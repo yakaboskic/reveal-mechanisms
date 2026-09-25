@@ -1,0 +1,316 @@
+{
+  "402cf4a1f3682a2e5bf1b002": {
+    "edges": [
+      {
+        "description": "gene_attribute_matrix.txt.gz is a data input to analysis:hubmap_asctb_augmented:28f6ed71-cfa7-54c0-a3f6-bd38d3ab63df.",
+        "id": "file:input_matrix:fa66b92a-28f2-56cc-abc3-511053f4f37e_to_analysis:hubmap_asctb_augmented:28f6ed71-cfa7-54c0-a3f6-bd38d3ab63df",
+        "label": "data input",
+        "source": "file:input_matrix:fa66b92a-28f2-56cc-abc3-511053f4f37e",
+        "target": "analysis:hubmap_asctb_augmented:28f6ed71-cfa7-54c0-a3f6-bd38d3ab63df"
+      },
+      {
+        "description": "human_gene_info is a data input to analysis:hubmap_asctb_augmented:28f6ed71-cfa7-54c0-a3f6-bd38d3ab63df.",
+        "id": "file:human_gene_info:9202e2fa-eafc-5d12-a804-b653631f56f5_to_analysis:hubmap_asctb_augmented:28f6ed71-cfa7-54c0-a3f6-bd38d3ab63df",
+        "label": "data input",
+        "source": "file:human_gene_info:9202e2fa-eafc-5d12-a804-b653631f56f5",
+        "target": "analysis:hubmap_asctb_augmented:28f6ed71-cfa7-54c0-a3f6-bd38d3ab63df"
+      },
+      {
+        "description": "analysis:hubmap_asctb_augmented:28f6ed71-cfa7-54c0-a3f6-bd38d3ab63df produces file:unsigned_term_gene_tsv:ba2297f9-7b5a-5215-a32e-d96bfbf71170.",
+        "id": "analysis:hubmap_asctb_augmented:28f6ed71-cfa7-54c0-a3f6-bd38d3ab63df_to_file:unsigned_term_gene_tsv:ba2297f9-7b5a-5215-a32e-d96bfbf71170",
+        "label": "data output",
+        "source": "analysis:hubmap_asctb_augmented:28f6ed71-cfa7-54c0-a3f6-bd38d3ab63df",
+        "target": "file:unsigned_term_gene_tsv:ba2297f9-7b5a-5215-a32e-d96bfbf71170"
+      },
+      {
+        "description": "analysis:hubmap_asctb_augmented:28f6ed71-cfa7-54c0-a3f6-bd38d3ab63df materializes output artifact asctb_geneshot_augmented_genes.tsv.",
+        "id": "analysis:hubmap_asctb_augmented:28f6ed71-cfa7-54c0-a3f6-bd38d3ab63df_to_file:asctb_geneshot_augmented_genes_tsv:b76ffd1f-2f15-5f61-8d51-25a4aedaa4a7",
+        "label": "data output",
+        "source": "analysis:hubmap_asctb_augmented:28f6ed71-cfa7-54c0-a3f6-bd38d3ab63df",
+        "target": "file:asctb_geneshot_augmented_genes_tsv:b76ffd1f-2f15-5f61-8d51-25a4aedaa4a7"
+      },
+      {
+        "description": "hubmap_unsigned_term_gene.tsv is a data input to analysis:unsigned_term_gene:af57f812-9a29-559a-9683-4e2c3fd79d5b.",
+        "id": "file:table_tsv:41937669-9704-5311-852b-3a25d92653be_to_analysis:unsigned_term_gene:af57f812-9a29-559a-9683-4e2c3fd79d5b",
+        "label": "data input",
+        "source": "file:unsigned_term_gene_tsv:ba2297f9-7b5a-5215-a32e-d96bfbf71170",
+        "target": "analysis:unsigned_term_gene:af57f812-9a29-559a-9683-4e2c3fd79d5b"
+      },
+      {
+        "description": "analysis:unsigned_term_gene:af57f812-9a29-559a-9683-4e2c3fd79d5b produces geneset:402cf4a1f3682a2e5bf1b002.",
+        "id": "analysis:unsigned_term_gene:af57f812-9a29-559a-9683-4e2c3fd79d5b_to_geneset:402cf4a1f3682a2e5bf1b002",
+        "label": "data output",
+        "source": "analysis:unsigned_term_gene:af57f812-9a29-559a-9683-4e2c3fd79d5b",
+        "target": "geneset:402cf4a1f3682a2e5bf1b002"
+      },
+      {
+        "description": "analysis:unsigned_term_gene:af57f812-9a29-559a-9683-4e2c3fd79d5b materializes output artifact genesets.gmt.",
+        "id": "analysis:unsigned_term_gene:af57f812-9a29-559a-9683-4e2c3fd79d5b_to_file:gmt_library:b4c7e054-28fb-5374-a002-8010b1fa56ca",
+        "label": "data output",
+        "source": "analysis:unsigned_term_gene:af57f812-9a29-559a-9683-4e2c3fd79d5b",
+        "target": "file:gmt_library:b4c7e054-28fb-5374-a002-8010b1fa56ca"
+      },
+      {
+        "description": "analysis:unsigned_term_gene:af57f812-9a29-559a-9683-4e2c3fd79d5b materializes output artifact geneset.tsv.",
+        "id": "analysis:unsigned_term_gene:af57f812-9a29-559a-9683-4e2c3fd79d5b_to_file:selected_program:b2db1f99-5f1b-5384-96a1-ca8929dc6a0d",
+        "label": "data output",
+        "source": "analysis:unsigned_term_gene:af57f812-9a29-559a-9683-4e2c3fd79d5b",
+        "target": "file:selected_program:b2db1f99-5f1b-5384-96a1-ca8929dc6a0d"
+      },
+      {
+        "description": "analysis:unsigned_term_gene:af57f812-9a29-559a-9683-4e2c3fd79d5b materializes output artifact geneset.full.tsv.",
+        "id": "analysis:unsigned_term_gene:af57f812-9a29-559a-9683-4e2c3fd79d5b_to_file:full_scores:cdf7aa45-bc3a-5771-a289-31dd5fd56fc1",
+        "label": "data output",
+        "source": "analysis:unsigned_term_gene:af57f812-9a29-559a-9683-4e2c3fd79d5b",
+        "target": "file:full_scores:cdf7aa45-bc3a-5771-a289-31dd5fd56fc1"
+      },
+      {
+        "description": "analysis:unsigned_term_gene:af57f812-9a29-559a-9683-4e2c3fd79d5b materializes output artifact signature_summary.tsv.",
+        "id": "analysis:unsigned_term_gene:af57f812-9a29-559a-9683-4e2c3fd79d5b_to_file:signature_summary:0da22be4-4be3-5a02-bc7d-b8d4aec76827",
+        "label": "data output",
+        "source": "analysis:unsigned_term_gene:af57f812-9a29-559a-9683-4e2c3fd79d5b",
+        "target": "file:signature_summary:0da22be4-4be3-5a02-bc7d-b8d4aec76827"
+      },
+      {
+        "description": "analysis:unsigned_term_gene:af57f812-9a29-559a-9683-4e2c3fd79d5b materializes output artifact geneset.meta.json.",
+        "id": "analysis:unsigned_term_gene:af57f812-9a29-559a-9683-4e2c3fd79d5b_to_file:metadata_json:b29e5127-0b91-54db-adb4-2e5be40d4237",
+        "label": "data output",
+        "source": "analysis:unsigned_term_gene:af57f812-9a29-559a-9683-4e2c3fd79d5b",
+        "target": "file:metadata_json:b29e5127-0b91-54db-adb4-2e5be40d4237"
+      }
+    ],
+    "nodes": [
+      {
+        "c2m2_properties": {
+          "_uuid": "1579915c-f3a0-536d-ad25-3e04a593a050",
+          "filename": "gene_attribute_matrix.txt.gz",
+          "local_id": "s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ1/workflow/gene_attribute_matrix.txt.gz",
+          "md5": "96aZvXyRQHqydJoeaC351g==",
+          "persistent_id": "6b757af6-b9b0-583e-8846-b0e16b3e57c4",
+          "size_in_bytes": 31222
+        },
+        "dcc_url": "s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ1/workflow/gene_attribute_matrix.txt.gz",
+        "description": "File node for gene_attribute_matrix.txt.gz (role: input_matrix)",
+        "drc_url": "s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ1/workflow/gene_attribute_matrix.txt.gz",
+        "id": "file:input_matrix:fa66b92a-28f2-56cc-abc3-511053f4f37e",
+        "name": "gene_attribute_matrix.txt.gz",
+        "type": "File"
+      },
+      {
+        "c2m2_properties": {
+          "_uuid": "d90c5919-caf8-53e4-abe6-71f854bf4301",
+          "filename": "human_gene_info",
+          "local_id": "https://ftp.ncbi.nih.gov/gene/DATA/GENE_INFO/Mammalia/Homo_sapiens.gene_info.gz",
+          "md5": "hvzbVLFaJJSRJutxecW6lQ==",
+          "persistent_id": "48b9abef-1545-5e87-9e26-bef6dbd36c09",
+          "size_in_bytes": 34989436
+        },
+        "dcc_url": "https://ftp.ncbi.nih.gov/gene/DATA/GENE_INFO/Mammalia/Homo_sapiens.gene_info.gz",
+        "description": "File node for human_gene_info (role: human_gene_info)",
+        "drc_url": "https://ftp.ncbi.nih.gov/gene/DATA/GENE_INFO/Mammalia/Homo_sapiens.gene_info.gz",
+        "id": "file:human_gene_info:9202e2fa-eafc-5d12-a804-b653631f56f5",
+        "name": "human_gene_info",
+        "type": "File"
+      },
+      {
+        "analysis": {
+          "command": "python -m geneset_extractors.cli workflows hubmap_asctb_augmented --input_matrix s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ1/workflow/gene_attribute_matrix.txt.gz --human_gene_info https://ftp.ncbi.nih.gov/gene/DATA/GENE_INFO/Mammalia/Homo_sapiens.gene_info.gz --out_dir s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ2/workflow --augmentation_threshold 0.67 --cap_multiplier 4 --geneshot_url https://maayanlab.cloud/geneshot/api/associate --request_timeout 120 --request_retries 2 --pause_seconds 0.1",
+          "environment": {
+            "container_image": null,
+            "entrypoint": "geneset-extractors workflows hubmap_asctb_augmented",
+            "mode": "cli",
+            "module": "geneset_extractors.workflows.hubmap_asctb_augmented",
+            "repo_url": "https://github.com/flannick/dig-gene-set-extractors",
+            "workspace_template_url": null
+          },
+          "observed_command": null,
+          "parameters": {
+            "augmentation_threshold": 0.67,
+            "cap_multiplier": 4,
+            "geneshot_url": "https://maayanlab.cloud/geneshot/api/associate",
+            "n_rows": 7544,
+            "n_terms": 1339
+          },
+          "script_url": "https://github.com/flannick/dig-gene-set-extractors",
+          "version": "2fb57130136a8fa25211ef1e77fe13d220e4b115"
+        },
+        "c2m2_properties": {
+          "description": "Analysis step that prepares GTEx differential expression results and emits hubmap_unsigned_term_gene.tsv.",
+          "id": "analysis:hubmap_asctb_augmented:28f6ed71-cfa7-54c0-a3f6-bd38d3ab63df",
+          "name": "prepare_hubmap_unsigned_term_gene",
+          "synonyms": []
+        },
+        "dcc_url": "https://github.com/flannick/dig-gene-set-extractors",
+        "description": "Analysis step that prepares GTEx differential expression results and emits hubmap_unsigned_term_gene.tsv.",
+        "drc_url": "https://github.com/flannick/dig-gene-set-extractors",
+        "id": "analysis:hubmap_asctb_augmented:28f6ed71-cfa7-54c0-a3f6-bd38d3ab63df",
+        "name": "prepare_hubmap_unsigned_term_gene",
+        "type": "AnalysisType"
+      },
+      {
+        "c2m2_properties": {
+          "_uuid": "f3bf9c73-7184-582d-ac2b-b39fa6f4baad",
+          "filename": "hubmap_unsigned_term_gene.tsv",
+          "local_id": "s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ2/workflow/hubmap_unsigned_term_gene.tsv",
+          "md5": "/a9nJVKGLpwp/A+RP0F6xQ==",
+          "persistent_id": "c5da16f0-d42c-52c4-ba9e-9221acb9effd",
+          "size_in_bytes": 385544
+        },
+        "dcc_url": "s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ2/workflow/hubmap_unsigned_term_gene.tsv",
+        "description": "File node for hubmap_unsigned_term_gene.tsv (role: unsigned_term_gene_tsv)",
+        "drc_url": "s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ2/workflow/hubmap_unsigned_term_gene.tsv",
+        "id": "file:unsigned_term_gene_tsv:ba2297f9-7b5a-5215-a32e-d96bfbf71170",
+        "name": "hubmap_unsigned_term_gene.tsv",
+        "type": "File"
+      },
+      {
+        "c2m2_properties": {
+          "_uuid": "913fc28e-c10f-5529-83cc-412abfafdb89",
+          "filename": "asctb_geneshot_augmented_genes.tsv",
+          "local_id": "s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ2/workflow/asctb_geneshot_augmented_genes.tsv",
+          "md5": "TuCrBzqQGNv+HtCqJCZ1QA==",
+          "persistent_id": "62453e36-d5b8-5fb5-8fe8-76bc77ae806f",
+          "size_in_bytes": 22026266
+        },
+        "dcc_url": "s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ2/workflow/asctb_geneshot_augmented_genes.tsv",
+        "description": "File node for asctb_geneshot_augmented_genes.tsv (role: asctb_geneshot_augmented_genes_tsv)",
+        "drc_url": "s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ2/workflow/asctb_geneshot_augmented_genes.tsv",
+        "id": "file:asctb_geneshot_augmented_genes_tsv:b76ffd1f-2f15-5f61-8d51-25a4aedaa4a7",
+        "name": "asctb_geneshot_augmented_genes.tsv",
+        "type": "File"
+      },
+      {
+        "c2m2_properties": {
+          "description": "HuBMAP ASCT+B augmented marker gene-set library using model HZ2: library built from released ASCT+B marker tables and expanded with GeneShot-based augmentation under the configured enrichment threshold and cap.",
+          "id": "geneset:402cf4a1f3682a2e5bf1b002",
+          "name": "unsigned_term_gene:402cf4a1f3682a2e5bf1b002"
+        },
+        "dcc_url": "urn:geneset:402cf4a1f3682a2e5bf1b002",
+        "description": "HuBMAP ASCT+B augmented marker gene-set library using model HZ2: library built from released ASCT+B marker tables and expanded with GeneShot-based augmentation under the configured enrichment threshold and cap.",
+        "drc_url": "urn:geneset:402cf4a1f3682a2e5bf1b002",
+        "id": "geneset:402cf4a1f3682a2e5bf1b002",
+        "name": "unsigned_term_gene:402cf4a1f3682a2e5bf1b002",
+        "type": "GeneSet"
+      },
+      {
+        "analysis": {
+          "command": "python -m geneset_extractors.cli convert unsigned_term_gene --emit_small_gene_sets false --gene_id_column gene_id --gene_symbol_column gene_symbol --gmt_min_genes 5 --score_column score --term_column term --term_prefix HuBMAP",
+          "environment": {
+            "container_image": null,
+            "entrypoint": "geneset-extractors convert unsigned_term_gene",
+            "mode": "cli",
+            "module": "geneset_extractors.extractors.converters.unsigned_term_gene",
+            "n_input_nodes": 1,
+            "n_output_nodes": 5,
+            "repo_url": "https://github.com/flannick/dig-gene-set-extractors",
+            "workspace_template_url": null
+          },
+          "observed_command": "python -m geneset_extractors.cli convert unsigned_term_gene --table_tsv s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ2/workflow/hubmap_unsigned_term_gene.tsv --out_dir s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ2/extractor --organism human --genome_build hg38 --term_column term --term_prefix HuBMAP --gene_id_column gene_id --gene_symbol_column gene_symbol --score_column score --gmt_min_genes 5 --gmt_require_symbol true --emit_small_gene_sets false",
+          "parameters": {
+            "emit_small_gene_sets": false,
+            "gene_id_column": "gene_id",
+            "gene_symbol_column": "gene_symbol",
+            "gmt_min_genes": 5,
+            "score_column": "score",
+            "term_column": "term",
+            "term_prefix": "HuBMAP"
+          },
+          "script_url": "https://github.com/flannick/dig-gene-set-extractors",
+          "version": "2fb57130136a8fa25211ef1e77fe13d220e4b115"
+        },
+        "c2m2_properties": {
+          "description": "Analysis step that derives the gene set using converter unsigned_term_gene.",
+          "id": "analysis:unsigned_term_gene:af57f812-9a29-559a-9683-4e2c3fd79d5b",
+          "name": "generate_402cf4a1f3682a2e5bf1b002",
+          "synonyms": []
+        },
+        "dcc_url": "https://github.com/flannick/dig-gene-set-extractors",
+        "description": "Analysis step that derives the gene set using converter unsigned_term_gene.",
+        "drc_url": "https://github.com/flannick/dig-gene-set-extractors",
+        "id": "analysis:unsigned_term_gene:af57f812-9a29-559a-9683-4e2c3fd79d5b",
+        "name": "generate_402cf4a1f3682a2e5bf1b002",
+        "type": "AnalysisType"
+      },
+      {
+        "c2m2_properties": {
+          "_uuid": "0f08d646-3f2a-5870-90b4-498f7c72a724",
+          "filename": "genesets.gmt",
+          "local_id": "s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ2/extractor/genesets.gmt",
+          "md5": "lpgmArYDypVqkRWP/KQ9Zw==",
+          "persistent_id": "576cdadd-7d0b-55d8-917f-a9ea29456f28",
+          "size_in_bytes": 55157
+        },
+        "dcc_url": "s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ2/extractor/genesets.gmt",
+        "description": "File node for genesets.gmt (role: gmt_library)",
+        "drc_url": "s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ2/extractor/genesets.gmt",
+        "id": "file:gmt_library:b4c7e054-28fb-5374-a002-8010b1fa56ca",
+        "name": "genesets.gmt",
+        "type": "File"
+      },
+      {
+        "c2m2_properties": {
+          "_uuid": "98519f9e-070d-5a60-af1e-be2ab6e8c33f",
+          "filename": "geneset.tsv",
+          "local_id": "s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ2/extractor/geneset.tsv",
+          "md5": "i+RX9V+qA0HHxRjgJW4g6A==",
+          "persistent_id": "3f9cfc06-3275-594d-a1cf-1af3cd14539e",
+          "size_in_bytes": 520234
+        },
+        "dcc_url": "s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ2/extractor/geneset.tsv",
+        "description": "File node for geneset.tsv (role: selected_program)",
+        "drc_url": "s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ2/extractor/geneset.tsv",
+        "id": "file:selected_program:b2db1f99-5f1b-5384-96a1-ca8929dc6a0d",
+        "name": "geneset.tsv",
+        "type": "File"
+      },
+      {
+        "c2m2_properties": {
+          "_uuid": "9c043e8b-7369-5bf4-8a66-cbb2d4b13dd6",
+          "filename": "geneset.full.tsv",
+          "local_id": "s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ2/extractor/geneset.full.tsv",
+          "md5": "i+RX9V+qA0HHxRjgJW4g6A==",
+          "persistent_id": "0ddb17ca-f9a0-5e82-baf9-7ca1475eba80",
+          "size_in_bytes": 520234
+        },
+        "dcc_url": "s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ2/extractor/geneset.full.tsv",
+        "description": "File node for geneset.full.tsv (role: full_scores)",
+        "drc_url": "s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ2/extractor/geneset.full.tsv",
+        "id": "file:full_scores:cdf7aa45-bc3a-5771-a289-31dd5fd56fc1",
+        "name": "geneset.full.tsv",
+        "type": "File"
+      },
+      {
+        "c2m2_properties": {
+          "_uuid": "25e9a396-c5ed-536e-aedd-c543f4cfd890",
+          "filename": "signature_summary.tsv",
+          "local_id": "s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ2/extractor/signature_summary.tsv",
+          "md5": "Zqbcc0HXE3PZdxemBkbY9w==",
+          "persistent_id": "ef8f04dd-1c8c-5c37-ac69-d9d493d7c2d5",
+          "size_in_bytes": 30480
+        },
+        "dcc_url": "s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ2/extractor/signature_summary.tsv",
+        "description": "File node for signature_summary.tsv (role: signature_summary)",
+        "drc_url": "s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ2/extractor/signature_summary.tsv",
+        "id": "file:signature_summary:0da22be4-4be3-5a02-bc7d-b8d4aec76827",
+        "name": "signature_summary.tsv",
+        "type": "File"
+      },
+      {
+        "c2m2_properties": {
+          "_uuid": "b3b0b7b6-c253-5aaf-9606-2eaf45b30a34",
+          "filename": "geneset.meta.json",
+          "local_id": "s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ2/extractor/geneset.meta.json",
+          "md5": "s5a0fBfnlNslvsPtWCNr0A==",
+          "persistent_id": "f06b158a-d13c-5827-9d7b-d787e01e9cc9",
+          "size_in_bytes": 10332
+        },
+        "dcc_url": "s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ2/extractor/geneset.meta.json",
+        "description": "File node for geneset.meta.json (role: metadata_json)",
+        "drc_url": "s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ2/extractor/geneset.meta.json",
+        "id": "file:metadata_json:b29e5127-0b91-54db-adb4-2e5be40d4237",
+        "name": "geneset.meta.json",
+        "type": "File"
+      }
+    ]
+  }
+}

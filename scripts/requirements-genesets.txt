@@ -1,0 +1,4 @@
+-r requirements-audit.txt
+linkml==1.11.1
+rdflib==7.6.0
+ruamel.yaml==0.18.17

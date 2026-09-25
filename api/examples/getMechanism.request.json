@@ -1,0 +1,53 @@
+{
+  "operation_id": "getMechanism",
+  "case": "request",
+  "method": "GET",
+  "path_template": "/v1/mechanisms/{source_id}",
+  "request": {
+    "url": "https://api.reveal.example.org/v1/mechanisms/factor%3Aportal%3ACADinT2D%3Acfde-inc-v2%3AFactor1?source_revision=5797893b517def4fdc82f285c9bf835195f9f88eddfb6409cbf3b1e31dd63d83",
+    "path": {
+      "source_id": "factor:portal:CADinT2D:cfde-inc-v2:Factor1"
+    },
+    "query": {
+      "source_revision": "5797893b517def4fdc82f285c9bf835195f9f88eddfb6409cbf3b1e31dd63d83"
+    },
+    "headers": {
+      "Accept": "application/json"
+    },
+    "body": null
+  },
+  "responses": {
+    "200": {
+      "content_type": "application/json",
+      "examples": {
+        "eaggl_factor": {
+          "source": "eaggl",
+          "source_id": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+          "source_revision": "5797893b517def4fdc82f285c9bf835195f9f88eddfb6409cbf3b1e31dd63d83",
+          "object_class": "Mechanism",
+          "object": {
+            "description": "EAGGL mechanism factor:portal:CADinT2D:cfde-inc-v2:Factor1. Source label: AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn.",
+            "id": "dapper:Mechanism.MyhahXB55tDUS667sJzeJZ40BeeQBWOR",
+            "name": "CADinT2D mechanism Factor1"
+          },
+          "cfde_anchor": {
+            "node_id": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+            "node_type": "factor",
+            "label": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+            "subtitle": "Coronary artery disease in type 2 diabetes (CAD in T2D) (Factor1)"
+          },
+          "model": "cfde-inc-v2",
+          "catalog_file": {
+            "filename": "Factor1.catalog-record.json",
+            "sha256": "5797893b517def4fdc82f285c9bf835195f9f88eddfb6409cbf3b1e31dd63d83",
+            "size_in_bytes": 302,
+            "mime_type": "application/json",
+            "description": "Canonical CFDE catalog record; a factor source record, not a causal mechanism.",
+            "id": "dapper:File.pD1t7so66hPVDxDeNYyXaoZyUJIuQwEQ"
+          }
+        }
+      }
+    }
+  },
+  "curl": "curl -X GET 'https://api.reveal.example.org/v1/mechanisms/factor%3Aportal%3ACADinT2D%3Acfde-inc-v2%3AFactor1?source_revision=5797893b517def4fdc82f285c9bf835195f9f88eddfb6409cbf3b1e31dd63d83' -H 'Accept: application/json'"
+}

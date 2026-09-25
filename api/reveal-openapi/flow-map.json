@@ -1,0 +1,246 @@
+{
+  "openapi_sha256": "477343e0f267e0b88a93eb31baef8d2b387de9fb142c102c43ee50171c99326f",
+  "steps": [
+    {
+      "id": "gap",
+      "title": "Find a DisMech knowledge gap",
+      "route": "GET /v1/knowledge-gaps/search",
+      "action": "Type to search; select an exact source question on the same page.",
+      "incoming": "q, fuzzy mode by default, source=dismech and filters.",
+      "outgoing": "GapSearchResults / GapRecord with DAPPER gap, exact source detail and public-account count.",
+      "cases": [
+        "searchKnowledgeGaps.request",
+        "listKnowledgeGaps.request",
+        "getKnowledgeGap.request"
+      ],
+      "rules": [
+        "Search text is not a new inquiry. Trending entries disappear while typing.",
+        "Initial homepage is curated; counts include only public saved accounts for the exact gap digest."
+      ]
+    },
+    {
+      "id": "anchors",
+      "title": "Choose mechanism anchors",
+      "route": "POST /v1/mechanisms/suggest",
+      "action": "Review up to five mapped EAGGL mechanism chips; edit anchors, not linked DisMech context.",
+      "incoming": "SelectedGap, manual factors, dismissals and optional mechanism subquery.",
+      "outgoing": "Suggestions and Mechanism records with DAPPER Mechanism, native CFDE ID and catalog File.",
+      "cases": [
+        "suggestMechanisms.dismech_context",
+        "searchMechanisms.request",
+        "getMechanism.request"
+      ],
+      "rules": [
+        "Search existing EAGGL label embeddings; join the populated exact-trait/factor-number CFDE crosswalk before selecting five. Ignore label/gene differences.",
+        "Five total, maximum cosine across linked mechanisms, deterministic native-ID deduplication; fewer if needed. At least one resolved cfde-inc-v2 anchor is required.",
+        "Existing ranked GeneSet links resolve through aliases to DAPPER objects. Missing summary links do not disable a mapped factor."
+      ]
+    },
+    {
+      "id": "draft",
+      "title": "Continue and save",
+      "route": "POST /v1/drafts; PATCH /v1/drafts/{id}",
+      "action": "Choose ORCID, Google or anonymous at submit; preserve selection and autosave.",
+      "incoming": "Trusted session, Composer, expected_version and Idempotency-Key.",
+      "outgoing": "Owned Draft with confirmed revision.",
+      "cases": [
+        "createDraft.question_and_anchor",
+        "updateDraft.save_revision_two",
+        "getDraft.request"
+      ],
+      "rules": [
+        "Local edits before session; no credentials stored in research data.",
+        "Composer accepts no free-text inquiry or editable linked DisMech list."
+      ]
+    },
+    {
+      "id": "analysis",
+      "title": "Submit saved gap analysis",
+      "route": "POST /v1/jobs",
+      "action": "Freeze the confirmed draft and queue analysis.",
+      "incoming": "AnalysisJobInput: kind=analysis, draft ID/version, bounded budgets.",
+      "outgoing": "202 Job and immutable ResearchRequest.",
+      "cases": [
+        "createJob.analysis"
+      ],
+      "rules": [
+        "Freeze saved source/mapping runs and resolved native CFDE IDs; later mapping updates do not retarget this request.",
+        "Question collapses upward with chips retained."
+      ],
+      "worker": [
+        "Resolve frozen DisMech context; four same-seed CFDE connections plus contextual edges and BioIndex queries.",
+        "Build, validate and freeze evidence package with exact source artifacts.",
+        "Fresh verified DAPPER clone, Claude Code in Box, selected Proto-OKN tools.",
+        "Trusted assembly, minting, final lint plus grounding/ledger/ownership checks."
+      ]
+    },
+    {
+      "id": "analysis-progress",
+      "title": "Prepare evidence and observe research",
+      "route": "GET /v1/jobs/{id}; GET /events",
+      "action": "Evidence preparation followed by public agent/tool activity; Stop stays available.",
+      "incoming": "Job ID and event cursor.",
+      "outgoing": "JobEvent.detail with counts/call state/artifacts; EvidencePackageResult for inspection.",
+      "cases": [
+        "getJob.request",
+        "getJobEvents.request",
+        "getJobEvents.sse",
+        "getEvidencePackage.request"
+      ],
+      "rules": [
+        "One active loading state; no private reasoning.",
+        "Package is the schema-current captured input; account fixture is separately authored, not its accepted agent output.",
+        "Completed activity compresses into Gap analysis complete."
+      ]
+    },
+    {
+      "id": "account",
+      "title": "Read the scientific account",
+      "route": "GET /v1/accounts/{id}",
+      "action": "Read closing remarks; open associated claims on demand.",
+      "incoming": "Exact account/claim/GeneSet/object ID and optional payload/traversal bounds.",
+      "outgoing": "DAPPER document, payload checksums, coverage, artifacts and research_statement state.",
+      "cases": [
+        "getAccount.request",
+        "getClaim.request",
+        "getGeneSet.request",
+        "resolveDapperObject.request"
+      ],
+      "rules": [
+        "Conclusions and Research statement are divider tabs.",
+        "Claims open inline; no auto-opened first claim. Dedicated claim page has Assessment, Proposition, Evidence and Provenance tabs.",
+        "Partial provenance and unavailable downloads remain explicit."
+      ]
+    },
+    {
+      "id": "paragraph-job",
+      "title": "Generate the cited statement automatically",
+      "route": "Worker outbox \u2192 kind=paragraph job",
+      "action": "Each accepted account independently queues a paragraph; explicit endpoint supports retry/alternate focus.",
+      "incoming": "Saved account payload, citation revisions, settings and skill version.",
+      "outgoing": "Paragraph Job; account remains usable independently.",
+      "cases": [
+        "createJob.paragraph"
+      ],
+      "rules": [
+        "Unique outbox key prevents duplicate automatic work.",
+        "No fresh KG research or invented claims."
+      ],
+      "worker": [
+        "Author segments using saved claims/gap.",
+        "Backend assembles citation occurrences and validates exact registry revisions/code-point spans.",
+        "Persist Paragraph and expression provenance."
+      ]
+    },
+    {
+      "id": "paragraph-progress",
+      "title": "Follow paragraph generation",
+      "route": "GET /v1/jobs/{id}",
+      "action": "Show pending/failed/ready research statement without blocking conclusions.",
+      "incoming": "Separate paragraph job ID.",
+      "outgoing": "ParagraphResult with account and Paragraph IDs.",
+      "cases": [
+        "getJob.paragraph"
+      ],
+      "rules": [
+        "Shared events/cancel apply to both job kinds.",
+        "Paragraph failure does not change analysis success."
+      ]
+    },
+    {
+      "id": "paragraph",
+      "title": "Read the research statement",
+      "route": "GET /v1/paragraphs/{id}",
+      "action": "Render Paragraph text, markers and complete references.",
+      "incoming": "Exact Paragraph ID and payload observation.",
+      "outgoing": "ParagraphObjectResult and pinned citation metadata.",
+      "cases": [
+        "getParagraph.request"
+      ],
+      "rules": [
+        "Offsets are Unicode code points, not UTF-16 indices.",
+        "Do not substitute latest registry revision when a pin is missing."
+      ]
+    },
+    {
+      "id": "citations",
+      "title": "Copy or download",
+      "route": "POST /v1/citations/render; GET /v1/paragraphs/{id}/export",
+      "action": "Copy hyperlinked rich text for Word, or download Markdown, LaTeX and BibTeX.",
+      "incoming": "Paragraph ID/format; citation target ID/revision/style/locale.",
+      "outgoing": "ParagraphExport or CitationRendering and native citation formats.",
+      "cases": [
+        "renderCitations.apa",
+        "getCitation.request",
+        "getCitation.bibtex",
+        "getCitation.biblatex",
+        "getCitation.csl-json",
+        "getCitation.apa",
+        "getCitation.mla",
+        "exportParagraph.request",
+        "exportParagraph.latex",
+        "exportParagraph.bibtex",
+        "exportParagraph.rich-text"
+      ],
+      "rules": [
+        "LaTeX includes cite commands; remind users to download references.bib.",
+        "Exports share exact Paragraph and registry pins. Rendering does not launch an agent."
+      ]
+    }
+  ],
+  "support": [
+    {
+      "id": "identity",
+      "title": "Registered or anonymous ownership",
+      "route": "GET /v1/me",
+      "action": "Gateway establishes trusted session and resolves a stable application UUID.",
+      "incoming": "Registered or anonymous gateway assertion.",
+      "outgoing": "Me with principal_kind and optional workspace expiry.",
+      "cases": [
+        "getMe.request"
+      ],
+      "rules": [
+        "Browser OAuth/bootstrap and service provisioning are separately specified in docs/gateway-contract.md.",
+        "No bearer is not anonymous write permission."
+      ]
+    },
+    {
+      "id": "history",
+      "title": "Your gaps and scientific accounts",
+      "route": "GET /v1/me/explorations; GET /v1/accounts",
+      "action": "Avatar opens two-tab personal dashboard.",
+      "incoming": "Trusted owner session, exact gap filters and pagination.",
+      "outgoing": "Exploration/account summaries; saved drafts and immutable request/job history.",
+      "cases": [
+        "listExplorations.request",
+        "recordExploration.selected_gap",
+        "listAccounts.request",
+        "listDrafts.request",
+        "listResearchRequests.request",
+        "getResearchRequest.request",
+        "listJobs.request"
+      ],
+      "rules": [
+        "Before-session visits remain local; record after trusted bootstrap.",
+        "Anonymous recovery requires session possession. Verified sign-in preserves durable access and original authorship."
+      ]
+    },
+    {
+      "id": "cancel",
+      "title": "Stop or recover",
+      "route": "POST /v1/jobs/{id}/cancel",
+      "action": "Request cancellation or recover from stale save/event cursor.",
+      "incoming": "Owned job ID or current cursor/version.",
+      "outgoing": "Authoritative Job or typed Problem.",
+      "cases": [
+        "cancelJob.request"
+      ],
+      "rules": [
+        "Stopping is not stopped; committed results win cancellation races.",
+        "Browser disconnect does not cancel. Resume with monotonic event IDs."
+      ]
+    }
+  ],
+  "operation_count": 30,
+  "exchange_count": 41
+}

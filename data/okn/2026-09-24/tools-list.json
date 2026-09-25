@@ -1,0 +1,1072 @@
+{
+  "endpoint": "https://apps.okn.us/okn-mcp-dev/mcp",
+  "captured_at": "2026-09-24T13:31:55.798685+00:00",
+  "response": {
+    "jsonrpc": "2.0",
+    "id": 2,
+    "result": {
+      "tools": [
+        {
+          "name": "get_valid_contrasts",
+          "description": "Return VETTED spaceflight differential-expression contrasts for spoke-genelab.\n\n    USE THIS before reading any spoke-genelab differential value (expression,\n    methylation, abundance) as a \"spaceflight effect\". It resolves a request like\n    \"spaceflight DEGs in bone marrow\" to a list of assays that already pass the\n    two contrast rules, so you never hand-write the comparability self-join (the\n    step LLMs skip, which lets a confounded assay slip through).\n\n    The server computes, per assay:\n      - Rule 1 (direction): kept only when factor_space_1 = \"Space Flight\" and\n        factor_space_2 = \"Ground Control\". With this orientation group 1 = Space\n        Flight, group 2 = Ground Control, so log2fc/lnfc/methylation_diff > 0\n        means UP in spaceflight.\n      - Rule 2 (within-assay comparability): `is_clean_contrast` is True only when\n        the flight arm (factors_1) and ground arm (factors_2) carry the SAME\n        covariates after the condition labels/codes are stripped, AND\n        material_id_1 = material_id_2. A WildType-flight-vs-knockout-ground assay\n        (or one differing in sex/dose/time point/hardware) is `is_clean_contrast`\n        False with a `confound_reason` \u2014 its differential values reflect that\n        covariate, not spaceflight. Do NOT read those as a spaceflight effect.\n\n    Then read differential expression for the returned `assay` IRIs via the\n    reified relationship, e.g.::\n\n        ?stmt rdf:subject ?assay ;\n              rdf:predicate schema:MEASURED_DIFFERENTIAL_EXPRESSION_ASmMG ;\n              rdf:object ?gene ; schema:log2fc ?lfc ; schema:adj_p_value ?p .\n\n    Args:\n        tissue: Optional UBERON tissue to scope to (IRI or CURIE, e.g.\n            `UBERON:0002371` or the full purl), matched on `INVESTIGATED_ASiA`.\n        include_confounded: False (default) returns only clean contrasts plus a\n            `confounded_count` of those excluded. True returns every Space-Flight-\n            vs-Ground-Control assay, each carrying `is_clean_contrast` and\n            `confound_reason` so confounded ones are visible for inspection.\n\n    Returns:\n        `{\"shortname\", \"tissue\", \"rule\", \"clean_count\", \"confounded_count\",\n        \"contrasts\": [{assay, material_id_1, material_id_2, measurement,\n        technology, tissues, factors_1, factors_2, flight_covariates,\n        control_covariates, is_clean_contrast, confound_reason, contrast_label}]}`.\n        Contrasts are ordered clean-first. On endpoint failure: `{\"error\": ...}`.\n    ",
+          "inputSchema": {
+            "properties": {
+              "tissue": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Tissue"
+              },
+              "include_confounded": {
+                "default": false,
+                "title": "Include Confounded",
+                "type": "boolean"
+              }
+            },
+            "title": "get_valid_contrastsArguments",
+            "type": "object"
+          },
+          "outputSchema": {
+            "additionalProperties": true,
+            "title": "get_valid_contrastsDictOutput",
+            "type": "object"
+          }
+        },
+        {
+          "name": "get_server_info",
+          "description": "Identify THIS server: `{service, version, build, sparql_endpoint}`.\n\n    `build` is the deployed commit (`unknown` if unidentifiable). The version alone\n    can't tell two deployments apart, so call this when a tool or argument seems to\n    be missing \u2014 a hosted server can lag the repo \u2014 or to record exactly which build\n    produced a result.\n    ",
+          "inputSchema": {
+            "properties": {},
+            "title": "get_server_infoArguments",
+            "type": "object"
+          },
+          "outputSchema": {
+            "additionalProperties": true,
+            "title": "get_server_infoDictOutput",
+            "type": "object"
+          }
+        },
+        {
+          "name": "list_kgs",
+          "description": "List all Proto-OKN knowledge graphs available on the OKN federation.\n\n    Returns one entry per KG with its `shortname`, `title`, `description`,\n    `homepage`, the `named_graph` URI to use inside `GRAPH <...> { ... }` blocks,\n    and a `payload` list \u2014 the curated context types that KG SUPPLIES (e.g.\n    `digcfdekg` \u2192 `[\"gene\", \"gene_set\", \"trait\", \"disease\"]`, `prokn` \u2192 `[\"protein\",\n    \"gene\", \"GO\", \"Reactome\", \"pathway\", ...]`). The `payload` tags say what a graph\n    adds, not just how it joins \u2014 judge a graph by them, NOT by its name (a graph\n    named for one thing often carries much more). To go the other way \u2014 \"which KGs\n    SUPPLY pathway/GO/trait for a gene I can join on Entrez?\" \u2014 call\n    `find_context_sources(want=[...], join_key=...)`.\n\n    Use the descriptions to decide which graph(s) to query. If these one-line\n    descriptions are too terse to tell which KG a question targets, call\n    `describe_kg(shortname, long_description=True)` on the candidates for the\n    registry's ~150-word prose description before choosing.\n    ",
+          "inputSchema": {
+            "properties": {},
+            "title": "list_kgsArguments",
+            "type": "object"
+          },
+          "outputSchema": {
+            "properties": {
+              "result": {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "title": "Result",
+                "type": "array"
+              }
+            },
+            "required": [
+              "result"
+            ],
+            "title": "list_kgsOutput",
+            "type": "object"
+          }
+        },
+        {
+          "name": "describe_kg",
+          "description": "Return registry documentation for one KG.\n\n    Args:\n        shortname: The KG shortname (e.g. `prokn`, `sawgraph`, `ubergraph`),\n            as returned by `list_kgs`.\n        long_description: If True, return ONLY the registry's free-text\n            description \u2014 the ~150-word prose below the YAML frontmatter \u2014 instead\n            of the full markdown. Reach for this when the one-line `list_kgs`\n            descriptions are too terse to tell which KG a question belongs to:\n            the longer prose usually names the entities, sources, and scope that\n            disambiguate near-overlapping graphs.\n\n    Returns the registry markdown (title, description, and prose) for deeper\n    context before writing a query \u2014 or just the long description when\n    `long_description` is set. For KGs with query-time domain rules the registry\n    prose does not cover (e.g. `spoke-genelab`'s spaceflight assay-comparison\n    rules), the relevant guidance is appended to the returned text.\n    ",
+          "inputSchema": {
+            "properties": {
+              "shortname": {
+                "title": "Shortname",
+                "type": "string"
+              },
+              "long_description": {
+                "default": false,
+                "title": "Long Description",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "shortname"
+            ],
+            "title": "describe_kgArguments",
+            "type": "object"
+          },
+          "outputSchema": {
+            "properties": {
+              "result": {
+                "title": "Result",
+                "type": "string"
+              }
+            },
+            "required": [
+              "result"
+            ],
+            "title": "describe_kgOutput",
+            "type": "object"
+          }
+        },
+        {
+          "name": "get_kg_version",
+          "description": "Return a KG's release version and last-updated date (from the VoID metadata).\n\n    The `okn-void` meta-graph records provenance for each loaded KG. This tool\n    reads it live and returns, per KG:\n      * `version` \u2014 the release string, e.g. `\"v0.0.5\"` (`pav:version`);\n      * `last_updated` \u2014 an ISO-8601 timestamp of the last load\n        (`pav:lastUpdatedOn`), e.g. `\"2026-06-23T14:26:02.126+00:00\"`;\n      * `named_graph` \u2014 the KG's federation named-graph URI.\n\n    Use it to check how current a graph is, cite the exact version behind an\n    analysis, or compare release freshness across graphs.\n\n    Args:\n        shortname: a KG shortname (as from `list_kgs`). Omit to return the\n            provenance for EVERY KG that records it, sorted by shortname.\n\n    Returns (shortname given) a single record dict, or `{\"shortname\", \"version\":\n    None, \"note\": ...}` when that KG records no VoID provenance (a few, e.g.\n    `nestkg` and `wikidata`, do not). Returns (shortname omitted) `{\"count\",\n    \"versions\": [record, ...]}`.\n    ",
+          "inputSchema": {
+            "properties": {
+              "shortname": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Shortname"
+              }
+            },
+            "title": "get_kg_versionArguments",
+            "type": "object"
+          },
+          "outputSchema": {
+            "additionalProperties": true,
+            "title": "get_kg_versionDictOutput",
+            "type": "object"
+          }
+        },
+        {
+          "name": "get_join_strategy",
+          "description": "Look up a PRECOMPUTED, verified recipe for joining two KGs.\n\n    Call this FIRST whenever a question spans two graphs \u2014 BEFORE `find_crosswalks`\n    and before writing any federated join query. `find_crosswalks` discovers join\n    keys live and frequently times out on large graphs; this serves a curated,\n    hand-verified table (exact `COUNT(DISTINCT)` over the named graphs on\n    `verified_on`) instead, so it is fast and reliable. It tells you not just THAT\n    two KGs join but exactly HOW: the predicates and roles on each side, the shared\n    identifier and its namespace, any bridge graph, and \u2014 critically \u2014 a runnable\n    `skeleton_query`: a verified, minimal `COUNT(DISTINCT <shared key>)` join that\n    already applies every IRI rewrite (the same id often appears in 2-3 IRI forms,\n    so a naive join silently returns nothing). Start from that query \u2014 actually\n    RUN it (non-exploratory, so it lands in the transcript) to confirm the key\n    still joins, then extend that same query with your own payload instead of\n    rebuilding the boilerplate. Do NOT decompose the join into separate\n    exploratory lookups, read an id off one, and hard-code it as a constant IRI:\n    that is the join the whole cross-KG claim rests on, so the query that\n    establishes it must be logged \u2014 otherwise the transcript can't reproduce its\n    own headline result.\n\n    Args:\n        kg_a: a KG shortname (as from `list_kgs`).\n        kg_b: optional second shortname. Omit to list everything `kg_a` can join.\n\n    Returns (kg_b given) one of:\n      * `{\"status\": \"verified\", \"joins\": [recipe, ...]}` \u2014 apply the recipe.\n        Each recipe carries `left_kg/right_kg`, `left_predicate/right_predicate`\n        (`\"node-iri\"` means the id IS the entity's own IRI \u2014 join directly on it),\n        `left_role/right_role`, `shared_key`, `key_namespace`, `bridge_kg`,\n        `domain`, `verified_count`, `example_question`, and a runnable\n        `skeleton_query` \u2014 the example SPARQL to copy and build on (it encodes the\n        IRI-normalization, so no separate prose recipe is returned).\n        `skeleton_verified: true` means it reproduced `verified_count` exactly when\n        last run on `verified_on`. When two recipes link the same entity through\n        different identifiers (e.g. direct MONDO AND an OMIM bridge), each carries\n        a `complementary_note` and a top-level `note` flags that they are\n        COMPLEMENTARY \u2014 UNION them for complete coverage rather than picking one.\n      * `{\"status\": \"known_non_join\", \"non_joins\": [...]}` \u2014 this pair was CHECKED\n        and does not join on the obvious key. Do NOT attempt it; read `diagnosis`.\n      * `{\"status\": \"unknown\", ...}` \u2014 nothing precomputed. Fall back to\n        `find_crosswalks(kg_a)` / `find_crosswalks(kg_b)` to discover a key live.\n    Returns (kg_b omitted) `{\"shortname\", \"joins\": [...], \"island\": {...}|None,\n    \"known_non_joins\": [...]}` \u2014 every verified join touching `kg_a`, the `joins`\n    grouped by `domain` (sorted by `(domain, shared_key)`) like `list_crosswalks`.\n\n    `island`/`known_non_join` context is included whenever present so you can tell\n    apart \"not yet profiled\" from \"verified to share no key\". `verified_on` dates\n    every answer so staleness is visible.\n    ",
+          "inputSchema": {
+            "properties": {
+              "kg_a": {
+                "title": "Kg A",
+                "type": "string"
+              },
+              "kg_b": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Kg B"
+              }
+            },
+            "required": [
+              "kg_a"
+            ],
+            "title": "get_join_strategyArguments",
+            "type": "object"
+          },
+          "outputSchema": {
+            "additionalProperties": true,
+            "title": "get_join_strategyDictOutput",
+            "type": "object"
+          }
+        },
+        {
+          "name": "taxon_overlap",
+          "description": "Build a runnable query for the NCBITaxon overlap between two KGs.\n\n    The taxonomy crosswalks are a HUB: each KG joins `ubergraph` (see\n    `list_crosswalks`, domain \"Taxonomy\"), not each other \u2014 so the table stores no\n    direct pairwise count. This tool composes two hub spokes THROUGH ubergraph into\n    a runnable skeleton you then execute with `query` / federation (it does not run\n    it \u2014 federated taxonomy joins can be heavy).\n\n    Pairwise taxon overlap is NOT single-valued; two skeletons are returned:\n      * `exact_id_skeleton` \u2014 taxa carrying the SAME NCBITaxon id in both KGs\n        (strict intersection).\n      * `clade_membership_skeleton` \u2014 `kg_b` taxa nested under `kg_a`'s taxa via\n        ubergraph `subClassOf*`. This can be FAR larger when one side is\n        coarser-grained (e.g. genus names vs strain-level taxids); it is\n        directional, so swap `kg_a`/`kg_b` to flip which side is the clade. The\n        exact-id count understating a real biological overlap is the #1 trap here.\n\n    Each side applies its KG's own id normalization (PATRIC genome id, UniProt\n    taxonomy IRI, label resolution, \u2026). Materialized counts (exact-id + both clade\n    directions) are returned under `materialized_overlap` when the pair has a\n    non-zero overlap precomputed in the NCBITaxon hub (see `list_crosswalks`); a\n    verified pairwise crosswalk recipe (e.g. spoke-genelab<->spoke-okn, D9) is\n    returned under `materialized` so you can use the stored count instead of\n    re-running.\n\n    Args:\n        kg_a: a KG shortname in the NCBITaxon hub (see `TAXON_HUB_KGS`).\n        kg_b: the other KG shortname.\n\n    Returns `{\"kg_a\", \"kg_b\", \"exact_id_skeleton\", \"clade_membership_skeleton\",\n    \"note\", \"materialized_overlap\"?, \"materialized\"?}`, or `{\"status\":\n    \"not_in_taxon_hub\", ...}` if either KG has no taxon representation that reaches\n    the hub.\n    ",
+          "inputSchema": {
+            "properties": {
+              "kg_a": {
+                "title": "Kg A",
+                "type": "string"
+              },
+              "kg_b": {
+                "title": "Kg B",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kg_a",
+              "kg_b"
+            ],
+            "title": "taxon_overlapArguments",
+            "type": "object"
+          },
+          "outputSchema": {
+            "additionalProperties": true,
+            "title": "taxon_overlapDictOutput",
+            "type": "object"
+          }
+        },
+        {
+          "name": "list_crosswalks",
+          "description": "List EVERY precomputed cross-KG integration point in one call.\n\n    The federation ships a curated, hand-verified table of join recipes between\n    knowledge graphs. `get_join_strategy` narrows it to one KG or one pair; this\n    returns the whole map at once, so you can discover which graphs connect \u2014\n    and on what shared identifier \u2014 without knowing the pair in advance. Each row\n    is a compact summary; call `get_join_strategy(kg_a, kg_b)` for a pair's full\n    recipe (predicates, roles, IRI-normalization snippet, counts).\n\n    Args:\n        include_examples: when True (default), each row carries an\n            `example_question` describing what the join answers. Set False for a\n            more compact listing.\n\n    Returns:\n        `{\"verified_on\", \"count\", \"crosswalks\": [...], \"taxon_clade_note\"?}`. Rows\n        are sorted by `(domain, shared_key)`, so the list reads as a table grouped\n        by `domain` (e.g. \"Genes\", \"Geospatial\", \"Disease & phenotype\") and ordered\n        by ontology within each \u2014 render it directly as such. `kgs` lists every KG\n        the join touches in join order (left \u2192 bridge \u2192 right), each an official\n        registry shortname usable directly with `describe_kg`/`get_schema`/`query`.\n        Most rows carry a single `verified_count`; `verified_on` dates the counts.\n\n        The NCBITaxon crosswalks are a hub (each KG joins `ubergraph`); rather than\n        list each KG's overlap with that plumbing, the listing shows ONE row PER\n        non-zero KG pair, composed through the hub (`kgs: [kg_a, \"ubergraph\",\n        kg_b]`, `bridge_kg: \"ubergraph\"`, `hub: \"ubergraph\"`). These rows have NO\n        single `verified_count`; the overlap is two-valued \u2014 `exact_id` (taxa with\n        the same NCBITaxon id, symmetric) plus directional `clade_a_in_b` /\n        `clade_b_in_a` (taxa nested under the other KG's clades via `subClassOf*`,\n        often far larger). Some Taxonomy rows are instead LABEL-BRIDGED\n        (`match_type: \"label\"`): biohealth carries no NCBITaxon id, so its organisms\n        are matched to the other KG by exact scientific name, and the row carries\n        `label_match` / `kg_b_taxa` (NOT `exact_id`/clade) \u2014 render these as\n        \"label match: <label_match> of <kg_b_taxa> organisms by name\". Do NOT drop a\n        Taxonomy row just because it lacks the id columns. When the result includes\n        Taxonomy rows it also carries a top-level `taxon_clade_note`: RENDER IT as a\n        short paragraph AFTER the table so the reader understands both the id columns\n        and the label rows. `taxon_overlap(kg_a, kg_b)` returns the runnable\n        skeletons.\n\n        Rows where `ubergraph` is a bare endpoint (a KG's overlap with the ontology\n        backbone, not a KG-to-KG join \u2014 e.g. oard-kg's MONDO terms, biobricks-mesh's\n        MeSH terms) are omitted from this listing; they remain available via\n        `get_join_strategy` and are what inline `subClassOf*` category expansion\n        uses. In the listing ubergraph appears only as a bridge (middle of `kgs`).\n    ",
+          "inputSchema": {
+            "properties": {
+              "include_examples": {
+                "default": true,
+                "title": "Include Examples",
+                "type": "boolean"
+              }
+            },
+            "title": "list_crosswalksArguments",
+            "type": "object"
+          },
+          "outputSchema": {
+            "additionalProperties": true,
+            "title": "list_crosswalksDictOutput",
+            "type": "object"
+          }
+        },
+        {
+          "name": "find_context_sources",
+          "description": "Reverse capability index: which KGs SUPPLY a given context type, joinably.\n\n    The inverse of `get_join_strategy`. Instead of \"how do these two KGs join?\",\n    this answers \"who supplies pathway / GO / trait / disease \u2026 for an entity I can\n    join on `join_key`?\" in ONE deterministic call \u2014 so you enumerate every graph\n    that adds the context you need BEFORE narrowing, rather than judging a graph by\n    its name and concluding a context type is \"unavailable\" without checking. It\n    combines the curated per-KG `payload` tags (what a graph carries; see\n    `list_kgs`) with the verified crosswalk table (the predicate, shared key, and\n    `COUNT(DISTINCT)` size of each join).\n\n    Args:\n        want: context types to look for, from the payload vocabulary \u2014 e.g.\n            `[\"GO\", \"pathway\", \"gene_set\", \"trait\", \"disease\"]`. Unknown types are\n            echoed back in `unmatched_want` (the rest still run). Omit to consider\n            every payload type.\n        join_key: optional shared identifier the supplier must be joinable on \u2014\n            e.g. `\"Entrez\"`, `\"UniProt\"`, `\"MONDO\"`, `\"S2_L13\"`. Matched as a\n            case-insensitive substring, so `\"Entrez\"` also matches bridged keys\n            like `\"Entrez -> HGNC (bridged)\"`. Omit to list every key each\n            supplier joins on.\n\n    Returns `{\"want\", \"join_key\", \"payloads_verified_on\", \"crosswalks_verified_on\",\n    \"sources\", \"payload_only\", \"unmatched_want\", \"note\"}`:\n      * `sources` \u2014 `{context_type: [{\"kg\", \"payloads\", \"joins\": [{shared_key,\n        predicate, role, bridge_kg, size}, ...]}, ...]}`. Within each type, KGs are\n        sorted by their LARGEST join `size` first, so the biggest join surfaces at\n        the top (the trap this defeats: not noticing the biggest gene join). `kg`'s\n        full `payloads` list is included so you see everything it adds, not just the\n        type you asked for.\n      * `payload_only` \u2014 `{context_type: [kg, ...]}`: KGs that SUPPLY the type but\n        do NOT join on `join_key` (e.g. they key genes on Ensembl, not Entrez).\n        They are not hidden \u2014 they still warrant a schema check or an id\n        conversion. Empty when `join_key` is omitted.\n      * `unmatched_want` \u2014 requested types that are not in the vocabulary.\n\n    Every requested (known) type appears as a key in `sources` even when its list\n    is empty, so an empty list is POSITIVE evidence that nothing supplies it on\n    that key \u2014 not an unchecked assumption.\n    ",
+          "inputSchema": {
+            "properties": {
+              "want": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Want"
+              },
+              "join_key": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Join Key"
+              }
+            },
+            "title": "find_context_sourcesArguments",
+            "type": "object"
+          },
+          "outputSchema": {
+            "additionalProperties": true,
+            "title": "find_context_sourcesDictOutput",
+            "type": "object"
+          }
+        },
+        {
+          "name": "sparql_to_mermaid",
+          "description": "Render a SPARQL query as a Mermaid flowchart diagram of its graph pattern.\n\n    Turns the query's WHERE clause into a `graph TD` diagram: variables and\n    constants become nodes, triple patterns become labeled edges, and\n    OPTIONAL / UNION / FILTER / BIND / VALUES / SERVICE / MINUS / EXISTS blocks\n    and property paths are drawn as their own shapes/subgraphs. Projected\n    variables are highlighted. Use this to help a reader understand the shape of\n    a query you wrote or are about to run with `sparql_query` \u2014 it complements\n    `visualize_schema` (which diagrams a KG's schema, not a specific query).\n\n    IRIs are shortened using the query's own `PREFIX` declarations; by default a\n    curated set of well-known life-science / semantic-web prefixes (MONDO, CHEBI,\n    GO, HP, NCIT, biolink, up, efo, \u2026) also shortens common IRIs the query did\n    not declare.\n\n    Args:\n        query: The SPARQL query text (SELECT/ASK/CONSTRUCT/DESCRIBE). May include\n            federation `GRAPH <...> { ... }` blocks and its own `PREFIX` lines.\n        well_known: If True (default), also shorten common bio/semantic-web IRIs\n            the query did not declare a prefix for. Set False to shorten only\n            against the query's own `PREFIX` declarations.\n        portable: If True, emit a stricter-renderer-compatible diagram \u2014 any IRI\n            with no known prefix is compacted to a synthetic `segment:local` CURIE\n            (e.g. `kg:spoke-genelab`, `reactome:R-HSA-163210`) instead of a raw\n            `https://\u2026` in a node or `GRAPH` title, and the aggregate edge uses the\n            conventional pipe-label form. Default False; the default output already\n            renders in Claude's Artifact renderer and current Mermaid, so only set\n            this if a specific viewer rejects a diagram.\n\n    Returns:\n        `{\"mermaid\": ..., \"mermaid_block\": ...}`, where `mermaid_block` is the\n        diagram ALREADY wrapped in a ```mermaid fenced code block and `mermaid`\n        is the same diagram fence-free (for saving as a `.mermaid` file). On a\n        query that cannot be parsed, returns `{\"error\": ...}` instead.\n\n    PRESENTATION (required): output `mermaid_block` VERBATIM, and nothing else.\n    Do NOT redraw, re-render, or convert it \u2014 no SVG, PNG, HTML, image, artifact,\n    or hand-built diagram. Mermaid clients render the fenced block natively;\n    producing your own graphic yields a messy, incorrect picture.\n    ",
+          "inputSchema": {
+            "properties": {
+              "query": {
+                "title": "Query",
+                "type": "string"
+              },
+              "well_known": {
+                "default": true,
+                "title": "Well Known",
+                "type": "boolean"
+              },
+              "portable": {
+                "default": false,
+                "title": "Portable",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "query"
+            ],
+            "title": "sparql_to_mermaidArguments",
+            "type": "object"
+          },
+          "outputSchema": {
+            "additionalProperties": true,
+            "title": "sparql_to_mermaidDictOutput",
+            "type": "object"
+          }
+        },
+        {
+          "name": "probe_namespaces",
+          "description": "Report which identifier/ontology namespaces populate a predicate's objects.\n\n    Schema introspection (`get_schema`) tells you a KG's predicates but NOT which\n    controlled vocabularies fill their object values \u2014 so it's easy to assume a\n    single ontology (e.g. DOID) and miss a richer one (e.g. MONDO) that is also\n    present. Call this BEFORE writing the main query whenever a predicate's\n    objects are ontology terms (diseases, chemicals, genes, anatomy) to see the\n    actual namespace distribution and pick the best identifier to join on.\n\n    Args:\n        shortname: The KG shortname (e.g. `nde`), as returned by `list_kgs`.\n        predicate: The predicate whose objects to profile, as a full IRI or a\n            known CURIE (`schema:healthCondition`, `rdfs:seeAlso`, `MONDO:...`).\n            Get the exact predicate from `get_schema`.\n        sample: 0 (default) counts every object exactly. Set a positive N to\n            profile only the first N objects via an inner `LIMIT` \u2014 a fast,\n            representative distribution for very large predicates where a full\n            scan would time out. Counts are then over the sample, not the graph.\n\n    Returns:\n        `{\"shortname\", \"predicate\", \"namespaces\": [{\"namespace\", \"count\"}, ...]\n        sorted by count desc, \"total\", \"sampled\"}`. A `namespace` is an ontology\n        prefix (`MONDO`, `DOID`, `MeSH`) when objects are CURIE-style, else the\n        base IRI namespace; an OBO prefix (MONDO/DOID/HP/CHEBI/\u2026) can then be\n        joined to ubergraph's `rdfs:subClassOf*` hierarchy for category\n        expansion. `sampled` is the `LIMIT` used, or null for an exact full scan.\n\n    This is an exploratory probe \u2014 it is NOT recorded in the session/transcript.\n    ",
+          "inputSchema": {
+            "properties": {
+              "shortname": {
+                "title": "Shortname",
+                "type": "string"
+              },
+              "predicate": {
+                "title": "Predicate",
+                "type": "string"
+              },
+              "sample": {
+                "default": 0,
+                "title": "Sample",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "shortname",
+              "predicate"
+            ],
+            "title": "probe_namespacesArguments",
+            "type": "object"
+          },
+          "outputSchema": {
+            "additionalProperties": true,
+            "title": "probe_namespacesDictOutput",
+            "type": "object"
+          }
+        },
+        {
+          "name": "find_crosswalks",
+          "description": "Find ontology/database ids in a KG, however they are encoded.\n\n    Ontology ids (MONDO, CHEBI, NCBI Gene, \u2026) hide in THREE places, and a KG that\n    \"lacks\" the id you need usually just encodes it somewhere non-obvious. This\n    profiles all three at once:\n\n    1. MAPPING predicates \u2014 `rdfs:seeAlso`, `owl:sameAs`, `schema:sameAs`, the\n       SKOS `*Match` predicates, `oboInOwl:hasDbXref`. Generic, so `get_schema`\n       often omits them or buries them among hundreds of predicates. Returned\n       under `crosswalks`, per predicate.\n    2. NODE IRIs \u2014 the entity's OWN IRI is the ontology term (rdkg's diseases ARE\n       `obo/MONDO_\u2026` IRIs; ids may also be `identifiers.org/\u2026`). No mapping\n       predicate exists; you join DIRECTLY on the node IRI. Returned under\n       `ontology_ids` with `role=\"subject\"`.\n    3. DOMAIN predicates \u2014 the id is the object of an arbitrary, KG-specific\n       predicate (not one of the mapping set). Returned under `ontology_ids`\n       with `role=\"object\"` and the carrying predicate.\n\n    Cases 2 and 3 are invisible to a mapping-predicate-only scan \u2014 they are\n    exactly why `find_crosswalks` used to return empty for KGs (rdkg, oard-kg,\n    biobricks-ice, biomarkerkg) that in fact carry rich ontology ids. Use this\n    whenever a KG seems to lack the identifier you need on its obvious predicates.\n\n    Args:\n        shortname: KG shortname (e.g. `prokn`), as returned by `list_kgs`.\n        sample: 0 (default) counts exactly; a positive N caps each scan via an\n            inner `LIMIT` for KGs where a predicate or the node-IRI scan is very\n            large. Counts are then over the sample, not the graph.\n\n    Returns:\n        `{\"shortname\", \"crosswalks\": [{\"predicate\", \"predicate_iri\", \"namespaces\":\n        [{\"namespace\", \"count\"}, ...], \"total\"}, ...], \"ontology_ids\": [{\"role\",\n        \"namespace\", \"count\", \"predicates\": [...]}, ...], \"sampled\"}`.\n        `crosswalks` lists mapping predicates (busiest first; namespaces by count\n        desc). `ontology_ids` lists ids encoded as node IRIs (`role=\"subject\"`) or\n        as domain-predicate objects (`role=\"object\"`), one row per id family,\n        busiest first; `count` is DISTINCT ids \u2014 i.e. how many join keys \u2014 and\n        `predicates` are the edges they ride on. Any OBO prefix (MONDO/CHEBI/\u2026) can\n        be joined to ubergraph's `rdfs:subClassOf*`. When `ontology_ids` shows a\n        `subject`-role namespace, the join is direct: the KG's nodes ARE those\n        IRIs, so `?s` already equals the ontology term in the other graph.\n\n    CROSS-KG BRIDGING: when a KG stores ids in an EXTERNAL IRI form that no\n    ontology shares directly (e.g. ProKN's diseases as `https://www.omim.org/\n    entry/100100`), two bridges through `ubergraph` work:\n      1. `oboInOwl:hasDbXref` \u2014 MONDO/HP/CHEBI terms hold CURIE cross-refs\n         (`OMIM:100100`, `UMLS:C...`, `MESH:D...`). Extract the bare id from the\n         KG's IRI, rebuild the CURIE, and join `?mondo oboInOwl:hasDbXref\n         \"OMIM:100100\"`. PREFERRED \u2014 CURIEs sidestep IRI-form mismatches.\n      2. `skos:exactMatch` \u2014 MONDO terms link to OMIM as IRIs, BUT ubergraph uses\n         `https://omim.org/entry/100100` while ProKN uses `https://www.omim.org/\n         entry/100100` (note the missing `www.`). A direct join silently matches\n         nothing; rewrite at query time, e.g. `BIND(IRI(REPLACE(STR(?omim),\n         \"://www\\.omim\", \"://omim\")) AS ?ug_omim)`, then join on `?ug_omim`.\n    Either way ubergraph also gives you the `subClassOf*` hierarchy. Beware IRI-\n    form drift across graphs generally (subdomain, http/https, trailing slash).\n\n    This is an exploratory probe \u2014 it is NOT recorded in the session/transcript.\n    ",
+          "inputSchema": {
+            "properties": {
+              "shortname": {
+                "title": "Shortname",
+                "type": "string"
+              },
+              "sample": {
+                "default": 0,
+                "title": "Sample",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "shortname"
+            ],
+            "title": "find_crosswalksArguments",
+            "type": "object"
+          },
+          "outputSchema": {
+            "additionalProperties": true,
+            "title": "find_crosswalksDictOutput",
+            "type": "object"
+          }
+        },
+        {
+          "name": "sparql_query",
+          "description": "Run a SPARQL query against the OKN federation endpoint.\n\n    Scope each knowledge graph with its named graph, e.g.::\n\n        PREFIX up: <http://purl.uniprot.org/core/>\n        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>\n        SELECT DISTINCT ?mondo ?label WHERE {\n          GRAPH <https://purl.org/okn/frink/kg/prokn> {\n            ?d a up:Disease ; rdfs:seeAlso ?mondo .\n          }\n        }\n\n    BEFORE joining a target KG on an ontology term (the `<...MONDO_...>` IRIs\n    below), confirm which namespace that KG actually stores for the predicate by\n    calling `probe_namespaces(shortname, predicate)` first. KGs routinely carry\n    several ontologies for the same field (e.g. NDE's `schema:healthCondition`\n    holds MONDO, DOID, HP and NCIT), and picking the sparse one \u2014 or one with no\n    `subClassOf*` hierarchy in ubergraph \u2014 yields a fraction of the results.\n\n    For category/subtype questions (\"all cardiovascular diseases\", \"any asthma\",\n    \"subtypes of X\"), expand the category INLINE using ubergraph's precomputed\n    transitive closure and join it to the target KG in the SAME query \u2014 do not\n    walk the hierarchy level by level or fetch the tree separately::\n\n        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>\n        SELECT DISTINCT ?disease ?label WHERE {\n          GRAPH <https://purl.org/okn/frink/kg/ubergraph> {\n            ?disease rdfs:subClassOf* <http://purl.obolibrary.org/obo/MONDO_0004995> .\n            OPTIONAL { ?disease rdfs:label ?label }\n          }\n          GRAPH <https://purl.org/okn/frink/kg/SOME_TARGET_KG> {\n            ?record some:predicate ?disease .\n          }\n        }\n\n    Args:\n        query: A complete SPARQL query string.\n        format: `json` (default; parsed into rows), `csv`, or `tsv` (raw text).\n        exploratory: Set True for schema-probing, sampling, or trial-and-error\n            queries you don't want in the transcript. Exploratory queries are\n            never logged. (Queries that error or return no rows are skipped\n            automatically, exploratory or not.)\n        compact: Set True to return json results in a token-efficient shape that\n            lists the column names ONCE instead of repeating them on every row \u2014\n            useful for large, wide result sets. `{\"columns\": [...], \"data\":\n            [[...], ...], \"count\": N}` where each `data` row is an array in\n            `columns` order (unbound cells are `null`). Default False returns the\n            self-describing dict-row shape below. Only affects json (csv/tsv and\n            errors are unchanged) and only the returned payload \u2014 the transcript\n            log is unaffected.\n        scope: OPTIONAL log scope. Omit it for a normal single analysis. Pass a\n            unique label when SEVERAL ANALYSES RUN CONCURRENTLY against this\n            server \u2014 most importantly parallel subagents, which all share ONE MCP\n            session. Without it their queries interleave in a single log and one\n            agent's SPARQL ends up in another's transcript. Use the SAME scope\n            string in `reset_query_log`, `sparql_query` and\n            `create_chat_transcript` for a given analysis.\n\n    Returns:\n        For json (default): `{\"vars\": [...], \"rows\": [...], \"row_count\": N}`.\n        For json with `compact=True`: `{\"columns\": [...], \"data\": [[...], ...],\n        \"count\": N}`.\n        For csv/tsv: `{\"format\": ..., \"text\": \"...\"}`.\n        A zero-row json result also carries a `hint` field \u2014 DON'T conclude the\n        data is absent; the join term's identifier scheme is the usual culprit.\n\n    Note: The endpoint runs on a read-only filesystem, so queries needing a\n    large external sort over a full-graph scan may fail; add a `LIMIT`, narrow\n    the pattern, or scope to a named graph.\n    ",
+          "inputSchema": {
+            "properties": {
+              "query": {
+                "title": "Query",
+                "type": "string"
+              },
+              "format": {
+                "default": "json",
+                "title": "Format",
+                "type": "string"
+              },
+              "exploratory": {
+                "default": false,
+                "title": "Exploratory",
+                "type": "boolean"
+              },
+              "compact": {
+                "default": false,
+                "title": "Compact",
+                "type": "boolean"
+              },
+              "scope": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Scope"
+              }
+            },
+            "required": [
+              "query"
+            ],
+            "title": "sparql_queryArguments",
+            "type": "object"
+          }
+        },
+        {
+          "name": "expand_ontology_term",
+          "description": "Expand an ontology term to its full subtree/closure via `ubergraph`.\n\n    USE THIS (or the equivalent inline `rdfs:subClassOf*` pattern) for any\n    \"all X under category Y\" / \"subtypes of\" / \"descendants of\" question, e.g.\n    \"all cardiovascular diseases\". Ubergraph stores precomputed inferred edges,\n    so this returns the COMPLETE subtree in one call. Do not walk the hierarchy\n    level by level or fetch the tree separately.\n\n    Args:\n        term: The ontology term as a full URI\n            (e.g. `http://purl.obolibrary.org/obo/MONDO_0003847`) or a CURIE\n            with an OBO prefix (e.g. `MONDO:0003847`, `CHEBI:24431`).\n        relation: `subClassOf` (default) or `partOf`.\n        direction: `descendants` (terms under `term`) or `ancestors`.\n        include_self: If True (default), include `term` itself in the results\n            (reflexive `*` path); if False, return only strict descendants/\n            ancestors (non-reflexive `+` path).\n        limit: Max rows to return.\n        scope: OPTIONAL log scope \u2014 the same string passed to `sparql_query` and\n            `create_chat_transcript`. Omit for a normal single analysis; pass a\n            unique label when several analyses run concurrently against this\n            server (parallel subagents share one MCP session, so an unscoped log\n            mixes their entries).\n\n    Returns the matching terms with their `rdfs:label`.\n    ",
+          "inputSchema": {
+            "properties": {
+              "term": {
+                "title": "Term",
+                "type": "string"
+              },
+              "relation": {
+                "default": "subClassOf",
+                "title": "Relation",
+                "type": "string"
+              },
+              "direction": {
+                "default": "descendants",
+                "title": "Direction",
+                "type": "string"
+              },
+              "include_self": {
+                "default": true,
+                "title": "Include Self",
+                "type": "boolean"
+              },
+              "limit": {
+                "default": 1000,
+                "title": "Limit",
+                "type": "integer"
+              },
+              "scope": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Scope"
+              }
+            },
+            "required": [
+              "term"
+            ],
+            "title": "expand_ontology_termArguments",
+            "type": "object"
+          }
+        },
+        {
+          "name": "point_to_s2",
+          "description": "Convert a lat/long point to its spatialkg S2 cell IRI (level 13 default).",
+          "inputSchema": {
+            "properties": {
+              "lat": {
+                "title": "Lat",
+                "type": "number"
+              },
+              "lng": {
+                "title": "Lng",
+                "type": "number"
+              },
+              "level": {
+                "default": 13,
+                "title": "Level",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "lat",
+              "lng"
+            ],
+            "title": "point_to_s2Arguments",
+            "type": "object"
+          },
+          "outputSchema": {
+            "properties": {
+              "result": {
+                "title": "Result",
+                "type": "string"
+              }
+            },
+            "required": [
+              "result"
+            ],
+            "title": "point_to_s2Output",
+            "type": "object"
+          }
+        },
+        {
+          "name": "spatial_bridge",
+          "description": "Generic point->S2 bridge for ANY point-bearing graph.\n\n    ``point_query`` must SELECT ``?site ?lat ?lng``; ``target_pattern`` uses\n    ``?site``/``?cell`` to join the computed S2 cell to spatialkg/fiokg/sawgraph\n    and select payload.\n    ",
+          "inputSchema": {
+            "properties": {
+              "point_query": {
+                "title": "Point Query",
+                "type": "string"
+              },
+              "target_pattern": {
+                "title": "Target Pattern",
+                "type": "string"
+              },
+              "select_vars": {
+                "default": "*",
+                "title": "Select Vars",
+                "type": "string"
+              },
+              "extra_prefixes": {
+                "default": "",
+                "title": "Extra Prefixes",
+                "type": "string"
+              },
+              "limit": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": 500,
+                "title": "Limit"
+              }
+            },
+            "required": [
+              "point_query",
+              "target_pattern"
+            ],
+            "title": "spatial_bridgeArguments",
+            "type": "object"
+          }
+        },
+        {
+          "name": "get_schema",
+          "description": "Get the schema (classes, predicates, edge/node properties) for one KG.\n\n    Call this BEFORE writing a `sparql_query` for a KG, to learn its specific\n    entity types, predicates, and property names. Prefers curated metadata and\n    falls back to probing the federation endpoint for the distinct classes and\n    predicates used in the KG's named graph.\n\n    Args:\n        shortname: The KG shortname (e.g. `prokn`, `sawgraph`), as returned by\n            `list_kgs`.\n        compact: If True (default), return the compact schema. Set False to also\n            include an `edge_property_summary` highlighting relationships that\n            carry edge properties (with ready-to-use reification query templates).\n\n    Returns:\n        `{\"shortname\": ..., \"schema\": {\"classes\", \"predicates\",\n        \"edge_properties\", \"node_properties\"}}`. Each of `classes`/`predicates`/\n        `node_properties` is a `{\"columns\", \"data\", \"count\"}` table;\n        `edge_properties` maps relationship names to their properties and a\n        `query_template` showing the RDF reification pattern to query them.\n        Also includes `next_step` reminding you to `probe_namespaces` for any\n        predicate whose objects are ontology terms before writing the query. For\n        KGs with domain rules the schema alone does not convey (e.g.\n        `spoke-genelab`), also includes `usage_notes` with `guidance` prose and a\n        reusable `query_snippet`.\n    ",
+          "inputSchema": {
+            "properties": {
+              "shortname": {
+                "title": "Shortname",
+                "type": "string"
+              },
+              "compact": {
+                "default": true,
+                "title": "Compact",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "shortname"
+            ],
+            "title": "get_schemaArguments",
+            "type": "object"
+          },
+          "outputSchema": {
+            "additionalProperties": true,
+            "title": "get_schemaDictOutput",
+            "type": "object"
+          }
+        },
+        {
+          "name": "visualize_schema",
+          "description": "Generate a Mermaid class diagram of a KG's schema.\n\n    Builds the diagram deterministically from `get_schema` (no drafting needed):\n    node classes become class boxes (with node properties as members), edge\n    predicates become labeled arrows, and predicates that carry edge properties\n    become intermediary classes with typed fields wired `source --> edge -->\n    target`. Node (entity) classes are colored light blue and edge\n    (relationship) classes orange, with a legend showing both. When the curated\n    metadata names predicates but not their endpoints (e.g. `sawgraph`), edges\n    are recovered from the graph's `rdfs:domain`/`rdfs:range`, scoped to the\n    curated classes; any predicate still without endpoints is listed as a `%%`\n    comment rather than guessed at.\n\n    Args:\n        shortname: The KG shortname (e.g. `spoke-genelab`), as returned by\n            `list_kgs`.\n        scope: OPTIONAL log scope \u2014 the same string passed to `sparql_query` and\n            `create_chat_transcript`. Omit for a normal single analysis; pass a\n            unique label when several analyses run concurrently against this\n            server (parallel subagents share one MCP session, so an unscoped log\n            mixes their entries).\n\n    Returns:\n        `{\"shortname\": ..., \"mermaid\": ..., \"mermaid_block\": ...}`.\n        `mermaid_block` is the diagram ALREADY wrapped in a ```mermaid fenced\n        code block; `mermaid` is the same diagram fence-free (for saving as a\n        `.mermaid` file).\n\n    PRESENTATION (required): output `mermaid_block` VERBATIM, and nothing else.\n    Do NOT redraw, re-render, or convert it \u2014 in particular do NOT emit SVG, PNG,\n    HTML, an image, an artifact, or a hand-built diagram. Mermaid clients render\n    the fenced block natively; producing your own graphic yields a messy,\n    incorrect picture.\n\n    The diagram is logged to the session automatically (like queries), so\n    `create_chat_transcript` renders it without you re-supplying it. Pass the same\n    `scope` you pass to `sparql_query` / `create_chat_transcript` when several\n    analyses run concurrently against this server (e.g. parallel subagents, which\n    share one MCP session); omit it otherwise.\n    ",
+          "inputSchema": {
+            "properties": {
+              "shortname": {
+                "title": "Shortname",
+                "type": "string"
+              },
+              "scope": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Scope"
+              }
+            },
+            "required": [
+              "shortname"
+            ],
+            "title": "visualize_schemaArguments",
+            "type": "object"
+          },
+          "outputSchema": {
+            "additionalProperties": true,
+            "title": "visualize_schemaDictOutput",
+            "type": "object"
+          }
+        },
+        {
+          "name": "reset_query_log",
+          "description": "Clear this analysis's query log (and logged diagrams) for a fresh start.\n\n    Call this at the START of a new analysis. Every subsequent `sparql_query`\n    (and `expand_ontology_term`) call is logged automatically, as is every\n    `visualize_schema` diagram, and `create_chat_transcript` renders them as the\n    ground-truth record of what actually ran \u2014 so you don't have to re-supply\n    queries or diagrams from memory.\n\n    Args:\n        scope: OPTIONAL log scope. Omit for a normal single analysis. If SEVERAL\n            ANALYSES RUN CONCURRENTLY against this server \u2014 most importantly\n            parallel subagents, which all share ONE MCP session \u2014 each MUST pass\n            its own unique scope, and pass the SAME string to `sparql_query` and\n            `create_chat_transcript`. Without it, their queries interleave in one\n            log and one agent's SPARQL lands in another's transcript. Resetting\n            one scope never touches another.\n\n    Returns:\n        `{\"cleared\": N, \"scope\": ..., \"active_scopes\": [...]}`. If `active_scopes`\n        shows scopes you did not create, other analyses ARE running concurrently\n        in this session \u2014 pass a `scope` from here on.\n    ",
+          "inputSchema": {
+            "properties": {
+              "scope": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Scope"
+              }
+            },
+            "title": "reset_query_logArguments",
+            "type": "object"
+          },
+          "outputSchema": {
+            "additionalProperties": true,
+            "title": "reset_query_logDictOutput",
+            "type": "object"
+          }
+        },
+        {
+          "name": "get_query_log",
+          "description": "Return the SPARQL queries logged so far for this analysis, in order.\n\n    Only queries that returned rows and were not marked exploratory are present.\n    Each entry has `timestamp`, `sparql` (verbatim), `graphs` (KG shortnames),\n    `format`, `row_count`, and `results` (capped sample). Useful to inspect what\n    will appear in `create_chat_transcript`.\n\n    A query that ran but is ABSENT here (it errored, returned zero rows, or was\n    marked exploratory) is NOT lost \u2014 call `get_skipped_queries` to see it with\n    the reason it was skipped.\n\n    Args:\n        scope: OPTIONAL log scope \u2014 the same one passed to `sparql_query`. Omit\n            for a normal single analysis.\n    ",
+          "inputSchema": {
+            "properties": {
+              "scope": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Scope"
+              }
+            },
+            "title": "get_query_logArguments",
+            "type": "object"
+          },
+          "outputSchema": {
+            "properties": {
+              "result": {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "title": "Result",
+                "type": "array"
+              }
+            },
+            "required": [
+              "result"
+            ],
+            "title": "get_query_logOutput",
+            "type": "object"
+          }
+        },
+        {
+          "name": "get_skipped_queries",
+          "description": "Return queries that RAN but were kept OUT of the transcript log, in order.\n\n    The counterpart to `get_query_log`: a query is skipped \u2014 and appears here\n    instead of in the log \u2014 when it errored, returned zero rows, or was marked\n    `exploratory`. This is where an \"empty auto-log\" gets explained: if your\n    substantive pulls hit the endpoint's read-only-filesystem / oversized-sort\n    error, they land here with `reason: \"error\"` rather than in the log.\n\n    Each entry has `timestamp`, `sparql` (verbatim), `graphs` (KG shortnames),\n    `format`, `reason` (`error` / `empty` / `exploratory`), `error` (the endpoint\n    message when `reason == \"error\"`, else null), and `row_count`. These entries\n    never enter `create_chat_transcript` \u2014 they are diagnostic only.\n\n    Args:\n        scope: OPTIONAL log scope \u2014 the same one passed to `sparql_query`. Omit\n            for a normal single analysis.\n    ",
+          "inputSchema": {
+            "properties": {
+              "scope": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Scope"
+              }
+            },
+            "title": "get_skipped_queriesArguments",
+            "type": "object"
+          },
+          "outputSchema": {
+            "properties": {
+              "result": {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "title": "Result",
+                "type": "array"
+              }
+            },
+            "required": [
+              "result"
+            ],
+            "title": "get_skipped_queriesOutput",
+            "type": "object"
+          }
+        },
+        {
+          "name": "create_chat_transcript",
+          "description": "Build a reproducible, detailed transcript of a Proto-OKN session.\n\n    Captures the FULL working detail \u2014 not just a summary \u2014 so the session can\n    be reproduced and audited: the user prompts and your answers, every SPARQL\n    query that actually ran (verbatim) with the rows it returned, plus session\n    provenance (date, model version, knowledge graphs, endpoint).\n\n    Queries come from the automatic session log: each `sparql_query` /\n    `expand_ontology_term` call is recorded as it runs, and (when\n    `include_query_log` is true) rendered here as ground truth \u2014 you do NOT need\n    to re-supply them. Call `reset_query_log` at the start of an analysis to\n    scope the log to that session. You still supply the prompts and your\n    full answer text (verbatim, not summarized) via `exchanges`.\n\n    Args:\n        model: The EXACT runtime model identifier that produced the analysis\n            (e.g. `claude-opus-4-8`, `gpt-5.6-sol`), taken from trusted session\n            metadata or supplied by the user \u2014 never a family or product name\n            (`Claude`, `GPT-5`, `Codex`), a placeholder, or an id inferred from\n            wording like \"based on GPT-5\". The server stores this verbatim and\n            cannot see which model is calling it, so it can neither derive the\n            value nor tell a right one from a wrong one. If you cannot determine\n            it, ASK the user rather than guessing.\n        exchanges: The conversation turns, in order. Each is a dict with\n            `prompt` (str) and optional `answer` (str). The `answer` MUST be your\n            full response for that turn, reproduced verbatim as the user saw it \u2014\n            the complete report text, findings, and any inline tables or lists \u2014\n            NOT a high-level summary or paraphrase. The server cannot see your\n            prose (only tool calls are logged), so whatever you omit here is gone\n            from the transcript. Err toward including too much. You may also attach an\n            explicit `queries` list per turn (same shape as the log entries) if\n            you want queries shown inline with a specific prompt instead of \u2014\n            or in addition to \u2014 the auto-logged appendix. Attach ONLY queries\n            that produced findings; never attach exploratory/schema-probing\n            queries. A query's optional `description` is a plain, user-facing\n            label of what the query finds (e.g. \"Diseases linked to PFAS\") \u2014\n            never internal bookkeeping such as \"(exploratory, not logged)\",\n            \"(intermediate)\", or notes about logging state.\n        kgs_used: Shortnames of the knowledge graphs queried. If omitted, they\n            are inferred from the logged queries. Each is expanded to its\n            federation named-graph URI. As a backstop, any name you pass that no\n            logged query (or schema visualization) actually touched is flagged as\n            a phantom source in the returned warnings \u2014 credit a KG only if a\n            logged query used it.\n        date: ISO date (`YYYY-MM-DD`) of the session. Defaults to today.\n        format: `markdown` (default) for a rendered document string, or `json`\n            for the structured fields.\n        title: Heading for the transcript.\n        include_query_log: If true (default), append the auto-logged queries\n            as a \"SPARQL queries executed\" section.\n        include_intermediate_rows: If false (default), only the FINAL logged\n            query renders its result table; earlier (intermediate) queries\n            show their SPARQL, row count, and a compact PREVIEW of the rows (a\n            single-row result in full, otherwise the first 3 rows), to keep the\n            transcript focused on the queries that produced the findings. Set\n            true to render result rows for every logged query (each still capped\n            at `max_result_rows`).\n        max_result_rows: Cap on how many result rows each rendered table shows \u2014\n            for the final logged query, any inline-attached `queries`, and (with\n            `include_intermediate_rows=True`) every query. The true row count is\n            always preserved, with a \"showing first N\" note when capped; this\n            applies to csv/tsv results too. Defaults to 5 so a large deliverable\n            doesn't bloat the transcript (the full data belongs in the separate\n            output file). Pass `None` to render every row.\n        include_visualizations: If true (default), append a \"Schema\n            visualizations\" section with every `visualize_schema` diagram logged\n            this session, each in a fenced ```mermaid block. These are recorded\n            automatically \u2014 you do NOT need to re-supply them.\n        include_query_diagrams: If true (default), render a Mermaid `graph TD`\n            diagram of each SPARQL query directly beneath its ```sparql block\n            (both the inline queries and the \"SPARQL queries executed\" appendix),\n            so the transcript shows the shape of every query. A query that cannot\n            be parsed into a diagram is skipped silently (its text still shows).\n            Set false to omit the per-query diagrams (right when a large record\n            would otherwise spill) \u2014 but that is only HALF the flow: RE-ADD the\n            diagrams before delivering, via report-style's\n            `scripts/expand_query_diagrams.py`, and verify with\n            `readd_query_diagrams.py --check` (the delivery gate). Skip the re-add\n            only if the user asked for no diagrams.\n        diagram_max_chars: OPTIONAL cap on a per-query diagram's size. When set,\n            a diagram longer than this many characters is dropped (its query text\n            still shows) so a huge diagram never bloats the transcript. Default\n            None = no cap.\n        scope: OPTIONAL log scope \u2014 the same string passed to `reset_query_log`\n            and `sparql_query`. Omit for a normal single analysis. Pass a unique\n            label when SEVERAL ANALYSES RUN CONCURRENTLY against this server\n            (parallel subagents share ONE MCP session, so an unscoped log mixes\n            their queries and this transcript would render whichever happened to\n            be logged). As a backstop, when `kgs_used` is given, any auto-logged\n            query touching NONE of those KGs is dropped from the transcript and\n            reported \u2014 so a forgotten scope is loud, not silent.\n        max_inline_chars: Guard against handing back a body so large the harness\n            spills/truncates it (which invites a fabricated substitute). If the\n            rendered markdown exceeds this many characters, the tool returns a\n            compact STUB \u2014 provenance, size, and a pointer to\n            `transcript://session/latest` \u2014 instead of the full body; the complete\n            document is still published verbatim to that resource, so nothing is\n            lost. Default 100_000 (\u224825k tokens). Pass `None` to always return the\n            full body inline (for clients that handle large results and want to\n            save it verbatim). Applies to `markdown` only. When you get a stub,\n            deliver the transcript from the resource \u2014 do not treat the stub AS the\n            transcript.\n        skills: The agent skills that shaped this analysis, each as\n            `\"<name> v<version>\"` (e.g. `[\"okn-bioanalysis v0.1.0\",\n            \"okn-report-style v0.1.1\"]`) \u2014 the version is the skill's frontmatter\n            `metadata.version`. Rendered as a `- **Skills:**` header line directly\n            beneath \"Model\". Technically optional, but PASS IT whenever a skill was\n            followed: the server CANNOT see which skills your session loaded, so\n            omitting it silently publishes a transcript claiming no methodology \u2014\n            the tool returns a WARNING when you do, and the fix is to call again\n            with `skills=[...]`, never to hand-add the line to the saved file. List\n            only skills you actually followed, exactly as `model` names the model\n            that actually ran. Naming a skill you did not use is a phantom source,\n            same as an unqueried KG.\n        external_mcp_servers: OTHER MCP servers this session actually CALLED \u2014\n            connectors the user enabled that supplied evidence beyond this server's\n            KGs (e.g. `[\"PubMed\", \"Paperclip\", \"Open Targets\"]`; append a version\n            when the connector reports one). Rendered as an\n            `- **External MCP servers:**` header line beneath \"Skills\". Like `skills`,\n            the server cannot see your other connectors, so this is caller-supplied \u2014\n            and the same two rules apply: list a server only if a call to it fed the\n            analysis (an enabled-but-unused connector is a phantom source, exactly\n            like an unqueried KG), and don't leave a used one off (the transcript's KG\n            list then reads as the whole evidence base when it wasn't).\n\n    Returns:\n        For `markdown`: the transcript string (or, when it exceeds\n        `max_inline_chars`, a compact stub pointing at\n        `transcript://session/latest`). Each conversation turn is\n        rendered in the mcp-proto-okn style \u2014 a \"\ud83d\udc64 **User**\" block (the prompt)\n        and a \"\ud83e\udde0 **Assistant**\" block (the answer), separated by a rule \u2014 with\n        queries in fenced ```sparql blocks (each followed, by default, by a\n        Mermaid diagram of the query \u2014 see `include_query_diagrams`), their\n        result tables, and schema diagrams in fenced ```mermaid blocks under the\n        answer.\n        For `json`: a dict with `title`, `date`, `model`, `exchanges`,\n        `knowledge_graphs`, `query_log`, `visualizations`, and\n        `sparql_endpoint`.\n\n    OUTPUT HANDLING (required): SAVE the transcript as a downloadable file.\n    Write the full markdown returned by this tool \u2014 verbatim and in its\n    entirety \u2014 to a `.md` file using your file-creation capability (the same\n    thing that happens when a user says \"save the transcript as a file\": the\n    `.md` is written and shown in the preview panel, downloadable directly from\n    the chat). A Markdown ARTIFACT / document achieves the same result (Claude\n    Desktop and claude.ai render it in a side panel the user can save as `.md`\n    or export to PDF; a hosted `present_files`-style tool also works). Creating\n    the file is the goal \u2014 a sentence describing or summarizing the transcript\n    is NOT a substitute.\n\n    COPY THE RETURN VALUE BYTE-FOR-BYTE \u2014 DO NOT RETYPE IT. Pass this tool's exact\n    returned string to your file/artifact writer. Do NOT re-type it, restructure\n    it, reorder or rename sections, tidy the formatting, or regenerate it from your\n    understanding of what it said. This transcript is already the final, formatted\n    deliverable; it needs no editing. Every query carries a fenced ```mermaid\n    diagram and a result table directly beneath its ```sparql block \u2014 a hand-typed\n    \"cleaned up\" version silently DROPS exactly those diagrams and tables, which is\n    the whole point of the transcript. If you find yourself reading the transcript\n    and re-emitting it, stop: write the original string instead. SELF-CHECK: the\n    header's `- **Contents:**` bullet states how many queries and diagrams the\n    document has \u2014 after saving, confirm your file has that many ```mermaid blocks\n    (and ```sparql blocks); if fewer, you dropped some, so rewrite it from the exact\n    tool output. When in doubt the canonical copy is the resource\n    `transcript://session/latest` (below) \u2014 deliver from there.\n\n    IF THIS RESULT IS SPILLED TO A FILE (it is large and often exceeds the\n    harness result-size limit, so the harness may save it to a temp file and hand\n    you a notice instead of the text): this output is a DELIVERABLE ARTIFACT, not\n    analysis input. The spill notice is usually phrased as a comprehension task\n    (\"read the content in chunks to summarize / analyze / review\") \u2014 ignore that\n    framing. Your job is not to understand the transcript, it is to deliver it\n    verbatim, and you must NOT hand-write, summarize, truncate, or reconstruct a\n    substitute from memory \u2014 an authoritative-looking incomplete transcript is\n    worse than no file at all. Two ways to deliver it, in order:\n      1. PRIMARY (works even when this server is hosted REMOTELY): the full\n         markdown is republished every run at the read-only MCP resource\n         `transcript://session/latest`. Point the user to it \u2014 their client\n         fetches/saves it DIRECTLY, bypassing both the result-size limit and your\n         context. This is the reliable path on a hosted server, where the spilled\n         temp file lives on the client and you may have no filesystem access to\n         the server at all.\n      2. Only if your client exposes the spilled temp file to your file tools\n         (e.g. a local CLI): `Read` it and `Write` its exact bytes to the report\n         folder. (This routes the full content through your context \u2014 costly \u2014 so\n         prefer 1 when available.)\n    Note the size limit is enforced by the HARNESS after this tool returns, so a\n    tool/notice cannot lift it \u2014 these are the delivery paths that work around it.\n\n    Only if you genuinely cannot write a file or artifact, fall back to\n    outputting the complete markdown in a fenced ```markdown block in your reply\n    so the user can copy/save it.\n\n    NEVER claim the transcript is \"ready\", \"in the preview panel\", or \"saved\"\n    unless you actually wrote the file (or emitted its full content) \u2014 do not\n    fabricate a preview. Either the file exists / the document content is present\n    in your response, or you state plainly that you could not produce it.\n\n    The rendered markdown is also published as the read-only MCP resource\n    `transcript://session/latest`, so a client can fetch/save it directly\n    (transport-agnostic; works for remote servers) regardless of how you present\n    it. You may point the user there.\n    ",
+          "inputSchema": {
+            "properties": {
+              "model": {
+                "title": "Model",
+                "type": "string"
+              },
+              "exchanges": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "additionalProperties": true,
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Exchanges"
+              },
+              "kgs_used": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Kgs Used"
+              },
+              "date": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Date"
+              },
+              "format": {
+                "default": "markdown",
+                "title": "Format",
+                "type": "string"
+              },
+              "title": {
+                "default": "Proto-OKN Chat Transcript",
+                "title": "Title",
+                "type": "string"
+              },
+              "include_query_log": {
+                "default": true,
+                "title": "Include Query Log",
+                "type": "boolean"
+              },
+              "include_intermediate_rows": {
+                "default": false,
+                "title": "Include Intermediate Rows",
+                "type": "boolean"
+              },
+              "include_visualizations": {
+                "default": true,
+                "title": "Include Visualizations",
+                "type": "boolean"
+              },
+              "include_query_diagrams": {
+                "default": true,
+                "title": "Include Query Diagrams",
+                "type": "boolean"
+              },
+              "diagram_max_chars": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Diagram Max Chars"
+              },
+              "max_result_rows": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": 5,
+                "title": "Max Result Rows"
+              },
+              "scope": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Scope"
+              },
+              "max_inline_chars": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": 100000,
+                "title": "Max Inline Chars"
+              },
+              "skills": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Skills"
+              },
+              "external_mcp_servers": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "External Mcp Servers"
+              }
+            },
+            "required": [
+              "model"
+            ],
+            "title": "create_chat_transcriptArguments",
+            "type": "object"
+          }
+        },
+        {
+          "name": "create_reproducibility_record",
+          "description": "Build the reproducibility record: header + replicator spec + supporting queries.\n\n    The SINGLE reproducibility deliverable (`<study>_reproducibility.md`): it merges\n    what were two files \u2014 the replicator SPEC (rules, thresholds, joins, verified\n    quantities, limitations) you pass as `appendix`, and the verbatim query record\n    this tool generates. A compact alternative to `create_chat_transcript`, it keeps\n    only what lets someone RE-RUN the analysis \u2014 a provenance header, your `appendix`\n    spec, and the SPARQL queries that support the reported findings (verbatim, pulled\n    from the session log, NOT re-typed), each query's row COUNT, and a per-query\n    diagram when it fits \u2014 and drops the conversation prose, the full result tables,\n    and schema visualizations. That keeps it small enough to return INLINE in the\n    common case, so you save the returned string DIRECTLY to the `.md` file \u2014 no\n    resource round-trip, no stub.\n\n    Run the analysis first: the queries come from the auto-log (every\n    non-exploratory, row-returning `sparql_query`), so DO NOT hand-write this record.\n    The full result data belongs in the workbook / `data/` extracts, not here.\n\n    Args:\n        model: The EXACT runtime model identifier producing the analysis (e.g.\n            `claude-opus-4-8`, `gpt-5.6-sol`), taken from trusted session metadata\n            or supplied by the user \u2014 never a family or product name (`Claude`,\n            `GPT-5`, `Codex`), a placeholder, or an inferred id. The server stores\n            it verbatim and cannot check it; it must match the report's title-block\n            `**Model:**` exactly. If you cannot determine it, ASK the user.\n        kgs_used: Shortnames of the knowledge graphs this record is about. If\n            omitted, inferred from the selected queries. When given, drives the same\n            guards as `create_chat_transcript`: a logged query touching none of them\n            is dropped as foreign (a concurrent subagent's leak \u2014 pass a unique\n            `scope`), and a named KG that no selected query touched is flagged a\n            phantom source (its contribution cannot be reproduced \u2014 re-run the\n            establishing query non-exploratory, or drop the KG).\n        supporting: OPTIONAL curation. None = all logged queries in log order.\n            Otherwise a list where each item is either a bare 1-based index (e.g.\n            `supporting=[1, 5, 9]`) or a `{\"index\": int, \"description\": str | None}`\n            dict (the `description` is an optional heading label); `index` is a\n            position into the log in the order `get_query_log` shows. Use it to keep\n            only the queries that underpin reported findings, in the order given \u2014 the\n            lever for shrinking a large log so the record fits inline. **If the record\n            comes back as a stub (over `max_inline_chars`), that is not a stopping\n            point: you know there are N queries, so re-call with `supporting` to curate\n            to the findings-supporting subset, or batch (`list(range(1, 41))`, then\n            `range(41, 81)`, \u2026) \u2014 never leave the transcript missing.** An out-of-range\n            index is skipped with a warning.\n        date: ISO date for the header; defaults to today.\n        format: `markdown` (default) or `json`.\n        title: Document title.\n        include_query_diagrams: If true (default), render a Mermaid `graph TD`\n            diagram beneath each query, subject to `diagram_max_chars`. Set false\n            when a large record would spill \u2014 but then RE-ADD the diagrams before\n            delivering (report-style's `scripts/expand_query_diagrams.py`; verify\n            with `readd_query_diagrams.py --check`), unless the user asked for none.\n        diagram_max_chars: Drop a per-query diagram longer than this many characters\n            (default 1500) so an oversized diagram never bloats the record; the\n            query's SPARQL text still shows.\n        scope: OPTIONAL log scope \u2014 the same string passed to `reset_query_log` /\n            `sparql_query`. Pass a unique label when parallel subagents share one\n            MCP session.\n        max_inline_chars: Return a compact stub above this size (default 100_000),\n            with the full body published to `transcript://session/latest`. A record\n            of many verbatim queries with large `VALUES` lists can still exceed this\n            \u2014 curate `supporting` to fewer queries, or raise this on a client that\n            can handle a larger inline result.\n        chat_started: OPTIONAL ISO-8601 timestamp of when the CHAT began (e.g.\n            `2026-07-18T09:00:00Z`). When given, the header's timing line shows the\n            WHOLE-CHAT elapsed time \u2014 `- **Elapsed time:** <start>\u2013<end> UTC\n            (<elapsed>)` \u2014 INSTEAD of the \"Study active window\" (which spans only the\n            first-to-last logged query and so undercounts, badly if large extraction\n            queries went unlogged). The server cannot know the chat's duration on its\n            own, so YOU must pass this \u2014 the caller is the only party that knows when\n            the conversation started. Omit it to keep the active-query-window line.\n        chat_ended: OPTIONAL ISO-8601 end timestamp for the whole-chat window; only\n            used with `chat_started`. Defaults to now (UTC) \u2014 the record's generation\n            moment, a fair stand-in for the end of the chat.\n        notes: OPTIONAL methodology note, rendered as a VISIBLE `## Notes` section\n            just under the header. This is the SANCTIONED place for provenance\n            context \u2014 e.g. that the logged queries are compact COUNT/aggregate\n            re-registrations while the full extraction SELECTs (auto-saved to\n            tool-result files, hence unlogged) live in `scripts/`. Put such context\n            HERE rather than hand-editing the saved `.md` after the fact: the record\n            must be saved exactly as returned, so any note added outside the tool\n            (e.g. an HTML-comment preamble) both breaks that contract and, being an\n            HTML comment, is invisible to a reader anyway.\n        prompt: OPTIONAL originating user prompt \u2014 the request that kicked off the\n            study \u2014 rendered as a `## Prompt` section at the TOP of the record so the\n            document is self-contained (a replicator sees the question the analysis\n            answered). Paste the user's prompt VERBATIM; don't paraphrase it.\n        appendix: OPTIONAL replicator SPEC in Markdown \u2014 the rules, thresholds, join\n            definitions, key verified quantities, downstream computation, and\n            reproducibility limitations that used to be a SEPARATE\n            `<study>_reproducibility_appendix.md`. Passing it here merges the two\n            reproducibility files into ONE: the content is rendered as its own\n            section(s) between the header and the `## SPARQL queries` record (author\n            it with your own `##` headings; it is inserted verbatim). This is the\n            human-readable spec; the queries below are the machine-checkable evidence.\n            Unlike `notes` (a short caption), this is the full multi-section document.\n            It is authored by you (the queries can't express thresholds/limitations),\n            so \u2014 like `notes` \u2014 put it here, never by hand-editing the saved file.\n        skills: The agent skills that shaped this study, each as `\"<name> v<version>\"`\n            (e.g. `[\"okn-bioanalysis v0.1.0\", \"okn-report-style v0.1.1\"]`) \u2014 the version\n            is the skill's frontmatter `metadata.version`. Rendered as a `- **Skills:**`\n            header line directly beneath \"Model\" (together they are the agent's\n            configuration: which model, following which methodology). Technically\n            optional, but PASS IT whenever a skill was followed: the server cannot see\n            which skills your session loaded, so omitting it silently publishes a record\n            that claims no methodology \u2014 the tool returns a WARNING when you do, and the\n            fix is to call again with `skills=[...]`, never to hand-add the line to the\n            saved file. List only skills you actually followed \u2014 naming one you didn't\n            is a phantom source, same as an unqueried KG.\n        external_mcp_servers: OTHER MCP servers this session actually CALLED \u2014\n            connectors the user enabled that supplied evidence beyond this server's\n            KGs (e.g. `[\"PubMed\", \"Paperclip\", \"Open Targets\"]`; append a version\n            when the connector reports one). Rendered as an\n            `- **External MCP servers:**` header line beneath \"Skills\". Like `skills`,\n            the server cannot see your other connectors, so this is caller-supplied \u2014\n            and the same two rules apply: list a server only if a call to it fed the\n            analysis (an enabled-but-unused connector is a phantom source, exactly\n            like an unqueried KG), and don't leave a used one off (the record's KG\n            list then reads as the whole evidence base when it wasn't).\n\n    Returns:\n        A Markdown string (or a dict when `format=\"json\"`): the header, any `appendix`\n        spec, a `## SPARQL queries` section (one verbatim query + row count + optional\n        diagram each), and a Contents manifest. Provenance warnings, if any, are\n        prepended as HTML comments (invisible in a saved `.md`).\n    ",
+          "inputSchema": {
+            "properties": {
+              "model": {
+                "title": "Model",
+                "type": "string"
+              },
+              "kgs_used": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Kgs Used"
+              },
+              "supporting": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": true,
+                          "type": "object"
+                        },
+                        {
+                          "type": "integer"
+                        }
+                      ]
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Supporting"
+              },
+              "date": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Date"
+              },
+              "format": {
+                "default": "markdown",
+                "title": "Format",
+                "type": "string"
+              },
+              "title": {
+                "default": "Proto-OKN Reproducibility Record",
+                "title": "Title",
+                "type": "string"
+              },
+              "include_query_diagrams": {
+                "default": true,
+                "title": "Include Query Diagrams",
+                "type": "boolean"
+              },
+              "diagram_max_chars": {
+                "default": 1500,
+                "title": "Diagram Max Chars",
+                "type": "integer"
+              },
+              "scope": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Scope"
+              },
+              "max_inline_chars": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": 100000,
+                "title": "Max Inline Chars"
+              },
+              "notes": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Notes"
+              },
+              "chat_started": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Chat Started"
+              },
+              "chat_ended": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Chat Ended"
+              },
+              "appendix": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Appendix"
+              },
+              "prompt": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Prompt"
+              },
+              "skills": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Skills"
+              },
+              "external_mcp_servers": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "External Mcp Servers"
+              }
+            },
+            "required": [
+              "model"
+            ],
+            "title": "create_reproducibility_recordArguments",
+            "type": "object"
+          }
+        }
+      ]
+    }
+  }
+}

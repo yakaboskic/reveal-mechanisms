@@ -1,0 +1,19 @@
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+.venv/
+node_modules/
+schema/prisma/generated/
+data/cfde/raw/
+data/cfde-genesets/*/raw/
+.DS_Store
+.env
+.env.*
+!.env.example
+
+# Frozen EAGGL captures and resumable embedding caches can be large.
+data/eaggl/captures/
+# Live evidence captures are immutable local run artifacts, potentially large.
+data/evidence-captures/

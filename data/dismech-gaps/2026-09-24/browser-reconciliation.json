@@ -1,0 +1,63 @@
+{
+  "url": "https://dismech.monarchinitiative.org/app/discussions/data.js",
+  "observed_at": "2026-09-24T14:29:40.049930+00:00",
+  "response_headers": {
+    "Last-Modified": "Thu, 24 Sep 2026 13:24:49 GMT",
+    "ETag": "\"6ab524a1-559d0\"",
+    "Content-Type": "application/javascript; charset=utf-8"
+  },
+  "sha256": "07aa916d6dbef89ff9fb2bde3a13df1907c001831243544e47c051d78ac89515",
+  "identical_to_local_browser_asset": true,
+  "total_discussions": 149,
+  "by_kind": {
+    "INTERPRETATION": 3,
+    "KNOWLEDGE GAP": 127,
+    "HUMAN MODEL MISMATCH": 17,
+    "EMERGING HYPOTHESIS": 1,
+    "OPEN QUESTION": 1
+  },
+  "by_gap_facet": {
+    "Other discussion": 5,
+    "Knowledge gap": 144
+  },
+  "reported_metrics": {
+    "total_discussions": 149,
+    "total_knowledge_gaps": 144,
+    "total_source_entries": 92,
+    "total_with_experiments": 86,
+    "total_discussion_kinds": 5
+  },
+  "local_source_commit": "df3884a8bba34370ecc0b3a49d956e7f0523bb28",
+  "local_export_discussions": 4051,
+  "local_unique_discussion_ids": 4051,
+  "local_by_source_kind": {
+    "disorders": {
+      "KNOWLEDGE_GAP": 2526,
+      "HUMAN_MODEL_MISMATCH": 738,
+      "INTERPRETATION": 148,
+      "CONTROVERSY": 228,
+      "OPEN_QUESTION": 223,
+      "CURATION_TODO": 40,
+      "EMERGING_HYPOTHESIS": 31
+    },
+    "groupings": {
+      "CURATION_TODO": 3,
+      "OPEN_QUESTION": 1,
+      "KNOWLEDGE_GAP": 11,
+      "INTERPRETATION": 2,
+      "CONTROVERSY": 1
+    },
+    "modules": {
+      "KNOWLEDGE_GAP": 67,
+      "HUMAN_MODEL_MISMATCH": 25,
+      "INTERPRETATION": 1,
+      "CONTROVERSY": 2,
+      "OPEN_QUESTION": 3,
+      "CURATION_TODO": 1
+    }
+  },
+  "local_browser_scope_discussions": 4033,
+  "local_browser_scope_knowledge_gap_kind": 2593,
+  "browser_asset_last_commit": "cdb6a7804fc4c27f1db77953084bb065f6705085 2026-06-13T15:43:59-07:00 Add discussions browser with faceted search interface (#4267)",
+  "conclusion": "Public browser serves the same June 13 checked-in data asset as the local checkout; September 15 KB YAML contains more discussions. Our all-KB scope additionally includes groupings."
+}

@@ -1,0 +1,15 @@
+# Test-time dependencies. The code under test is a set of standalone PEP-723
+# scripts that declare their own deps inline, so there is nothing to install for
+# normal use — this file exists only so `uv run` can assemble an environment
+# that has pytest AND the scripts' own dependencies at once.
+#
+#   uv run --with-requirements tests/requirements.txt pytest tests/ -q
+#
+pytest>=8
+pyyaml
+rdflib
+linkml-runtime
+# The full linkml package validates graph nodes and builds schema documentation.
+linkml==1.11.1
+jsonschema[format]>=4.18,<5
+ruamel.yaml

@@ -1,0 +1,147 @@
+# REVEAL integration with current DAPPER
+
+**September 24, 2026 · design v8.** DAPPER now covers the scientific model required for the first REVEAL workflow. This document separates implemented DAPPER contracts from the adapters and services REVEAL still needs. It supersedes earlier audits where gap context and paragraph citations were missing. It does not change the selected frontend, backend, authentication, embedding, CFDE, or Box/MCP architecture.
+
+## 1. Audited dependency and results
+
+The audit read the working tree at `/Users/cyakaboski/src/research/dapper`, based on commit `ebfc471049240c23d6ce1d3d40cd2785b35e6443`. The relevant implementation includes uncommitted files; the commit is not a release pin. DAPPER describes its claims model as an implemented experimental profile.
+
+- [Exact snapshot manifest](../data/dapper/2026-09-24-v8/snapshot.json): 83 source/test/example files, with source status and individual hashes. The capture checked that source bytes had not changed while copying.
+- Root schema SHA-256: `219769c9874a3c0a7d6972360d5847a8b344e412a8b9f4e2648f059682440345`. This uses DAPPER's citation-example convention: sorted root YAML filenames, NUL, file bytes, NUL. Pin the identity and validation code separately through the full manifest.
+- **287 passed** across upstream claims, citations, identity, GeneSet collections, document prefixes, and provenance-linter tests. [Log](../data/dapper/2026-09-24-v8/pytest.log), [JUnit results](../data/dapper/2026-09-24-v8/pytest.xml). Tests ran against the copy, not the sibling checkout. This is a targeted suite, not the full upstream suite or a deployed REVEAL test.
+- [Compatibility report](../data/dapper/2026-09-24-v8/compatibility.json): all **801,934** existing GeneSet export rows scanned for field coverage; **82** deterministic samples passed current closed-schema validation and retained their original IDs. The encoding Activity also passed. Compared with the original catalog import, the current hashable GeneSet field set is unchanged. The new GMT row fields are unhashable and absent from those catalog records. This is sampled identity/schema replay, not full revalidation under the new schema.
+- All **3,367** local source gaps have nonblank prompts; **four lack rationale**. **3,216** have a supplied disease term ID available to map into entity context. Missing identifiers remain missing; a label is not an ontology ID.
+- Probes confirm that File relocation, GeneSet inverse collection links and GMT row/file locators can change a payload without changing its ID; external CURIE expansion can change a gap's ID; a collection with 10,001 members exceeds the identity limit.
+
+Reproduce with the audit environment dependencies recorded in the compatibility report:
+
+```bash
+python scripts/audit_dapper_integration.py
+cd data/dapper/2026-09-24-v8/snapshot
+PYTHONDONTWRITEBYTECODE=1 python -m pytest -q -p no:cacheprovider \
+  tests/test_claims.py tests/test_citations.py tests/test_identity.py \
+  tests/test_gene_set_collections.py tests/test_document_prefixes.py \
+  tests/test_lint_provenance.py
+```
+
+The schema changed during the audit: GMT file/row locators became unhashable, and the upstream examples were re-minted to match. The final snapshot and 287-test result include those updates. Earlier and intermediate captures remain available for audit history; the transition capture’s two stale-example failures are resolved in the final capture.
+
+Before deployment, use a committed or packaged DAPPER version with matching schema, identity, and validator hashes. Existing imports retain their original dependency pins. This audit changed neither the sibling repository nor the database.
+
+## 2. Question and DisMech gap adapter
+
+Authoritative fields are in [the captured claims schema](../data/dapper/2026-09-24-v8/snapshot/schema/claims.yaml).
+
+- **Question:** `text` is required; `scope` and `about_entities` are optional. It inherits provenance. Retain it for legacy records and DAPPER interoperability; the current REVEAL workflow accepts selected imported DisMech KnowledgeGaps only.
+- **KnowledgeGap:** inherits Question and requires `gap_description`; optional `gap_kind` accepts `KNOWLEDGE_GAP` and `HUMAN_MODEL_MISMATCH`. Neither is a lifecycle status. A KnowledgeGap is used directly through `ScientificAccount.question`, without minting a duplicate Question.
+- DisMech `prompt` maps verbatim to `text`, nonblank `rationale` to `gap_description`, and `kind` to `gap_kind`. Do not shorten or strengthen the source text while importing.
+- For the four missing rationales, the proposed v1 adapter uses the deterministic description **“Missing knowledge identified by the source inquiry: {verbatim prompt}”**. Mark `description_derivation=prompt_fallback` in the application mapping, outside DAPPER. Expose that limitation in the inspector. No model invents a rationale. Blank prompts, if encountered in future imports, are quarantined rather than minted.
+- Put verified disease/entity identifiers in `about_entities`, using an explicit namespace map. Keep human-readable disease/model context in `scope` when it is part of the inquiry's meaning. Only include resolvable mechanism/phenotype entity references; a section attachment is not automatically an ontology entity.
+- Preserve source `discussion_id`, status, document identity, raw attachments, resolution ambiguity, proposed experiments, and source evidence in the versioned source records. KnowledgeGap has no `status`, `attaches_to`, or `has_evidence` slot. Do not invent those fields or attach EvidenceItems that pretend to assess a Question's truth.
+
+The four fallback cases are two gaps in **Congenital Merosin-deficient Muscular Dystrophy 1A** and two in **HFM1-related gametogenic failure**; exact IDs are recorded in the compatibility report.
+
+### Stable content versus source observations
+
+Store `(repository, document, discussion_id, observed source hash/commit, adapter version) → (DAPPER ID, payload snapshot)`. Preserve every original discussion and import observation, including unchanged-content reimports. DisMech's stable discussion label is not itself a content version.
+
+Mint from a deterministic **semantic projection**: inquiry, description, kind, meaningful context/entities, and supported source attribution. A checksummed projection File can anchor `was_derived_from`, with a versioned conversion Activity. Full raw document hashes, retrieval time, discussion status, and batch IDs live in observation/provenance records. Do not put a changing repository commit or batch-specific activity into every gap's hashable fields merely to record a refresh. Otherwise even a status-only change remints the gap through its provenance.
+
+This separation does not erase provenance: the saved source mapping and immutable provenance document link each projection to its observed raw source. A change to hashable scientific content or source attribution legitimately changes identity; an updated snapshot observation alone does not. Reordered semantically unordered entity lists should use a deterministic adapter ordering; do not reorder scientifically meaningful account/byline lists.
+
+The current REVEAL workflow does not create free-text inquiries or edited copies of imported gaps. Selecting another source gap changes the request framing; search text remains ephemeral. User attribution belongs to the research request and authored account, without reattributing the curated gap to its selector.
+
+## 3. CFDE and Proto-OKN evidence adapter
+
+**September 25 modeling update:** use [ScientificAccount construction](scientific-account-construction.md) and [the four PIGEAN/EAGGL claim templates](pigean-claim-model.md). The account combines one or more scoped Claims, each assessing one Proposition, and supplies a final synthesis through existing `closing_remarks` and optional `conclusion_claims`. Biological involvement Propositions are assessed using gene–factor, gene-set–factor, gene–trait and gene-set–trait results as evidence. The Claim statement summarizes the assessment across its evidence lines. Several methods may assess the same biological Proposition. Simple examples keep observations in EvidenceItems and source Files; separate source-result Claims and ClaimScores are an optional modeling choice. The previous graph-path proposal is withdrawn; no additional scientific class or evidence field is required.
+
+The implementation must turn graph responses into locatable evidence without inventing source science. Preserve captured artifacts and explicit interpretations, with an optional source-assessment layer:
+
+1. **Captured artifacts:** immutable CFDE requests/responses, clipped graph bundle, and every MCP request/result/error. Represent retained artifact bytes with DAPPER File records (`filename`, SHA-256, byte size, MIME type where known); locations are separate access observations. Source timestamps and tool/runtime state remain in the ledger.
+2. **Optional source Claims:** use a separate Proposition/Claim when a scoped reported result/assertion needs its own identity, citation, assessment or typed scores. Its Claim has `proposition`, actual recording `was_generated_by` and `was_attributed_to`, `was_derived_from` artifact references, and an exact `source_locator` such as a JSON pointer/row plus named artifact. Preserve original scientific author/provider information when supplied; recording attribution must not impersonate an unknown source author. Do not require this extra pair for every PIGEAN observation.
+3. **Mined account Claims:** the agent interprets those sources through EvidenceItems. The simple pattern links an EvidenceItem directly to a captured File with `was_derived_from`, a verbatim `snippet`, and the exact artifact/row locator in `context`. The original JSON retains structured metric values; EvidenceItem has no `has_score` or `source_locator` slot. Alternatively, `source_claims` references separately recorded assessments. Both patterns carry `target_proposition`, `direction`, `explanation` and `context` under REVEAL's authoring rules; DAPPER conditionally requires those fields when `source_claims` is present. The target must match the owning Claim's Proposition. Preserve assumptions and contrary evidence. Provenance records input lineage; it does not replace the explicit scientific interpretation.
+
+Underlying source Claims/Files may inform several Propositions. Create separate EvidenceItems for their use against different targets, retaining the shared source identities. One EvidenceItem can be reused by multiple Claims only when the target Proposition and interpretation remain the same. This preserves reusable evidence without changing the singular `target_proposition` field.
+
+A single factor result can therefore contribute to multiple gene-involvement and gene-set/program/readout assessments within one account. The synthesis can express signed regulation and process routes when these are represented by assessed Propositions. Biological inhibition/amplification belongs in Proposition content; `direction: SUPPORTS` can support either an inhibitory or an amplifying proposition. This uses the existing schema and does not infer regulatory direction from a factor loading.
+
+Every generated account finding/conclusion needs a CFDE evidence path. Source-only Claims capturing Proto-OKN assertions are auxiliary evidence and may lack CFDE ancestry. Their application role must be explicit, so the lineage gate does not reject all external evidence or silently accept Proto-OKN-only generated findings. Shared upstream publications are not independent corroboration.
+
+`ClaimScore` requires `score_kind`, `value`, exact source `metric`, and `interpretation`. Supported kinds are PROBABILITY, POSTERIOR_PROBABILITY, EFFECT_ESTIMATE, LOADING, and SCORE. Only the first two have the [0,1] restriction. Similarity, rank, factor loading, and CFDE reducer outputs never become a biological probability by renaming them. Unknown metric semantics remain in raw retrieval metadata until a faithful interpretation is available. The upstream PIGEAN claims example explicitly uses fictional probabilities; it supplies object shapes, not production metric definitions.
+
+**EAGGL factor = mechanism in the REVEAL domain model.** The revised source adapter will encode EAGGL factors as DAPPER `Mechanism` objects, preserving their full CFDE identities, model/trait context and versioned source-to-digest mappings. `Factor1` and `Factor12` are interim mechanism labels; a missing descriptive name does not block mechanism-level Propositions. There is no separate factor-to-mechanism interpretation Claim. Retain the original catalog File as source provenance and use the native factor ID for CFDE expansion. The current v9 API exposes File-only factor records; the Mechanism projection is a documented pending adapter/contract change. Apply normal DAPPER identity/revision rules to changes in hashable mechanism fields, retaining the durable native source alias across label revisions.
+
+This identity rule does not merge an EAGGL mechanism with a separate DisMech record or another fit's mechanism based on similar names. Optional MechanisticModel/CausalStep structure can elaborate assessed relationships involving the mechanism; selection alone does not assert a gene's regulatory direction.
+
+Resolve each CFDE gene-set alias against the frozen import. A reference to its DAPPER GeneSet establishes catalog/encoding provenance only until membership and construction history are verified. Preserve raw KG identifiers, canonical mapped identifiers, mapping evidence, species/context, and mapping revision. Gene/protein/disease mapping is not settled by textual embeddings.
+
+## 4. Agent output and validation contract
+
+Define a versioned **REVEAL envelope** carrying one or more proposed accounts, temporary node references, evidence locators, and explicit empty/insufficient-evidence outcomes. This is an application transport format, not another scientific schema.
+
+The backend merges authored fields with trusted inputs and provenance. The agent cannot change a saved Question, imported GeneSet, source artifact checksum, authenticated human identity, mint date, or existing citation revision. It may reference those objects by their supplied exact IDs. No agent-supplied digest is accepted without verification.
+
+For each account:
+
+1. Hydrate the referenced saved objects and their required provenance into a bounded local document. DAPPER scientific references must resolve locally for the linter, even when the records already exist in MySQL. A packet containing only IDs of externally stored DAPPER nodes is insufficient.
+2. Validate shapes with closed LinkML/JSON Schema validation. Unknown fields fail. Assemble/mint new nodes with `assign_ids`; use `compute_id`/`verify` against the pinned dependency and reject changes to trusted nodes.
+3. Run the provenance linter with `--profile scientific-account`. Its terminal constraint is **exactly one account per document**. Split the proposed up-to-three accounts into separate provenance documents with shared IDs, not one invalid multi-account document. Keep complete edges and dependencies per document.
+4. Enforce references, correct endpoint types, activity inputs, distinct ordered component claims, a non-conclusion finding, conclusions as a subset, evidence-target agreement, and no circular source-claim support. DAPPER supplies these structural checks; warnings remain recorded with an explicit application policy.
+5. Apply REVEAL rules: every account’s `question` equals the frozen selected DisMech KnowledgeGap ID, and its resolved object matches the trusted gap payload; source locators resolve into authorized frozen artifacts; factors/model and gene-set import are pinned; generated account claims have CFDE ancestry; graph allowlists and budgets are honored; exact numeric values and metric names agree with captures.
+6. Check scientific grounding separately: the cited span/assertion must actually support, dispute, or contextualize the authored proposition within the stated scope. Preserve the check's rationale/model/prompt version and outcome. Syntax/identity validation cannot establish this. Unsupported content is repaired within a bound or saved only as a failed/flagged attempt, not certified by a passing schema.
+7. Commit accepted scientific nodes, payload/provenance snapshots, membership, run links, and citation registration transactionally. Operational attempts remain distinct even when scientific identities deduplicate.
+
+DAPPER supports hypothesis-only accounts; REVEAL deliberately requires `question` to reference the exact selected DisMech KnowledgeGap for this workflow. Do not create a duplicate Question or substitute an agent-generated search question. Accounts have no combined probability, and closing prose cannot introduce an otherwise absent scientific conclusion. `render_account` assembles authored text and references; it is not a discovery agent or scientific verifier.
+
+REVEAL additionally requires a nonempty `closing_remarks` synthesis connecting the scoped assessments to the selected gap, even though that field is optional in generic DAPPER. The account may organize one or several Propositions and does not require a single overarching hypothesis. If the synthesis adds a new substantive scientific conclusion, represent it as a Claim and preserve the existing conclusion-membership constraints. This is a design requirement for the next application/fixture iteration; the reviewed OpenAPI package has not been regenerated here.
+
+### Paragraph activity
+
+Give the second agent the exact saved account and an explicit list of authorized Claim/Question/KnowledgeGap targets with registry revision numbers. Include selected prior source Claims when useful; they need not be account members. Require authored text segments plus target/revision pairs. The backend calls `assemble_cited_text` and records the distinct paragraph-generating Activity.
+
+CitationOccurrence requires `target_id`, positive `citation_metadata_revision`, `start`, and `end`, with optional `exact_text`. Spans use zero-based Unicode code points, inclusive start/exclusive end; JavaScript slicing must use `Array.from(text)`. DAPPER permits repeated targets and different targets on the same span, but rejects duplicate target/revision/span tuples. Freeze text after anchoring.
+
+Hydrate cited objects, validate the Paragraph with its account provenance document, validate every metadata record with `check_citation_metadata`, and call `check_citation_registry_links`. Missing pinned revisions fail rather than using latest. A separate paragraph-faithfulness check preserves scope, uncertainty and direction and detects new scientific assertions. Fresh scientific work creates a new account revision.
+
+## 5. Persistence and identity boundaries
+
+The initial `dapper_objects` table rejects a different whole-payload checksum under an existing ID. That is appropriate for replaying its fixed catalog export, but **cannot be the general rule for all DAPPER objects**. DAPPER explicitly excludes fields such as File.location, Activity.generated_at_time, Claim.asserted_in, and GeneSet.in_gene_set_collection/in_gmt_file/gmt_entry from identity.
+
+Extend persistence, without replacing existing import payloads:
+
+- Keep the first stored scientific object and its identity verification. Add immutable **payload snapshots** keyed by `(object_id, payload_sha256)`, with the exact schema/identity implementation pin and validation result. New observations with the same digest must verify under their recorded dependency and differ only as permitted; never use this to accept a hashable-content conflict.
+- Store **provenance documents and edges** as immutable, checksummed artifacts/rows, with referenced object payload snapshots, prefix map, run and source manifest. Reified `Used` edges are not part of a node digest. Saving nodes alone loses which inputs and edges justified an account. Bind the input/final-evidence manifest into hashable generation metadata (for example, the real replay command and AgenticWorkspace prompt) and retain the full document hash; do not claim a node ID hashes the entire graph.
+- Keep separate **run/attempt/activity observations**. Timestamp changes do not force a new DAPPER Activity identity. Box IDs, execution timestamps, leases, failures and retries remain distinguishable in application records.
+- Add **object access and usage links** to owned requests/runs. Global digest deduplication must not grant another user access to private content. Current ACLs govern access even when a historic citation record says public; bibliographic metadata is not an authorization source. UI visibility changes do not mutate a scientific node's hashable `access_level`.
+- Store **append-only citation registry revisions** and first-mint/issue events. DAPPER defines the record/validation contract; MySQL enforces concurrent uniqueness, historical retention and issuance semantics. Source authors, human operators, and software generators retain distinct roles.
+
+Use a consistent representation for new external entity references, resolving CURIEs through a pinned map before minting. Prefix resolution is syntactic; it does not prove ontology membership. Expansion can change IDs because external references are identity-bearing. Never silently normalize existing imported payloads; keep historical versions and source aliases.
+
+Human scientific attribution can use a pinned Person record or supported external identity URI. DAPPER has no concrete SoftwareAgent class in this snapshot: represent the runtime through Activity software fields and AgenticWorkspace (`agent_model`, `agent_role`, prompt), and use the citation registry's `kind: software` with model/harness provenance. Do not fabricate an unsupported node class or give software an ORCID. Application user UUIDs remain independent from Person digests and login providers.
+
+## 6. GeneSet enrichment and collections
+
+The completed **801,934** objects remain named GeneSets under their original import. No schema change detected here requires replacing those catalog IDs. Their old manifest is authoritative for reproducing that import.
+
+For later verified GMT/source ingestion, current DAPPER distinguishes:
+
+- **File / C2M2File:** actual GMT bytes and checksums; location is unhashable.
+- **GeneSetCollection:** a library; `has_gmt_file` references its file, `n_sets` counts sets, and `n_genes` counts unique genes across the union when known.
+- **GeneSet:** one set; pair unhashable `in_gmt_file` with exact unhashable `gmt_entry`, populate verified gene members and `n_genes`, and retain exact aliases. `n_sets` on a GeneSet is deprecated and, if present, must equal 1.
+- Collection `members` is a complete, distinct list when supplied. Individual `in_gene_set_collection` backlinks can be present without enumerating a whole collection; backlinks are unhashable and must agree with any supplied full list.
+
+DAPPER's linter does not fetch GMT bytes or prove a row exists. The source adapter must verify checksum, row identity, membership and counts. The identity implementation caps one object at **10,000 triples**, including list items and other fields. Do not mint a collection listing the entire CFDE catalog, or use a truncated list as if complete. Keep the catalog in application import/alias tables. Real large libraries can omit the full member list and retain verified backlinks/file references within the current model.
+
+## 7. Remaining work and optional upstream improvements
+
+The core schema is sufficient. The implementation work is:
+
+1. **Source ingestion:** implement and fixture-test the gap semantic projection/fallback, source-kind/status separation, and CFDE/Proto-OKN source Claim/EvidenceItem mappings.
+2. **Agent contract and acceptance:** JSON output envelope, complete per-account packages, trusted attribution/runtime metadata, deterministic source checks, and a recorded scientific grounding/paragraph-faithfulness evaluation. Choose its evaluation examples and failure thresholds before treating generated prose as acceptable.
+3. **Storage:** schema/identity pins, payload observations, complete provenance/edge captures, ACL/run ownership links, stable first-mint events, and transactional citation revisions. These migrations are not yet applied.
+4. **Citation delivery:** resolver deployment, native registry persistence, export mappings and pinned CSL renderer/styles/locales. DAPPER supplies contracts and checks, not a running resolver or APA/MLA exporter. Retain style markers outside Paragraph text.
+5. **Operational verification:** obtain the embedding key, confirm CFDE limits/score/build metadata, and exercise real Box/MCP capture/policy/cost limits and deployment auth/network settings. These do not change the settled providers or interaction.
+
+Useful but nonblocking upstream additions: a standalone Question/KnowledgeGap linter profile (currently validate their nodes/identity directly), a multi-account transport profile (currently split documents), and a concrete software-agent class if richer local graph exports need one. None requires reopening the agreed flow.
+
+**First implementation slice:** a DisMech gap and its linked mechanisms → confirmed EAGGL anchors → one captured CFDE round → one validated, saved account with exact evidence locators → registry entries → one cited Paragraph and reproducible APA/BibTeX export. Use captured evidence for adapter tests before spending on Box runs; then validate the same contracts end to end with live services.

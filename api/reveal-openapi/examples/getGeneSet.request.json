@@ -1,0 +1,85 @@
+{
+  "operation_id": "getGeneSet",
+  "case": "request",
+  "method": "GET",
+  "path_template": "/v1/gene-sets/{dapper_id}",
+  "request": {
+    "url": "https://api.reveal.example.org/v1/gene-sets/dapper%3AGeneSet.I1UZhVhKU-YDerPLIxtnZOGlTXNAlrgD?payload_sha256=93e172c324211e5e720fd369e572918585f2db7964a0912c236ac735037eed8e",
+    "path": {
+      "dapper_id": "dapper:GeneSet.I1UZhVhKU-YDerPLIxtnZOGlTXNAlrgD"
+    },
+    "query": {
+      "payload_sha256": "93e172c324211e5e720fd369e572918585f2db7964a0912c236ac735037eed8e"
+    },
+    "headers": {
+      "Accept": "application/json"
+    },
+    "body": null
+  },
+  "responses": {
+    "200": {
+      "content_type": "application/json",
+      "examples": {
+        "document": {
+          "root_id": "dapper:GeneSet.I1UZhVhKU-YDerPLIxtnZOGlTXNAlrgD",
+          "schema": {
+            "schema_sha256": "219769c9874a3c0a7d6972360d5847a8b344e412a8b9f4e2648f059682440345",
+            "dependency_snapshot_sha256": "801fb347c54c036c15345d132d302171fc6cd74c1f75a03a5c59c937f5ed7d11",
+            "identity_profile": "DAPPER-ID-1"
+          },
+          "document": {
+            "gene_sets": [
+              {
+                "name": "AMP AD / all brain / AMP AD MAYO TCX Diagnosis.AOD AD-CONTROL ALL dn | GTEx / brain / GTEx aging Brain 20-29 60-69 dn",
+                "member_type": "gene",
+                "term": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+                "alternate_identifier": [
+                  "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+                  "cfde:cfde-inc-v2:gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn"
+                ],
+                "was_generated_by": "dapper:Activity.VM0nxPd0QVsZJ-7qw4WjAvXtEiFMehqx",
+                "was_derived_from": [
+                  "https://cfde-dev.hugeampkpnbi.org/api/bio/keys/pigean-gene-set/2"
+                ],
+                "id": "dapper:GeneSet.I1UZhVhKU-YDerPLIxtnZOGlTXNAlrgD"
+              }
+            ],
+            "activities": [
+              {
+                "name": "CFDE GeneSet catalog encoding",
+                "activity_type": "CFDEGeneSetCatalogImport",
+                "description": "Encodes advertised CFDE named gene-set identities; not the original biological gene-set creation activity.",
+                "command": "cfde-geneset-catalog-v1 model=cfde-inc-v2",
+                "id": "dapper:Activity.VM0nxPd0QVsZJ-7qw4WjAvXtEiFMehqx"
+              }
+            ]
+          },
+          "payloads": [
+            {
+              "object_id": "dapper:Activity.VM0nxPd0QVsZJ-7qw4WjAvXtEiFMehqx",
+              "payload_sha256": "312f6b1007c48a9463265eaa29752d0defa41ae268e5b8971becdebf71417e52"
+            },
+            {
+              "object_id": "dapper:GeneSet.I1UZhVhKU-YDerPLIxtnZOGlTXNAlrgD",
+              "payload_sha256": "93e172c324211e5e720fd369e572918585f2db7964a0912c236ac735037eed8e"
+            }
+          ],
+          "citation_metadata": [],
+          "artifacts": [],
+          "aliases": [
+            {
+              "model": "cfde-inc-v2",
+              "node_id": "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+              "import_id": "3714a036aea279190d4723d9ddf2dd81d105e3427c38d9fc685e7fd606cb260e"
+            }
+          ],
+          "coverage": {
+            "membership": "unknown",
+            "construction_provenance": "unknown"
+          }
+        }
+      }
+    }
+  },
+  "curl": "curl -X GET 'https://api.reveal.example.org/v1/gene-sets/dapper%3AGeneSet.I1UZhVhKU-YDerPLIxtnZOGlTXNAlrgD?payload_sha256=93e172c324211e5e720fd369e572918585f2db7964a0912c236ac735037eed8e' -H 'Accept: application/json'"
+}

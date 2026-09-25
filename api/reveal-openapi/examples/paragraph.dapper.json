@@ -1,0 +1,872 @@
+{
+  "knowledge_gaps": [
+    {
+      "text": "Are the CAD PGS×context interactions driven by adverse exposures causally amplifying genetic risk, or are some \"contexts\" actually downstream readouts of incipient disease (reverse causation)?",
+      "gap_description": "Population PGS×context analyses (Nagpal & Gibson 2026, PMID:42443528) are largely unable to establish the causality of specific contexts. dismech separates true environmental exposures (smoking, high-fat diet, sedentary lifestyle) from biochemical readouts (LDL, HDL, C-reactive protein); the biochemical \"contexts\" are prime reverse-causation suspects, since they may be partly downstream of the atherosclerotic process rather than upstream drivers, and behavioural contexts such as reduced physical activity may be rapid responses to incipient angina rather than causes. Distinguishing genuine amplification of genetic effects from reverse causation determines whether the modelled interventions (e.g. lowering cholesterol in high-PGS smokers) would actually reduce risk.",
+      "gap_kind": "KNOWLEDGE_GAP",
+      "scope": "Coronary Artery Disease",
+      "about_entities": [
+        "http://purl.obolibrary.org/obo/MONDO_0021661"
+      ],
+      "id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk"
+    }
+  ],
+  "mechanisms": [
+    {
+      "id": "dapper:Mechanism.kEJMDzCkDYE94DpWaXrQg-eC4gFGQyuX",
+      "name": "CAD-in-T2D mechanism Factor1",
+      "description": "EAGGL mechanism factor:portal:CADinT2D:cfde-inc-v2:Factor1. Factor1 is its interim name. Scope: coronary artery disease in people with type 2 diabetes."
+    }
+  ],
+  "persons": [
+    {
+      "id": "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he",
+      "given_name": "Design",
+      "family_name": "Example"
+    }
+  ],
+  "activities": [
+    {
+      "name": "CFDE GeneSet catalog encoding",
+      "activity_type": "CFDEGeneSetCatalogImport",
+      "description": "Encodes advertised CFDE named gene-set identities; not the original biological gene-set creation activity.",
+      "command": "cfde-geneset-catalog-v1 model=cfde-inc-v2",
+      "id": "dapper:Activity.VM0nxPd0QVsZJ-7qw4WjAvXtEiFMehqx"
+    },
+    {
+      "id": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+      "name": "ScientificAccount design example assembly",
+      "description": "Offline authored UI example. No research agent or external KG query was executed.",
+      "software_name": "REVEAL HTML fixture builder",
+      "software_version": "0.2.0",
+      "command": "python3 design/build_account_example.py"
+    },
+    {
+      "id": "dapper:Activity.XZK6LpSUO5eTobg5XZa95h3ywTGGvdRM",
+      "name": "Design paragraph expression",
+      "description": "Offline authored paragraph preview, not an executed agent."
+    }
+  ],
+  "files": [
+    {
+      "id": "dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ",
+      "filename": "pigean-gene-factor.response.json",
+      "mime_type": "application/json",
+      "sha256": "3fdf0f2ae3f782824ec7f96687c4a988a88a6ffb0a106b52f4e20464cdf51e30",
+      "size_in_bytes": 2945,
+      "description": "Original CFDE response bytes captured September 25, 2026; not a new retrieval."
+    },
+    {
+      "id": "dapper:File.Dt0S38v_sLn5jiOAVXMrMWTrXBLnsn83",
+      "filename": "pigean-gene-set-factor.response.json",
+      "mime_type": "application/json",
+      "sha256": "b4ba6a21f6791c8b80ce8ef471361634ebb8b9f1f4e91e886fe1f05d02e7c1fa",
+      "size_in_bytes": 3785,
+      "description": "Original CFDE response bytes captured September 25, 2026; not a new retrieval."
+    },
+    {
+      "id": "dapper:File.eG0HM7wVGbDLt-99TA-OMnMeKqdIircT",
+      "filename": "dismech-gap.source.json",
+      "mime_type": "application/json",
+      "sha256": "ed59adee2b7de542f72781a90265088feb79900ad88f83c60bc124ede420d78f",
+      "size_in_bytes": 3382,
+      "description": "Frozen DisMech source discussion; its exact question frames this example."
+    },
+    {
+      "id": "dapper:File._FB2fhvDopxDEHgoDgf2Hk4jE0wxilag",
+      "filename": "illustrative-kg-assertions.json",
+      "mime_type": "application/json",
+      "sha256": "9539fb6db89cdc4f3122fa497dfe70c4940f9d0b21bcc17505f90da8770391dc",
+      "size_in_bytes": 821,
+      "description": "Invented assertions for UI design. Not retrieved from ProKN or BiomarkerKG; not verified GeneSet membership."
+    }
+  ],
+  "gene_sets": [
+    {
+      "name": "AMP AD / all brain / AMP AD MAYO TCX Diagnosis.AOD AD-CONTROL ALL dn | GTEx / brain / GTEx aging Brain 20-29 60-69 dn",
+      "member_type": "gene",
+      "term": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+      "alternate_identifier": [
+        "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+        "cfde:cfde-inc-v2:gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn"
+      ],
+      "was_generated_by": "dapper:Activity.VM0nxPd0QVsZJ-7qw4WjAvXtEiFMehqx",
+      "was_derived_from": [
+        "https://cfde-dev.hugeampkpnbi.org/api/bio/keys/pigean-gene-set/2"
+      ],
+      "id": "dapper:GeneSet.I1UZhVhKU-YDerPLIxtnZOGlTXNAlrgD"
+    },
+    {
+      "name": "PsychENCODE / all signatures / PsychENCODE geneM16",
+      "member_type": "gene",
+      "term": "PsychENCODE__all_signatures__PsychENCODE_geneM16",
+      "alternate_identifier": [
+        "gene_set:PsychENCODE__all_signatures__PsychENCODE_geneM16",
+        "cfde:cfde-inc-v2:gene_set:PsychENCODE__all_signatures__PsychENCODE_geneM16"
+      ],
+      "was_generated_by": "dapper:Activity.VM0nxPd0QVsZJ-7qw4WjAvXtEiFMehqx",
+      "was_derived_from": [
+        "https://cfde-dev.hugeampkpnbi.org/api/bio/keys/pigean-gene-set/2"
+      ],
+      "term_prefix": "PsychENCODE",
+      "id": "dapper:GeneSet.zQ8X81n_J-Fuv0zNRp1iQQXqIzuAOzGP"
+    }
+  ],
+  "propositions": [
+    {
+      "id": "dapper:Proposition.cjK2Yz-rwiv49w9zH71aodlAHIzbNVqE",
+      "statement": "SHH is involved in mechanism Factor1 relevant to coronary artery disease in people with type 2 diabetes.",
+      "proposition_kind": "BIOLOGICAL_INTERPRETATION",
+      "scope": "Coronary artery disease in people with type 2 diabetes (portal CADinT2D). The mechanism is factor:portal:CADinT2D:cfde-inc-v2:Factor1.",
+      "subject_entity": "urn:cfde:gene:SHH",
+      "relation": "urn:reveal:relation:involved-in",
+      "object_entity": "dapper:Mechanism.kEJMDzCkDYE94DpWaXrQg-eC4gFGQyuX"
+    },
+    {
+      "id": "dapper:Proposition.rCjXmKoJQot2L0j-JXULHltjuBgtYhnD",
+      "statement": "GLI3 is involved in mechanism Factor1 relevant to coronary artery disease in people with type 2 diabetes.",
+      "proposition_kind": "BIOLOGICAL_INTERPRETATION",
+      "scope": "Coronary artery disease in people with type 2 diabetes (portal CADinT2D). The mechanism is factor:portal:CADinT2D:cfde-inc-v2:Factor1.",
+      "subject_entity": "urn:cfde:gene:GLI3",
+      "relation": "urn:reveal:relation:involved-in",
+      "object_entity": "dapper:Mechanism.kEJMDzCkDYE94DpWaXrQg-eC4gFGQyuX"
+    },
+    {
+      "id": "dapper:Proposition.b06Styo26ZiZC2Sy599Uk98OKhiNgcuy",
+      "statement": "TCF7L2 is involved in mechanism Factor1 relevant to coronary artery disease in people with type 2 diabetes.",
+      "proposition_kind": "BIOLOGICAL_INTERPRETATION",
+      "scope": "Coronary artery disease in people with type 2 diabetes (portal CADinT2D). The mechanism is factor:portal:CADinT2D:cfde-inc-v2:Factor1.",
+      "subject_entity": "urn:cfde:gene:TCF7L2",
+      "relation": "urn:reveal:relation:involved-in",
+      "object_entity": "dapper:Mechanism.kEJMDzCkDYE94DpWaXrQg-eC4gFGQyuX"
+    },
+    {
+      "id": "dapper:Proposition.yUAm2Mgs3NxOTghFk_4SrqgpYaecOFvL",
+      "statement": "The gene program represented by the AMP AD / GTEx brain-aging set is involved in mechanism Factor1 relevant to CAD in people with type 2 diabetes.",
+      "proposition_kind": "BIOLOGICAL_INTERPRETATION",
+      "scope": "Coronary artery disease in people with type 2 diabetes (portal CADinT2D). The mechanism is factor:portal:CADinT2D:cfde-inc-v2:Factor1.",
+      "subject_entity": "dapper:GeneSet.I1UZhVhKU-YDerPLIxtnZOGlTXNAlrgD",
+      "relation": "urn:reveal:relation:involved-in",
+      "object_entity": "dapper:Mechanism.kEJMDzCkDYE94DpWaXrQg-eC4gFGQyuX"
+    },
+    {
+      "id": "dapper:Proposition.YglauZfsf1X5GagFEmSSWB-dwoGljEGz",
+      "statement": "The gene program represented by the PsychENCODE geneM16 set is involved in mechanism Factor1 relevant to CAD in people with type 2 diabetes.",
+      "proposition_kind": "BIOLOGICAL_INTERPRETATION",
+      "scope": "Coronary artery disease in people with type 2 diabetes (portal CADinT2D). The mechanism is factor:portal:CADinT2D:cfde-inc-v2:Factor1.",
+      "subject_entity": "dapper:GeneSet.zQ8X81n_J-Fuv0zNRp1iQQXqIzuAOzGP",
+      "relation": "urn:reveal:relation:involved-in",
+      "object_entity": "dapper:Mechanism.kEJMDzCkDYE94DpWaXrQg-eC4gFGQyuX"
+    },
+    {
+      "id": "dapper:Proposition.3dNz6hkwxQ199hXVaHISAWghx_R6G8og",
+      "statement": "SHH is involved in the biology of coronary artery disease in people with type 2 diabetes.",
+      "proposition_kind": "BIOLOGICAL_INTERPRETATION",
+      "scope": "Coronary artery disease in people with type 2 diabetes (portal CADinT2D). Trait-level biological involvement.",
+      "subject_entity": "urn:cfde:gene:SHH",
+      "relation": "urn:reveal:relation:involved-in",
+      "object_entity": "urn:cfde:trait:portal:CADinT2D"
+    },
+    {
+      "id": "dapper:Proposition.6cRd977XvXOzcsRLrJfwthdIHn_iRAOT",
+      "statement": "GLI3 is involved in the biology of coronary artery disease in people with type 2 diabetes.",
+      "proposition_kind": "BIOLOGICAL_INTERPRETATION",
+      "scope": "Coronary artery disease in people with type 2 diabetes (portal CADinT2D). Trait-level biological involvement.",
+      "subject_entity": "urn:cfde:gene:GLI3",
+      "relation": "urn:reveal:relation:involved-in",
+      "object_entity": "urn:cfde:trait:portal:CADinT2D"
+    },
+    {
+      "id": "dapper:Proposition.9Ah6tV2FtJ8m_rEHO6e92pmWxAyfU8U_",
+      "statement": "TCF7L2 is involved in the biology of coronary artery disease in people with type 2 diabetes.",
+      "proposition_kind": "BIOLOGICAL_INTERPRETATION",
+      "scope": "Coronary artery disease in people with type 2 diabetes (portal CADinT2D). Trait-level biological involvement.",
+      "subject_entity": "urn:cfde:gene:TCF7L2",
+      "relation": "urn:reveal:relation:involved-in",
+      "object_entity": "urn:cfde:trait:portal:CADinT2D"
+    },
+    {
+      "id": "dapper:Proposition.NJYh11lXY-LXoFXrJeK7KkfI7r7iQzFT",
+      "statement": "The gene program represented by the AMP AD / GTEx brain-aging set is involved in the biology of CAD in people with type 2 diabetes.",
+      "proposition_kind": "BIOLOGICAL_INTERPRETATION",
+      "scope": "Coronary artery disease in people with type 2 diabetes (portal CADinT2D). Trait-level biological involvement.",
+      "subject_entity": "dapper:GeneSet.I1UZhVhKU-YDerPLIxtnZOGlTXNAlrgD",
+      "relation": "urn:reveal:relation:involved-in",
+      "object_entity": "urn:cfde:trait:portal:CADinT2D"
+    },
+    {
+      "id": "dapper:Proposition.JfxEcQLDt9bMiSejgOKxh7G8ylVGAqxI",
+      "statement": "The gene program represented by the PsychENCODE geneM16 set is involved in the biology of CAD in people with type 2 diabetes.",
+      "proposition_kind": "BIOLOGICAL_INTERPRETATION",
+      "scope": "Coronary artery disease in people with type 2 diabetes (portal CADinT2D). Trait-level biological involvement.",
+      "subject_entity": "dapper:GeneSet.zQ8X81n_J-Fuv0zNRp1iQQXqIzuAOzGP",
+      "relation": "urn:reveal:relation:involved-in",
+      "object_entity": "urn:cfde:trait:portal:CADinT2D"
+    },
+    {
+      "id": "dapper:Proposition.9l7Nq6exgMpGL5Z3Tn4Luy62urD9GHT5",
+      "statement": "SHH belongs to the gene set representing the AMP AD / GTEx brain-aging set.",
+      "proposition_kind": "BIOLOGICAL_INTERPRETATION",
+      "scope": "Coronary artery disease in people with type 2 diabetes (portal CADinT2D). Illustrative membership proposition; not established by captured CFDE data.",
+      "subject_entity": "urn:cfde:gene:SHH",
+      "relation": "urn:reveal:relation:member-of",
+      "object_entity": "dapper:GeneSet.I1UZhVhKU-YDerPLIxtnZOGlTXNAlrgD"
+    },
+    {
+      "id": "dapper:Proposition.6T-VChVL5ddew5vFiMsuYE8O4_60DfUz",
+      "statement": "TCF7L2 belongs to the gene set representing the PsychENCODE geneM16 set.",
+      "proposition_kind": "BIOLOGICAL_INTERPRETATION",
+      "scope": "Coronary artery disease in people with type 2 diabetes (portal CADinT2D). Illustrative membership proposition; not established by captured CFDE data.",
+      "subject_entity": "urn:cfde:gene:TCF7L2",
+      "relation": "urn:reveal:relation:member-of",
+      "object_entity": "dapper:GeneSet.zQ8X81n_J-Fuv0zNRp1iQQXqIzuAOzGP"
+    }
+  ],
+  "claims": [
+    {
+      "id": "dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km",
+      "proposition": "dapper:Proposition.cjK2Yz-rwiv49w9zH71aodlAHIzbNVqE",
+      "statement": "The EAGGL result supports SHH involvement in this mechanism through its reported loading of 0.5042 under cfde-inc-v2.",
+      "direction": "SUPPORTS",
+      "status": "proposed",
+      "has_evidence": [
+        "dapper:EvidenceItem.1Sq7f12tg9y1afcop6HdNCwT4vNBk0-H",
+        "dapper:EvidenceItem.YkOjbB_uxlxEhXe6VEJ5-zDGTfEh5Iek"
+      ],
+      "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+      "was_attributed_to": [
+        "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+      ]
+    },
+    {
+      "id": "dapper:Claim.Uv7_cT46DdsqZMvk5nh8G48qOIKvhRgc",
+      "proposition": "dapper:Proposition.rCjXmKoJQot2L0j-JXULHltjuBgtYhnD",
+      "statement": "The EAGGL result supports GLI3 involvement in this mechanism through its reported loading of 0.3245 under cfde-inc-v2.",
+      "direction": "SUPPORTS",
+      "status": "proposed",
+      "has_evidence": [
+        "dapper:EvidenceItem.YN7PV1PkRn3wAY5eX7voYINQIrYZpd8x"
+      ],
+      "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+      "was_attributed_to": [
+        "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+      ]
+    },
+    {
+      "id": "dapper:Claim.I2mf6PJ0DPF5_nnbiBjAhgjlUCOiUZZ9",
+      "proposition": "dapper:Proposition.b06Styo26ZiZC2Sy599Uk98OKhiNgcuy",
+      "statement": "The EAGGL result supports TCF7L2 involvement in this mechanism through its reported loading of 0.3813 under cfde-inc-v2.",
+      "direction": "SUPPORTS",
+      "status": "proposed",
+      "has_evidence": [
+        "dapper:EvidenceItem.4j1Kh6qQTrMLAMh2i8HOqwY-E1jBEC4G",
+        "dapper:EvidenceItem.j6xtY8mzZ5SGHhlKOH1bOMu2lXp5idpW"
+      ],
+      "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+      "was_attributed_to": [
+        "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+      ]
+    },
+    {
+      "id": "dapper:Claim.Kd3psmdr4G9AlD0UU1E1Vu6AjpKaQYWE",
+      "proposition": "dapper:Proposition.yUAm2Mgs3NxOTghFk_4SrqgpYaecOFvL",
+      "statement": "The EAGGL result supports involvement of the AMP AD / GTEx brain-aging set, with a loading of 1.0 on mechanism Factor1.",
+      "direction": "SUPPORTS",
+      "status": "proposed",
+      "has_evidence": [
+        "dapper:EvidenceItem.TmJpftCshV-2i4dhf6jejSdst3s6VSib"
+      ],
+      "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+      "was_attributed_to": [
+        "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+      ]
+    },
+    {
+      "id": "dapper:Claim.NBafdtdEE2Uabs-8pZqurv7SoWpg7Yhi",
+      "proposition": "dapper:Proposition.YglauZfsf1X5GagFEmSSWB-dwoGljEGz",
+      "statement": "The EAGGL result supports involvement of the PsychENCODE geneM16 set, with a loading of 0.4518 on mechanism Factor1.",
+      "direction": "SUPPORTS",
+      "status": "proposed",
+      "has_evidence": [
+        "dapper:EvidenceItem.e_woYuSIytDbJ7bWIRGY0q6K8vCabcFw"
+      ],
+      "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+      "was_attributed_to": [
+        "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+      ]
+    },
+    {
+      "id": "dapper:Claim.Oe2UZeV7oMY4NsMHyB8h4HJO1FH4nSGF",
+      "proposition": "dapper:Proposition.3dNz6hkwxQ199hXVaHISAWghx_R6G8og",
+      "statement": "PIGEAN supports SHH trait-level involvement with a combined relevance score of 3.86; this is distinct from its mechanism loading.",
+      "direction": "SUPPORTS",
+      "status": "proposed",
+      "has_evidence": [
+        "dapper:EvidenceItem.QMnxv6KQF0En3XH-b9ruB3myjTEYc1a9"
+      ],
+      "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+      "was_attributed_to": [
+        "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+      ]
+    },
+    {
+      "id": "dapper:Claim.2idJniYU4zCtCN6puy8XZ2mzo9Mq6c5p",
+      "proposition": "dapper:Proposition.6cRd977XvXOzcsRLrJfwthdIHn_iRAOT",
+      "statement": "PIGEAN supports GLI3 trait-level involvement with a combined relevance score of 1.98; this is distinct from its mechanism loading.",
+      "direction": "SUPPORTS",
+      "status": "proposed",
+      "has_evidence": [
+        "dapper:EvidenceItem.kvUX6sx8doykSMMmWJe0FEet-fPmMxpN"
+      ],
+      "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+      "was_attributed_to": [
+        "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+      ]
+    },
+    {
+      "id": "dapper:Claim.H5icBYm5JLM3_T-b1mMfH65Nc0zMhZzH",
+      "proposition": "dapper:Proposition.9Ah6tV2FtJ8m_rEHO6e92pmWxAyfU8U_",
+      "statement": "PIGEAN supports TCF7L2 trait-level involvement with a combined relevance score of 2.42; this is distinct from its mechanism loading.",
+      "direction": "SUPPORTS",
+      "status": "proposed",
+      "has_evidence": [
+        "dapper:EvidenceItem.KU2TsRllsq60RcwOPrk5OGbnX6QX4kvT"
+      ],
+      "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+      "was_attributed_to": [
+        "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+      ]
+    },
+    {
+      "id": "dapper:Claim.xzV_35EYnLl-zy03YbmhfBk_ynNbl7H9",
+      "proposition": "dapper:Proposition.NJYh11lXY-LXoFXrJeK7KkfI7r7iQzFT",
+      "statement": "PIGEAN supports trait-level involvement of the AMP AD / GTEx brain-aging set, with beta=0.115 and beta_uncorrected=0.119.",
+      "direction": "SUPPORTS",
+      "status": "proposed",
+      "has_evidence": [
+        "dapper:EvidenceItem.LG9zY-dbXmGT8ldum4A8LrmAHFAvSyBm"
+      ],
+      "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+      "was_attributed_to": [
+        "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+      ]
+    },
+    {
+      "id": "dapper:Claim.SYqCJXxCVXDpwflRSdZnkVLzGLO_vi_r",
+      "proposition": "dapper:Proposition.JfxEcQLDt9bMiSejgOKxh7G8ylVGAqxI",
+      "statement": "PIGEAN supports trait-level involvement of the PsychENCODE geneM16 set, with beta=0.00729 and beta_uncorrected=0.0586.",
+      "direction": "SUPPORTS",
+      "status": "proposed",
+      "has_evidence": [
+        "dapper:EvidenceItem.O0yC2UWrCiEd7Iw-S3hgW070oHE_x8hm"
+      ],
+      "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+      "was_attributed_to": [
+        "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+      ]
+    },
+    {
+      "id": "dapper:Claim.x7aCVQ1uTkYKLJo32ZyAGMGZaAGCSvWV",
+      "proposition": "dapper:Proposition.9l7Nq6exgMpGL5Z3Tn4Luy62urD9GHT5",
+      "statement": "For this illustrative scenario, a mock ProKN assertion supports SHH membership in the AMP AD / GTEx brain-aging set. The membership is unverified.",
+      "direction": "SUPPORTS",
+      "status": "proposed",
+      "has_evidence": [
+        "dapper:EvidenceItem.2uQrn7wZLvOA2uUhncD6zCHmyIB_N5Jh",
+        "dapper:EvidenceItem.KIcbQc5Jr6Ac4zUJr52D7SlNWXmDeElR"
+      ],
+      "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+      "was_attributed_to": [
+        "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+      ]
+    },
+    {
+      "id": "dapper:Claim.uzqyfwuhf59hSTdravdcr4cTxuitWGx-",
+      "proposition": "dapper:Proposition.6T-VChVL5ddew5vFiMsuYE8O4_60DfUz",
+      "statement": "For this illustrative scenario, a mock BiomarkerKG assertion supports TCF7L2 membership in the PsychENCODE geneM16 set. The membership is unverified.",
+      "direction": "SUPPORTS",
+      "status": "proposed",
+      "has_evidence": [
+        "dapper:EvidenceItem.-2rU_GVD34ddH6jrpbtOyP3TZq-y3c1q",
+        "dapper:EvidenceItem.1raZeL7bxIDn9SyULEBH0z1Yj4Lds5-k"
+      ],
+      "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+      "was_attributed_to": [
+        "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+      ]
+    }
+  ],
+  "evidence_items": [
+    {
+      "id": "dapper:EvidenceItem.1Sq7f12tg9y1afcop6HdNCwT4vNBk0-H",
+      "target_proposition": "dapper:Proposition.cjK2Yz-rwiv49w9zH71aodlAHIzbNVqE",
+      "direction": "SUPPORTS",
+      "evidence_source": "CFDE — captured PIGEAN/EAGGL result",
+      "snippet": "\"factor_value\":0.5042",
+      "explanation": "The loading is used as evidence of involvement in the mechanism. It does not distinguish amplification from inhibition.",
+      "context": "Source locator: pigean-gene-factor.response.json#/data/0. Trait: portal CADinT2D; model: cfde-inc-v2; mechanism: factor:portal:CADinT2D:cfde-inc-v2:Factor1. Source metrics retain their original meanings; no probability calibration is assumed.",
+      "was_derived_from": [
+        "dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ"
+      ],
+      "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+      "was_attributed_to": [
+        "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+      ]
+    },
+    {
+      "id": "dapper:EvidenceItem.YN7PV1PkRn3wAY5eX7voYINQIrYZpd8x",
+      "target_proposition": "dapper:Proposition.rCjXmKoJQot2L0j-JXULHltjuBgtYhnD",
+      "direction": "SUPPORTS",
+      "evidence_source": "CFDE — captured PIGEAN/EAGGL result",
+      "snippet": "\"factor_value\":0.3245",
+      "explanation": "The loading is used as evidence of involvement in the mechanism. It does not distinguish amplification from inhibition.",
+      "context": "Source locator: pigean-gene-factor.response.json#/data/3. Trait: portal CADinT2D; model: cfde-inc-v2; mechanism: factor:portal:CADinT2D:cfde-inc-v2:Factor1. Source metrics retain their original meanings; no probability calibration is assumed.",
+      "was_derived_from": [
+        "dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ"
+      ],
+      "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+      "was_attributed_to": [
+        "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+      ]
+    },
+    {
+      "id": "dapper:EvidenceItem.4j1Kh6qQTrMLAMh2i8HOqwY-E1jBEC4G",
+      "target_proposition": "dapper:Proposition.b06Styo26ZiZC2Sy599Uk98OKhiNgcuy",
+      "direction": "SUPPORTS",
+      "evidence_source": "CFDE — captured PIGEAN/EAGGL result",
+      "snippet": "\"factor_value\":0.3813",
+      "explanation": "The loading is used as evidence of involvement in the mechanism. It does not distinguish amplification from inhibition.",
+      "context": "Source locator: pigean-gene-factor.response.json#/data/1. Trait: portal CADinT2D; model: cfde-inc-v2; mechanism: factor:portal:CADinT2D:cfde-inc-v2:Factor1. Source metrics retain their original meanings; no probability calibration is assumed.",
+      "was_derived_from": [
+        "dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ"
+      ],
+      "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+      "was_attributed_to": [
+        "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+      ]
+    },
+    {
+      "id": "dapper:EvidenceItem.TmJpftCshV-2i4dhf6jejSdst3s6VSib",
+      "target_proposition": "dapper:Proposition.yUAm2Mgs3NxOTghFk_4SrqgpYaecOFvL",
+      "direction": "SUPPORTS",
+      "evidence_source": "CFDE — captured PIGEAN/EAGGL result",
+      "snippet": "\"factor_value\":1.0",
+      "explanation": "This is program-level involvement. The source label alone does not establish a particular causal process, cell type or activity readout.",
+      "context": "Source locator: pigean-gene-set-factor.response.json#/data/0. Trait: portal CADinT2D; model: cfde-inc-v2; mechanism: factor:portal:CADinT2D:cfde-inc-v2:Factor1. Source metrics retain their original meanings; no probability calibration is assumed.",
+      "was_derived_from": [
+        "dapper:File.Dt0S38v_sLn5jiOAVXMrMWTrXBLnsn83"
+      ],
+      "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+      "was_attributed_to": [
+        "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+      ]
+    },
+    {
+      "id": "dapper:EvidenceItem.e_woYuSIytDbJ7bWIRGY0q6K8vCabcFw",
+      "target_proposition": "dapper:Proposition.YglauZfsf1X5GagFEmSSWB-dwoGljEGz",
+      "direction": "SUPPORTS",
+      "evidence_source": "CFDE — captured PIGEAN/EAGGL result",
+      "snippet": "\"factor_value\":0.4518",
+      "explanation": "This is program-level involvement. The source label alone does not establish a particular causal process, cell type or activity readout.",
+      "context": "Source locator: pigean-gene-set-factor.response.json#/data/2. Trait: portal CADinT2D; model: cfde-inc-v2; mechanism: factor:portal:CADinT2D:cfde-inc-v2:Factor1. Source metrics retain their original meanings; no probability calibration is assumed.",
+      "was_derived_from": [
+        "dapper:File.Dt0S38v_sLn5jiOAVXMrMWTrXBLnsn83"
+      ],
+      "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+      "was_attributed_to": [
+        "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+      ]
+    },
+    {
+      "id": "dapper:EvidenceItem.QMnxv6KQF0En3XH-b9ruB3myjTEYc1a9",
+      "target_proposition": "dapper:Proposition.3dNz6hkwxQ199hXVaHISAWghx_R6G8og",
+      "direction": "SUPPORTS",
+      "evidence_source": "CFDE — captured PIGEAN/EAGGL result",
+      "snippet": "\"combined\":3.86",
+      "explanation": "The reported gene–trait relevance supports this scoped involvement assessment. It does not answer whether genetic risk is amplified by an exposure or whether the exposure is a downstream readout.",
+      "context": "Source locator: pigean-gene-factor.response.json#/data/0. Trait: portal CADinT2D; model: cfde-inc-v2; mechanism: factor:portal:CADinT2D:cfde-inc-v2:Factor1. Source metrics retain their original meanings; no probability calibration is assumed.",
+      "was_derived_from": [
+        "dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ"
+      ],
+      "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+      "was_attributed_to": [
+        "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+      ]
+    },
+    {
+      "id": "dapper:EvidenceItem.kvUX6sx8doykSMMmWJe0FEet-fPmMxpN",
+      "target_proposition": "dapper:Proposition.6cRd977XvXOzcsRLrJfwthdIHn_iRAOT",
+      "direction": "SUPPORTS",
+      "evidence_source": "CFDE — captured PIGEAN/EAGGL result",
+      "snippet": "\"combined\":1.98",
+      "explanation": "The reported gene–trait relevance supports this scoped involvement assessment. It does not answer whether genetic risk is amplified by an exposure or whether the exposure is a downstream readout.",
+      "context": "Source locator: pigean-gene-factor.response.json#/data/3. Trait: portal CADinT2D; model: cfde-inc-v2; mechanism: factor:portal:CADinT2D:cfde-inc-v2:Factor1. Source metrics retain their original meanings; no probability calibration is assumed.",
+      "was_derived_from": [
+        "dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ"
+      ],
+      "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+      "was_attributed_to": [
+        "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+      ]
+    },
+    {
+      "id": "dapper:EvidenceItem.KU2TsRllsq60RcwOPrk5OGbnX6QX4kvT",
+      "target_proposition": "dapper:Proposition.9Ah6tV2FtJ8m_rEHO6e92pmWxAyfU8U_",
+      "direction": "SUPPORTS",
+      "evidence_source": "CFDE — captured PIGEAN/EAGGL result",
+      "snippet": "\"combined\":2.42",
+      "explanation": "The reported gene–trait relevance supports this scoped involvement assessment. It does not answer whether genetic risk is amplified by an exposure or whether the exposure is a downstream readout.",
+      "context": "Source locator: pigean-gene-factor.response.json#/data/1. Trait: portal CADinT2D; model: cfde-inc-v2; mechanism: factor:portal:CADinT2D:cfde-inc-v2:Factor1. Source metrics retain their original meanings; no probability calibration is assumed.",
+      "was_derived_from": [
+        "dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ"
+      ],
+      "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+      "was_attributed_to": [
+        "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+      ]
+    },
+    {
+      "id": "dapper:EvidenceItem.LG9zY-dbXmGT8ldum4A8LrmAHFAvSyBm",
+      "target_proposition": "dapper:Proposition.NJYh11lXY-LXoFXrJeK7KkfI7r7iQzFT",
+      "direction": "SUPPORTS",
+      "evidence_source": "CFDE — captured PIGEAN/EAGGL result",
+      "snippet": "\"beta\":0.115,\"beta_uncorrected\":0.119",
+      "explanation": "The two effect estimates describe the annotation–trait relationship on their source scales. They come from the same analysis and are not independent replications.",
+      "context": "Source locator: pigean-gene-set-factor.response.json#/data/0. Trait: portal CADinT2D; model: cfde-inc-v2; mechanism: factor:portal:CADinT2D:cfde-inc-v2:Factor1. Source metrics retain their original meanings; no probability calibration is assumed.",
+      "was_derived_from": [
+        "dapper:File.Dt0S38v_sLn5jiOAVXMrMWTrXBLnsn83"
+      ],
+      "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+      "was_attributed_to": [
+        "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+      ]
+    },
+    {
+      "id": "dapper:EvidenceItem.O0yC2UWrCiEd7Iw-S3hgW070oHE_x8hm",
+      "target_proposition": "dapper:Proposition.JfxEcQLDt9bMiSejgOKxh7G8ylVGAqxI",
+      "direction": "SUPPORTS",
+      "evidence_source": "CFDE — captured PIGEAN/EAGGL result",
+      "snippet": "\"beta\":0.00729,\"beta_uncorrected\":0.0586",
+      "explanation": "The two effect estimates describe the annotation–trait relationship on their source scales. They come from the same analysis and are not independent replications.",
+      "context": "Source locator: pigean-gene-set-factor.response.json#/data/2. Trait: portal CADinT2D; model: cfde-inc-v2; mechanism: factor:portal:CADinT2D:cfde-inc-v2:Factor1. Source metrics retain their original meanings; no probability calibration is assumed.",
+      "was_derived_from": [
+        "dapper:File.Dt0S38v_sLn5jiOAVXMrMWTrXBLnsn83"
+      ],
+      "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+      "was_attributed_to": [
+        "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+      ]
+    },
+    {
+      "id": "dapper:EvidenceItem.2uQrn7wZLvOA2uUhncD6zCHmyIB_N5Jh",
+      "target_proposition": "dapper:Proposition.9l7Nq6exgMpGL5Z3Tn4Luy62urD9GHT5",
+      "direction": "SUPPORTS",
+      "evidence_source": "ProKN — illustrative assertion, not retrieved",
+      "snippet": "SHH is a member of the retained AMP AD / GTEx gene set.",
+      "explanation": "This invented assertion directly supplies membership for the UI example. It is not a returned KG result and must not update the imported GeneSet membership.",
+      "context": "Source locator: illustrative-kg-assertions.json#/assertions/0. Trait: portal CADinT2D; model: cfde-inc-v2; mechanism: factor:portal:CADinT2D:cfde-inc-v2:Factor1. This is synthetic design evidence and has not been verified.",
+      "was_derived_from": [
+        "dapper:File._FB2fhvDopxDEHgoDgf2Hk4jE0wxilag"
+      ],
+      "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+      "was_attributed_to": [
+        "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+      ]
+    },
+    {
+      "id": "dapper:EvidenceItem.KIcbQc5Jr6Ac4zUJr52D7SlNWXmDeElR",
+      "target_proposition": "dapper:Proposition.9l7Nq6exgMpGL5Z3Tn4Luy62urD9GHT5",
+      "direction": "NEUTRAL",
+      "evidence_source": "CFDE — captured PIGEAN/EAGGL result",
+      "snippet": "\"factor\":\"Factor1\"",
+      "explanation": "Both entities load on the same mechanism. That is useful investigation context but does not establish that the gene belongs to the set.",
+      "context": "Source locator: pigean-gene-factor.response.json and pigean-gene-set-factor.response.json; shared Factor1 neighborhood. Trait: portal CADinT2D; model: cfde-inc-v2; mechanism: factor:portal:CADinT2D:cfde-inc-v2:Factor1. Source metrics retain their original meanings; no probability calibration is assumed.",
+      "was_derived_from": [
+        "dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ",
+        "dapper:File.Dt0S38v_sLn5jiOAVXMrMWTrXBLnsn83"
+      ],
+      "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+      "was_attributed_to": [
+        "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+      ]
+    },
+    {
+      "id": "dapper:EvidenceItem.YkOjbB_uxlxEhXe6VEJ5-zDGTfEh5Iek",
+      "target_proposition": "dapper:Proposition.cjK2Yz-rwiv49w9zH71aodlAHIzbNVqE",
+      "direction": "NEUTRAL",
+      "evidence_source": "ProKN — illustrative assertion, not retrieved",
+      "snippet": "SHH is a member of the retained AMP AD / GTEx gene set.",
+      "explanation": "The mock membership suggests a gene-to-program connection to inspect alongside the program’s captured mechanism loading. It supplies context only; it is not independent support for mechanism involvement.",
+      "context": "Source locator: illustrative-kg-assertions.json#/assertions/0. Trait: portal CADinT2D; model: cfde-inc-v2; mechanism: factor:portal:CADinT2D:cfde-inc-v2:Factor1. This is synthetic design evidence and has not been verified.",
+      "was_derived_from": [
+        "dapper:File._FB2fhvDopxDEHgoDgf2Hk4jE0wxilag"
+      ],
+      "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+      "was_attributed_to": [
+        "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+      ]
+    },
+    {
+      "id": "dapper:EvidenceItem.-2rU_GVD34ddH6jrpbtOyP3TZq-y3c1q",
+      "target_proposition": "dapper:Proposition.6T-VChVL5ddew5vFiMsuYE8O4_60DfUz",
+      "direction": "SUPPORTS",
+      "evidence_source": "BiomarkerKG — illustrative assertion, not retrieved",
+      "snippet": "TCF7L2 is a member of the PsychENCODE geneM16 gene set.",
+      "explanation": "This invented assertion directly supplies membership for the UI example. It is not a returned KG result and must not update the imported GeneSet membership.",
+      "context": "Source locator: illustrative-kg-assertions.json#/assertions/1. Trait: portal CADinT2D; model: cfde-inc-v2; mechanism: factor:portal:CADinT2D:cfde-inc-v2:Factor1. This is synthetic design evidence and has not been verified.",
+      "was_derived_from": [
+        "dapper:File._FB2fhvDopxDEHgoDgf2Hk4jE0wxilag"
+      ],
+      "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+      "was_attributed_to": [
+        "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+      ]
+    },
+    {
+      "id": "dapper:EvidenceItem.1raZeL7bxIDn9SyULEBH0z1Yj4Lds5-k",
+      "target_proposition": "dapper:Proposition.6T-VChVL5ddew5vFiMsuYE8O4_60DfUz",
+      "direction": "NEUTRAL",
+      "evidence_source": "CFDE — captured PIGEAN/EAGGL result",
+      "snippet": "\"factor\":\"Factor1\"",
+      "explanation": "Both entities load on the same mechanism. That is useful investigation context but does not establish that the gene belongs to the set.",
+      "context": "Source locator: pigean-gene-factor.response.json and pigean-gene-set-factor.response.json; shared Factor1 neighborhood. Trait: portal CADinT2D; model: cfde-inc-v2; mechanism: factor:portal:CADinT2D:cfde-inc-v2:Factor1. Source metrics retain their original meanings; no probability calibration is assumed.",
+      "was_derived_from": [
+        "dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ",
+        "dapper:File.Dt0S38v_sLn5jiOAVXMrMWTrXBLnsn83"
+      ],
+      "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+      "was_attributed_to": [
+        "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+      ]
+    },
+    {
+      "id": "dapper:EvidenceItem.j6xtY8mzZ5SGHhlKOH1bOMu2lXp5idpW",
+      "target_proposition": "dapper:Proposition.b06Styo26ZiZC2Sy599Uk98OKhiNgcuy",
+      "direction": "NEUTRAL",
+      "evidence_source": "BiomarkerKG — illustrative assertion, not retrieved",
+      "snippet": "TCF7L2 is a member of the PsychENCODE geneM16 gene set.",
+      "explanation": "The mock membership suggests a gene-to-program connection to inspect alongside the program’s captured mechanism loading. It supplies context only; it is not independent support for mechanism involvement.",
+      "context": "Source locator: illustrative-kg-assertions.json#/assertions/1. Trait: portal CADinT2D; model: cfde-inc-v2; mechanism: factor:portal:CADinT2D:cfde-inc-v2:Factor1. This is synthetic design evidence and has not been verified.",
+      "was_derived_from": [
+        "dapper:File._FB2fhvDopxDEHgoDgf2Hk4jE0wxilag"
+      ],
+      "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+      "was_attributed_to": [
+        "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+      ]
+    }
+  ],
+  "scientific_accounts": [
+    {
+      "id": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
+      "name": "Genes and gene programs in a shared CAD-in-T2D mechanism",
+      "question": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+      "context": "A CAD-in-T2D evidence slice used to investigate the selected broader CAD gap. This authored design packet combines captured CFDE observations with explicitly illustrative KG membership assertions. No live agent ran.",
+      "component_claims": [
+        "dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km",
+        "dapper:Claim.Uv7_cT46DdsqZMvk5nh8G48qOIKvhRgc",
+        "dapper:Claim.I2mf6PJ0DPF5_nnbiBjAhgjlUCOiUZZ9",
+        "dapper:Claim.Kd3psmdr4G9AlD0UU1E1Vu6AjpKaQYWE",
+        "dapper:Claim.NBafdtdEE2Uabs-8pZqurv7SoWpg7Yhi",
+        "dapper:Claim.Oe2UZeV7oMY4NsMHyB8h4HJO1FH4nSGF",
+        "dapper:Claim.2idJniYU4zCtCN6puy8XZ2mzo9Mq6c5p",
+        "dapper:Claim.H5icBYm5JLM3_T-b1mMfH65Nc0zMhZzH",
+        "dapper:Claim.xzV_35EYnLl-zy03YbmhfBk_ynNbl7H9",
+        "dapper:Claim.SYqCJXxCVXDpwflRSdZnkVLzGLO_vi_r",
+        "dapper:Claim.x7aCVQ1uTkYKLJo32ZyAGMGZaAGCSvWV",
+        "dapper:Claim.uzqyfwuhf59hSTdravdcr4cTxuitWGx-"
+      ],
+      "conclusion_claims": [
+        "dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km",
+        "dapper:Claim.Uv7_cT46DdsqZMvk5nh8G48qOIKvhRgc",
+        "dapper:Claim.I2mf6PJ0DPF5_nnbiBjAhgjlUCOiUZZ9",
+        "dapper:Claim.Kd3psmdr4G9AlD0UU1E1Vu6AjpKaQYWE",
+        "dapper:Claim.NBafdtdEE2Uabs-8pZqurv7SoWpg7Yhi"
+      ],
+      "closing_remarks": "SHH, GLI3 and TCF7L2, together with the AMP AD / GTEx and PsychENCODE geneM16 programs, are implicated in the same CAD-in-T2D mechanism by their captured EAGGL loadings. Their PIGEAN trait-level results connect these assessments to CAD in people with type 2 diabetes. The illustrative membership assertions show how genes could be connected to the programs, but those links remain unverified. Together, the assessed relationships prioritize a mechanism for investigating the selected gap. They do not distinguish exposure-driven amplification of genetic risk from downstream readouts or reverse causation; that requires temporal or intervention evidence not present here.",
+      "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+      "was_attributed_to": [
+        "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+      ]
+    }
+  ],
+  "used_edges": [
+    {
+      "subject": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+      "predicate": "prov:used",
+      "object": "dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ"
+    },
+    {
+      "subject": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+      "predicate": "prov:used",
+      "object": "dapper:File.Dt0S38v_sLn5jiOAVXMrMWTrXBLnsn83"
+    },
+    {
+      "subject": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+      "predicate": "prov:used",
+      "object": "dapper:File.eG0HM7wVGbDLt-99TA-OMnMeKqdIircT"
+    },
+    {
+      "subject": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+      "predicate": "prov:used",
+      "object": "dapper:File._FB2fhvDopxDEHgoDgf2Hk4jE0wxilag"
+    },
+    {
+      "subject": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+      "predicate": "prov:used",
+      "object": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk"
+    },
+    {
+      "subject": "dapper:Activity.XZK6LpSUO5eTobg5XZa95h3ywTGGvdRM",
+      "predicate": "prov:used",
+      "object": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd"
+    }
+  ],
+  "paragraphs": [
+    {
+      "id": "dapper:Paragraph.uSYa1LdXNPuwlSgsCz3oZ7IfrVoztroD",
+      "scientific_account": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
+      "language": "en",
+      "was_generated_by": "dapper:Activity.XZK6LpSUO5eTobg5XZa95h3ywTGGvdRM",
+      "was_attributed_to": [
+        "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+      ],
+      "text": "The selected CAD knowledge gap asks whether context amplifies genetic risk or instead reflects incipient disease. In the captured CAD-in-T2D analysis, SHH, GLI3 and TCF7L2 are implicated in mechanism Factor1 by EAGGL loadings of 0.5042, 0.3245 and 0.3813, respectively. The AMP AD / GTEx brain-aging and PsychENCODE geneM16 programs are also implicated in this mechanism by their gene-set loadings. PIGEAN gene–trait and gene-set–trait results further connect these genes and programs to CAD in people with type 2 diabetes. Illustrative, unverified KG membership assertions connect SHH to the AMP AD / GTEx set and TCF7L2 to the PsychENCODE set; these links demonstrate a possible evidence connection and are not retrieved biological findings. Taken together, these assessments prioritize a shared mechanism for investigating the gap, but do not resolve whether exposures amplify genetic risk or are downstream readouts. Temporal or intervention evidence is still needed.",
+      "citations": [
+        {
+          "target_id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+          "citation_metadata_revision": 1,
+          "start": 0,
+          "end": 113,
+          "exact_text": "The selected CAD knowledge gap asks whether context amplifies genetic risk or instead reflects incipient disease."
+        },
+        {
+          "target_id": "dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km",
+          "citation_metadata_revision": 1,
+          "start": 114,
+          "end": 269,
+          "exact_text": "In the captured CAD-in-T2D analysis, SHH, GLI3 and TCF7L2 are implicated in mechanism Factor1 by EAGGL loadings of 0.5042, 0.3245 and 0.3813, respectively."
+        },
+        {
+          "target_id": "dapper:Claim.Uv7_cT46DdsqZMvk5nh8G48qOIKvhRgc",
+          "citation_metadata_revision": 1,
+          "start": 114,
+          "end": 269,
+          "exact_text": "In the captured CAD-in-T2D analysis, SHH, GLI3 and TCF7L2 are implicated in mechanism Factor1 by EAGGL loadings of 0.5042, 0.3245 and 0.3813, respectively."
+        },
+        {
+          "target_id": "dapper:Claim.I2mf6PJ0DPF5_nnbiBjAhgjlUCOiUZZ9",
+          "citation_metadata_revision": 1,
+          "start": 114,
+          "end": 269,
+          "exact_text": "In the captured CAD-in-T2D analysis, SHH, GLI3 and TCF7L2 are implicated in mechanism Factor1 by EAGGL loadings of 0.5042, 0.3245 and 0.3813, respectively."
+        },
+        {
+          "target_id": "dapper:Claim.Kd3psmdr4G9AlD0UU1E1Vu6AjpKaQYWE",
+          "citation_metadata_revision": 1,
+          "start": 270,
+          "end": 398,
+          "exact_text": "The AMP AD / GTEx brain-aging and PsychENCODE geneM16 programs are also implicated in this mechanism by their gene-set loadings."
+        },
+        {
+          "target_id": "dapper:Claim.NBafdtdEE2Uabs-8pZqurv7SoWpg7Yhi",
+          "citation_metadata_revision": 1,
+          "start": 270,
+          "end": 398,
+          "exact_text": "The AMP AD / GTEx brain-aging and PsychENCODE geneM16 programs are also implicated in this mechanism by their gene-set loadings."
+        },
+        {
+          "target_id": "dapper:Claim.Oe2UZeV7oMY4NsMHyB8h4HJO1FH4nSGF",
+          "citation_metadata_revision": 1,
+          "start": 399,
+          "end": 523,
+          "exact_text": "PIGEAN gene–trait and gene-set–trait results further connect these genes and programs to CAD in people with type 2 diabetes."
+        },
+        {
+          "target_id": "dapper:Claim.2idJniYU4zCtCN6puy8XZ2mzo9Mq6c5p",
+          "citation_metadata_revision": 1,
+          "start": 399,
+          "end": 523,
+          "exact_text": "PIGEAN gene–trait and gene-set–trait results further connect these genes and programs to CAD in people with type 2 diabetes."
+        },
+        {
+          "target_id": "dapper:Claim.H5icBYm5JLM3_T-b1mMfH65Nc0zMhZzH",
+          "citation_metadata_revision": 1,
+          "start": 399,
+          "end": 523,
+          "exact_text": "PIGEAN gene–trait and gene-set–trait results further connect these genes and programs to CAD in people with type 2 diabetes."
+        },
+        {
+          "target_id": "dapper:Claim.xzV_35EYnLl-zy03YbmhfBk_ynNbl7H9",
+          "citation_metadata_revision": 1,
+          "start": 399,
+          "end": 523,
+          "exact_text": "PIGEAN gene–trait and gene-set–trait results further connect these genes and programs to CAD in people with type 2 diabetes."
+        },
+        {
+          "target_id": "dapper:Claim.SYqCJXxCVXDpwflRSdZnkVLzGLO_vi_r",
+          "citation_metadata_revision": 1,
+          "start": 399,
+          "end": 523,
+          "exact_text": "PIGEAN gene–trait and gene-set–trait results further connect these genes and programs to CAD in people with type 2 diabetes."
+        },
+        {
+          "target_id": "dapper:Claim.x7aCVQ1uTkYKLJo32ZyAGMGZaAGCSvWV",
+          "citation_metadata_revision": 1,
+          "start": 524,
+          "end": 743,
+          "exact_text": "Illustrative, unverified KG membership assertions connect SHH to the AMP AD / GTEx set and TCF7L2 to the PsychENCODE set; these links demonstrate a possible evidence connection and are not retrieved biological findings."
+        },
+        {
+          "target_id": "dapper:Claim.uzqyfwuhf59hSTdravdcr4cTxuitWGx-",
+          "citation_metadata_revision": 1,
+          "start": 524,
+          "end": 743,
+          "exact_text": "Illustrative, unverified KG membership assertions connect SHH to the AMP AD / GTEx set and TCF7L2 to the PsychENCODE set; these links demonstrate a possible evidence connection and are not retrieved biological findings."
+        },
+        {
+          "target_id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+          "citation_metadata_revision": 1,
+          "start": 744,
+          "end": 971,
+          "exact_text": "Taken together, these assessments prioritize a shared mechanism for investigating the gap, but do not resolve whether exposures amplify genetic risk or are downstream readouts. Temporal or intervention evidence is still needed."
+        },
+        {
+          "target_id": "dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km",
+          "citation_metadata_revision": 1,
+          "start": 744,
+          "end": 971,
+          "exact_text": "Taken together, these assessments prioritize a shared mechanism for investigating the gap, but do not resolve whether exposures amplify genetic risk or are downstream readouts. Temporal or intervention evidence is still needed."
+        },
+        {
+          "target_id": "dapper:Claim.Uv7_cT46DdsqZMvk5nh8G48qOIKvhRgc",
+          "citation_metadata_revision": 1,
+          "start": 744,
+          "end": 971,
+          "exact_text": "Taken together, these assessments prioritize a shared mechanism for investigating the gap, but do not resolve whether exposures amplify genetic risk or are downstream readouts. Temporal or intervention evidence is still needed."
+        },
+        {
+          "target_id": "dapper:Claim.I2mf6PJ0DPF5_nnbiBjAhgjlUCOiUZZ9",
+          "citation_metadata_revision": 1,
+          "start": 744,
+          "end": 971,
+          "exact_text": "Taken together, these assessments prioritize a shared mechanism for investigating the gap, but do not resolve whether exposures amplify genetic risk or are downstream readouts. Temporal or intervention evidence is still needed."
+        },
+        {
+          "target_id": "dapper:Claim.Kd3psmdr4G9AlD0UU1E1Vu6AjpKaQYWE",
+          "citation_metadata_revision": 1,
+          "start": 744,
+          "end": 971,
+          "exact_text": "Taken together, these assessments prioritize a shared mechanism for investigating the gap, but do not resolve whether exposures amplify genetic risk or are downstream readouts. Temporal or intervention evidence is still needed."
+        },
+        {
+          "target_id": "dapper:Claim.NBafdtdEE2Uabs-8pZqurv7SoWpg7Yhi",
+          "citation_metadata_revision": 1,
+          "start": 744,
+          "end": 971,
+          "exact_text": "Taken together, these assessments prioritize a shared mechanism for investigating the gap, but do not resolve whether exposures amplify genetic risk or are downstream readouts. Temporal or intervention evidence is still needed."
+        }
+      ]
+    }
+  ]
+}

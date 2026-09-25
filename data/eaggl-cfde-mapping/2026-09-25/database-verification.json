@@ -1,0 +1,36 @@
+{
+  "verified_at": "2026-09-25T18:53:08.847603+00:00",
+  "database": "cyaka_reveal_mechanisms",
+  "run_id": "272cfa19d093257863d7e7134776229dbc9b9b018d974e6b311285686833ec31",
+  "status": "complete",
+  "factor_links": 1756,
+  "gene_set_summary_links": 8780,
+  "resolved_gene_set_links": 4056,
+  "verified_existing_geneset_objects": 4056,
+  "factors_with_resolved_gene_sets": 1052,
+  "eaggl_factors_unchanged": 4037,
+  "dapper_genesets_unchanged": 801934,
+  "table_count": 14,
+  "example": {
+    "eaggl_factor_id": "AD::Factor1",
+    "cfde_node_id": "factor:portal:AD:cfde-inc-v2:Factor1",
+    "resolved_gene_sets": 1
+  },
+  "example_unmatched": {
+    "run_id": "272cfa19d093257863d7e7134776229dbc9b9b018d974e6b311285686833ec31",
+    "eaggl_import_id": "a548ad801c11551de74f04a4cb2ecce65e776a443d2730a01ec6e17d89a6f1bc",
+    "eaggl_factor_id": "22q112_deletion_syndrome_Orphanet_567::Factor1",
+    "eaggl_label": "22q11 Deletion Effects",
+    "model": "cfde-inc-v2",
+    "match_method": "exact_trait_factor_number",
+    "status": "unmatched",
+    "reason": "trait_not_in_cfde_catalog",
+    "gene_sets": []
+  },
+  "tests": {
+    "mapping_tests_passed": 10,
+    "prisma_validation": "passed",
+    "prisma_generation": "passed",
+    "local_mysql_schema_diff": "No difference detected"
+  }
+}

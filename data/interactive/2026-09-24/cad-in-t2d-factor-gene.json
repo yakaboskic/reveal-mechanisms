@@ -1,0 +1,633 @@
+{
+  "url": "https://dev.cfdeknowledge.org/api/interactive/connections",
+  "method": "POST",
+  "request": {
+    "anchor_items": [
+      {
+        "node_id": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+        "node_type": "factor",
+        "node_key": "Factor1",
+        "label": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+        "subtitle": "Coronary artery disease in type 2 diabetes (CAD in T2D) (Factor1)"
+      }
+    ],
+    "context": "",
+    "target_type": "gene",
+    "reducer": "mean",
+    "connection_scope": "direct",
+    "limit": 8,
+    "exclude_node_ids": [
+      "factor:portal:CADinT2D:cfde-inc-v2:Factor1"
+    ],
+    "model": "cfde-inc-v2"
+  },
+  "retrieved_at": "2026-09-24T12:42:35.888812+00:00",
+  "status": 200,
+  "content_type": "application/json",
+  "body_sha256": "6f689724ca918b1706cbde411b6337c98cd5f4d7a9b23561a9a7d7695d50547f",
+  "body_bytes": 11697,
+  "response": {
+    "candidates": [
+      {
+        "candidate": {
+          "node_id": "gene:SHH",
+          "node_type": "gene",
+          "node_key": "SHH",
+          "label": "SHH",
+          "subtitle": "Gene",
+          "id": "gene:SHH",
+          "type": "gene"
+        },
+        "aggregate_score": 3.6776304513454114,
+        "raw_max_score": 0.5041999816894531,
+        "raw_mean_score": 0.5041999816894531,
+        "support_path_count": 1,
+        "support_anchor_count": 1,
+        "anchor_count": 1,
+        "supporting_paths": [
+          {
+            "anchor_id": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+            "family": "factor_gene_direct",
+            "relation": "direct",
+            "raw_score": 0.5041999816894531,
+            "normalized_score": 3.6776304513454114,
+            "path_nodes": [
+              "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+              "gene:SHH"
+            ],
+            "extra": {}
+          }
+        ],
+        "edges": [
+          {
+            "id": "eceaf78b98133a1e",
+            "source": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+            "target": "gene:SHH",
+            "weight": 3.6776304513454114,
+            "label": "factor gene direct",
+            "relation": "direct",
+            "family": "factor_gene_direct",
+            "raw_score": 0.5041999816894531,
+            "normalized_score": 3.6776304513454114,
+            "path_nodes": [
+              "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+              "gene:SHH"
+            ],
+            "extra": {}
+          }
+        ]
+      },
+      {
+        "candidate": {
+          "node_id": "gene:TCF7L2",
+          "node_type": "gene",
+          "node_key": "TCF7L2",
+          "label": "TCF7L2",
+          "subtitle": "Gene",
+          "id": "gene:TCF7L2",
+          "type": "gene"
+        },
+        "aggregate_score": 2.6035690825535336,
+        "raw_max_score": 0.3813000023365021,
+        "raw_mean_score": 0.3813000023365021,
+        "support_path_count": 1,
+        "support_anchor_count": 1,
+        "anchor_count": 1,
+        "supporting_paths": [
+          {
+            "anchor_id": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+            "family": "factor_gene_direct",
+            "relation": "direct",
+            "raw_score": 0.3813000023365021,
+            "normalized_score": 2.6035690825535336,
+            "path_nodes": [
+              "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+              "gene:TCF7L2"
+            ],
+            "extra": {}
+          }
+        ],
+        "edges": [
+          {
+            "id": "b8c1fc89897bf85c",
+            "source": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+            "target": "gene:TCF7L2",
+            "weight": 2.6035690825535336,
+            "label": "factor gene direct",
+            "relation": "direct",
+            "family": "factor_gene_direct",
+            "raw_score": 0.3813000023365021,
+            "normalized_score": 2.6035690825535336,
+            "path_nodes": [
+              "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+              "gene:TCF7L2"
+            ],
+            "extra": {}
+          }
+        ]
+      },
+      {
+        "candidate": {
+          "node_id": "gene:SIX2",
+          "node_type": "gene",
+          "node_key": "SIX2",
+          "label": "SIX2",
+          "subtitle": "Gene",
+          "id": "gene:SIX2",
+          "type": "gene"
+        },
+        "aggregate_score": 2.22253510356319,
+        "raw_max_score": 0.3377000093460083,
+        "raw_mean_score": 0.3377000093460083,
+        "support_path_count": 1,
+        "support_anchor_count": 1,
+        "anchor_count": 1,
+        "supporting_paths": [
+          {
+            "anchor_id": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+            "family": "factor_gene_direct",
+            "relation": "direct",
+            "raw_score": 0.3377000093460083,
+            "normalized_score": 2.22253510356319,
+            "path_nodes": [
+              "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+              "gene:SIX2"
+            ],
+            "extra": {}
+          }
+        ],
+        "edges": [
+          {
+            "id": "e666780a18348376",
+            "source": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+            "target": "gene:SIX2",
+            "weight": 2.22253510356319,
+            "label": "factor gene direct",
+            "relation": "direct",
+            "family": "factor_gene_direct",
+            "raw_score": 0.3377000093460083,
+            "normalized_score": 2.22253510356319,
+            "path_nodes": [
+              "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+              "gene:SIX2"
+            ],
+            "extra": {}
+          }
+        ]
+      },
+      {
+        "candidate": {
+          "node_id": "gene:GLI3",
+          "node_type": "gene",
+          "node_key": "GLI3",
+          "label": "GLI3",
+          "subtitle": "Gene",
+          "id": "gene:GLI3",
+          "type": "gene"
+        },
+        "aggregate_score": 2.1071760443458127,
+        "raw_max_score": 0.3244999945163727,
+        "raw_mean_score": 0.3244999945163727,
+        "support_path_count": 1,
+        "support_anchor_count": 1,
+        "anchor_count": 1,
+        "supporting_paths": [
+          {
+            "anchor_id": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+            "family": "factor_gene_direct",
+            "relation": "direct",
+            "raw_score": 0.3244999945163727,
+            "normalized_score": 2.1071760443458127,
+            "path_nodes": [
+              "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+              "gene:GLI3"
+            ],
+            "extra": {}
+          }
+        ],
+        "edges": [
+          {
+            "id": "c1e566f0ea35fc42",
+            "source": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+            "target": "gene:GLI3",
+            "weight": 2.1071760443458127,
+            "label": "factor gene direct",
+            "relation": "direct",
+            "family": "factor_gene_direct",
+            "raw_score": 0.3244999945163727,
+            "normalized_score": 2.1071760443458127,
+            "path_nodes": [
+              "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+              "gene:GLI3"
+            ],
+            "extra": {}
+          }
+        ]
+      },
+      {
+        "candidate": {
+          "node_id": "gene:FGF13",
+          "node_type": "gene",
+          "node_key": "FGF13",
+          "label": "FGF13",
+          "subtitle": "Gene",
+          "id": "gene:FGF13",
+          "type": "gene"
+        },
+        "aggregate_score": 1.804795910173722,
+        "raw_max_score": 0.289900004863739,
+        "raw_mean_score": 0.289900004863739,
+        "support_path_count": 1,
+        "support_anchor_count": 1,
+        "anchor_count": 1,
+        "supporting_paths": [
+          {
+            "anchor_id": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+            "family": "factor_gene_direct",
+            "relation": "direct",
+            "raw_score": 0.289900004863739,
+            "normalized_score": 1.804795910173722,
+            "path_nodes": [
+              "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+              "gene:FGF13"
+            ],
+            "extra": {}
+          }
+        ],
+        "edges": [
+          {
+            "id": "6e8ff05f0490f11f",
+            "source": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+            "target": "gene:FGF13",
+            "weight": 1.804795910173722,
+            "label": "factor gene direct",
+            "relation": "direct",
+            "family": "factor_gene_direct",
+            "raw_score": 0.289900004863739,
+            "normalized_score": 1.804795910173722,
+            "path_nodes": [
+              "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+              "gene:FGF13"
+            ],
+            "extra": {}
+          }
+        ]
+      },
+      {
+        "candidate": {
+          "node_id": "gene:EYA2",
+          "node_type": "gene",
+          "node_key": "EYA2",
+          "label": "EYA2",
+          "subtitle": "Gene",
+          "id": "gene:EYA2",
+          "type": "gene"
+        },
+        "aggregate_score": 1.7191504967263718,
+        "raw_max_score": 0.2800999879837036,
+        "raw_mean_score": 0.2800999879837036,
+        "support_path_count": 1,
+        "support_anchor_count": 1,
+        "anchor_count": 1,
+        "supporting_paths": [
+          {
+            "anchor_id": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+            "family": "factor_gene_direct",
+            "relation": "direct",
+            "raw_score": 0.2800999879837036,
+            "normalized_score": 1.7191504967263718,
+            "path_nodes": [
+              "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+              "gene:EYA2"
+            ],
+            "extra": {}
+          }
+        ],
+        "edges": [
+          {
+            "id": "21cfe53ae7016ddd",
+            "source": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+            "target": "gene:EYA2",
+            "weight": 1.7191504967263718,
+            "label": "factor gene direct",
+            "relation": "direct",
+            "family": "factor_gene_direct",
+            "raw_score": 0.2800999879837036,
+            "normalized_score": 1.7191504967263718,
+            "path_nodes": [
+              "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+              "gene:EYA2"
+            ],
+            "extra": {}
+          }
+        ]
+      },
+      {
+        "candidate": {
+          "node_id": "gene:CTNNB1",
+          "node_type": "gene",
+          "node_key": "CTNNB1",
+          "label": "CTNNB1",
+          "subtitle": "Gene",
+          "id": "gene:CTNNB1",
+          "type": "gene"
+        },
+        "aggregate_score": 1.7069155120772699,
+        "raw_max_score": 0.27869999408721924,
+        "raw_mean_score": 0.27869999408721924,
+        "support_path_count": 1,
+        "support_anchor_count": 1,
+        "anchor_count": 1,
+        "supporting_paths": [
+          {
+            "anchor_id": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+            "family": "factor_gene_direct",
+            "relation": "direct",
+            "raw_score": 0.27869999408721924,
+            "normalized_score": 1.7069155120772699,
+            "path_nodes": [
+              "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+              "gene:CTNNB1"
+            ],
+            "extra": {}
+          }
+        ],
+        "edges": [
+          {
+            "id": "6c8a84bb02f6385a",
+            "source": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+            "target": "gene:CTNNB1",
+            "weight": 1.7069155120772699,
+            "label": "factor gene direct",
+            "relation": "direct",
+            "family": "factor_gene_direct",
+            "raw_score": 0.27869999408721924,
+            "normalized_score": 1.7069155120772699,
+            "path_nodes": [
+              "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+              "gene:CTNNB1"
+            ],
+            "extra": {}
+          }
+        ]
+      },
+      {
+        "candidate": {
+          "node_id": "gene:WNT4",
+          "node_type": "gene",
+          "node_key": "WNT4",
+          "label": "WNT4",
+          "subtitle": "Gene",
+          "id": "gene:WNT4",
+          "type": "gene"
+        },
+        "aggregate_score": 1.7069155120772699,
+        "raw_max_score": 0.27869999408721924,
+        "raw_mean_score": 0.27869999408721924,
+        "support_path_count": 1,
+        "support_anchor_count": 1,
+        "anchor_count": 1,
+        "supporting_paths": [
+          {
+            "anchor_id": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+            "family": "factor_gene_direct",
+            "relation": "direct",
+            "raw_score": 0.27869999408721924,
+            "normalized_score": 1.7069155120772699,
+            "path_nodes": [
+              "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+              "gene:WNT4"
+            ],
+            "extra": {}
+          }
+        ],
+        "edges": [
+          {
+            "id": "7fd143ab438dbe8d",
+            "source": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+            "target": "gene:WNT4",
+            "weight": 1.7069155120772699,
+            "label": "factor gene direct",
+            "relation": "direct",
+            "family": "factor_gene_direct",
+            "raw_score": 0.27869999408721924,
+            "normalized_score": 1.7069155120772699,
+            "path_nodes": [
+              "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+              "gene:WNT4"
+            ],
+            "extra": {}
+          }
+        ]
+      }
+    ],
+    "graph": {
+      "nodes": [
+        {
+          "node_id": "gene:SHH",
+          "node_type": "gene",
+          "node_key": "SHH",
+          "label": "SHH",
+          "subtitle": "Gene",
+          "id": "gene:SHH",
+          "type": "gene"
+        },
+        {
+          "node_id": "gene:TCF7L2",
+          "node_type": "gene",
+          "node_key": "TCF7L2",
+          "label": "TCF7L2",
+          "subtitle": "Gene",
+          "id": "gene:TCF7L2",
+          "type": "gene"
+        },
+        {
+          "node_id": "gene:SIX2",
+          "node_type": "gene",
+          "node_key": "SIX2",
+          "label": "SIX2",
+          "subtitle": "Gene",
+          "id": "gene:SIX2",
+          "type": "gene"
+        },
+        {
+          "node_id": "gene:GLI3",
+          "node_type": "gene",
+          "node_key": "GLI3",
+          "label": "GLI3",
+          "subtitle": "Gene",
+          "id": "gene:GLI3",
+          "type": "gene"
+        },
+        {
+          "node_id": "gene:FGF13",
+          "node_type": "gene",
+          "node_key": "FGF13",
+          "label": "FGF13",
+          "subtitle": "Gene",
+          "id": "gene:FGF13",
+          "type": "gene"
+        },
+        {
+          "node_id": "gene:EYA2",
+          "node_type": "gene",
+          "node_key": "EYA2",
+          "label": "EYA2",
+          "subtitle": "Gene",
+          "id": "gene:EYA2",
+          "type": "gene"
+        },
+        {
+          "node_id": "gene:CTNNB1",
+          "node_type": "gene",
+          "node_key": "CTNNB1",
+          "label": "CTNNB1",
+          "subtitle": "Gene",
+          "id": "gene:CTNNB1",
+          "type": "gene"
+        },
+        {
+          "node_id": "gene:WNT4",
+          "node_type": "gene",
+          "node_key": "WNT4",
+          "label": "WNT4",
+          "subtitle": "Gene",
+          "id": "gene:WNT4",
+          "type": "gene"
+        }
+      ],
+      "edges": [
+        {
+          "id": "eceaf78b98133a1e",
+          "source": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+          "target": "gene:SHH",
+          "weight": 3.6776304513454114,
+          "label": "factor gene direct",
+          "relation": "direct",
+          "family": "factor_gene_direct",
+          "raw_score": 0.5041999816894531,
+          "normalized_score": 3.6776304513454114,
+          "path_nodes": [
+            "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+            "gene:SHH"
+          ],
+          "extra": {}
+        },
+        {
+          "id": "b8c1fc89897bf85c",
+          "source": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+          "target": "gene:TCF7L2",
+          "weight": 2.6035690825535336,
+          "label": "factor gene direct",
+          "relation": "direct",
+          "family": "factor_gene_direct",
+          "raw_score": 0.3813000023365021,
+          "normalized_score": 2.6035690825535336,
+          "path_nodes": [
+            "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+            "gene:TCF7L2"
+          ],
+          "extra": {}
+        },
+        {
+          "id": "e666780a18348376",
+          "source": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+          "target": "gene:SIX2",
+          "weight": 2.22253510356319,
+          "label": "factor gene direct",
+          "relation": "direct",
+          "family": "factor_gene_direct",
+          "raw_score": 0.3377000093460083,
+          "normalized_score": 2.22253510356319,
+          "path_nodes": [
+            "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+            "gene:SIX2"
+          ],
+          "extra": {}
+        },
+        {
+          "id": "c1e566f0ea35fc42",
+          "source": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+          "target": "gene:GLI3",
+          "weight": 2.1071760443458127,
+          "label": "factor gene direct",
+          "relation": "direct",
+          "family": "factor_gene_direct",
+          "raw_score": 0.3244999945163727,
+          "normalized_score": 2.1071760443458127,
+          "path_nodes": [
+            "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+            "gene:GLI3"
+          ],
+          "extra": {}
+        },
+        {
+          "id": "6e8ff05f0490f11f",
+          "source": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+          "target": "gene:FGF13",
+          "weight": 1.804795910173722,
+          "label": "factor gene direct",
+          "relation": "direct",
+          "family": "factor_gene_direct",
+          "raw_score": 0.289900004863739,
+          "normalized_score": 1.804795910173722,
+          "path_nodes": [
+            "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+            "gene:FGF13"
+          ],
+          "extra": {}
+        },
+        {
+          "id": "21cfe53ae7016ddd",
+          "source": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+          "target": "gene:EYA2",
+          "weight": 1.7191504967263718,
+          "label": "factor gene direct",
+          "relation": "direct",
+          "family": "factor_gene_direct",
+          "raw_score": 0.2800999879837036,
+          "normalized_score": 1.7191504967263718,
+          "path_nodes": [
+            "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+            "gene:EYA2"
+          ],
+          "extra": {}
+        },
+        {
+          "id": "6c8a84bb02f6385a",
+          "source": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+          "target": "gene:CTNNB1",
+          "weight": 1.7069155120772699,
+          "label": "factor gene direct",
+          "relation": "direct",
+          "family": "factor_gene_direct",
+          "raw_score": 0.27869999408721924,
+          "normalized_score": 1.7069155120772699,
+          "path_nodes": [
+            "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+            "gene:CTNNB1"
+          ],
+          "extra": {}
+        },
+        {
+          "id": "7fd143ab438dbe8d",
+          "source": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+          "target": "gene:WNT4",
+          "weight": 1.7069155120772699,
+          "label": "factor gene direct",
+          "relation": "direct",
+          "family": "factor_gene_direct",
+          "raw_score": 0.27869999408721924,
+          "normalized_score": 1.7069155120772699,
+          "path_nodes": [
+            "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+            "gene:WNT4"
+          ],
+          "extra": {}
+        }
+      ]
+    },
+    "candidate_count": 8
+  },
+  "elapsed_seconds": 0.543
+}

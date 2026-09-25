@@ -1,0 +1,31 @@
+{
+  "url": "https://dev.cfdeknowledge.org/api/interactive/connections",
+  "method": "POST",
+  "request": {
+    "anchor_items": [],
+    "context": "",
+    "reducer": "mean",
+    "connection_scope": "direct",
+    "limit": 100,
+    "exclude_node_ids": [
+      "factor:gcat_trait:gcat_trait_language_measurement:cfde-inc-v2:Factor5",
+      "factor:gcat_trait:gcat_trait_presubiculum_volume:cfde-inc-v2:Factor1"
+    ],
+    "model": "cfde-inc-v2",
+    "target_type": "gene"
+  },
+  "retrieved_at": "2026-09-24T12:40:47.037525+00:00",
+  "status": 200,
+  "content_type": "application/json",
+  "body_sha256": "dc0bfbd8c23271a7e0a6d2285a90de9be7698f2ede9465b6d5877bbd24e96006",
+  "body_bytes": 69,
+  "response": {
+    "candidates": [],
+    "graph": {
+      "nodes": [],
+      "edges": []
+    },
+    "candidate_count": 0
+  },
+  "elapsed_seconds": 0.472
+}

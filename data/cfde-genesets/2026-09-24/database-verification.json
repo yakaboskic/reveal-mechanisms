@@ -1,0 +1,11 @@
+{
+  "import_id": "3714a036aea279190d4723d9ddf2dd81d105e3427c38d9fc685e7fd606cb260e",
+  "database": "cyaka_reveal_mechanisms",
+  "checked_at": "2026-09-24T14:19:50.861284+00:00",
+  "complete": true,
+  "persisted_aliases": 801934,
+  "unique_gene_sets": 801934,
+  "full_alias_checks_passed": true,
+  "exact_payload_samples": 18,
+  "activity_verified": true
+}

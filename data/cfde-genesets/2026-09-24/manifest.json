@@ -1,0 +1,35 @@
+{
+  "profile": "cfde-geneset-catalog-v1",
+  "model": "cfde-inc-v2",
+  "catalog_sha256": "eee28cd1718cf84f2254ef95d48f1f4dcd7479f67a6540eac2a1750cf5e74032",
+  "dapper_snapshot_hash": "41834a8c5bf97992dfa21c7292cc3a5007d02d476d873d653ab7290415568ac7",
+  "script_sha256": "ef6d8cb2b5626b96a2959febafc04dac198ebd80dd99b7cc808ef86aa312daa7",
+  "expected_rows": 801934,
+  "import_id": "3714a036aea279190d4723d9ddf2dd81d105e3427c38d9fc685e7fd606cb260e",
+  "complete": true,
+  "captured_at": "2026-09-24T13:57:56.137713+00:00",
+  "catalog_url": "https://cfde-dev.hugeampkpnbi.org/api/bio/keys/pigean-gene-set/2",
+  "coverage": {
+    "enumeration": "all advertised pigean-gene-set/2 keys for the requested model",
+    "membership": "not_loaded",
+    "construction_provenance": "not_loaded",
+    "metadata": "source identity, display name, parsed namespace, import activity only"
+  },
+  "dapper": {
+    "base_commit": "ebfc471049240c23d6ce1d3d40cd2785b35e6443",
+    "working_tree_modified": true,
+    "files": {
+      "schema/.linkml-lint.yaml": "6b0208b4e0cb24650c155e3739e6ada63d21a47835bdd75d65914cb593d6fd00",
+      "schema/claims.yaml": "791fd4c257d47f2d81f9bcbd9ea9c6d61473e8b79f4c922485ab0cfe1d14171d",
+      "schema/dapper.yaml": "b6bedb1bb8716a4a10461c98950309146d6bf9cd9d547a6b091164f9c0be53b6",
+      "schema/identity/dapper_identity.py": "ec3237693af354ccd6667754509027dbcbdd95892813ea58f44274bdb48312d1",
+      "schema/identity/test_vectors.json": "525df8b511b67c28a795a43a5b12a944be3b9a0babbf96e30077bb6b3dfc05d8",
+      "LICENSE": "a9dd59be2eaeb06d97411c7f08197c423136e8059f635ad7979264771deb529f"
+    },
+    "snapshot_hash": "41834a8c5bf97992dfa21c7292cc3a5007d02d476d873d653ab7290415568ac7"
+  },
+  "activity_id": "dapper:Activity.VM0nxPd0QVsZJ-7qw4WjAvXtEiFMehqx",
+  "encoded_rows": 801934,
+  "records_sha256": "45fc3c0c0483827526e948074fbd9b31681e071c6d97cb290b62e58705f28a98",
+  "activity_sha256": "58ad4c9b5e545c8f47b477fd95c3e4ff6aa4c17ef72db285afe53d2f75a1d20f"
+}

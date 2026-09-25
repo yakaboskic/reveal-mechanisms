@@ -1,0 +1,65 @@
+{
+  "run_id": "272cfa19d093257863d7e7134776229dbc9b9b018d974e6b311285686833ec31",
+  "eaggl_import_id": "a548ad801c11551de74f04a4cb2ecce65e776a443d2730a01ec6e17d89a6f1bc",
+  "eaggl_factor_id": "AD::Factor1",
+  "eaggl_label": "Amyloid Precursor Protein Processes",
+  "model": "cfde-inc-v2",
+  "match_method": "exact_trait_factor_number",
+  "status": "matched",
+  "cfde_node_id": "factor:portal:AD:cfde-inc-v2:Factor1",
+  "cfde_trait": "AD",
+  "cfde_factor": "Factor1",
+  "cfde_trait_group": "portal",
+  "cfde_metadata": {
+    "label": "HuBMAP__all_signatures__HuBMAP_Lymph_node_CT1_Macrophage___PsychENCODE__all_signatures__PsychENCODE_geneM6",
+    "factor": "Factor1",
+    "lambda": 0.0274,
+    "cluster": "Factor1",
+    "phenotype": "AD",
+    "top_genes": "CLU;TREM2;HLA-DMB;HLA-DQA1;HLA-DRA",
+    "trait_group": "portal",
+    "gene_set_size": "cfde-inc-v2",
+    "top_gene_sets": "HuBMAP__all_signatures__HuBMAP_Lymph_node_CT1_Macrophage___PsychENCODE__all_signatures__PsychENCODE_geneM6;DESCARTES_FETAL_LIVER_MYELOID_CELLS;DESCARTES_FETAL_KIDNEY_MYELOID_CELLS;DESCARTES_MAIN_FETAL_MYELOID_CELLS;DESCARTES_FETAL_HEART_MYELOID_CELLS",
+    "anchor_any_joint": 1.0,
+    "anchor_any_marginal": 1.0
+  },
+  "gene_set_import_id": "3714a036aea279190d4723d9ddf2dd81d105e3427c38d9fc685e7fd606cb260e",
+  "gene_set_scope": "CFDE factor metadata top_gene_sets only",
+  "gene_sets": [
+    {
+      "rank": 1,
+      "source_key": "HuBMAP__all_signatures__HuBMAP_Lymph_node_CT1_Macrophage___PsychENCODE__all_signatures__PsychENCODE_geneM6",
+      "node_id": "gene_set:HuBMAP__all_signatures__HuBMAP_Lymph_node_CT1_Macrophage___PsychENCODE__all_signatures__PsychENCODE_geneM6",
+      "dapper_id": "dapper:GeneSet.1GifgXxTzu0nAv3OlqxCXrwsBwqdj_R1",
+      "status": "resolved"
+    },
+    {
+      "rank": 2,
+      "source_key": "DESCARTES_FETAL_LIVER_MYELOID_CELLS",
+      "node_id": "gene_set:DESCARTES_FETAL_LIVER_MYELOID_CELLS",
+      "dapper_id": null,
+      "status": "not_in_gene_set_catalog"
+    },
+    {
+      "rank": 3,
+      "source_key": "DESCARTES_FETAL_KIDNEY_MYELOID_CELLS",
+      "node_id": "gene_set:DESCARTES_FETAL_KIDNEY_MYELOID_CELLS",
+      "dapper_id": null,
+      "status": "not_in_gene_set_catalog"
+    },
+    {
+      "rank": 4,
+      "source_key": "DESCARTES_MAIN_FETAL_MYELOID_CELLS",
+      "node_id": "gene_set:DESCARTES_MAIN_FETAL_MYELOID_CELLS",
+      "dapper_id": null,
+      "status": "not_in_gene_set_catalog"
+    },
+    {
+      "rank": 5,
+      "source_key": "DESCARTES_FETAL_HEART_MYELOID_CELLS",
+      "node_id": "gene_set:DESCARTES_FETAL_HEART_MYELOID_CELLS",
+      "dapper_id": null,
+      "status": "not_in_gene_set_catalog"
+    }
+  ]
+}

@@ -1,0 +1,287 @@
+{
+  "operation_id": "exportParagraph",
+  "case": "request",
+  "method": "GET",
+  "path_template": "/v1/paragraphs/{dapper_id}/export",
+  "request": {
+    "url": "https://api.reveal.example.org/v1/paragraphs/dapper%3AParagraph.uSYa1LdXNPuwlSgsCz3oZ7IfrVoztroD/export?format=markdown",
+    "path": {
+      "dapper_id": "dapper:Paragraph.uSYa1LdXNPuwlSgsCz3oZ7IfrVoztroD"
+    },
+    "query": {
+      "format": "markdown"
+    },
+    "headers": {
+      "Accept": "application/json"
+    },
+    "body": null
+  },
+  "responses": {
+    "200": {
+      "content_type": "application/json",
+      "examples": {
+        "markdown": {
+          "paragraph_id": "dapper:Paragraph.uSYa1LdXNPuwlSgsCz3oZ7IfrVoztroD",
+          "format": "markdown",
+          "filename": "research-statement.md",
+          "media_type": "text/markdown",
+          "content": "# Genes and gene programs in a shared CAD-in-T2D mechanism\n\n> Authored design example; unpublished. CFDE observations are captured; KG membership assertions are illustrative and unverified.\n\nThe selected CAD knowledge gap asks whether context amplifies genetic risk or instead reflects incipient disease. [1](#reference-1) In the captured CAD-in-T2D analysis, SHH, GLI3 and TCF7L2 are implicated in mechanism Factor1 by EAGGL loadings of 0.5042, 0.3245 and 0.3813, respectively. [2](#reference-2)[3](#reference-3)[4](#reference-4) The AMP AD / GTEx brain-aging and PsychENCODE geneM16 programs are also implicated in this mechanism by their gene-set loadings. [5](#reference-5)[6](#reference-6) PIGEAN gene–trait and gene-set–trait results further connect these genes and programs to CAD in people with type 2 diabetes. [7](#reference-7)[8](#reference-8)[9](#reference-9)[10](#reference-10)[11](#reference-11) Illustrative, unverified KG membership assertions connect SHH to the AMP AD / GTEx set and TCF7L2 to the PsychENCODE set; these links demonstrate a possible evidence connection and are not retrieved biological findings. [12](#reference-12)[13](#reference-13) Taken together, these assessments prioritize a shared mechanism for investigating the gap, but do not resolve whether exposures amplify genetic risk or are downstream readouts. Temporal or intervention evidence is still needed. [1](#reference-1)[2](#reference-2)[3](#reference-3)[4](#reference-4)[5](#reference-5)[6](#reference-6)\n\n## References\n\n<a id=\"reference-1\"></a>\n1. No author recorded (2026). Are the CAD PGS×context interactions driven by adverse exposures causally amplifying genetic risk, or are some \"contexts\" actually downstream readouts of incipient disease (reverse causation)? DAPPER KnowledgeGap. REVEAL design examples — unpublished. [dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk](http://127.0.0.1:8767/data/cad-account/scientific-account.json#/knowledge_gaps/0). Metadata revision 1.\n\n<a id=\"reference-2\"></a>\n2. Example, Design (2026). The EAGGL result supports SHH involvement in this mechanism through its reported loading of 0.5042 under cfde-inc-v2. DAPPER Claim. REVEAL design examples — unpublished. [dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km](http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/0). Metadata revision 1.\n\n<a id=\"reference-3\"></a>\n3. Example, Design (2026). The EAGGL result supports GLI3 involvement in this mechanism through its reported loading of 0.3245 under cfde-inc-v2. DAPPER Claim. REVEAL design examples — unpublished. [dapper:Claim.Uv7_cT46DdsqZMvk5nh8G48qOIKvhRgc](http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/1). Metadata revision 1.\n\n<a id=\"reference-4\"></a>\n4. Example, Design (2026). The EAGGL result supports TCF7L2 involvement in this mechanism through its reported loading of 0.3813 under cfde-inc-v2. DAPPER Claim. REVEAL design examples — unpublished. [dapper:Claim.I2mf6PJ0DPF5_nnbiBjAhgjlUCOiUZZ9](http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/2). Metadata revision 1.\n\n<a id=\"reference-5\"></a>\n5. Example, Design (2026). The EAGGL result supports involvement of the AMP AD / GTEx brain-aging set, with a loading of 1.0 on mechanism Factor1. DAPPER Claim. REVEAL design examples — unpublished. [dapper:Claim.Kd3psmdr4G9AlD0UU1E1Vu6AjpKaQYWE](http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/3). Metadata revision 1.\n\n<a id=\"reference-6\"></a>\n6. Example, Design (2026). The EAGGL result supports involvement of the PsychENCODE geneM16 set, with a loading of 0.4518 on mechanism Factor1. DAPPER Claim. REVEAL design examples — unpublished. [dapper:Claim.NBafdtdEE2Uabs-8pZqurv7SoWpg7Yhi](http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/4). Metadata revision 1.\n\n<a id=\"reference-7\"></a>\n7. Example, Design (2026). PIGEAN supports SHH trait-level involvement with a combined relevance score of 3.86; this is distinct from its mechanism loading. DAPPER Claim. REVEAL design examples — unpublished. [dapper:Claim.Oe2UZeV7oMY4NsMHyB8h4HJO1FH4nSGF](http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/5). Metadata revision 1.\n\n<a id=\"reference-8\"></a>\n8. Example, Design (2026). PIGEAN supports GLI3 trait-level involvement with a combined relevance score of 1.98; this is distinct from its mechanism loading. DAPPER Claim. REVEAL design examples — unpublished. [dapper:Claim.2idJniYU4zCtCN6puy8XZ2mzo9Mq6c5p](http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/6). Metadata revision 1.\n\n<a id=\"reference-9\"></a>\n9. Example, Design (2026). PIGEAN supports TCF7L2 trait-level involvement with a combined relevance score of 2.42; this is distinct from its mechanism loading. DAPPER Claim. REVEAL design examples — unpublished. [dapper:Claim.H5icBYm5JLM3_T-b1mMfH65Nc0zMhZzH](http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/7). Metadata revision 1.\n\n<a id=\"reference-10\"></a>\n10. Example, Design (2026). PIGEAN supports trait-level involvement of the AMP AD / GTEx brain-aging set, with beta=0.115 and beta_uncorrected=0.119. DAPPER Claim. REVEAL design examples — unpublished. [dapper:Claim.xzV_35EYnLl-zy03YbmhfBk_ynNbl7H9](http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/8). Metadata revision 1.\n\n<a id=\"reference-11\"></a>\n11. Example, Design (2026). PIGEAN supports trait-level involvement of the PsychENCODE geneM16 set, with beta=0.00729 and beta_uncorrected=0.0586. DAPPER Claim. REVEAL design examples — unpublished. [dapper:Claim.SYqCJXxCVXDpwflRSdZnkVLzGLO_vi_r](http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/9). Metadata revision 1.\n\n<a id=\"reference-12\"></a>\n12. Example, Design (2026). For this illustrative scenario, a mock ProKN assertion supports SHH membership in the AMP AD / GTEx brain-aging set. The membership is unverified. DAPPER Claim. REVEAL design examples — unpublished. [dapper:Claim.x7aCVQ1uTkYKLJo32ZyAGMGZaAGCSvWV](http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/10). Metadata revision 1.\n\n<a id=\"reference-13\"></a>\n13. Example, Design (2026). For this illustrative scenario, a mock BiomarkerKG assertion supports TCF7L2 membership in the PsychENCODE geneM16 set. The membership is unverified. DAPPER Claim. REVEAL design examples — unpublished. [dapper:Claim.uzqyfwuhf59hSTdravdcr4cTxuitWGx-](http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/11). Metadata revision 1.\n\n## Object identity\n\nParagraph: `dapper:Paragraph.uSYa1LdXNPuwlSgsCz3oZ7IfrVoztroD`  \nScientific account: `dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd`\n\nThe companion Paragraph JSON preserves exact Unicode citation spans and pinned metadata revisions. References resolve to local design fixtures, not published records.\n",
+          "plain_text": null,
+          "required_companions": [],
+          "citation_targets": [
+            {
+              "target_id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+              "citation_metadata_revision": 1
+            },
+            {
+              "target_id": "dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km",
+              "citation_metadata_revision": 1
+            },
+            {
+              "target_id": "dapper:Claim.Uv7_cT46DdsqZMvk5nh8G48qOIKvhRgc",
+              "citation_metadata_revision": 1
+            },
+            {
+              "target_id": "dapper:Claim.I2mf6PJ0DPF5_nnbiBjAhgjlUCOiUZZ9",
+              "citation_metadata_revision": 1
+            },
+            {
+              "target_id": "dapper:Claim.Kd3psmdr4G9AlD0UU1E1Vu6AjpKaQYWE",
+              "citation_metadata_revision": 1
+            },
+            {
+              "target_id": "dapper:Claim.NBafdtdEE2Uabs-8pZqurv7SoWpg7Yhi",
+              "citation_metadata_revision": 1
+            },
+            {
+              "target_id": "dapper:Claim.Oe2UZeV7oMY4NsMHyB8h4HJO1FH4nSGF",
+              "citation_metadata_revision": 1
+            },
+            {
+              "target_id": "dapper:Claim.2idJniYU4zCtCN6puy8XZ2mzo9Mq6c5p",
+              "citation_metadata_revision": 1
+            },
+            {
+              "target_id": "dapper:Claim.H5icBYm5JLM3_T-b1mMfH65Nc0zMhZzH",
+              "citation_metadata_revision": 1
+            },
+            {
+              "target_id": "dapper:Claim.xzV_35EYnLl-zy03YbmhfBk_ynNbl7H9",
+              "citation_metadata_revision": 1
+            },
+            {
+              "target_id": "dapper:Claim.SYqCJXxCVXDpwflRSdZnkVLzGLO_vi_r",
+              "citation_metadata_revision": 1
+            },
+            {
+              "target_id": "dapper:Claim.x7aCVQ1uTkYKLJo32ZyAGMGZaAGCSvWV",
+              "citation_metadata_revision": 1
+            },
+            {
+              "target_id": "dapper:Claim.uzqyfwuhf59hSTdravdcr4cTxuitWGx-",
+              "citation_metadata_revision": 1
+            }
+          ],
+          "warnings": []
+        },
+        "latex": {
+          "paragraph_id": "dapper:Paragraph.uSYa1LdXNPuwlSgsCz3oZ7IfrVoztroD",
+          "format": "latex",
+          "filename": "research-statement.tex",
+          "media_type": "application/x-tex",
+          "content": "% Download references.bib and save it beside this file.\n% Compile: pdflatex research-statement; bibtex research-statement; pdflatex research-statement; pdflatex research-statement\n\\documentclass[11pt]{article}\n\\usepackage[utf8]{inputenc}\n\\usepackage[T1]{fontenc}\n\\usepackage[hidelinks]{hyperref}\n\\usepackage[margin=1in]{geometry}\n\\begin{document}\n\\section*{Genes and gene programs in a shared CAD-in-T2D mechanism}\nThe selected CAD knowledge gap asks whether context amplifies genetic risk or instead reflects incipient disease.~\\cite{dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk} In the captured CAD-in-T2D analysis, SHH, GLI3 and TCF7L2 are implicated in mechanism Factor1 by EAGGL loadings of 0.5042, 0.3245 and 0.3813, respectively.~\\cite{dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km,dapper:Claim.Uv7_cT46DdsqZMvk5nh8G48qOIKvhRgc,dapper:Claim.I2mf6PJ0DPF5_nnbiBjAhgjlUCOiUZZ9} The AMP AD / GTEx brain-aging and PsychENCODE geneM16 programs are also implicated in this mechanism by their gene-set loadings.~\\cite{dapper:Claim.Kd3psmdr4G9AlD0UU1E1Vu6AjpKaQYWE,dapper:Claim.NBafdtdEE2Uabs-8pZqurv7SoWpg7Yhi} PIGEAN gene--trait and gene-set--trait results further connect these genes and programs to CAD in people with type 2 diabetes.~\\cite{dapper:Claim.Oe2UZeV7oMY4NsMHyB8h4HJO1FH4nSGF,dapper:Claim.2idJniYU4zCtCN6puy8XZ2mzo9Mq6c5p,dapper:Claim.H5icBYm5JLM3_T-b1mMfH65Nc0zMhZzH,dapper:Claim.xzV_35EYnLl-zy03YbmhfBk_ynNbl7H9,dapper:Claim.SYqCJXxCVXDpwflRSdZnkVLzGLO_vi_r} Illustrative, unverified KG membership assertions connect SHH to the AMP AD / GTEx set and TCF7L2 to the PsychENCODE set; these links demonstrate a possible evidence connection and are not retrieved biological findings.~\\cite{dapper:Claim.x7aCVQ1uTkYKLJo32ZyAGMGZaAGCSvWV,dapper:Claim.uzqyfwuhf59hSTdravdcr4cTxuitWGx-} Taken together, these assessments prioritize a shared mechanism for investigating the gap, but do not resolve whether exposures amplify genetic risk or are downstream readouts. Temporal or intervention evidence is still needed.~\\cite{dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk,dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km,dapper:Claim.Uv7_cT46DdsqZMvk5nh8G48qOIKvhRgc,dapper:Claim.I2mf6PJ0DPF5_nnbiBjAhgjlUCOiUZZ9,dapper:Claim.Kd3psmdr4G9AlD0UU1E1Vu6AjpKaQYWE,dapper:Claim.NBafdtdEE2Uabs-8pZqurv7SoWpg7Yhi}\n\n\\par\\medskip{\\small\\itshape Authored design example; unpublished. CFDE observations are captured; KG membership assertions are illustrative and unverified.}\n\\bibliographystyle{unsrt}\n\\bibliography{references}\n\\end{document}\n",
+          "plain_text": null,
+          "required_companions": [
+            "references.bib"
+          ],
+          "citation_targets": [
+            {
+              "target_id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+              "citation_metadata_revision": 1
+            },
+            {
+              "target_id": "dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km",
+              "citation_metadata_revision": 1
+            },
+            {
+              "target_id": "dapper:Claim.Uv7_cT46DdsqZMvk5nh8G48qOIKvhRgc",
+              "citation_metadata_revision": 1
+            },
+            {
+              "target_id": "dapper:Claim.I2mf6PJ0DPF5_nnbiBjAhgjlUCOiUZZ9",
+              "citation_metadata_revision": 1
+            },
+            {
+              "target_id": "dapper:Claim.Kd3psmdr4G9AlD0UU1E1Vu6AjpKaQYWE",
+              "citation_metadata_revision": 1
+            },
+            {
+              "target_id": "dapper:Claim.NBafdtdEE2Uabs-8pZqurv7SoWpg7Yhi",
+              "citation_metadata_revision": 1
+            },
+            {
+              "target_id": "dapper:Claim.Oe2UZeV7oMY4NsMHyB8h4HJO1FH4nSGF",
+              "citation_metadata_revision": 1
+            },
+            {
+              "target_id": "dapper:Claim.2idJniYU4zCtCN6puy8XZ2mzo9Mq6c5p",
+              "citation_metadata_revision": 1
+            },
+            {
+              "target_id": "dapper:Claim.H5icBYm5JLM3_T-b1mMfH65Nc0zMhZzH",
+              "citation_metadata_revision": 1
+            },
+            {
+              "target_id": "dapper:Claim.xzV_35EYnLl-zy03YbmhfBk_ynNbl7H9",
+              "citation_metadata_revision": 1
+            },
+            {
+              "target_id": "dapper:Claim.SYqCJXxCVXDpwflRSdZnkVLzGLO_vi_r",
+              "citation_metadata_revision": 1
+            },
+            {
+              "target_id": "dapper:Claim.x7aCVQ1uTkYKLJo32ZyAGMGZaAGCSvWV",
+              "citation_metadata_revision": 1
+            },
+            {
+              "target_id": "dapper:Claim.uzqyfwuhf59hSTdravdcr4cTxuitWGx-",
+              "citation_metadata_revision": 1
+            }
+          ],
+          "warnings": [
+            "Download references.bib alongside the LaTeX file."
+          ]
+        },
+        "bibtex": {
+          "paragraph_id": "dapper:Paragraph.uSYa1LdXNPuwlSgsCz3oZ7IfrVoztroD",
+          "format": "bibtex",
+          "filename": "references.bib",
+          "media_type": "application/x-bibtex",
+          "content": "% Unpublished REVEAL design example. No DOI has been issued.\n\n@misc{dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk,\n  title = {{Are the CAD PGS\\ensuremath{\\times}context interactions driven by adverse exposures causally amplifying genetic risk, or are some \"contexts\" actually downstream readouts of incipient disease (reverse causation)?}},\n  year = {2026},\n  archivePrefix = {DAPPER},\n  eprint = {KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk},\n  howpublished = {REVEAL design examples --- unpublished},\n  url = {http://127.0.0.1:8767/data/cad-account/scientific-account.json#/knowledge_gaps/0},\n  note = {Unpublished design fixture. DAPPER ID: dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk. Citation metadata revision 1. Issued date basis: first\\_minted\\_at.}\n}\n\n@misc{dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km,\n  title = {{The EAGGL result supports SHH involvement in this mechanism through its reported loading of 0.5042 under cfde-inc-v2.}},\n  year = {2026},\n  archivePrefix = {DAPPER},\n  eprint = {Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km},\n  howpublished = {REVEAL design examples --- unpublished},\n  url = {http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/0},\n  note = {Unpublished design fixture. DAPPER ID: dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km. Citation metadata revision 1. Issued date basis: first\\_minted\\_at.},\n  author = {Example, Design}\n}\n\n@misc{dapper:Claim.Uv7_cT46DdsqZMvk5nh8G48qOIKvhRgc,\n  title = {{The EAGGL result supports GLI3 involvement in this mechanism through its reported loading of 0.3245 under cfde-inc-v2.}},\n  year = {2026},\n  archivePrefix = {DAPPER},\n  eprint = {Claim.Uv7_cT46DdsqZMvk5nh8G48qOIKvhRgc},\n  howpublished = {REVEAL design examples --- unpublished},\n  url = {http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/1},\n  note = {Unpublished design fixture. DAPPER ID: dapper:Claim.Uv7\\_cT46DdsqZMvk5nh8G48qOIKvhRgc. Citation metadata revision 1. Issued date basis: first\\_minted\\_at.},\n  author = {Example, Design}\n}\n\n@misc{dapper:Claim.I2mf6PJ0DPF5_nnbiBjAhgjlUCOiUZZ9,\n  title = {{The EAGGL result supports TCF7L2 involvement in this mechanism through its reported loading of 0.3813 under cfde-inc-v2.}},\n  year = {2026},\n  archivePrefix = {DAPPER},\n  eprint = {Claim.I2mf6PJ0DPF5_nnbiBjAhgjlUCOiUZZ9},\n  howpublished = {REVEAL design examples --- unpublished},\n  url = {http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/2},\n  note = {Unpublished design fixture. DAPPER ID: dapper:Claim.I2mf6PJ0DPF5\\_nnbiBjAhgjlUCOiUZZ9. Citation metadata revision 1. Issued date basis: first\\_minted\\_at.},\n  author = {Example, Design}\n}\n\n@misc{dapper:Claim.Kd3psmdr4G9AlD0UU1E1Vu6AjpKaQYWE,\n  title = {{The EAGGL result supports involvement of the AMP AD / GTEx brain-aging set, with a loading of 1.0 on mechanism Factor1.}},\n  year = {2026},\n  archivePrefix = {DAPPER},\n  eprint = {Claim.Kd3psmdr4G9AlD0UU1E1Vu6AjpKaQYWE},\n  howpublished = {REVEAL design examples --- unpublished},\n  url = {http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/3},\n  note = {Unpublished design fixture. DAPPER ID: dapper:Claim.Kd3psmdr4G9AlD0UU1E1Vu6AjpKaQYWE. Citation metadata revision 1. Issued date basis: first\\_minted\\_at.},\n  author = {Example, Design}\n}\n\n@misc{dapper:Claim.NBafdtdEE2Uabs-8pZqurv7SoWpg7Yhi,\n  title = {{The EAGGL result supports involvement of the PsychENCODE geneM16 set, with a loading of 0.4518 on mechanism Factor1.}},\n  year = {2026},\n  archivePrefix = {DAPPER},\n  eprint = {Claim.NBafdtdEE2Uabs-8pZqurv7SoWpg7Yhi},\n  howpublished = {REVEAL design examples --- unpublished},\n  url = {http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/4},\n  note = {Unpublished design fixture. DAPPER ID: dapper:Claim.NBafdtdEE2Uabs-8pZqurv7SoWpg7Yhi. Citation metadata revision 1. Issued date basis: first\\_minted\\_at.},\n  author = {Example, Design}\n}\n\n@misc{dapper:Claim.Oe2UZeV7oMY4NsMHyB8h4HJO1FH4nSGF,\n  title = {{PIGEAN supports SHH trait-level involvement with a combined relevance score of 3.86; this is distinct from its mechanism loading.}},\n  year = {2026},\n  archivePrefix = {DAPPER},\n  eprint = {Claim.Oe2UZeV7oMY4NsMHyB8h4HJO1FH4nSGF},\n  howpublished = {REVEAL design examples --- unpublished},\n  url = {http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/5},\n  note = {Unpublished design fixture. DAPPER ID: dapper:Claim.Oe2UZeV7oMY4NsMHyB8h4HJO1FH4nSGF. Citation metadata revision 1. Issued date basis: first\\_minted\\_at.},\n  author = {Example, Design}\n}\n\n@misc{dapper:Claim.2idJniYU4zCtCN6puy8XZ2mzo9Mq6c5p,\n  title = {{PIGEAN supports GLI3 trait-level involvement with a combined relevance score of 1.98; this is distinct from its mechanism loading.}},\n  year = {2026},\n  archivePrefix = {DAPPER},\n  eprint = {Claim.2idJniYU4zCtCN6puy8XZ2mzo9Mq6c5p},\n  howpublished = {REVEAL design examples --- unpublished},\n  url = {http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/6},\n  note = {Unpublished design fixture. DAPPER ID: dapper:Claim.2idJniYU4zCtCN6puy8XZ2mzo9Mq6c5p. Citation metadata revision 1. Issued date basis: first\\_minted\\_at.},\n  author = {Example, Design}\n}\n\n@misc{dapper:Claim.H5icBYm5JLM3_T-b1mMfH65Nc0zMhZzH,\n  title = {{PIGEAN supports TCF7L2 trait-level involvement with a combined relevance score of 2.42; this is distinct from its mechanism loading.}},\n  year = {2026},\n  archivePrefix = {DAPPER},\n  eprint = {Claim.H5icBYm5JLM3_T-b1mMfH65Nc0zMhZzH},\n  howpublished = {REVEAL design examples --- unpublished},\n  url = {http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/7},\n  note = {Unpublished design fixture. DAPPER ID: dapper:Claim.H5icBYm5JLM3\\_T-b1mMfH65Nc0zMhZzH. Citation metadata revision 1. Issued date basis: first\\_minted\\_at.},\n  author = {Example, Design}\n}\n\n@misc{dapper:Claim.xzV_35EYnLl-zy03YbmhfBk_ynNbl7H9,\n  title = {{PIGEAN supports trait-level involvement of the AMP AD / GTEx brain-aging set, with beta=0.115 and beta\\_uncorrected=0.119.}},\n  year = {2026},\n  archivePrefix = {DAPPER},\n  eprint = {Claim.xzV_35EYnLl-zy03YbmhfBk_ynNbl7H9},\n  howpublished = {REVEAL design examples --- unpublished},\n  url = {http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/8},\n  note = {Unpublished design fixture. DAPPER ID: dapper:Claim.xzV\\_35EYnLl-zy03YbmhfBk\\_ynNbl7H9. Citation metadata revision 1. Issued date basis: first\\_minted\\_at.},\n  author = {Example, Design}\n}\n\n@misc{dapper:Claim.SYqCJXxCVXDpwflRSdZnkVLzGLO_vi_r,\n  title = {{PIGEAN supports trait-level involvement of the PsychENCODE geneM16 set, with beta=0.00729 and beta\\_uncorrected=0.0586.}},\n  year = {2026},\n  archivePrefix = {DAPPER},\n  eprint = {Claim.SYqCJXxCVXDpwflRSdZnkVLzGLO_vi_r},\n  howpublished = {REVEAL design examples --- unpublished},\n  url = {http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/9},\n  note = {Unpublished design fixture. DAPPER ID: dapper:Claim.SYqCJXxCVXDpwflRSdZnkVLzGLO\\_vi\\_r. Citation metadata revision 1. Issued date basis: first\\_minted\\_at.},\n  author = {Example, Design}\n}\n\n@misc{dapper:Claim.x7aCVQ1uTkYKLJo32ZyAGMGZaAGCSvWV,\n  title = {{For this illustrative scenario, a mock ProKN assertion supports SHH membership in the AMP AD / GTEx brain-aging set. The membership is unverified.}},\n  year = {2026},\n  archivePrefix = {DAPPER},\n  eprint = {Claim.x7aCVQ1uTkYKLJo32ZyAGMGZaAGCSvWV},\n  howpublished = {REVEAL design examples --- unpublished},\n  url = {http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/10},\n  note = {Unpublished design fixture. DAPPER ID: dapper:Claim.x7aCVQ1uTkYKLJo32ZyAGMGZaAGCSvWV. Citation metadata revision 1. Issued date basis: first\\_minted\\_at.},\n  author = {Example, Design}\n}\n\n@misc{dapper:Claim.uzqyfwuhf59hSTdravdcr4cTxuitWGx-,\n  title = {{For this illustrative scenario, a mock BiomarkerKG assertion supports TCF7L2 membership in the PsychENCODE geneM16 set. The membership is unverified.}},\n  year = {2026},\n  archivePrefix = {DAPPER},\n  eprint = {Claim.uzqyfwuhf59hSTdravdcr4cTxuitWGx-},\n  howpublished = {REVEAL design examples --- unpublished},\n  url = {http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/11},\n  note = {Unpublished design fixture. DAPPER ID: dapper:Claim.uzqyfwuhf59hSTdravdcr4cTxuitWGx-. Citation metadata revision 1. Issued date basis: first\\_minted\\_at.},\n  author = {Example, Design}\n}\n",
+          "plain_text": null,
+          "required_companions": [],
+          "citation_targets": [
+            {
+              "target_id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+              "citation_metadata_revision": 1
+            },
+            {
+              "target_id": "dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km",
+              "citation_metadata_revision": 1
+            },
+            {
+              "target_id": "dapper:Claim.Uv7_cT46DdsqZMvk5nh8G48qOIKvhRgc",
+              "citation_metadata_revision": 1
+            },
+            {
+              "target_id": "dapper:Claim.I2mf6PJ0DPF5_nnbiBjAhgjlUCOiUZZ9",
+              "citation_metadata_revision": 1
+            },
+            {
+              "target_id": "dapper:Claim.Kd3psmdr4G9AlD0UU1E1Vu6AjpKaQYWE",
+              "citation_metadata_revision": 1
+            },
+            {
+              "target_id": "dapper:Claim.NBafdtdEE2Uabs-8pZqurv7SoWpg7Yhi",
+              "citation_metadata_revision": 1
+            },
+            {
+              "target_id": "dapper:Claim.Oe2UZeV7oMY4NsMHyB8h4HJO1FH4nSGF",
+              "citation_metadata_revision": 1
+            },
+            {
+              "target_id": "dapper:Claim.2idJniYU4zCtCN6puy8XZ2mzo9Mq6c5p",
+              "citation_metadata_revision": 1
+            },
+            {
+              "target_id": "dapper:Claim.H5icBYm5JLM3_T-b1mMfH65Nc0zMhZzH",
+              "citation_metadata_revision": 1
+            },
+            {
+              "target_id": "dapper:Claim.xzV_35EYnLl-zy03YbmhfBk_ynNbl7H9",
+              "citation_metadata_revision": 1
+            },
+            {
+              "target_id": "dapper:Claim.SYqCJXxCVXDpwflRSdZnkVLzGLO_vi_r",
+              "citation_metadata_revision": 1
+            },
+            {
+              "target_id": "dapper:Claim.x7aCVQ1uTkYKLJo32ZyAGMGZaAGCSvWV",
+              "citation_metadata_revision": 1
+            },
+            {
+              "target_id": "dapper:Claim.uzqyfwuhf59hSTdravdcr4cTxuitWGx-",
+              "citation_metadata_revision": 1
+            }
+          ],
+          "warnings": []
+        },
+        "rich-text": {
+          "paragraph_id": "dapper:Paragraph.uSYa1LdXNPuwlSgsCz3oZ7IfrVoztroD",
+          "format": "rich-text",
+          "filename": "research-statement.html",
+          "media_type": "text/html",
+          "content": "<div style=\"font-family:Calibri,Arial,sans-serif;font-size:11pt;line-height:1.5;color:#222222\"><h2 style=\"font-size:14pt\">Genes and gene programs in a shared CAD-in-T2D mechanism</h2><p>The selected CAD knowledge gap asks whether context amplifies genetic risk or instead reflects incipient disease.<sup><a href=\"http://127.0.0.1:8767/data/cad-account/scientific-account.json#/knowledge_gaps/0\" style=\"color:#265ca2;text-decoration:underline\">1</a></sup> In the captured CAD-in-T2D analysis, SHH, GLI3 and TCF7L2 are implicated in mechanism Factor1 by EAGGL loadings of 0.5042, 0.3245 and 0.3813, respectively.<sup><a href=\"http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/0\" style=\"color:#265ca2;text-decoration:underline\">2</a>, <a href=\"http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/1\" style=\"color:#265ca2;text-decoration:underline\">3</a>, <a href=\"http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/2\" style=\"color:#265ca2;text-decoration:underline\">4</a></sup> The AMP AD / GTEx brain-aging and PsychENCODE geneM16 programs are also implicated in this mechanism by their gene-set loadings.<sup><a href=\"http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/3\" style=\"color:#265ca2;text-decoration:underline\">5</a>, <a href=\"http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/4\" style=\"color:#265ca2;text-decoration:underline\">6</a></sup> PIGEAN gene–trait and gene-set–trait results further connect these genes and programs to CAD in people with type 2 diabetes.<sup><a href=\"http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/5\" style=\"color:#265ca2;text-decoration:underline\">7</a>, <a href=\"http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/6\" style=\"color:#265ca2;text-decoration:underline\">8</a>, <a href=\"http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/7\" style=\"color:#265ca2;text-decoration:underline\">9</a>, <a href=\"http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/8\" style=\"color:#265ca2;text-decoration:underline\">10</a>, <a href=\"http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/9\" style=\"color:#265ca2;text-decoration:underline\">11</a></sup> Illustrative, unverified KG membership assertions connect SHH to the AMP AD / GTEx set and TCF7L2 to the PsychENCODE set; these links demonstrate a possible evidence connection and are not retrieved biological findings.<sup><a href=\"http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/10\" style=\"color:#265ca2;text-decoration:underline\">12</a>, <a href=\"http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/11\" style=\"color:#265ca2;text-decoration:underline\">13</a></sup> Taken together, these assessments prioritize a shared mechanism for investigating the gap, but do not resolve whether exposures amplify genetic risk or are downstream readouts. Temporal or intervention evidence is still needed.<sup><a href=\"http://127.0.0.1:8767/data/cad-account/scientific-account.json#/knowledge_gaps/0\" style=\"color:#265ca2;text-decoration:underline\">1</a>, <a href=\"http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/0\" style=\"color:#265ca2;text-decoration:underline\">2</a>, <a href=\"http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/1\" style=\"color:#265ca2;text-decoration:underline\">3</a>, <a href=\"http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/2\" style=\"color:#265ca2;text-decoration:underline\">4</a>, <a href=\"http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/3\" style=\"color:#265ca2;text-decoration:underline\">5</a>, <a href=\"http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/4\" style=\"color:#265ca2;text-decoration:underline\">6</a></sup></p><h3 style=\"font-size:12pt\">References</h3><ol><li style=\"margin-bottom:8pt\">No author recorded (2026). <a href=\"http://127.0.0.1:8767/data/cad-account/scientific-account.json#/knowledge_gaps/0\" style=\"color:#265ca2;text-decoration:underline\">Are the CAD PGS×context interactions driven by adverse exposures causally amplifying genetic risk, or are some &quot;contexts&quot; actually downstream readouts of incipient disease (reverse causation)?</a> DAPPER KnowledgeGap. REVEAL design examples — unpublished. Metadata revision 1. <a href=\"http://127.0.0.1:8767/data/cad-account/scientific-account.json#/knowledge_gaps/0\">dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk</a>.</li><li style=\"margin-bottom:8pt\">Example, Design (2026). <a href=\"http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/0\" style=\"color:#265ca2;text-decoration:underline\">The EAGGL result supports SHH involvement in this mechanism through its reported loading of 0.5042 under cfde-inc-v2.</a> DAPPER Claim. REVEAL design examples — unpublished. Metadata revision 1. <a href=\"http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/0\">dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km</a>.</li><li style=\"margin-bottom:8pt\">Example, Design (2026). <a href=\"http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/1\" style=\"color:#265ca2;text-decoration:underline\">The EAGGL result supports GLI3 involvement in this mechanism through its reported loading of 0.3245 under cfde-inc-v2.</a> DAPPER Claim. REVEAL design examples — unpublished. Metadata revision 1. <a href=\"http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/1\">dapper:Claim.Uv7_cT46DdsqZMvk5nh8G48qOIKvhRgc</a>.</li><li style=\"margin-bottom:8pt\">Example, Design (2026). <a href=\"http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/2\" style=\"color:#265ca2;text-decoration:underline\">The EAGGL result supports TCF7L2 involvement in this mechanism through its reported loading of 0.3813 under cfde-inc-v2.</a> DAPPER Claim. REVEAL design examples — unpublished. Metadata revision 1. <a href=\"http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/2\">dapper:Claim.I2mf6PJ0DPF5_nnbiBjAhgjlUCOiUZZ9</a>.</li><li style=\"margin-bottom:8pt\">Example, Design (2026). <a href=\"http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/3\" style=\"color:#265ca2;text-decoration:underline\">The EAGGL result supports involvement of the AMP AD / GTEx brain-aging set, with a loading of 1.0 on mechanism Factor1.</a> DAPPER Claim. REVEAL design examples — unpublished. Metadata revision 1. <a href=\"http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/3\">dapper:Claim.Kd3psmdr4G9AlD0UU1E1Vu6AjpKaQYWE</a>.</li><li style=\"margin-bottom:8pt\">Example, Design (2026). <a href=\"http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/4\" style=\"color:#265ca2;text-decoration:underline\">The EAGGL result supports involvement of the PsychENCODE geneM16 set, with a loading of 0.4518 on mechanism Factor1.</a> DAPPER Claim. REVEAL design examples — unpublished. Metadata revision 1. <a href=\"http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/4\">dapper:Claim.NBafdtdEE2Uabs-8pZqurv7SoWpg7Yhi</a>.</li><li style=\"margin-bottom:8pt\">Example, Design (2026). <a href=\"http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/5\" style=\"color:#265ca2;text-decoration:underline\">PIGEAN supports SHH trait-level involvement with a combined relevance score of 3.86; this is distinct from its mechanism loading.</a> DAPPER Claim. REVEAL design examples — unpublished. Metadata revision 1. <a href=\"http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/5\">dapper:Claim.Oe2UZeV7oMY4NsMHyB8h4HJO1FH4nSGF</a>.</li><li style=\"margin-bottom:8pt\">Example, Design (2026). <a href=\"http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/6\" style=\"color:#265ca2;text-decoration:underline\">PIGEAN supports GLI3 trait-level involvement with a combined relevance score of 1.98; this is distinct from its mechanism loading.</a> DAPPER Claim. REVEAL design examples — unpublished. Metadata revision 1. <a href=\"http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/6\">dapper:Claim.2idJniYU4zCtCN6puy8XZ2mzo9Mq6c5p</a>.</li><li style=\"margin-bottom:8pt\">Example, Design (2026). <a href=\"http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/7\" style=\"color:#265ca2;text-decoration:underline\">PIGEAN supports TCF7L2 trait-level involvement with a combined relevance score of 2.42; this is distinct from its mechanism loading.</a> DAPPER Claim. REVEAL design examples — unpublished. Metadata revision 1. <a href=\"http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/7\">dapper:Claim.H5icBYm5JLM3_T-b1mMfH65Nc0zMhZzH</a>.</li><li style=\"margin-bottom:8pt\">Example, Design (2026). <a href=\"http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/8\" style=\"color:#265ca2;text-decoration:underline\">PIGEAN supports trait-level involvement of the AMP AD / GTEx brain-aging set, with beta=0.115 and beta_uncorrected=0.119.</a> DAPPER Claim. REVEAL design examples — unpublished. Metadata revision 1. <a href=\"http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/8\">dapper:Claim.xzV_35EYnLl-zy03YbmhfBk_ynNbl7H9</a>.</li><li style=\"margin-bottom:8pt\">Example, Design (2026). <a href=\"http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/9\" style=\"color:#265ca2;text-decoration:underline\">PIGEAN supports trait-level involvement of the PsychENCODE geneM16 set, with beta=0.00729 and beta_uncorrected=0.0586.</a> DAPPER Claim. REVEAL design examples — unpublished. Metadata revision 1. <a href=\"http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/9\">dapper:Claim.SYqCJXxCVXDpwflRSdZnkVLzGLO_vi_r</a>.</li><li style=\"margin-bottom:8pt\">Example, Design (2026). <a href=\"http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/10\" style=\"color:#265ca2;text-decoration:underline\">For this illustrative scenario, a mock ProKN assertion supports SHH membership in the AMP AD / GTEx brain-aging set. The membership is unverified.</a> DAPPER Claim. REVEAL design examples — unpublished. Metadata revision 1. <a href=\"http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/10\">dapper:Claim.x7aCVQ1uTkYKLJo32ZyAGMGZaAGCSvWV</a>.</li><li style=\"margin-bottom:8pt\">Example, Design (2026). <a href=\"http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/11\" style=\"color:#265ca2;text-decoration:underline\">For this illustrative scenario, a mock BiomarkerKG assertion supports TCF7L2 membership in the PsychENCODE geneM16 set. The membership is unverified.</a> DAPPER Claim. REVEAL design examples — unpublished. Metadata revision 1. <a href=\"http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/11\">dapper:Claim.uzqyfwuhf59hSTdravdcr4cTxuitWGx-</a>.</li></ol><p style=\"font-size:9pt;color:#666666\">Authored design example; unpublished. CFDE observations are captured; KG membership assertions are illustrative and unverified.</p></div>",
+          "plain_text": "Genes and gene programs in a shared CAD-in-T2D mechanism\n\nThe selected CAD knowledge gap asks whether context amplifies genetic risk or instead reflects incipient disease. [1] In the captured CAD-in-T2D analysis, SHH, GLI3 and TCF7L2 are implicated in mechanism Factor1 by EAGGL loadings of 0.5042, 0.3245 and 0.3813, respectively. [2, 3, 4] The AMP AD / GTEx brain-aging and PsychENCODE geneM16 programs are also implicated in this mechanism by their gene-set loadings. [5, 6] PIGEAN gene–trait and gene-set–trait results further connect these genes and programs to CAD in people with type 2 diabetes. [7, 8, 9, 10, 11] Illustrative, unverified KG membership assertions connect SHH to the AMP AD / GTEx set and TCF7L2 to the PsychENCODE set; these links demonstrate a possible evidence connection and are not retrieved biological findings. [12, 13] Taken together, these assessments prioritize a shared mechanism for investigating the gap, but do not resolve whether exposures amplify genetic risk or are downstream readouts. Temporal or intervention evidence is still needed. [1, 2, 3, 4, 5, 6]\n\nReferences\n\n1. No author recorded (2026). Are the CAD PGS×context interactions driven by adverse exposures causally amplifying genetic risk, or are some \"contexts\" actually downstream readouts of incipient disease (reverse causation)? DAPPER KnowledgeGap. REVEAL design examples — unpublished. Metadata revision 1. dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk. http://127.0.0.1:8767/data/cad-account/scientific-account.json#/knowledge_gaps/0\n\n2. Example, Design (2026). The EAGGL result supports SHH involvement in this mechanism through its reported loading of 0.5042 under cfde-inc-v2. DAPPER Claim. REVEAL design examples — unpublished. Metadata revision 1. dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km. http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/0\n\n3. Example, Design (2026). The EAGGL result supports GLI3 involvement in this mechanism through its reported loading of 0.3245 under cfde-inc-v2. DAPPER Claim. REVEAL design examples — unpublished. Metadata revision 1. dapper:Claim.Uv7_cT46DdsqZMvk5nh8G48qOIKvhRgc. http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/1\n\n4. Example, Design (2026). The EAGGL result supports TCF7L2 involvement in this mechanism through its reported loading of 0.3813 under cfde-inc-v2. DAPPER Claim. REVEAL design examples — unpublished. Metadata revision 1. dapper:Claim.I2mf6PJ0DPF5_nnbiBjAhgjlUCOiUZZ9. http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/2\n\n5. Example, Design (2026). The EAGGL result supports involvement of the AMP AD / GTEx brain-aging set, with a loading of 1.0 on mechanism Factor1. DAPPER Claim. REVEAL design examples — unpublished. Metadata revision 1. dapper:Claim.Kd3psmdr4G9AlD0UU1E1Vu6AjpKaQYWE. http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/3\n\n6. Example, Design (2026). The EAGGL result supports involvement of the PsychENCODE geneM16 set, with a loading of 0.4518 on mechanism Factor1. DAPPER Claim. REVEAL design examples — unpublished. Metadata revision 1. dapper:Claim.NBafdtdEE2Uabs-8pZqurv7SoWpg7Yhi. http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/4\n\n7. Example, Design (2026). PIGEAN supports SHH trait-level involvement with a combined relevance score of 3.86; this is distinct from its mechanism loading. DAPPER Claim. REVEAL design examples — unpublished. Metadata revision 1. dapper:Claim.Oe2UZeV7oMY4NsMHyB8h4HJO1FH4nSGF. http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/5\n\n8. Example, Design (2026). PIGEAN supports GLI3 trait-level involvement with a combined relevance score of 1.98; this is distinct from its mechanism loading. DAPPER Claim. REVEAL design examples — unpublished. Metadata revision 1. dapper:Claim.2idJniYU4zCtCN6puy8XZ2mzo9Mq6c5p. http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/6\n\n9. Example, Design (2026). PIGEAN supports TCF7L2 trait-level involvement with a combined relevance score of 2.42; this is distinct from its mechanism loading. DAPPER Claim. REVEAL design examples — unpublished. Metadata revision 1. dapper:Claim.H5icBYm5JLM3_T-b1mMfH65Nc0zMhZzH. http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/7\n\n10. Example, Design (2026). PIGEAN supports trait-level involvement of the AMP AD / GTEx brain-aging set, with beta=0.115 and beta_uncorrected=0.119. DAPPER Claim. REVEAL design examples — unpublished. Metadata revision 1. dapper:Claim.xzV_35EYnLl-zy03YbmhfBk_ynNbl7H9. http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/8\n\n11. Example, Design (2026). PIGEAN supports trait-level involvement of the PsychENCODE geneM16 set, with beta=0.00729 and beta_uncorrected=0.0586. DAPPER Claim. REVEAL design examples — unpublished. Metadata revision 1. dapper:Claim.SYqCJXxCVXDpwflRSdZnkVLzGLO_vi_r. http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/9\n\n12. Example, Design (2026). For this illustrative scenario, a mock ProKN assertion supports SHH membership in the AMP AD / GTEx brain-aging set. The membership is unverified. DAPPER Claim. REVEAL design examples — unpublished. Metadata revision 1. dapper:Claim.x7aCVQ1uTkYKLJo32ZyAGMGZaAGCSvWV. http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/10\n\n13. Example, Design (2026). For this illustrative scenario, a mock BiomarkerKG assertion supports TCF7L2 membership in the PsychENCODE geneM16 set. The membership is unverified. DAPPER Claim. REVEAL design examples — unpublished. Metadata revision 1. dapper:Claim.uzqyfwuhf59hSTdravdcr4cTxuitWGx-. http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/11\n\nAuthored design example; unpublished. CFDE observations are captured; KG membership assertions are illustrative and unverified.",
+          "required_companions": [],
+          "citation_targets": [
+            {
+              "target_id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+              "citation_metadata_revision": 1
+            },
+            {
+              "target_id": "dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km",
+              "citation_metadata_revision": 1
+            },
+            {
+              "target_id": "dapper:Claim.Uv7_cT46DdsqZMvk5nh8G48qOIKvhRgc",
+              "citation_metadata_revision": 1
+            },
+            {
+              "target_id": "dapper:Claim.I2mf6PJ0DPF5_nnbiBjAhgjlUCOiUZZ9",
+              "citation_metadata_revision": 1
+            },
+            {
+              "target_id": "dapper:Claim.Kd3psmdr4G9AlD0UU1E1Vu6AjpKaQYWE",
+              "citation_metadata_revision": 1
+            },
+            {
+              "target_id": "dapper:Claim.NBafdtdEE2Uabs-8pZqurv7SoWpg7Yhi",
+              "citation_metadata_revision": 1
+            },
+            {
+              "target_id": "dapper:Claim.Oe2UZeV7oMY4NsMHyB8h4HJO1FH4nSGF",
+              "citation_metadata_revision": 1
+            },
+            {
+              "target_id": "dapper:Claim.2idJniYU4zCtCN6puy8XZ2mzo9Mq6c5p",
+              "citation_metadata_revision": 1
+            },
+            {
+              "target_id": "dapper:Claim.H5icBYm5JLM3_T-b1mMfH65Nc0zMhZzH",
+              "citation_metadata_revision": 1
+            },
+            {
+              "target_id": "dapper:Claim.xzV_35EYnLl-zy03YbmhfBk_ynNbl7H9",
+              "citation_metadata_revision": 1
+            },
+            {
+              "target_id": "dapper:Claim.SYqCJXxCVXDpwflRSdZnkVLzGLO_vi_r",
+              "citation_metadata_revision": 1
+            },
+            {
+              "target_id": "dapper:Claim.x7aCVQ1uTkYKLJo32ZyAGMGZaAGCSvWV",
+              "citation_metadata_revision": 1
+            },
+            {
+              "target_id": "dapper:Claim.uzqyfwuhf59hSTdravdcr4cTxuitWGx-",
+              "citation_metadata_revision": 1
+            }
+          ],
+          "warnings": []
+        }
+      }
+    }
+  },
+  "curl": "curl -X GET 'https://api.reveal.example.org/v1/paragraphs/dapper%3AParagraph.uSYa1LdXNPuwlSgsCz3oZ7IfrVoztroD/export?format=markdown' -H 'Accept: application/json'"
+}

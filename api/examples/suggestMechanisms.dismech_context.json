@@ -1,0 +1,233 @@
+{
+  "operation_id": "suggestMechanisms",
+  "case": "dismech_context",
+  "method": "POST",
+  "path_template": "/v1/mechanisms/suggest",
+  "request": {
+    "url": "https://api.reveal.example.org/v1/mechanisms/suggest",
+    "path": {},
+    "query": {},
+    "headers": {
+      "Content-Type": "application/json",
+      "Accept": "application/json"
+    },
+    "body": {
+      "manual_eaggl_anchors": [],
+      "dismissed_source_ids": [],
+      "subquery": "Endothelial dysfunction",
+      "mode": "semantic",
+      "model": "cfde-inc-v2",
+      "source_gap": {
+        "id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+        "source_id": "dismech:disorders/Coronary_Artery_Disease#discussion:cad_pgsxc_reverse_causation",
+        "source_revision": "8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd"
+      }
+    }
+  },
+  "responses": {
+    "200": {
+      "content_type": "application/json",
+      "examples": {
+        "illustrative_five_total": {
+          "suggestion_id": "77777777-7777-4777-8777-777777777777",
+          "automatic_anchors": [
+            {
+              "factor": {
+                "source": "eaggl",
+                "source_id": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                "source_revision": "5797893b517def4fdc82f285c9bf835195f9f88eddfb6409cbf3b1e31dd63d83",
+                "object_class": "Mechanism",
+                "object": {
+                  "description": "EAGGL mechanism factor:portal:CADinT2D:cfde-inc-v2:Factor1. Source label: AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn.",
+                  "id": "dapper:Mechanism.MyhahXB55tDUS667sJzeJZ40BeeQBWOR",
+                  "name": "CADinT2D mechanism Factor1"
+                },
+                "cfde_anchor": {
+                  "node_id": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                  "node_type": "factor",
+                  "label": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+                  "subtitle": "Coronary artery disease in type 2 diabetes (CAD in T2D) (Factor1)"
+                },
+                "model": "cfde-inc-v2",
+                "catalog_file": {
+                  "filename": "Factor1.catalog-record.json",
+                  "sha256": "5797893b517def4fdc82f285c9bf835195f9f88eddfb6409cbf3b1e31dd63d83",
+                  "size_in_bytes": 302,
+                  "mime_type": "application/json",
+                  "description": "Canonical CFDE catalog record; a factor source record, not a causal mechanism.",
+                  "id": "dapper:File.pD1t7so66hPVDxDeNYyXaoZyUJIuQwEQ"
+                }
+              },
+              "ranking": {
+                "value": 0.83,
+                "metric": "cosine_similarity",
+                "rank": 1
+              },
+              "matched_context_ids": [
+                "dismech:disorders/Coronary_Artery_Disease#/pathophysiology/0"
+              ]
+            },
+            {
+              "factor": {
+                "source": "eaggl",
+                "source_id": "factor:portal:T2DwRM:cfde-inc-v2:Factor1",
+                "source_revision": "ddba1b382a8f44d13696e7f6c17966521337db67e1a9fecbb513ff3f095418ca",
+                "object_class": "Mechanism",
+                "object": {
+                  "name": "T2DwRM mechanism Factor1",
+                  "description": "EAGGL mechanism factor:portal:T2DwRM:cfde-inc-v2:Factor1. Source label: AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.Sex_AD-CONTROL_MALE_up.",
+                  "id": "dapper:Mechanism.x5aZ3zyAyAiHpdLtTZKV23auakVUkx1k"
+                },
+                "cfde_anchor": {
+                  "node_id": "factor:portal:T2DwRM:cfde-inc-v2:Factor1",
+                  "node_type": "factor",
+                  "label": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.Sex_AD-CONTROL_MALE_up",
+                  "subtitle": "T2DwRM (Factor1)"
+                },
+                "model": "cfde-inc-v2",
+                "catalog_file": {
+                  "filename": "Factor1.catalog-record.json",
+                  "sha256": "ddba1b382a8f44d13696e7f6c17966521337db67e1a9fecbb513ff3f095418ca",
+                  "size_in_bytes": 205,
+                  "mime_type": "application/json",
+                  "description": "Canonical CFDE catalog record; a factor source record, not a causal mechanism.",
+                  "id": "dapper:File.UWK5t8Lc9ZpC2Vy8OIEcIbdCf8YS8JLp"
+                }
+              },
+              "ranking": {
+                "value": 0.8,
+                "metric": "cosine_similarity",
+                "rank": 2
+              },
+              "matched_context_ids": [
+                "dismech:disorders/Coronary_Artery_Disease#/pathophysiology/0"
+              ]
+            },
+            {
+              "factor": {
+                "source": "eaggl",
+                "source_id": "factor:portal:CKD_T2D:cfde-inc-v2:Factor12",
+                "source_revision": "5310bb9500e8b9f48b5d495b2c89171118b41b167546016c26decdd85c8cdad1",
+                "object_class": "Mechanism",
+                "object": {
+                  "name": "CKD_T2D mechanism Factor12",
+                  "description": "EAGGL mechanism factor:portal:CKD_T2D:cfde-inc-v2:Factor12. Source label: AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.Sex_AD-CONTROL_MALE_up___LINCS_L1000__all_signatures__LINCS_L1000_CRISPR_KO_TSSK6_dn.",
+                  "id": "dapper:Mechanism.TGgbZhu9qts6i03v6d3WI6eEfV6-olup"
+                },
+                "cfde_anchor": {
+                  "node_id": "factor:portal:CKD_T2D:cfde-inc-v2:Factor12",
+                  "node_type": "factor",
+                  "label": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.Sex_AD-CONTROL_MALE_up___LINCS_L1000__all_signatures__LINCS_L1000_CRISPR_KO_TSSK6_dn",
+                  "subtitle": "Chronic kidney disease in type 2 diabetes (Factor12)"
+                },
+                "model": "cfde-inc-v2",
+                "catalog_file": {
+                  "filename": "Factor12.catalog-record.json",
+                  "sha256": "5310bb9500e8b9f48b5d495b2c89171118b41b167546016c26decdd85c8cdad1",
+                  "size_in_bytes": 306,
+                  "mime_type": "application/json",
+                  "description": "Canonical CFDE catalog record; a factor source record, not a causal mechanism.",
+                  "id": "dapper:File.h2fNmxkI11u5FzXCZvjusBK6HGOng8sh"
+                }
+              },
+              "ranking": {
+                "value": 0.77,
+                "metric": "cosine_similarity",
+                "rank": 3
+              },
+              "matched_context_ids": [
+                "dismech:disorders/Coronary_Artery_Disease#/pathophysiology/0"
+              ]
+            },
+            {
+              "factor": {
+                "source": "eaggl",
+                "source_id": "factor:portal:CKD_EXT_vGFRinT2D:cfde-inc-v2:Factor2",
+                "source_revision": "8c0b7811bbc9b871001a03b1b42d771c54bfab466d964aa05712abfdf4179ed3",
+                "object_class": "Mechanism",
+                "object": {
+                  "name": "CKD_EXT_vGFRinT2D mechanism Factor2",
+                  "description": "EAGGL mechanism factor:portal:CKD_EXT_vGFRinT2D:cfde-inc-v2:Factor2. Source label: AMP_AD__all_brain__AMP_AD_MSSM_FP_SourceDiagnosis_CDR_ALL_up___LINCS_L1000__all_signatures__LINCS_L1000_CRISPR_KO_KRT23_dn.",
+                  "id": "dapper:Mechanism.msiEAtfRHDg-zWhhocCK-2A-2ojbBZQt"
+                },
+                "cfde_anchor": {
+                  "node_id": "factor:portal:CKD_EXT_vGFRinT2D:cfde-inc-v2:Factor2",
+                  "node_type": "factor",
+                  "label": "AMP_AD__all_brain__AMP_AD_MSSM_FP_SourceDiagnosis_CDR_ALL_up___LINCS_L1000__all_signatures__LINCS_L1000_CRISPR_KO_KRT23_dn",
+                  "subtitle": "Extreme chronic kidney disease (CKD) vs. eGFR >= 60 in type 2 diabetes (Factor2)"
+                },
+                "model": "cfde-inc-v2",
+                "catalog_file": {
+                  "filename": "Factor2.catalog-record.json",
+                  "sha256": "8c0b7811bbc9b871001a03b1b42d771c54bfab466d964aa05712abfdf4179ed3",
+                  "size_in_bytes": 335,
+                  "mime_type": "application/json",
+                  "description": "Canonical CFDE catalog record; a factor source record, not a causal mechanism.",
+                  "id": "dapper:File.q8old21nj0BClY9CQJwQ3mB4lMExn6zd"
+                }
+              },
+              "ranking": {
+                "value": 0.74,
+                "metric": "cosine_similarity",
+                "rank": 4
+              },
+              "matched_context_ids": [
+                "dismech:disorders/Coronary_Artery_Disease#/pathophysiology/0"
+              ]
+            },
+            {
+              "factor": {
+                "source": "eaggl",
+                "source_id": "factor:portal:StrokeinT2D:cfde-inc-v2:Factor2",
+                "source_revision": "b0539131e3a9d0c4f5dad10e0f2ebe1f3365cd53bc0831c2d3b293885d482167",
+                "object_class": "Mechanism",
+                "object": {
+                  "name": "StrokeinT2D mechanism Factor2",
+                  "description": "EAGGL mechanism factor:portal:StrokeinT2D:cfde-inc-v2:Factor2. Source label: DESCARTES_FETAL_STOMACH_STROMAL_CELLS.",
+                  "id": "dapper:Mechanism.uOn4qX6HmXw4kFg8_Ecl_tW0Qfz3dTA7"
+                },
+                "cfde_anchor": {
+                  "node_id": "factor:portal:StrokeinT2D:cfde-inc-v2:Factor2",
+                  "node_type": "factor",
+                  "label": "DESCARTES_FETAL_STOMACH_STROMAL_CELLS",
+                  "subtitle": "Stroke in type 2 diabetes (Factor2)"
+                },
+                "model": "cfde-inc-v2",
+                "catalog_file": {
+                  "filename": "Factor2.catalog-record.json",
+                  "sha256": "b0539131e3a9d0c4f5dad10e0f2ebe1f3365cd53bc0831c2d3b293885d482167",
+                  "size_in_bytes": 199,
+                  "mime_type": "application/json",
+                  "description": "Canonical CFDE catalog record; a factor source record, not a causal mechanism.",
+                  "id": "dapper:File.QHc3XsUkGsmm9ozNIEv3oJrReUphOy4A"
+                }
+              },
+              "ranking": {
+                "value": 0.71,
+                "metric": "cosine_similarity",
+                "rank": 5
+              },
+              "matched_context_ids": [
+                "dismech:disorders/Coronary_Artery_Disease#/pathophysiology/0"
+              ]
+            }
+          ],
+          "automatic_target_count": 5,
+          "search": {
+            "query": "Endothelial dysfunction",
+            "mode": "semantic",
+            "corpus_snapshot": "illustrative-contract-snapshot",
+            "embedding_model": "pritamdeka/BioBERT-mnli-snli-scinli-scitail-mednli-stsb",
+            "embedding_revision": null,
+            "template_version": "illustrative-template-v1",
+            "score_aggregation": "maximum cosine over selected context"
+          },
+          "limitations": [
+            "Layout-only similarity scores. These five native CFDE example factors are not measured recommendations for the CAD gap or a demonstration of mapped-subset retrieval. Production defaults use existing EAGGL embeddings joined to the populated exact-trait/factor-number crosswalk."
+          ]
+        }
+      }
+    }
+  },
+  "curl": "curl -X POST https://api.reveal.example.org/v1/mechanisms/suggest -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"dismissed_source_ids\":[],\"manual_eaggl_anchors\":[],\"mode\":\"semantic\",\"model\":\"cfde-inc-v2\",\"source_gap\":{\"id\":\"dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk\",\"source_id\":\"dismech:disorders/Coronary_Artery_Disease#discussion:cad_pgsxc_reverse_causation\",\"source_revision\":\"8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd\"},\"subquery\":\"Endothelial dysfunction\"}'"
+}

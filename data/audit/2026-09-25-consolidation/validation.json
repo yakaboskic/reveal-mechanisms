@@ -1,0 +1,35 @@
+{
+  "openapi": {
+    "passed": true,
+    "operations": 30,
+    "exchanges": 41,
+    "sha256": "87a58ca3ed8beb0ff7b27422d946ea03a5c22b99ef2aa2303bdf4c8156a2f7bb"
+  },
+  "flow": {
+    "passed": true,
+    "all_operations_mapped": true,
+    "all_exchanges_reachable": true
+  },
+  "evidence_schema": {
+    "generation_current": true,
+    "captured_package_valid": true,
+    "dapper_objects_checked": 45
+  },
+  "component_tests": {
+    "evidence_and_schema": 24,
+    "account_linter_and_bootstrap": 10,
+    "passed": true
+  },
+  "proposed_internal_schemas": {
+    "schema_valid": true,
+    "document_examples_valid": true,
+    "runtime_implemented": false
+  },
+  "portable_handoff": {
+    "zip_and_mirror_match_current_contract": true,
+    "nested_export_copy_absent": true
+  },
+  "application_built": false,
+  "database_mutated": false,
+  "paid_agent_run": false
+}

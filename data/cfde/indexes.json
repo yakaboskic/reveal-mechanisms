@@ -1,0 +1,646 @@
+{
+  "count": 51,
+  "data": [
+    {
+      "index": "4dn-falcon-gene",
+      "built": "2025-09-22T17:54:46",
+      "schema": "gene",
+      "compressed": 1,
+      "query": {
+        "keys": [
+          "gene"
+        ],
+        "locus": false
+      }
+    },
+    {
+      "index": "4dn-falcon-gene-phenotype",
+      "built": "2025-09-22T17:54:49",
+      "schema": "phenotype",
+      "compressed": 1,
+      "query": {
+        "keys": [
+          "phenotype"
+        ],
+        "locus": false
+      }
+    },
+    {
+      "index": "4dn-falcon-v2g",
+      "built": "2025-09-22T18:02:08",
+      "schema": "phenotype,gene",
+      "compressed": 1,
+      "query": {
+        "keys": [
+          "phenotype",
+          "gene"
+        ],
+        "locus": false
+      }
+    },
+    {
+      "index": "4dn-gene",
+      "built": "2025-02-04T18:55:55",
+      "schema": "tissue,gene",
+      "compressed": 1,
+      "query": {
+        "keys": [
+          "tissue",
+          "gene"
+        ],
+        "locus": false
+      }
+    },
+    {
+      "index": "4dn-gene",
+      "built": "2025-02-04T18:55:55",
+      "schema": "tissue,biosample,gene",
+      "compressed": 1,
+      "query": {
+        "keys": [
+          "tissue",
+          "biosample",
+          "gene"
+        ],
+        "locus": false
+      }
+    },
+    {
+      "index": "4dn-mondo",
+      "built": "2025-02-04T18:55:57",
+      "schema": "tissue,mondo_id",
+      "compressed": 1,
+      "query": {
+        "keys": [
+          "tissue",
+          "mondo_id"
+        ],
+        "locus": false
+      }
+    },
+    {
+      "index": "4dn-mondo",
+      "built": "2025-02-04T18:55:57",
+      "schema": "tissue,biosample,mondo_id",
+      "compressed": 1,
+      "query": {
+        "keys": [
+          "tissue",
+          "biosample",
+          "mondo_id"
+        ],
+        "locus": false
+      }
+    },
+    {
+      "index": "c2m2-provenance",
+      "built": "2026-03-27T17:01:44",
+      "schema": "gene_set",
+      "compressed": 0,
+      "query": {
+        "keys": [
+          "gene_set"
+        ],
+        "locus": false
+      }
+    },
+    {
+      "index": "diff-exp",
+      "built": "2025-02-04T18:59:11",
+      "schema": "geneName",
+      "compressed": 1,
+      "query": {
+        "keys": [
+          "geneName"
+        ],
+        "locus": false
+      }
+    },
+    {
+      "index": "diff-exp-phenotype",
+      "built": "2025-02-04T18:59:14",
+      "schema": "phenotype",
+      "compressed": 1,
+      "query": {
+        "keys": [
+          "phenotype"
+        ],
+        "locus": false
+      }
+    },
+    {
+      "index": "diff-exp-phenotype-tissue",
+      "built": "2025-02-04T19:06:11",
+      "schema": "phenotype,tissue",
+      "compressed": 1,
+      "query": {
+        "keys": [
+          "phenotype",
+          "tissue"
+        ],
+        "locus": false
+      }
+    },
+    {
+      "index": "diff-exp-tissue",
+      "built": "2025-02-04T18:59:16",
+      "schema": "tissue",
+      "compressed": 1,
+      "query": {
+        "keys": [
+          "tissue"
+        ],
+        "locus": false
+      }
+    },
+    {
+      "index": "diff-exp-top-phenotype",
+      "built": "2025-02-04T19:06:12",
+      "schema": "dummy",
+      "compressed": 1,
+      "query": {
+        "keys": [
+          "dummy"
+        ],
+        "locus": false
+      }
+    },
+    {
+      "index": "diff-exp-top-tissue",
+      "built": "2025-02-04T19:06:14",
+      "schema": "dummy",
+      "compressed": 1,
+      "query": {
+        "keys": [
+          "dummy"
+        ],
+        "locus": false
+      }
+    },
+    {
+      "index": "diff-exp-top-tissue-phenotype-source",
+      "built": "2025-02-04T19:09:39",
+      "schema": "dummy",
+      "compressed": 1,
+      "query": {
+        "keys": [
+          "dummy"
+        ],
+        "locus": false
+      }
+    },
+    {
+      "index": "exrna-biofluid-gene",
+      "built": "2025-09-15T19:38:53",
+      "schema": "BIOFLUID,gene_name,gene_type",
+      "compressed": 1,
+      "query": {
+        "keys": [
+          "BIOFLUID",
+          "gene_name",
+          "gene_type"
+        ],
+        "locus": false
+      }
+    },
+    {
+      "index": "exrna-biofluid-gene-counts",
+      "built": "2025-09-12T14:38:53",
+      "schema": "gene_symbol",
+      "compressed": 0,
+      "query": {
+        "keys": [
+          "gene_symbol"
+        ],
+        "locus": false
+      }
+    },
+    {
+      "index": "exrna-gene",
+      "built": "2025-09-15T14:23:59",
+      "schema": "gene_name",
+      "compressed": 1,
+      "query": {
+        "keys": [
+          "gene_name"
+        ],
+        "locus": false
+      }
+    },
+    {
+      "index": "exrna-gene-counts",
+      "built": "2025-02-04T18:55:59",
+      "schema": "gene_symbol",
+      "compressed": 1,
+      "query": {
+        "keys": [
+          "gene_symbol"
+        ],
+        "locus": false
+      }
+    },
+    {
+      "index": "exrna-rbp-counts",
+      "built": "2025-02-04T18:56:02",
+      "schema": "rbp",
+      "compressed": 1,
+      "query": {
+        "keys": [
+          "rbp"
+        ],
+        "locus": false
+      }
+    },
+    {
+      "index": "exrna-regions",
+      "built": "2025-08-06T15:07:17",
+      "schema": "chr:start-end",
+      "compressed": 0,
+      "query": {
+        "keys": [],
+        "locus": true
+      }
+    },
+    {
+      "index": "glygen-genes",
+      "built": "2025-02-04T19:09:51",
+      "schema": "gene_symbol",
+      "compressed": 1,
+      "query": {
+        "keys": [
+          "gene_symbol"
+        ],
+        "locus": false
+      }
+    },
+    {
+      "index": "gtex-sldsc",
+      "built": "2025-02-04T18:55:20",
+      "schema": "mondo_id",
+      "compressed": 1,
+      "query": {
+        "keys": [
+          "mondo_id"
+        ],
+        "locus": false
+      }
+    },
+    {
+      "index": "gtex-tstat",
+      "built": "2025-02-04T18:55:54",
+      "schema": "gene",
+      "compressed": 1,
+      "query": {
+        "keys": [
+          "gene"
+        ],
+        "locus": false
+      }
+    },
+    {
+      "index": "kids-first-gene-variants",
+      "built": "2025-03-24T16:26:02",
+      "schema": "gene",
+      "compressed": 1,
+      "query": {
+        "keys": [
+          "gene"
+        ],
+        "locus": false
+      }
+    },
+    {
+      "index": "lincs-corr",
+      "built": "2025-02-04T18:58:52",
+      "schema": "name",
+      "compressed": 1,
+      "query": {
+        "keys": [
+          "name"
+        ],
+        "locus": false
+      }
+    },
+    {
+      "index": "metabolomics-disease",
+      "built": "2025-02-04T18:55:17",
+      "schema": "disease",
+      "compressed": 1,
+      "query": {
+        "keys": [
+          "disease"
+        ],
+        "locus": false
+      }
+    },
+    {
+      "index": "pigean-factor",
+      "built": "2026-07-08T02:28:33",
+      "schema": "phenotype,gene_set_size",
+      "compressed": 1,
+      "query": {
+        "keys": [
+          "phenotype",
+          "gene_set_size"
+        ],
+        "locus": false
+      }
+    },
+    {
+      "index": "pigean-gene",
+      "built": "2026-07-07T15:51:25",
+      "schema": "gene",
+      "compressed": 1,
+      "query": {
+        "keys": [
+          "gene"
+        ],
+        "locus": false
+      }
+    },
+    {
+      "index": "pigean-gene",
+      "built": "2026-07-07T15:51:25",
+      "schema": "gene,gene_set_size",
+      "compressed": 1,
+      "query": {
+        "keys": [
+          "gene",
+          "gene_set_size"
+        ],
+        "locus": false
+      }
+    },
+    {
+      "index": "pigean-gene-factor",
+      "built": "2026-07-08T02:48:35",
+      "schema": "phenotype,gene_set_size,factor",
+      "compressed": 1,
+      "query": {
+        "keys": [
+          "phenotype",
+          "gene_set_size",
+          "factor"
+        ],
+        "locus": false
+      }
+    },
+    {
+      "index": "pigean-gene-gene-sets",
+      "built": "2026-04-02T14:23:14",
+      "schema": "gene,gene_set_size",
+      "compressed": 0,
+      "query": {
+        "keys": [
+          "gene",
+          "gene_set_size"
+        ],
+        "locus": false
+      }
+    },
+    {
+      "index": "pigean-gene-phenotype",
+      "built": "2026-07-07T15:45:51",
+      "schema": "phenotype,gene_set_size",
+      "compressed": 1,
+      "query": {
+        "keys": [
+          "phenotype",
+          "gene_set_size"
+        ],
+        "locus": false
+      }
+    },
+    {
+      "index": "pigean-gene-phenotype",
+      "built": "2026-07-07T15:45:51",
+      "schema": "phenotype",
+      "compressed": 1,
+      "query": {
+        "keys": [
+          "phenotype"
+        ],
+        "locus": false
+      }
+    },
+    {
+      "index": "pigean-gene-set",
+      "built": "2026-07-07T16:00:25",
+      "schema": "gene_set,gene_set_size",
+      "compressed": 1,
+      "query": {
+        "keys": [
+          "gene_set",
+          "gene_set_size"
+        ],
+        "locus": false
+      }
+    },
+    {
+      "index": "pigean-gene-set",
+      "built": "2026-07-07T16:00:25",
+      "schema": "gene_set",
+      "compressed": 1,
+      "query": {
+        "keys": [
+          "gene_set"
+        ],
+        "locus": false
+      }
+    },
+    {
+      "index": "pigean-gene-set-factor",
+      "built": "2026-07-08T02:55:21",
+      "schema": "phenotype,gene_set_size,factor",
+      "compressed": 1,
+      "query": {
+        "keys": [
+          "phenotype",
+          "gene_set_size",
+          "factor"
+        ],
+        "locus": false
+      }
+    },
+    {
+      "index": "pigean-gene-set-genes",
+      "built": "2026-04-02T14:24:03",
+      "schema": "gene_set,gene_set_size",
+      "compressed": 0,
+      "query": {
+        "keys": [
+          "gene_set",
+          "gene_set_size"
+        ],
+        "locus": false
+      }
+    },
+    {
+      "index": "pigean-gene-set-phenotype",
+      "built": "2026-07-07T15:58:51",
+      "schema": "phenotype,gene_set_size",
+      "compressed": 1,
+      "query": {
+        "keys": [
+          "phenotype",
+          "gene_set_size"
+        ],
+        "locus": false
+      }
+    },
+    {
+      "index": "pigean-gene-set-phenotype",
+      "built": "2026-07-07T15:58:51",
+      "schema": "phenotype",
+      "compressed": 1,
+      "query": {
+        "keys": [
+          "phenotype"
+        ],
+        "locus": false
+      }
+    },
+    {
+      "index": "pigean-gene-set-source",
+      "built": "2026-07-08T02:24:35",
+      "schema": "source_index,gene_set_size",
+      "compressed": 1,
+      "query": {
+        "keys": [
+          "source_index",
+          "gene_set_size"
+        ],
+        "locus": false
+      }
+    },
+    {
+      "index": "pigean-gene-set-source",
+      "built": "2026-07-08T02:24:35",
+      "schema": "source_index",
+      "compressed": 1,
+      "query": {
+        "keys": [
+          "source_index"
+        ],
+        "locus": false
+      }
+    },
+    {
+      "index": "pigean-joined-gene",
+      "built": "2026-07-07T20:52:59",
+      "schema": "phenotype,gene,gene_set_size",
+      "compressed": 1,
+      "query": {
+        "keys": [
+          "phenotype",
+          "gene",
+          "gene_set_size"
+        ],
+        "locus": false
+      }
+    },
+    {
+      "index": "pigean-joined-gene",
+      "built": "2026-07-07T20:52:59",
+      "schema": "phenotype,gene",
+      "compressed": 1,
+      "query": {
+        "keys": [
+          "phenotype",
+          "gene"
+        ],
+        "locus": false
+      }
+    },
+    {
+      "index": "pigean-joined-gene-set",
+      "built": "2026-07-07T22:01:00",
+      "schema": "phenotype,gene_set,gene_set_size",
+      "compressed": 1,
+      "query": {
+        "keys": [
+          "phenotype",
+          "gene_set",
+          "gene_set_size"
+        ],
+        "locus": false
+      }
+    },
+    {
+      "index": "pigean-joined-gene-set",
+      "built": "2026-07-07T22:01:00",
+      "schema": "phenotype,gene_set",
+      "compressed": 1,
+      "query": {
+        "keys": [
+          "phenotype",
+          "gene_set"
+        ],
+        "locus": false
+      }
+    },
+    {
+      "index": "pigean-overall-gene",
+      "built": "2026-07-08T03:25:11",
+      "schema": "gene,gene_set_size",
+      "compressed": 1,
+      "query": {
+        "keys": [
+          "gene",
+          "gene_set_size"
+        ],
+        "locus": false
+      }
+    },
+    {
+      "index": "pigean-overall-gene",
+      "built": "2026-07-08T03:25:11",
+      "schema": "gene",
+      "compressed": 1,
+      "query": {
+        "keys": [
+          "gene"
+        ],
+        "locus": false
+      }
+    },
+    {
+      "index": "pigean-phenotypes",
+      "built": "2025-02-06T16:04:19",
+      "schema": "dummy",
+      "compressed": 1,
+      "query": {
+        "keys": [
+          "dummy"
+        ],
+        "locus": false
+      }
+    },
+    {
+      "index": "ptm",
+      "built": "2026-09-10T17:05:25",
+      "schema": "uniprot_accession",
+      "compressed": 0,
+      "query": {
+        "keys": [
+          "uniprot_accession"
+        ],
+        "locus": false
+      }
+    },
+    {
+      "index": "single-cell-lognorm",
+      "built": "2025-02-04T19:09:37",
+      "schema": "dataset,gene",
+      "compressed": 1,
+      "query": {
+        "keys": [
+          "dataset",
+          "gene"
+        ],
+        "locus": false
+      }
+    }
+  ],
+  "nonce": "p-eSOXDyI35UTFJ6i4u-NMrtmzNdZkcQzf6-ySrUr10"
+}

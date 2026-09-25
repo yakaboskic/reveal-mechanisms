@@ -1,0 +1,132 @@
+{
+  "operation_id": "listKnowledgeGaps",
+  "case": "request",
+  "method": "GET",
+  "path_template": "/v1/knowledge-gaps",
+  "request": {
+    "url": "https://api.reveal.example.org/v1/knowledge-gaps?kind=KNOWLEDGE_GAP&status=OPEN&source=dismech&disease_id=MONDO%3A0021661&limit=20",
+    "path": {},
+    "query": {
+      "kind": "KNOWLEDGE_GAP",
+      "status": "OPEN",
+      "source": "dismech",
+      "disease_id": "MONDO:0021661",
+      "limit": 20
+    },
+    "headers": {
+      "Accept": "application/json"
+    },
+    "body": null
+  },
+  "responses": {
+    "200": {
+      "content_type": "application/json",
+      "examples": {
+        "gaps": {
+          "items": [
+            {
+              "object": {
+                "text": "Are the CAD PGS×context interactions driven by adverse exposures causally amplifying genetic risk, or are some \"contexts\" actually downstream readouts of incipient disease (reverse causation)?",
+                "gap_description": "Population PGS×context analyses (Nagpal & Gibson 2026, PMID:42443528) are largely unable to establish the causality of specific contexts. dismech separates true environmental exposures (smoking, high-fat diet, sedentary lifestyle) from biochemical readouts (LDL, HDL, C-reactive protein); the biochemical \"contexts\" are prime reverse-causation suspects, since they may be partly downstream of the atherosclerotic process rather than upstream drivers, and behavioural contexts such as reduced physical activity may be rapid responses to incipient angina rather than causes. Distinguishing genuine amplification of genetic effects from reverse causation determines whether the modelled interventions (e.g. lowering cholesterol in high-PGS smokers) would actually reduce risk.",
+                "gap_kind": "KNOWLEDGE_GAP",
+                "scope": "Coronary Artery Disease",
+                "about_entities": [
+                  "http://purl.obolibrary.org/obo/MONDO_0021661"
+                ],
+                "id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk"
+              },
+              "source": {
+                "source": "dismech",
+                "source_id": "dismech:disorders/Coronary_Artery_Disease#discussion:cad_pgsxc_reverse_causation",
+                "source_revision": "8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd",
+                "status": "OPEN",
+                "disease_label": "Coronary Artery Disease",
+                "description_derivation": "source_rationale"
+              },
+              "attachments": [
+                {
+                  "source_reference": "pathophysiology#Endothelial Dysfunction",
+                  "target_kind": "pathophysiology",
+                  "resolution": "resolved",
+                  "target": {
+                    "source": "dismech",
+                    "source_id": "dismech:disorders/Coronary_Artery_Disease#/pathophysiology/0",
+                    "source_revision": "d7ea32f7d5b2101e19136522bece815085f1aee34898ab451acda840ae5809dc",
+                    "dapper_id": "dapper:Mechanism.Tbd3TXttvLnVp5rlCDkdPYOWlFOfRUG2"
+                  },
+                  "label": "Endothelial Dysfunction"
+                },
+                {
+                  "source_reference": "biochemical#LDL Cholesterol",
+                  "target_kind": "biochemical",
+                  "resolution": "resolved",
+                  "target": null,
+                  "label": "LDL Cholesterol"
+                },
+                {
+                  "source_reference": "biochemical#C-Reactive Protein",
+                  "target_kind": "biochemical",
+                  "resolution": "resolved",
+                  "target": null,
+                  "label": "C-Reactive Protein"
+                },
+                {
+                  "source_reference": "environmental#Smoking",
+                  "target_kind": "environmental",
+                  "resolution": "resolved",
+                  "target": null,
+                  "label": "Smoking"
+                }
+              ],
+              "source_detail": {
+                "source_file": "kb/disorders/Coronary_Artery_Disease.yaml",
+                "source_pointer": "/discussions/0",
+                "payload_sha256": "8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd",
+                "raw": {
+                  "discussion_id": "cad_pgsxc_reverse_causation",
+                  "prompt": "Are the CAD PGS×context interactions driven by adverse exposures causally amplifying genetic risk, or are some \"contexts\" actually downstream readouts of incipient disease (reverse causation)?",
+                  "kind": "KNOWLEDGE_GAP",
+                  "status": "OPEN",
+                  "attaches_to": [
+                    "pathophysiology#Endothelial Dysfunction",
+                    "biochemical#LDL Cholesterol",
+                    "biochemical#C-Reactive Protein",
+                    "environmental#Smoking"
+                  ],
+                  "rationale": "Population PGS×context analyses (Nagpal & Gibson 2026, PMID:42443528) are largely unable to establish the causality of specific contexts. dismech separates true environmental exposures (smoking, high-fat diet, sedentary lifestyle) from biochemical readouts (LDL, HDL, C-reactive protein); the biochemical \"contexts\" are prime reverse-causation suspects, since they may be partly downstream of the atherosclerotic process rather than upstream drivers, and behavioural contexts such as reduced physical activity may be rapid responses to incipient angina rather than causes. Distinguishing genuine amplification of genetic effects from reverse causation determines whether the modelled interventions (e.g. lowering cholesterol in high-PGS smokers) would actually reduce risk.",
+                  "proposed_experiments": [
+                    {
+                      "experiment_id": "cad_pgsxc_mr_direction",
+                      "name": "Mendelian randomization of exposure-to-CAD direction across PGS strata",
+                      "description": "Use bidirectional / multivariable Mendelian randomization to test whether each candidate context (LDL, HDL, C-reactive protein, smoking) causally affects CAD versus being a consequence of subclinical disease, and whether the causal effect estimate scales with polygenic liability as the amplification model predicts.",
+                      "decision_criterion": "A context is retained as a causal amplifier if MR supports exposure-to-disease directionality and the exposure-attributable risk difference increases across increasing PGS strata; it is flagged as a reverse-causation suspect otherwise."
+                    },
+                    {
+                      "experiment_id": "cad_pgsxc_prospective_temporal",
+                      "name": "Prospective incident-CAD analysis restricted to pre-diagnosis exposure windows",
+                      "description": "Restrict exposures to measurements taken well before diagnosis and repeat the PGS×context liability-threshold modelling on incident cases only, to reduce the chance that exposure values reflect behavioural responses to early disease.",
+                      "decision_criterion": "Amplification is supported if the PGS×context deviation from additivity persists when only pre-diagnosis exposure windows and incident cases are used."
+                    }
+                  ]
+                }
+              },
+              "scientific_accounts": {
+                "count": 0,
+                "scope": "public_exact_gap",
+                "as_of": "2026-09-24T16:00:00Z",
+                "ranking": "curated",
+                "window_days": null
+              }
+            }
+          ],
+          "page": {
+            "next_cursor": null,
+            "has_more": false,
+            "snapshot_id": "illustrative-contract-snapshot"
+          }
+        }
+      }
+    }
+  },
+  "curl": "curl -X GET 'https://api.reveal.example.org/v1/knowledge-gaps?kind=KNOWLEDGE_GAP&status=OPEN&source=dismech&disease_id=MONDO%3A0021661&limit=20' -H 'Accept: application/json'"
+}

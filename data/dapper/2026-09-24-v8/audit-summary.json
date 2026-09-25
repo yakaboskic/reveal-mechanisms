@@ -1,0 +1,26 @@
+{
+  "snapshot_sha256": "801fb347c54c036c15345d132d302171fc6cd74c1f75a03a5c59c937f5ed7d11",
+  "root_schema_sha256": "219769c9874a3c0a7d6972360d5847a8b344e412a8b9f4e2648f059682440345",
+  "source_base_commit": "ebfc471049240c23d6ce1d3d40cd2785b35e6443",
+  "capture_at": "2026-09-24T15:20:16.281312+00:00",
+  "upstream_targeted_tests": {
+    "tests": 287,
+    "errors": 0,
+    "failures": 0,
+    "skipped": 0
+  },
+  "test_log": "pytest.log",
+  "test_results": "pytest.xml",
+  "compatibility_results": "compatibility.json",
+  "scope": "Offline DAPPER integration audit and plan revision; no sibling repository or database changes.",
+  "history": [
+    {
+      "directory": "../2026-09-24-v8-initial",
+      "result": "286 targeted tests passed before the GMT locator identity change."
+    },
+    {
+      "directory": "../2026-09-24-v8-transition",
+      "result": "285 passed, 2 failed while upstream row/HuBMAP examples still had old IDs; resolved by updated upstream fixtures in the final snapshot."
+    }
+  ]
+}

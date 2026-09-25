@@ -1,0 +1,48 @@
+# Illustrative intermediate-file provenance. All nodes are synthetic.
+# Temporary source keys are replaced by computed IDs with dapper_identity.py assign.
+_illustrative:
+  - dapper:Activity.IIANzoY1jtwzFi9JJwn2wRj9sE0cNlJd
+  - dapper:Activity.uSyoGdvCZ3blGCjRnBPXrBdMT5PIH0ai
+  - dapper:File.aYgsG7KuOqG7gJ_yC9i9zCmvjMsTCMQ3
+  - dapper:DrsObject.CyS9MDiYIOGkNnW3DRR6DxLPLZygIopV
+
+activities:
+  - id: dapper:Activity.IIANzoY1jtwzFi9JJwn2wRj9sE0cNlJd
+    name: Prepare expression matrix
+    command: python prepare.py --output normalized.tsv
+  - id: dapper:Activity.uSyoGdvCZ3blGCjRnBPXrBdMT5PIH0ai
+    name: Analyze expression matrix
+    command: python analyze.py --input normalized.tsv
+
+files:
+  - id: dapper:File.aYgsG7KuOqG7gJ_yC9i9zCmvjMsTCMQ3
+    name: Normalized expression matrix
+    filename: normalized.tsv
+    description: Intermediate output consumed by the next activity.
+    size_in_bytes: 1024
+    sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    mime_type: text/tab-separated-values
+    location: /work/run-1/normalized.tsv
+    drs_representation:
+      - dapper:DrsObject.CyS9MDiYIOGkNnW3DRR6DxLPLZygIopV
+
+drs_objects:
+  - id: dapper:DrsObject.CyS9MDiYIOGkNnW3DRR6DxLPLZygIopV
+    name: DRS access to the normalized matrix
+    drs_id: normalized-matrix-v1
+    self_uri: drs://drs.example.org/normalized-matrix-v1
+    size: 1024
+    checksum_sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    mime_type: text/tab-separated-values
+    access_methods: [https]
+
+was_generated_by_edges:
+  - subject: dapper:File.aYgsG7KuOqG7gJ_yC9i9zCmvjMsTCMQ3
+    predicate: prov:wasGeneratedBy
+    object: dapper:Activity.IIANzoY1jtwzFi9JJwn2wRj9sE0cNlJd
+
+used_edges:
+  - subject: dapper:Activity.uSyoGdvCZ3blGCjRnBPXrBdMT5PIH0ai
+    predicate: prov:used
+    object: dapper:File.aYgsG7KuOqG7gJ_yC9i9zCmvjMsTCMQ3
+    edge_role: data_input

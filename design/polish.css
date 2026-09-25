@@ -1,0 +1,286 @@
+/* Shared finishing layer: the approved white canvas, quieter chrome, readable detail. */
+:root{--ink:#20293a;--muted:#69798e;--line:#e3e9f1;--reading:#4d5e76;--secondary:#6b7b91;--focus:#6d96d3;--page-width:960px}
+html{scroll-padding-top:24px}
+body{font-synthesis:none;-webkit-font-smoothing:antialiased}
+button,a,input,textarea,select,summary{-webkit-tap-highlight-color:transparent}
+button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,summary:focus-visible,[tabindex="0"]:focus-visible{outline:2px solid var(--focus);outline-offset:4px}
+:focus-visible{outline-color:var(--focus)!important}
+button:disabled{opacity:.55}
+.skip:focus{border-radius:8px;color:var(--ink)}
+[hidden]{display:none!important}
+::selection{background:#e3edfc;color:#233e66}
+.workspace-nav{height:60px;padding-inline:clamp(20px,3vw,36px)}
+.workspace-avatar{width:38px;height:38px}
+.workspace-menu{padding:8px;box-shadow:0 10px 35px #253b5712}
+.workspace-menu nav a{min-height:43px;font-size:13px}
+.workspace-menu-identity span,.workspace-menu nav a span,.workspace-menu-footer p{color:var(--secondary);font-size:12px}
+.workspace-menu-footer button{min-height:38px}
+
+/* Search and the expanded question share a single, restrained container. */
+.question-page{padding-top:clamp(86px,17vh,164px)}
+.question-page.has-context{padding-top:clamp(36px,7vh,72px)}
+.question-shell{border-color:#dce4ef;border-radius:20px;box-shadow:0 4px 22px #17203304}
+.question-shell:has(#gap-search:focus){border-color:#a8bfdf;box-shadow:0 0 0 3px #2563eb08}
+.search-invitation{color:#737f91;font-size:12px;margin-bottom:16px}
+.question-input-row.gap-search-row{display:grid;grid-template-columns:minmax(0,1fr);align-items:center;min-height:110px}
+.gap-search-row input,.gap-search-row .question-example{grid-area:1/1;font:400 17px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;letter-spacing:-.3px}
+.question-example{position:static;align-self:center;min-width:0;color:#7a8698}
+.gap-search-row input{height:62px}
+.question-meta{align-items:flex-start}
+.inline-context .question-meta{margin-top:14px;margin-bottom:22px}
+.anchor-guidance{color:var(--secondary);max-width:64ch}
+.chip-group-label{color:#64758d;font-size:12px}
+.chip .label{font-size:11px;max-width:min(470px,100%)}
+.chip{min-width:0;max-width:100%}
+.chip .label{min-width:0}
+.chip .remove{min-width:32px;min-height:34px}
+.chip-add{width:34px;min-height:34px}
+.context-disclosures{padding-top:5px}
+.context-disclosures>details{border-top:1px solid #eef1f6;padding:0}
+.context-disclosures>details:first-child{border-top:0}
+.context-disclosures>details>summary{display:flex;align-items:center;gap:8px;list-style:none;min-height:42px;padding:9px 0;color:#697c98;font-size:12px}
+.context-disclosures>details>summary::-webkit-details-marker{display:none}
+.context-disclosures>details>summary::after{content:'›';font-size:18px;line-height:1;color:#8a9bb0;margin-left:auto;transition:transform .15s}
+.context-disclosures>details[open]>summary::after{transform:rotate(90deg)}
+.context-disclosures>details>summary:hover{color:#355f9a}
+.disclosure-count{color:#7e8ca1;font-size:11px}
+.inline-submit{margin-top:22px}
+.gap-submit{color:#496488}
+.trending{margin-top:34px}
+.trending h2{color:#66768d}
+.trending .caption{font-size:11px;color:#79889c}
+.trend{font-size:14px;padding:19px 0;color:#41526c;line-height:1.65}
+.trend small{color:#748399;font-size:12px;margin-top:7px}
+.trend .sample-count{color:#7e8b9e;font-size:11px}
+.results{border-color:#e0e7f1;box-shadow:0 6px 20px #253b5706}
+.results-head{font-size:11px;color:#718198;line-height:1.6}
+.result{padding:17px 20px}
+.result .title{font-size:14px;line-height:1.65;color:#40536f}
+.result .sub{font-size:11px;color:#72829a}
+.field,select{border-color:#dce4ee;font-size:13px;min-height:42px;border-radius:9px}
+.filter-result{min-height:44px;line-height:1.6;color:#536b8a}
+.linked-mechanism{color:#64778f}
+
+/* Reading alignment is shared by accounts, claims and the personal workspace. */
+.account-study{max-width:var(--page-width);padding:20px 28px 72px}
+.account-topbar{min-height:40px;margin-bottom:28px;gap:20px}
+.account-topbar a,.account-topbar button{font-size:12px;color:#5a7090;line-height:1.6}
+.account-topbar a{display:inline-flex;align-items:center;min-height:40px}
+.account-topbar a:hover,.account-topbar button:hover{color:#2f5f9f;text-decoration:underline;text-underline-offset:4px}
+.account-gap{margin:0 0 26px;max-width:none}
+.account-gap .gap-source{color:var(--secondary);font-size:12px;margin-bottom:10px}
+.account-gap h1{max-width:68ch;margin-bottom:18px}
+.account-gap .job-anchor{white-space:normal;text-align:left;font-size:11px;line-height:1.6;min-height:32px}
+.account-reading-switch{gap:28px;margin-bottom:26px}
+.account-reading-switch button{min-height:45px;font-size:13px;color:#6f7e92;white-space:nowrap}
+.account-reading-switch button[aria-selected=true]{color:#365a8a;border-bottom-color:#6084b7}
+.account-reading-switch button:hover{color:#365a8a}
+.account-summary h2{font-size:18px;line-height:1.55;margin-bottom:13px}
+.account-conclusions,.research-prose{color:var(--reading);line-height:1.9;max-width:80ch}
+.account-summary{padding-bottom:30px}
+.account-claims-toggle{font-size:14px;color:#4f6380;min-height:64px}
+.account-claims-toggle small,.claim-option-meta,.claim-ref{color:#74849b}
+.account-claims-toggle:hover{color:#315f9d}
+.claim-search-toolbar{margin-bottom:14px}
+.claim-search input{height:42px;font-size:13px}
+.claim-search input::placeholder{color:#748298}
+.claim-filter-toggle{min-height:43px;color:#61738e}
+.claim-filters button{font-size:12px;color:#64748d;min-height:36px}
+.account-claim-option{padding:14px 10px}
+.claim-option-text{font-size:13px;line-height:1.7;color:#40536f}
+.claim-option-meta{font-size:11px;line-height:1.7;column-gap:12px;margin-top:6px}
+.claim-inline-status{font-size:11px;color:#6b7d96}
+.claim-inline-sources{max-width:560px;gap:9px}
+.claim-inline-sources>div{font-size:12px}
+.claim-inline-sources small{font-size:11px;color:#748399}
+.claim-page-link{min-height:38px}
+.account-example-details{color:#72839b;margin-top:22px}
+.account-example-details>summary{font-size:12px;color:#72839b;padding:10px 0}
+.account-example-details p{color:#6c7d94}
+.example-records{gap:8px 18px;align-items:center}
+.example-records a{font-size:12px;text-decoration:none;min-height:36px;display:inline-flex;align-items:center;color:#5a789f}
+.example-records button{color:#5a789f}
+
+/* The claim is read as a proposition, followed by the selected detail. */
+.claim-page-heading{padding:6px 0 22px}
+.claim-page-kind{font-size:12px;color:var(--secondary);margin-bottom:10px}
+.claim-page-account{font-size:12px;color:#748399}
+.claim-page-account a{color:#5c769a}
+.claim-detail-panel h3{font-size:15px;line-height:1.6;color:#354963;font-weight:550}
+.claim-detail-panel p{font-size:14px;line-height:1.85;color:var(--reading)}
+.claim-detail-panel .detail-proposition{font-size:15px;color:#405571;max-width:78ch}
+.claim-detail-panel .small-note{font-size:12px;color:var(--secondary);line-height:1.75}
+.claim-detail-panel .keyval{margin:22px 0;font-size:13px;grid-template-columns:100px minmax(0,1fr);row-gap:12px}
+.claim-detail-panel .keyval dt{color:var(--secondary)}
+.claim-detail-panel .keyval dd{color:#425875}
+.claim-detail-panel .btn.text{color:#416ba4;font-size:12px;margin-right:16px;min-height:40px;padding-inline:0}
+.claim-evidence{padding:24px 0}
+.evidence-heading{align-items:center;margin-bottom:10px}
+.evidence-heading strong{font-size:13px;color:#48617f}
+.evidence-origin{font-size:11px;color:#496999;border-radius:5px}
+.evidence-origin.mock{color:#896331;background:#fff5e7}
+.claim-detail-panel .evidence-assessment{font-size:12px;color:#677b96;margin-bottom:10px}
+.metric-observation{font-size:12px;color:#6b7c93;align-items:center;padding:3px 0}
+.metric-observation b{font-size:15px;font-variant-numeric:tabular-nums;color:#385574}
+.source-artifact{padding:12px 0;min-height:44px;font-size:13px;line-height:1.7;color:#496e9f}
+.source-artifact:hover{color:#2f61a4}
+.source-artifact>span:first-child{min-width:0;overflow-wrap:anywhere}
+.source-artifact>span:last-child:not(:first-child){flex-shrink:0}
+.source-artifact small{font-size:11px;color:#72839b}
+.claim-detail-panel .rule{margin-top:24px;padding-top:24px}
+
+/* Exports remain close to the cited statement; metadata is secondary. */
+.research-downloads{column-gap:22px;row-gap:6px;margin:24px 0 7px}
+.research-downloads a{min-height:38px}
+.copy-for-word{min-height:38px;padding:8px 12px;border-color:#dbe5f3}
+.paragraph-export-note{font-size:12px;color:#708098;max-width:76ch}
+.latex-export-note{margin-bottom:26px}
+.research-references h3{font-size:14px;color:#4d6380}
+.research-references h3 span{font-size:12px;color:#73849a}
+.research-references li{padding-left:7px;margin-bottom:20px;border-radius:5px}
+.research-references li p{font-size:13px;color:#66778f}
+.reference-title{color:#46668f}
+.reference-meta{font-size:11px;line-height:1.7;color:#73839a}
+.research-references li:target,.research-references li:focus{background:#f2f6fc;outline:2px solid #e0e9f7;outline-offset:7px}
+.research-citations a{border-radius:3px}
+
+/* Fit activity to the viewport; completed results return to normal page flow. */
+.job-page{height:calc(100svh - 60px);padding-top:30px;padding-bottom:24px}
+.job-page:has(.is-complete){height:auto;min-height:calc(100svh - 60px)}
+.job-page:has(.is-complete) .activity-scroll{overflow:visible;max-height:none}
+.job-question{box-shadow:none}
+.job-question .job-anchor{font-size:11px}
+.activity-panel{margin-top:26px}
+.activity-preview,.preview-explanation,.job-replay{color:#6e7f98;font-size:12px}
+.activity-detail,.activity-source{color:#6f8098}
+.preparation>summary{font-size:13px;min-height:44px;color:#60758f}
+#preparation-status{font-size:12px;color:#708199}
+.agent-workspace{background:#f7f7f9;border-color:#e2e3e9;border-radius:12px}
+.agent-transcript{color:#5e6270;font-size:12px;line-height:1.8}
+.transcript-call{color:#727583}
+.transcript-result{font-size:12px;color:#747987}
+.agent-workspace .agent-state-label{font-size:12px;color:#747a89}
+.activity-complete-line{min-height:42px;font-size:13px;color:#6f819b}
+.job-outcome .account-example-note{font-size:12px;color:#73839c;line-height:1.7}
+.example-tag{font-size:11px;color:#6e809b}
+.account-result{padding:23px;border-color:#e1e8f2;border-radius:12px}
+.account-result h4{margin-bottom:12px}
+.job-outcome .account-result-closing{color:var(--reading);line-height:1.85}
+.account-facts{color:#71819a;font-size:12px;gap:18px}
+.account-parts{align-items:center;flex-wrap:wrap;column-gap:14px;row-gap:0}
+.account-parts button{font-size:12px;color:#5b789f}
+.account-paragraph-status{font-size:11px;color:#718399;margin-top:0}
+
+/* Modals share the same reading hierarchy and work on narrow screens. */
+dialog{background:#fff;border-color:#dfe6f0;border-radius:16px;box-shadow:0 24px 80px #23375126;max-height:calc(100svh - 40px)}
+dialog::backdrop{background:#23334c36;backdrop-filter:blur(3px)}
+.dialog-head{padding:16px 24px;gap:20px;background:#fff}
+.dialog-head h2{font-size:18px;font-weight:500;line-height:1.5;overflow-wrap:anywhere}
+.dialog-body{padding:24px}
+.dialog-body p{line-height:1.8;color:#64768f}
+.dialog-body h3{margin-top:22px}
+.close{border-radius:50%;flex-shrink:0;color:#74859c}
+.close:hover{background:#f1f5fa}
+.auth-choice{min-height:48px;font-size:13px;border-color:#e0e7f1;font-weight:450;margin-bottom:10px;justify-content:flex-start}
+.auth-choice:hover{background:#f8faff;border-color:#bfd0e9}
+.auth-divider{margin:17px 0;color:#71829a}
+.auth-session-note{font-size:12px;color:#6c7c93;margin:14px 0}
+.auth-preview-note{font-size:11px;color:#7a899d;border-top:1px solid #edf1f6;padding-top:16px;margin:18px 0 0}
+#auth-context{font-size:12px;padding:10px 12px;margin:16px 0 0}
+pre{background:#f5f7fb;color:#526780;font-size:12px;line-height:1.75;border-radius:8px}
+.toast{background:#30435e;border-radius:10px;padding:12px 17px;font-size:12px;line-height:1.6;box-shadow:0 5px 20px #253b571a}
+
+/* The workspace keeps the same reading density as its accounts. */
+.workspace-dashboard{padding-top:8px}
+.workspace-heading>p{color:#6f8098;font-size:13px}
+.workspace-continuity{margin-bottom:24px;padding:16px 18px;background:#f7f9fc}
+.workspace-continuity strong{font-size:13px;color:#5e7390}
+.workspace-continuity p{font-size:12px;color:#70829a;max-width:62ch}
+.workspace-reading-switch{margin-bottom:0}
+.workspace-reading-switch button span,.workspace-item-meta{color:#70829a;font-size:12px}
+.workspace-item-title{font-size:15px;line-height:1.75;color:#405571}
+.workspace-account-conclusion{color:#62758e;font-size:13px;line-height:1.85}
+.workspace-empty p{color:#6d7f98}
+
+/* The separate source study uses the same scale and restrained surfaces. */
+.provenance-shell{max-width:1120px;padding-top:20px}
+.provenance-shell .account-head h1{font-size:28px;line-height:1.35;letter-spacing:-.5px}
+.provenance-shell .account-head{margin-bottom:20px}
+.provenance-shell .paper{border:0;border-left:1px solid var(--line);border-radius:0;padding:0 0 0 32px;background:none;min-width:0}
+.provenance-shell .prov-content h2{font-size:23px;line-height:1.45;overflow-wrap:anywhere}
+.provenance-shell .provenance{grid-template-columns:240px minmax(0,1fr);gap:28px}
+.provenance-shell .prov-step{border-radius:0 7px 7px 0;font-size:13px;color:#5f7491}
+.provenance-shell .prov-step.active{color:#3f6caa}
+.provenance-shell .prov-step small{font-size:11px;line-height:1.7}
+.provenance-shell .eyebrow{font-size:12px;font-weight:450;text-transform:none;letter-spacing:0;color:#71839a}
+.provenance-shell .metricline{font-size:12px;line-height:1.8;gap:10px 18px}
+.provenance-shell .file-list button{font-size:13px;line-height:1.7}
+.provenance-shell .file-list small{font-size:11px}
+.provenance-shell .file-list button>span{min-width:0;overflow-wrap:anywhere}
+.provenance-shell .inspector-link{border-color:#e0e7f0;border-radius:9px;font-size:13px}
+.provenance-shell .idline{font-size:11px;color:#71829a}
+.provenance-shell .caption{font-size:12px;line-height:1.7}
+.notes-grid h2{font-size:19px;line-height:1.5}
+.notes-grid p{font-size:13px;line-height:1.85;color:#64758e}
+
+@media(max-width:740px){
+  .workspace-nav{padding-inline:20px}
+  .account-study{padding:12px 20px 48px}
+  .account-topbar{margin-bottom:24px;align-items:flex-start;gap:18px}
+  .account-topbar>a:last-child,.account-topbar>button:last-child{text-align:right;justify-content:flex-end}
+  .account-gap{margin:0 0 24px}
+  .account-gap h1,.claim-page h1{font-size:19px;line-height:1.6}
+  .account-reading-switch{gap:22px}
+  .account-reading-switch button{font-size:12px;min-height:44px}
+  .account-conclusions,.research-prose{font-size:14px;line-height:1.85}
+  .claim-option-text{font-size:13px}
+  .claim-inline-body{padding:15px 14px 18px 41px}
+  .claim-inline-assessment{font-size:13px}
+  .claim-detail-panel .keyval{grid-template-columns:85px minmax(0,1fr)}
+  .claim-reading-switch{gap:clamp(14px,4vw,22px);flex-wrap:nowrap}
+  .research-downloads{gap:6px 18px}
+  .question-page{padding:clamp(70px,13vh,110px) 20px 48px}
+  .question-page.has-context{padding-top:28px}
+  .question-input-row{padding-inline:20px}
+  .inline-context{padding-inline:20px}
+  .gap-search-row input,.gap-search-row .question-example{font-size:16px}
+  .question-input-row.gap-search-row{padding-right:62px;min-height:108px}
+  .selected-gap-question{font-size:16px;line-height:1.65}
+  .chip .label{max-width:calc(100vw - 144px)}
+  .anchor-guidance{font-size:12px}
+  .question-meta .caption{font-size:11px}
+  .trending{margin-inline:2px;margin-top:30px}
+  .trending>.row{gap:12px;flex-wrap:wrap}
+  .trend{font-size:13px;gap:12px}
+  .trend small{font-size:11px}
+  .job-page{height:auto;min-height:calc(100svh - 60px);padding-top:20px;padding-bottom:28px}
+  .activity-panel{min-height:0;margin:24px 0 0}
+  .activity-scroll{max-height:56svh;min-height:120px}
+  .job-anchor{font-size:11px}
+  .job-foot{align-items:flex-start;flex-wrap:wrap}
+  .agent-transcript{font-size:12px}
+  .transcript-result{font-size:11px}
+  .agent-workspace>summary{font-size:12px}
+  .account-result{padding:18px}
+  .account-result-actions{align-items:flex-start;row-gap:2px}
+  .account-parts{column-gap:10px}
+  .workspace-dashboard{padding-top:4px}
+  .workspace-continuity{padding:15px 16px;gap:7px}
+  .workspace-gap-row,.workspace-account-row{padding-block:22px}
+  .workspace-item-meta{font-size:11px;column-gap:12px}
+  .workspace-account-conclusion{font-size:13px}
+  dialog{width:calc(100vw - 28px);max-height:calc(100svh - 28px)}
+  .dialog-head{padding:15px 20px}
+  .dialog-body{padding:20px}
+  .dialog-head h2{font-size:17px}
+  pre{font-size:11px;padding:14px}
+  .provenance-shell{padding-inline:20px}
+  .provenance-shell .account-head h1{font-size:23px}
+  .provenance-shell .provenance{grid-template-columns:minmax(0,1fr);gap:24px}
+  .provenance-shell .paper{padding:24px 0 0;border-left:0;border-top:1px solid var(--line)}
+  .provenance-shell .prov-content h2{font-size:20px}
+  .provenance-shell .prov-step{min-height:40px;padding:9px 10px;font-size:12px;border-radius:6px 6px 0 0}
+  .provenance-shell .prov-nav select{max-width:100%;width:100%}
+}
+@media(prefers-reduced-motion:reduce){.context-disclosures>details>summary::after{transition:none}}
+@media(max-width:360px){.claim-reading-switch{gap:12px}.claim-reading-switch button{font-size:11px}}

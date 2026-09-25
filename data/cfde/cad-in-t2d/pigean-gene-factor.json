@@ -1,0 +1,137 @@
+{
+  "url": "https://cfde-dev.hugeampkpnbi.org/api/bio/query/pigean-gene-factor?q=CADinT2D%2Ccfde-inc-v2%2CFactor1&limit=8",
+  "method": "GET",
+  "retrieved_at": "2026-09-25T13:26:30.684913+00:00",
+  "status": 200,
+  "content_type": "application/json",
+  "body_sha256": "3fdf0f2ae3f782824ec7f96687c4a988a88a6ffb0a106b52f4e20464cdf51e30",
+  "response": {
+    "profile": {
+      "fetch": 0.4385114439937752,
+      "query": 0.05519808499957435
+    },
+    "index": "pigean-gene-factor",
+    "q": [
+      "CADinT2D",
+      "cfde-inc-v2",
+      "Factor1"
+    ],
+    "count": 8,
+    "restricted": 0,
+    "progress": {
+      "bytes_read": 2945,
+      "bytes_total": 6295,
+      "filtered": 0
+    },
+    "page": 1,
+    "limit": 8,
+    "data": [
+      {
+        "combined": 3.86,
+        "factor": "Factor1",
+        "factor_value": 0.5042,
+        "gene": "SHH",
+        "gene_set_size": "cfde-inc-v2",
+        "label": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+        "label_factor": "Factor1",
+        "log_bf": 2.14,
+        "phenotype": "CADinT2D",
+        "prior": 1.72,
+        "trait_group": "portal"
+      },
+      {
+        "combined": 2.42,
+        "factor": "Factor1",
+        "factor_value": 0.3813,
+        "gene": "TCF7L2",
+        "gene_set_size": "cfde-inc-v2",
+        "label": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+        "label_factor": "Factor1",
+        "log_bf": 2.33,
+        "phenotype": "CADinT2D",
+        "prior": 0.0873,
+        "trait_group": "portal"
+      },
+      {
+        "combined": 2.07,
+        "factor": "Factor1",
+        "factor_value": 0.3377,
+        "gene": "SIX2",
+        "gene_set_size": "cfde-inc-v2",
+        "label": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+        "label_factor": "Factor1",
+        "log_bf": 2.06,
+        "phenotype": "CADinT2D",
+        "prior": 0.0101,
+        "trait_group": "portal"
+      },
+      {
+        "combined": 1.98,
+        "factor": "Factor1",
+        "factor_value": 0.3245,
+        "gene": "GLI3",
+        "gene_set_size": "cfde-inc-v2",
+        "label": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+        "label_factor": "Factor1",
+        "log_bf": 0.474,
+        "phenotype": "CADinT2D",
+        "prior": 1.51,
+        "trait_group": "portal"
+      },
+      {
+        "combined": 1.73,
+        "factor": "Factor1",
+        "factor_value": 0.2899,
+        "gene": "FGF13",
+        "gene_set_size": "cfde-inc-v2",
+        "label": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+        "label_factor": "Factor1",
+        "log_bf": 1.77,
+        "phenotype": "CADinT2D",
+        "prior": -0.0446,
+        "trait_group": "portal"
+      },
+      {
+        "combined": 1.66,
+        "factor": "Factor1",
+        "factor_value": 0.2801,
+        "gene": "EYA2",
+        "gene_set_size": "cfde-inc-v2",
+        "label": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+        "label_factor": "Factor1",
+        "log_bf": 1.68,
+        "phenotype": "CADinT2D",
+        "prior": -0.0237,
+        "trait_group": "portal"
+      },
+      {
+        "combined": 1.65,
+        "factor": "Factor1",
+        "factor_value": 0.2787,
+        "gene": "CTNNB1",
+        "gene_set_size": "cfde-inc-v2",
+        "label": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+        "label_factor": "Factor1",
+        "log_bf": 0.173,
+        "phenotype": "CADinT2D",
+        "prior": 1.48,
+        "trait_group": "portal"
+      },
+      {
+        "combined": 1.65,
+        "factor": "Factor1",
+        "factor_value": 0.2787,
+        "gene": "WNT4",
+        "gene_set_size": "cfde-inc-v2",
+        "label": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+        "label_factor": "Factor1",
+        "log_bf": 1.62,
+        "phenotype": "CADinT2D",
+        "prior": 0.033,
+        "trait_group": "portal"
+      }
+    ],
+    "continuation": null,
+    "nonce": "rGzm4WeKYfhq7e8JNChQ7V_Hp7ludYB7cisdJXA7WzI"
+  }
+}

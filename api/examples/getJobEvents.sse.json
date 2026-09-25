@@ -1,0 +1,31 @@
+{
+  "operation_id": "getJobEvents",
+  "case": "sse",
+  "method": "GET",
+  "path_template": "/v1/jobs/{job_id}/events",
+  "request": {
+    "url": "https://api.reveal.example.org/v1/jobs/44444444-4444-4444-8444-444444444444/events?after=0&limit=100",
+    "path": {
+      "job_id": "44444444-4444-4444-8444-444444444444"
+    },
+    "query": {
+      "after": "0",
+      "limit": 100
+    },
+    "headers": {
+      "Last-Event-ID": "0",
+      "Authorization": "Bearer <trusted-gateway-assertion>",
+      "Accept": "text/event-stream"
+    },
+    "body": null
+  },
+  "responses": {
+    "200": {
+      "content_type": "text/event-stream",
+      "examples": {
+        "sse": "id: 4\nevent: result\ndata: {\"detail\":null,\"event_type\":\"result\",\"id\":\"4\",\"job_id\":\"44444444-4444-4444-8444-444444444444\",\"message\":\"Illustrative saved account is available.\",\"occurred_at\":\"2026-09-24T16:01:00Z\",\"result\":{\"account_ids\":[\"dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd\"],\"enrichment\":[{\"detail\":\"Contract fixture; no MCP agent run was performed.\",\"graph\":\"biomarkerkg\",\"source_claim_ids\":[],\"status\":\"skipped\"},{\"detail\":\"Contract fixture; no MCP agent run was performed.\",\"graph\":\"prokn\",\"source_claim_ids\":[],\"status\":\"skipped\"}],\"evidence_package_sha256\":\"9a55d126679291a95fa3d35f544915610134075eaf110f62f77ec8ee870b6ae2\",\"kind\":\"analysis\",\"paragraph_job_ids\":[\"55555555-5555-4555-8555-555555555555\"],\"request_id\":\"33333333-3333-4333-8333-333333333333\"},\"stage\":\"complete\",\"status\":\"succeeded\"}\n\n"
+      }
+    }
+  },
+  "curl": "curl -X GET 'https://api.reveal.example.org/v1/jobs/44444444-4444-4444-8444-444444444444/events?after=0&limit=100' -H 'Last-Event-ID: 0' -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Accept: text/event-stream'"
+}

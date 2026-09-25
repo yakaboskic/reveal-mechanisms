@@ -1,0 +1,890 @@
+[
+  {
+    "id": "dismech:disorders/Type_2_Diabetes_Mellitus#/pathophysiology/0",
+    "document_id": "dismech:disorders/Type_2_Diabetes_Mellitus",
+    "document_name": "Type 2 Diabetes Mellitus",
+    "source_kind": "disorders",
+    "source_file": "kb/disorders/Type_2_Diabetes_Mellitus.yaml",
+    "json_pointer": "/pathophysiology/0",
+    "name": "White Adipose Tissue Inflammation",
+    "description": "With expanding adiposity, bone-marrow-derived macrophages accumulate in white adipose tissue, shift toward classical (M1) proinflammatory activation, and surround damaged adipocytes as crown-like structures. The resulting local and systemic tumor necrosis factor alpha, together with other proinflammatory cytokines, impairs adipocyte insulin signalling and releases lipolysis from insulin restraint, so non-esterified fatty acids and cytokines are exported to liver and muscle. This node is the adipose-tissue origin of the insulin resistance the entry otherwise begins with: the Insulin Resistance node names adipose as a resistant tissue but does not say what makes it resistant. The causal direction is anchored by an intervention rather than an association: neutralizing tumor necrosis factor alpha in obese rats restores insulin-stimulated peripheral glucose uptake.\n",
+    "conforms_to": null,
+    "raw": {
+      "name": "White Adipose Tissue Inflammation",
+      "biological_scale": "TISSUE",
+      "description": "With expanding adiposity, bone-marrow-derived macrophages accumulate in white adipose tissue, shift toward classical (M1) proinflammatory activation, and surround damaged adipocytes as crown-like structures. The resulting local and systemic tumor necrosis factor alpha, together with other proinflammatory cytokines, impairs adipocyte insulin signalling and releases lipolysis from insulin restraint, so non-esterified fatty acids and cytokines are exported to liver and muscle. This node is the adipose-tissue origin of the insulin resistance the entry otherwise begins with: the Insulin Resistance node names adipose as a resistant tissue but does not say what makes it resistant. The causal direction is anchored by an intervention rather than an association: neutralizing tumor necrosis factor alpha in obese rats restores insulin-stimulated peripheral glucose uptake.\n",
+      "cell_types": [
+        {
+          "preferred_term": "White Adipocyte",
+          "term": {
+            "id": "CL:0000448",
+            "label": "white adipocyte"
+          }
+        },
+        {
+          "preferred_term": "Proinflammatory (M1) Adipose Tissue Macrophage",
+          "term": {
+            "id": "CL:0000863",
+            "label": "M1 macrophage"
+          }
+        }
+      ],
+      "genes": [
+        {
+          "preferred_term": "TNF",
+          "term": {
+            "id": "hgnc:11892",
+            "label": "TNF"
+          }
+        }
+      ],
+      "biological_processes": [
+        {
+          "preferred_term": "Adipose Tissue Inflammation",
+          "term": {
+            "id": "GO:0006954",
+            "label": "inflammatory response"
+          },
+          "modifier": "INCREASED"
+        },
+        {
+          "preferred_term": "Tumor Necrosis Factor Production",
+          "term": {
+            "id": "GO:0032640",
+            "label": "tumor necrosis factor production"
+          },
+          "modifier": "INCREASED"
+        },
+        {
+          "preferred_term": "Dysregulated Adipocyte Lipolysis",
+          "term": {
+            "id": "GO:0019433",
+            "label": "triglyceride catabolic process"
+          },
+          "modifier": "INCREASED"
+        }
+      ],
+      "locations": [
+        {
+          "preferred_term": "White Adipose Tissue",
+          "term": {
+            "id": "UBERON:0001347",
+            "label": "white adipose tissue"
+          }
+        }
+      ],
+      "evidence": [
+        {
+          "reference": "PMID:14679176",
+          "reference_title": "Obesity is associated with macrophage accumulation in adipose tissue.",
+          "supports": "SUPPORT",
+          "evidence_source": "MODEL_ORGANISM",
+          "snippet": "the percentage of cells expressing the macrophage marker F4/80 (F4/80+) was significantly and positively correlated with both adipocyte size and body mass",
+          "explanation": "Establishes the macrophage accumulation that defines this node, and scales it with adiposity rather than treating it as present or absent."
+        },
+        {
+          "reference": "PMID:14679176",
+          "reference_title": "Obesity is associated with macrophage accumulation in adipose tissue.",
+          "supports": "SUPPORT",
+          "evidence_source": "HUMAN_CLINICAL",
+          "snippet": "Similar relationships were found in human subcutaneous adipose tissue stained for the macrophage antigen CD68.",
+          "explanation": "The human arm of the same study, cited separately so the node does not rest on rodent adipose tissue alone."
+        },
+        {
+          "reference": "PMID:7678183",
+          "reference_title": "Adipose expression of tumor necrosis factor-alpha: direct role in obesity-linked insulin resistance.",
+          "supports": "SUPPORT",
+          "evidence_source": "MODEL_ORGANISM",
+          "snippet": "An induction of TNF-alpha messenger RNA expression was observed in adipose tissue from four different rodent models of obesity and diabetes.",
+          "explanation": "Supplies the cytokine content of the node across four independent obesity and diabetes models, which is what makes it a general feature rather than a property of one model."
+        },
+        {
+          "reference": "PMID:21633179",
+          "reference_title": "Inflammatory links between obesity and metabolic disease.",
+          "supports": "SUPPORT",
+          "evidence_source": "OTHER",
+          "snippet": "Adipose tissue insulin resistance and dysfunctional lipid storage in adipocytes are sentinel events in the progression toward metabolic dysregulation with obesity.",
+          "explanation": "A review placing adipose insulin resistance and disordered lipid storage early in the sequence, which is why this node is modeled upstream of the systemic Insulin Resistance node rather than as one of its consequences."
+        }
+      ],
+      "downstream": [
+        {
+          "target": "Insulin Resistance",
+          "description": "Macrophage-derived tumor necrosis factor alpha and the accompanying cytokines impair insulin action in adipose tissue and, through cytokine and fatty acid export, in muscle and liver. The edge is drawn causally because the cytokine can be removed and the insulin response recovers.",
+          "causal_link_type": "DIRECT",
+          "evidence": [
+            {
+              "reference": "PMID:7678183",
+              "reference_title": "Adipose expression of tumor necrosis factor-alpha: direct role in obesity-linked insulin resistance.",
+              "supports": "SUPPORT",
+              "evidence_source": "MODEL_ORGANISM",
+              "snippet": "Neutralization of TNF-alpha in obese fa/fa rats caused a significant increase in the peripheral uptake of glucose in response to insulin.",
+              "explanation": "An intervention, not an association: removing the cytokine restores insulin-stimulated glucose uptake, which is the direction this edge asserts."
+            },
+            {
+              "reference": "PMID:21633179",
+              "reference_title": "Inflammatory links between obesity and metabolic disease.",
+              "supports": "SUPPORT",
+              "evidence_source": "OTHER",
+              "snippet": "Over time, ectopic lipid accumulation in muscle, liver, and blood vessels activates tissue leukocytes, contributes to organ-specific disease, and exacerbates systemic insulin resistance.",
+              "explanation": "Names the route by which a local adipose lesion becomes systemic insulin resistance, which is the step this edge crosses."
+            }
+          ]
+        },
+        {
+          "target": "Insulin-Stimulated Adipocyte Fatty Acid Uptake via FATP1",
+          "description": "Tumor necrosis factor alpha suppresses both basal and insulin-stimulated long-chain fatty acid uptake in adipocytes and lowers FATP1 and FATP4 protein levels, so the inflamed adipocyte loses the fatty acid arm of the insulin response as well as the glucose arm.",
+          "causal_link_type": "DIRECT",
+          "evidence": [
+            {
+              "reference": "PMID:11970897",
+              "reference_title": "Insulin causes fatty acid transport protein translocation and enhanced fatty acid uptake in adipocytes.",
+              "supports": "SUPPORT",
+              "evidence_source": "IN_VITRO",
+              "snippet": "In contrast, treatment with TNF-alpha inhibited basal and insulin-induced LCFA uptake and reduced FATP1 and -4 levels.",
+              "explanation": "The direct measurement behind this edge: the cytokine this node produces suppresses the transport step the target node represents, at both the activity and the protein level."
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "dismech:disorders/Type_2_Diabetes_Mellitus#/pathophysiology/1",
+    "document_id": "dismech:disorders/Type_2_Diabetes_Mellitus",
+    "document_name": "Type 2 Diabetes Mellitus",
+    "source_kind": "disorders",
+    "source_file": "kb/disorders/Type_2_Diabetes_Mellitus.yaml",
+    "json_pointer": "/pathophysiology/1",
+    "name": "Impaired GLUT4-Mediated Glucose Uptake",
+    "description": "Dysregulation of GLUT4 trafficking in adipocytes and skeletal muscle reduces insulin-stimulated glucose uptake. GULP1 facilitates GLUT4 translocation to the plasma membrane by counteracting ACAP1 inhibition of ARF6 activity. Reduced GULP1 activity therefore decreases peripheral glucose disposal and contributes to systemic insulin resistance.\n",
+    "conforms_to": null,
+    "raw": {
+      "name": "Impaired GLUT4-Mediated Glucose Uptake",
+      "description": "Dysregulation of GLUT4 trafficking in adipocytes and skeletal muscle reduces insulin-stimulated glucose uptake. GULP1 facilitates GLUT4 translocation to the plasma membrane by counteracting ACAP1 inhibition of ARF6 activity. Reduced GULP1 activity therefore decreases peripheral glucose disposal and contributes to systemic insulin resistance.\n",
+      "genes": [
+        {
+          "preferred_term": "GULP1",
+          "term": {
+            "id": "hgnc:18649",
+            "label": "GULP1"
+          }
+        },
+        {
+          "preferred_term": "ACAP1",
+          "term": {
+            "id": "hgnc:16467",
+            "label": "ACAP1"
+          }
+        },
+        {
+          "preferred_term": "ARF6",
+          "term": {
+            "id": "hgnc:659",
+            "label": "ARF6"
+          }
+        }
+      ],
+      "cell_types": [
+        {
+          "preferred_term": "Adipocyte",
+          "term": {
+            "id": "CL:0000136",
+            "label": "adipocyte"
+          }
+        },
+        {
+          "preferred_term": "Skeletal Muscle Cell",
+          "term": {
+            "id": "CL:0000188",
+            "label": "cell of skeletal muscle"
+          }
+        }
+      ],
+      "biological_processes": [
+        {
+          "preferred_term": "Insulin Receptor Signaling",
+          "term": {
+            "id": "GO:0008286",
+            "label": "insulin receptor signaling pathway"
+          }
+        },
+        {
+          "preferred_term": "Protein Transport",
+          "term": {
+            "id": "GO:0015031",
+            "label": "protein transport"
+          }
+        }
+      ],
+      "evidence": [
+        {
+          "reference": "PMID:42436120",
+          "reference_title": "GULP1 enhances GLUT4 translocation by counteracting ACAP1-ARF6 inhibition.",
+          "supports": "SUPPORT",
+          "evidence_source": "MODEL_ORGANISM",
+          "snippet": "GULP1 significantly enhanced glucose uptake in adipocytes and muscle cells by promoting GLUT4 translocation to the plasma membrane. In obese mice, GULP1 overexpression improved insulin sensitivity and glucose tolerance.",
+          "explanation": "Demonstrates GULP1-dependent GLUT4 trafficking and improved insulin sensitivity in metabolic tissues and obese mice."
+        },
+        {
+          "reference": "PMID:42436120",
+          "reference_title": "GULP1 enhances GLUT4 translocation by counteracting ACAP1-ARF6 inhibition.",
+          "supports": "SUPPORT",
+          "evidence_source": "MODEL_ORGANISM",
+          "snippet": "Mechanistically, GULP1 counteracted ACAP1's inhibition of ARF6 activity, thereby facilitating insulin-stimulated GLUT4 trafficking.",
+          "explanation": "Establishes the GULP1-ACAP1-ARF6 regulatory mechanism."
+        }
+      ],
+      "downstream": [
+        {
+          "target": "Insulin Resistance",
+          "description": "Impaired GLUT4-mediated uptake reduces peripheral glucose disposal and contributes to systemic insulin resistance.",
+          "causal_link_type": "DIRECT",
+          "evidence": [
+            {
+              "reference": "PMID:42436120",
+              "reference_title": "GULP1 enhances GLUT4 translocation by counteracting ACAP1-ARF6 inhibition.",
+              "supports": "SUPPORT",
+              "evidence_source": "MODEL_ORGANISM",
+              "snippet": "GULP1 can bind to ACAP1 and ARF6, and alleviate the inhibitory effect of ACAP1 on ARF6 activity, thereby enhancing insulin-mediated glucose uptake and improving insulin sensitivity in obese mice.",
+              "explanation": "Directly links the trafficking axis to insulin-mediated glucose uptake and insulin sensitivity in the obesity model."
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "dismech:disorders/Type_2_Diabetes_Mellitus#/pathophysiology/2",
+    "document_id": "dismech:disorders/Type_2_Diabetes_Mellitus",
+    "document_name": "Type 2 Diabetes Mellitus",
+    "source_kind": "disorders",
+    "source_file": "kb/disorders/Type_2_Diabetes_Mellitus.yaml",
+    "json_pointer": "/pathophysiology/2",
+    "name": "Insulin-Stimulated Adipocyte Fatty Acid Uptake via FATP1",
+    "description": "Insulin acts on the adipocyte through two transporter arms, not one. Alongside GLUT4, insulin drives translocation of fatty acid transport proteins — FATP1 (SLC27A1) and FATP4 (SLC27A4) — from an intracellular perinuclear compartment to the plasma membrane within minutes, and long-chain fatty acid uptake rises in parallel. In FATP1-null adipocytes the insulin-stimulated component of fatty acid uptake is entirely absent while basal uptake is unaffected, so FATP1 specifically carries the hormone-responsive arm. Tumor necrosis factor alpha from inflamed adipose tissue suppresses this arm and lowers FATP1 and FATP4 protein. This node is deliberately terminal. Whether losing the arm drives systemic insulin resistance is genuinely unsettled — FATP1-null mice, which lack it from birth, are completely protected from diet-induced insulin desensitization — so no edge is drawn into Insulin Resistance and the tension is carried by the kgap_t2d_fatp1_insulin_stimulated_fatty_acid_uptake discussion instead. The node is curated because it is a real, measurable arm of adipocyte insulin action that the entry otherwise omits, and because it is one of the three functional assays the human adipose microphysiological systems use to score insulin sensitivity.\n",
+    "conforms_to": null,
+    "raw": {
+      "name": "Insulin-Stimulated Adipocyte Fatty Acid Uptake via FATP1",
+      "biological_scale": "MOLECULAR",
+      "description": "Insulin acts on the adipocyte through two transporter arms, not one. Alongside GLUT4, insulin drives translocation of fatty acid transport proteins — FATP1 (SLC27A1) and FATP4 (SLC27A4) — from an intracellular perinuclear compartment to the plasma membrane within minutes, and long-chain fatty acid uptake rises in parallel. In FATP1-null adipocytes the insulin-stimulated component of fatty acid uptake is entirely absent while basal uptake is unaffected, so FATP1 specifically carries the hormone-responsive arm. Tumor necrosis factor alpha from inflamed adipose tissue suppresses this arm and lowers FATP1 and FATP4 protein. This node is deliberately terminal. Whether losing the arm drives systemic insulin resistance is genuinely unsettled — FATP1-null mice, which lack it from birth, are completely protected from diet-induced insulin desensitization — so no edge is drawn into Insulin Resistance and the tension is carried by the kgap_t2d_fatp1_insulin_stimulated_fatty_acid_uptake discussion instead. The node is curated because it is a real, measurable arm of adipocyte insulin action that the entry otherwise omits, and because it is one of the three functional assays the human adipose microphysiological systems use to score insulin sensitivity.\n",
+      "genes": [
+        {
+          "preferred_term": "SLC27A1",
+          "term": {
+            "id": "hgnc:10995",
+            "label": "SLC27A1"
+          }
+        },
+        {
+          "preferred_term": "SLC27A4",
+          "term": {
+            "id": "hgnc:10998",
+            "label": "SLC27A4"
+          }
+        }
+      ],
+      "cell_types": [
+        {
+          "preferred_term": "White Adipocyte",
+          "term": {
+            "id": "CL:0000448",
+            "label": "white adipocyte"
+          }
+        },
+        {
+          "preferred_term": "Skeletal Muscle Cell",
+          "term": {
+            "id": "CL:0000188",
+            "label": "cell of skeletal muscle"
+          }
+        }
+      ],
+      "biological_processes": [
+        {
+          "preferred_term": "Insulin-Stimulated Long-Chain Fatty Acid Import",
+          "term": {
+            "id": "GO:0044539",
+            "label": "long-chain fatty acid import into cell"
+          },
+          "modifier": "DECREASED"
+        },
+        {
+          "preferred_term": "Insulin Receptor Signaling",
+          "term": {
+            "id": "GO:0008286",
+            "label": "insulin receptor signaling pathway"
+          }
+        }
+      ],
+      "molecular_functions": [
+        {
+          "preferred_term": "FATP1/FATP4 long-chain fatty acid transport activity",
+          "term": {
+            "id": "GO:0005324",
+            "label": "long-chain fatty acid transmembrane transporter activity"
+          }
+        }
+      ],
+      "locations": [
+        {
+          "preferred_term": "White Adipose Tissue",
+          "term": {
+            "id": "UBERON:0001347",
+            "label": "white adipose tissue"
+          }
+        }
+      ],
+      "evidence": [
+        {
+          "reference": "PMID:11970897",
+          "reference_title": "Insulin causes fatty acid transport protein translocation and enhanced fatty acid uptake in adipocytes.",
+          "supports": "SUPPORT",
+          "evidence_source": "IN_VITRO",
+          "snippet": "in adipocytes, insulin induces plasma membrane translocation of FATPs from an intracellular perinuclear compartment to the plasma membrane.",
+          "explanation": "Establishes the regulated trafficking step this node represents, and its parallel to the GLUT4 translocation the entry already models."
+        },
+        {
+          "reference": "PMID:16611988",
+          "reference_title": "FATP1 is an insulin-sensitive fatty acid transporter involved in diet-induced obesity.",
+          "supports": "SUPPORT",
+          "evidence_source": "MODEL_ORGANISM",
+          "snippet": "insulin-stimulated fatty acid uptake is completely abolished in FATP1-null adipocytes and greatly reduced in skeletal muscle of FATP1-knockout animals while basal LCFA uptake by both tissues was unaffected.",
+          "explanation": "Assigns the hormone-responsive component specifically to FATP1 — basal uptake is untouched — which is what makes this a distinct node rather than a restatement of fatty acid handling in general."
+        }
+      ]
+    }
+  },
+  {
+    "id": "dismech:disorders/Type_2_Diabetes_Mellitus#/pathophysiology/3",
+    "document_id": "dismech:disorders/Type_2_Diabetes_Mellitus",
+    "document_name": "Type 2 Diabetes Mellitus",
+    "source_kind": "disorders",
+    "source_file": "kb/disorders/Type_2_Diabetes_Mellitus.yaml",
+    "json_pointer": "/pathophysiology/3",
+    "name": "Insulin Resistance",
+    "description": "Peripheral tissues (muscle, liver, adipose) become resistant to insulin action, requiring higher insulin levels to maintain glucose homeostasis. This leads to compensatory hyperinsulinemia and eventually beta cell exhaustion.\n",
+    "conforms_to": null,
+    "raw": {
+      "name": "Insulin Resistance",
+      "description": "Peripheral tissues (muscle, liver, adipose) become resistant to insulin action, requiring higher insulin levels to maintain glucose homeostasis. This leads to compensatory hyperinsulinemia and eventually beta cell exhaustion.\n",
+      "genes": [
+        {
+          "preferred_term": "PPARG",
+          "term": {
+            "id": "hgnc:9236",
+            "label": "PPARG"
+          }
+        }
+      ],
+      "cell_types": [
+        {
+          "preferred_term": "Hepatocyte",
+          "term": {
+            "id": "CL:0000182",
+            "label": "hepatocyte"
+          }
+        },
+        {
+          "preferred_term": "Skeletal Muscle Cell",
+          "term": {
+            "id": "CL:0000188",
+            "label": "cell of skeletal muscle"
+          }
+        },
+        {
+          "preferred_term": "Adipocyte",
+          "term": {
+            "id": "CL:0000136",
+            "label": "adipocyte"
+          }
+        }
+      ],
+      "biological_processes": [
+        {
+          "preferred_term": "Insulin Signaling",
+          "term": {
+            "id": "GO:0008286",
+            "label": "insulin receptor signaling pathway"
+          }
+        }
+      ],
+      "evidence": [
+        {
+          "reference": "PMID:12231074",
+          "reference_title": "Pathogenesis of skeletal muscle insulin resistance in type 2 diabetes mellitus.",
+          "supports": "SUPPORT",
+          "snippet": "Insulin resistance is caused by the decreased ability of peripheral target tissues (especially muscle) to respond properly to normal circulating concentrations of insulin.",
+          "explanation": "This establishes that skeletal muscle is a key site of insulin resistance in type 2 diabetes, with impaired response to normal insulin levels."
+        },
+        {
+          "reference": "PMID:12231074",
+          "reference_title": "Pathogenesis of skeletal muscle insulin resistance in type 2 diabetes mellitus.",
+          "supports": "SUPPORT",
+          "snippet": "These alterations in glucose transport activity are likely the result of dysregulation of intramyocellular fatty acid metabolism, whereby fatty acids cause insulin resistance by activation of a serine kinase cascade, leading to decreased insulin-stimulated insulin receptor substrate (IRS)-1 tyrosine phosphorylation and decreased IRS-1-associated phosphatidylinositol 3-kinase activity, a required step in insulin-stimulated glucose transport into muscle.",
+          "explanation": "This describes the molecular mechanism of insulin resistance involving fatty acid-induced serine kinase activation that impairs insulin receptor signaling through IRS-1 and PI3K."
+        },
+        {
+          "reference": "PMID:29939616",
+          "reference_title": "Insulin Resistance.",
+          "supports": "SUPPORT",
+          "snippet": "Insulin resistance impairs glucose disposal, resulting in a compensatory increase in beta-cell insulin production and hyperinsulinemia.",
+          "explanation": "This confirms that insulin resistance leads to compensatory hyperinsulinemia as beta cells attempt to overcome impaired glucose disposal in peripheral tissues."
+        },
+        {
+          "reference": "PMID:17463248",
+          "reference_title": "A genome-wide association study of type 2 diabetes in Finns detects multiple susceptibility variants.",
+          "supports": "SUPPORT",
+          "evidence_source": "HUMAN_CLINICAL",
+          "snippet": "confirm that variants near TCF7L2, SLC30A8, HHEX, FTO, PPARG, and KCNJ11 are associated with T2D risk",
+          "explanation": "This genome-wide association study confirms PPARG (the insulin-sensitizing nuclear receptor and thiazolidinedione drug target) as a genetic susceptibility locus for type 2 diabetes, tying it to insulin-resistance biology."
+        }
+      ],
+      "downstream": [
+        {
+          "target": "Beta Cell Dysfunction",
+          "description": "Sustained insulin resistance increases compensatory beta-cell insulin demand, contributing to eventual beta-cell failure.",
+          "causal_link_type": "INDIRECT_KNOWN_INTERMEDIATES",
+          "intermediate_mechanisms": [
+            "Compensatory hyperinsulinemia and beta-cell secretory stress"
+          ],
+          "evidence": [
+            {
+              "reference": "PMID:29939616",
+              "reference_title": "Insulin Resistance.",
+              "supports": "SUPPORT",
+              "evidence_source": "OTHER",
+              "snippet": "This vicious cycle continues until pancreatic beta-cell activity can no longer adequately meet the insulin demand created by insulin resistance, resulting in hyperglycemia.",
+              "explanation": "Directly supports progression from insulin-resistance-driven insulin demand to beta-cell failure."
+            }
+          ]
+        },
+        {
+          "target": "Hepatic Glucose Overproduction",
+          "description": "Hepatic insulin resistance reduces insulin-mediated suppression of liver glucose production.",
+          "causal_link_type": "DIRECT",
+          "evidence": [
+            {
+              "reference": "PMID:32872570",
+              "reference_title": "Pathophysiology of Type 2 Diabetes Mellitus.",
+              "supports": "SUPPORT",
+              "evidence_source": "OTHER",
+              "snippet": "IR contributes to increased glucose production in the liver and decreased glucose uptake both in the muscle, liver and adipose tissue.",
+              "explanation": "Supports insulin resistance as a cause of increased hepatic glucose production."
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "dismech:disorders/Type_2_Diabetes_Mellitus#/pathophysiology/4",
+    "document_id": "dismech:disorders/Type_2_Diabetes_Mellitus",
+    "document_name": "Type 2 Diabetes Mellitus",
+    "source_kind": "disorders",
+    "source_file": "kb/disorders/Type_2_Diabetes_Mellitus.yaml",
+    "json_pointer": "/pathophysiology/4",
+    "name": "Beta Cell Dysfunction",
+    "description": "Progressive loss of pancreatic beta cell function and mass leads to inadequate insulin secretion relative to insulin demand. Beta cell failure is the key determinant of disease progression.\n",
+    "conforms_to": null,
+    "raw": {
+      "name": "Beta Cell Dysfunction",
+      "description": "Progressive loss of pancreatic beta cell function and mass leads to inadequate insulin secretion relative to insulin demand. Beta cell failure is the key determinant of disease progression.\n",
+      "genes": [
+        {
+          "preferred_term": "KCNJ11",
+          "term": {
+            "id": "hgnc:6257",
+            "label": "KCNJ11"
+          }
+        },
+        {
+          "preferred_term": "SLC30A8",
+          "term": {
+            "id": "hgnc:20303",
+            "label": "SLC30A8"
+          }
+        }
+      ],
+      "cell_types": [
+        {
+          "preferred_term": "Pancreatic Beta Cell",
+          "term": {
+            "id": "CL:0000169",
+            "label": "type B pancreatic cell"
+          }
+        }
+      ],
+      "biological_processes": [
+        {
+          "preferred_term": "Insulin Secretion",
+          "term": {
+            "id": "GO:0030073",
+            "label": "insulin secretion"
+          }
+        }
+      ],
+      "evidence": [
+        {
+          "reference": "PMID:37035220",
+          "reference_title": "Pancreatic β-cell dysfunction in type 2 diabetes: Implications of inflammation and oxidative stress.",
+          "supports": "SUPPORT",
+          "snippet": "Insulin resistance and pancreatic β-cell dysfunction are major pathological mechanisms implicated in the development and progression of type 2 diabetes (T2D).",
+          "explanation": "This establishes beta cell dysfunction as a core pathological mechanism in type 2 diabetes development alongside insulin resistance."
+        },
+        {
+          "reference": "PMID:37035220",
+          "reference_title": "Pancreatic β-cell dysfunction in type 2 diabetes: Implications of inflammation and oxidative stress.",
+          "supports": "SUPPORT",
+          "snippet": "Predominant markers of inflammation such as C-reactive protein, tumor necrosis factor alpha, and interleukin-1β are consistently associated with β-cell failure in preclinical models and in people with T2D.",
+          "explanation": "This demonstrates that inflammatory markers are associated with beta cell failure, indicating inflammation contributes to beta cell dysfunction."
+        },
+        {
+          "reference": "PMID:37035220",
+          "reference_title": "Pancreatic β-cell dysfunction in type 2 diabetes: Implications of inflammation and oxidative stress.",
+          "supports": "SUPPORT",
+          "snippet": "Similarly, important markers of oxidative stress, such as increased reactive oxygen species and depleted intracellular antioxidants, are consistent with pancreatic β-cell damage in conditions of T2D.",
+          "explanation": "This confirms that oxidative stress, characterized by increased ROS and depleted antioxidants, contributes to pancreatic beta cell damage in type 2 diabetes."
+        },
+        {
+          "reference": "PMID:29939616",
+          "reference_title": "Insulin Resistance.",
+          "supports": "SUPPORT",
+          "snippet": "This vicious cycle continues until pancreatic beta-cell activity can no longer adequately meet the insulin demand created by insulin resistance, resulting in hyperglycemia.",
+          "explanation": "This describes the progression from compensatory beta cell hyperfunction to beta cell exhaustion and failure, leading to hyperglycemia."
+        },
+        {
+          "reference": "PMID:17463248",
+          "reference_title": "A genome-wide association study of type 2 diabetes in Finns detects multiple susceptibility variants.",
+          "supports": "SUPPORT",
+          "evidence_source": "HUMAN_CLINICAL",
+          "snippet": "confirm that variants near TCF7L2, SLC30A8, HHEX, FTO, PPARG, and KCNJ11 are associated with T2D risk",
+          "explanation": "This genome-wide association study confirms two beta-cell genes as type 2 diabetes susceptibility loci — KCNJ11 (Kir6.2 subunit of the beta-cell KATP channel governing insulin secretion) and SLC30A8 (the beta-cell zinc transporter involved in insulin granule storage)."
+        }
+      ],
+      "downstream": [
+        {
+          "target": "Hyperglycemia",
+          "description": "Insufficient beta-cell insulin secretion limits glucose control and drives hyperglycemia.",
+          "causal_link_type": "DIRECT",
+          "evidence": [
+            {
+              "reference": "PMID:32872570",
+              "reference_title": "Pathophysiology of Type 2 Diabetes Mellitus.",
+              "supports": "SUPPORT",
+              "evidence_source": "OTHER",
+              "snippet": "In the case of β-cell dysfunction, insulin secretion is reduced, limiting the body’s capacity to maintain physiological glucose levels.",
+              "explanation": "Supports beta-cell dysfunction as a direct cause of impaired glucose homeostasis."
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "dismech:disorders/Type_2_Diabetes_Mellitus#/pathophysiology/5",
+    "document_id": "dismech:disorders/Type_2_Diabetes_Mellitus",
+    "document_name": "Type 2 Diabetes Mellitus",
+    "source_kind": "disorders",
+    "source_file": "kb/disorders/Type_2_Diabetes_Mellitus.yaml",
+    "json_pointer": "/pathophysiology/5",
+    "name": "Hepatic Glucose Overproduction",
+    "description": "Impaired suppression of hepatic gluconeogenesis leads to elevated fasting glucose levels. The liver fails to respond appropriately to insulin signals.\n",
+    "conforms_to": null,
+    "raw": {
+      "name": "Hepatic Glucose Overproduction",
+      "description": "Impaired suppression of hepatic gluconeogenesis leads to elevated fasting glucose levels. The liver fails to respond appropriately to insulin signals.\n",
+      "cell_types": [
+        {
+          "preferred_term": "Hepatocyte",
+          "term": {
+            "id": "CL:0000182",
+            "label": "hepatocyte"
+          }
+        }
+      ],
+      "biological_processes": [
+        {
+          "preferred_term": "Gluconeogenesis",
+          "term": {
+            "id": "GO:0006094",
+            "label": "gluconeogenesis"
+          }
+        }
+      ],
+      "evidence": [
+        {
+          "reference": "PMID:30150719",
+          "reference_title": "Metformin reduces liver glucose production by inhibition of fructose-1-6-bisphosphatase.",
+          "supports": "SUPPORT",
+          "snippet": "Diabetes is characterized by impaired glucose homeostasis partly due to abnormally elevated hepatic glucose production (HGP).",
+          "explanation": "This establishes that elevated hepatic glucose production is a key feature of diabetes pathophysiology."
+        },
+        {
+          "reference": "PMID:30150719",
+          "reference_title": "Metformin reduces liver glucose production by inhibition of fructose-1-6-bisphosphatase.",
+          "supports": "SUPPORT",
+          "snippet": "Metformin exerts its antihyperglycemic action primarily through lowering hepatic glucose production (HGP).",
+          "explanation": "This confirms that hepatic glucose overproduction is central to diabetes hyperglycemia, as metformin's primary mechanism targets HGP suppression."
+        },
+        {
+          "reference": "PMID:30150719",
+          "reference_title": "Metformin reduces liver glucose production by inhibition of fructose-1-6-bisphosphatase.",
+          "supports": "SUPPORT",
+          "snippet": "FBP1 catalyzes the irreversible hydrolysis of fructose-1,6-bisphosphate (F-1,6-P2) to fructose-6-phosphate (F6P) and inorganic phosphate (Pi) in the presence of divalent cations. FBP1 is a key rate-controlling enzyme in the gluconeogenic pathway.",
+          "explanation": "This identifies fructose-1,6-bisphosphatase (FBP1) as a key rate-controlling enzyme in hepatic gluconeogenesis, the pathway responsible for glucose overproduction in diabetes."
+        }
+      ],
+      "downstream": [
+        {
+          "target": "Hyperglycemia",
+          "description": "Excess hepatic glucose production contributes directly to impaired glucose homeostasis.",
+          "causal_link_type": "DIRECT",
+          "evidence": [
+            {
+              "reference": "PMID:30150719",
+              "reference_title": "Metformin reduces liver glucose production by inhibition of fructose-1-6-bisphosphatase.",
+              "supports": "SUPPORT",
+              "evidence_source": "OTHER",
+              "snippet": "Diabetes is characterized by impaired glucose homeostasis partly due to abnormally elevated hepatic glucose production (HGP).",
+              "explanation": "Supports hepatic glucose overproduction as a contributor to diabetes-associated hyperglycemia."
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "dismech:disorders/Type_2_Diabetes_Mellitus#/pathophysiology/6",
+    "document_id": "dismech:disorders/Type_2_Diabetes_Mellitus",
+    "document_name": "Type 2 Diabetes Mellitus",
+    "source_kind": "disorders",
+    "source_file": "kb/disorders/Type_2_Diabetes_Mellitus.yaml",
+    "json_pointer": "/pathophysiology/6",
+    "name": "Mitochondrial Dysfunction and Oxidative Stress",
+    "description": "Early-onset mitochondrial dysfunction and pathological reactive oxygen species (ROS) generation occur across multiple metabolic tissues including pancreatic beta cells, skeletal muscle, and adipose tissue. Impaired mitophagy and mitochondrial dynamics contribute to disease progression. Extracellular vesicle-mediated inter-organ miscommunication propagates oxidative damage.\n",
+    "conforms_to": null,
+    "raw": {
+      "name": "Mitochondrial Dysfunction and Oxidative Stress",
+      "description": "Early-onset mitochondrial dysfunction and pathological reactive oxygen species (ROS) generation occur across multiple metabolic tissues including pancreatic beta cells, skeletal muscle, and adipose tissue. Impaired mitophagy and mitochondrial dynamics contribute to disease progression. Extracellular vesicle-mediated inter-organ miscommunication propagates oxidative damage.\n",
+      "cell_types": [
+        {
+          "preferred_term": "Pancreatic Beta Cell",
+          "term": {
+            "id": "CL:0000169",
+            "label": "type B pancreatic cell"
+          }
+        },
+        {
+          "preferred_term": "Skeletal Muscle Cell",
+          "term": {
+            "id": "CL:0000188",
+            "label": "cell of skeletal muscle"
+          }
+        }
+      ],
+      "biological_processes": [
+        {
+          "preferred_term": "Oxidative Stress Response",
+          "term": {
+            "id": "GO:0006979",
+            "label": "response to oxidative stress"
+          }
+        },
+        {
+          "preferred_term": "Mitophagy",
+          "term": {
+            "id": "GO:0000422",
+            "label": "autophagy of mitochondrion"
+          }
+        }
+      ],
+      "evidence": [
+        {
+          "reference": "PMID:38338783",
+          "reference_title": "Mitochondrial Dysfunction, Oxidative Stress, and Inter-Organ Miscommunications in T2D Progression.",
+          "supports": "SUPPORT",
+          "snippet": "New evidence suggests that T2D-lean individuals experience early β-cell dysfunction without significant IR. Regardless of the primary event (i.e., IR vs. β-cell dysfunction) that contributes to dysglycemia, significant early-onset oxidative damage and mitochondrial dysfunction in multiple metabolic tissues may be a driver of T2D onset and progression.",
+          "explanation": "This establishes that mitochondrial dysfunction and oxidative damage occur early and may drive T2D progression regardless of whether insulin resistance or beta cell dysfunction is the primary event."
+        },
+        {
+          "reference": "PMID:38338783",
+          "reference_title": "Mitochondrial Dysfunction, Oxidative Stress, and Inter-Organ Miscommunications in T2D Progression.",
+          "supports": "SUPPORT",
+          "snippet": "Physiological oxidative stress promotes inter-tissue communication, while pathological oxidative stress promotes inter-tissue mis-communication, and new evidence suggests that this is mediated via extracellular vesicles (EVs), including mitochondria containing EVs.",
+          "explanation": "This describes the novel mechanism of extracellular vesicle-mediated oxidative stress propagation between tissues in T2D pathogenesis."
+        },
+        {
+          "reference": "PMID:37035220",
+          "reference_title": "Pancreatic β-cell dysfunction in type 2 diabetes: Implications of inflammation and oxidative stress.",
+          "supports": "SUPPORT",
+          "snippet": "Similarly, important markers of oxidative stress, such as increased reactive oxygen species and depleted intracellular antioxidants, are consistent with pancreatic β-cell damage in conditions of T2D.",
+          "explanation": "This confirms that oxidative stress characterized by increased ROS and depleted antioxidants contributes to beta cell damage."
+        }
+      ]
+    }
+  },
+  {
+    "id": "dismech:disorders/Type_2_Diabetes_Mellitus#/pathophysiology/7",
+    "document_id": "dismech:disorders/Type_2_Diabetes_Mellitus",
+    "document_name": "Type 2 Diabetes Mellitus",
+    "source_kind": "disorders",
+    "source_file": "kb/disorders/Type_2_Diabetes_Mellitus.yaml",
+    "json_pointer": "/pathophysiology/7",
+    "name": "Incretin Axis Dysfunction",
+    "description": "Impaired incretin hormone signaling, particularly blunted glucose-dependent insulinotropic peptide (GIP) action in beta cells. GLP-1 action is relatively preserved. The incretin effect amplifies insulin secretion in response to oral glucose via cAMP-PKA signaling pathways.\n",
+    "conforms_to": null,
+    "raw": {
+      "name": "Incretin Axis Dysfunction",
+      "description": "Impaired incretin hormone signaling, particularly blunted glucose-dependent insulinotropic peptide (GIP) action in beta cells. GLP-1 action is relatively preserved. The incretin effect amplifies insulin secretion in response to oral glucose via cAMP-PKA signaling pathways.\n",
+      "genes": [
+        {
+          "preferred_term": "TCF7L2",
+          "term": {
+            "id": "hgnc:11641",
+            "label": "TCF7L2"
+          }
+        }
+      ],
+      "cell_types": [
+        {
+          "preferred_term": "Pancreatic Beta Cell",
+          "term": {
+            "id": "CL:0000169",
+            "label": "type B pancreatic cell"
+          }
+        },
+        {
+          "preferred_term": "Enteroendocrine Cell",
+          "term": {
+            "id": "CL:0000164",
+            "label": "enteroendocrine cell"
+          }
+        }
+      ],
+      "biological_processes": [
+        {
+          "preferred_term": "cAMP Signaling",
+          "term": {
+            "id": "GO:0141156",
+            "label": "cAMP/PKA signal transduction"
+          }
+        },
+        {
+          "preferred_term": "Insulin Secretion Regulation",
+          "term": {
+            "id": "GO:0050796",
+            "label": "regulation of insulin secretion"
+          }
+        }
+      ],
+      "evidence": [
+        {
+          "reference": "PMID:38831203",
+          "reference_title": "GLP1-GIP receptor co-agonists: a promising evolution in the treatment of type 2 diabetes.",
+          "supports": "SUPPORT",
+          "snippet": "Dual glucagon like peptide 1 (GLP1) and glucose-dependent insulinotropic peptide (GIP) receptor agonists are among the new pharmacological strategies recently developed to address this challenge.",
+          "explanation": "This establishes the importance of the GLP-1/GIP incretin axis in T2D pathophysiology and its targeting by dual agonist therapies."
+        },
+        {
+          "reference": "PMID:38831203",
+          "reference_title": "GLP1-GIP receptor co-agonists: a promising evolution in the treatment of type 2 diabetes.",
+          "supports": "SUPPORT",
+          "snippet": "Tirzepatide, characterized by its ability to selectively bind and activate receptors for the intestinal hormones GIP and GLP-1, has been tested in numerous clinical studies and is already currently authorized in several countries for the treatment of type 2 diabetes and obesity.",
+          "explanation": "This demonstrates the clinical relevance of incretin axis dysfunction by showing dual GLP-1/GIP agonism is effective for T2D treatment."
+        },
+        {
+          "reference": "PMID:19934000",
+          "reference_title": "TCF7L2 variant rs7903146 affects the risk of type 2 diabetes by modulating incretin action.",
+          "supports": "SUPPORT",
+          "evidence_source": "HUMAN_CLINICAL",
+          "snippet": "The TCF7L2 variant rs7903146 appears to affect risk of type 2 diabetes, at least in part, by modifying the effect of incretins on insulin secretion.",
+          "explanation": "Supports TCF7L2 as a genetic contributor to incretin-axis effects on insulin secretion in humans."
+        }
+      ],
+      "downstream": [
+        {
+          "target": "Beta Cell Dysfunction",
+          "description": "Reduced beta-cell sensitivity to incretins impairs oral-glucose-stimulated insulin secretion.",
+          "causal_link_type": "DIRECT",
+          "evidence": [
+            {
+              "reference": "PMID:19934000",
+              "reference_title": "TCF7L2 variant rs7903146 affects the risk of type 2 diabetes by modulating incretin action.",
+              "supports": "SUPPORT",
+              "evidence_source": "HUMAN_CLINICAL",
+              "snippet": "This is not due to reduced secretion of GLP-1 and GIP but rather due to the effect of TCF7L2 on the sensitivity of the beta-cell to incretins.",
+              "explanation": "Directly supports a TCF7L2-associated incretin-sensitivity defect at the beta cell."
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "dismech:disorders/Type_2_Diabetes_Mellitus#/pathophysiology/8",
+    "document_id": "dismech:disorders/Type_2_Diabetes_Mellitus",
+    "document_name": "Type 2 Diabetes Mellitus",
+    "source_kind": "disorders",
+    "source_file": "kb/disorders/Type_2_Diabetes_Mellitus.yaml",
+    "json_pointer": "/pathophysiology/8",
+    "name": "Chronic Hyperglycemia",
+    "description": "Sustained hyperglycemia arising from the combined insulin resistance, beta-cell secretory failure, and hepatic glucose overproduction is the shared driver of long-term diabetic tissue injury and the entry point to the conserved diabetic vascular-complication cascade captured by the diabetic_vascular_complications module (chronic hyperglycemia -> oxidative and AGE-RAGE stress -> endothelial dysfunction and vascular inflammation -> micro- and macrovascular injury -> end-organ complications). In type 2 diabetes this cascade manifests clinically as diabetic retinopathy, neuropathy, nephropathy, and atherosclerotic cardiovascular disease.",
+    "conforms_to": "diabetic_vascular_complications#Chronic Hyperglycemia",
+    "raw": {
+      "name": "Chronic Hyperglycemia",
+      "description": "Sustained hyperglycemia arising from the combined insulin resistance, beta-cell secretory failure, and hepatic glucose overproduction is the shared driver of long-term diabetic tissue injury and the entry point to the conserved diabetic vascular-complication cascade captured by the diabetic_vascular_complications module (chronic hyperglycemia -> oxidative and AGE-RAGE stress -> endothelial dysfunction and vascular inflammation -> micro- and macrovascular injury -> end-organ complications). In type 2 diabetes this cascade manifests clinically as diabetic retinopathy, neuropathy, nephropathy, and atherosclerotic cardiovascular disease.",
+      "conforms_to": "diabetic_vascular_complications#Chronic Hyperglycemia",
+      "biological_processes": [
+        {
+          "preferred_term": "glucose homeostasis",
+          "term": {
+            "id": "GO:0042593",
+            "label": "glucose homeostasis"
+          },
+          "modifier": "ABNORMAL"
+        }
+      ],
+      "downstream": [
+        {
+          "target": "Diabetic Retinopathy",
+          "description": "Sustained hyperglycemia drives the microvascular injury that produces diabetic retinopathy, one of the shared end-organ complications captured by the diabetic_vascular_complications module this node conforms to.",
+          "evidence": [
+            {
+              "reference": "PMID:39158206",
+              "reference_title": "Serum biomarkers for predicting microvascular complications of diabetes mellitus.",
+              "supports": "SUPPORT",
+              "evidence_source": "HUMAN_CLINICAL",
+              "snippet": "Diabetic microvascular complications such as retinopathy, nephropathy, and neuropathy are primary causes of blindness, terminal renal failure, and neuropathic disorders in type 2 diabetes mellitus patients.",
+              "explanation": "Supports chronic hyperglycemia driving retinopathy as a microvascular end-organ complication in type 2 diabetes."
+            }
+          ]
+        },
+        {
+          "target": "Peripheral Neuropathy",
+          "description": "Sustained hyperglycemia drives the microvascular and metabolic nerve injury that produces diabetic peripheral neuropathy, another shared end-organ complication of the conserved vascular-complication cascade.",
+          "evidence": [
+            {
+              "reference": "PMID:39158206",
+              "reference_title": "Serum biomarkers for predicting microvascular complications of diabetes mellitus.",
+              "supports": "SUPPORT",
+              "evidence_source": "HUMAN_CLINICAL",
+              "snippet": "Diabetic microvascular complications such as retinopathy, nephropathy, and neuropathy are primary causes of blindness, terminal renal failure, and neuropathic disorders in type 2 diabetes mellitus patients.",
+              "explanation": "Supports chronic hyperglycemia driving neuropathy as a microvascular end-organ complication in type 2 diabetes."
+            }
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "reference": "PMID:29939616",
+          "reference_title": "Insulin Resistance.",
+          "supports": "SUPPORT",
+          "evidence_source": "OTHER",
+          "snippet": "This vicious cycle continues until pancreatic beta-cell activity can no longer adequately meet the insulin demand created by insulin resistance, resulting in hyperglycemia.",
+          "explanation": "Supports sustained hyperglycemia arising from beta-cell failure to compensate for insulin resistance, the shared trigger that feeds the diabetic vascular-complication cascade."
+        }
+      ]
+    }
+  }
+]

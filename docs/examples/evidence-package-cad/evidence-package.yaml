@@ -1,0 +1,899 @@
+package_version: reveal.evidence-package/0.1-draft
+prefixes:
+  dapper: https://broadinstitute.github.io/dapper/ns#
+  MONDO: http://purl.obolibrary.org/obo/MONDO_
+  CL: http://purl.obolibrary.org/obo/CL_
+  PMID: http://identifiers.org/pubmed/
+  GO: http://purl.obolibrary.org/obo/GO_
+  ECTO: http://purl.obolibrary.org/obo/ECTO_
+  factor: 'urn:cfde:factor:'
+  gene: 'urn:cfde:gene:'
+  gene_set: 'urn:cfde:gene_set:'
+  trait: 'urn:cfde:trait:'
+  cfde: 'urn:cfde:record:'
+identifier_policy:
+  expansion: Split a CURIE at the first colon and concatenate its declared prefix base and local identifier.
+  source_local_prefixes:
+  - factor
+  - gene
+  - gene_set
+  - trait
+  - cfde
+  dismech_record_ids: Opaque native aliases resolved through their source_ref and source revision; not
+    DisMech schema vocabulary CURIEs.
+  opaque_fields:
+  - source_id
+  - source_reference
+  - result_key
+  - artifact_id
+  - alternate_identifier
+  preserve_existing_dapper_payloads: true
+mode: offline_design_example
+dispatch_ready: false
+dapper_pin:
+  name: 2026-09-24-v8
+  snapshot_sha256: 801fb347c54c036c15345d132d302171fc6cd74c1f75a03a5c59c937f5ed7d11
+selection:
+  knowledge_gap_id: dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk
+  dismech_mechanism_ids:
+  - dismech:disorders/Coronary_Artery_Disease#/pathophysiology/0
+  eaggl_mechanism_ids:
+  - factor:portal:CADinT2D:cfde-inc-v2:Factor1
+  origins:
+    factor:portal:CADinT2D:cfde-inc-v2:Factor1: manual_design_example
+  dismissed_eaggl_ids: []
+  semantic_retrieval:
+    status: not_computed
+    embedding_model: pritamdeka/BioBERT-mnli-snli-scinli-scitail-mednli-stsb
+    embedding_run_id: null
+    automatic_limit_total: 5
+    aggregation: max_cosine_across_selected_dismech_mechanisms
+  expansion_policy:
+    rounds: 1
+    reducer: mean
+    connection_scope: direct
+    context: ''
+dismech:
+  source_revision:
+    commit: df3884a8bba34370ecc0b3a49d956e7f0523bb28
+    source_sha256: 00f2a71dca11fd7d4a8c835ea9e978037dcbef88d3fb050c5e74192db2bd7338
+  knowledge_gap:
+    dapper_id: dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk
+    source_id: dismech:disorders/Coronary_Artery_Disease#discussion:cad_pgsxc_reverse_causation
+    source_kind: KNOWLEDGE_GAP
+    source_status: OPEN
+    prompt: Are the CAD PGS×context interactions driven by adverse exposures causally amplifying genetic
+      risk, or are some "contexts" actually downstream readouts of incipient disease (reverse causation)?
+    rationale: Population PGS×context analyses (Nagpal & Gibson 2026, PMID:42443528) are largely unable
+      to establish the causality of specific contexts. dismech separates true environmental exposures
+      (smoking, high-fat diet, sedentary lifestyle) from biochemical readouts (LDL, HDL, C-reactive protein);
+      the biochemical "contexts" are prime reverse-causation suspects, since they may be partly downstream
+      of the atherosclerotic process rather than upstream drivers, and behavioural contexts such as reduced
+      physical activity may be rapid responses to incipient angina rather than causes. Distinguishing
+      genuine amplification of genetic effects from reverse causation determines whether the modelled
+      interventions (e.g. lowering cholesterol in high-PGS smokers) would actually reduce risk.
+    disease:
+      preferred_term: coronary atherosclerosis
+      term:
+        id: MONDO:0021661
+        label: coronary atherosclerosis
+    attachments:
+    - source_reference: pathophysiology#Endothelial Dysfunction
+      kind: pathophysiology
+      source_id: dismech:disorders/Coronary_Artery_Disease#/pathophysiology/0
+      label: Endothelial Dysfunction
+      resolution: resolved
+      source_ref:
+        artifact_id: dismech-cad
+        pointer: /pathophysiology/0
+    - source_reference: biochemical#LDL Cholesterol
+      kind: biochemical
+      source_id: dismech:disorders/Coronary_Artery_Disease#/biochemical/0
+      label: LDL Cholesterol
+      resolution: resolved
+      source_ref:
+        artifact_id: dismech-cad
+        pointer: /biochemical/0
+    - source_reference: biochemical#C-Reactive Protein
+      kind: biochemical
+      source_id: dismech:disorders/Coronary_Artery_Disease#/biochemical/2
+      label: C-Reactive Protein
+      resolution: resolved
+      source_ref:
+        artifact_id: dismech-cad
+        pointer: /biochemical/2
+    - source_reference: environmental#Smoking
+      kind: environmental
+      source_id: dismech:disorders/Coronary_Artery_Disease#/environmental/0
+      label: Smoking
+      resolution: resolved
+      source_ref:
+        artifact_id: dismech-cad
+        pointer: /environmental/0
+    proposed_experiments:
+    - experiment_id: cad_pgsxc_mr_direction
+      name: Mendelian randomization of exposure-to-CAD direction across PGS strata
+      description: Use bidirectional / multivariable Mendelian randomization to test whether each candidate
+        context (LDL, HDL, C-reactive protein, smoking) causally affects CAD versus being a consequence
+        of subclinical disease, and whether the causal effect estimate scales with polygenic liability
+        as the amplification model predicts.
+      decision_criterion: A context is retained as a causal amplifier if MR supports exposure-to-disease
+        directionality and the exposure-attributable risk difference increases across increasing PGS strata;
+        it is flagged as a reverse-causation suspect otherwise.
+    - experiment_id: cad_pgsxc_prospective_temporal
+      name: Prospective incident-CAD analysis restricted to pre-diagnosis exposure windows
+      description: Restrict exposures to measurements taken well before diagnosis and repeat the PGS×context
+        liability-threshold modelling on incident cases only, to reduce the chance that exposure values
+        reflect behavioural responses to early disease.
+      decision_criterion: Amplification is supported if the PGS×context deviation from additivity persists
+        when only pre-diagnosis exposure windows and incident cases are used.
+    source_ref:
+      artifact_id: dismech-cad
+      pointer: /discussions/0
+  mechanisms:
+    dismech:disorders/Coronary_Artery_Disease#/pathophysiology/0:
+      dapper_id: dapper:Mechanism.Tbd3TXttvLnVp5rlCDkdPYOWlFOfRUG2
+      projection_status: example_projection_not_imported
+      name: Endothelial Dysfunction
+      description: At atherosclerosis-prone arterial sites, disturbed flow is associated with endothelial
+        stress and senescence, while reduced endothelial nitric-oxide biosynthesis represents the vasomotor
+        dysfunction that impairs dilation. This nonconforming coronary endothelial-function branch is
+        modeled separately from the conserved subendothelial apoB-retention trigger. The cited disturbed-flow
+        evidence derives from mouse carotid arteries and human carotid plaques, so its transfer to coronary
+        endothelial dysfunction is explicitly partial.
+      cell_types:
+      - preferred_term: Endothelial Cell
+        term:
+          id: CL:0000115
+          label: endothelial cell
+      biological_processes:
+      - preferred_term: Nitric Oxide Production
+        term:
+          id: GO:0006809
+          label: nitric oxide biosynthetic process
+        modifier: DECREASED
+      evidence:
+      - reference: PMID:40594772
+        reference_title: Single-cell RNA-seq analysis of mouse carotid artery under disturbed flow and
+          human carotid plaques identifies key cell populations in atherosclerosis development.
+        supports: SUPPORT
+        evidence_source: MODEL_ORGANISM
+        snippet: CD36 + positive ECs exhibited significant senescence phenotypes following disturbed flow
+          stimulation.
+        explanation: Supports disturbed-flow-associated endothelial senescence as one component of endothelial
+          dysfunction. It does not directly measure nitric-oxide biosynthesis and comes from a mouse carotid
+          model, so it is not treated as direct coronary or nitric-oxide evidence.
+      - reference: PMID:40594772
+        reference_title: Single-cell RNA-seq analysis of mouse carotid artery under disturbed flow and
+          human carotid plaques identifies key cell populations in atherosclerosis development.
+        supports: SUPPORT
+        evidence_source: MODEL_ORGANISM
+        snippet: Atherosclerosis tends to occur in regions of disturbed blood flow. This study explored
+          how disturbed flow aggravates atherosclerosis using single-cell RNA-seq (scRNA-seq) datasets
+          from mouse carotid arteries under disturbed flow and human carotid artery plaques.
+        explanation: Supports disturbed flow as a regional context for atherosclerosis and endothelial
+          dysfunction. It does not directly establish reduced nitric-oxide biosynthesis or a coronary-specific
+          effect.
+      source_ref:
+        artifact_id: dismech-cad
+        pointer: /pathophysiology/0
+      associated_eaggl_mechanisms:
+        factor:portal:CADinT2D:cfde-inc-v2:Factor1:
+          status: not_computed
+          semantic_similarity: null
+          association_basis: co_selected_for_design_example_only
+  other_context:
+  - source_id: dismech:disorders/Coronary_Artery_Disease#/biochemical/0
+    kind: biochemical
+    record:
+      name: LDL Cholesterol
+      presence: Elevated
+      context: Major risk factor for plaque formation
+      readouts:
+      - target: Coronary Endothelial Injury and Subendothelial LDL Retention
+        relationship: READOUT_OF
+        direction: POSITIVE
+        endpoint_context: PROGNOSTIC
+        description: Circulating LDL cholesterol indexes the pool of apoB-containing lipoprotein available
+          for retention in the coronary subendothelial space, so its level reports on the intensity of
+          the retention step rather than being caused by it.
+      evidence:
+      - reference: PMID:28444290
+        reference_title: Low-density lipoproteins cause atherosclerotic cardiovascular disease. 1. Evidence
+          from genetic, epidemiologic, and clinical studies. A consensus statement from the European Atherosclerosis
+          Society Consensus Panel.
+        supports: SUPPORT
+        evidence_source: OTHER
+        snippet: Consistent evidence from numerous and multiple different types of clinical and genetic
+          studies unequivocally establishes that LDL causes ASCVD.
+        explanation: EAS consensus statement concludes that LDL is causal for atherosclerotic cardiovascular
+          disease, supporting elevated LDL cholesterol as a major risk factor for coronary plaque formation.
+    source_ref:
+      artifact_id: dismech-cad
+      pointer: /biochemical/0
+  - source_id: dismech:disorders/Coronary_Artery_Disease#/biochemical/2
+    kind: biochemical
+    record:
+      name: C-Reactive Protein
+      presence: Elevated
+      context: Marker of inflammation
+      readouts:
+      - target: Monocyte Recruitment and Macrophage Foam Cell Formation
+        relationship: CORRELATES_WITH
+        direction: POSITIVE
+        endpoint_context: PROGNOSTIC
+        description: C-reactive protein is a systemic acute-phase index that rises with the inflammatory
+          activity of which intimal monocyte recruitment and foam-cell formation are part. It is a correlate
+          of that intimal process and of coronary risk, not a direct measurement of the lesion.
+      evidence:
+      - reference: PMID:20031199
+        reference_title: 'C-reactive protein concentration and risk of coronary heart disease, stroke,
+          and mortality: an individual participant meta-analysis.'
+        supports: SUPPORT
+        evidence_source: HUMAN_CLINICAL
+        snippet: Risk ratios (RRs) for coronary heart disease per 1-SD higher log(e) CRP concentration
+          (three-fold higher) were 1.63 (95% CI 1.51-1.76) when initially adjusted for age and sex only,
+          and 1.37 (1.27-1.48) when adjusted further for conventional risk factors
+        explanation: Individual-participant meta-analysis quantifies the association between circulating
+          C-reactive protein and incident coronary heart disease, supporting CRP as an inflammatory risk
+          marker in coronary artery disease.
+    source_ref:
+      artifact_id: dismech-cad
+      pointer: /biochemical/2
+  - source_id: dismech:disorders/Coronary_Artery_Disease#/environmental/0
+    kind: environmental
+    record:
+      name: Smoking
+      exposure_term:
+        preferred_term: exposure to tobacco smoking
+        term:
+          id: ECTO:6000029
+          label: exposure to tobacco smoking
+      notes: Major modifiable risk factor, with a dose-response relationship to myocardial infarction
+        risk.
+      review_notes: The prior note also asserted that smoking promotes endothelial damage. That mechanism
+        is not carried by either epidemiologic source cited here and is not evidenced in this entry; it
+        belongs in pathophysiology with its own citation rather than as an unsourced clause on an exposure.
+      evidence:
+      - reference: PMID:15364185
+        reference_title: 'Effect of potentially modifiable risk factors associated with myocardial infarction
+          in 52 countries (the INTERHEART study): case-control study.'
+        supports: SUPPORT
+        evidence_source: HUMAN_CLINICAL
+        snippet: Smoking (odds ratio 2.87 for current vs never, PAR 35.7% for current and former vs never)
+        explanation: INTERHEART, a standardised case-control study of acute myocardial infarction across
+          52 countries with 15152 cases and 14820 controls. Establishes smoking as one of the largest
+          modifiable contributors to population attributable risk.
+      - reference: PMID:16920470
+        reference_title: 'Tobacco use and risk of myocardial infarction in 52 countries in the INTERHEART
+          study: a case-control study.'
+        supports: SUPPORT
+        evidence_source: HUMAN_CLINICAL
+        snippet: risk increased by 5.6% for every additional cigarette smoked
+        explanation: The tobacco-specific INTERHEART analysis. Quoted for the dose-response relationship,
+          which is the part of the note the odds ratio alone does not establish.
+      influences_mechanisms:
+      - target: Myocardial Infarction
+        environmental_effect: PREDISPOSES
+        causal_link_type: INDIRECT_UNKNOWN_INTERMEDIATES
+        description: Tobacco smoking raises the risk of acute myocardial infarction in a dose-dependent
+          way. The link is drawn to the clinical event because that is what the cited epidemiology measures;
+          the mediating coronary mechanism is deliberately left unasserted here, as the entry's review
+          notes require.
+        evidence:
+        - reference: PMID:15364185
+          reference_title: 'Effect of potentially modifiable risk factors associated with myocardial infarction
+            in 52 countries (the INTERHEART study): case-control study.'
+          supports: SUPPORT
+          evidence_source: HUMAN_CLINICAL
+          snippet: Smoking (odds ratio 2.87 for current vs never, PAR 35.7% for current and former vs
+            never)
+          explanation: INTERHEART, a standardised case-control study of acute myocardial infarction across
+            52 countries with 15152 cases and 14820 controls. Establishes smoking as one of the largest
+            modifiable contributors to population attributable risk.
+    source_ref:
+      artifact_id: dismech-cad
+      pointer: /environmental/0
+  related_knowledge_gaps:
+    status: same_document_subset
+    items:
+    - source_id: dismech:disorders/Coronary_Artery_Disease#discussion:dapt_mortality_risk_stratification
+      prompt: Which easily-derived clinical variables most reliably predict in-hospital mortality in CAD
+        patients receiving dual antiplatelet therapy (DAPT) after percutaneous coronary intervention (PCI)?
+        Can a simple risk score validated against external cohorts improve prognostic classification beyond
+        conventional risk factors alone, and what patient subtypes remain at highest risk despite optimized
+        antiplatelet and supportive therapy?
+      kind: KNOWLEDGE_GAP
+      status: OPEN
+      source_ref:
+        artifact_id: dismech-cad
+        pointer: /discussions/1
+    - source_id: dismech:disorders/Coronary_Artery_Disease#discussion:gap_icosapent_ethyl_event_reduction_mechanism
+      prompt: 'Which, if any, pathway beyond change in circulating triglyceride concentration causally
+        mediates the cardiovascular-event contrast observed with high-dose icosapent ethyl: coronary plaque
+        remodeling; altered apolipoprotein-B/remnant burden, composition, trafficking, or retention; platelet
+        effects; inflammatory resolution; endothelial effects; or membrane stabilization and reduced lipid
+        oxidation? How much of the contrast reflects the mineral-oil comparator?'
+      kind: KNOWLEDGE_GAP
+      status: OPEN
+      source_ref:
+        artifact_id: dismech-cad
+        pointer: /discussions/2
+    selection_method: same frozen disease document; no semantic ranking
+pigean:
+  source_family: cfde-interactive-and-bioindex
+  model: cfde-inc-v2
+  mechanisms:
+    factor:portal:CADinT2D:cfde-inc-v2:Factor1:
+      dapper_id: dapper:Mechanism.kEJMDzCkDYE94DpWaXrQg-eC4gFGQyuX
+      display_name: CAD-in-T2D mechanism Factor1
+      fit:
+        trait_id: trait:portal:CADinT2D
+        trait_group: portal
+        phenotype: CADinT2D
+        factor: Factor1
+        model: cfde-inc-v2
+        upstream_build: null
+      gene_loadings:
+        status: ok
+        items:
+          gene:SHH:
+            result_key: portal:CADinT2D:cfde-inc-v2:Factor1:gene:SHH
+            factor_value: 0.5042
+            source_ref:
+              artifact_id: bioindex-gene
+              pointer: /data/0
+            interactive:
+              aggregate_score: 3.6776304513454114
+              support_anchor_count: 1
+              anchor_count: 1
+              edge_id: eceaf78b98133a1e
+              family: factor_gene_direct
+              relation: direct
+              raw_score: 0.5041999816894531
+              normalized_score: 3.6776304513454114
+              source_ref:
+                artifact_id: interactive-gene
+                pointer: /response/candidates/0
+          gene:GLI3:
+            result_key: portal:CADinT2D:cfde-inc-v2:Factor1:gene:GLI3
+            factor_value: 0.3245
+            source_ref:
+              artifact_id: bioindex-gene
+              pointer: /data/3
+            interactive:
+              aggregate_score: 2.1071760443458127
+              support_anchor_count: 1
+              anchor_count: 1
+              edge_id: c1e566f0ea35fc42
+              family: factor_gene_direct
+              relation: direct
+              raw_score: 0.3244999945163727
+              normalized_score: 2.1071760443458127
+              source_ref:
+                artifact_id: interactive-gene
+                pointer: /response/candidates/3
+          gene:TCF7L2:
+            result_key: portal:CADinT2D:cfde-inc-v2:Factor1:gene:TCF7L2
+            factor_value: 0.3813
+            source_ref:
+              artifact_id: bioindex-gene
+              pointer: /data/1
+            interactive:
+              aggregate_score: 2.6035690825535336
+              support_anchor_count: 1
+              anchor_count: 1
+              edge_id: b8c1fc89897bf85c
+              family: factor_gene_direct
+              relation: direct
+              raw_score: 0.3813000023365021
+              normalized_score: 2.6035690825535336
+              source_ref:
+                artifact_id: interactive-gene
+                pointer: /response/candidates/1
+      gene_set_loadings:
+        status: ok
+        items:
+          gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn:
+            result_key: portal:CADinT2D:cfde-inc-v2:Factor1:gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn
+            factor_value: 1.0
+            source_ref:
+              artifact_id: bioindex-gene-set
+              pointer: /data/0
+            interactive:
+              aggregate_score: 4.400714758178104
+              support_anchor_count: 1
+              anchor_count: 1
+              edge_id: c290ca4093cac212
+              family: factor_gene_set_direct
+              relation: direct
+              raw_score: 1.0
+              normalized_score: 4.400714758178104
+              source_ref:
+                artifact_id: interactive-gene_set
+                pointer: /response/candidates/0
+          gene_set:PsychENCODE__all_signatures__PsychENCODE_geneM16:
+            result_key: portal:CADinT2D:cfde-inc-v2:Factor1:gene_set:PsychENCODE__all_signatures__PsychENCODE_geneM16
+            factor_value: 0.4518
+            source_ref:
+              artifact_id: bioindex-gene-set
+              pointer: /data/2
+            interactive:
+              aggregate_score: 1.6347754521132016
+              support_anchor_count: 1
+              anchor_count: 1
+              edge_id: 24985b05ad4d0a8a
+              family: factor_gene_set_direct
+              relation: direct
+              raw_score: 0.45179998874664307
+              normalized_score: 1.6347754521132016
+              source_ref:
+                artifact_id: interactive-gene_set
+                pointer: /response/candidates/2
+      trait_loadings:
+        status: empty
+        items: {}
+        source_ref:
+          artifact_id: interactive-trait
+          pointer: /response
+        interpretation: No direct trait candidates returned; the fit trait is metadata, not an observed
+          trait loading.
+  traits:
+    trait:portal:CADinT2D:
+      display_name: Coronary artery disease in people with type 2 diabetes
+      model: cfde-inc-v2
+      gene_associations:
+        status: ok
+        items:
+          gene:SHH:
+            result_key: portal:CADinT2D:cfde-inc-v2:Factor1:gene:SHH
+            reported_metrics:
+              combined: 3.86
+              log_bf: 2.14
+              prior: 1.72
+            source_ref:
+              artifact_id: bioindex-gene
+              pointer: /data/0
+            ascertained_via_mechanism: factor:portal:CADinT2D:cfde-inc-v2:Factor1
+          gene:GLI3:
+            result_key: portal:CADinT2D:cfde-inc-v2:Factor1:gene:GLI3
+            reported_metrics:
+              combined: 1.98
+              log_bf: 0.474
+              prior: 1.51
+            source_ref:
+              artifact_id: bioindex-gene
+              pointer: /data/3
+            ascertained_via_mechanism: factor:portal:CADinT2D:cfde-inc-v2:Factor1
+          gene:TCF7L2:
+            result_key: portal:CADinT2D:cfde-inc-v2:Factor1:gene:TCF7L2
+            reported_metrics:
+              combined: 2.42
+              log_bf: 2.33
+              prior: 0.0873
+            source_ref:
+              artifact_id: bioindex-gene
+              pointer: /data/1
+            ascertained_via_mechanism: factor:portal:CADinT2D:cfde-inc-v2:Factor1
+      gene_set_associations:
+        status: ok
+        items:
+          gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn:
+            result_key: portal:CADinT2D:cfde-inc-v2:Factor1:gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn
+            reported_metrics:
+              beta: 0.115
+              beta_uncorrected: 0.119
+              rs_score: 0.9840045398876323
+            source_ref:
+              artifact_id: bioindex-gene-set
+              pointer: /data/0
+            ascertained_via_mechanism: factor:portal:CADinT2D:cfde-inc-v2:Factor1
+          gene_set:PsychENCODE__all_signatures__PsychENCODE_geneM16:
+            result_key: portal:CADinT2D:cfde-inc-v2:Factor1:gene_set:PsychENCODE__all_signatures__PsychENCODE_geneM16
+            reported_metrics:
+              beta: 0.00729
+              beta_uncorrected: 0.0586
+              rs_score: 0.9732207436257954
+            source_ref:
+              artifact_id: bioindex-gene-set
+              pointer: /data/2
+            ascertained_via_mechanism: factor:portal:CADinT2D:cfde-inc-v2:Factor1
+      coverage: Trait statistics retained from factor-query rows; no independent phenotype-wide query
+        captured.
+  contextual_relationships:
+    status: ok
+    returned_edges: 16
+    new_unique_edges: 0
+    source_ref:
+      artifact_id: contextual
+      pointer: /response/edges
+    retained_edge_ids:
+    - eceaf78b98133a1e
+    - c1e566f0ea35fc42
+    - b8c1fc89897bf85c
+    - c290ca4093cac212
+    - 24985b05ad4d0a8a
+    gene_gene_set_membership: not_observed
+entities:
+  genes:
+    gene:SHH:
+      source_symbol: SHH
+      entity_uri: urn:cfde:gene:SHH
+      external_identity_mapping: not_resolved
+      organism: null
+    gene:GLI3:
+      source_symbol: GLI3
+      entity_uri: urn:cfde:gene:GLI3
+      external_identity_mapping: not_resolved
+      organism: null
+    gene:TCF7L2:
+      source_symbol: TCF7L2
+      entity_uri: urn:cfde:gene:TCF7L2
+      external_identity_mapping: not_resolved
+      organism: null
+  gene_sets:
+    gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn:
+      dapper_id: dapper:GeneSet.I1UZhVhKU-YDerPLIxtnZOGlTXNAlrgD
+      display_name: AMP AD / all brain / AMP AD MAYO TCX Diagnosis.AOD AD-CONTROL ALL dn | GTEx / brain
+        / GTEx aging Brain 20-29 60-69 dn
+      import_id: 3714a036aea279190d4723d9ddf2dd81d105e3427c38d9fc685e7fd606cb260e
+      membership_status: not_loaded
+      construction_provenance_status: not_loaded
+      provenance_refs:
+      - artifact_id: geneset-import
+        pointer: ''
+    gene_set:PsychENCODE__all_signatures__PsychENCODE_geneM16:
+      dapper_id: dapper:GeneSet.zQ8X81n_J-Fuv0zNRp1iQQXqIzuAOzGP
+      display_name: PsychENCODE / all signatures / PsychENCODE geneM16
+      import_id: 3714a036aea279190d4723d9ddf2dd81d105e3427c38d9fc685e7fd606cb260e
+      membership_status: not_loaded
+      construction_provenance_status: not_loaded
+      provenance_refs:
+      - artifact_id: geneset-import
+        pointer: ''
+dapper_context:
+  prefixes:
+    dapper: https://broadinstitute.github.io/dapper/ns#
+    MONDO: http://purl.obolibrary.org/obo/MONDO_
+    CL: http://purl.obolibrary.org/obo/CL_
+    PMID: http://identifiers.org/pubmed/
+    GO: http://purl.obolibrary.org/obo/GO_
+    ECTO: http://purl.obolibrary.org/obo/ECTO_
+    factor: 'urn:cfde:factor:'
+    gene: 'urn:cfde:gene:'
+    gene_set: 'urn:cfde:gene_set:'
+    trait: 'urn:cfde:trait:'
+    cfde: 'urn:cfde:record:'
+  knowledge_gaps:
+  - text: Are the CAD PGS×context interactions driven by adverse exposures causally amplifying genetic
+      risk, or are some "contexts" actually downstream readouts of incipient disease (reverse causation)?
+    gap_description: Population PGS×context analyses (Nagpal & Gibson 2026, PMID:42443528) are largely
+      unable to establish the causality of specific contexts. dismech separates true environmental exposures
+      (smoking, high-fat diet, sedentary lifestyle) from biochemical readouts (LDL, HDL, C-reactive protein);
+      the biochemical "contexts" are prime reverse-causation suspects, since they may be partly downstream
+      of the atherosclerotic process rather than upstream drivers, and behavioural contexts such as reduced
+      physical activity may be rapid responses to incipient angina rather than causes. Distinguishing
+      genuine amplification of genetic effects from reverse causation determines whether the modelled
+      interventions (e.g. lowering cholesterol in high-PGS smokers) would actually reduce risk.
+    gap_kind: KNOWLEDGE_GAP
+    scope: Coronary Artery Disease
+    about_entities:
+    - http://purl.obolibrary.org/obo/MONDO_0021661
+    id: dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk
+  mechanisms:
+  - id: dapper:Mechanism.kEJMDzCkDYE94DpWaXrQg-eC4gFGQyuX
+    name: CAD-in-T2D mechanism Factor1
+    description: 'EAGGL mechanism factor:portal:CADinT2D:cfde-inc-v2:Factor1. Factor1 is its interim name.
+      Scope: coronary artery disease in people with type 2 diabetes.'
+  - name: Endothelial Dysfunction
+    description: At atherosclerosis-prone arterial sites, disturbed flow is associated with endothelial
+      stress and senescence, while reduced endothelial nitric-oxide biosynthesis represents the vasomotor
+      dysfunction that impairs dilation. This nonconforming coronary endothelial-function branch is modeled
+      separately from the conserved subendothelial apoB-retention trigger. The cited disturbed-flow evidence
+      derives from mouse carotid arteries and human carotid plaques, so its transfer to coronary endothelial
+      dysfunction is explicitly partial.
+    id: dapper:Mechanism.Tbd3TXttvLnVp5rlCDkdPYOWlFOfRUG2
+  gene_sets:
+  - name: AMP AD / all brain / AMP AD MAYO TCX Diagnosis.AOD AD-CONTROL ALL dn | GTEx / brain / GTEx aging
+      Brain 20-29 60-69 dn
+    member_type: gene
+    term: AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn
+    alternate_identifier:
+    - gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn
+    - cfde:cfde-inc-v2:gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn
+    was_generated_by: dapper:Activity.VM0nxPd0QVsZJ-7qw4WjAvXtEiFMehqx
+    was_derived_from:
+    - https://cfde-dev.hugeampkpnbi.org/api/bio/keys/pigean-gene-set/2
+    id: dapper:GeneSet.I1UZhVhKU-YDerPLIxtnZOGlTXNAlrgD
+  - name: PsychENCODE / all signatures / PsychENCODE geneM16
+    member_type: gene
+    term: PsychENCODE__all_signatures__PsychENCODE_geneM16
+    alternate_identifier:
+    - gene_set:PsychENCODE__all_signatures__PsychENCODE_geneM16
+    - cfde:cfde-inc-v2:gene_set:PsychENCODE__all_signatures__PsychENCODE_geneM16
+    was_generated_by: dapper:Activity.VM0nxPd0QVsZJ-7qw4WjAvXtEiFMehqx
+    was_derived_from:
+    - https://cfde-dev.hugeampkpnbi.org/api/bio/keys/pigean-gene-set/2
+    term_prefix: PsychENCODE
+    id: dapper:GeneSet.zQ8X81n_J-Fuv0zNRp1iQQXqIzuAOzGP
+  activities:
+  - name: CFDE GeneSet catalog encoding
+    activity_type: CFDEGeneSetCatalogImport
+    description: Encodes advertised CFDE named gene-set identities; not the original biological gene-set
+      creation activity.
+    command: cfde-geneset-catalog-v1 model=cfde-inc-v2
+    id: dapper:Activity.VM0nxPd0QVsZJ-7qw4WjAvXtEiFMehqx
+  files:
+  - filename: Coronary_Artery_Disease.yaml
+    mime_type: application/yaml
+    sha256: 00f2a71dca11fd7d4a8c835ea9e978037dcbef88d3fb050c5e74192db2bd7338
+    size_in_bytes: 97708
+    id: dapper:File.yLVqlItWKdOT-93XZiIpyLvzrYltbxwQ
+  - filename: cad-in-t2d-factor-gene.json
+    mime_type: application/json
+    sha256: 49ca33b405ab76c626ed1d025e71b9e142dfb19505b190ee0f41299302b023a7
+    size_in_bytes: 19844
+    id: dapper:File.kpagyYW3JWsKhx2jtH2M0VVOPssOH0CB
+  - filename: cad-in-t2d-factor-gene_set.json
+    mime_type: application/json
+    sha256: 23a3d1fb73f1dd33e84531e8dc0cd893e970c6b051e3554ba2206fa289f31be5
+    size_in_bytes: 28067
+    id: dapper:File.neEJEGGvxZ2ZhZZwda4gU5aXckPQbZoC
+  - filename: cad-in-t2d-factor-trait.json
+    mime_type: application/json
+    sha256: 89c65bec055db8940f2250568dac5323a1126ff314858c5da92dbd612ffd0ccd
+    size_in_bytes: 1107
+    id: dapper:File.cKAzH6uoMGkWaGcC_KacGjtBJh1BSXqx
+  - filename: cad-in-t2d-contextual-edges.json
+    mime_type: application/json
+    sha256: 271cfce3c200775f1f8d4897e3d5f2559a99ba10d5a8cf99dcf354c8f42414b4
+    size_in_bytes: 10975
+    id: dapper:File.aBYDsae7bwP8anXRp-g-bn4yhto9khvM
+  - filename: pigean-gene-factor.response.json
+    mime_type: application/json
+    sha256: 3fdf0f2ae3f782824ec7f96687c4a988a88a6ffb0a106b52f4e20464cdf51e30
+    size_in_bytes: 2945
+    id: dapper:File.O3hbhN6vHn_eHIdpf9SBC11C-wqps9D5
+  - filename: pigean-gene-set-factor.response.json
+    mime_type: application/json
+    sha256: b4ba6a21f6791c8b80ce8ef471361634ebb8b9f1f4e91e886fe1f05d02e7c1fa
+    size_in_bytes: 3785
+    id: dapper:File.GrCAGlPlRTzG2YG-lmDzotf-DwkteVEm
+  - filename: geneset-import.manifest.json
+    mime_type: application/json
+    sha256: 16332bb1da593d9a7040097290148469528721f9d7e8ac6026d1da4d1327bc6c
+    size_in_bytes: 1976
+    id: dapper:File.DF57Yi9yFibp-7oBDTzGK3kuoN42HUbY
+source_artifacts:
+  dismech-cad:
+    path: sources/Coronary_Artery_Disease.yaml
+    sha256: 00f2a71dca11fd7d4a8c835ea9e978037dcbef88d3fb050c5e74192db2bd7338
+    dapper_file_id: dapper:File.yLVqlItWKdOT-93XZiIpyLvzrYltbxwQ
+    origin:
+      repository: https://github.com/monarch-initiative/dismech
+      commit: df3884a8bba34370ecc0b3a49d956e7f0523bb28
+      path: kb/disorders/Coronary_Artery_Disease.yaml
+  interactive-gene:
+    path: sources/cad-in-t2d-factor-gene.json
+    sha256: 49ca33b405ab76c626ed1d025e71b9e142dfb19505b190ee0f41299302b023a7
+    dapper_file_id: dapper:File.kpagyYW3JWsKhx2jtH2M0VVOPssOH0CB
+    origin: data/interactive/2026-09-24/cad-in-t2d-factor-gene.json
+    retrieval:
+      url: https://dev.cfdeknowledge.org/api/interactive/connections
+      method: POST
+      request:
+        anchor_items:
+        - node_id: factor:portal:CADinT2D:cfde-inc-v2:Factor1
+          node_type: factor
+          node_key: Factor1
+          label: AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn
+          subtitle: Coronary artery disease in type 2 diabetes (CAD in T2D) (Factor1)
+        context: ''
+        target_type: gene
+        reducer: mean
+        connection_scope: direct
+        limit: 8
+        exclude_node_ids:
+        - factor:portal:CADinT2D:cfde-inc-v2:Factor1
+        model: cfde-inc-v2
+      retrieved_at: '2026-09-24T12:42:35.888812+00:00'
+      status: 200
+      body_sha256: 6f689724ca918b1706cbde411b6337c98cd5f4d7a9b23561a9a7d7695d50547f
+  interactive-gene_set:
+    path: sources/cad-in-t2d-factor-gene_set.json
+    sha256: 23a3d1fb73f1dd33e84531e8dc0cd893e970c6b051e3554ba2206fa289f31be5
+    dapper_file_id: dapper:File.neEJEGGvxZ2ZhZZwda4gU5aXckPQbZoC
+    origin: data/interactive/2026-09-24/cad-in-t2d-factor-gene_set.json
+    retrieval:
+      url: https://dev.cfdeknowledge.org/api/interactive/connections
+      method: POST
+      request:
+        anchor_items:
+        - node_id: factor:portal:CADinT2D:cfde-inc-v2:Factor1
+          node_type: factor
+          node_key: Factor1
+          label: AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn
+          subtitle: Coronary artery disease in type 2 diabetes (CAD in T2D) (Factor1)
+        context: ''
+        target_type: gene_set
+        reducer: mean
+        connection_scope: direct
+        limit: 8
+        exclude_node_ids:
+        - factor:portal:CADinT2D:cfde-inc-v2:Factor1
+        model: cfde-inc-v2
+      retrieved_at: '2026-09-24T12:42:36.928817+00:00'
+      status: 200
+      body_sha256: b30b0dd47d1a7b4744d1a75624dfff7fb6cc2b40c1ad0bf9a5b0652e9c3fa82f
+  interactive-trait:
+    path: sources/cad-in-t2d-factor-trait.json
+    sha256: 89c65bec055db8940f2250568dac5323a1126ff314858c5da92dbd612ffd0ccd
+    dapper_file_id: dapper:File.cKAzH6uoMGkWaGcC_KacGjtBJh1BSXqx
+    origin: data/interactive/2026-09-24/cad-in-t2d-factor-trait.json
+    retrieval:
+      url: https://dev.cfdeknowledge.org/api/interactive/connections
+      method: POST
+      request:
+        anchor_items:
+        - node_id: factor:portal:CADinT2D:cfde-inc-v2:Factor1
+          node_type: factor
+          node_key: Factor1
+          label: AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn
+          subtitle: Coronary artery disease in type 2 diabetes (CAD in T2D) (Factor1)
+        context: ''
+        target_type: trait
+        reducer: mean
+        connection_scope: direct
+        limit: 8
+        exclude_node_ids:
+        - factor:portal:CADinT2D:cfde-inc-v2:Factor1
+        model: cfde-inc-v2
+      retrieved_at: '2026-09-24T12:42:36.433973+00:00'
+      status: 200
+      body_sha256: dc0bfbd8c23271a7e0a6d2285a90de9be7698f2ede9465b6d5877bbd24e96006
+  contextual:
+    path: sources/cad-in-t2d-contextual-edges.json
+    sha256: 271cfce3c200775f1f8d4897e3d5f2559a99ba10d5a8cf99dcf354c8f42414b4
+    dapper_file_id: dapper:File.aBYDsae7bwP8anXRp-g-bn4yhto9khvM
+    origin: data/interactive/2026-09-25/cad-in-t2d-contextual-edges.json
+    retrieval:
+      url: https://dev.cfdeknowledge.org/api/interactive/contextual-edges
+      method: POST
+      request:
+        node_ids:
+        - factor:portal:CADinT2D:cfde-inc-v2:Factor1
+        - gene:SHH
+        - gene:TCF7L2
+        - gene:SIX2
+        - gene:GLI3
+        - gene:FGF13
+        - gene:EYA2
+        - gene:CTNNB1
+        - gene:WNT4
+        - gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn
+        - gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis_AD-OTHER_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn
+        - gene_set:PsychENCODE__all_signatures__PsychENCODE_geneM16
+        - gene_set:IGVF__IGVFDS4003HZAB__IGVF_Perturb_Seq_chr5:173234812-173235812_dn
+        - gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_SourceDiagnosis_AD-PATH_AGE_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn
+        - gene_set:IGVF__IGVFDS6332VCTO__IGVF_Perturb_Seq_ZFP64_up
+        - gene_set:GTEx__small_intestine__GTEx_aging_SmallIntestine_20-29_50-59_up
+        - gene_set:IGVF__IGVFDS2266YDVM__IGVF_Perturb_Seq_chr5:88882966-88883966_dn
+        model: cfde-inc-v2
+      retrieved_at: '2026-09-25T13:25:40.053605+00:00'
+      status: 200
+      body_sha256: f3842dccff3665359f62858a8ab7fae10f20442455042664b6e6fb2f8f490228
+  bioindex-gene:
+    path: sources/pigean-gene-factor.response.json
+    sha256: 3fdf0f2ae3f782824ec7f96687c4a988a88a6ffb0a106b52f4e20464cdf51e30
+    dapper_file_id: dapper:File.O3hbhN6vHn_eHIdpf9SBC11C-wqps9D5
+    origin: data/cfde/cad-in-t2d/pigean-gene-factor.response.json
+    retrieval:
+      url: https://cfde-dev.hugeampkpnbi.org/api/bio/query/pigean-gene-factor?q=CADinT2D%2Ccfde-inc-v2%2CFactor1&limit=8
+      method: GET
+      retrieved_at: '2026-09-25T13:26:30.684913+00:00'
+      status: 200
+      body_sha256: 3fdf0f2ae3f782824ec7f96687c4a988a88a6ffb0a106b52f4e20464cdf51e30
+  bioindex-gene-set:
+    path: sources/pigean-gene-set-factor.response.json
+    sha256: b4ba6a21f6791c8b80ce8ef471361634ebb8b9f1f4e91e886fe1f05d02e7c1fa
+    dapper_file_id: dapper:File.GrCAGlPlRTzG2YG-lmDzotf-DwkteVEm
+    origin: data/cfde/cad-in-t2d/pigean-gene-set-factor.response.json
+    retrieval:
+      url: https://cfde-dev.hugeampkpnbi.org/api/bio/query/pigean-gene-set-factor?q=CADinT2D%2Ccfde-inc-v2%2CFactor1&limit=8
+      method: GET
+      retrieved_at: '2026-09-25T13:26:31.687758+00:00'
+      status: 200
+      body_sha256: b4ba6a21f6791c8b80ce8ef471361634ebb8b9f1f4e91e886fe1f05d02e7c1fa
+  geneset-import:
+    path: sources/geneset-import.manifest.json
+    sha256: 16332bb1da593d9a7040097290148469528721f9d7e8ac6026d1da4d1327bc6c
+    dapper_file_id: dapper:File.DF57Yi9yFibp-7oBDTzGK3kuoN42HUbY
+    origin: data/cfde-genesets/2026-09-24/manifest.json
+coverage:
+  kind: authored_subset_of_captured_results
+  selection_rule: Three genes and two sets used in the existing account UI fixture; not a significance
+    threshold.
+  captured:
+    anchors: 1
+    genes: 8
+    gene_sets: 8
+    unique_graph_nodes: 17
+    unique_graph_edges: 16
+  retained:
+    anchors: 1
+    genes: 3
+    gene_sets: 2
+    unique_graph_nodes: 6
+    unique_graph_edges: 5
+  omitted_gene_ids:
+  - gene:SIX2
+  - gene:FGF13
+  - gene:EYA2
+  - gene:CTNNB1
+  - gene:WNT4
+  omitted_gene_set_ids:
+  - gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis_AD-OTHER_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn
+  - gene_set:IGVF__IGVFDS4003HZAB__IGVF_Perturb_Seq_chr5:173234812-173235812_dn
+  - gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_SourceDiagnosis_AD-PATH_AGE_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn
+  - gene_set:IGVF__IGVFDS6332VCTO__IGVF_Perturb_Seq_ZFP64_up
+  - gene_set:GTEx__small_intestine__GTEx_aging_SmallIntestine_20-29_50-59_up
+  - gene_set:IGVF__IGVFDS2266YDVM__IGVF_Perturb_Seq_chr5:88882966-88883966_dn
+  queries:
+    gene: ok_limit_reached
+    gene_set: ok_limit_reached
+    trait: empty
+    factor: not_captured
+    contextual: ok
+  upstream_total: null
+  same_upstream_build_verified: false
+  limitations:
+  - Interactive and BioIndex responses were collected on different dates.
+  - Candidate counts describe returned rows, not exhaustive neighborhoods.
+  - The gap concerns CAD; this fit concerns CAD within a T2D population.
+  - No measured semantic match, retrieved KG assertion, or gene-set membership is included.
+  - No causal direction, interaction effect or exposure timing is established by these scores.
+external_evidence:
+  status: not_queried
+  mcp_url: https://apps.okn.us/okn-mcp-dev/mcp
+  selected_graphs:
+  - shortname: biomarkerkg
+    graph_uri: https://purl.org/okn/frink/kg/biomarkerkg
+  - shortname: prokn
+    graph_uri: https://purl.org/okn/frink/kg/prokn
+  ledger: []
+  assertions: []
+authoring:
+  skill:
+    path: services/backend/agent-skills/construct-scientific-account/SKILL.md
+    sha256: 01fee0f2e05f0e331fb8ee81ca9a887e54f3436430dc7ec577ed7a51a623c793
+  contract:
+    path: docs/evidence-package.md
+    sha256: 985bf555410c29197d87e7be312fbd2ed5f0082561cbbc538dc57a0ed45a3aa4
+  references:
+  - path: docs/scientific-account-construction.md
+    sha256: 841ba75f1169cfbe21ecc826f127c5537e21080addfa4d06d40fa711c5dae897
+  - path: docs/pigean-claim-model.md
+    sha256: 8b797269d45a2a4feabe00fbac84df7c99ebaa72affcf6154c89c7ce7fcdcf08
+  - path: docs/dapper-integration.md
+    sha256: 4680546617d0aea69d297979a09ba56d1250f9d40e49b68f1a9c807d6666184b
+  - path: docs/agent-evidence-integration.md
+    sha256: c5b6f2bad1a89b4aba7aefc91a9c9ef8eb8db89dafb4203c18b979c6a242bc47
+  max_accounts: 3
+  required_question: dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk
+  budgets:
+    selected_eaggl_anchors: 10
+    dismech_mechanisms: 10
+    candidates_per_target: 100
+    retained_nodes: 250
+    retained_edges: 1000
+    total_context_tokens: 24000
+    mcp_calls: 20
+    rows_per_mcp_query: 100
+    retained_external_tokens: 5000
+  runtime:
+    harness: Claude Code
+    model: null
+    harness_version: null
+    status: not_launched
+  token_count: null
+  token_count_status: not_measured_for_target_model

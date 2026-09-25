@@ -1,0 +1,35 @@
+{
+  "url": "https://cfde-dev.hugeampkpnbi.org/api/bio/query/pigean-gene-gene-sets?q=IRS2%2Ccfde-inc-v2",
+  "retrieved_at": "2026-09-15T16:46:58.613716+00:00",
+  "index": "pigean-gene-gene-sets",
+  "keys": [
+    "IRS2",
+    "cfde-inc-v2"
+  ],
+  "complete": true,
+  "restricted": 0,
+  "pages": [
+    {
+      "profile": {
+        "fetch": 3.175000529154204e-06,
+        "query": 0.035330943999724695
+      },
+      "index": "pigean-gene-gene-sets",
+      "q": [
+        "IRS2",
+        "cfde-inc-v2"
+      ],
+      "count": 0,
+      "restricted": 0,
+      "progress": {
+        "bytes_read": 0,
+        "bytes_total": 0,
+        "filtered": 0
+      },
+      "page": 1,
+      "limit": null
+    }
+  ],
+  "row_count": 0,
+  "data": []
+}

@@ -1,0 +1,20 @@
+{
+  "url": "https://dev.cfdeknowledge.org/api/interactive/contextual-edges",
+  "method": "POST",
+  "request": {
+    "node_ids": [
+      "factor:gcat_trait:gcat_trait_language_measurement:cfde-inc-v2:Factor5",
+      "factor:gcat_trait:gcat_trait_presubiculum_volume:cfde-inc-v2:Factor1"
+    ],
+    "model": "cfde-inc-v2"
+  },
+  "retrieved_at": "2026-09-24T12:45:41.374780+00:00",
+  "status": 200,
+  "content_type": "application/json",
+  "body_sha256": "4727d0a89be7999b4f4d81c4774594c9726b02c1bd8ebcb15a8109edca0d2f92",
+  "body_bytes": 12,
+  "response": {
+    "edges": []
+  },
+  "elapsed_seconds": 0.46
+}

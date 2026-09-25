@@ -1,0 +1,12 @@
+{
+  "url": "https://dev.cfdeknowledge.org/api/openapi.json",
+  "method": "GET",
+  "request": null,
+  "retrieved_at": "2026-09-24T12:40:46.580447+00:00",
+  "status": 200,
+  "content_type": "text/html; charset=utf-8",
+  "body_sha256": "a0cb8dbf0ebd590aac15746465a9ddcee0d2e708b994d1a5c9fe16227bb76bb0",
+  "body_bytes": 589,
+  "non_json_excerpt": "<!doctype html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"UTF-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n    <title>REVEAL KG Playground</title>\n    <meta\n      name=\"description\"\n      content=\"Local paper-to-graph portal for CFDE factor families, bridges, and packet retrieval.\"\n    />\n    <!-- cd-smoke-test: 2026-05-11 -->\n    <script type=\"module\" crossorigin src=\"/assets/index-BrSiPi1z.js\"></script>\n    <link rel=\"stylesheet\" crossorigin href=\"/asse",
+  "elapsed_seconds": 0.456
+}

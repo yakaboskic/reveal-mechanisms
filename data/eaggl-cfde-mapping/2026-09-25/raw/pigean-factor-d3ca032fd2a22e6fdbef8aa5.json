@@ -1,0 +1,35 @@
+{
+  "url": "https://cfde-dev.hugeampkpnbi.org/api/bio/query/pigean-factor?q=22q112_deletion_syndrome_Orphanet_567%2Ccfde-inc-v2",
+  "retrieved_at": "2026-09-25T18:40:54.441182+00:00",
+  "index": "pigean-factor",
+  "keys": [
+    "22q112_deletion_syndrome_Orphanet_567",
+    "cfde-inc-v2"
+  ],
+  "complete": true,
+  "restricted": 0,
+  "pages": [
+    {
+      "profile": {
+        "fetch": 2.3799948394298553e-06,
+        "query": 0.04194333194755018
+      },
+      "index": "pigean-factor",
+      "q": [
+        "22q112_deletion_syndrome_Orphanet_567",
+        "cfde-inc-v2"
+      ],
+      "count": 0,
+      "restricted": 0,
+      "progress": {
+        "bytes_read": 0,
+        "bytes_total": 0,
+        "filtered": 0
+      },
+      "page": 1,
+      "limit": null
+    }
+  ],
+  "row_count": 0,
+  "data": []
+}

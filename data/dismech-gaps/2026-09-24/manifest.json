@@ -1,0 +1,56 @@
+{
+  "retrieved_at": "2026-09-24T12:44:27.692048+00:00",
+  "source_commit": "df3884a8bba34370ecc0b3a49d956e7f0523bb28",
+  "yaml_files": 3361,
+  "discussions": 4051,
+  "knowledge_gaps": 3367,
+  "gap_kinds": [
+    "HUMAN_MODEL_MISMATCH",
+    "KNOWLEDGE_GAP"
+  ],
+  "discussions_by_kind": {
+    "KNOWLEDGE_GAP": 2604,
+    "HUMAN_MODEL_MISMATCH": 763,
+    "INTERPRETATION": 151,
+    "CONTROVERSY": 231,
+    "OPEN_QUESTION": 227,
+    "CURATION_TODO": 44,
+    "EMERGING_HYPOTHESIS": 31
+  },
+  "gaps_by_kind": {
+    "KNOWLEDGE_GAP": 2604,
+    "HUMAN_MODEL_MISMATCH": 763
+  },
+  "gaps_by_status": {
+    "null": 838,
+    "OPEN": 2526,
+    "RESOLVED": 3
+  },
+  "gaps_missing_source_id": 0,
+  "attachments": 6422,
+  "attachment_resolution": {
+    "whole_section": 79,
+    "resolved": 6329,
+    "ambiguous_target": 10,
+    "whole_document": 4
+  },
+  "complete": true,
+  "errors": [],
+  "files": {
+    "discussions.jsonl.gz": {
+      "rows": 4051,
+      "sha256": "6540032173ee9a30244913dcee2153aa0526081d265a66006d7582e5354dcd35"
+    },
+    "knowledge-gaps.jsonl.gz": {
+      "rows": 3367,
+      "sha256": "3739dde70dd99f04e16b875e69536710c7c3b52ba5aac4c8c9d0efa9556b643d"
+    },
+    "gap-attachments.jsonl.gz": {
+      "rows": 6422,
+      "sha256": "9a009f5c6b639b4332c816e124f4238fd1230aa3a7087753a92a66fd2f90d3dd"
+    }
+  },
+  "resolver_source": "src/dismech/entity_refs.py",
+  "resolver_sha256": "93270d4bd87eb02a021c7f3133089ccff92dbb0321e36577b858ac8ebca75c85",
+  "scope_note": "All KB YAML discussions; gap kinds follow DisMech discussions exporter; no source statuses changed"
+}

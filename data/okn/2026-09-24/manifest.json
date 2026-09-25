@@ -1,0 +1,62 @@
+{
+  "scope": "MCP discovery and selected-graph schemas only; no scientific query or Box execution",
+  "protocol": "2025-03-26",
+  "endpoint": "https://apps.okn.us/okn-mcp-dev/mcp",
+  "tools": 23,
+  "selected_graphs": {
+    "biomarkerkg": {
+      "shortname": "biomarkerkg",
+      "title": "BiomarkerKB KG",
+      "description": "The BiomarkerKB knowledge graph is a structured network that connects biomarkers to diseases, drugs, biological entities, and evidence from the scientific literature.",
+      "homepage": "https://biomarkerkb.org/home/",
+      "named_graph": "https://purl.org/okn/frink/kg/biomarkerkg",
+      "payload": [
+        "biomarker",
+        "disease",
+        "protein",
+        "gene",
+        "variant",
+        "chemical",
+        "anatomy",
+        "cell_type"
+      ]
+    },
+    "prokn": {
+      "shortname": "prokn",
+      "title": "Protein Knowledge Network",
+      "description": "The Protein Knowledge Network (ProKN) integrates protein-centric data with the genomic-centric datasets of the Common Fund Data Ecosystem (CFDE), spanning heterogeneous biological data types across multiple domains to foster CFDE re-use and collaboration through enhanced connectivity and data integration, enabling new capabilities for functional genomics and systems-level understanding of disease mechanisms.",
+      "homepage": "https://research.bioinformatics.udel.edu/ProKN/",
+      "named_graph": "https://purl.org/okn/frink/kg/prokn",
+      "payload": [
+        "protein",
+        "gene",
+        "GO",
+        "Reactome",
+        "pathway",
+        "disease",
+        "phenotype",
+        "drug",
+        "chemical",
+        "variant",
+        "cell_type"
+      ]
+    }
+  },
+  "files": {
+    "initialize.json": {
+      "sha256": "10d5a576b75132fee7220b2739afb801f4300c50fa7d52d6cf509d6a6776ac34"
+    },
+    "list-kgs.json": {
+      "sha256": "063bd2dbc0cf226101fde0e4907354611ccff28affe3778090d12090f54a63a8"
+    },
+    "schema-biomarkerkg.json": {
+      "sha256": "7d4a7bdff8f2803f7ca6e30a4e9f55a6fa2834e8d38539731892596eac241058"
+    },
+    "schema-prokn.json": {
+      "sha256": "688fcd13ac484027fcb0b4af5bf97b0c50ef53f65ef7661a21f7a269dc1d9a58"
+    },
+    "tools-list.json": {
+      "sha256": "142e032e3038fb4cbbc8dee6f4c26ff5faf04951f57eec766644cecb2d95a538"
+    }
+  }
+}

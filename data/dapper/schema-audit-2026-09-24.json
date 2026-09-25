@@ -1,0 +1,37 @@
+{
+  "audited_at": "2026-09-24",
+  "repository": "/Users/cyakaboski/src/research/dapper",
+  "commit": "ebfc471049240c23d6ce1d3d40cd2785b35e6443",
+  "schema_has_local_changes": false,
+  "files": {
+    "schema/docs/claims.md": {
+      "sha256": "65c196a88456fcc54f06f57fdd910fd3957af7599bb0c8760ec337244758cc4c"
+    },
+    "schema/claims.yaml": {
+      "sha256": "63e0d97a1c8b5aff9efbe01d3747a2baf78ac4e7e5db2f6d8b65ad71d1cec3b5"
+    },
+    "schema/dapper.yaml": {
+      "sha256": "cc80f06becbf5dfd505cf6f1502ed1522ed33075d899a0e0d616ad3853cbda6a"
+    },
+    "schema/identity/README.md": {
+      "sha256": "f8ce2f9f7befbd404854d698d3ed29fc5ed6137862d77245ad2f1e9fc83066e8"
+    },
+    "schema/identity/dapper_identity.py": {
+      "sha256": "e01ca6be7d03626bb2c9528e06c2dbf4d9a8a8a58564676d2d671e40bc1a7218"
+    }
+  },
+  "findings": {
+    "design_unit": "ScientificAccount",
+    "implemented_container": "CompositeClaim",
+    "implemented_claim_classes": [
+      "Proposition",
+      "ClaimScore",
+      "Claim",
+      "CompositeClaim"
+    ],
+    "scientific_account_implemented": false,
+    "paragraph_implemented": false,
+    "knowledge_gap_digest_class_found_in_schema": false,
+    "identity_profile": "DAPPER-ID-1"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "date": "2026-09-25",
+  "artifact_sha256": "92c05d1e2df081bf25acaf6c9ed10a56d4ca299d0789082a9f87265b959eeebe",
+  "scope": "HTML job interaction, scripted playback only",
+  "browser": "Codex in-app browser",
+  "checks": [
+    "JavaScript syntax: node --check passed",
+    "Anonymous submission automatically starts job activity",
+    "Exact selected question and five read-only anchor chips retained above the panel",
+    "Counts from reference graph: 9 distinct nodes, 8 distinct edges; scope labeled",
+    "Progress appends through graph expansion, package preparation, agent startup and activity",
+    "Completed playback reports Agent finished and missing applicable evidence, not an unrelated account",
+    "Stop transitions through Stopping to Stopped and halts event advancement",
+    "Back to question retains source selection; repeat submission reuses preview session",
+    "1280x720 visual review: question, stop button, scrollable activity and footer visible",
+    "Browser runtime logs empty during review"
+  ],
+  "limitations": [
+    "No live services or agent were called",
+    "Reduced-motion and small-screen rules present; not device-emulated in this review",
+    "The current OpenAPI remains unchanged; presentation event extensions are documented separately"
+  ]
+}

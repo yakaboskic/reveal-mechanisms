@@ -1,0 +1,17 @@
+{
+  "name": "reveal-database-schema",
+  "private": true,
+  "type": "module",
+  "engines": { "node": "^20.19 || ^22.12 || >=24.0" },
+  "scripts": {
+    "validate": "prisma validate",
+    "format": "prisma format",
+    "generate": "prisma generate",
+    "inspect": "prisma db pull --print"
+  },
+  "devDependencies": {
+    "prisma": "7.10.0",
+    "@prisma/client": "7.10.0",
+    "dotenv": "18.0.4"
+  }
+}

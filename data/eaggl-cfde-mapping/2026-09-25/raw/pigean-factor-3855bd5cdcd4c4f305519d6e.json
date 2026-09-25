@@ -1,0 +1,62 @@
+{
+  "url": "https://cfde-dev.hugeampkpnbi.org/api/bio/query/pigean-factor?q=T2D%2Ccfde-inc-v2",
+  "retrieved_at": "2026-09-25T18:40:56.006621+00:00",
+  "index": "pigean-factor",
+  "keys": [
+    "T2D",
+    "cfde-inc-v2"
+  ],
+  "complete": true,
+  "restricted": 0,
+  "pages": [
+    {
+      "profile": {
+        "fetch": 0.33883756498107687,
+        "query": 0.005834053969010711
+      },
+      "index": "pigean-factor",
+      "q": [
+        "T2D",
+        "cfde-inc-v2"
+      ],
+      "count": 2,
+      "restricted": 0,
+      "progress": {
+        "bytes_read": 904,
+        "bytes_total": 904,
+        "filtered": 0
+      },
+      "page": 1,
+      "limit": null
+    }
+  ],
+  "row_count": 2,
+  "data": [
+    {
+      "anchor_any_joint": 1.0,
+      "anchor_any_marginal": 1.0,
+      "factor": "Factor1",
+      "gene_set_size": "cfde-inc-v2",
+      "label": "mp_improved_glucose_tolerance",
+      "lambda": 0.0645,
+      "phenotype": "T2D",
+      "top_gene_sets": "mp_improved_glucose_tolerance;mp_decreased_circulating_cholesterol_level;mp_decreased_circulating_glucose_level;mp_decreased_circulating_triglyceride_level;mp_decreased_body_weight",
+      "top_genes": "NF1;ADIPOQ;LMNA;IL6;STAT3",
+      "trait_group": "portal",
+      "cluster": "Factor1"
+    },
+    {
+      "anchor_any_joint": 1.0,
+      "anchor_any_marginal": 1.0,
+      "factor": "Factor2",
+      "gene_set_size": "cfde-inc-v2",
+      "label": "mp_impaired_glucose_tolerance",
+      "lambda": 0.142,
+      "phenotype": "T2D",
+      "top_gene_sets": "mp_impaired_glucose_tolerance;mp_increased_circulating_glucose_level;mp_increased_body_weight;mp_increased_circulating_insulin_level;GOBP_REGULATION_OF_HORMONE_LEVELS",
+      "top_genes": "CEBPB;COL1A1;PIK3R1;HMGA1;RETNLB",
+      "trait_group": "portal",
+      "cluster": "Factor2"
+    }
+  ]
+}

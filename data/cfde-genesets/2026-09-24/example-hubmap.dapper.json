@@ -1,0 +1,28 @@
+{
+  "gene_sets": [
+    {
+      "alternate_identifier": [
+        "gene_set:HuBMAP__all_signatures__HuBMAP_Blood_CT2_CD14_monocyte",
+        "cfde:cfde-inc-v2:gene_set:HuBMAP__all_signatures__HuBMAP_Blood_CT2_CD14_monocyte"
+      ],
+      "id": "dapper:GeneSet.Y_4XC3Zf4QDL7CF-I3mD9M2YiONEsxFv",
+      "member_type": "gene",
+      "name": "HuBMAP / all signatures / HuBMAP Blood CT2 CD14 monocyte",
+      "term": "HuBMAP__all_signatures__HuBMAP_Blood_CT2_CD14_monocyte",
+      "term_prefix": "HuBMAP",
+      "was_derived_from": [
+        "https://cfde-dev.hugeampkpnbi.org/api/bio/keys/pigean-gene-set/2"
+      ],
+      "was_generated_by": "dapper:Activity.VM0nxPd0QVsZJ-7qw4WjAvXtEiFMehqx"
+    }
+  ],
+  "activities": [
+    {
+      "name": "CFDE GeneSet catalog encoding",
+      "activity_type": "CFDEGeneSetCatalogImport",
+      "description": "Encodes advertised CFDE named gene-set identities; not the original biological gene-set creation activity.",
+      "command": "cfde-geneset-catalog-v1 model=cfde-inc-v2",
+      "id": "dapper:Activity.VM0nxPd0QVsZJ-7qw4WjAvXtEiFMehqx"
+    }
+  ]
+}

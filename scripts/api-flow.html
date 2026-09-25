@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>REVEAL user interaction flow</title>
+  <style>
+    :root { color-scheme:light; --ink:#16334a; --blue:#2463eb; --soft:#eef5ff; --line:#d9e3ec; --body:#193b52; }
+    * { box-sizing:border-box; }
+    body { margin:0; color:var(--body); background:white; font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    main { max-width:1260px; margin:auto; padding:30px 28px; }
+    h1,h2 { color:var(--ink); font-family:"Trebuchet MS",sans-serif; line-height:1.15; margin:0 0 12px; }
+    h1 { font-size:32px; letter-spacing:-.5px; } h2 { font-size:23px; }
+    h3 { font-size:15px; margin:0 0 8px; }
+    p { margin:0 0 10px; max-width:90ch; }
+    a { color:#1b50bd; text-underline-offset:3px; }
+    button,select { font:inherit; }
+    :focus-visible { outline:3px solid var(--blue); outline-offset:3px; }
+    header { display:flex; align-items:flex-start; justify-content:space-between; gap:24px; margin-bottom:14px; }
+    header p { color:#4b6273; }
+    nav { display:flex; gap:16px; flex-wrap:wrap; padding-top:7px; }
+    nav a { white-space:nowrap; }
+    .note { font-size:13px; padding:10px 14px; background:var(--soft); border-left:3px solid #9ebdf6; margin-bottom:21px; }
+    .flow-label { display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:8px; margin:0 0 12px; }
+    .flow-label h2 { font-size:20px; margin:0; }
+    .flow-label span { color:#4b6273; font-size:13px; }
+    .diagram { position:relative; }
+    #connectors { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; overflow:visible; }
+    .nodes { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:38px 24px; position:relative; }
+    .step { border:1px solid #b7c8d8; background:white; border-radius:6px; padding:12px 12px 13px; color:var(--ink); cursor:pointer; text-align:left; min-height:116px; display:flex; flex-direction:column; justify-content:center; gap:7px; }
+    .step:hover { border-color:var(--blue); }
+    .step[aria-pressed="true"] { background:var(--soft); border:2px solid var(--blue); padding:11px 11px 12px; }
+    .step-heading { font-weight:650; display:flex; align-items:center; gap:8px; line-height:1.3; }
+    .step-number { font-size:12px; font-weight:650; background:#f0f4f8; color:#38566e; border-radius:50%; min-width:23px; height:23px; text-align:center; line-height:23px; }
+    .step[aria-pressed="true"] .step-number { background:var(--blue); color:white; }
+    .route { font:11px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace; overflow-wrap:anywhere; }
+    .outcome { font-size:12px; color:#536879; overflow-wrap:anywhere; }
+    .support { margin:20px 0 14px; display:flex; align-items:center; flex-wrap:wrap; gap:10px; }
+    .support-label { font-size:13px; color:#4b6273; margin-right:2px; }
+    .support button { border:1px dashed #aabbca; border-radius:5px; padding:8px 12px; color:var(--body); background:white; cursor:pointer; font-size:13px; }
+    .support button[aria-pressed="true"] { border-style:solid; border-color:var(--blue); background:var(--soft); }
+    .branches { display:flex; flex-wrap:wrap; gap:5px 20px; font-size:12px; color:#536879; padding-bottom:22px; border-bottom:1px solid var(--line); }
+    .branches a { cursor:pointer; }
+    .inspector { margin-top:23px; }
+    .selected-head { display:flex; justify-content:space-between; gap:20px; align-items:flex-start; }
+    .selected-head a { font-size:13px; white-space:nowrap; }
+    .detail-links { display:flex; gap:15px; flex-wrap:wrap; }
+    .input-output { display:grid; grid-template-columns:1fr 1fr; gap:25px; padding:16px 0; }
+    .input-output p { margin:0; font-size:14px; }
+    .input-output strong { display:block; color:#536879; font-size:12px; font-weight:600; margin-bottom:4px; }
+    .controls { display:grid; grid-template-columns: minmax(0,1.45fr) minmax(0,1fr) 155px; gap:14px; margin:7px 0 15px; }
+    label { display:block; font-size:13px; font-weight:600; }
+    select { display:block; width:100%; background:white; color:var(--ink); border:1px solid #aabcca; border-radius:4px; padding:9px; margin-top:5px; font-size:13px; min-height:39px; }
+    .payloads { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+    .payload { min-width:0; }
+    .code-head { display:flex; align-items:center; justify-content:space-between; gap:12px; font-size:13px; }
+    .code-head h3 { margin:0; font-size:13px; }
+    .copy { border:1px solid var(--line); border-radius:4px; background:white; padding:4px 10px; color:var(--ink); cursor:pointer; }
+    pre { margin:8px 0 0; padding:16px; border-radius:5px; background:#f4f7fa; color:#19344e; font:12px/1.65 ui-monospace,SFMono-Regular,Consolas,monospace; white-space:pre-wrap; overflow-wrap:anywhere; overflow:auto; height:340px; }
+    details { margin-top:16px; font-size:14px; }
+    summary { cursor:pointer; font-weight:600; padding:6px 0; }
+    ul { padding-left:20px; margin:6px 0 12px; max-width:100ch; } li { margin:5px 0; }
+    #worker-title { margin-top:16px; }
+    footer { border-top:1px solid var(--line); padding-top:17px; margin-top:26px; font-size:12px; color:#536879; }
+    #copy-status { font-size:12px; }
+    @media(max-width:1000px) {
+      .nodes { grid-template-columns:repeat(2,minmax(0,1fr)); gap:30px 28px; }
+      .controls { grid-template-columns:1fr 1fr; } .request-view { grid-column:1/-1; max-width:230px; }
+      .route { font-size:12px; } .step { min-height:96px; }
+    }
+    @media(max-width:600px) {
+      main { padding:22px 18px; } header { flex-direction:column; gap:3px; } h1 { font-size:28px; }
+      .nodes { grid-template-columns:1fr; gap:26px; } .step { min-height:86px; }
+      .selected-head { flex-direction:column; gap:5px; } .payloads,.input-output,.controls { grid-template-columns:1fr; gap:14px; }
+      .request-view { grid-column:auto; max-width:none; } select { font-size:16px; }
+      pre { height:auto; max-height:380px; } .support button { min-height:44px; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <header><div><h1>REVEAL user interaction flow</h1><p>Follow the user journey. Select a step to inspect its endpoints, requests and responses.</p></div><nav aria-label="API handoff"><a href="index.html">API reference</a><a href="flow.mmd" download>Mermaid source</a><a href="flow.md">Full mapping</a></nav></header>
+  <aside class="note">Contract diagram · <span id="coverage"></span> · Examples are captured-source and illustrative fixtures. Selecting a step does not call an API or start a job.</aside>
+  <section aria-label="Core research flow">
+    <div class="flow-label"><h2>From inquiry to cited paragraph</h2><span>Arrows follow the successful path; supporting and recovery paths are below.</span></div>
+    <div class="diagram"><svg id="connectors" aria-hidden="true"><defs><marker id="arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M 0 0 L 8 4 L 0 8 z" fill="#8ca3b7"/></marker></defs><g id="lines"></g></svg><div class="nodes" id="nodes"></div></div>
+    <div class="support" id="support"><span class="support-label">Supporting paths</span></div>
+    <div class="branches"><a href="#anchors" data-go="anchors">422 missing EAGGL anchor → step 2</a><a href="#draft" data-go="draft">409 stale draft → reconcile at step 3</a><a href="#cancel" data-go="cancel">Other terminal job outcomes → inspect or retry</a></div>
+  </section>
+  <section class="inspector" aria-labelledby="selected-title">
+    <div class="selected-head"><div><h2 id="selected-title"></h2><p id="selected-action"></p></div><div class="detail-links"><a href="#" id="back-to-diagram">Back to diagram</a><a id="reference-link" href="index.html">Open endpoint schemas</a></div></div>
+    <div class="input-output"><p><strong>User/client sends</strong><span id="input-summary"></span></p><p><strong>Backend returns</strong><span id="output-summary"></span></p></div>
+    <div class="controls"><label for="exchange-select">Endpoint and request example<select id="exchange-select"></select></label><label for="response-select">Response or error example<select id="response-select"></select></label><label for="request-view" class="request-view">Request view<select id="request-view"><option value="json">Structured request</option><option value="curl">curl</option></select></label></div>
+    <div class="payloads"><section class="payload"><div class="code-head"><h3 id="request-title">Request</h3><button class="copy" data-copy="request-code">Copy</button></div><pre id="request-code"></pre></section><section class="payload"><div class="code-head"><h3 id="response-title">Response</h3><button class="copy" data-copy="response-code">Copy</button></div><pre id="response-code"></pre></section></div>
+    <span id="copy-status" role="status" aria-live="polite"></span>
+    <details><summary>Guards, recovery and backend processing</summary><ul id="rules"></ul><h3 id="worker-title" hidden>Worker activity behind this job</h3><ol id="worker" hidden></ol><p id="operation-description"></p></details>
+    <span id="selection-status" role="status" aria-live="polite" style="position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)"></span>
+  </section>
+  <footer><p>All payloads come from the validated OpenAPI handoff. The AIP gap/suggestion example is separate from the linked CADinT2D account/paragraph sequence. Similarity values and agent results are illustrative; no new research was executed.</p><p>Scientific content uses DAPPER. Drafts, jobs, retrieval rankings and ownership are application records. Backend services run inside the job; they are not additional frontend endpoints.</p></footer>
+</main>
+<!-- FLOW_DATA -->
+<script>
+  const data=window.REVEAL_FLOW, allSteps=[...data.steps,...data.support];
+  const nodes=document.getElementById('nodes'), support=document.getElementById('support');
+  const exchangeSelect=document.getElementById('exchange-select'), responseSelect=document.getElementById('response-select');
+  const requestView=document.getElementById('request-view');let activeStep,responseChoices=[];
+  document.getElementById('coverage').textContent=data.operation_count+' operations and '+data.exchange_count+' validated exchanges';
+  function buttonFor(step,index,main) {
+    const b=document.createElement('button');b.type='button';b.dataset.step=step.id;b.setAttribute('aria-pressed','false');
+    if(main){b.className='step';const heading=document.createElement('span');heading.className='step-heading';const n=document.createElement('span');n.className='step-number';n.textContent=index+1;heading.append(n,document.createTextNode(step.title));const route=document.createElement('span');route.className='route';route.textContent=step.route;const first=data.examples[step.cases[0]],status=Object.keys(first.responses)[0],media=first.responses[status].content_type,schema=data.operations[first.operation_id].responses[status].content[media].schema;const outcome=document.createElement('span');outcome.className='outcome';outcome.textContent=[...new Set(step.cases.flatMap(key=>Object.keys(data.examples[key].responses)))].join('/')+' · '+(schema.$ref?schema.$ref.split('/').pop():media);b.append(heading,route,outcome);}
+    else b.textContent=step.title;
+    b.addEventListener('click',()=>selectStep(step.id,true));return b;
+  }
+  data.steps.forEach((s,i)=>nodes.append(buttonFor(s,i,true)));data.support.forEach((s,i)=>support.append(buttonFor(s,i,false)));
+  function draw(){
+    const columns=window.matchMedia('(max-width:600px)').matches?1:window.matchMedia('(max-width:1000px)').matches?2:5;
+    const buttons=[...nodes.children];buttons.forEach((b,i)=>{const row=Math.floor(i/columns),col=row%2?columns-1-i%columns:i%columns;b.style.gridRow=row+1;b.style.gridColumn=col+1;});
+    const bounds=nodes.getBoundingClientRect(), lines=document.getElementById('lines');lines.replaceChildren();
+    for(let i=0;i<buttons.length-1;i++){
+      const a=buttons[i].getBoundingClientRect(),b=buttons[i+1].getBoundingClientRect();let x1,y1,x2,y2;
+      if(Math.abs(a.top-b.top)<2){const right=b.left>a.left;x1=(right?a.right:a.left)-bounds.left;y1=a.top+a.height/2-bounds.top;x2=(right?b.left:b.right)-bounds.left;y2=y1;}
+      else{x1=a.left+a.width/2-bounds.left;y1=a.bottom-bounds.top;x2=b.left+b.width/2-bounds.left;y2=b.top-bounds.top;}
+      const path=document.createElementNS('http://www.w3.org/2000/svg','path');path.setAttribute('d',`M ${x1} ${y1} L ${x2} ${y2}`);path.setAttribute('stroke','#8ca3b7');path.setAttribute('stroke-width','1.5');path.setAttribute('fill','none');path.setAttribute('marker-end','url(#arrow)');lines.append(path);
+    }
+  }
+  function option(select,value,text){const el=document.createElement('option');el.value=value;el.textContent=text;select.append(el);}
+  function selectStep(id,reveal=false){
+    activeStep=allSteps.find(s=>s.id===id)||data.steps[0];
+    document.querySelectorAll('[data-step]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.step===activeStep.id)));
+    const i=data.steps.indexOf(activeStep);document.getElementById('selected-title').textContent=(i>=0?(i+1)+'. ':'')+activeStep.title;
+    document.getElementById('selected-action').textContent=activeStep.action;document.getElementById('input-summary').textContent=activeStep.incoming;document.getElementById('output-summary').textContent=activeStep.outgoing;
+    exchangeSelect.replaceChildren();activeStep.cases.forEach(key=>{const e=data.examples[key];option(exchangeSelect,key,e.method+' '+e.path_template+' · '+e.case.replaceAll('_',' '));});
+    const rules=document.getElementById('rules');rules.replaceChildren();activeStep.rules.forEach(t=>{const li=document.createElement('li');li.textContent=t;rules.append(li);});
+    const worker=document.getElementById('worker');worker.replaceChildren();worker.hidden=!activeStep.worker;document.getElementById('worker-title').hidden=!activeStep.worker;
+    (activeStep.worker||[]).forEach(t=>{const li=document.createElement('li');li.textContent=t;worker.append(li);});
+    document.getElementById('selection-status').textContent='Selected '+activeStep.title+'. '+activeStep.cases.length+' request examples.';
+    history.replaceState(null,'','#'+activeStep.id);showExchange();
+    if(reveal)document.querySelector('.inspector').scrollIntoView({block:'start',behavior:'instant'});
+  }
+  function showExchange(){
+    const ex=data.examples[exchangeSelect.value],op=data.operations[ex.operation_id];responseChoices=[];
+    for(const [status,response] of Object.entries(ex.responses))for(const [name,value] of Object.entries(response.examples))responseChoices.push({status,media:response.content_type,name,value});
+    for(const [status,response] of Object.entries(op.responses))if(Number(status)>=400)for(const [media,item]of Object.entries(response.content))for(const[name,e]of Object.entries(item.examples))responseChoices.push({status,media,name,value:e.value});
+    responseSelect.replaceChildren();responseChoices.forEach((r,i)=>option(responseSelect,i,r.status+' · '+r.name.replaceAll('_',' ')+' · '+r.media));
+    document.getElementById('reference-link').href=op.reference;document.getElementById('operation-description').textContent=op.description;
+    showRequest();showResponse();
+  }
+  function showRequest(){
+    const ex=data.examples[exchangeSelect.value],r=ex.request;
+    const structured={method:ex.method,path:ex.path_template,...(Object.keys(r.path).length?{path_parameters:r.path}:{}),...(Object.keys(r.query).length?{query_parameters:r.query}:{}),headers:r.headers,...(r.body!==null?{body:r.body}:{})};
+    document.getElementById('request-title').textContent='Request · '+ex.method;
+    document.getElementById('request-code').textContent=requestView.value==='curl'?ex.curl:JSON.stringify(structured,null,2);
+  }
+  function showResponse(){const r=responseChoices[Number(responseSelect.value)];document.getElementById('response-title').textContent='Response · '+r.status+' · '+r.media;document.getElementById('response-code').textContent=typeof r.value==='string'?r.value:JSON.stringify(r.value,null,2);}
+  exchangeSelect.addEventListener('change',showExchange);responseSelect.addEventListener('change',showResponse);requestView.addEventListener('change',showRequest);
+  document.querySelectorAll('[data-go]').forEach(a=>a.addEventListener('click',e=>{e.preventDefault();selectStep(a.dataset.go,true);}));
+  document.getElementById('back-to-diagram').addEventListener('click',e=>{e.preventDefault();document.querySelector('.flow-label').scrollIntoView({block:'start',behavior:'instant'});});
+  document.querySelectorAll('[data-copy]').forEach(b=>b.addEventListener('click',async()=>{const el=document.getElementById(b.dataset.copy);try{await navigator.clipboard.writeText(el.textContent);document.getElementById('copy-status').textContent='Copied to clipboard.';}catch{const range=document.createRange();range.selectNodeContents(el);const selection=window.getSelection();selection.removeAllRanges();selection.addRange(range);document.getElementById('copy-status').textContent='Text selected. Use your keyboard copy command.';}}));
+  new ResizeObserver(draw).observe(nodes);window.addEventListener('resize',draw);selectStep(location.hash.slice(1)||'gap');draw();
+</script>
+</body>
+</html>

@@ -1,0 +1,391 @@
+// Aurora's original 11 tables, migration 004's application links, and the pending
+// DisMech migration 003. All 23 definitions verified against MySQL 8.0.42.
+// SQL migrations are authoritative for collations, CHECK constraints and
+// database-managed ON UPDATE timestamps. Do not use db push on Aurora.
+// DisMech knowledge gaps: DismechDiscussion rows where is_gap = true.
+
+generator client {
+  provider = "prisma-client"
+  output   = "./generated/client"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+model CfdeGeneSetAlias {
+  eaggl_cfde_gene_set_links EagglCfdeGeneSetLink[]
+  import_id                 String                 @db.Char(64)
+  node_id_sha256            String                 @db.Char(64)
+  model                     String                 @db.VarChar(64)
+  source_key                String                 @db.Text
+  node_id                   String                 @db.Text
+  dapper_id                 String                 @db.VarChar(128)
+  provenance                Json
+  gene_set_imports          GeneSetImport          @relation(fields: [import_id], references: [import_id], onDelete: NoAction, onUpdate: NoAction, map: "cfde_gene_set_aliases_ibfk_1")
+  dapper_objects            DapperObject           @relation(fields: [dapper_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "cfde_gene_set_aliases_ibfk_2")
+
+  @@id([import_id, node_id_sha256])
+  @@index([dapper_id], map: "lookup_dapper")
+  @@index([model, node_id_sha256], map: "lookup_node")
+  @@map("cfde_gene_set_aliases")
+}
+
+model DapperObject {
+  id                    String             @id @db.VarChar(128)
+  class_name            String             @db.VarChar(64)
+  identity_profile      String             @db.VarChar(32)
+  payload_sha256        String             @db.Char(64)
+  payload               Json
+  created_at            DateTime           @default(now()) @db.Timestamp(0)
+  cfde_gene_set_aliases CfdeGeneSetAlias[]
+
+  @@map("dapper_objects")
+}
+
+model DismechCausalEdge {
+  import_id          String           @db.Char(64)
+  id_sha256          String           @db.Char(64)
+  mechanism_sha256   String           @db.Char(64)
+  source_id          String           @db.Text
+  target_resolution  String           @db.VarChar(64)
+  payload            Json
+  dismech_mechanisms DismechMechanism @relation(fields: [import_id, mechanism_sha256], references: [import_id, id_sha256], onDelete: NoAction, onUpdate: NoAction, map: "dismech_causal_edges_ibfk_1")
+
+  @@id([import_id, id_sha256])
+  @@index([import_id, mechanism_sha256], map: "import_id")
+  @@map("dismech_causal_edges")
+}
+
+model DismechDiscussion {
+  import_id               String                 @db.Char(64)
+  id_sha256               String                 @db.Char(64)
+  document_sha256         String                 @db.Char(64)
+  source_id               String                 @db.Text
+  discussion_id           String?                @db.Text
+  source_pointer          String                 @db.Text
+  kind                    String?                @db.VarChar(64)
+  status                  String?                @db.VarChar(64)
+  is_gap                  Boolean
+  has_stable_source_id    Boolean
+  prompt                  String                 @db.LongText
+  payload                 Json
+  dismech_documents       DismechDocument        @relation(fields: [import_id, document_sha256], references: [import_id, id_sha256], onDelete: NoAction, onUpdate: NoAction, map: "dismech_discussions_ibfk_1")
+  dismech_gap_attachments DismechGapAttachment[]
+
+  @@id([import_id, id_sha256])
+  @@index([import_id, is_gap, kind, status], map: "dismech_gap_filter")
+  @@index([import_id, document_sha256], map: "import_id")
+  @@map("dismech_discussions")
+}
+
+model DismechDocument {
+  import_id               String                 @db.Char(64)
+  id_sha256               String                 @db.Char(64)
+  source_id               String                 @db.Text
+  name                    String                 @db.Text
+  kind                    String                 @db.VarChar(64)
+  source_file             String                 @db.Text
+  source_sha256           String                 @db.Char(64)
+  payload                 Json
+  dismech_discussions     DismechDiscussion[]
+  dismech_imports         DismechImport          @relation(fields: [import_id], references: [import_id], onDelete: NoAction, onUpdate: NoAction, map: "dismech_documents_ibfk_1")
+  dismech_gap_attachments DismechGapAttachment[]
+  dismech_hypotheses      DismechHypothesis[]
+  dismech_mechanisms      DismechMechanism[]
+
+  @@id([import_id, id_sha256])
+  @@index([import_id, kind], map: "dismech_document_kind")
+  @@map("dismech_documents")
+}
+
+model DismechGapAttachment {
+  import_id               String            @db.Char(64)
+  gap_sha256              String            @db.Char(64)
+  attachment_index        Int               @db.UnsignedInt
+  source_reference        String            @db.Text
+  resolution              String            @db.VarChar(64)
+  target_document_sha256  String?           @db.Char(64)
+  target_mechanism_sha256 String?           @db.Char(64)
+  target_id               String?           @db.Text
+  target_pointer          String?           @db.Text
+  target_kind             String?           @db.VarChar(64)
+  payload                 Json
+  dismech_discussions     DismechDiscussion @relation(fields: [import_id, gap_sha256], references: [import_id, id_sha256], onDelete: NoAction, onUpdate: NoAction, map: "dismech_gap_attachments_ibfk_1")
+  dismech_documents       DismechDocument?  @relation(fields: [import_id, target_document_sha256], references: [import_id, id_sha256], onDelete: NoAction, onUpdate: NoAction, map: "dismech_gap_attachments_ibfk_2")
+  dismech_mechanisms      DismechMechanism? @relation(fields: [import_id, target_mechanism_sha256], references: [import_id, id_sha256], onDelete: NoAction, onUpdate: NoAction, map: "dismech_gap_attachments_ibfk_3")
+
+  @@id([import_id, gap_sha256, attachment_index])
+  @@index([import_id, target_document_sha256], map: "import_id")
+  @@index([import_id, target_mechanism_sha256], map: "import_id_2")
+  @@map("dismech_gap_attachments")
+}
+
+model DismechHypothesis {
+  import_id         String          @db.Char(64)
+  id_sha256         String          @db.Char(64)
+  document_sha256   String          @db.Char(64)
+  source_id         String          @db.Text
+  source_pointer    String          @db.Text
+  payload           Json
+  dismech_documents DismechDocument @relation(fields: [import_id, document_sha256], references: [import_id, id_sha256], onDelete: NoAction, onUpdate: NoAction, map: "dismech_hypotheses_ibfk_1")
+
+  @@id([import_id, id_sha256])
+  @@index([import_id, document_sha256], map: "import_id")
+  @@map("dismech_hypotheses")
+}
+
+model DismechImport {
+  import_id              String                @id @db.Char(64)
+  source_commit          String                @db.VarChar(64)
+  status                 String                @db.VarChar(16)
+  manifest               Json
+  source_files           Json
+  schema_vocabularies    Json
+  progress               Json
+  created_at             DateTime              @default(now()) @db.Timestamp(0)
+  updated_at             DateTime              @default(now()) @db.Timestamp(0)
+  dismech_documents      DismechDocument[]
+  dismech_ontology_terms DismechOntologyTerm[]
+  dismech_vocabulary     DismechVocabulary[]
+
+  @@map("dismech_imports")
+}
+
+model DismechMechanism {
+  import_id               String                 @db.Char(64)
+  id_sha256               String                 @db.Char(64)
+  document_sha256         String                 @db.Char(64)
+  source_id               String                 @db.Text
+  source_pointer          String                 @db.Text
+  name                    String?                @db.Text
+  description             String?                @db.LongText
+  payload                 Json
+  dismech_causal_edges    DismechCausalEdge[]
+  dismech_gap_attachments DismechGapAttachment[]
+  dismech_documents       DismechDocument        @relation(fields: [import_id, document_sha256], references: [import_id, id_sha256], onDelete: NoAction, onUpdate: NoAction, map: "dismech_mechanisms_ibfk_1")
+
+  @@id([import_id, id_sha256])
+  @@index([import_id, document_sha256], map: "import_id")
+  @@map("dismech_mechanisms")
+}
+
+model DismechOntologyTerm {
+  import_id       String        @db.Char(64)
+  id_sha256       String        @db.Char(64)
+  source_id       String        @db.Text
+  payload         Json
+  dismech_imports DismechImport @relation(fields: [import_id], references: [import_id], onDelete: NoAction, onUpdate: NoAction, map: "dismech_ontology_terms_ibfk_1")
+
+  @@id([import_id, id_sha256])
+  @@map("dismech_ontology_terms")
+}
+
+model DismechVocabulary {
+  import_id       String        @db.Char(64)
+  id_sha256       String        @db.Char(64)
+  source_id       String        @db.Text
+  kind            String        @db.VarChar(64)
+  label           String        @db.Text
+  term_id         String?       @db.Text
+  payload         Json
+  dismech_imports DismechImport @relation(fields: [import_id], references: [import_id], onDelete: NoAction, onUpdate: NoAction, map: "dismech_vocabulary_ibfk_1")
+
+  @@id([import_id, id_sha256])
+  @@index([import_id, kind], map: "dismech_vocabulary_kind")
+  @@map("dismech_vocabulary")
+}
+
+model EagglEmbeddingRun {
+  run_id                String               @id @db.Char(64)
+  import_id             String               @db.Char(64)
+  config                Json
+  dimensions            Int                  @db.UnsignedInt
+  expected_rows         Int                  @db.UnsignedInt
+  loaded_rows           Int                  @default(0) @db.UnsignedInt
+  status                String               @db.VarChar(16)
+  created_at            DateTime             @default(now()) @db.Timestamp(0)
+  eaggl_imports         EagglImport          @relation(fields: [import_id], references: [import_id], onDelete: NoAction, onUpdate: NoAction, map: "eaggl_embedding_runs_ibfk_1")
+  eaggl_name_embeddings EagglNameEmbedding[]
+
+  @@index([import_id], map: "import_id")
+  @@map("eaggl_embedding_runs")
+}
+
+model EagglFactor {
+  eaggl_cfde_factor_links EagglCfdeFactorLink[]
+  import_id               String                @db.Char(64)
+  factor_index            Int                   @db.UnsignedInt
+  factor_id               String                @db.Text
+  factor_id_sha256        String                @db.Char(64)
+  trait                   String                @db.Text
+  label                   String                @db.Text
+  input_sha256            String                @db.Char(64)
+  metadata                Json
+  eaggl_imports           EagglImport           @relation(fields: [import_id], references: [import_id], onDelete: NoAction, onUpdate: NoAction, map: "eaggl_factors_ibfk_1")
+  eaggl_gene_loadings     EagglGeneLoading[]
+  eaggl_graph_nodes       EagglGraphNode[]
+
+  @@id([import_id, factor_index])
+  @@unique([import_id, factor_id_sha256], map: "factor_lookup")
+  @@map("eaggl_factors")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model EagglGeneLoading {
+  import_id     String      @db.Char(64)
+  factor_index  Int         @db.UnsignedInt
+  gene_index    Int         @db.UnsignedInt
+  loading       Float
+  eaggl_factors EagglFactor @relation(fields: [import_id, factor_index], references: [import_id, factor_index], onDelete: NoAction, onUpdate: NoAction, map: "eaggl_gene_loadings_ibfk_1")
+  eaggl_genes   EagglGene   @relation(fields: [import_id, gene_index], references: [import_id, gene_index], onDelete: NoAction, onUpdate: NoAction, map: "eaggl_gene_loadings_ibfk_2")
+
+  @@id([import_id, factor_index, gene_index])
+  @@index([import_id, gene_index], map: "import_id")
+  @@map("eaggl_gene_loadings")
+}
+
+model EagglGene {
+  import_id           String             @db.Char(64)
+  gene_index          Int                @db.UnsignedInt
+  symbol              String             @db.Text
+  eaggl_gene_loadings EagglGeneLoading[]
+  eaggl_imports       EagglImport        @relation(fields: [import_id], references: [import_id], onDelete: NoAction, onUpdate: NoAction, map: "eaggl_genes_ibfk_1")
+
+  @@id([import_id, gene_index])
+  @@map("eaggl_genes")
+}
+
+model EagglGraphEdge {
+  import_id                                                                     String         @db.Char(64)
+  parent_index                                                                  Int            @db.UnsignedInt
+  child_index                                                                   Int            @db.UnsignedInt
+  eaggl_graph_nodes_eaggl_graph_edges_import_id_parent_indexToeaggl_graph_nodes EagglGraphNode @relation("eaggl_graph_edges_import_id_parent_indexToeaggl_graph_nodes", fields: [import_id, parent_index], references: [import_id, node_index], onDelete: NoAction, onUpdate: NoAction, map: "eaggl_graph_edges_ibfk_1")
+  eaggl_graph_nodes_eaggl_graph_edges_import_id_child_indexToeaggl_graph_nodes  EagglGraphNode @relation("eaggl_graph_edges_import_id_child_indexToeaggl_graph_nodes", fields: [import_id, child_index], references: [import_id, node_index], onDelete: NoAction, onUpdate: NoAction, map: "eaggl_graph_edges_ibfk_2")
+
+  @@id([import_id, parent_index, child_index])
+  @@index([import_id, child_index], map: "import_id")
+  @@map("eaggl_graph_edges")
+}
+
+model EagglGraphNode {
+  import_id                                                                     String           @db.Char(64)
+  node_index                                                                    Int              @db.UnsignedInt
+  node_id                                                                       String           @db.VarChar(255)
+  factor_index                                                                  Int?             @db.UnsignedInt
+  payload                                                                       Json
+  eaggl_graph_edges_eaggl_graph_edges_import_id_parent_indexToeaggl_graph_nodes EagglGraphEdge[] @relation("eaggl_graph_edges_import_id_parent_indexToeaggl_graph_nodes")
+  eaggl_graph_edges_eaggl_graph_edges_import_id_child_indexToeaggl_graph_nodes  EagglGraphEdge[] @relation("eaggl_graph_edges_import_id_child_indexToeaggl_graph_nodes")
+  eaggl_imports                                                                 EagglImport      @relation(fields: [import_id], references: [import_id], onDelete: NoAction, onUpdate: NoAction, map: "eaggl_graph_nodes_ibfk_1")
+  eaggl_factors                                                                 EagglFactor?     @relation(fields: [import_id, factor_index], references: [import_id, factor_index], onDelete: NoAction, onUpdate: NoAction, map: "eaggl_graph_nodes_ibfk_2")
+
+  @@id([import_id, node_index])
+  @@unique([import_id, node_id], map: "node_lookup")
+  @@index([import_id, factor_index], map: "import_id")
+  @@map("eaggl_graph_nodes")
+}
+
+model EagglImport {
+  eaggl_cfde_link_runs EagglCfdeLinkRun[]
+  import_id            String              @id @db.Char(64)
+  source_namespace     String              @db.VarChar(128)
+  source_version       String              @db.VarChar(255)
+  status               String              @db.VarChar(16)
+  manifest             Json
+  progress             Json
+  created_at           DateTime            @default(now()) @db.Timestamp(0)
+  eaggl_embedding_runs EagglEmbeddingRun[]
+  eaggl_factors        EagglFactor[]
+  eaggl_genes          EagglGene[]
+  eaggl_graph_nodes    EagglGraphNode[]
+
+  @@map("eaggl_imports")
+}
+
+model EagglNameEmbedding {
+  run_id               String            @db.Char(64)
+  input_sha256         String            @db.Char(64)
+  input_text           String            @db.Text
+  vector               Bytes             @db.MediumBlob
+  vector_sha256        String            @db.Char(64)
+  eaggl_embedding_runs EagglEmbeddingRun @relation(fields: [run_id], references: [run_id], onDelete: NoAction, onUpdate: NoAction, map: "eaggl_name_embeddings_ibfk_1")
+
+  @@id([run_id, input_sha256])
+  @@map("eaggl_name_embeddings")
+}
+
+model GeneSetImport {
+  eaggl_cfde_link_runs  EagglCfdeLinkRun[]
+  import_id             String             @id @db.Char(64)
+  model                 String             @db.VarChar(64)
+  status                String             @db.VarChar(16)
+  loaded_rows           Int                @default(0) @db.UnsignedInt
+  expected_rows         Int                @db.UnsignedInt
+  manifest              Json
+  created_at            DateTime           @default(now()) @db.Timestamp(0)
+  updated_at            DateTime           @default(now()) @db.Timestamp(0)
+  cfde_gene_set_aliases CfdeGeneSetAlias[]
+
+  @@map("gene_set_imports")
+}
+
+model EagglCfdeLinkRun {
+  run_id             String                 @id @db.Char(64)
+  eaggl_import_id    String                 @db.Char(64)
+  gene_set_import_id String                 @db.Char(64)
+  model              String                 @db.VarChar(64)
+  match_method       String                 @db.VarChar(64)
+  status             String                 @db.VarChar(16)
+  manifest           Json
+  created_at         DateTime               @default(now()) @db.Timestamp(0)
+  eaggl_imports      EagglImport            @relation(fields: [eaggl_import_id], references: [import_id], onDelete: NoAction, onUpdate: NoAction, map: "link_run_source_fk")
+  gene_set_imports   GeneSetImport          @relation(fields: [gene_set_import_id], references: [import_id], onDelete: NoAction, onUpdate: NoAction, map: "link_run_gene_sets_fk")
+  factor_links       EagglCfdeFactorLink[]
+  gene_set_links     EagglCfdeGeneSetLink[]
+
+  @@unique([run_id, eaggl_import_id], map: "link_run_eaggl")
+  @@unique([run_id, gene_set_import_id], map: "link_run_gene_sets")
+  @@index([eaggl_import_id], map: "link_run_source")
+  @@index([gene_set_import_id], map: "link_run_gene_set_import")
+  @@map("eaggl_cfde_link_runs")
+}
+
+model EagglCfdeFactorLink {
+  run_id             String                 @db.Char(64)
+  factor_index       Int                    @db.UnsignedInt
+  eaggl_import_id    String                 @db.Char(64)
+  cfde_node_id       String                 @db.Text
+  cfde_node_sha256   String                 @db.Char(64)
+  cfde_trait         String                 @db.Text
+  cfde_factor_number Int                    @db.UnsignedInt
+  cfde_trait_group   String                 @db.VarChar(64)
+  payload            Json
+  run                EagglCfdeLinkRun       @relation(fields: [run_id, eaggl_import_id], references: [run_id, eaggl_import_id], onDelete: NoAction, onUpdate: NoAction, map: "factor_link_run_fk")
+  eaggl_factors      EagglFactor            @relation(fields: [eaggl_import_id, factor_index], references: [import_id, factor_index], onDelete: NoAction, onUpdate: NoAction, map: "factor_link_source_fk")
+  gene_set_links     EagglCfdeGeneSetLink[]
+
+  @@id([run_id, factor_index])
+  @@unique([run_id, cfde_node_sha256], map: "cfde_factor_link_target")
+  @@index([run_id, eaggl_import_id], map: "cfde_factor_link_run")
+  @@index([eaggl_import_id, factor_index], map: "cfde_factor_link_source")
+  @@map("eaggl_cfde_factor_links")
+}
+
+model EagglCfdeGeneSetLink {
+  run_id                String              @db.Char(64)
+  factor_index          Int                 @db.UnsignedInt
+  gene_set_rank         Int                 @db.UnsignedInt
+  gene_set_import_id    String              @db.Char(64)
+  source_key            String              @db.Text
+  node_id               String              @db.Text
+  node_id_sha256        String              @db.Char(64)
+  resolved_alias_sha256 String?             @db.Char(64)
+  factor                EagglCfdeFactorLink @relation(fields: [run_id, factor_index], references: [run_id, factor_index], onDelete: NoAction, onUpdate: NoAction, map: "gene_set_link_factor_fk")
+  run                   EagglCfdeLinkRun    @relation(fields: [run_id, gene_set_import_id], references: [run_id, gene_set_import_id], onDelete: NoAction, onUpdate: NoAction, map: "gene_set_link_run_fk")
+  alias                 CfdeGeneSetAlias?   @relation(fields: [gene_set_import_id, resolved_alias_sha256], references: [import_id, node_id_sha256], onDelete: NoAction, onUpdate: NoAction, map: "gene_set_link_alias_fk")
+
+  @@id([run_id, factor_index, gene_set_rank])
+  @@index([run_id, gene_set_import_id], map: "cfde_gene_set_link_run")
+  @@index([gene_set_import_id, resolved_alias_sha256], map: "cfde_gene_set_link_alias")
+  @@map("eaggl_cfde_gene_set_links")
+}

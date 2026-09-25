@@ -1,0 +1,23 @@
+{
+  "illustrative": true,
+  "retrieved": false,
+  "purpose": "Design-only membership and KG evidence interactions",
+  "assertions": [
+    {
+      "id": "mock-prokn-1",
+      "graph": "ProKN",
+      "statement": "SHH is a member of the retained AMP AD / GTEx gene set.",
+      "subject": "SHH",
+      "gene_set": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+      "status": "invented for UI design; membership unverified"
+    },
+    {
+      "id": "mock-biomarkerkg-1",
+      "graph": "BiomarkerKG",
+      "statement": "TCF7L2 is a member of the PsychENCODE geneM16 gene set.",
+      "subject": "TCF7L2",
+      "gene_set": "PsychENCODE__all_signatures__PsychENCODE_geneM16",
+      "status": "invented for UI design; membership unverified"
+    }
+  ]
+}

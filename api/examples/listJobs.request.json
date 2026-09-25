@@ -1,0 +1,83 @@
+{
+  "operation_id": "listJobs",
+  "case": "request",
+  "method": "GET",
+  "path_template": "/v1/jobs",
+  "request": {
+    "url": "https://api.reveal.example.org/v1/jobs?kind=analysis&status=succeeded&research_request_id=33333333-3333-4333-8333-333333333333&limit=20",
+    "path": {},
+    "query": {
+      "kind": "analysis",
+      "status": "succeeded",
+      "research_request_id": "33333333-3333-4333-8333-333333333333",
+      "limit": 20
+    },
+    "headers": {
+      "Authorization": "Bearer <trusted-gateway-assertion>",
+      "Accept": "application/json"
+    },
+    "body": null
+  },
+  "responses": {
+    "200": {
+      "content_type": "application/json",
+      "examples": {
+        "jobs": {
+          "items": [
+            {
+              "id": "44444444-4444-4444-8444-444444444444",
+              "kind": "analysis",
+              "owner_user_id": "11111111-1111-4111-8111-111111111111",
+              "status": "succeeded",
+              "stage": "complete",
+              "research_request_id": "33333333-3333-4333-8333-333333333333",
+              "input_account_id": null,
+              "created_at": "2026-09-24T16:01:00Z",
+              "updated_at": "2026-09-24T16:01:00Z",
+              "completed_at": "2026-09-24T16:01:00Z",
+              "result": {
+                "kind": "analysis",
+                "request_id": "33333333-3333-4333-8333-333333333333",
+                "account_ids": [
+                  "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd"
+                ],
+                "enrichment": [
+                  {
+                    "graph": "biomarkerkg",
+                    "status": "skipped",
+                    "source_claim_ids": [],
+                    "detail": "Contract fixture; no MCP agent run was performed."
+                  },
+                  {
+                    "graph": "prokn",
+                    "status": "skipped",
+                    "source_claim_ids": [],
+                    "detail": "Contract fixture; no MCP agent run was performed."
+                  }
+                ],
+                "paragraph_job_ids": [
+                  "55555555-5555-4555-8555-555555555555"
+                ],
+                "evidence_package_sha256": "9a55d126679291a95fa3d35f544915610134075eaf110f62f77ec8ee870b6ae2"
+              },
+              "failure": null,
+              "warnings": [],
+              "last_event_id": "4",
+              "links": {
+                "self": "/v1/jobs/44444444-4444-4444-8444-444444444444",
+                "events": "/v1/jobs/44444444-4444-4444-8444-444444444444/events",
+                "cancel": "/v1/jobs/44444444-4444-4444-8444-444444444444/cancel"
+              }
+            }
+          ],
+          "page": {
+            "next_cursor": null,
+            "has_more": false,
+            "snapshot_id": "illustrative-contract-snapshot"
+          }
+        }
+      }
+    }
+  },
+  "curl": "curl -X GET 'https://api.reveal.example.org/v1/jobs?kind=analysis&status=succeeded&research_request_id=33333333-3333-4333-8333-333333333333&limit=20' -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Accept: application/json'"
+}

@@ -1,0 +1,22 @@
+{
+  "checked_at": "2026-09-25T17:38:50.604714+00:00",
+  "aurora_changes_applied": false,
+  "tests": {
+    "dismech_offline": 9,
+    "dismech_mysql": 5,
+    "eaggl": 20,
+    "embedding_client": 10,
+    "relevant_tests_passed": 44
+  },
+  "mysql_version": "8.0.42",
+  "full_snapshot_import_and_readback": "passed in disposable localhost database",
+  "prisma_version": "7.10.0",
+  "prisma_models": 20,
+  "prisma_validate": "passed",
+  "prisma_generate": "passed",
+  "prisma_schema_diff": "No difference detected against exact existing Aurora DDL plus migration 003 recreated locally",
+  "limitations": [
+    "Prisma native CLI on this Mac rejects the RDS certificate chain with P1011; verified-TLS Python schema reads succeed.",
+    "The broader backend test suite has one failure in test_multiple_anchors_preserve_shared_gene_observations: Conflicting duplicate edge eceaf78b98133a1e, in the separate evidence-package implementation."
+  ]
+}

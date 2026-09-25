@@ -1,0 +1,21 @@
+# A single GeneSetCollection instance, EXTRACTED from example_geneset_graph.yaml.
+#
+# `funded_by` and `has_recommended_citation` were removed rather than left
+# pointing at an Award and a RecommendedCitation that exist nowhere. See
+# example_dataset.yaml for a resource that carries full NIH attribution — every
+# id there resolves to a real object in example_graph.yaml.
+#
+#   uv run --with linkml linkml-validate \
+#     -s schema/dapper.yaml -C GeneSetCollection schema/examples/example_geneset_collection.yaml
+
+id: dapper:GeneSetCollection.QF4WtSBZjQgVPIASB2-LFLet72zpOgGS
+name: HuBMAP ASCT+B augmented marker gene-set library (model HZ2)
+member_type: gene_set
+n_genes: 1747
+n_sets: 487
+organism: human
+genome_build: hg38
+was_generated_by: dapper:Activity.hyXTofaQO9E8PnynkwQJt_KVxHGTAYFd
+was_derived_from:
+  - dapper:C2M2File.CXfIyIocwZWUCAERcmhJDfH8ZVtfVIF9
+has_gmt_file: dapper:C2M2File.U9_ScfeqzGcdLkJC__frh396mPwO6yWo

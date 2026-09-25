@@ -1,0 +1,34 @@
+# Synthetic PR #27 review fixture; all names, checksums, and locations are illustrative.
+# Observed against PR head 6f606bff1411e3e7ed8ff876ac565c128adf68d5.
+# Fixed linter: PASS, 0 errors and 0 warnings.
+# Policy case: replace the reified WasGeneratedBy edge with the equivalent inline slot.
+# The scalar was_generated_by field is valid under the DAPPER schema.
+# Expected: PASS; both relationship representations are accepted.
+# Before fix: FAIL with required-edges, despite the inline generation link.
+
+datasets:
+- id: dapper:Dataset.4m0kz-OSutx2uVrDcGNDUiqYOiJvjDtA
+  name: Synthetic final result
+  resource_type: dataset
+  was_generated_by: dapper:Activity.N2ZGhLItamKdVSSbX1mQNpzIQEwmMxne
+activities:
+- id: dapper:Activity.N2ZGhLItamKdVSSbX1mQNpzIQEwmMxne
+  name: Analyze input
+  command: python analyze.py input.tsv
+files:
+- id: dapper:File.7uSMFgEazvyYU9HPfkEhdODpDwjqPrHM
+  filename: input.tsv
+  sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+drs_objects:
+- id: dapper:DrsObject.u9TZbI23plbenZHXFKk-yqNpWM_rDMzS
+  name: Result bytes
+  self_uri: drs://example.org/result
+  checksum_sha256: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+used_edges:
+- subject: dapper:Activity.N2ZGhLItamKdVSSbX1mQNpzIQEwmMxne
+  predicate: prov:used
+  object: dapper:File.7uSMFgEazvyYU9HPfkEhdODpDwjqPrHM
+has_drs_object_edges:
+- subject: dapper:Dataset.4m0kz-OSutx2uVrDcGNDUiqYOiJvjDtA
+  predicate: dapper:hasDrsObject
+  object: dapper:DrsObject.u9TZbI23plbenZHXFKk-yqNpWM_rDMzS

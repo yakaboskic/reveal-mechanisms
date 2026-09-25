@@ -1,0 +1,8 @@
+{
+  "rejected_cross_language_json_symbol_matches": 6,
+  "external_import_references": 66,
+  "resolved_local_imports": 13,
+  "resolved_sql_foreign_keys": 4,
+  "resolved_excluded_artifact_references": 4,
+  "exact_duplicate_records_removed": 3
+}

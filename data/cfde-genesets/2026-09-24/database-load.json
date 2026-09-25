@@ -1,0 +1,13 @@
+{
+  "import_id": "3714a036aea279190d4723d9ddf2dd81d105e3427c38d9fc685e7fd606cb260e",
+  "database": "cyaka_reveal_mechanisms",
+  "complete": true,
+  "started_at": "2026-09-24T14:20:13.369829+00:00",
+  "expected_rows": 801934,
+  "loader_script_sha256": "45610493f81ff91702f6207695fde7edd4ba89fb43178328b58e760c0f07f0a1",
+  "mode": "compressed-json-staging",
+  "tls_cipher": "TLS_AES_256_GCM_SHA384",
+  "resumed_at_rows": 801934,
+  "loaded_rows": 801934,
+  "finished_at": "2026-09-24T14:20:18.720540+00:00"
+}

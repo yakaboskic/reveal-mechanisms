@@ -1,0 +1,28 @@
+# Graph the project's implementation, schemas and documentation. Data captures
+# and copied dependency snapshots are described through their loaders and docs.
+/data/
+/design/data/
+/api/reveal-openapi/
+/api/vendor/
+/schema/prisma/generated/
+/schema/prisma/node_modules/
+**/package-lock.json
+**/*.egg-info/
+**/*.zip
+**/*.png
+**/*.jpg
+**/*.jpeg
+**/*.svg
+# Generated UI bundles duplicate the Python builders and OpenAPI definitions.
+/api/index.html
+/api/flow.html
+/api/reveal-api.html
+/api/history/
+/api/examples/evidence-package/sources/
+/docs/examples/evidence-package-cad/sources/
+/scripts/api-viewer.html
+/scripts/api-flow.html
+# Credentials stay outside graph extraction.
+.env
+.env.*
+!.env.example

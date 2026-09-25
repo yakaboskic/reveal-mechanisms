@@ -1,0 +1,28 @@
+{
+  "activities": [
+    {
+      "name": "CFDE GeneSet catalog encoding",
+      "activity_type": "CFDEGeneSetCatalogImport",
+      "description": "Encodes advertised CFDE named gene-set identities; not the original biological gene-set creation activity.",
+      "command": "cfde-geneset-catalog-v1 model=cfde-inc-v2",
+      "id": "dapper:Activity.VM0nxPd0QVsZJ-7qw4WjAvXtEiFMehqx"
+    }
+  ],
+  "gene_sets": [
+    {
+      "alternate_identifier": [
+        "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_CBE_Diagnosis.AOD_AD-CONTROL_ALL_dn",
+        "cfde:cfde-inc-v2:gene_set:AMP_AD__all_brain__AMP_AD_MAYO_CBE_Diagnosis.AOD_AD-CONTROL_ALL_dn"
+      ],
+      "id": "dapper:GeneSet.p_wy0OGmyLicwdmmFX2gX3JqC7EUxwR1",
+      "member_type": "gene",
+      "name": "AMP AD / all brain / AMP AD MAYO CBE Diagnosis.AOD AD-CONTROL ALL dn",
+      "term": "AMP_AD__all_brain__AMP_AD_MAYO_CBE_Diagnosis.AOD_AD-CONTROL_ALL_dn",
+      "term_prefix": "AMP_AD",
+      "was_derived_from": [
+        "https://cfde-dev.hugeampkpnbi.org/api/bio/keys/pigean-gene-set/2"
+      ],
+      "was_generated_by": "dapper:Activity.VM0nxPd0QVsZJ-7qw4WjAvXtEiFMehqx"
+    }
+  ]
+}

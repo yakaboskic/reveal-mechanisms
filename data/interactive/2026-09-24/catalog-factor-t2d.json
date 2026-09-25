@@ -1,0 +1,72 @@
+{
+  "url": "https://dev.cfdeknowledge.org/api/interactive/catalog?entity_type=factor&q=T2D&limit=8&model=cfde-inc-v2",
+  "method": "GET",
+  "request": null,
+  "retrieved_at": "2026-09-24T12:42:33.849415+00:00",
+  "status": 200,
+  "content_type": "application/json",
+  "body_sha256": "be942a5405b743e4495ea4323bee21e877c912ab25bb30973af09a11d5cd8f4b",
+  "body_bytes": 2242,
+  "response": {
+    "entity_type": "factor",
+    "items": [
+      {
+        "node_id": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+        "node_type": "factor",
+        "node_key": "Factor1",
+        "label": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+        "subtitle": "Coronary artery disease in type 2 diabetes (CAD in T2D) (Factor1)"
+      },
+      {
+        "node_id": "factor:portal:T2DwRM:cfde-inc-v2:Factor1",
+        "node_type": "factor",
+        "node_key": "Factor1",
+        "label": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.Sex_AD-CONTROL_MALE_up",
+        "subtitle": "T2DwRM (Factor1)"
+      },
+      {
+        "node_id": "factor:portal:CKD_T2D:cfde-inc-v2:Factor12",
+        "node_type": "factor",
+        "node_key": "Factor12",
+        "label": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.Sex_AD-CONTROL_MALE_up___LINCS_L1000__all_signatures__LINCS_L1000_CRISPR_KO_TSSK6_dn",
+        "subtitle": "Chronic kidney disease in type 2 diabetes (Factor12)"
+      },
+      {
+        "node_id": "factor:portal:CKD_EXT_vGFRinT2D:cfde-inc-v2:Factor2",
+        "node_type": "factor",
+        "node_key": "Factor2",
+        "label": "AMP_AD__all_brain__AMP_AD_MSSM_FP_SourceDiagnosis_CDR_ALL_up___LINCS_L1000__all_signatures__LINCS_L1000_CRISPR_KO_KRT23_dn",
+        "subtitle": "Extreme chronic kidney disease (CKD) vs. eGFR >= 60 in type 2 diabetes (Factor2)"
+      },
+      {
+        "node_id": "factor:portal:StrokeinT2D:cfde-inc-v2:Factor2",
+        "node_type": "factor",
+        "node_key": "Factor2",
+        "label": "DESCARTES_FETAL_STOMACH_STROMAL_CELLS",
+        "subtitle": "Stroke in type 2 diabetes (Factor2)"
+      },
+      {
+        "node_id": "factor:portal:CKD_DNinT2D:cfde-inc-v2:Factor1",
+        "node_type": "factor",
+        "node_key": "Factor1",
+        "label": "GAVISH_3CA_MALIGNANT_METAPROGRAM_16_MES_GLIOMA",
+        "subtitle": "Chronic kidney disease (CKD) and diabetic nephropathy in type 2 diabetes (Factor1)"
+      },
+      {
+        "node_id": "factor:portal:T2D_autoimmune:cfde-inc-v2:Factor4",
+        "node_type": "factor",
+        "node_key": "Factor4",
+        "label": "GEO_BULK__GSE109182__GEO_BULK_GSE109182_Il1bVsControl_up___LINCS_L1000__all_signatures__LINCS_L1000_CRISPR_KO_TRAF3IP2_dn",
+        "subtitle": "Severe autoimmune type 2 diabetes (Factor4)"
+      },
+      {
+        "node_id": "factor:portal:PADnonT2D:cfde-inc-v2:Factor1",
+        "node_type": "factor",
+        "node_key": "Factor1",
+        "label": "GEO_BULK__GSE142394__GEO_BULK_GSE142394_CoCultureVsControl_up___LINCS_L1000__all_signatures__LINCS_L1000_CRISPR_KO_PEAK1_dn",
+        "subtitle": "Peripheral artery disease in subjects without diabetes (Factor1)"
+      }
+    ]
+  },
+  "elapsed_seconds": 0.635
+}

@@ -1,0 +1,72 @@
+{
+  "model": "cfde-inc-v2",
+  "complete": true,
+  "scope": "T2D factors and direct expansion; IRS2 and one gene set demonstrate second-hop routes",
+  "queries": [
+    {
+      "file": "pigean-factor.json",
+      "row_count": 2,
+      "url": "https://cfde-dev.hugeampkpnbi.org/api/bio/query/pigean-factor?q=T2D%2Ccfde-inc-v2"
+    },
+    {
+      "file": "pigean-gene-phenotype.json",
+      "row_count": 18321,
+      "url": "https://cfde-dev.hugeampkpnbi.org/api/bio/query/pigean-gene-phenotype?q=T2D%2Ccfde-inc-v2"
+    },
+    {
+      "file": "pigean-gene-set-phenotype.json",
+      "row_count": 5000,
+      "url": "https://cfde-dev.hugeampkpnbi.org/api/bio/query/pigean-gene-set-phenotype?q=T2D%2Ccfde-inc-v2"
+    },
+    {
+      "file": "pigean-gene-factor-Factor1.json",
+      "row_count": 541,
+      "url": "https://cfde-dev.hugeampkpnbi.org/api/bio/query/pigean-gene-factor?q=T2D%2Ccfde-inc-v2%2CFactor1"
+    },
+    {
+      "file": "pigean-gene-set-factor-Factor1.json",
+      "row_count": 597,
+      "url": "https://cfde-dev.hugeampkpnbi.org/api/bio/query/pigean-gene-set-factor?q=T2D%2Ccfde-inc-v2%2CFactor1"
+    },
+    {
+      "file": "pigean-gene-factor-Factor2.json",
+      "row_count": 502,
+      "url": "https://cfde-dev.hugeampkpnbi.org/api/bio/query/pigean-gene-factor?q=T2D%2Ccfde-inc-v2%2CFactor2"
+    },
+    {
+      "file": "pigean-gene-set-factor-Factor2.json",
+      "row_count": 467,
+      "url": "https://cfde-dev.hugeampkpnbi.org/api/bio/query/pigean-gene-set-factor?q=T2D%2Ccfde-inc-v2%2CFactor2"
+    },
+    {
+      "file": "pigean-gene.json",
+      "row_count": 6682,
+      "url": "https://cfde-dev.hugeampkpnbi.org/api/bio/query/pigean-gene?q=IRS2%2Ccfde-inc-v2"
+    },
+    {
+      "file": "pigean-gene-gene-sets.json",
+      "row_count": 0,
+      "url": "https://cfde-dev.hugeampkpnbi.org/api/bio/query/pigean-gene-gene-sets?q=IRS2%2Ccfde-inc-v2"
+    },
+    {
+      "file": "pigean-gene-set-genes.json",
+      "row_count": 0,
+      "url": "https://cfde-dev.hugeampkpnbi.org/api/bio/query/pigean-gene-set-genes?q=LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K09454191_up%2Ccfde-inc-v2"
+    },
+    {
+      "file": "pigean-gene-set.json",
+      "row_count": 82,
+      "url": "https://cfde-dev.hugeampkpnbi.org/api/bio/query/pigean-gene-set?q=LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K09454191_up%2Ccfde-inc-v2"
+    },
+    {
+      "file": "pigean-joined-gene-set.json",
+      "row_count": 262,
+      "url": "https://cfde-dev.hugeampkpnbi.org/api/bio/query/pigean-joined-gene-set?q=T2D%2CLINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K09454191_up%2Ccfde-inc-v2"
+    },
+    {
+      "file": "pigean-joined-gene.json",
+      "row_count": 167,
+      "url": "https://cfde-dev.hugeampkpnbi.org/api/bio/query/pigean-joined-gene?q=T2D%2CIRS2%2Ccfde-inc-v2"
+    }
+  ]
+}

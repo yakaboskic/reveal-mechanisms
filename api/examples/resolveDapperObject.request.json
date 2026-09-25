@@ -1,0 +1,108 @@
+{
+  "operation_id": "resolveDapperObject",
+  "case": "request",
+  "method": "GET",
+  "path_template": "/v1/objects/{dapper_id}",
+  "request": {
+    "url": "https://api.reveal.example.org/v1/objects/dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk?payload_sha256=ad93f0824f9e7305bbef273498ea6c704cbf8a7101f5a151b5a99682c8fc3f6a&max_depth=5&max_nodes=250",
+    "path": {
+      "dapper_id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk"
+    },
+    "query": {
+      "payload_sha256": "ad93f0824f9e7305bbef273498ea6c704cbf8a7101f5a151b5a99682c8fc3f6a",
+      "max_depth": 5,
+      "max_nodes": 250
+    },
+    "headers": {
+      "Accept": "application/json"
+    },
+    "body": null
+  },
+  "responses": {
+    "200": {
+      "content_type": "application/json",
+      "examples": {
+        "question": {
+          "root_id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+          "schema": {
+            "schema_sha256": "219769c9874a3c0a7d6972360d5847a8b344e412a8b9f4e2648f059682440345",
+            "dependency_snapshot_sha256": "801fb347c54c036c15345d132d302171fc6cd74c1f75a03a5c59c937f5ed7d11",
+            "identity_profile": "DAPPER-ID-1"
+          },
+          "document": {
+            "knowledge_gaps": [
+              {
+                "text": "Are the CAD PGS×context interactions driven by adverse exposures causally amplifying genetic risk, or are some \"contexts\" actually downstream readouts of incipient disease (reverse causation)?",
+                "gap_description": "Population PGS×context analyses (Nagpal & Gibson 2026, PMID:42443528) are largely unable to establish the causality of specific contexts. dismech separates true environmental exposures (smoking, high-fat diet, sedentary lifestyle) from biochemical readouts (LDL, HDL, C-reactive protein); the biochemical \"contexts\" are prime reverse-causation suspects, since they may be partly downstream of the atherosclerotic process rather than upstream drivers, and behavioural contexts such as reduced physical activity may be rapid responses to incipient angina rather than causes. Distinguishing genuine amplification of genetic effects from reverse causation determines whether the modelled interventions (e.g. lowering cholesterol in high-PGS smokers) would actually reduce risk.",
+                "gap_kind": "KNOWLEDGE_GAP",
+                "scope": "Coronary Artery Disease",
+                "about_entities": [
+                  "http://purl.obolibrary.org/obo/MONDO_0021661"
+                ],
+                "id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk"
+              }
+            ]
+          },
+          "payloads": [
+            {
+              "object_id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+              "payload_sha256": "ad93f0824f9e7305bbef273498ea6c704cbf8a7101f5a151b5a99682c8fc3f6a"
+            }
+          ],
+          "citation_metadata": [
+            {
+              "target_id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+              "target_class": "KnowledgeGap",
+              "dapper_schema_version": "sha256:219769c9874a3c0a7d6972360d5847a8b344e412a8b9f4e2648f059682440345",
+              "dapper_identity_profile": "DAPPER-ID-1",
+              "object_payload_ref": "http://127.0.0.1:8767/data/cad-account/scientific-account.json",
+              "metadata_revision": 1,
+              "citation_profile_version": "reveal-citation-v1",
+              "title": "Are the CAD PGS×context interactions driven by adverse exposures causally amplifying genetic risk, or are some \"contexts\" actually downstream readouts of incipient disease (reverse causation)?",
+              "title_derivation": {
+                "method": "inquiry_text",
+                "version": "1",
+                "source": {
+                  "source_ref": "urn:example:cad-account-design"
+                }
+              },
+              "language": "en",
+              "byline": [],
+              "origin": "imported",
+              "generated_at": null,
+              "first_minted_at": "2026-09-24T16:00:00Z",
+              "published_at": null,
+              "original_issued_date": null,
+              "imported_at": "2026-09-24T16:00:00Z",
+              "issued_date": "2026-09-24",
+              "issued_basis": "first_minted_at",
+              "date_provenance": {
+                "first_minted_at": {
+                  "source_ref": "urn:example:reveal:contract-fixture"
+                },
+                "imported_at": {
+                  "source_ref": "urn:example:reveal:contract-fixture"
+                }
+              },
+              "publisher": null,
+              "repository": "REVEAL design examples — unpublished",
+              "canonical_url": "http://127.0.0.1:8767/data/cad-account/scientific-account.json#/knowledge_gaps/0",
+              "access_level": "private",
+              "publication_state": "unpublished"
+            }
+          ],
+          "artifacts": [],
+          "coverage": {
+            "direction": "upstream",
+            "max_depth": 5,
+            "max_nodes": 250,
+            "complete": true,
+            "missing_ids": [],
+            "next_cursor": null
+          }
+        }
+      }
+    }
+  },
+  "curl": "curl -X GET 'https://api.reveal.example.org/v1/objects/dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk?payload_sha256=ad93f0824f9e7305bbef273498ea6c704cbf8a7101f5a151b5a99682c8fc3f6a&max_depth=5&max_nodes=250' -H 'Accept: application/json'"
+}

@@ -1,0 +1,51 @@
+# A single GeneProgram instance — the single-cell counterpart of
+# example_geneset.yaml. Populated from a real gene-by-program NMF loading
+# matrix to demonstrate `member_weights`: `members[i]` and
+# `member_weights[i]` describe the same gene, positionally paired. Contrast
+# with example_geneset.yaml, a static curated annotation with no weights.
+# Also carries a `quality_score` (GeneProgramQualityScore) assessment, an
+# optional field on GeneProgram — a composite value plus `components`
+# (stability, confounders, validity).
+#
+#   uv run --with linkml linkml-validate \
+#     -s ../dapper.yaml -C GeneProgram example_gene_program.yaml
+#
+# Referenced by example_cell_state.yaml and example_cell_graph.yaml via
+# `has_program`.
+
+id: dapper:GeneProgram.c3BuK-YYanBJtDBVs3iPkQCWKVcX33Sv
+name: Factor 1 gene program
+description: >-
+  Gene program corresponding to Factor_1 of a gene-by-program NMF loading
+  matrix. `member_weights` are the raw factor loadings for each gene in
+  `members`.
+member_type: gene
+organism: human
+inference_method: NMF
+members:
+  - ACAP3
+  - KLHL21
+  - SPATA21
+  - ZNF593OS
+  - NUDC
+  - TSSK3
+  - HPCA
+  - SZT2
+  - P3R3URF-PIK3R3
+member_weights:
+  - 7.01433539589991
+  - 0
+  - 0
+  - 0
+  - 12.2178988599668
+  - 0
+  - 6.85234101964327
+  - 0
+  - 0
+n_genes: 9
+quality_score:
+  quality_score: 86.8
+  components:
+    stability_score: 88
+    confounder_score: 79
+    validity_score: 91

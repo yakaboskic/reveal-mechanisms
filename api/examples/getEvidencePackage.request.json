@@ -1,0 +1,3608 @@
+{
+  "operation_id": "getEvidencePackage",
+  "case": "request",
+  "method": "GET",
+  "path_template": "/v1/jobs/{job_id}/evidence-package",
+  "request": {
+    "url": "https://api.reveal.example.org/v1/jobs/44444444-4444-4444-8444-444444444444/evidence-package",
+    "path": {
+      "job_id": "44444444-4444-4444-8444-444444444444"
+    },
+    "query": {},
+    "headers": {
+      "Authorization": "Bearer <trusted-gateway-assertion>",
+      "Accept": "application/json"
+    },
+    "body": null
+  },
+  "responses": {
+    "200": {
+      "content_type": "application/json",
+      "examples": {
+        "captured_input": {
+          "job_id": "44444444-4444-4444-8444-444444444444",
+          "package_sha256": "9a55d126679291a95fa3d35f544915610134075eaf110f62f77ec8ee870b6ae2",
+          "package": {
+            "authoring": {
+              "assembly_builder": {
+                "source_sha256": "4510c6259cd225736ef0d0073998636ef3f8e3f8927e510c0f0902e80cbae74b",
+                "version": "reveal.evidence-builder/1"
+              },
+              "contract": {
+                "artifact_id": "instruction-1",
+                "path": "docs/evidence-package.md",
+                "sha256": "f1c6afbb7ead99f43c2bcc4f6ac1b0ea1c8f4100717663004e07f9da75c47365"
+              },
+              "max_accounts": 3,
+              "references": [
+                {
+                  "artifact_id": "instruction-2",
+                  "path": "docs/scientific-account-construction.md",
+                  "sha256": "841ba75f1169cfbe21ecc826f127c5537e21080addfa4d06d40fa711c5dae897"
+                },
+                {
+                  "artifact_id": "instruction-3",
+                  "path": "docs/pigean-claim-model.md",
+                  "sha256": "8b797269d45a2a4feabe00fbac84df7c99ebaa72affcf6154c89c7ce7fcdcf08"
+                },
+                {
+                  "artifact_id": "instruction-4",
+                  "path": "docs/dapper-integration.md",
+                  "sha256": "5737fc67f5d4d2348a6464a6086e762f7e95d8d2b2dfcf8de0359f15c4274d38"
+                },
+                {
+                  "artifact_id": "instruction-5",
+                  "path": "docs/agent-evidence-integration.md",
+                  "sha256": "c5b6f2bad1a89b4aba7aefc91a9c9ef8eb8db89dafb4203c18b979c6a242bc47"
+                }
+              ],
+              "required_question": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+              "skill": {
+                "artifact_id": "instruction-0",
+                "path": "services/backend/agent-skills/construct-scientific-account/SKILL.md",
+                "sha256": "98ead053d56359de279fcb06d74e6ef5cce72a23350da99dd26c0d03bea1c35a"
+              }
+            },
+            "builder": {
+              "source_sha256": "4510c6259cd225736ef0d0073998636ef3f8e3f8927e510c0f0902e80cbae74b",
+              "version": "reveal.evidence-builder/1"
+            },
+            "coverage": {
+              "bioindex_queries": [
+                {
+                  "artifact_id": "gene-factor-50fbafcddac8.attempt-1.body",
+                  "continuation_present": false,
+                  "exhaustive": false,
+                  "limit": 8,
+                  "progress": {
+                    "bytes_read": 2945,
+                    "bytes_total": 6295,
+                    "filtered": 0
+                  },
+                  "returned_rows": 8
+                },
+                {
+                  "artifact_id": "gene_set-factor-50fbafcddac8.attempt-1.body",
+                  "continuation_present": false,
+                  "exhaustive": false,
+                  "limit": 8,
+                  "progress": {
+                    "bytes_read": 3867,
+                    "bytes_total": 25226,
+                    "filtered": 0
+                  },
+                  "returned_rows": 8
+                },
+                {
+                  "artifact_id": "gene-trait-a559f3f24e19.attempt-1.body",
+                  "continuation_present": false,
+                  "exhaustive": false,
+                  "limit": 8,
+                  "progress": {
+                    "bytes_read": 1465,
+                    "bytes_total": 2769098,
+                    "filtered": 0
+                  },
+                  "returned_rows": 8
+                },
+                {
+                  "artifact_id": "gene_set-trait-a559f3f24e19.attempt-1.body",
+                  "continuation_present": false,
+                  "exhaustive": false,
+                  "limit": 8,
+                  "progress": {
+                    "bytes_read": 3445,
+                    "bytes_total": 1599999,
+                    "filtered": 0
+                  },
+                  "returned_rows": 8
+                }
+              ],
+              "captured_nodes": 17,
+              "captured_unique_edges": 16,
+              "omitted_edge_ids": [],
+              "omitted_node_ids": [],
+              "queries": {
+                "contextual": "ok",
+                "factor": "empty",
+                "gene": "ok_limit_reached",
+                "gene_set": "ok_limit_reached",
+                "trait": "empty"
+              },
+              "ranking": "aggregate_score descending; exact node ID ascending on ties",
+              "retained_edges": 16,
+              "retained_nodes": 17,
+              "same_upstream_build_verified": false,
+              "upstream_total": null
+            },
+            "dapper_context": {
+              "activities": [
+                {
+                  "activity_type": "CFDEGeneSetCatalogImport",
+                  "command": "cfde-geneset-catalog-v1 model=cfde-inc-v2",
+                  "description": "Encodes advertised CFDE named gene-set identities; not the original biological gene-set creation activity.",
+                  "id": "dapper:Activity.VM0nxPd0QVsZJ-7qw4WjAvXtEiFMehqx",
+                  "name": "CFDE GeneSet catalog encoding"
+                }
+              ],
+              "files": [
+                {
+                  "filename": "connections-gene_set.attempt-1.body.json",
+                  "id": "dapper:File.-H99jNBgwGkrEQmTpGCRHWLg6eKaumMo",
+                  "mime_type": "application/json",
+                  "sha256": "b30b0dd47d1a7b4744d1a75624dfff7fb6cc2b40c1ad0bf9a5b0652e9c3fa82f",
+                  "size_in_bytes": 19916
+                },
+                {
+                  "filename": "gene-factor-50fbafcddac8.attempt-1.body.json",
+                  "id": "dapper:File.2eXr4WpviGW_X7rOdyGlPqn3EpvkIAcH",
+                  "mime_type": "application/json",
+                  "sha256": "62d00329740cf7e8117ca39a94b5b3012315d062c511fae8698b32e5a29a6550",
+                  "size_in_bytes": 2946
+                },
+                {
+                  "filename": "gene_set-trait-a559f3f24e19.attempt-1.json",
+                  "id": "dapper:File.4m2UwkNZChJxOwvnSozI5AJJOKfiGT1t",
+                  "mime_type": "application/json",
+                  "sha256": "5d5a53df948f35e5d963ed958c48f6b2ff3da77eec8f5f25f37da454ec2400bd",
+                  "size_in_bytes": 3810
+                },
+                {
+                  "filename": "catalog-a559f3f24e19.attempt-1.json",
+                  "id": "dapper:File.8TmljuISG_SL81c0XnY8Tv2jgfDZbBpW",
+                  "mime_type": "application/json",
+                  "sha256": "4d3d0ea9a513a8d60da51ce058aa5f2efaa1167389d9416df5985668f4335802",
+                  "size_in_bytes": 1013
+                },
+                {
+                  "filename": "agent-evidence-integration.md",
+                  "id": "dapper:File.8UUBN6UhsIn1TCs3XK6nab6xZDAfqk4t",
+                  "mime_type": "text/plain",
+                  "sha256": "c5b6f2bad1a89b4aba7aefc91a9c9ef8eb8db89dafb4203c18b979c6a242bc47",
+                  "size_in_bytes": 9537
+                },
+                {
+                  "filename": "evidence_collector.py",
+                  "id": "dapper:File.Cku1uSpvxiaaVLbRMenzu2K5X4iEX-rV",
+                  "mime_type": "text/plain",
+                  "sha256": "3dfa16f53707a87f481cd3c49aa25a19f48caac8643921a646f50a2746f603c5",
+                  "size_in_bytes": 23374
+                },
+                {
+                  "filename": "connections-gene.attempt-1.json",
+                  "id": "dapper:File.ETUZPhmkLXMI69keWTC3Pu14WfBzXCo7",
+                  "mime_type": "application/json",
+                  "sha256": "f542df4c003390aab0404d51a8500c84d1e02e932d7f20e5856e606b84bb4cfc",
+                  "size_in_bytes": 12477
+                },
+                {
+                  "filename": "gene-trait-a559f3f24e19.attempt-1.body.json",
+                  "id": "dapper:File.Hp1NQ7aTPiKT-UBtbEvbZuokAdUNm3r1",
+                  "mime_type": "application/json",
+                  "sha256": "1155ff76a8573c3302498cba9352f83e780c998321b81db7ea83076747824065",
+                  "size_in_bytes": 1642
+                },
+                {
+                  "filename": "connections-trait.attempt-1.json",
+                  "id": "dapper:File.JYZMrUbK8tAxQW8CyZjXgUpVlV1wyCBm",
+                  "mime_type": "application/json",
+                  "sha256": "0e287ec725121bf7ebea565646b3248dd6cc659a274b4e4274cc7bb5021749e1",
+                  "size_in_bytes": 847
+                },
+                {
+                  "filename": "scientific-account-construction.md",
+                  "id": "dapper:File.KI6Q5pQwFAGz1ETzd7q6e4rl-2GtvqQG",
+                  "mime_type": "text/plain",
+                  "sha256": "841ba75f1169cfbe21ecc826f127c5537e21080addfa4d06d40fa711c5dae897",
+                  "size_in_bytes": 22793
+                },
+                {
+                  "filename": "evidence-package.md",
+                  "id": "dapper:File.LVMBF40pDzJ-mVRXDrjY8u2MkR3WWi7I",
+                  "mime_type": "text/plain",
+                  "sha256": "f1c6afbb7ead99f43c2bcc4f6ac1b0ea1c8f4100717663004e07f9da75c47365",
+                  "size_in_bytes": 28767
+                },
+                {
+                  "filename": "gene-factor-50fbafcddac8.attempt-1.json",
+                  "id": "dapper:File.Om2BFvNqJF8ltHYk71Q8boatXRTYH--G",
+                  "mime_type": "application/json",
+                  "sha256": "d92acf433dcae39f527f0e4ae5fd4b5ff24e303a1526ffc79ee5eb6f06141b99",
+                  "size_in_bytes": 3304
+                },
+                {
+                  "filename": "gene_set-factor-50fbafcddac8.attempt-1.body.json",
+                  "id": "dapper:File.P5OVguO1HZzw7ekAqiZILmb07t--PpVh",
+                  "mime_type": "application/json",
+                  "sha256": "1c302e12ae3db93d6f606d1ac2198748968c594d7d8abebdc25100dda85d1080",
+                  "size_in_bytes": 3787
+                },
+                {
+                  "filename": "connections-gene_set.attempt-1.json",
+                  "id": "dapper:File.ZO8Ow7EHwG2XlIwSBmDs5w75vLFA-Eg7",
+                  "mime_type": "application/json",
+                  "sha256": "66d963274fe00760f7572220ce5bda2bb0379f63bf172506411e4e3b2cf268cc",
+                  "size_in_bytes": 20700
+                },
+                {
+                  "filename": "connections-factor.attempt-1.body.json",
+                  "id": "dapper:File.aqedURD0t1sOBZrUaRoutVmOaRCzZt-p",
+                  "mime_type": "application/json",
+                  "sha256": "dc0bfbd8c23271a7e0a6d2285a90de9be7698f2ede9465b6d5877bbd24e96006",
+                  "size_in_bytes": 69
+                },
+                {
+                  "filename": "connections-factor.attempt-1.json",
+                  "id": "dapper:File.h845ro_lHmlnNS4AV1Df57i4zy8GGaCt",
+                  "mime_type": "application/json",
+                  "sha256": "20c524bbdf07f3088f6e88d1d77dcf68495f389112ee04a171988bd2561e3bc8",
+                  "size_in_bytes": 848
+                },
+                {
+                  "filename": "connections-trait.attempt-1.body.json",
+                  "id": "dapper:File.hP2Qbe6zyi4MN45IfEP2n6ZzcMkWZ8NP",
+                  "mime_type": "application/json",
+                  "sha256": "dc0bfbd8c23271a7e0a6d2285a90de9be7698f2ede9465b6d5877bbd24e96006",
+                  "size_in_bytes": 69
+                },
+                {
+                  "filename": "geneset-import.json",
+                  "id": "dapper:File.jhATaviXz7ShSsxZ7Xv4rbCX7tNWR8Nk",
+                  "mime_type": "application/json",
+                  "sha256": "16332bb1da593d9a7040097290148469528721f9d7e8ac6026d1da4d1327bc6c",
+                  "size_in_bytes": 1976
+                },
+                {
+                  "filename": "gene_set-trait-a559f3f24e19.attempt-1.body.json",
+                  "id": "dapper:File.kWSAPS8ImPDI9mT2KIFhaVDz5u0AI-MB",
+                  "mime_type": "application/json",
+                  "sha256": "b38fec16807ed8f65f519043cabac0fc0d7e65a4a2668d59595add524f11ff85",
+                  "size_in_bytes": 3455
+                },
+                {
+                  "filename": "geneset-selected-records.json",
+                  "id": "dapper:File.knSmLHuHVmRdxsg2ittn6nqB427mstqi",
+                  "mime_type": "application/json",
+                  "sha256": "d2f803a4683be29219647401e49ebb5dcfd68be362882432d242d16ca65cc8b8",
+                  "size_in_bytes": 7040
+                },
+                {
+                  "filename": "evidence_package.py",
+                  "id": "dapper:File.n80yhQw8GQPnkBbhRzchAzcEHq2SfXOJ",
+                  "mime_type": "text/plain",
+                  "sha256": "4510c6259cd225736ef0d0073998636ef3f8e3f8927e510c0f0902e80cbae74b",
+                  "size_in_bytes": 38287
+                },
+                {
+                  "filename": "SKILL.md",
+                  "id": "dapper:File.oXxr25cqI9ppv9PLSlj5cIT-OYfpGdi_",
+                  "mime_type": "text/plain",
+                  "sha256": "98ead053d56359de279fcb06d74e6ef5cce72a23350da99dd26c0d03bea1c35a",
+                  "size_in_bytes": 8352
+                },
+                {
+                  "filename": "dapper-integration.md",
+                  "id": "dapper:File.pDUwVMynhab9l2lkeaKOjQO_nK6dr1LY",
+                  "mime_type": "text/plain",
+                  "sha256": "5737fc67f5d4d2348a6464a6086e762f7e95d8d2b2dfcf8de0359f15c4274d38",
+                  "size_in_bytes": 25625
+                },
+                {
+                  "filename": "contextual.attempt-1.json",
+                  "id": "dapper:File.s6eClSzF36BNVxm2NIv834oDkvl4uRvV",
+                  "mime_type": "application/json",
+                  "sha256": "59f7a7cf7c515666fff9910171ca7d274f4a51a529b954eb2e0893b9bbed0bbd",
+                  "size_in_bytes": 8277
+                },
+                {
+                  "filename": "factor-catalog-a559f3f24e19.attempt-1.json",
+                  "id": "dapper:File.tCp5-Pju3u4idjrvS97fHQWiYY6Y_7dV",
+                  "mime_type": "application/json",
+                  "sha256": "3c0cfb8601e73d2422d8d6da6eee08b3a48bf7031f1d6210d276398b9e9e0c04",
+                  "size_in_bytes": 2511
+                },
+                {
+                  "filename": "contextual.attempt-1.body.json",
+                  "id": "dapper:File.ufdpJKe7Y9ENrxCzOkVoDWVwBkS4Qi3R",
+                  "mime_type": "application/json",
+                  "sha256": "f3842dccff3665359f62858a8ab7fae10f20442455042664b6e6fb2f8f490228",
+                  "size_in_bytes": 7068
+                },
+                {
+                  "filename": "gene-trait-a559f3f24e19.attempt-1.json",
+                  "id": "dapper:File.uxbR3Iy380gQHZfRCgVCEaqMRsVNYO9x",
+                  "mime_type": "application/json",
+                  "sha256": "9abf832cdfacafcfe858a877bf8818cf46a1c571631933faf753b9396aa42fc3",
+                  "size_in_bytes": 1993
+                },
+                {
+                  "filename": "factor-catalog-a559f3f24e19.attempt-1.body.json",
+                  "id": "dapper:File.vaC9DluVBWfFHpOY4pa0Gqu-MUit2jk1",
+                  "mime_type": "application/json",
+                  "sha256": "e7bd191f91e658c267a28ae1e96c426f122119ca00c75320df0d1cb031bac585",
+                  "size_in_bytes": 2168
+                },
+                {
+                  "filename": "connections-gene.attempt-1.body.json",
+                  "id": "dapper:File.vuALMaKVdlwNv82BHjHouNgICfTsiB-h",
+                  "mime_type": "application/json",
+                  "sha256": "6f689724ca918b1706cbde411b6337c98cd5f4d7a9b23561a9a7d7695d50547f",
+                  "size_in_bytes": 11697
+                },
+                {
+                  "filename": "catalog-a559f3f24e19.attempt-1.body.json",
+                  "id": "dapper:File.x1a4stQKeMRSDlNcYbrwxYpjO4KLLcP3",
+                  "mime_type": "application/json",
+                  "sha256": "2791188a1ceb0489678f98179968fe8b18f9c42313f6412c9bbf1f6e68af0b2e",
+                  "size_in_bytes": 654
+                },
+                {
+                  "filename": "pigean-claim-model.md",
+                  "id": "dapper:File.y1dfMnW05kqSQCueRWBFpdtyTQhDyyGY",
+                  "mime_type": "text/plain",
+                  "sha256": "8b797269d45a2a4feabe00fbac84df7c99ebaa72affcf6154c89c7ce7fcdcf08",
+                  "size_in_bytes": 44183
+                },
+                {
+                  "filename": "Coronary_Artery_Disease.yaml",
+                  "id": "dapper:File.yLVqlItWKdOT-93XZiIpyLvzrYltbxwQ",
+                  "mime_type": "application/yaml",
+                  "sha256": "00f2a71dca11fd7d4a8c835ea9e978037dcbef88d3fb050c5e74192db2bd7338",
+                  "size_in_bytes": 97708
+                },
+                {
+                  "filename": "gene_set-factor-50fbafcddac8.attempt-1.json",
+                  "id": "dapper:File.zb-rweKEax9BNAtbciWbJFKs9WB_L4vw",
+                  "mime_type": "application/json",
+                  "sha256": "96dd4443430ecc405ff558185d8ddc8fc0e6eb5222ea32a947a2689dce7d08b9",
+                  "size_in_bytes": 4150
+                }
+              ],
+              "gene_sets": [
+                {
+                  "alternate_identifier": [
+                    "gene_set:IGVF__IGVFDS2266YDVM__IGVF_Perturb_Seq_chr5:88882966-88883966_dn",
+                    "cfde:cfde-inc-v2:gene_set:IGVF__IGVFDS2266YDVM__IGVF_Perturb_Seq_chr5:88882966-88883966_dn"
+                  ],
+                  "id": "dapper:GeneSet.2YxoyPN2jm9mMBKzygdsuckV9yBYHB3t",
+                  "member_type": "gene",
+                  "name": "IGVF / IGVFDS2266YDVM / IGVF Perturb Seq chr5:88882966-88883966 dn",
+                  "term": "IGVF__IGVFDS2266YDVM__IGVF_Perturb_Seq_chr5:88882966-88883966_dn",
+                  "term_prefix": "IGVF",
+                  "was_derived_from": [
+                    "https://cfde-dev.hugeampkpnbi.org/api/bio/keys/pigean-gene-set/2"
+                  ],
+                  "was_generated_by": "dapper:Activity.VM0nxPd0QVsZJ-7qw4WjAvXtEiFMehqx"
+                },
+                {
+                  "alternate_identifier": [
+                    "gene_set:IGVF__IGVFDS4003HZAB__IGVF_Perturb_Seq_chr5:173234812-173235812_dn",
+                    "cfde:cfde-inc-v2:gene_set:IGVF__IGVFDS4003HZAB__IGVF_Perturb_Seq_chr5:173234812-173235812_dn"
+                  ],
+                  "id": "dapper:GeneSet.39T9Pve7EUEmSwJMr1aEspCF8p4SPKpo",
+                  "member_type": "gene",
+                  "name": "IGVF / IGVFDS4003HZAB / IGVF Perturb Seq chr5:173234812-173235812 dn",
+                  "term": "IGVF__IGVFDS4003HZAB__IGVF_Perturb_Seq_chr5:173234812-173235812_dn",
+                  "term_prefix": "IGVF",
+                  "was_derived_from": [
+                    "https://cfde-dev.hugeampkpnbi.org/api/bio/keys/pigean-gene-set/2"
+                  ],
+                  "was_generated_by": "dapper:Activity.VM0nxPd0QVsZJ-7qw4WjAvXtEiFMehqx"
+                },
+                {
+                  "alternate_identifier": [
+                    "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+                    "cfde:cfde-inc-v2:gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn"
+                  ],
+                  "id": "dapper:GeneSet.I1UZhVhKU-YDerPLIxtnZOGlTXNAlrgD",
+                  "member_type": "gene",
+                  "name": "AMP AD / all brain / AMP AD MAYO TCX Diagnosis.AOD AD-CONTROL ALL dn | GTEx / brain / GTEx aging Brain 20-29 60-69 dn",
+                  "term": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+                  "was_derived_from": [
+                    "https://cfde-dev.hugeampkpnbi.org/api/bio/keys/pigean-gene-set/2"
+                  ],
+                  "was_generated_by": "dapper:Activity.VM0nxPd0QVsZJ-7qw4WjAvXtEiFMehqx"
+                },
+                {
+                  "alternate_identifier": [
+                    "gene_set:GTEx__small_intestine__GTEx_aging_SmallIntestine_20-29_50-59_up",
+                    "cfde:cfde-inc-v2:gene_set:GTEx__small_intestine__GTEx_aging_SmallIntestine_20-29_50-59_up"
+                  ],
+                  "id": "dapper:GeneSet.Kb7K2lvQ2UghY3l9ElGspREYM-MTZwem",
+                  "member_type": "gene",
+                  "name": "GTEx / small intestine / GTEx aging SmallIntestine 20-29 50-59 up",
+                  "term": "GTEx__small_intestine__GTEx_aging_SmallIntestine_20-29_50-59_up",
+                  "term_prefix": "GTEx",
+                  "was_derived_from": [
+                    "https://cfde-dev.hugeampkpnbi.org/api/bio/keys/pigean-gene-set/2"
+                  ],
+                  "was_generated_by": "dapper:Activity.VM0nxPd0QVsZJ-7qw4WjAvXtEiFMehqx"
+                },
+                {
+                  "alternate_identifier": [
+                    "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_SourceDiagnosis_AD-PATH_AGE_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+                    "cfde:cfde-inc-v2:gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_SourceDiagnosis_AD-PATH_AGE_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn"
+                  ],
+                  "id": "dapper:GeneSet.Tw4SJJGFSQaO6MWIogMpP5JVzNjKDd-L",
+                  "member_type": "gene",
+                  "name": "AMP AD / all brain / AMP AD MAYO TCX SourceDiagnosis AD-PATH AGE ALL dn | GTEx / brain / GTEx aging Brain 20-29 60-69 dn",
+                  "term": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_SourceDiagnosis_AD-PATH_AGE_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+                  "was_derived_from": [
+                    "https://cfde-dev.hugeampkpnbi.org/api/bio/keys/pigean-gene-set/2"
+                  ],
+                  "was_generated_by": "dapper:Activity.VM0nxPd0QVsZJ-7qw4WjAvXtEiFMehqx"
+                },
+                {
+                  "alternate_identifier": [
+                    "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis_AD-OTHER_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+                    "cfde:cfde-inc-v2:gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis_AD-OTHER_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn"
+                  ],
+                  "id": "dapper:GeneSet.vz9FgYhauWzJN2g7y69RtjsfhQgQhVHV",
+                  "member_type": "gene",
+                  "name": "AMP AD / all brain / AMP AD MAYO TCX Diagnosis AD-OTHER ALL dn | GTEx / brain / GTEx aging Brain 20-29 60-69 dn",
+                  "term": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis_AD-OTHER_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+                  "was_derived_from": [
+                    "https://cfde-dev.hugeampkpnbi.org/api/bio/keys/pigean-gene-set/2"
+                  ],
+                  "was_generated_by": "dapper:Activity.VM0nxPd0QVsZJ-7qw4WjAvXtEiFMehqx"
+                },
+                {
+                  "alternate_identifier": [
+                    "gene_set:IGVF__IGVFDS6332VCTO__IGVF_Perturb_Seq_ZFP64_up",
+                    "cfde:cfde-inc-v2:gene_set:IGVF__IGVFDS6332VCTO__IGVF_Perturb_Seq_ZFP64_up"
+                  ],
+                  "id": "dapper:GeneSet.wk5axiHiaRv_PMa1NzNRP0TNUi2f3Pp7",
+                  "member_type": "gene",
+                  "name": "IGVF / IGVFDS6332VCTO / IGVF Perturb Seq ZFP64 up",
+                  "term": "IGVF__IGVFDS6332VCTO__IGVF_Perturb_Seq_ZFP64_up",
+                  "term_prefix": "IGVF",
+                  "was_derived_from": [
+                    "https://cfde-dev.hugeampkpnbi.org/api/bio/keys/pigean-gene-set/2"
+                  ],
+                  "was_generated_by": "dapper:Activity.VM0nxPd0QVsZJ-7qw4WjAvXtEiFMehqx"
+                },
+                {
+                  "alternate_identifier": [
+                    "gene_set:PsychENCODE__all_signatures__PsychENCODE_geneM16",
+                    "cfde:cfde-inc-v2:gene_set:PsychENCODE__all_signatures__PsychENCODE_geneM16"
+                  ],
+                  "id": "dapper:GeneSet.zQ8X81n_J-Fuv0zNRp1iQQXqIzuAOzGP",
+                  "member_type": "gene",
+                  "name": "PsychENCODE / all signatures / PsychENCODE geneM16",
+                  "term": "PsychENCODE__all_signatures__PsychENCODE_geneM16",
+                  "term_prefix": "PsychENCODE",
+                  "was_derived_from": [
+                    "https://cfde-dev.hugeampkpnbi.org/api/bio/keys/pigean-gene-set/2"
+                  ],
+                  "was_generated_by": "dapper:Activity.VM0nxPd0QVsZJ-7qw4WjAvXtEiFMehqx"
+                }
+              ],
+              "knowledge_gaps": [
+                {
+                  "about_entities": [
+                    "http://purl.obolibrary.org/obo/MONDO_0021661"
+                  ],
+                  "gap_description": "Population PGS×context analyses (Nagpal & Gibson 2026, PMID:42443528) are largely unable to establish the causality of specific contexts. dismech separates true environmental exposures (smoking, high-fat diet, sedentary lifestyle) from biochemical readouts (LDL, HDL, C-reactive protein); the biochemical \"contexts\" are prime reverse-causation suspects, since they may be partly downstream of the atherosclerotic process rather than upstream drivers, and behavioural contexts such as reduced physical activity may be rapid responses to incipient angina rather than causes. Distinguishing genuine amplification of genetic effects from reverse causation determines whether the modelled interventions (e.g. lowering cholesterol in high-PGS smokers) would actually reduce risk.",
+                  "gap_kind": "KNOWLEDGE_GAP",
+                  "id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+                  "scope": "Coronary Artery Disease",
+                  "text": "Are the CAD PGS×context interactions driven by adverse exposures causally amplifying genetic risk, or are some \"contexts\" actually downstream readouts of incipient disease (reverse causation)?"
+                }
+              ],
+              "mechanisms": [
+                {
+                  "description": "EAGGL mechanism factor:portal:CADinT2D:cfde-inc-v2:Factor1. Source label: AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn.",
+                  "id": "dapper:Mechanism.MyhahXB55tDUS667sJzeJZ40BeeQBWOR",
+                  "name": "CADinT2D mechanism Factor1"
+                },
+                {
+                  "description": "At atherosclerosis-prone arterial sites, disturbed flow is associated with endothelial stress and senescence, while reduced endothelial nitric-oxide biosynthesis represents the vasomotor dysfunction that impairs dilation. This nonconforming coronary endothelial-function branch is modeled separately from the conserved subendothelial apoB-retention trigger. The cited disturbed-flow evidence derives from mouse carotid arteries and human carotid plaques, so its transfer to coronary endothelial dysfunction is explicitly partial.",
+                  "id": "dapper:Mechanism.Tbd3TXttvLnVp5rlCDkdPYOWlFOfRUG2",
+                  "name": "Endothelial Dysfunction"
+                }
+              ],
+              "prefixes": {
+                "CL": "http://purl.obolibrary.org/obo/CL_",
+                "ECTO": "http://purl.obolibrary.org/obo/ECTO_",
+                "GO": "http://purl.obolibrary.org/obo/GO_",
+                "MONDO": "http://purl.obolibrary.org/obo/MONDO_",
+                "PMID": "http://identifiers.org/pubmed/",
+                "cfde": "urn:cfde:record:",
+                "dapper": "https://broadinstitute.github.io/dapper/ns#",
+                "factor": "urn:cfde:factor:",
+                "gene": "urn:cfde:gene:",
+                "gene_set": "urn:cfde:gene_set:",
+                "trait": "urn:cfde:trait:"
+              }
+            },
+            "dapper_pin": {
+              "name": "configured-snapshot",
+              "snapshot_manifest_sha256": "7a07ddc6cea507ec83f56f30e56f48f7e245ccb1be350330221dcafacbe10d41",
+              "snapshot_sha256": "801fb347c54c036c15345d132d302171fc6cd74c1f75a03a5c59c937f5ed7d11"
+            },
+            "dismech": {
+              "knowledge_gap": {
+                "attachments": [
+                  {
+                    "attachment_index": 0,
+                    "gap_id": "dismech:disorders/Coronary_Artery_Disease#discussion:cad_pgsxc_reverse_causation",
+                    "resolution": "resolved",
+                    "source_ref": {
+                      "artifact_id": "dismech-cee6cec679d5a938",
+                      "pointer": "/pathophysiology/0"
+                    },
+                    "source_reference": "pathophysiology#Endothelial Dysfunction",
+                    "target_document_id": "dismech:disorders/Coronary_Artery_Disease",
+                    "target_id": "dismech:disorders/Coronary_Artery_Disease#/pathophysiology/0",
+                    "target_kind": "pathophysiology",
+                    "target_label": "Endothelial Dysfunction",
+                    "target_pointer": "/pathophysiology/0",
+                    "target_source_file": "kb/disorders/Coronary_Artery_Disease.yaml"
+                  },
+                  {
+                    "attachment_index": 1,
+                    "gap_id": "dismech:disorders/Coronary_Artery_Disease#discussion:cad_pgsxc_reverse_causation",
+                    "resolution": "resolved",
+                    "source_ref": {
+                      "artifact_id": "dismech-cee6cec679d5a938",
+                      "pointer": "/biochemical/0"
+                    },
+                    "source_reference": "biochemical#LDL Cholesterol",
+                    "target_document_id": "dismech:disorders/Coronary_Artery_Disease",
+                    "target_id": "dismech:disorders/Coronary_Artery_Disease#/biochemical/0",
+                    "target_kind": "biochemical",
+                    "target_label": "LDL Cholesterol",
+                    "target_pointer": "/biochemical/0",
+                    "target_source_file": "kb/disorders/Coronary_Artery_Disease.yaml"
+                  },
+                  {
+                    "attachment_index": 2,
+                    "gap_id": "dismech:disorders/Coronary_Artery_Disease#discussion:cad_pgsxc_reverse_causation",
+                    "resolution": "resolved",
+                    "source_ref": {
+                      "artifact_id": "dismech-cee6cec679d5a938",
+                      "pointer": "/biochemical/2"
+                    },
+                    "source_reference": "biochemical#C-Reactive Protein",
+                    "target_document_id": "dismech:disorders/Coronary_Artery_Disease",
+                    "target_id": "dismech:disorders/Coronary_Artery_Disease#/biochemical/2",
+                    "target_kind": "biochemical",
+                    "target_label": "C-Reactive Protein",
+                    "target_pointer": "/biochemical/2",
+                    "target_source_file": "kb/disorders/Coronary_Artery_Disease.yaml"
+                  },
+                  {
+                    "attachment_index": 3,
+                    "gap_id": "dismech:disorders/Coronary_Artery_Disease#discussion:cad_pgsxc_reverse_causation",
+                    "resolution": "resolved",
+                    "source_ref": {
+                      "artifact_id": "dismech-cee6cec679d5a938",
+                      "pointer": "/environmental/0"
+                    },
+                    "source_reference": "environmental#Smoking",
+                    "target_document_id": "dismech:disorders/Coronary_Artery_Disease",
+                    "target_id": "dismech:disorders/Coronary_Artery_Disease#/environmental/0",
+                    "target_kind": "environmental",
+                    "target_label": "Smoking",
+                    "target_pointer": "/environmental/0",
+                    "target_source_file": "kb/disorders/Coronary_Artery_Disease.yaml"
+                  }
+                ],
+                "dapper_id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+                "disease": {
+                  "preferred_term": "coronary atherosclerosis",
+                  "term": {
+                    "id": "MONDO:0021661",
+                    "label": "coronary atherosclerosis"
+                  }
+                },
+                "prompt": "Are the CAD PGS×context interactions driven by adverse exposures causally amplifying genetic risk, or are some \"contexts\" actually downstream readouts of incipient disease (reverse causation)?",
+                "proposed_experiments": [
+                  {
+                    "decision_criterion": "A context is retained as a causal amplifier if MR supports exposure-to-disease directionality and the exposure-attributable risk difference increases across increasing PGS strata; it is flagged as a reverse-causation suspect otherwise.",
+                    "description": "Use bidirectional / multivariable Mendelian randomization to test whether each candidate context (LDL, HDL, C-reactive protein, smoking) causally affects CAD versus being a consequence of subclinical disease, and whether the causal effect estimate scales with polygenic liability as the amplification model predicts.",
+                    "experiment_id": "cad_pgsxc_mr_direction",
+                    "name": "Mendelian randomization of exposure-to-CAD direction across PGS strata"
+                  },
+                  {
+                    "decision_criterion": "Amplification is supported if the PGS×context deviation from additivity persists when only pre-diagnosis exposure windows and incident cases are used.",
+                    "description": "Restrict exposures to measurements taken well before diagnosis and repeat the PGS×context liability-threshold modelling on incident cases only, to reduce the chance that exposure values reflect behavioural responses to early disease.",
+                    "experiment_id": "cad_pgsxc_prospective_temporal",
+                    "name": "Prospective incident-CAD analysis restricted to pre-diagnosis exposure windows"
+                  }
+                ],
+                "rationale": "Population PGS×context analyses (Nagpal & Gibson 2026, PMID:42443528) are largely unable to establish the causality of specific contexts. dismech separates true environmental exposures (smoking, high-fat diet, sedentary lifestyle) from biochemical readouts (LDL, HDL, C-reactive protein); the biochemical \"contexts\" are prime reverse-causation suspects, since they may be partly downstream of the atherosclerotic process rather than upstream drivers, and behavioural contexts such as reduced physical activity may be rapid responses to incipient angina rather than causes. Distinguishing genuine amplification of genetic effects from reverse causation determines whether the modelled interventions (e.g. lowering cholesterol in high-PGS smokers) would actually reduce risk.",
+                "source_id": "dismech:disorders/Coronary_Artery_Disease#discussion:cad_pgsxc_reverse_causation",
+                "source_kind": "KNOWLEDGE_GAP",
+                "source_ref": {
+                  "artifact_id": "dismech-cee6cec679d5a938",
+                  "pointer": "/discussions/0"
+                },
+                "source_status": "OPEN"
+              },
+              "mechanisms": {
+                "dismech:disorders/Coronary_Artery_Disease#/pathophysiology/0": {
+                  "associated_eaggl_mechanisms": {
+                    "factor:portal:CADinT2D:cfde-inc-v2:Factor1": {
+                      "association_basis": "user_supplied_anchor",
+                      "semantic_similarity": null,
+                      "status": "not_computed"
+                    }
+                  },
+                  "biological_processes": [
+                    {
+                      "modifier": "DECREASED",
+                      "preferred_term": "Nitric Oxide Production",
+                      "term": {
+                        "id": "GO:0006809",
+                        "label": "nitric oxide biosynthetic process"
+                      }
+                    }
+                  ],
+                  "cell_types": [
+                    {
+                      "preferred_term": "Endothelial Cell",
+                      "term": {
+                        "id": "CL:0000115",
+                        "label": "endothelial cell"
+                      }
+                    }
+                  ],
+                  "dapper_id": "dapper:Mechanism.Tbd3TXttvLnVp5rlCDkdPYOWlFOfRUG2",
+                  "description": "At atherosclerosis-prone arterial sites, disturbed flow is associated with endothelial stress and senescence, while reduced endothelial nitric-oxide biosynthesis represents the vasomotor dysfunction that impairs dilation. This nonconforming coronary endothelial-function branch is modeled separately from the conserved subendothelial apoB-retention trigger. The cited disturbed-flow evidence derives from mouse carotid arteries and human carotid plaques, so its transfer to coronary endothelial dysfunction is explicitly partial.",
+                  "downstream": [
+                    {
+                      "causal_link_type": "INDIRECT_KNOWN_INTERMEDIATES",
+                      "description": "Connects the vasomotor and disturbed-flow endothelial branch to the conserved retention trigger without asserting that reduced nitric oxide alone is sufficient for apoB retention.",
+                      "evidence": [
+                        {
+                          "evidence_source": "OTHER",
+                          "explanation": "Links arterial injury and endothelial dysfunction to subendothelial apoB modification and monocyte entry, but does not isolate nitric-oxide loss or directly establish every intermediate in lipoprotein retention.",
+                          "reference": "PMID:26844337",
+                          "reference_title": "The Role of Lipids and Lipoproteins in Atherosclerosis.",
+                          "snippet": "Arterial injury causes endothelial dysfunction promoting modification of apoB containing lipoproteins and infiltration of monocytes into the subendothelial space.",
+                          "supports": "SUPPORT"
+                        }
+                      ],
+                      "intermediate_mechanisms": [
+                        "increased endothelial permeability and apoB-lipoprotein entry",
+                        "subendothelial lipoprotein modification and retention"
+                      ],
+                      "target": "Coronary Endothelial Injury and Subendothelial LDL Retention"
+                    }
+                  ],
+                  "evidence": [
+                    {
+                      "evidence_source": "MODEL_ORGANISM",
+                      "explanation": "Supports disturbed-flow-associated endothelial senescence as one component of endothelial dysfunction. It does not directly measure nitric-oxide biosynthesis and comes from a mouse carotid model, so it is not treated as direct coronary or nitric-oxide evidence.",
+                      "reference": "PMID:40594772",
+                      "reference_title": "Single-cell RNA-seq analysis of mouse carotid artery under disturbed flow and human carotid plaques identifies key cell populations in atherosclerosis development.",
+                      "snippet": "CD36 + positive ECs exhibited significant senescence phenotypes following disturbed flow stimulation.",
+                      "supports": "SUPPORT"
+                    },
+                    {
+                      "evidence_source": "MODEL_ORGANISM",
+                      "explanation": "Supports disturbed flow as a regional context for atherosclerosis and endothelial dysfunction. It does not directly establish reduced nitric-oxide biosynthesis or a coronary-specific effect.",
+                      "reference": "PMID:40594772",
+                      "reference_title": "Single-cell RNA-seq analysis of mouse carotid artery under disturbed flow and human carotid plaques identifies key cell populations in atherosclerosis development.",
+                      "snippet": "Atherosclerosis tends to occur in regions of disturbed blood flow. This study explored how disturbed flow aggravates atherosclerosis using single-cell RNA-seq (scRNA-seq) datasets from mouse carotid arteries under disturbed flow and human carotid artery plaques.",
+                      "supports": "SUPPORT"
+                    }
+                  ],
+                  "name": "Endothelial Dysfunction",
+                  "source_ref": {
+                    "artifact_id": "dismech-cee6cec679d5a938",
+                    "pointer": "/pathophysiology/0"
+                  }
+                }
+              },
+              "other_context": [
+                {
+                  "kind": "biochemical",
+                  "record": {
+                    "context": "Major risk factor for plaque formation",
+                    "evidence": [
+                      {
+                        "evidence_source": "OTHER",
+                        "explanation": "EAS consensus statement concludes that LDL is causal for atherosclerotic cardiovascular disease, supporting elevated LDL cholesterol as a major risk factor for coronary plaque formation.",
+                        "reference": "PMID:28444290",
+                        "reference_title": "Low-density lipoproteins cause atherosclerotic cardiovascular disease. 1. Evidence from genetic, epidemiologic, and clinical studies. A consensus statement from the European Atherosclerosis Society Consensus Panel.",
+                        "snippet": "Consistent evidence from numerous and multiple different types of clinical and genetic studies unequivocally establishes that LDL causes ASCVD.",
+                        "supports": "SUPPORT"
+                      }
+                    ],
+                    "name": "LDL Cholesterol",
+                    "presence": "Elevated",
+                    "readouts": [
+                      {
+                        "description": "Circulating LDL cholesterol indexes the pool of apoB-containing lipoprotein available for retention in the coronary subendothelial space, so its level reports on the intensity of the retention step rather than being caused by it.",
+                        "direction": "POSITIVE",
+                        "endpoint_context": "PROGNOSTIC",
+                        "relationship": "READOUT_OF",
+                        "target": "Coronary Endothelial Injury and Subendothelial LDL Retention"
+                      }
+                    ]
+                  },
+                  "source_id": "dismech:disorders/Coronary_Artery_Disease#/biochemical/0",
+                  "source_ref": {
+                    "artifact_id": "dismech-cee6cec679d5a938",
+                    "pointer": "/biochemical/0"
+                  }
+                },
+                {
+                  "kind": "biochemical",
+                  "record": {
+                    "context": "Marker of inflammation",
+                    "evidence": [
+                      {
+                        "evidence_source": "HUMAN_CLINICAL",
+                        "explanation": "Individual-participant meta-analysis quantifies the association between circulating C-reactive protein and incident coronary heart disease, supporting CRP as an inflammatory risk marker in coronary artery disease.",
+                        "reference": "PMID:20031199",
+                        "reference_title": "C-reactive protein concentration and risk of coronary heart disease, stroke, and mortality: an individual participant meta-analysis.",
+                        "snippet": "Risk ratios (RRs) for coronary heart disease per 1-SD higher log(e) CRP concentration (three-fold higher) were 1.63 (95% CI 1.51-1.76) when initially adjusted for age and sex only, and 1.37 (1.27-1.48) when adjusted further for conventional risk factors",
+                        "supports": "SUPPORT"
+                      }
+                    ],
+                    "name": "C-Reactive Protein",
+                    "presence": "Elevated",
+                    "readouts": [
+                      {
+                        "description": "C-reactive protein is a systemic acute-phase index that rises with the inflammatory activity of which intimal monocyte recruitment and foam-cell formation are part. It is a correlate of that intimal process and of coronary risk, not a direct measurement of the lesion.",
+                        "direction": "POSITIVE",
+                        "endpoint_context": "PROGNOSTIC",
+                        "relationship": "CORRELATES_WITH",
+                        "target": "Monocyte Recruitment and Macrophage Foam Cell Formation"
+                      }
+                    ]
+                  },
+                  "source_id": "dismech:disorders/Coronary_Artery_Disease#/biochemical/2",
+                  "source_ref": {
+                    "artifact_id": "dismech-cee6cec679d5a938",
+                    "pointer": "/biochemical/2"
+                  }
+                },
+                {
+                  "kind": "environmental",
+                  "record": {
+                    "evidence": [
+                      {
+                        "evidence_source": "HUMAN_CLINICAL",
+                        "explanation": "INTERHEART, a standardised case-control study of acute myocardial infarction across 52 countries with 15152 cases and 14820 controls. Establishes smoking as one of the largest modifiable contributors to population attributable risk.",
+                        "reference": "PMID:15364185",
+                        "reference_title": "Effect of potentially modifiable risk factors associated with myocardial infarction in 52 countries (the INTERHEART study): case-control study.",
+                        "snippet": "Smoking (odds ratio 2.87 for current vs never, PAR 35.7% for current and former vs never)",
+                        "supports": "SUPPORT"
+                      },
+                      {
+                        "evidence_source": "HUMAN_CLINICAL",
+                        "explanation": "The tobacco-specific INTERHEART analysis. Quoted for the dose-response relationship, which is the part of the note the odds ratio alone does not establish.",
+                        "reference": "PMID:16920470",
+                        "reference_title": "Tobacco use and risk of myocardial infarction in 52 countries in the INTERHEART study: a case-control study.",
+                        "snippet": "risk increased by 5.6% for every additional cigarette smoked",
+                        "supports": "SUPPORT"
+                      }
+                    ],
+                    "exposure_term": {
+                      "preferred_term": "exposure to tobacco smoking",
+                      "term": {
+                        "id": "ECTO:6000029",
+                        "label": "exposure to tobacco smoking"
+                      }
+                    },
+                    "influences_mechanisms": [
+                      {
+                        "causal_link_type": "INDIRECT_UNKNOWN_INTERMEDIATES",
+                        "description": "Tobacco smoking raises the risk of acute myocardial infarction in a dose-dependent way. The link is drawn to the clinical event because that is what the cited epidemiology measures; the mediating coronary mechanism is deliberately left unasserted here, as the entry's review notes require.",
+                        "environmental_effect": "PREDISPOSES",
+                        "evidence": [
+                          {
+                            "evidence_source": "HUMAN_CLINICAL",
+                            "explanation": "INTERHEART, a standardised case-control study of acute myocardial infarction across 52 countries with 15152 cases and 14820 controls. Establishes smoking as one of the largest modifiable contributors to population attributable risk.",
+                            "reference": "PMID:15364185",
+                            "reference_title": "Effect of potentially modifiable risk factors associated with myocardial infarction in 52 countries (the INTERHEART study): case-control study.",
+                            "snippet": "Smoking (odds ratio 2.87 for current vs never, PAR 35.7% for current and former vs never)",
+                            "supports": "SUPPORT"
+                          }
+                        ],
+                        "target": "Myocardial Infarction"
+                      }
+                    ],
+                    "name": "Smoking",
+                    "notes": "Major modifiable risk factor, with a dose-response relationship to myocardial infarction risk.",
+                    "review_notes": "The prior note also asserted that smoking promotes endothelial damage. That mechanism is not carried by either epidemiologic source cited here and is not evidenced in this entry; it belongs in pathophysiology with its own citation rather than as an unsourced clause on an exposure."
+                  },
+                  "source_id": "dismech:disorders/Coronary_Artery_Disease#/environmental/0",
+                  "source_ref": {
+                    "artifact_id": "dismech-cee6cec679d5a938",
+                    "pointer": "/environmental/0"
+                  }
+                }
+              ],
+              "related_knowledge_gaps": {
+                "items": [
+                  {
+                    "kind": "KNOWLEDGE_GAP",
+                    "prompt": "Which easily-derived clinical variables most reliably predict in-hospital mortality in CAD patients receiving dual antiplatelet therapy (DAPT) after percutaneous coronary intervention (PCI)? Can a simple risk score validated against external cohorts improve prognostic classification beyond conventional risk factors alone, and what patient subtypes remain at highest risk despite optimized antiplatelet and supportive therapy?",
+                    "source_id": "dismech:disorders/Coronary_Artery_Disease#discussion:dapt_mortality_risk_stratification",
+                    "source_ref": {
+                      "artifact_id": "dismech-cee6cec679d5a938",
+                      "pointer": "/discussions/1"
+                    },
+                    "status": "OPEN"
+                  },
+                  {
+                    "kind": "KNOWLEDGE_GAP",
+                    "prompt": "Which, if any, pathway beyond change in circulating triglyceride concentration causally mediates the cardiovascular-event contrast observed with high-dose icosapent ethyl: coronary plaque remodeling; altered apolipoprotein-B/remnant burden, composition, trafficking, or retention; platelet effects; inflammatory resolution; endothelial effects; or membrane stabilization and reduced lipid oxidation? How much of the contrast reflects the mineral-oil comparator?",
+                    "source_id": "dismech:disorders/Coronary_Artery_Disease#discussion:gap_icosapent_ethyl_event_reduction_mechanism",
+                    "source_ref": {
+                      "artifact_id": "dismech-cee6cec679d5a938",
+                      "pointer": "/discussions/2"
+                    },
+                    "status": "OPEN"
+                  }
+                ],
+                "status": "provided_subset"
+              },
+              "source_revision": {
+                "commit": "df3884a8bba34370ecc0b3a49d956e7f0523bb28",
+                "source_sha256": "00f2a71dca11fd7d4a8c835ea9e978037dcbef88d3fb050c5e74192db2bd7338"
+              }
+            },
+            "entities": {
+              "gene_sets": {
+                "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn": {
+                  "construction_provenance_status": "not_loaded",
+                  "dapper_id": "dapper:GeneSet.I1UZhVhKU-YDerPLIxtnZOGlTXNAlrgD",
+                  "display_name": "AMP AD / all brain / AMP AD MAYO TCX Diagnosis.AOD AD-CONTROL ALL dn | GTEx / brain / GTEx aging Brain 20-29 60-69 dn",
+                  "import_id": "3714a036aea279190d4723d9ddf2dd81d105e3427c38d9fc685e7fd606cb260e",
+                  "membership_status": "not_loaded",
+                  "provenance_refs": [
+                    {
+                      "artifact_id": "geneset-import",
+                      "pointer": ""
+                    }
+                  ]
+                },
+                "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis_AD-OTHER_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn": {
+                  "construction_provenance_status": "not_loaded",
+                  "dapper_id": "dapper:GeneSet.vz9FgYhauWzJN2g7y69RtjsfhQgQhVHV",
+                  "display_name": "AMP AD / all brain / AMP AD MAYO TCX Diagnosis AD-OTHER ALL dn | GTEx / brain / GTEx aging Brain 20-29 60-69 dn",
+                  "import_id": "3714a036aea279190d4723d9ddf2dd81d105e3427c38d9fc685e7fd606cb260e",
+                  "membership_status": "not_loaded",
+                  "provenance_refs": [
+                    {
+                      "artifact_id": "geneset-import",
+                      "pointer": ""
+                    }
+                  ]
+                },
+                "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_SourceDiagnosis_AD-PATH_AGE_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn": {
+                  "construction_provenance_status": "not_loaded",
+                  "dapper_id": "dapper:GeneSet.Tw4SJJGFSQaO6MWIogMpP5JVzNjKDd-L",
+                  "display_name": "AMP AD / all brain / AMP AD MAYO TCX SourceDiagnosis AD-PATH AGE ALL dn | GTEx / brain / GTEx aging Brain 20-29 60-69 dn",
+                  "import_id": "3714a036aea279190d4723d9ddf2dd81d105e3427c38d9fc685e7fd606cb260e",
+                  "membership_status": "not_loaded",
+                  "provenance_refs": [
+                    {
+                      "artifact_id": "geneset-import",
+                      "pointer": ""
+                    }
+                  ]
+                },
+                "gene_set:GTEx__small_intestine__GTEx_aging_SmallIntestine_20-29_50-59_up": {
+                  "construction_provenance_status": "not_loaded",
+                  "dapper_id": "dapper:GeneSet.Kb7K2lvQ2UghY3l9ElGspREYM-MTZwem",
+                  "display_name": "GTEx / small intestine / GTEx aging SmallIntestine 20-29 50-59 up",
+                  "import_id": "3714a036aea279190d4723d9ddf2dd81d105e3427c38d9fc685e7fd606cb260e",
+                  "membership_status": "not_loaded",
+                  "provenance_refs": [
+                    {
+                      "artifact_id": "geneset-import",
+                      "pointer": ""
+                    }
+                  ]
+                },
+                "gene_set:IGVF__IGVFDS2266YDVM__IGVF_Perturb_Seq_chr5:88882966-88883966_dn": {
+                  "construction_provenance_status": "not_loaded",
+                  "dapper_id": "dapper:GeneSet.2YxoyPN2jm9mMBKzygdsuckV9yBYHB3t",
+                  "display_name": "IGVF / IGVFDS2266YDVM / IGVF Perturb Seq chr5:88882966-88883966 dn",
+                  "import_id": "3714a036aea279190d4723d9ddf2dd81d105e3427c38d9fc685e7fd606cb260e",
+                  "membership_status": "not_loaded",
+                  "provenance_refs": [
+                    {
+                      "artifact_id": "geneset-import",
+                      "pointer": ""
+                    }
+                  ]
+                },
+                "gene_set:IGVF__IGVFDS4003HZAB__IGVF_Perturb_Seq_chr5:173234812-173235812_dn": {
+                  "construction_provenance_status": "not_loaded",
+                  "dapper_id": "dapper:GeneSet.39T9Pve7EUEmSwJMr1aEspCF8p4SPKpo",
+                  "display_name": "IGVF / IGVFDS4003HZAB / IGVF Perturb Seq chr5:173234812-173235812 dn",
+                  "import_id": "3714a036aea279190d4723d9ddf2dd81d105e3427c38d9fc685e7fd606cb260e",
+                  "membership_status": "not_loaded",
+                  "provenance_refs": [
+                    {
+                      "artifact_id": "geneset-import",
+                      "pointer": ""
+                    }
+                  ]
+                },
+                "gene_set:IGVF__IGVFDS6332VCTO__IGVF_Perturb_Seq_ZFP64_up": {
+                  "construction_provenance_status": "not_loaded",
+                  "dapper_id": "dapper:GeneSet.wk5axiHiaRv_PMa1NzNRP0TNUi2f3Pp7",
+                  "display_name": "IGVF / IGVFDS6332VCTO / IGVF Perturb Seq ZFP64 up",
+                  "import_id": "3714a036aea279190d4723d9ddf2dd81d105e3427c38d9fc685e7fd606cb260e",
+                  "membership_status": "not_loaded",
+                  "provenance_refs": [
+                    {
+                      "artifact_id": "geneset-import",
+                      "pointer": ""
+                    }
+                  ]
+                },
+                "gene_set:PsychENCODE__all_signatures__PsychENCODE_geneM16": {
+                  "construction_provenance_status": "not_loaded",
+                  "dapper_id": "dapper:GeneSet.zQ8X81n_J-Fuv0zNRp1iQQXqIzuAOzGP",
+                  "display_name": "PsychENCODE / all signatures / PsychENCODE geneM16",
+                  "import_id": "3714a036aea279190d4723d9ddf2dd81d105e3427c38d9fc685e7fd606cb260e",
+                  "membership_status": "not_loaded",
+                  "provenance_refs": [
+                    {
+                      "artifact_id": "geneset-import",
+                      "pointer": ""
+                    }
+                  ]
+                }
+              },
+              "genes": {
+                "gene:CTNNB1": {
+                  "entity_uri": "urn:cfde:gene:CTNNB1",
+                  "external_identity_mapping": "not_resolved",
+                  "source_symbol": "CTNNB1"
+                },
+                "gene:EYA2": {
+                  "entity_uri": "urn:cfde:gene:EYA2",
+                  "external_identity_mapping": "not_resolved",
+                  "source_symbol": "EYA2"
+                },
+                "gene:FGF13": {
+                  "entity_uri": "urn:cfde:gene:FGF13",
+                  "external_identity_mapping": "not_resolved",
+                  "source_symbol": "FGF13"
+                },
+                "gene:GLI3": {
+                  "entity_uri": "urn:cfde:gene:GLI3",
+                  "external_identity_mapping": "not_resolved",
+                  "source_symbol": "GLI3"
+                },
+                "gene:SHH": {
+                  "entity_uri": "urn:cfde:gene:SHH",
+                  "external_identity_mapping": "not_resolved",
+                  "source_symbol": "SHH"
+                },
+                "gene:SIX2": {
+                  "entity_uri": "urn:cfde:gene:SIX2",
+                  "external_identity_mapping": "not_resolved",
+                  "source_symbol": "SIX2"
+                },
+                "gene:TCF7L2": {
+                  "entity_uri": "urn:cfde:gene:TCF7L2",
+                  "external_identity_mapping": "not_resolved",
+                  "source_symbol": "TCF7L2"
+                },
+                "gene:WNT4": {
+                  "entity_uri": "urn:cfde:gene:WNT4",
+                  "external_identity_mapping": "not_resolved",
+                  "source_symbol": "WNT4"
+                }
+              }
+            },
+            "external_evidence": {
+              "assertions": [],
+              "ledger": [],
+              "selected_graphs": [
+                "biomarkerkg",
+                "prokn"
+              ],
+              "status": "not_queried"
+            },
+            "identifier_policy": {
+              "dismech_record_ids": "Opaque aliases resolved through source_ref and source revision.",
+              "preserve_existing_dapper_payloads": true,
+              "source_local_prefixes": [
+                "factor",
+                "gene",
+                "gene_set",
+                "trait",
+                "cfde"
+              ]
+            },
+            "package_version": "reveal.evidence-package/0.2-draft",
+            "pigean": {
+              "candidates": {
+                "gene:CTNNB1": {
+                  "candidate": {
+                    "aggregate_score": 1.7069155120772699,
+                    "anchor_count": 1,
+                    "candidate": {
+                      "id": "gene:CTNNB1",
+                      "label": "CTNNB1",
+                      "node_id": "gene:CTNNB1",
+                      "node_key": "CTNNB1",
+                      "node_type": "gene",
+                      "subtitle": "Gene",
+                      "type": "gene"
+                    },
+                    "edges": [
+                      {
+                        "extra": {},
+                        "family": "factor_gene_direct",
+                        "id": "6c8a84bb02f6385a",
+                        "label": "factor gene direct",
+                        "normalized_score": 1.7069155120772699,
+                        "path_nodes": [
+                          "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                          "gene:CTNNB1"
+                        ],
+                        "raw_score": 0.27869999408721924,
+                        "relation": "direct",
+                        "source": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                        "target": "gene:CTNNB1",
+                        "weight": 1.7069155120772699
+                      }
+                    ],
+                    "raw_max_score": 0.27869999408721924,
+                    "raw_mean_score": 0.27869999408721924,
+                    "support_anchor_count": 1,
+                    "support_path_count": 1,
+                    "supporting_paths": [
+                      {
+                        "anchor_id": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                        "extra": {},
+                        "family": "factor_gene_direct",
+                        "normalized_score": 1.7069155120772699,
+                        "path_nodes": [
+                          "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                          "gene:CTNNB1"
+                        ],
+                        "raw_score": 0.27869999408721924,
+                        "relation": "direct"
+                      }
+                    ]
+                  },
+                  "node": {
+                    "id": "gene:CTNNB1",
+                    "label": "CTNNB1",
+                    "node_id": "gene:CTNNB1",
+                    "node_key": "CTNNB1",
+                    "node_type": "gene",
+                    "subtitle": "Gene",
+                    "type": "gene"
+                  },
+                  "source_ref": {
+                    "artifact_id": "connections-gene.attempt-1",
+                    "pointer": "/response/candidates/6"
+                  }
+                },
+                "gene:EYA2": {
+                  "candidate": {
+                    "aggregate_score": 1.7191504967263718,
+                    "anchor_count": 1,
+                    "candidate": {
+                      "id": "gene:EYA2",
+                      "label": "EYA2",
+                      "node_id": "gene:EYA2",
+                      "node_key": "EYA2",
+                      "node_type": "gene",
+                      "subtitle": "Gene",
+                      "type": "gene"
+                    },
+                    "edges": [
+                      {
+                        "extra": {},
+                        "family": "factor_gene_direct",
+                        "id": "21cfe53ae7016ddd",
+                        "label": "factor gene direct",
+                        "normalized_score": 1.7191504967263718,
+                        "path_nodes": [
+                          "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                          "gene:EYA2"
+                        ],
+                        "raw_score": 0.2800999879837036,
+                        "relation": "direct",
+                        "source": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                        "target": "gene:EYA2",
+                        "weight": 1.7191504967263718
+                      }
+                    ],
+                    "raw_max_score": 0.2800999879837036,
+                    "raw_mean_score": 0.2800999879837036,
+                    "support_anchor_count": 1,
+                    "support_path_count": 1,
+                    "supporting_paths": [
+                      {
+                        "anchor_id": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                        "extra": {},
+                        "family": "factor_gene_direct",
+                        "normalized_score": 1.7191504967263718,
+                        "path_nodes": [
+                          "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                          "gene:EYA2"
+                        ],
+                        "raw_score": 0.2800999879837036,
+                        "relation": "direct"
+                      }
+                    ]
+                  },
+                  "node": {
+                    "id": "gene:EYA2",
+                    "label": "EYA2",
+                    "node_id": "gene:EYA2",
+                    "node_key": "EYA2",
+                    "node_type": "gene",
+                    "subtitle": "Gene",
+                    "type": "gene"
+                  },
+                  "source_ref": {
+                    "artifact_id": "connections-gene.attempt-1",
+                    "pointer": "/response/candidates/5"
+                  }
+                },
+                "gene:FGF13": {
+                  "candidate": {
+                    "aggregate_score": 1.804795910173722,
+                    "anchor_count": 1,
+                    "candidate": {
+                      "id": "gene:FGF13",
+                      "label": "FGF13",
+                      "node_id": "gene:FGF13",
+                      "node_key": "FGF13",
+                      "node_type": "gene",
+                      "subtitle": "Gene",
+                      "type": "gene"
+                    },
+                    "edges": [
+                      {
+                        "extra": {},
+                        "family": "factor_gene_direct",
+                        "id": "6e8ff05f0490f11f",
+                        "label": "factor gene direct",
+                        "normalized_score": 1.804795910173722,
+                        "path_nodes": [
+                          "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                          "gene:FGF13"
+                        ],
+                        "raw_score": 0.289900004863739,
+                        "relation": "direct",
+                        "source": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                        "target": "gene:FGF13",
+                        "weight": 1.804795910173722
+                      }
+                    ],
+                    "raw_max_score": 0.289900004863739,
+                    "raw_mean_score": 0.289900004863739,
+                    "support_anchor_count": 1,
+                    "support_path_count": 1,
+                    "supporting_paths": [
+                      {
+                        "anchor_id": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                        "extra": {},
+                        "family": "factor_gene_direct",
+                        "normalized_score": 1.804795910173722,
+                        "path_nodes": [
+                          "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                          "gene:FGF13"
+                        ],
+                        "raw_score": 0.289900004863739,
+                        "relation": "direct"
+                      }
+                    ]
+                  },
+                  "node": {
+                    "id": "gene:FGF13",
+                    "label": "FGF13",
+                    "node_id": "gene:FGF13",
+                    "node_key": "FGF13",
+                    "node_type": "gene",
+                    "subtitle": "Gene",
+                    "type": "gene"
+                  },
+                  "source_ref": {
+                    "artifact_id": "connections-gene.attempt-1",
+                    "pointer": "/response/candidates/4"
+                  }
+                },
+                "gene:GLI3": {
+                  "candidate": {
+                    "aggregate_score": 2.1071760443458127,
+                    "anchor_count": 1,
+                    "candidate": {
+                      "id": "gene:GLI3",
+                      "label": "GLI3",
+                      "node_id": "gene:GLI3",
+                      "node_key": "GLI3",
+                      "node_type": "gene",
+                      "subtitle": "Gene",
+                      "type": "gene"
+                    },
+                    "edges": [
+                      {
+                        "extra": {},
+                        "family": "factor_gene_direct",
+                        "id": "c1e566f0ea35fc42",
+                        "label": "factor gene direct",
+                        "normalized_score": 2.1071760443458127,
+                        "path_nodes": [
+                          "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                          "gene:GLI3"
+                        ],
+                        "raw_score": 0.3244999945163727,
+                        "relation": "direct",
+                        "source": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                        "target": "gene:GLI3",
+                        "weight": 2.1071760443458127
+                      }
+                    ],
+                    "raw_max_score": 0.3244999945163727,
+                    "raw_mean_score": 0.3244999945163727,
+                    "support_anchor_count": 1,
+                    "support_path_count": 1,
+                    "supporting_paths": [
+                      {
+                        "anchor_id": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                        "extra": {},
+                        "family": "factor_gene_direct",
+                        "normalized_score": 2.1071760443458127,
+                        "path_nodes": [
+                          "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                          "gene:GLI3"
+                        ],
+                        "raw_score": 0.3244999945163727,
+                        "relation": "direct"
+                      }
+                    ]
+                  },
+                  "node": {
+                    "id": "gene:GLI3",
+                    "label": "GLI3",
+                    "node_id": "gene:GLI3",
+                    "node_key": "GLI3",
+                    "node_type": "gene",
+                    "subtitle": "Gene",
+                    "type": "gene"
+                  },
+                  "source_ref": {
+                    "artifact_id": "connections-gene.attempt-1",
+                    "pointer": "/response/candidates/3"
+                  }
+                },
+                "gene:SHH": {
+                  "candidate": {
+                    "aggregate_score": 3.6776304513454114,
+                    "anchor_count": 1,
+                    "candidate": {
+                      "id": "gene:SHH",
+                      "label": "SHH",
+                      "node_id": "gene:SHH",
+                      "node_key": "SHH",
+                      "node_type": "gene",
+                      "subtitle": "Gene",
+                      "type": "gene"
+                    },
+                    "edges": [
+                      {
+                        "extra": {},
+                        "family": "factor_gene_direct",
+                        "id": "eceaf78b98133a1e",
+                        "label": "factor gene direct",
+                        "normalized_score": 3.6776304513454114,
+                        "path_nodes": [
+                          "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                          "gene:SHH"
+                        ],
+                        "raw_score": 0.5041999816894531,
+                        "relation": "direct",
+                        "source": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                        "target": "gene:SHH",
+                        "weight": 3.6776304513454114
+                      }
+                    ],
+                    "raw_max_score": 0.5041999816894531,
+                    "raw_mean_score": 0.5041999816894531,
+                    "support_anchor_count": 1,
+                    "support_path_count": 1,
+                    "supporting_paths": [
+                      {
+                        "anchor_id": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                        "extra": {},
+                        "family": "factor_gene_direct",
+                        "normalized_score": 3.6776304513454114,
+                        "path_nodes": [
+                          "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                          "gene:SHH"
+                        ],
+                        "raw_score": 0.5041999816894531,
+                        "relation": "direct"
+                      }
+                    ]
+                  },
+                  "node": {
+                    "id": "gene:SHH",
+                    "label": "SHH",
+                    "node_id": "gene:SHH",
+                    "node_key": "SHH",
+                    "node_type": "gene",
+                    "subtitle": "Gene",
+                    "type": "gene"
+                  },
+                  "source_ref": {
+                    "artifact_id": "connections-gene.attempt-1",
+                    "pointer": "/response/candidates/0"
+                  }
+                },
+                "gene:SIX2": {
+                  "candidate": {
+                    "aggregate_score": 2.22253510356319,
+                    "anchor_count": 1,
+                    "candidate": {
+                      "id": "gene:SIX2",
+                      "label": "SIX2",
+                      "node_id": "gene:SIX2",
+                      "node_key": "SIX2",
+                      "node_type": "gene",
+                      "subtitle": "Gene",
+                      "type": "gene"
+                    },
+                    "edges": [
+                      {
+                        "extra": {},
+                        "family": "factor_gene_direct",
+                        "id": "e666780a18348376",
+                        "label": "factor gene direct",
+                        "normalized_score": 2.22253510356319,
+                        "path_nodes": [
+                          "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                          "gene:SIX2"
+                        ],
+                        "raw_score": 0.3377000093460083,
+                        "relation": "direct",
+                        "source": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                        "target": "gene:SIX2",
+                        "weight": 2.22253510356319
+                      }
+                    ],
+                    "raw_max_score": 0.3377000093460083,
+                    "raw_mean_score": 0.3377000093460083,
+                    "support_anchor_count": 1,
+                    "support_path_count": 1,
+                    "supporting_paths": [
+                      {
+                        "anchor_id": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                        "extra": {},
+                        "family": "factor_gene_direct",
+                        "normalized_score": 2.22253510356319,
+                        "path_nodes": [
+                          "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                          "gene:SIX2"
+                        ],
+                        "raw_score": 0.3377000093460083,
+                        "relation": "direct"
+                      }
+                    ]
+                  },
+                  "node": {
+                    "id": "gene:SIX2",
+                    "label": "SIX2",
+                    "node_id": "gene:SIX2",
+                    "node_key": "SIX2",
+                    "node_type": "gene",
+                    "subtitle": "Gene",
+                    "type": "gene"
+                  },
+                  "source_ref": {
+                    "artifact_id": "connections-gene.attempt-1",
+                    "pointer": "/response/candidates/2"
+                  }
+                },
+                "gene:TCF7L2": {
+                  "candidate": {
+                    "aggregate_score": 2.6035690825535336,
+                    "anchor_count": 1,
+                    "candidate": {
+                      "id": "gene:TCF7L2",
+                      "label": "TCF7L2",
+                      "node_id": "gene:TCF7L2",
+                      "node_key": "TCF7L2",
+                      "node_type": "gene",
+                      "subtitle": "Gene",
+                      "type": "gene"
+                    },
+                    "edges": [
+                      {
+                        "extra": {},
+                        "family": "factor_gene_direct",
+                        "id": "b8c1fc89897bf85c",
+                        "label": "factor gene direct",
+                        "normalized_score": 2.6035690825535336,
+                        "path_nodes": [
+                          "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                          "gene:TCF7L2"
+                        ],
+                        "raw_score": 0.3813000023365021,
+                        "relation": "direct",
+                        "source": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                        "target": "gene:TCF7L2",
+                        "weight": 2.6035690825535336
+                      }
+                    ],
+                    "raw_max_score": 0.3813000023365021,
+                    "raw_mean_score": 0.3813000023365021,
+                    "support_anchor_count": 1,
+                    "support_path_count": 1,
+                    "supporting_paths": [
+                      {
+                        "anchor_id": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                        "extra": {},
+                        "family": "factor_gene_direct",
+                        "normalized_score": 2.6035690825535336,
+                        "path_nodes": [
+                          "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                          "gene:TCF7L2"
+                        ],
+                        "raw_score": 0.3813000023365021,
+                        "relation": "direct"
+                      }
+                    ]
+                  },
+                  "node": {
+                    "id": "gene:TCF7L2",
+                    "label": "TCF7L2",
+                    "node_id": "gene:TCF7L2",
+                    "node_key": "TCF7L2",
+                    "node_type": "gene",
+                    "subtitle": "Gene",
+                    "type": "gene"
+                  },
+                  "source_ref": {
+                    "artifact_id": "connections-gene.attempt-1",
+                    "pointer": "/response/candidates/1"
+                  }
+                },
+                "gene:WNT4": {
+                  "candidate": {
+                    "aggregate_score": 1.7069155120772699,
+                    "anchor_count": 1,
+                    "candidate": {
+                      "id": "gene:WNT4",
+                      "label": "WNT4",
+                      "node_id": "gene:WNT4",
+                      "node_key": "WNT4",
+                      "node_type": "gene",
+                      "subtitle": "Gene",
+                      "type": "gene"
+                    },
+                    "edges": [
+                      {
+                        "extra": {},
+                        "family": "factor_gene_direct",
+                        "id": "7fd143ab438dbe8d",
+                        "label": "factor gene direct",
+                        "normalized_score": 1.7069155120772699,
+                        "path_nodes": [
+                          "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                          "gene:WNT4"
+                        ],
+                        "raw_score": 0.27869999408721924,
+                        "relation": "direct",
+                        "source": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                        "target": "gene:WNT4",
+                        "weight": 1.7069155120772699
+                      }
+                    ],
+                    "raw_max_score": 0.27869999408721924,
+                    "raw_mean_score": 0.27869999408721924,
+                    "support_anchor_count": 1,
+                    "support_path_count": 1,
+                    "supporting_paths": [
+                      {
+                        "anchor_id": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                        "extra": {},
+                        "family": "factor_gene_direct",
+                        "normalized_score": 1.7069155120772699,
+                        "path_nodes": [
+                          "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                          "gene:WNT4"
+                        ],
+                        "raw_score": 0.27869999408721924,
+                        "relation": "direct"
+                      }
+                    ]
+                  },
+                  "node": {
+                    "id": "gene:WNT4",
+                    "label": "WNT4",
+                    "node_id": "gene:WNT4",
+                    "node_key": "WNT4",
+                    "node_type": "gene",
+                    "subtitle": "Gene",
+                    "type": "gene"
+                  },
+                  "source_ref": {
+                    "artifact_id": "connections-gene.attempt-1",
+                    "pointer": "/response/candidates/7"
+                  }
+                },
+                "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn": {
+                  "candidate": {
+                    "aggregate_score": 4.400714758178104,
+                    "anchor_count": 1,
+                    "candidate": {
+                      "id": "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+                      "label": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+                      "node_id": "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+                      "node_key": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+                      "node_type": "gene_set",
+                      "subtitle": "Gene set",
+                      "type": "gene_set"
+                    },
+                    "edges": [
+                      {
+                        "extra": {},
+                        "family": "factor_gene_set_direct",
+                        "id": "c290ca4093cac212",
+                        "label": "factor gene set direct",
+                        "normalized_score": 4.400714758178104,
+                        "path_nodes": [
+                          "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                          "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn"
+                        ],
+                        "raw_score": 1.0,
+                        "relation": "direct",
+                        "source": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                        "target": "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+                        "weight": 4.400714758178104
+                      }
+                    ],
+                    "raw_max_score": 1.0,
+                    "raw_mean_score": 1.0,
+                    "support_anchor_count": 1,
+                    "support_path_count": 1,
+                    "supporting_paths": [
+                      {
+                        "anchor_id": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                        "extra": {},
+                        "family": "factor_gene_set_direct",
+                        "normalized_score": 4.400714758178104,
+                        "path_nodes": [
+                          "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                          "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn"
+                        ],
+                        "raw_score": 1.0,
+                        "relation": "direct"
+                      }
+                    ]
+                  },
+                  "node": {
+                    "id": "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+                    "label": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+                    "node_id": "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+                    "node_key": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+                    "node_type": "gene_set",
+                    "subtitle": "Gene set",
+                    "type": "gene_set"
+                  },
+                  "source_ref": {
+                    "artifact_id": "connections-gene_set.attempt-1",
+                    "pointer": "/response/candidates/0"
+                  }
+                },
+                "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis_AD-OTHER_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn": {
+                  "candidate": {
+                    "aggregate_score": 3.1847509678722874,
+                    "anchor_count": 1,
+                    "candidate": {
+                      "id": "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis_AD-OTHER_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+                      "label": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis_AD-OTHER_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+                      "node_id": "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis_AD-OTHER_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+                      "node_key": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis_AD-OTHER_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+                      "node_type": "gene_set",
+                      "subtitle": "Gene set",
+                      "type": "gene_set"
+                    },
+                    "edges": [
+                      {
+                        "extra": {},
+                        "family": "factor_gene_set_direct",
+                        "id": "0fd558c6d5177805",
+                        "label": "factor gene set direct",
+                        "normalized_score": 3.1847509678722874,
+                        "path_nodes": [
+                          "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                          "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis_AD-OTHER_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn"
+                        ],
+                        "raw_score": 0.7590000033378601,
+                        "relation": "direct",
+                        "source": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                        "target": "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis_AD-OTHER_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+                        "weight": 3.1847509678722874
+                      }
+                    ],
+                    "raw_max_score": 0.7590000033378601,
+                    "raw_mean_score": 0.7590000033378601,
+                    "support_anchor_count": 1,
+                    "support_path_count": 1,
+                    "supporting_paths": [
+                      {
+                        "anchor_id": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                        "extra": {},
+                        "family": "factor_gene_set_direct",
+                        "normalized_score": 3.1847509678722874,
+                        "path_nodes": [
+                          "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                          "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis_AD-OTHER_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn"
+                        ],
+                        "raw_score": 0.7590000033378601,
+                        "relation": "direct"
+                      }
+                    ]
+                  },
+                  "node": {
+                    "id": "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis_AD-OTHER_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+                    "label": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis_AD-OTHER_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+                    "node_id": "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis_AD-OTHER_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+                    "node_key": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis_AD-OTHER_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+                    "node_type": "gene_set",
+                    "subtitle": "Gene set",
+                    "type": "gene_set"
+                  },
+                  "source_ref": {
+                    "artifact_id": "connections-gene_set.attempt-1",
+                    "pointer": "/response/candidates/1"
+                  }
+                },
+                "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_SourceDiagnosis_AD-PATH_AGE_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn": {
+                  "candidate": {
+                    "aggregate_score": 0.98895239573062,
+                    "anchor_count": 1,
+                    "candidate": {
+                      "id": "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_SourceDiagnosis_AD-PATH_AGE_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+                      "label": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_SourceDiagnosis_AD-PATH_AGE_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+                      "node_id": "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_SourceDiagnosis_AD-PATH_AGE_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+                      "node_key": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_SourceDiagnosis_AD-PATH_AGE_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+                      "node_type": "gene_set",
+                      "subtitle": "Gene set",
+                      "type": "gene_set"
+                    },
+                    "edges": [
+                      {
+                        "extra": {},
+                        "family": "factor_gene_set_direct",
+                        "id": "deef0c16ba922576",
+                        "label": "factor gene set direct",
+                        "normalized_score": 0.98895239573062,
+                        "path_nodes": [
+                          "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                          "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_SourceDiagnosis_AD-PATH_AGE_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn"
+                        ],
+                        "raw_score": 0.3237999975681305,
+                        "relation": "direct",
+                        "source": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                        "target": "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_SourceDiagnosis_AD-PATH_AGE_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+                        "weight": 0.98895239573062
+                      }
+                    ],
+                    "raw_max_score": 0.3237999975681305,
+                    "raw_mean_score": 0.3237999975681305,
+                    "support_anchor_count": 1,
+                    "support_path_count": 1,
+                    "supporting_paths": [
+                      {
+                        "anchor_id": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                        "extra": {},
+                        "family": "factor_gene_set_direct",
+                        "normalized_score": 0.98895239573062,
+                        "path_nodes": [
+                          "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                          "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_SourceDiagnosis_AD-PATH_AGE_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn"
+                        ],
+                        "raw_score": 0.3237999975681305,
+                        "relation": "direct"
+                      }
+                    ]
+                  },
+                  "node": {
+                    "id": "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_SourceDiagnosis_AD-PATH_AGE_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+                    "label": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_SourceDiagnosis_AD-PATH_AGE_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+                    "node_id": "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_SourceDiagnosis_AD-PATH_AGE_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+                    "node_key": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_SourceDiagnosis_AD-PATH_AGE_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+                    "node_type": "gene_set",
+                    "subtitle": "Gene set",
+                    "type": "gene_set"
+                  },
+                  "source_ref": {
+                    "artifact_id": "connections-gene_set.attempt-1",
+                    "pointer": "/response/candidates/4"
+                  }
+                },
+                "gene_set:GTEx__small_intestine__GTEx_aging_SmallIntestine_20-29_50-59_up": {
+                  "candidate": {
+                    "aggregate_score": 0.4581665717360837,
+                    "anchor_count": 1,
+                    "candidate": {
+                      "id": "gene_set:GTEx__small_intestine__GTEx_aging_SmallIntestine_20-29_50-59_up",
+                      "label": "GTEx__small_intestine__GTEx_aging_SmallIntestine_20-29_50-59_up",
+                      "node_id": "gene_set:GTEx__small_intestine__GTEx_aging_SmallIntestine_20-29_50-59_up",
+                      "node_key": "GTEx__small_intestine__GTEx_aging_SmallIntestine_20-29_50-59_up",
+                      "node_type": "gene_set",
+                      "subtitle": "Gene set",
+                      "type": "gene_set"
+                    },
+                    "edges": [
+                      {
+                        "extra": {},
+                        "family": "factor_gene_set_direct",
+                        "id": "e478a5f98b0604ba",
+                        "label": "factor gene set direct",
+                        "normalized_score": 0.4581665717360837,
+                        "path_nodes": [
+                          "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                          "gene_set:GTEx__small_intestine__GTEx_aging_SmallIntestine_20-29_50-59_up"
+                        ],
+                        "raw_score": 0.21860000491142273,
+                        "relation": "direct",
+                        "source": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                        "target": "gene_set:GTEx__small_intestine__GTEx_aging_SmallIntestine_20-29_50-59_up",
+                        "weight": 0.4581665717360837
+                      }
+                    ],
+                    "raw_max_score": 0.21860000491142273,
+                    "raw_mean_score": 0.21860000491142273,
+                    "support_anchor_count": 1,
+                    "support_path_count": 1,
+                    "supporting_paths": [
+                      {
+                        "anchor_id": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                        "extra": {},
+                        "family": "factor_gene_set_direct",
+                        "normalized_score": 0.4581665717360837,
+                        "path_nodes": [
+                          "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                          "gene_set:GTEx__small_intestine__GTEx_aging_SmallIntestine_20-29_50-59_up"
+                        ],
+                        "raw_score": 0.21860000491142273,
+                        "relation": "direct"
+                      }
+                    ]
+                  },
+                  "node": {
+                    "id": "gene_set:GTEx__small_intestine__GTEx_aging_SmallIntestine_20-29_50-59_up",
+                    "label": "GTEx__small_intestine__GTEx_aging_SmallIntestine_20-29_50-59_up",
+                    "node_id": "gene_set:GTEx__small_intestine__GTEx_aging_SmallIntestine_20-29_50-59_up",
+                    "node_key": "GTEx__small_intestine__GTEx_aging_SmallIntestine_20-29_50-59_up",
+                    "node_type": "gene_set",
+                    "subtitle": "Gene set",
+                    "type": "gene_set"
+                  },
+                  "source_ref": {
+                    "artifact_id": "connections-gene_set.attempt-1",
+                    "pointer": "/response/candidates/6"
+                  }
+                },
+                "gene_set:IGVF__IGVFDS2266YDVM__IGVF_Perturb_Seq_chr5:88882966-88883966_dn": {
+                  "candidate": {
+                    "aggregate_score": 0.28813343716251205,
+                    "anchor_count": 1,
+                    "candidate": {
+                      "id": "gene_set:IGVF__IGVFDS2266YDVM__IGVF_Perturb_Seq_chr5:88882966-88883966_dn",
+                      "label": "IGVF__IGVFDS2266YDVM__IGVF_Perturb_Seq_chr5:88882966-88883966_dn",
+                      "node_id": "gene_set:IGVF__IGVFDS2266YDVM__IGVF_Perturb_Seq_chr5:88882966-88883966_dn",
+                      "node_key": "IGVF__IGVFDS2266YDVM__IGVF_Perturb_Seq_chr5:88882966-88883966_dn",
+                      "node_type": "gene_set",
+                      "subtitle": "Gene set",
+                      "type": "gene_set"
+                    },
+                    "edges": [
+                      {
+                        "extra": {},
+                        "family": "factor_gene_set_direct",
+                        "id": "4a03ba82a45e4b06",
+                        "label": "factor gene set direct",
+                        "normalized_score": 0.28813343716251205,
+                        "path_nodes": [
+                          "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                          "gene_set:IGVF__IGVFDS2266YDVM__IGVF_Perturb_Seq_chr5:88882966-88883966_dn"
+                        ],
+                        "raw_score": 0.18490000069141388,
+                        "relation": "direct",
+                        "source": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                        "target": "gene_set:IGVF__IGVFDS2266YDVM__IGVF_Perturb_Seq_chr5:88882966-88883966_dn",
+                        "weight": 0.28813343716251205
+                      }
+                    ],
+                    "raw_max_score": 0.18490000069141388,
+                    "raw_mean_score": 0.18490000069141388,
+                    "support_anchor_count": 1,
+                    "support_path_count": 1,
+                    "supporting_paths": [
+                      {
+                        "anchor_id": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                        "extra": {},
+                        "family": "factor_gene_set_direct",
+                        "normalized_score": 0.28813343716251205,
+                        "path_nodes": [
+                          "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                          "gene_set:IGVF__IGVFDS2266YDVM__IGVF_Perturb_Seq_chr5:88882966-88883966_dn"
+                        ],
+                        "raw_score": 0.18490000069141388,
+                        "relation": "direct"
+                      }
+                    ]
+                  },
+                  "node": {
+                    "id": "gene_set:IGVF__IGVFDS2266YDVM__IGVF_Perturb_Seq_chr5:88882966-88883966_dn",
+                    "label": "IGVF__IGVFDS2266YDVM__IGVF_Perturb_Seq_chr5:88882966-88883966_dn",
+                    "node_id": "gene_set:IGVF__IGVFDS2266YDVM__IGVF_Perturb_Seq_chr5:88882966-88883966_dn",
+                    "node_key": "IGVF__IGVFDS2266YDVM__IGVF_Perturb_Seq_chr5:88882966-88883966_dn",
+                    "node_type": "gene_set",
+                    "subtitle": "Gene set",
+                    "type": "gene_set"
+                  },
+                  "source_ref": {
+                    "artifact_id": "connections-gene_set.attempt-1",
+                    "pointer": "/response/candidates/7"
+                  }
+                },
+                "gene_set:IGVF__IGVFDS4003HZAB__IGVF_Perturb_Seq_chr5:173234812-173235812_dn": {
+                  "candidate": {
+                    "aggregate_score": 1.406214736036135,
+                    "anchor_count": 1,
+                    "candidate": {
+                      "id": "gene_set:IGVF__IGVFDS4003HZAB__IGVF_Perturb_Seq_chr5:173234812-173235812_dn",
+                      "label": "IGVF__IGVFDS4003HZAB__IGVF_Perturb_Seq_chr5:173234812-173235812_dn",
+                      "node_id": "gene_set:IGVF__IGVFDS4003HZAB__IGVF_Perturb_Seq_chr5:173234812-173235812_dn",
+                      "node_key": "IGVF__IGVFDS4003HZAB__IGVF_Perturb_Seq_chr5:173234812-173235812_dn",
+                      "node_type": "gene_set",
+                      "subtitle": "Gene set",
+                      "type": "gene_set"
+                    },
+                    "edges": [
+                      {
+                        "extra": {},
+                        "family": "factor_gene_set_direct",
+                        "id": "fabc0d40d8dcf70b",
+                        "label": "factor gene set direct",
+                        "normalized_score": 1.406214736036135,
+                        "path_nodes": [
+                          "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                          "gene_set:IGVF__IGVFDS4003HZAB__IGVF_Perturb_Seq_chr5:173234812-173235812_dn"
+                        ],
+                        "raw_score": 0.4065000116825104,
+                        "relation": "direct",
+                        "source": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                        "target": "gene_set:IGVF__IGVFDS4003HZAB__IGVF_Perturb_Seq_chr5:173234812-173235812_dn",
+                        "weight": 1.406214736036135
+                      }
+                    ],
+                    "raw_max_score": 0.4065000116825104,
+                    "raw_mean_score": 0.4065000116825104,
+                    "support_anchor_count": 1,
+                    "support_path_count": 1,
+                    "supporting_paths": [
+                      {
+                        "anchor_id": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                        "extra": {},
+                        "family": "factor_gene_set_direct",
+                        "normalized_score": 1.406214736036135,
+                        "path_nodes": [
+                          "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                          "gene_set:IGVF__IGVFDS4003HZAB__IGVF_Perturb_Seq_chr5:173234812-173235812_dn"
+                        ],
+                        "raw_score": 0.4065000116825104,
+                        "relation": "direct"
+                      }
+                    ]
+                  },
+                  "node": {
+                    "id": "gene_set:IGVF__IGVFDS4003HZAB__IGVF_Perturb_Seq_chr5:173234812-173235812_dn",
+                    "label": "IGVF__IGVFDS4003HZAB__IGVF_Perturb_Seq_chr5:173234812-173235812_dn",
+                    "node_id": "gene_set:IGVF__IGVFDS4003HZAB__IGVF_Perturb_Seq_chr5:173234812-173235812_dn",
+                    "node_key": "IGVF__IGVFDS4003HZAB__IGVF_Perturb_Seq_chr5:173234812-173235812_dn",
+                    "node_type": "gene_set",
+                    "subtitle": "Gene set",
+                    "type": "gene_set"
+                  },
+                  "source_ref": {
+                    "artifact_id": "connections-gene_set.attempt-1",
+                    "pointer": "/response/candidates/3"
+                  }
+                },
+                "gene_set:IGVF__IGVFDS6332VCTO__IGVF_Perturb_Seq_ZFP64_up": {
+                  "candidate": {
+                    "aggregate_score": 0.5964130887738552,
+                    "anchor_count": 1,
+                    "candidate": {
+                      "id": "gene_set:IGVF__IGVFDS6332VCTO__IGVF_Perturb_Seq_ZFP64_up",
+                      "label": "IGVF__IGVFDS6332VCTO__IGVF_Perturb_Seq_ZFP64_up",
+                      "node_id": "gene_set:IGVF__IGVFDS6332VCTO__IGVF_Perturb_Seq_ZFP64_up",
+                      "node_key": "IGVF__IGVFDS6332VCTO__IGVF_Perturb_Seq_ZFP64_up",
+                      "node_type": "gene_set",
+                      "subtitle": "Gene set",
+                      "type": "gene_set"
+                    },
+                    "edges": [
+                      {
+                        "extra": {},
+                        "family": "factor_gene_set_direct",
+                        "id": "14183a65f2858595",
+                        "label": "factor gene set direct",
+                        "normalized_score": 0.5964130887738552,
+                        "path_nodes": [
+                          "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                          "gene_set:IGVF__IGVFDS6332VCTO__IGVF_Perturb_Seq_ZFP64_up"
+                        ],
+                        "raw_score": 0.2460000067949295,
+                        "relation": "direct",
+                        "source": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                        "target": "gene_set:IGVF__IGVFDS6332VCTO__IGVF_Perturb_Seq_ZFP64_up",
+                        "weight": 0.5964130887738552
+                      }
+                    ],
+                    "raw_max_score": 0.2460000067949295,
+                    "raw_mean_score": 0.2460000067949295,
+                    "support_anchor_count": 1,
+                    "support_path_count": 1,
+                    "supporting_paths": [
+                      {
+                        "anchor_id": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                        "extra": {},
+                        "family": "factor_gene_set_direct",
+                        "normalized_score": 0.5964130887738552,
+                        "path_nodes": [
+                          "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                          "gene_set:IGVF__IGVFDS6332VCTO__IGVF_Perturb_Seq_ZFP64_up"
+                        ],
+                        "raw_score": 0.2460000067949295,
+                        "relation": "direct"
+                      }
+                    ]
+                  },
+                  "node": {
+                    "id": "gene_set:IGVF__IGVFDS6332VCTO__IGVF_Perturb_Seq_ZFP64_up",
+                    "label": "IGVF__IGVFDS6332VCTO__IGVF_Perturb_Seq_ZFP64_up",
+                    "node_id": "gene_set:IGVF__IGVFDS6332VCTO__IGVF_Perturb_Seq_ZFP64_up",
+                    "node_key": "IGVF__IGVFDS6332VCTO__IGVF_Perturb_Seq_ZFP64_up",
+                    "node_type": "gene_set",
+                    "subtitle": "Gene set",
+                    "type": "gene_set"
+                  },
+                  "source_ref": {
+                    "artifact_id": "connections-gene_set.attempt-1",
+                    "pointer": "/response/candidates/5"
+                  }
+                },
+                "gene_set:PsychENCODE__all_signatures__PsychENCODE_geneM16": {
+                  "candidate": {
+                    "aggregate_score": 1.6347754521132016,
+                    "anchor_count": 1,
+                    "candidate": {
+                      "id": "gene_set:PsychENCODE__all_signatures__PsychENCODE_geneM16",
+                      "label": "PsychENCODE__all_signatures__PsychENCODE_geneM16",
+                      "node_id": "gene_set:PsychENCODE__all_signatures__PsychENCODE_geneM16",
+                      "node_key": "PsychENCODE__all_signatures__PsychENCODE_geneM16",
+                      "node_type": "gene_set",
+                      "subtitle": "Gene set",
+                      "type": "gene_set"
+                    },
+                    "edges": [
+                      {
+                        "extra": {},
+                        "family": "factor_gene_set_direct",
+                        "id": "24985b05ad4d0a8a",
+                        "label": "factor gene set direct",
+                        "normalized_score": 1.6347754521132016,
+                        "path_nodes": [
+                          "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                          "gene_set:PsychENCODE__all_signatures__PsychENCODE_geneM16"
+                        ],
+                        "raw_score": 0.45179998874664307,
+                        "relation": "direct",
+                        "source": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                        "target": "gene_set:PsychENCODE__all_signatures__PsychENCODE_geneM16",
+                        "weight": 1.6347754521132016
+                      }
+                    ],
+                    "raw_max_score": 0.45179998874664307,
+                    "raw_mean_score": 0.45179998874664307,
+                    "support_anchor_count": 1,
+                    "support_path_count": 1,
+                    "supporting_paths": [
+                      {
+                        "anchor_id": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                        "extra": {},
+                        "family": "factor_gene_set_direct",
+                        "normalized_score": 1.6347754521132016,
+                        "path_nodes": [
+                          "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                          "gene_set:PsychENCODE__all_signatures__PsychENCODE_geneM16"
+                        ],
+                        "raw_score": 0.45179998874664307,
+                        "relation": "direct"
+                      }
+                    ]
+                  },
+                  "node": {
+                    "id": "gene_set:PsychENCODE__all_signatures__PsychENCODE_geneM16",
+                    "label": "PsychENCODE__all_signatures__PsychENCODE_geneM16",
+                    "node_id": "gene_set:PsychENCODE__all_signatures__PsychENCODE_geneM16",
+                    "node_key": "PsychENCODE__all_signatures__PsychENCODE_geneM16",
+                    "node_type": "gene_set",
+                    "subtitle": "Gene set",
+                    "type": "gene_set"
+                  },
+                  "source_ref": {
+                    "artifact_id": "connections-gene_set.attempt-1",
+                    "pointer": "/response/candidates/2"
+                  }
+                }
+              },
+              "contextual_relationships": {
+                "new_unique_edges": 0,
+                "returned_edges": 16,
+                "status": "ok"
+              },
+              "graph": {
+                "edges": [
+                  {
+                    "extra": {},
+                    "family": "factor_gene_set_direct",
+                    "id": "0fd558c6d5177805",
+                    "label": "factor gene set direct",
+                    "normalized_score": 3.1847509678722874,
+                    "path_nodes": [
+                      "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                      "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis_AD-OTHER_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn"
+                    ],
+                    "raw_score": 0.7590000033378601,
+                    "relation": "direct",
+                    "source": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                    "source_refs": [
+                      {
+                        "artifact_id": "connections-gene_set.attempt-1",
+                        "pointer": "/response/candidates/1/edges/0"
+                      },
+                      {
+                        "artifact_id": "connections-gene_set.attempt-1",
+                        "pointer": "/response/graph/edges/1"
+                      },
+                      {
+                        "artifact_id": "contextual.attempt-1",
+                        "pointer": "/response/edges/2"
+                      }
+                    ],
+                    "target": "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis_AD-OTHER_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+                    "weight": 3.1847509678722874
+                  },
+                  {
+                    "extra": {},
+                    "family": "factor_gene_set_direct",
+                    "id": "14183a65f2858595",
+                    "label": "factor gene set direct",
+                    "normalized_score": 0.5964130887738552,
+                    "path_nodes": [
+                      "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                      "gene_set:IGVF__IGVFDS6332VCTO__IGVF_Perturb_Seq_ZFP64_up"
+                    ],
+                    "raw_score": 0.2460000067949295,
+                    "relation": "direct",
+                    "source": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                    "source_refs": [
+                      {
+                        "artifact_id": "connections-gene_set.attempt-1",
+                        "pointer": "/response/candidates/5/edges/0"
+                      },
+                      {
+                        "artifact_id": "connections-gene_set.attempt-1",
+                        "pointer": "/response/graph/edges/5"
+                      },
+                      {
+                        "artifact_id": "contextual.attempt-1",
+                        "pointer": "/response/edges/13"
+                      }
+                    ],
+                    "target": "gene_set:IGVF__IGVFDS6332VCTO__IGVF_Perturb_Seq_ZFP64_up",
+                    "weight": 0.5964130887738552
+                  },
+                  {
+                    "extra": {},
+                    "family": "factor_gene_direct",
+                    "id": "21cfe53ae7016ddd",
+                    "label": "factor gene direct",
+                    "normalized_score": 1.7191504967263718,
+                    "path_nodes": [
+                      "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                      "gene:EYA2"
+                    ],
+                    "raw_score": 0.2800999879837036,
+                    "relation": "direct",
+                    "source": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                    "source_refs": [
+                      {
+                        "artifact_id": "connections-gene.attempt-1",
+                        "pointer": "/response/candidates/5/edges/0"
+                      },
+                      {
+                        "artifact_id": "connections-gene.attempt-1",
+                        "pointer": "/response/graph/edges/5"
+                      },
+                      {
+                        "artifact_id": "contextual.attempt-1",
+                        "pointer": "/response/edges/7"
+                      }
+                    ],
+                    "target": "gene:EYA2",
+                    "weight": 1.7191504967263718
+                  },
+                  {
+                    "extra": {},
+                    "family": "factor_gene_set_direct",
+                    "id": "24985b05ad4d0a8a",
+                    "label": "factor gene set direct",
+                    "normalized_score": 1.6347754521132016,
+                    "path_nodes": [
+                      "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                      "gene_set:PsychENCODE__all_signatures__PsychENCODE_geneM16"
+                    ],
+                    "raw_score": 0.45179998874664307,
+                    "relation": "direct",
+                    "source": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                    "source_refs": [
+                      {
+                        "artifact_id": "connections-gene_set.attempt-1",
+                        "pointer": "/response/candidates/2/edges/0"
+                      },
+                      {
+                        "artifact_id": "connections-gene_set.attempt-1",
+                        "pointer": "/response/graph/edges/2"
+                      },
+                      {
+                        "artifact_id": "contextual.attempt-1",
+                        "pointer": "/response/edges/10"
+                      }
+                    ],
+                    "target": "gene_set:PsychENCODE__all_signatures__PsychENCODE_geneM16",
+                    "weight": 1.6347754521132016
+                  },
+                  {
+                    "extra": {},
+                    "family": "factor_gene_set_direct",
+                    "id": "4a03ba82a45e4b06",
+                    "label": "factor gene set direct",
+                    "normalized_score": 0.28813343716251205,
+                    "path_nodes": [
+                      "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                      "gene_set:IGVF__IGVFDS2266YDVM__IGVF_Perturb_Seq_chr5:88882966-88883966_dn"
+                    ],
+                    "raw_score": 0.18490000069141388,
+                    "relation": "direct",
+                    "source": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                    "source_refs": [
+                      {
+                        "artifact_id": "connections-gene_set.attempt-1",
+                        "pointer": "/response/candidates/7/edges/0"
+                      },
+                      {
+                        "artifact_id": "connections-gene_set.attempt-1",
+                        "pointer": "/response/graph/edges/7"
+                      },
+                      {
+                        "artifact_id": "contextual.attempt-1",
+                        "pointer": "/response/edges/15"
+                      }
+                    ],
+                    "target": "gene_set:IGVF__IGVFDS2266YDVM__IGVF_Perturb_Seq_chr5:88882966-88883966_dn",
+                    "weight": 0.28813343716251205
+                  },
+                  {
+                    "extra": {},
+                    "family": "factor_gene_direct",
+                    "id": "6c8a84bb02f6385a",
+                    "label": "factor gene direct",
+                    "normalized_score": 1.7069155120772699,
+                    "path_nodes": [
+                      "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                      "gene:CTNNB1"
+                    ],
+                    "raw_score": 0.27869999408721924,
+                    "relation": "direct",
+                    "source": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                    "source_refs": [
+                      {
+                        "artifact_id": "connections-gene.attempt-1",
+                        "pointer": "/response/candidates/6/edges/0"
+                      },
+                      {
+                        "artifact_id": "connections-gene.attempt-1",
+                        "pointer": "/response/graph/edges/6"
+                      },
+                      {
+                        "artifact_id": "contextual.attempt-1",
+                        "pointer": "/response/edges/8"
+                      }
+                    ],
+                    "target": "gene:CTNNB1",
+                    "weight": 1.7069155120772699
+                  },
+                  {
+                    "extra": {},
+                    "family": "factor_gene_direct",
+                    "id": "6e8ff05f0490f11f",
+                    "label": "factor gene direct",
+                    "normalized_score": 1.804795910173722,
+                    "path_nodes": [
+                      "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                      "gene:FGF13"
+                    ],
+                    "raw_score": 0.289900004863739,
+                    "relation": "direct",
+                    "source": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                    "source_refs": [
+                      {
+                        "artifact_id": "connections-gene.attempt-1",
+                        "pointer": "/response/candidates/4/edges/0"
+                      },
+                      {
+                        "artifact_id": "connections-gene.attempt-1",
+                        "pointer": "/response/graph/edges/4"
+                      },
+                      {
+                        "artifact_id": "contextual.attempt-1",
+                        "pointer": "/response/edges/6"
+                      }
+                    ],
+                    "target": "gene:FGF13",
+                    "weight": 1.804795910173722
+                  },
+                  {
+                    "extra": {},
+                    "family": "factor_gene_direct",
+                    "id": "7fd143ab438dbe8d",
+                    "label": "factor gene direct",
+                    "normalized_score": 1.7069155120772699,
+                    "path_nodes": [
+                      "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                      "gene:WNT4"
+                    ],
+                    "raw_score": 0.27869999408721924,
+                    "relation": "direct",
+                    "source": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                    "source_refs": [
+                      {
+                        "artifact_id": "connections-gene.attempt-1",
+                        "pointer": "/response/candidates/7/edges/0"
+                      },
+                      {
+                        "artifact_id": "connections-gene.attempt-1",
+                        "pointer": "/response/graph/edges/7"
+                      },
+                      {
+                        "artifact_id": "contextual.attempt-1",
+                        "pointer": "/response/edges/9"
+                      }
+                    ],
+                    "target": "gene:WNT4",
+                    "weight": 1.7069155120772699
+                  },
+                  {
+                    "extra": {},
+                    "family": "factor_gene_direct",
+                    "id": "b8c1fc89897bf85c",
+                    "label": "factor gene direct",
+                    "normalized_score": 2.6035690825535336,
+                    "path_nodes": [
+                      "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                      "gene:TCF7L2"
+                    ],
+                    "raw_score": 0.3813000023365021,
+                    "relation": "direct",
+                    "source": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                    "source_refs": [
+                      {
+                        "artifact_id": "connections-gene.attempt-1",
+                        "pointer": "/response/candidates/1/edges/0"
+                      },
+                      {
+                        "artifact_id": "connections-gene.attempt-1",
+                        "pointer": "/response/graph/edges/1"
+                      },
+                      {
+                        "artifact_id": "contextual.attempt-1",
+                        "pointer": "/response/edges/3"
+                      }
+                    ],
+                    "target": "gene:TCF7L2",
+                    "weight": 2.6035690825535336
+                  },
+                  {
+                    "extra": {},
+                    "family": "factor_gene_direct",
+                    "id": "c1e566f0ea35fc42",
+                    "label": "factor gene direct",
+                    "normalized_score": 2.1071760443458127,
+                    "path_nodes": [
+                      "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                      "gene:GLI3"
+                    ],
+                    "raw_score": 0.3244999945163727,
+                    "relation": "direct",
+                    "source": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                    "source_refs": [
+                      {
+                        "artifact_id": "connections-gene.attempt-1",
+                        "pointer": "/response/candidates/3/edges/0"
+                      },
+                      {
+                        "artifact_id": "connections-gene.attempt-1",
+                        "pointer": "/response/graph/edges/3"
+                      },
+                      {
+                        "artifact_id": "contextual.attempt-1",
+                        "pointer": "/response/edges/5"
+                      }
+                    ],
+                    "target": "gene:GLI3",
+                    "weight": 2.1071760443458127
+                  },
+                  {
+                    "extra": {},
+                    "family": "factor_gene_set_direct",
+                    "id": "c290ca4093cac212",
+                    "label": "factor gene set direct",
+                    "normalized_score": 4.400714758178104,
+                    "path_nodes": [
+                      "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                      "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn"
+                    ],
+                    "raw_score": 1.0,
+                    "relation": "direct",
+                    "source": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                    "source_refs": [
+                      {
+                        "artifact_id": "connections-gene_set.attempt-1",
+                        "pointer": "/response/candidates/0/edges/0"
+                      },
+                      {
+                        "artifact_id": "connections-gene_set.attempt-1",
+                        "pointer": "/response/graph/edges/0"
+                      },
+                      {
+                        "artifact_id": "contextual.attempt-1",
+                        "pointer": "/response/edges/0"
+                      }
+                    ],
+                    "target": "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+                    "weight": 4.400714758178104
+                  },
+                  {
+                    "extra": {},
+                    "family": "factor_gene_set_direct",
+                    "id": "deef0c16ba922576",
+                    "label": "factor gene set direct",
+                    "normalized_score": 0.98895239573062,
+                    "path_nodes": [
+                      "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                      "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_SourceDiagnosis_AD-PATH_AGE_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn"
+                    ],
+                    "raw_score": 0.3237999975681305,
+                    "relation": "direct",
+                    "source": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                    "source_refs": [
+                      {
+                        "artifact_id": "connections-gene_set.attempt-1",
+                        "pointer": "/response/candidates/4/edges/0"
+                      },
+                      {
+                        "artifact_id": "connections-gene_set.attempt-1",
+                        "pointer": "/response/graph/edges/4"
+                      },
+                      {
+                        "artifact_id": "contextual.attempt-1",
+                        "pointer": "/response/edges/12"
+                      }
+                    ],
+                    "target": "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_SourceDiagnosis_AD-PATH_AGE_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+                    "weight": 0.98895239573062
+                  },
+                  {
+                    "extra": {},
+                    "family": "factor_gene_set_direct",
+                    "id": "e478a5f98b0604ba",
+                    "label": "factor gene set direct",
+                    "normalized_score": 0.4581665717360837,
+                    "path_nodes": [
+                      "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                      "gene_set:GTEx__small_intestine__GTEx_aging_SmallIntestine_20-29_50-59_up"
+                    ],
+                    "raw_score": 0.21860000491142273,
+                    "relation": "direct",
+                    "source": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                    "source_refs": [
+                      {
+                        "artifact_id": "connections-gene_set.attempt-1",
+                        "pointer": "/response/candidates/6/edges/0"
+                      },
+                      {
+                        "artifact_id": "connections-gene_set.attempt-1",
+                        "pointer": "/response/graph/edges/6"
+                      },
+                      {
+                        "artifact_id": "contextual.attempt-1",
+                        "pointer": "/response/edges/14"
+                      }
+                    ],
+                    "target": "gene_set:GTEx__small_intestine__GTEx_aging_SmallIntestine_20-29_50-59_up",
+                    "weight": 0.4581665717360837
+                  },
+                  {
+                    "extra": {},
+                    "family": "factor_gene_direct",
+                    "id": "e666780a18348376",
+                    "label": "factor gene direct",
+                    "normalized_score": 2.22253510356319,
+                    "path_nodes": [
+                      "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                      "gene:SIX2"
+                    ],
+                    "raw_score": 0.3377000093460083,
+                    "relation": "direct",
+                    "source": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                    "source_refs": [
+                      {
+                        "artifact_id": "connections-gene.attempt-1",
+                        "pointer": "/response/candidates/2/edges/0"
+                      },
+                      {
+                        "artifact_id": "connections-gene.attempt-1",
+                        "pointer": "/response/graph/edges/2"
+                      },
+                      {
+                        "artifact_id": "contextual.attempt-1",
+                        "pointer": "/response/edges/4"
+                      }
+                    ],
+                    "target": "gene:SIX2",
+                    "weight": 2.22253510356319
+                  },
+                  {
+                    "extra": {},
+                    "family": "factor_gene_direct",
+                    "id": "eceaf78b98133a1e",
+                    "label": "factor gene direct",
+                    "normalized_score": 3.6776304513454114,
+                    "path_nodes": [
+                      "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                      "gene:SHH"
+                    ],
+                    "raw_score": 0.5041999816894531,
+                    "relation": "direct",
+                    "source": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                    "source_refs": [
+                      {
+                        "artifact_id": "connections-gene.attempt-1",
+                        "pointer": "/response/candidates/0/edges/0"
+                      },
+                      {
+                        "artifact_id": "connections-gene.attempt-1",
+                        "pointer": "/response/graph/edges/0"
+                      },
+                      {
+                        "artifact_id": "contextual.attempt-1",
+                        "pointer": "/response/edges/1"
+                      }
+                    ],
+                    "target": "gene:SHH",
+                    "weight": 3.6776304513454114
+                  },
+                  {
+                    "extra": {},
+                    "family": "factor_gene_set_direct",
+                    "id": "fabc0d40d8dcf70b",
+                    "label": "factor gene set direct",
+                    "normalized_score": 1.406214736036135,
+                    "path_nodes": [
+                      "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                      "gene_set:IGVF__IGVFDS4003HZAB__IGVF_Perturb_Seq_chr5:173234812-173235812_dn"
+                    ],
+                    "raw_score": 0.4065000116825104,
+                    "relation": "direct",
+                    "source": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                    "source_refs": [
+                      {
+                        "artifact_id": "connections-gene_set.attempt-1",
+                        "pointer": "/response/candidates/3/edges/0"
+                      },
+                      {
+                        "artifact_id": "connections-gene_set.attempt-1",
+                        "pointer": "/response/graph/edges/3"
+                      },
+                      {
+                        "artifact_id": "contextual.attempt-1",
+                        "pointer": "/response/edges/11"
+                      }
+                    ],
+                    "target": "gene_set:IGVF__IGVFDS4003HZAB__IGVF_Perturb_Seq_chr5:173234812-173235812_dn",
+                    "weight": 1.406214736036135
+                  }
+                ],
+                "node_ids": [
+                  "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                  "gene:CTNNB1",
+                  "gene:EYA2",
+                  "gene:FGF13",
+                  "gene:GLI3",
+                  "gene:SHH",
+                  "gene:SIX2",
+                  "gene:TCF7L2",
+                  "gene:WNT4",
+                  "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+                  "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis_AD-OTHER_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+                  "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_SourceDiagnosis_AD-PATH_AGE_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+                  "gene_set:GTEx__small_intestine__GTEx_aging_SmallIntestine_20-29_50-59_up",
+                  "gene_set:IGVF__IGVFDS2266YDVM__IGVF_Perturb_Seq_chr5:88882966-88883966_dn",
+                  "gene_set:IGVF__IGVFDS4003HZAB__IGVF_Perturb_Seq_chr5:173234812-173235812_dn",
+                  "gene_set:IGVF__IGVFDS6332VCTO__IGVF_Perturb_Seq_ZFP64_up",
+                  "gene_set:PsychENCODE__all_signatures__PsychENCODE_geneM16"
+                ]
+              },
+              "mechanisms": {
+                "factor:portal:CADinT2D:cfde-inc-v2:Factor1": {
+                  "dapper_id": "dapper:Mechanism.MyhahXB55tDUS667sJzeJZ40BeeQBWOR",
+                  "display_name": "CADinT2D mechanism Factor1",
+                  "fit": {
+                    "factor": "Factor1",
+                    "model": "cfde-inc-v2",
+                    "phenotype": "CADinT2D",
+                    "trait_group": "portal",
+                    "trait_id": "trait:portal:CADinT2D",
+                    "upstream_build": null
+                  },
+                  "gene_loadings": {
+                    "items": {
+                      "gene:CTNNB1": {
+                        "factor_value": 0.2787,
+                        "interactive_edge_ids": [
+                          "6c8a84bb02f6385a"
+                        ],
+                        "interactive_observations": [
+                          {
+                            "family": "factor_gene_direct",
+                            "id": "6c8a84bb02f6385a",
+                            "normalized_score": 1.7069155120772699,
+                            "raw_score": 0.27869999408721924,
+                            "relation": "direct"
+                          }
+                        ],
+                        "reported_values_agree_within_1e_6": true,
+                        "result_key": "factor:portal:CADinT2D:cfde-inc-v2:Factor1:gene:CTNNB1",
+                        "source_ref": {
+                          "artifact_id": "gene-factor-50fbafcddac8.attempt-1.body",
+                          "pointer": "/data/6"
+                        }
+                      },
+                      "gene:EYA2": {
+                        "factor_value": 0.2801,
+                        "interactive_edge_ids": [
+                          "21cfe53ae7016ddd"
+                        ],
+                        "interactive_observations": [
+                          {
+                            "family": "factor_gene_direct",
+                            "id": "21cfe53ae7016ddd",
+                            "normalized_score": 1.7191504967263718,
+                            "raw_score": 0.2800999879837036,
+                            "relation": "direct"
+                          }
+                        ],
+                        "reported_values_agree_within_1e_6": true,
+                        "result_key": "factor:portal:CADinT2D:cfde-inc-v2:Factor1:gene:EYA2",
+                        "source_ref": {
+                          "artifact_id": "gene-factor-50fbafcddac8.attempt-1.body",
+                          "pointer": "/data/5"
+                        }
+                      },
+                      "gene:FGF13": {
+                        "factor_value": 0.2899,
+                        "interactive_edge_ids": [
+                          "6e8ff05f0490f11f"
+                        ],
+                        "interactive_observations": [
+                          {
+                            "family": "factor_gene_direct",
+                            "id": "6e8ff05f0490f11f",
+                            "normalized_score": 1.804795910173722,
+                            "raw_score": 0.289900004863739,
+                            "relation": "direct"
+                          }
+                        ],
+                        "reported_values_agree_within_1e_6": true,
+                        "result_key": "factor:portal:CADinT2D:cfde-inc-v2:Factor1:gene:FGF13",
+                        "source_ref": {
+                          "artifact_id": "gene-factor-50fbafcddac8.attempt-1.body",
+                          "pointer": "/data/4"
+                        }
+                      },
+                      "gene:GLI3": {
+                        "factor_value": 0.3245,
+                        "interactive_edge_ids": [
+                          "c1e566f0ea35fc42"
+                        ],
+                        "interactive_observations": [
+                          {
+                            "family": "factor_gene_direct",
+                            "id": "c1e566f0ea35fc42",
+                            "normalized_score": 2.1071760443458127,
+                            "raw_score": 0.3244999945163727,
+                            "relation": "direct"
+                          }
+                        ],
+                        "reported_values_agree_within_1e_6": true,
+                        "result_key": "factor:portal:CADinT2D:cfde-inc-v2:Factor1:gene:GLI3",
+                        "source_ref": {
+                          "artifact_id": "gene-factor-50fbafcddac8.attempt-1.body",
+                          "pointer": "/data/3"
+                        }
+                      },
+                      "gene:SHH": {
+                        "factor_value": 0.5042,
+                        "interactive_edge_ids": [
+                          "eceaf78b98133a1e"
+                        ],
+                        "interactive_observations": [
+                          {
+                            "family": "factor_gene_direct",
+                            "id": "eceaf78b98133a1e",
+                            "normalized_score": 3.6776304513454114,
+                            "raw_score": 0.5041999816894531,
+                            "relation": "direct"
+                          }
+                        ],
+                        "reported_values_agree_within_1e_6": true,
+                        "result_key": "factor:portal:CADinT2D:cfde-inc-v2:Factor1:gene:SHH",
+                        "source_ref": {
+                          "artifact_id": "gene-factor-50fbafcddac8.attempt-1.body",
+                          "pointer": "/data/0"
+                        }
+                      },
+                      "gene:SIX2": {
+                        "factor_value": 0.3377,
+                        "interactive_edge_ids": [
+                          "e666780a18348376"
+                        ],
+                        "interactive_observations": [
+                          {
+                            "family": "factor_gene_direct",
+                            "id": "e666780a18348376",
+                            "normalized_score": 2.22253510356319,
+                            "raw_score": 0.3377000093460083,
+                            "relation": "direct"
+                          }
+                        ],
+                        "reported_values_agree_within_1e_6": true,
+                        "result_key": "factor:portal:CADinT2D:cfde-inc-v2:Factor1:gene:SIX2",
+                        "source_ref": {
+                          "artifact_id": "gene-factor-50fbafcddac8.attempt-1.body",
+                          "pointer": "/data/2"
+                        }
+                      },
+                      "gene:TCF7L2": {
+                        "factor_value": 0.3813,
+                        "interactive_edge_ids": [
+                          "b8c1fc89897bf85c"
+                        ],
+                        "interactive_observations": [
+                          {
+                            "family": "factor_gene_direct",
+                            "id": "b8c1fc89897bf85c",
+                            "normalized_score": 2.6035690825535336,
+                            "raw_score": 0.3813000023365021,
+                            "relation": "direct"
+                          }
+                        ],
+                        "reported_values_agree_within_1e_6": true,
+                        "result_key": "factor:portal:CADinT2D:cfde-inc-v2:Factor1:gene:TCF7L2",
+                        "source_ref": {
+                          "artifact_id": "gene-factor-50fbafcddac8.attempt-1.body",
+                          "pointer": "/data/1"
+                        }
+                      },
+                      "gene:WNT4": {
+                        "factor_value": 0.2787,
+                        "interactive_edge_ids": [
+                          "7fd143ab438dbe8d"
+                        ],
+                        "interactive_observations": [
+                          {
+                            "family": "factor_gene_direct",
+                            "id": "7fd143ab438dbe8d",
+                            "normalized_score": 1.7069155120772699,
+                            "raw_score": 0.27869999408721924,
+                            "relation": "direct"
+                          }
+                        ],
+                        "reported_values_agree_within_1e_6": true,
+                        "result_key": "factor:portal:CADinT2D:cfde-inc-v2:Factor1:gene:WNT4",
+                        "source_ref": {
+                          "artifact_id": "gene-factor-50fbafcddac8.attempt-1.body",
+                          "pointer": "/data/7"
+                        }
+                      }
+                    },
+                    "query_status": "ok_limit_reached",
+                    "status": "ok"
+                  },
+                  "gene_set_loadings": {
+                    "items": {
+                      "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn": {
+                        "factor_value": 1.0,
+                        "interactive_edge_ids": [
+                          "c290ca4093cac212"
+                        ],
+                        "interactive_observations": [
+                          {
+                            "family": "factor_gene_set_direct",
+                            "id": "c290ca4093cac212",
+                            "normalized_score": 4.400714758178104,
+                            "raw_score": 1.0,
+                            "relation": "direct"
+                          }
+                        ],
+                        "reported_values_agree_within_1e_6": true,
+                        "result_key": "factor:portal:CADinT2D:cfde-inc-v2:Factor1:gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+                        "source_ref": {
+                          "artifact_id": "gene_set-factor-50fbafcddac8.attempt-1.body",
+                          "pointer": "/data/0"
+                        }
+                      },
+                      "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis_AD-OTHER_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn": {
+                        "factor_value": 0.759,
+                        "interactive_edge_ids": [
+                          "0fd558c6d5177805"
+                        ],
+                        "interactive_observations": [
+                          {
+                            "family": "factor_gene_set_direct",
+                            "id": "0fd558c6d5177805",
+                            "normalized_score": 3.1847509678722874,
+                            "raw_score": 0.7590000033378601,
+                            "relation": "direct"
+                          }
+                        ],
+                        "reported_values_agree_within_1e_6": true,
+                        "result_key": "factor:portal:CADinT2D:cfde-inc-v2:Factor1:gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis_AD-OTHER_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+                        "source_ref": {
+                          "artifact_id": "gene_set-factor-50fbafcddac8.attempt-1.body",
+                          "pointer": "/data/1"
+                        }
+                      },
+                      "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_SourceDiagnosis_AD-PATH_AGE_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn": {
+                        "factor_value": 0.3238,
+                        "interactive_edge_ids": [
+                          "deef0c16ba922576"
+                        ],
+                        "interactive_observations": [
+                          {
+                            "family": "factor_gene_set_direct",
+                            "id": "deef0c16ba922576",
+                            "normalized_score": 0.98895239573062,
+                            "raw_score": 0.3237999975681305,
+                            "relation": "direct"
+                          }
+                        ],
+                        "reported_values_agree_within_1e_6": true,
+                        "result_key": "factor:portal:CADinT2D:cfde-inc-v2:Factor1:gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_SourceDiagnosis_AD-PATH_AGE_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+                        "source_ref": {
+                          "artifact_id": "gene_set-factor-50fbafcddac8.attempt-1.body",
+                          "pointer": "/data/4"
+                        }
+                      },
+                      "gene_set:GTEx__small_intestine__GTEx_aging_SmallIntestine_20-29_50-59_up": {
+                        "factor_value": 0.2186,
+                        "interactive_edge_ids": [
+                          "e478a5f98b0604ba"
+                        ],
+                        "interactive_observations": [
+                          {
+                            "family": "factor_gene_set_direct",
+                            "id": "e478a5f98b0604ba",
+                            "normalized_score": 0.4581665717360837,
+                            "raw_score": 0.21860000491142273,
+                            "relation": "direct"
+                          }
+                        ],
+                        "reported_values_agree_within_1e_6": true,
+                        "result_key": "factor:portal:CADinT2D:cfde-inc-v2:Factor1:gene_set:GTEx__small_intestine__GTEx_aging_SmallIntestine_20-29_50-59_up",
+                        "source_ref": {
+                          "artifact_id": "gene_set-factor-50fbafcddac8.attempt-1.body",
+                          "pointer": "/data/6"
+                        }
+                      },
+                      "gene_set:IGVF__IGVFDS2266YDVM__IGVF_Perturb_Seq_chr5:88882966-88883966_dn": {
+                        "factor_value": 0.1849,
+                        "interactive_edge_ids": [
+                          "4a03ba82a45e4b06"
+                        ],
+                        "interactive_observations": [
+                          {
+                            "family": "factor_gene_set_direct",
+                            "id": "4a03ba82a45e4b06",
+                            "normalized_score": 0.28813343716251205,
+                            "raw_score": 0.18490000069141388,
+                            "relation": "direct"
+                          }
+                        ],
+                        "reported_values_agree_within_1e_6": true,
+                        "result_key": "factor:portal:CADinT2D:cfde-inc-v2:Factor1:gene_set:IGVF__IGVFDS2266YDVM__IGVF_Perturb_Seq_chr5:88882966-88883966_dn",
+                        "source_ref": {
+                          "artifact_id": "gene_set-factor-50fbafcddac8.attempt-1.body",
+                          "pointer": "/data/7"
+                        }
+                      },
+                      "gene_set:IGVF__IGVFDS4003HZAB__IGVF_Perturb_Seq_chr5:173234812-173235812_dn": {
+                        "factor_value": 0.4065,
+                        "interactive_edge_ids": [
+                          "fabc0d40d8dcf70b"
+                        ],
+                        "interactive_observations": [
+                          {
+                            "family": "factor_gene_set_direct",
+                            "id": "fabc0d40d8dcf70b",
+                            "normalized_score": 1.406214736036135,
+                            "raw_score": 0.4065000116825104,
+                            "relation": "direct"
+                          }
+                        ],
+                        "reported_values_agree_within_1e_6": true,
+                        "result_key": "factor:portal:CADinT2D:cfde-inc-v2:Factor1:gene_set:IGVF__IGVFDS4003HZAB__IGVF_Perturb_Seq_chr5:173234812-173235812_dn",
+                        "source_ref": {
+                          "artifact_id": "gene_set-factor-50fbafcddac8.attempt-1.body",
+                          "pointer": "/data/3"
+                        }
+                      },
+                      "gene_set:IGVF__IGVFDS6332VCTO__IGVF_Perturb_Seq_ZFP64_up": {
+                        "factor_value": 0.246,
+                        "interactive_edge_ids": [
+                          "14183a65f2858595"
+                        ],
+                        "interactive_observations": [
+                          {
+                            "family": "factor_gene_set_direct",
+                            "id": "14183a65f2858595",
+                            "normalized_score": 0.5964130887738552,
+                            "raw_score": 0.2460000067949295,
+                            "relation": "direct"
+                          }
+                        ],
+                        "reported_values_agree_within_1e_6": true,
+                        "result_key": "factor:portal:CADinT2D:cfde-inc-v2:Factor1:gene_set:IGVF__IGVFDS6332VCTO__IGVF_Perturb_Seq_ZFP64_up",
+                        "source_ref": {
+                          "artifact_id": "gene_set-factor-50fbafcddac8.attempt-1.body",
+                          "pointer": "/data/5"
+                        }
+                      },
+                      "gene_set:PsychENCODE__all_signatures__PsychENCODE_geneM16": {
+                        "factor_value": 0.4518,
+                        "interactive_edge_ids": [
+                          "24985b05ad4d0a8a"
+                        ],
+                        "interactive_observations": [
+                          {
+                            "family": "factor_gene_set_direct",
+                            "id": "24985b05ad4d0a8a",
+                            "normalized_score": 1.6347754521132016,
+                            "raw_score": 0.45179998874664307,
+                            "relation": "direct"
+                          }
+                        ],
+                        "reported_values_agree_within_1e_6": true,
+                        "result_key": "factor:portal:CADinT2D:cfde-inc-v2:Factor1:gene_set:PsychENCODE__all_signatures__PsychENCODE_geneM16",
+                        "source_ref": {
+                          "artifact_id": "gene_set-factor-50fbafcddac8.attempt-1.body",
+                          "pointer": "/data/2"
+                        }
+                      }
+                    },
+                    "query_status": "ok_limit_reached",
+                    "status": "ok"
+                  },
+                  "source_label": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+                  "source_ref": {
+                    "artifact_id": "factor-catalog-a559f3f24e19.attempt-1.body",
+                    "pointer": "/data/0"
+                  },
+                  "trait_loadings": {
+                    "items": {},
+                    "query_status": "empty",
+                    "status": "empty"
+                  }
+                }
+              },
+              "model": "cfde-inc-v2",
+              "traits": {
+                "trait:portal:CADinT2D": {
+                  "gene_associations": {
+                    "items": {
+                      "gene:CTNNB1": {
+                        "observations": [
+                          {
+                            "ascertained_via_mechanism": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                            "reported_metrics": {
+                              "combined": 1.65,
+                              "log_bf": 0.173,
+                              "prior": 1.48
+                            },
+                            "result_key": "factor:portal:CADinT2D:cfde-inc-v2:Factor1:gene:CTNNB1",
+                            "source_ref": {
+                              "artifact_id": "gene-factor-50fbafcddac8.attempt-1.body",
+                              "pointer": "/data/6"
+                            }
+                          }
+                        ]
+                      },
+                      "gene:EYA2": {
+                        "observations": [
+                          {
+                            "ascertained_via_mechanism": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                            "reported_metrics": {
+                              "combined": 1.66,
+                              "log_bf": 1.68,
+                              "prior": -0.0237
+                            },
+                            "result_key": "factor:portal:CADinT2D:cfde-inc-v2:Factor1:gene:EYA2",
+                            "source_ref": {
+                              "artifact_id": "gene-factor-50fbafcddac8.attempt-1.body",
+                              "pointer": "/data/5"
+                            }
+                          }
+                        ]
+                      },
+                      "gene:FGF13": {
+                        "observations": [
+                          {
+                            "ascertained_via_mechanism": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                            "reported_metrics": {
+                              "combined": 1.73,
+                              "log_bf": 1.77,
+                              "prior": -0.0446
+                            },
+                            "result_key": "factor:portal:CADinT2D:cfde-inc-v2:Factor1:gene:FGF13",
+                            "source_ref": {
+                              "artifact_id": "gene-factor-50fbafcddac8.attempt-1.body",
+                              "pointer": "/data/4"
+                            }
+                          }
+                        ]
+                      },
+                      "gene:GLI3": {
+                        "observations": [
+                          {
+                            "ascertained_via_mechanism": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                            "reported_metrics": {
+                              "combined": 1.98,
+                              "log_bf": 0.474,
+                              "prior": 1.51
+                            },
+                            "result_key": "factor:portal:CADinT2D:cfde-inc-v2:Factor1:gene:GLI3",
+                            "source_ref": {
+                              "artifact_id": "gene-factor-50fbafcddac8.attempt-1.body",
+                              "pointer": "/data/3"
+                            }
+                          }
+                        ]
+                      },
+                      "gene:SHH": {
+                        "observations": [
+                          {
+                            "ascertained_via_mechanism": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                            "reported_metrics": {
+                              "combined": 3.86,
+                              "log_bf": 2.14,
+                              "prior": 1.72
+                            },
+                            "result_key": "factor:portal:CADinT2D:cfde-inc-v2:Factor1:gene:SHH",
+                            "source_ref": {
+                              "artifact_id": "gene-factor-50fbafcddac8.attempt-1.body",
+                              "pointer": "/data/0"
+                            }
+                          },
+                          {
+                            "reported_metrics": {
+                              "combined": 3.86,
+                              "log_bf": 2.14,
+                              "prior": 1.72
+                            },
+                            "source_ref": {
+                              "artifact_id": "gene-trait-a559f3f24e19.attempt-1.body",
+                              "pointer": "/data/0"
+                            },
+                            "source_scope": "phenotype_query"
+                          }
+                        ]
+                      },
+                      "gene:SIX2": {
+                        "observations": [
+                          {
+                            "ascertained_via_mechanism": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                            "reported_metrics": {
+                              "combined": 2.07,
+                              "log_bf": 2.06,
+                              "prior": 0.0101
+                            },
+                            "result_key": "factor:portal:CADinT2D:cfde-inc-v2:Factor1:gene:SIX2",
+                            "source_ref": {
+                              "artifact_id": "gene-factor-50fbafcddac8.attempt-1.body",
+                              "pointer": "/data/2"
+                            }
+                          }
+                        ]
+                      },
+                      "gene:TCF7L2": {
+                        "observations": [
+                          {
+                            "ascertained_via_mechanism": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                            "reported_metrics": {
+                              "combined": 2.42,
+                              "log_bf": 2.33,
+                              "prior": 0.0873
+                            },
+                            "result_key": "factor:portal:CADinT2D:cfde-inc-v2:Factor1:gene:TCF7L2",
+                            "source_ref": {
+                              "artifact_id": "gene-factor-50fbafcddac8.attempt-1.body",
+                              "pointer": "/data/1"
+                            }
+                          }
+                        ]
+                      },
+                      "gene:WNT4": {
+                        "observations": [
+                          {
+                            "ascertained_via_mechanism": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                            "reported_metrics": {
+                              "combined": 1.65,
+                              "log_bf": 1.62,
+                              "prior": 0.033
+                            },
+                            "result_key": "factor:portal:CADinT2D:cfde-inc-v2:Factor1:gene:WNT4",
+                            "source_ref": {
+                              "artifact_id": "gene-factor-50fbafcddac8.attempt-1.body",
+                              "pointer": "/data/7"
+                            }
+                          }
+                        ]
+                      }
+                    },
+                    "status": "ok"
+                  },
+                  "gene_set_associations": {
+                    "items": {
+                      "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn": {
+                        "observations": [
+                          {
+                            "ascertained_via_mechanism": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                            "reported_metrics": {
+                              "beta": 0.115,
+                              "beta_uncorrected": 0.119,
+                              "rs_score": 0.9840045398876323
+                            },
+                            "result_key": "factor:portal:CADinT2D:cfde-inc-v2:Factor1:gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+                            "source_ref": {
+                              "artifact_id": "gene_set-factor-50fbafcddac8.attempt-1.body",
+                              "pointer": "/data/0"
+                            }
+                          },
+                          {
+                            "reported_metrics": {
+                              "beta": 3.23,
+                              "beta_uncorrected": 3.35,
+                              "rs_score": 0.0
+                            },
+                            "source_ref": {
+                              "artifact_id": "gene_set-trait-a559f3f24e19.attempt-1.body",
+                              "pointer": "/data/0"
+                            },
+                            "source_scope": "phenotype_query"
+                          }
+                        ]
+                      },
+                      "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis_AD-OTHER_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn": {
+                        "observations": [
+                          {
+                            "ascertained_via_mechanism": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                            "reported_metrics": {
+                              "beta": 0.00121,
+                              "beta_uncorrected": 0.121,
+                              "rs_score": 0.9849404917274122
+                            },
+                            "result_key": "factor:portal:CADinT2D:cfde-inc-v2:Factor1:gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis_AD-OTHER_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+                            "source_ref": {
+                              "artifact_id": "gene_set-factor-50fbafcddac8.attempt-1.body",
+                              "pointer": "/data/1"
+                            }
+                          }
+                        ]
+                      },
+                      "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_SourceDiagnosis_AD-PATH_AGE_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn": {
+                        "observations": [
+                          {
+                            "ascertained_via_mechanism": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                            "reported_metrics": {
+                              "beta": 0.0,
+                              "beta_uncorrected": 0.000551,
+                              "rs_score": 0.9525995556394983
+                            },
+                            "result_key": "factor:portal:CADinT2D:cfde-inc-v2:Factor1:gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_SourceDiagnosis_AD-PATH_AGE_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+                            "source_ref": {
+                              "artifact_id": "gene_set-factor-50fbafcddac8.attempt-1.body",
+                              "pointer": "/data/4"
+                            }
+                          }
+                        ]
+                      },
+                      "gene_set:GTEx__small_intestine__GTEx_aging_SmallIntestine_20-29_50-59_up": {
+                        "observations": [
+                          {
+                            "ascertained_via_mechanism": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                            "reported_metrics": {
+                              "beta": 0.00918,
+                              "beta_uncorrected": 0.0274,
+                              "rs_score": 0.9642555041281244
+                            },
+                            "result_key": "factor:portal:CADinT2D:cfde-inc-v2:Factor1:gene_set:GTEx__small_intestine__GTEx_aging_SmallIntestine_20-29_50-59_up",
+                            "source_ref": {
+                              "artifact_id": "gene_set-factor-50fbafcddac8.attempt-1.body",
+                              "pointer": "/data/6"
+                            }
+                          }
+                        ]
+                      },
+                      "gene_set:IGVF__IGVFDS2266YDVM__IGVF_Perturb_Seq_chr5:88882966-88883966_dn": {
+                        "observations": [
+                          {
+                            "ascertained_via_mechanism": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                            "reported_metrics": {
+                              "beta": 3.53e-06,
+                              "beta_uncorrected": 0.000737,
+                              "rs_score": 0.9537449059538898
+                            },
+                            "result_key": "factor:portal:CADinT2D:cfde-inc-v2:Factor1:gene_set:IGVF__IGVFDS2266YDVM__IGVF_Perturb_Seq_chr5:88882966-88883966_dn",
+                            "source_ref": {
+                              "artifact_id": "gene_set-factor-50fbafcddac8.attempt-1.body",
+                              "pointer": "/data/7"
+                            }
+                          }
+                        ]
+                      },
+                      "gene_set:IGVF__IGVFDS4003HZAB__IGVF_Perturb_Seq_chr5:173234812-173235812_dn": {
+                        "observations": [
+                          {
+                            "ascertained_via_mechanism": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                            "reported_metrics": {
+                              "beta": 0.0239,
+                              "beta_uncorrected": 0.142,
+                              "rs_score": 0.994767986045101
+                            },
+                            "result_key": "factor:portal:CADinT2D:cfde-inc-v2:Factor1:gene_set:IGVF__IGVFDS4003HZAB__IGVF_Perturb_Seq_chr5:173234812-173235812_dn",
+                            "source_ref": {
+                              "artifact_id": "gene_set-factor-50fbafcddac8.attempt-1.body",
+                              "pointer": "/data/3"
+                            }
+                          }
+                        ]
+                      },
+                      "gene_set:IGVF__IGVFDS6332VCTO__IGVF_Perturb_Seq_ZFP64_up": {
+                        "observations": [
+                          {
+                            "ascertained_via_mechanism": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                            "reported_metrics": {
+                              "beta": 0.00873,
+                              "beta_uncorrected": 0.118,
+                              "rs_score": 0.9835365639677423
+                            },
+                            "result_key": "factor:portal:CADinT2D:cfde-inc-v2:Factor1:gene_set:IGVF__IGVFDS6332VCTO__IGVF_Perturb_Seq_ZFP64_up",
+                            "source_ref": {
+                              "artifact_id": "gene_set-factor-50fbafcddac8.attempt-1.body",
+                              "pointer": "/data/5"
+                            }
+                          }
+                        ]
+                      },
+                      "gene_set:PsychENCODE__all_signatures__PsychENCODE_geneM16": {
+                        "observations": [
+                          {
+                            "ascertained_via_mechanism": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                            "reported_metrics": {
+                              "beta": 0.00729,
+                              "beta_uncorrected": 0.0586,
+                              "rs_score": 0.9732207436257954
+                            },
+                            "result_key": "factor:portal:CADinT2D:cfde-inc-v2:Factor1:gene_set:PsychENCODE__all_signatures__PsychENCODE_geneM16",
+                            "source_ref": {
+                              "artifact_id": "gene_set-factor-50fbafcddac8.attempt-1.body",
+                              "pointer": "/data/2"
+                            }
+                          }
+                        ]
+                      }
+                    },
+                    "status": "ok"
+                  },
+                  "model": "cfde-inc-v2"
+                }
+              }
+            },
+            "policy": {
+              "allow_incomplete_capture": false,
+              "max_anchors": 10,
+              "max_candidates_per_target": 100,
+              "max_dismech_mechanisms": 10,
+              "max_edges": 1000,
+              "max_nodes": 30,
+              "max_package_bytes": 2000000,
+              "retain_node_ids": [
+                "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                "gene:CTNNB1",
+                "gene:EYA2",
+                "gene:FGF13",
+                "gene:GLI3",
+                "gene:SHH",
+                "gene:SIX2",
+                "gene:TCF7L2",
+                "gene:WNT4",
+                "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+                "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis_AD-OTHER_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+                "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_SourceDiagnosis_AD-PATH_AGE_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+                "gene_set:GTEx__small_intestine__GTEx_aging_SmallIntestine_20-29_50-59_up",
+                "gene_set:IGVF__IGVFDS2266YDVM__IGVF_Perturb_Seq_chr5:88882966-88883966_dn",
+                "gene_set:IGVF__IGVFDS4003HZAB__IGVF_Perturb_Seq_chr5:173234812-173235812_dn",
+                "gene_set:IGVF__IGVFDS6332VCTO__IGVF_Perturb_Seq_ZFP64_up",
+                "gene_set:PsychENCODE__all_signatures__PsychENCODE_geneM16"
+              ]
+            },
+            "prefixes": {
+              "CL": "http://purl.obolibrary.org/obo/CL_",
+              "ECTO": "http://purl.obolibrary.org/obo/ECTO_",
+              "GO": "http://purl.obolibrary.org/obo/GO_",
+              "MONDO": "http://purl.obolibrary.org/obo/MONDO_",
+              "PMID": "http://identifiers.org/pubmed/",
+              "cfde": "urn:cfde:record:",
+              "dapper": "https://broadinstitute.github.io/dapper/ns#",
+              "factor": "urn:cfde:factor:",
+              "gene": "urn:cfde:gene:",
+              "gene_set": "urn:cfde:gene_set:",
+              "trait": "urn:cfde:trait:"
+            },
+            "readiness": {
+              "agent_dispatch_validated": false,
+              "capture_blockers": [],
+              "input_capture_complete": true,
+              "remaining_checks": [
+                "runtime and trusted attribution",
+                "target-model token budget",
+                "worker authorization and tool policy"
+              ]
+            },
+            "selection": {
+              "dismech_mechanism_ids": [
+                "dismech:disorders/Coronary_Artery_Disease#/pathophysiology/0"
+              ],
+              "dismissed_eaggl_ids": [],
+              "eaggl_mechanism_ids": [
+                "factor:portal:CADinT2D:cfde-inc-v2:Factor1"
+              ],
+              "expansion_policy": {
+                "connection_scope": "direct",
+                "context": "",
+                "reducer": "mean",
+                "rounds": 1
+              },
+              "knowledge_gap_id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+              "origins": {
+                "factor:portal:CADinT2D:cfde-inc-v2:Factor1": "user_supplied"
+              },
+              "semantic_retrieval": {
+                "embedding_run_id": null,
+                "status": "not_computed"
+              }
+            },
+            "source_artifacts": {
+              "assembly-builder-source": {
+                "dapper_file_id": "dapper:File.n80yhQw8GQPnkBbhRzchAzcEHq2SfXOJ",
+                "filename": "evidence_package.py",
+                "format": "text",
+                "path": "sources/4510c6259cd225736ef0d0073998636ef3f8e3f8927e510c0f0902e80cbae74b.text",
+                "sha256": "4510c6259cd225736ef0d0073998636ef3f8e3f8927e510c0f0902e80cbae74b"
+              },
+              "catalog-a559f3f24e19.attempt-1": {
+                "dapper_file_id": "dapper:File.8TmljuISG_SL81c0XnY8Tv2jgfDZbBpW",
+                "filename": "catalog-a559f3f24e19.attempt-1.json",
+                "format": "json",
+                "origin": "https://dev.cfdeknowledge.org/api/interactive/catalog?entity_type=factor&q=CADinT2D&limit=100&model=cfde-inc-v2",
+                "path": "sources/4d3d0ea9a513a8d60da51ce058aa5f2efaa1167389d9416df5985668f4335802.json",
+                "sha256": "4d3d0ea9a513a8d60da51ce058aa5f2efaa1167389d9416df5985668f4335802"
+              },
+              "catalog-a559f3f24e19.attempt-1.body": {
+                "dapper_file_id": "dapper:File.x1a4stQKeMRSDlNcYbrwxYpjO4KLLcP3",
+                "filename": "catalog-a559f3f24e19.attempt-1.body.json",
+                "format": "json",
+                "origin": "https://dev.cfdeknowledge.org/api/interactive/catalog?entity_type=factor&q=CADinT2D&limit=100&model=cfde-inc-v2",
+                "path": "sources/2791188a1ceb0489678f98179968fe8b18f9c42313f6412c9bbf1f6e68af0b2e.json",
+                "sha256": "2791188a1ceb0489678f98179968fe8b18f9c42313f6412c9bbf1f6e68af0b2e"
+              },
+              "collector-source": {
+                "dapper_file_id": "dapper:File.Cku1uSpvxiaaVLbRMenzu2K5X4iEX-rV",
+                "filename": "evidence_collector.py",
+                "format": "text",
+                "path": "sources/3dfa16f53707a87f481cd3c49aa25a19f48caac8643921a646f50a2746f603c5.text",
+                "sha256": "3dfa16f53707a87f481cd3c49aa25a19f48caac8643921a646f50a2746f603c5"
+              },
+              "connections-factor.attempt-1": {
+                "dapper_file_id": "dapper:File.h845ro_lHmlnNS4AV1Df57i4zy8GGaCt",
+                "filename": "connections-factor.attempt-1.json",
+                "format": "json",
+                "origin": "https://dev.cfdeknowledge.org/api/interactive/connections",
+                "path": "sources/20c524bbdf07f3088f6e88d1d77dcf68495f389112ee04a171988bd2561e3bc8.json",
+                "sha256": "20c524bbdf07f3088f6e88d1d77dcf68495f389112ee04a171988bd2561e3bc8"
+              },
+              "connections-factor.attempt-1.body": {
+                "dapper_file_id": "dapper:File.aqedURD0t1sOBZrUaRoutVmOaRCzZt-p",
+                "filename": "connections-factor.attempt-1.body.json",
+                "format": "json",
+                "origin": "https://dev.cfdeknowledge.org/api/interactive/connections",
+                "path": "sources/dc0bfbd8c23271a7e0a6d2285a90de9be7698f2ede9465b6d5877bbd24e96006.json",
+                "sha256": "dc0bfbd8c23271a7e0a6d2285a90de9be7698f2ede9465b6d5877bbd24e96006"
+              },
+              "connections-gene.attempt-1": {
+                "dapper_file_id": "dapper:File.ETUZPhmkLXMI69keWTC3Pu14WfBzXCo7",
+                "filename": "connections-gene.attempt-1.json",
+                "format": "json",
+                "origin": "https://dev.cfdeknowledge.org/api/interactive/connections",
+                "path": "sources/f542df4c003390aab0404d51a8500c84d1e02e932d7f20e5856e606b84bb4cfc.json",
+                "sha256": "f542df4c003390aab0404d51a8500c84d1e02e932d7f20e5856e606b84bb4cfc"
+              },
+              "connections-gene.attempt-1.body": {
+                "dapper_file_id": "dapper:File.vuALMaKVdlwNv82BHjHouNgICfTsiB-h",
+                "filename": "connections-gene.attempt-1.body.json",
+                "format": "json",
+                "origin": "https://dev.cfdeknowledge.org/api/interactive/connections",
+                "path": "sources/6f689724ca918b1706cbde411b6337c98cd5f4d7a9b23561a9a7d7695d50547f.json",
+                "sha256": "6f689724ca918b1706cbde411b6337c98cd5f4d7a9b23561a9a7d7695d50547f"
+              },
+              "connections-gene_set.attempt-1": {
+                "dapper_file_id": "dapper:File.ZO8Ow7EHwG2XlIwSBmDs5w75vLFA-Eg7",
+                "filename": "connections-gene_set.attempt-1.json",
+                "format": "json",
+                "origin": "https://dev.cfdeknowledge.org/api/interactive/connections",
+                "path": "sources/66d963274fe00760f7572220ce5bda2bb0379f63bf172506411e4e3b2cf268cc.json",
+                "sha256": "66d963274fe00760f7572220ce5bda2bb0379f63bf172506411e4e3b2cf268cc"
+              },
+              "connections-gene_set.attempt-1.body": {
+                "dapper_file_id": "dapper:File.-H99jNBgwGkrEQmTpGCRHWLg6eKaumMo",
+                "filename": "connections-gene_set.attempt-1.body.json",
+                "format": "json",
+                "origin": "https://dev.cfdeknowledge.org/api/interactive/connections",
+                "path": "sources/b30b0dd47d1a7b4744d1a75624dfff7fb6cc2b40c1ad0bf9a5b0652e9c3fa82f.json",
+                "sha256": "b30b0dd47d1a7b4744d1a75624dfff7fb6cc2b40c1ad0bf9a5b0652e9c3fa82f"
+              },
+              "connections-trait.attempt-1": {
+                "dapper_file_id": "dapper:File.JYZMrUbK8tAxQW8CyZjXgUpVlV1wyCBm",
+                "filename": "connections-trait.attempt-1.json",
+                "format": "json",
+                "origin": "https://dev.cfdeknowledge.org/api/interactive/connections",
+                "path": "sources/0e287ec725121bf7ebea565646b3248dd6cc659a274b4e4274cc7bb5021749e1.json",
+                "sha256": "0e287ec725121bf7ebea565646b3248dd6cc659a274b4e4274cc7bb5021749e1"
+              },
+              "connections-trait.attempt-1.body": {
+                "dapper_file_id": "dapper:File.hP2Qbe6zyi4MN45IfEP2n6ZzcMkWZ8NP",
+                "filename": "connections-trait.attempt-1.body.json",
+                "format": "json",
+                "origin": "https://dev.cfdeknowledge.org/api/interactive/connections",
+                "path": "sources/dc0bfbd8c23271a7e0a6d2285a90de9be7698f2ede9465b6d5877bbd24e96006.json",
+                "sha256": "dc0bfbd8c23271a7e0a6d2285a90de9be7698f2ede9465b6d5877bbd24e96006"
+              },
+              "contextual.attempt-1": {
+                "dapper_file_id": "dapper:File.s6eClSzF36BNVxm2NIv834oDkvl4uRvV",
+                "filename": "contextual.attempt-1.json",
+                "format": "json",
+                "origin": "https://dev.cfdeknowledge.org/api/interactive/contextual-edges",
+                "path": "sources/59f7a7cf7c515666fff9910171ca7d274f4a51a529b954eb2e0893b9bbed0bbd.json",
+                "sha256": "59f7a7cf7c515666fff9910171ca7d274f4a51a529b954eb2e0893b9bbed0bbd"
+              },
+              "contextual.attempt-1.body": {
+                "dapper_file_id": "dapper:File.ufdpJKe7Y9ENrxCzOkVoDWVwBkS4Qi3R",
+                "filename": "contextual.attempt-1.body.json",
+                "format": "json",
+                "origin": "https://dev.cfdeknowledge.org/api/interactive/contextual-edges",
+                "path": "sources/f3842dccff3665359f62858a8ab7fae10f20442455042664b6e6fb2f8f490228.json",
+                "sha256": "f3842dccff3665359f62858a8ab7fae10f20442455042664b6e6fb2f8f490228"
+              },
+              "dismech-cee6cec679d5a938": {
+                "dapper_file_id": "dapper:File.yLVqlItWKdOT-93XZiIpyLvzrYltbxwQ",
+                "filename": "Coronary_Artery_Disease.yaml",
+                "format": "yaml",
+                "origin": {
+                  "commit": "df3884a8bba34370ecc0b3a49d956e7f0523bb28",
+                  "path": "kb/disorders/Coronary_Artery_Disease.yaml",
+                  "repository": "https://github.com/monarch-initiative/dismech"
+                },
+                "path": "sources/00f2a71dca11fd7d4a8c835ea9e978037dcbef88d3fb050c5e74192db2bd7338.yaml",
+                "sha256": "00f2a71dca11fd7d4a8c835ea9e978037dcbef88d3fb050c5e74192db2bd7338"
+              },
+              "factor-catalog-a559f3f24e19.attempt-1": {
+                "dapper_file_id": "dapper:File.tCp5-Pju3u4idjrvS97fHQWiYY6Y_7dV",
+                "filename": "factor-catalog-a559f3f24e19.attempt-1.json",
+                "format": "json",
+                "origin": "https://cfde-dev.hugeampkpnbi.org/api/bio/query/pigean-factor?q=CADinT2D%2Ccfde-inc-v2&limit=8",
+                "path": "sources/3c0cfb8601e73d2422d8d6da6eee08b3a48bf7031f1d6210d276398b9e9e0c04.json",
+                "sha256": "3c0cfb8601e73d2422d8d6da6eee08b3a48bf7031f1d6210d276398b9e9e0c04"
+              },
+              "factor-catalog-a559f3f24e19.attempt-1.body": {
+                "dapper_file_id": "dapper:File.vaC9DluVBWfFHpOY4pa0Gqu-MUit2jk1",
+                "filename": "factor-catalog-a559f3f24e19.attempt-1.body.json",
+                "format": "json",
+                "origin": "https://cfde-dev.hugeampkpnbi.org/api/bio/query/pigean-factor?q=CADinT2D%2Ccfde-inc-v2&limit=8",
+                "path": "sources/e7bd191f91e658c267a28ae1e96c426f122119ca00c75320df0d1cb031bac585.json",
+                "sha256": "e7bd191f91e658c267a28ae1e96c426f122119ca00c75320df0d1cb031bac585"
+              },
+              "gene-factor-50fbafcddac8.attempt-1": {
+                "dapper_file_id": "dapper:File.Om2BFvNqJF8ltHYk71Q8boatXRTYH--G",
+                "filename": "gene-factor-50fbafcddac8.attempt-1.json",
+                "format": "json",
+                "origin": "https://cfde-dev.hugeampkpnbi.org/api/bio/query/pigean-gene-factor?q=CADinT2D%2Ccfde-inc-v2%2CFactor1&limit=8",
+                "path": "sources/d92acf433dcae39f527f0e4ae5fd4b5ff24e303a1526ffc79ee5eb6f06141b99.json",
+                "sha256": "d92acf433dcae39f527f0e4ae5fd4b5ff24e303a1526ffc79ee5eb6f06141b99"
+              },
+              "gene-factor-50fbafcddac8.attempt-1.body": {
+                "dapper_file_id": "dapper:File.2eXr4WpviGW_X7rOdyGlPqn3EpvkIAcH",
+                "filename": "gene-factor-50fbafcddac8.attempt-1.body.json",
+                "format": "json",
+                "origin": "https://cfde-dev.hugeampkpnbi.org/api/bio/query/pigean-gene-factor?q=CADinT2D%2Ccfde-inc-v2%2CFactor1&limit=8",
+                "path": "sources/62d00329740cf7e8117ca39a94b5b3012315d062c511fae8698b32e5a29a6550.json",
+                "sha256": "62d00329740cf7e8117ca39a94b5b3012315d062c511fae8698b32e5a29a6550"
+              },
+              "gene-trait-a559f3f24e19.attempt-1": {
+                "dapper_file_id": "dapper:File.uxbR3Iy380gQHZfRCgVCEaqMRsVNYO9x",
+                "filename": "gene-trait-a559f3f24e19.attempt-1.json",
+                "format": "json",
+                "origin": "https://cfde-dev.hugeampkpnbi.org/api/bio/query/pigean-gene-phenotype?q=CADinT2D%2Ccfde-inc-v2&limit=8",
+                "path": "sources/9abf832cdfacafcfe858a877bf8818cf46a1c571631933faf753b9396aa42fc3.json",
+                "sha256": "9abf832cdfacafcfe858a877bf8818cf46a1c571631933faf753b9396aa42fc3"
+              },
+              "gene-trait-a559f3f24e19.attempt-1.body": {
+                "dapper_file_id": "dapper:File.Hp1NQ7aTPiKT-UBtbEvbZuokAdUNm3r1",
+                "filename": "gene-trait-a559f3f24e19.attempt-1.body.json",
+                "format": "json",
+                "origin": "https://cfde-dev.hugeampkpnbi.org/api/bio/query/pigean-gene-phenotype?q=CADinT2D%2Ccfde-inc-v2&limit=8",
+                "path": "sources/1155ff76a8573c3302498cba9352f83e780c998321b81db7ea83076747824065.json",
+                "sha256": "1155ff76a8573c3302498cba9352f83e780c998321b81db7ea83076747824065"
+              },
+              "gene_set-factor-50fbafcddac8.attempt-1": {
+                "dapper_file_id": "dapper:File.zb-rweKEax9BNAtbciWbJFKs9WB_L4vw",
+                "filename": "gene_set-factor-50fbafcddac8.attempt-1.json",
+                "format": "json",
+                "origin": "https://cfde-dev.hugeampkpnbi.org/api/bio/query/pigean-gene-set-factor?q=CADinT2D%2Ccfde-inc-v2%2CFactor1&limit=8",
+                "path": "sources/96dd4443430ecc405ff558185d8ddc8fc0e6eb5222ea32a947a2689dce7d08b9.json",
+                "sha256": "96dd4443430ecc405ff558185d8ddc8fc0e6eb5222ea32a947a2689dce7d08b9"
+              },
+              "gene_set-factor-50fbafcddac8.attempt-1.body": {
+                "dapper_file_id": "dapper:File.P5OVguO1HZzw7ekAqiZILmb07t--PpVh",
+                "filename": "gene_set-factor-50fbafcddac8.attempt-1.body.json",
+                "format": "json",
+                "origin": "https://cfde-dev.hugeampkpnbi.org/api/bio/query/pigean-gene-set-factor?q=CADinT2D%2Ccfde-inc-v2%2CFactor1&limit=8",
+                "path": "sources/1c302e12ae3db93d6f606d1ac2198748968c594d7d8abebdc25100dda85d1080.json",
+                "sha256": "1c302e12ae3db93d6f606d1ac2198748968c594d7d8abebdc25100dda85d1080"
+              },
+              "gene_set-trait-a559f3f24e19.attempt-1": {
+                "dapper_file_id": "dapper:File.4m2UwkNZChJxOwvnSozI5AJJOKfiGT1t",
+                "filename": "gene_set-trait-a559f3f24e19.attempt-1.json",
+                "format": "json",
+                "origin": "https://cfde-dev.hugeampkpnbi.org/api/bio/query/pigean-gene-set-phenotype?q=CADinT2D%2Ccfde-inc-v2&limit=8",
+                "path": "sources/5d5a53df948f35e5d963ed958c48f6b2ff3da77eec8f5f25f37da454ec2400bd.json",
+                "sha256": "5d5a53df948f35e5d963ed958c48f6b2ff3da77eec8f5f25f37da454ec2400bd"
+              },
+              "gene_set-trait-a559f3f24e19.attempt-1.body": {
+                "dapper_file_id": "dapper:File.kWSAPS8ImPDI9mT2KIFhaVDz5u0AI-MB",
+                "filename": "gene_set-trait-a559f3f24e19.attempt-1.body.json",
+                "format": "json",
+                "origin": "https://cfde-dev.hugeampkpnbi.org/api/bio/query/pigean-gene-set-phenotype?q=CADinT2D%2Ccfde-inc-v2&limit=8",
+                "path": "sources/b38fec16807ed8f65f519043cabac0fc0d7e65a4a2668d59595add524f11ff85.json",
+                "sha256": "b38fec16807ed8f65f519043cabac0fc0d7e65a4a2668d59595add524f11ff85"
+              },
+              "geneset-import": {
+                "dapper_file_id": "dapper:File.jhATaviXz7ShSsxZ7Xv4rbCX7tNWR8Nk",
+                "filename": "geneset-import.json",
+                "format": "json",
+                "path": "sources/16332bb1da593d9a7040097290148469528721f9d7e8ac6026d1da4d1327bc6c.json",
+                "sha256": "16332bb1da593d9a7040097290148469528721f9d7e8ac6026d1da4d1327bc6c"
+              },
+              "geneset-selected-records": {
+                "dapper_file_id": "dapper:File.knSmLHuHVmRdxsg2ittn6nqB427mstqi",
+                "filename": "geneset-selected-records.json",
+                "format": "json",
+                "path": "sources/d2f803a4683be29219647401e49ebb5dcfd68be362882432d242d16ca65cc8b8.json",
+                "sha256": "d2f803a4683be29219647401e49ebb5dcfd68be362882432d242d16ca65cc8b8"
+              },
+              "instruction-0": {
+                "dapper_file_id": "dapper:File.oXxr25cqI9ppv9PLSlj5cIT-OYfpGdi_",
+                "filename": "SKILL.md",
+                "format": "text",
+                "origin": "services/backend/agent-skills/construct-scientific-account/SKILL.md",
+                "path": "sources/98ead053d56359de279fcb06d74e6ef5cce72a23350da99dd26c0d03bea1c35a.text",
+                "sha256": "98ead053d56359de279fcb06d74e6ef5cce72a23350da99dd26c0d03bea1c35a"
+              },
+              "instruction-1": {
+                "dapper_file_id": "dapper:File.LVMBF40pDzJ-mVRXDrjY8u2MkR3WWi7I",
+                "filename": "evidence-package.md",
+                "format": "text",
+                "origin": "docs/evidence-package.md",
+                "path": "sources/f1c6afbb7ead99f43c2bcc4f6ac1b0ea1c8f4100717663004e07f9da75c47365.text",
+                "sha256": "f1c6afbb7ead99f43c2bcc4f6ac1b0ea1c8f4100717663004e07f9da75c47365"
+              },
+              "instruction-2": {
+                "dapper_file_id": "dapper:File.KI6Q5pQwFAGz1ETzd7q6e4rl-2GtvqQG",
+                "filename": "scientific-account-construction.md",
+                "format": "text",
+                "origin": "docs/scientific-account-construction.md",
+                "path": "sources/841ba75f1169cfbe21ecc826f127c5537e21080addfa4d06d40fa711c5dae897.text",
+                "sha256": "841ba75f1169cfbe21ecc826f127c5537e21080addfa4d06d40fa711c5dae897"
+              },
+              "instruction-3": {
+                "dapper_file_id": "dapper:File.y1dfMnW05kqSQCueRWBFpdtyTQhDyyGY",
+                "filename": "pigean-claim-model.md",
+                "format": "text",
+                "origin": "docs/pigean-claim-model.md",
+                "path": "sources/8b797269d45a2a4feabe00fbac84df7c99ebaa72affcf6154c89c7ce7fcdcf08.text",
+                "sha256": "8b797269d45a2a4feabe00fbac84df7c99ebaa72affcf6154c89c7ce7fcdcf08"
+              },
+              "instruction-4": {
+                "dapper_file_id": "dapper:File.pDUwVMynhab9l2lkeaKOjQO_nK6dr1LY",
+                "filename": "dapper-integration.md",
+                "format": "text",
+                "origin": "docs/dapper-integration.md",
+                "path": "sources/5737fc67f5d4d2348a6464a6086e762f7e95d8d2b2dfcf8de0359f15c4274d38.text",
+                "sha256": "5737fc67f5d4d2348a6464a6086e762f7e95d8d2b2dfcf8de0359f15c4274d38"
+              },
+              "instruction-5": {
+                "dapper_file_id": "dapper:File.8UUBN6UhsIn1TCs3XK6nab6xZDAfqk4t",
+                "filename": "agent-evidence-integration.md",
+                "format": "text",
+                "origin": "docs/agent-evidence-integration.md",
+                "path": "sources/c5b6f2bad1a89b4aba7aefc91a9c9ef8eb8db89dafb4203c18b979c6a242bc47.text",
+                "sha256": "c5b6f2bad1a89b4aba7aefc91a9c9ef8eb8db89dafb4203c18b979c6a242bc47"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "curl": "curl -X GET https://api.reveal.example.org/v1/jobs/44444444-4444-4444-8444-444444444444/evidence-package -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Accept: application/json'"
+}

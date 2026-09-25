@@ -1,0 +1,30 @@
+{
+  "operation_id": "getCitation",
+  "case": "bibtex",
+  "method": "GET",
+  "path_template": "/v1/citations/{dapper_id}",
+  "request": {
+    "url": "https://api.reveal.example.org/v1/citations/dapper%3AClaim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km?format=bibtex&revision=1&locale=en-US",
+    "path": {
+      "dapper_id": "dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km"
+    },
+    "query": {
+      "format": "bibtex",
+      "revision": 1,
+      "locale": "en-US"
+    },
+    "headers": {
+      "Accept": "application/x-bibtex"
+    },
+    "body": null
+  },
+  "responses": {
+    "200": {
+      "content_type": "application/x-bibtex",
+      "examples": {
+        "bibtex": "@misc{dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km,\n  title = {The EAGGL result supports SHH involvement in this mechanism through its reported loading of 0.5042 under cfde-inc-v2.},\n  author = {Researcher, Example},\n  year = {2026},\n  archivePrefix = {DAPPER},\n  eprint = {Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km},\n  url = {http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/0}\n}\n"
+      }
+    }
+  },
+  "curl": "curl -X GET 'https://api.reveal.example.org/v1/citations/dapper%3AClaim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km?format=bibtex&revision=1&locale=en-US' -H 'Accept: application/x-bibtex'"
+}

@@ -1,0 +1,7 @@
+{
+  "extractor_dir": "/humgen/diabetes2/users/ryank/CFDE/geneset_extractors/runs/hubmap_all_models/genesets/all_signatures/models/HZ2/extractor",
+  "model_id": "HZ2",
+  "provenance_mirror_local_prefix": null,
+  "provenance_mirror_remote_prefix": null,
+  "workflow_dir": "/humgen/diabetes2/users/ryank/CFDE/geneset_extractors/runs/hubmap_all_models/genesets/all_signatures/models/HZ2/workflow"
+}

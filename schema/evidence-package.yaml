@@ -1,0 +1,1417 @@
+# Canonical LinkML source for the collector output, not the offline build-input manifest.
+# Generate JSON Schema using scripts/evidence_package_schema.py generate.
+# The generator materializes extra_slots and the annotated raw-list wire type.
+id: urn:reveal:evidence-package:schema
+name: reveal_evidence_package
+title: REVEAL Evidence Package
+version: 0.2.0-draft
+description: Application envelope for a frozen DisMech knowledge gap and bounded PIGEAN/EAGGL observations
+  supplied to the scientific-account agent. EAGGL factors are mechanisms. This schema describes inputs, not
+  authored scientific accounts or biological truth.
+prefixes:
+  reveal_ep: 'urn:reveal:evidence-package:'
+  linkml: https://w3id.org/linkml/
+  dapper: https://broadinstitute.github.io/dapper/ns#
+default_prefix: reveal_ep
+default_range: string
+imports:
+- linkml:types
+- ../data/dapper/2026-09-24-v8/snapshot/schema/dapper
+types:
+  EPSha256:
+    typeof: string
+    pattern: ^[0-9a-f]{64}$
+    description: Lowercase SHA-256 over exact UTF-8 or binary bytes.
+  EPCount:
+    typeof: integer
+    minimum_value: 0
+  EPPositiveCount:
+    typeof: integer
+    minimum_value: 1
+  EPSourcePointer:
+    typeof: string
+    pattern: ^(?:/(?:[^~/]|~[01])*)*$
+    description: RFC 6901 JSON Pointer into a saved structured artifact; empty string selects the root.
+  EPFactorID:
+    typeof: string
+    pattern: ^factor:[^:,]+:[^:,]+:[^:,]+:[^:,]+$
+    description: Full CFDE interactive mechanism identity including trait group, phenotype, model and factor.
+  EPKnowledgeGapID:
+    typeof: string
+    pattern: ^dapper:KnowledgeGap\.[A-Za-z0-9_-]{32}$
+  EPMechanismID:
+    typeof: string
+    pattern: ^dapper:Mechanism\.[A-Za-z0-9_-]{32}$
+  EPGeneSetID:
+    typeof: string
+    pattern: ^dapper:GeneSet\.[A-Za-z0-9_-]{32}$
+  EPFileID:
+    typeof: string
+    pattern: ^dapper:File\.[A-Za-z0-9_-]{32}$
+enums:
+  EPQueryStatus:
+    description: Availability of a bounded query or retained collection. Empty does not imply biological absence.
+    permissible_values:
+      ok: {}
+      ok_limit_reached: {}
+      empty: {}
+      not_available: {}
+      not_queried: {}
+      not_captured: {}
+      failed: {}
+  EPSimilarityStatus:
+    description: Whether semantic similarity was actually measured.
+    permissible_values:
+      computed: {}
+      not_computed: {}
+  EPNodeType:
+    description: Supported interactive graph entity types.
+    permissible_values:
+      gene: {}
+      gene_set: {}
+      trait: {}
+      factor: {}
+  EPArtifactFormat:
+    description: Serialization of the exact source bytes.
+    permissible_values:
+      json: {}
+      yaml: {}
+      text: {}
+  EPAttachmentResolution:
+    description: DisMech attachment lookup outcome.
+    permissible_values:
+      resolved: {}
+      whole_section: {}
+      whole_document: {}
+      invalid_syntax: {}
+      ambiguous_file: {}
+      missing_file: {}
+      missing_target: {}
+      unsupported_kind: {}
+      ambiguous_target: {}
+  EPGapKind:
+    description: Kinds accepted by the gap collector.
+    permissible_values:
+      KNOWLEDGE_GAP: {}
+      HUMAN_MODEL_MISMATCH: {}
+  EPNotQueried:
+    description: Initial packages have no external enrichment results.
+    permissible_values:
+      not_queried: {}
+  EPProvidedSubset:
+    description: Related questions are a bounded supplied subset.
+    permissible_values:
+      provided_subset: {}
+classes:
+  EPKeyedRecord:
+    description: A dictionary entry. _key is carried by the enclosing JSON/YAML map and need not be repeated
+      inside its value.
+    abstract: true
+    attributes:
+      _key:
+        range: string
+        required: true
+        identifier: true
+  EPPrefix:
+    description: A declared CURIE prefix and expansion; serializes as a simple prefix-to-URI dictionary.
+    attributes:
+      prefix:
+        range: string
+        required: true
+        identifier: true
+      expansion:
+        range: uri
+        required: true
+        description: Namespace expansion; no claim that the URI is an online record resolver.
+  EPSelectionOrigin:
+    description: Selection origin keyed by full mechanism ID; serializes as a simple string dictionary.
+    attributes:
+      factor_id:
+        range: EPFactorID
+        required: true
+        identifier: true
+      origin:
+        range: string
+        required: true
+        description: For example user_supplied; future suggestion workflows must retain their real selection
+          origin.
+  EPSourceRef:
+    description: Location of an observation in one frozen source artifact.
+    attributes:
+      artifact_id:
+        range: string
+        required: true
+      pointer:
+        range: EPSourcePointer
+        required: true
+  EPBuilderPin:
+    description: Version and exact source-code hash of the deterministic assembly implementation.
+    attributes:
+      version:
+        range: string
+        required: true
+        equals_string: reveal.evidence-builder/1
+      source_sha256:
+        range: EPSha256
+        required: true
+  EPDapperPin:
+    description: Pinned DAPPER schema and identity implementation dependency manifest.
+    attributes:
+      name:
+        range: string
+        required: true
+      snapshot_sha256:
+        range: EPSha256
+        required: true
+      snapshot_manifest_sha256:
+        range: EPSha256
+        required: true
+  EPIdentifierPolicy:
+    description: Rules for interpreting record aliases and preserving minted DAPPER objects.
+    attributes:
+      source_local_prefixes:
+        range: string
+        required: true
+        multivalued: true
+        inlined_as_list: true
+      dismech_record_ids:
+        range: string
+        required: true
+      preserve_existing_dapper_payloads:
+        range: boolean
+        required: true
+  EPExpansionPolicy:
+    description: One direct expansion round from the original selected mechanisms.
+    attributes:
+      rounds:
+        range: integer
+        required: true
+        equals_number: 1
+      reducer:
+        range: string
+        required: true
+        equals_string: mean
+      connection_scope:
+        range: string
+        required: true
+        equals_string: direct
+      context:
+        range: string
+        required: true
+        equals_string: ''
+  EPSemanticRetrieval:
+    description: Semantic selection metadata; uncomputed scores must not be invented.
+    attributes:
+      status:
+        range: EPSimilarityStatus
+        required: true
+      embedding_run_id:
+        range: string
+  EPSelection:
+    description: The exact gap and anchor set submitted by the caller.
+    attributes:
+      knowledge_gap_id:
+        range: EPKnowledgeGapID
+        required: true
+      dismech_mechanism_ids:
+        range: string
+        required: true
+        multivalued: true
+        inlined_as_list: true
+      eaggl_mechanism_ids:
+        range: EPFactorID
+        required: true
+        multivalued: true
+        inlined_as_list: true
+        minimum_cardinality: 1
+        maximum_cardinality: 10
+      dismissed_eaggl_ids:
+        range: EPFactorID
+        required: true
+        multivalued: true
+        inlined_as_list: true
+      origins:
+        range: EPSelectionOrigin
+        required: true
+        multivalued: true
+        inlined: true
+        inlined_as_list: false
+      semantic_retrieval:
+        range: EPSemanticRetrieval
+        required: true
+        inlined: true
+      expansion_policy:
+        range: EPExpansionPolicy
+        required: true
+        inlined: true
+  EPSourceRevision:
+    description: Frozen DisMech source revision and selected document checksum.
+    attributes:
+      commit:
+        range: string
+        required: true
+        pattern: ^[0-9a-f]{40}$
+      source_sha256:
+        range: EPSha256
+        required: true
+  EPRepositoryOrigin:
+    description: Repository location of a frozen source document.
+    attributes:
+      repository:
+        range: uri
+        required: true
+      commit:
+        range: string
+        required: true
+      path:
+        range: string
+        required: true
+  EPSourceArtifact:
+    description: Content-addressed source artifact with a durable DAPPER File identity. Transport input paths
+      are not part of this descriptor.
+    is_a: EPKeyedRecord
+    attributes:
+      filename:
+        range: string
+        required: true
+      format:
+        range: EPArtifactFormat
+        required: true
+      sha256:
+        range: EPSha256
+        required: true
+      path:
+        range: string
+        required: true
+        pattern: ^sources/[0-9a-f]{64}\.(json|yaml|text)$
+      dapper_file_id:
+        range: EPFileID
+        required: true
+      origin:
+        range: EPJSONValue
+        inlined: true
+        any_of:
+        - range: string
+        - range: EPRepositoryOrigin
+          inlined: true
+  EPRawObject:
+    description: Opaque upstream JSON object. Fields are preserved, not reinterpreted or validated as DAPPER.
+      Only explicitly identified source boundaries are open.
+    extra_slots:
+      allowed: true
+    attributes: {}
+  EPJSONValue:
+    description: Any JSON value, used only as the base range of explicitly constrained source unions.
+    class_uri: linkml:Any
+    annotations:
+      json_type: any
+    attributes: {}
+  EPAttachment:
+    description: An indexed DisMech attachment, including unresolved outcomes.
+    attributes:
+      attachment_index:
+        range: EPCount
+        required: true
+      gap_id:
+        range: string
+        required: true
+      resolution:
+        range: EPAttachmentResolution
+        required: true
+      source_reference:
+        range: string
+        required: true
+      source_ref:
+        range: EPSourceRef
+        inlined: true
+      target_document_id:
+        range: string
+      target_id:
+        range: string
+      target_kind:
+        range: string
+      target_label:
+        range: string
+      target_pointer:
+        range: EPSourcePointer
+      target_source_file:
+        range: string
+      section_has_content:
+        range: boolean
+      match_count:
+        range: EPCount
+  EPKnowledgeGapContext:
+    description: Selected natural-language gap with its original DisMech context and exact DAPPER binding.
+    attributes:
+      source_id:
+        range: string
+        required: true
+      source_ref:
+        range: EPSourceRef
+        required: true
+        inlined: true
+      dapper_id:
+        range: EPKnowledgeGapID
+        required: true
+      disease:
+        range: EPRawObject
+        inlined: true
+      prompt:
+        range: string
+        required: true
+      rationale:
+        range: string
+      source_kind:
+        range: EPGapKind
+        required: true
+      source_status:
+        range: string
+      attachments:
+        range: EPAttachment
+        required: true
+        multivalued: true
+        inlined_as_list: true
+        inlined: true
+      proposed_experiments:
+        range: EPRawObject
+        required: true
+        multivalued: true
+        inlined_as_list: true
+        inlined: true
+  EPSemanticAssociation:
+    description: Retrieval association only; semantic similarity does not constitute biological evidence.
+    is_a: EPKeyedRecord
+    attributes:
+      status:
+        range: EPSimilarityStatus
+        required: true
+      semantic_similarity:
+        range: double
+        minimum_value: -1
+        maximum_value: 1
+      association_basis:
+        range: string
+        required: true
+  EPDismechMechanism:
+    description: Raw DisMech pathophysiology record plus typed application bindings. Additional curated source
+      fields are intentionally preserved.
+    is_a: EPKeyedRecord
+    extra_slots:
+      allowed: true
+    attributes:
+      name:
+        range: string
+        required: true
+      description:
+        range: string
+      dapper_id:
+        range: EPMechanismID
+        required: true
+      source_ref:
+        range: EPSourceRef
+        required: true
+        inlined: true
+      associated_eaggl_mechanisms:
+        range: EPSemanticAssociation
+        required: true
+        multivalued: true
+        inlined: true
+        inlined_as_list: false
+  EPAttachedContext:
+    description: A linked non-mechanism DisMech item or entire section/document.
+    attributes:
+      source_id:
+        range: string
+        required: true
+      kind:
+        range: string
+        required: true
+      source_ref:
+        range: EPSourceRef
+        required: true
+        inlined: true
+      record:
+        range: EPJSONValue
+        required: true
+        inlined: true
+        any_of:
+        - range: EPRawObject
+        - range: EPRawList
+  EPRawList:
+    description: Opaque upstream array for a whole-section attachment. Its members remain source data.
+    class_uri: linkml:Any
+    annotations:
+      json_type: array
+    attributes: {}
+  EPRelatedGap:
+    description: A related same-document gap that cannot replace the selected question.
+    attributes:
+      source_id:
+        range: string
+        required: true
+      source_ref:
+        range: EPSourceRef
+        required: true
+        inlined: true
+      prompt:
+        range: string
+        required: true
+      kind:
+        range: EPGapKind
+        required: true
+      status:
+        range: string
+  EPRelatedGaps:
+    description: Bounded related knowledge-gap context.
+    attributes:
+      status:
+        range: EPProvidedSubset
+        required: true
+      items:
+        range: EPRelatedGap
+        required: true
+        multivalued: true
+        inlined_as_list: true
+        inlined: true
+  EPDismechContext:
+    description: The selected gap, linked mechanisms and other curated source context.
+    attributes:
+      source_revision:
+        range: EPSourceRevision
+        required: true
+        inlined: true
+      knowledge_gap:
+        range: EPKnowledgeGapContext
+        required: true
+        inlined: true
+      mechanisms:
+        range: EPDismechMechanism
+        required: true
+        multivalued: true
+        inlined: true
+        inlined_as_list: false
+      other_context:
+        range: EPAttachedContext
+        required: true
+        multivalued: true
+        inlined_as_list: true
+        inlined: true
+      related_knowledge_gaps:
+        range: EPRelatedGaps
+        required: true
+        inlined: true
+  EPFit:
+    description: Exact PIGEAN/EAGGL trait-specific fit. A factor is a mechanism in this application.
+    attributes:
+      factor:
+        range: string
+        required: true
+      model:
+        range: string
+        required: true
+      phenotype:
+        range: string
+        required: true
+      trait_group:
+        range: string
+        required: true
+      trait_id:
+        range: string
+        required: true
+        pattern: ^trait:.+:.+$
+      upstream_build:
+        range: string
+  EPInteractiveObservation:
+    description: Interactive direct-edge measurements, with metric names and numeric precision preserved.
+    attributes:
+      id:
+        range: string
+        required: true
+      family:
+        range: string
+        required: true
+      relation:
+        range: string
+        required: true
+      raw_score:
+        range: double
+      normalized_score:
+        range: double
+  EPLoadingObservation:
+    description: One entity-to-mechanism relationship, optionally enriched with its BioIndex loading. Scores
+      are not causal probabilities.
+    is_a: EPKeyedRecord
+    attributes:
+      result_key:
+        range: string
+        required: true
+      factor_value:
+        range: double
+      source_ref:
+        range: EPSourceRef
+        inlined: true
+      interactive_edge_ids:
+        range: string
+        required: true
+        multivalued: true
+        inlined_as_list: true
+        minimum_cardinality: 1
+      interactive_observations:
+        range: EPInteractiveObservation
+        required: true
+        multivalued: true
+        inlined_as_list: true
+        inlined: true
+        minimum_cardinality: 1
+      reported_values_agree_within_1e_6:
+        range: boolean
+  EPLoadingCollection:
+    description: Retained relationships plus the overall typed-query outcome, distinguishing empty from missing.
+    attributes:
+      status:
+        range: EPQueryStatus
+        required: true
+      query_status:
+        range: EPQueryStatus
+        required: true
+      items:
+        range: EPLoadingObservation
+        required: true
+        multivalued: true
+        inlined: true
+        inlined_as_list: false
+  EPMechanismEvidence:
+    description: A selected EAGGL mechanism, exact fit and gene/gene-set/trait observations.
+    is_a: EPKeyedRecord
+    attributes:
+      dapper_id:
+        range: EPMechanismID
+        required: true
+      display_name:
+        range: string
+        required: true
+      fit:
+        range: EPFit
+        required: true
+        inlined: true
+      source_label:
+        range: string
+        required: true
+      source_ref:
+        range: EPSourceRef
+        required: true
+        inlined: true
+      gene_loadings:
+        range: EPLoadingCollection
+        required: true
+        inlined: true
+      gene_set_loadings:
+        range: EPLoadingCollection
+        required: true
+        inlined: true
+      trait_loadings:
+        range: EPLoadingCollection
+        required: true
+        inlined: true
+  EPReportedMetrics:
+    description: Named PIGEAN metrics preserved without a shared confidence transformation.
+    attributes:
+      combined:
+        range: double
+      log_bf:
+        range: double
+      prior:
+        range: double
+      beta:
+        range: double
+      beta_uncorrected:
+        range: double
+      rs_score:
+        range: double
+  EPTraitObservation:
+    description: A source occurrence from a factor or phenotype query. Duplicate occurrences are not independent
+      corroboration.
+    attributes:
+      reported_metrics:
+        range: EPReportedMetrics
+        required: true
+        inlined: true
+      source_ref:
+        range: EPSourceRef
+        required: true
+        inlined: true
+      result_key:
+        range: string
+      ascertained_via_mechanism:
+        range: EPFactorID
+      source_scope:
+        range: string
+        equals_string: phenotype_query
+  EPTraitEntityObservations:
+    description: All retained source occurrences for one gene or gene set within this trait.
+    is_a: EPKeyedRecord
+    attributes:
+      observations:
+        range: EPTraitObservation
+        required: true
+        multivalued: true
+        inlined_as_list: true
+        inlined: true
+        minimum_cardinality: 1
+  EPTraitAssociations:
+    description: Retained trait observations, keyed by full source entity ID.
+    attributes:
+      status:
+        range: EPQueryStatus
+        required: true
+      items:
+        range: EPTraitEntityObservations
+        required: true
+        multivalued: true
+        inlined: true
+        inlined_as_list: false
+  EPTraitEvidence:
+    description: Trait-level associations retain both factor-query and dedicated phenotype-query occurrences.
+    is_a: EPKeyedRecord
+    attributes:
+      model:
+        range: string
+        required: true
+      gene_associations:
+        range: EPTraitAssociations
+        required: true
+        inlined: true
+      gene_set_associations:
+        range: EPTraitAssociations
+        required: true
+        inlined: true
+  EPGraphNode:
+    description: Native interactive graph node metadata.
+    attributes:
+      node_id:
+        range: string
+        required: true
+      node_type:
+        range: EPNodeType
+        required: true
+      node_key:
+        range: string
+        required: true
+      label:
+        range: string
+        required: true
+      subtitle:
+        range: string
+      id:
+        range: string
+      type:
+        range: string
+  EPGraphEdge:
+    description: Captured interactive edge, retaining native identity, scores and optional upstream metadata.
+      A path does not itself establish membership or causality.
+    attributes:
+      id:
+        range: string
+        required: true
+      source:
+        range: string
+        required: true
+      target:
+        range: string
+        required: true
+      family:
+        range: string
+        required: true
+      relation:
+        range: string
+        required: true
+      raw_score:
+        range: double
+      normalized_score:
+        range: double
+      weight:
+        range: double
+      label:
+        range: string
+      path_nodes:
+        range: string
+        multivalued: true
+        inlined_as_list: true
+      extra:
+        range: EPRawObject
+        inlined: true
+  EPRetainedEdge:
+    description: Deduplicated edge with every captured source occurrence.
+    is_a: EPGraphEdge
+    attributes:
+      source_refs:
+        range: EPSourceRef
+        required: true
+        multivalued: true
+        inlined_as_list: true
+        inlined: true
+        minimum_cardinality: 1
+  EPSupportingPath:
+    description: Native interactive path metadata used to rank a candidate; not a new DAPPER evidence-item
+      class.
+    attributes:
+      anchor_id:
+        range: string
+        required: true
+      family:
+        range: string
+        required: true
+      relation:
+        range: string
+        required: true
+      raw_score:
+        range: double
+      normalized_score:
+        range: double
+      path_nodes:
+        range: string
+        required: true
+        multivalued: true
+        inlined_as_list: true
+      extra:
+        range: EPRawObject
+        inlined: true
+  EPInteractiveCandidate:
+    description: Candidate and ranking statistics as returned by the interactive API.
+    attributes:
+      candidate:
+        range: EPGraphNode
+        required: true
+        inlined: true
+      aggregate_score:
+        range: double
+        required: true
+      anchor_count:
+        range: EPCount
+      support_anchor_count:
+        range: EPCount
+      support_path_count:
+        range: EPCount
+      raw_max_score:
+        range: double
+      raw_mean_score:
+        range: double
+      edges:
+        range: EPGraphEdge
+        multivalued: true
+        inlined_as_list: true
+        inlined: true
+      supporting_paths:
+        range: EPSupportingPath
+        multivalued: true
+        inlined_as_list: true
+        inlined: true
+  EPCandidateEvidence:
+    description: Retained candidate, native record and exact source locator.
+    is_a: EPKeyedRecord
+    attributes:
+      node:
+        range: EPGraphNode
+        required: true
+        inlined: true
+      candidate:
+        range: EPInteractiveCandidate
+        required: true
+        inlined: true
+      source_ref:
+        range: EPSourceRef
+        required: true
+        inlined: true
+  EPGraph:
+    description: Bounded retained graph. Endpoint closure and duplicate edge IDs are verified by the builder.
+    attributes:
+      node_ids:
+        range: string
+        required: true
+        multivalued: true
+        inlined_as_list: true
+        minimum_cardinality: 1
+      edges:
+        range: EPRetainedEdge
+        required: true
+        multivalued: true
+        inlined_as_list: true
+        inlined: true
+  EPContextualRelationships:
+    description: Outcome of the single contextual-edges query, including deduplication counts.
+    attributes:
+      status:
+        range: EPQueryStatus
+        required: true
+      returned_edges:
+        range: EPCount
+        required: true
+      new_unique_edges:
+        range: EPCount
+        required: true
+  EPPigeanEvidence:
+    description: Mechanism and trait observations from the selected CFDE model, with a bounded graph.
+    attributes:
+      model:
+        range: string
+        required: true
+      mechanisms:
+        range: EPMechanismEvidence
+        required: true
+        multivalued: true
+        inlined: true
+        inlined_as_list: false
+        minimum_cardinality: 1
+        maximum_cardinality: 10
+      traits:
+        range: EPTraitEvidence
+        required: true
+        multivalued: true
+        inlined: true
+        inlined_as_list: false
+      graph:
+        range: EPGraph
+        required: true
+        inlined: true
+      contextual_relationships:
+        range: EPContextualRelationships
+        required: true
+        inlined: true
+      candidates:
+        range: EPCandidateEvidence
+        required: true
+        multivalued: true
+        inlined: true
+        inlined_as_list: false
+  EPGeneBinding:
+    description: Source-local gene symbol; no external gene identity mapping is inferred.
+    is_a: EPKeyedRecord
+    attributes:
+      source_symbol:
+        range: string
+        required: true
+      entity_uri:
+        range: uri
+        required: true
+      external_identity_mapping:
+        range: string
+        required: true
+  EPGeneSetBinding:
+    description: Exact imported DAPPER GeneSet identity; catalog presence does not verify membership or original
+      construction provenance.
+    is_a: EPKeyedRecord
+    attributes:
+      dapper_id:
+        range: EPGeneSetID
+        required: true
+      import_id:
+        range: string
+        required: true
+      display_name:
+        range: string
+        required: true
+      membership_status:
+        range: string
+        required: true
+      construction_provenance_status:
+        range: string
+        required: true
+      provenance_refs:
+        range: EPSourceRef
+        required: true
+        multivalued: true
+        inlined_as_list: true
+        inlined: true
+  EPEntities:
+    description: Entity-to-DAPPER or source-local identity bindings.
+    attributes:
+      genes:
+        range: EPGeneBinding
+        required: true
+        multivalued: true
+        inlined: true
+        inlined_as_list: false
+      gene_sets:
+        range: EPGeneSetBinding
+        required: true
+        multivalued: true
+        inlined: true
+        inlined_as_list: false
+  EPQueryOutcomes:
+    description: All four typed expansion outcomes and the contextual query outcome.
+    attributes:
+      gene:
+        range: EPQueryStatus
+        required: true
+      gene_set:
+        range: EPQueryStatus
+        required: true
+      trait:
+        range: EPQueryStatus
+        required: true
+      factor:
+        range: EPQueryStatus
+        required: true
+      contextual:
+        range: EPQueryStatus
+        required: true
+  EPBioIndexProgress:
+    description: Upstream byte progress; continuation null is not evidence of exhaustive coverage.
+    attributes:
+      bytes_read:
+        range: EPCount
+      bytes_total:
+        range: EPCount
+      filtered:
+        range: EPCount
+  EPBioIndexCoverage:
+    description: One bounded BioIndex source query.
+    attributes:
+      artifact_id:
+        range: string
+        required: true
+      returned_rows:
+        range: EPCount
+        required: true
+      limit:
+        range: EPPositiveCount
+      continuation_present:
+        range: boolean
+        required: true
+      progress:
+        range: EPBioIndexProgress
+        inlined: true
+      exhaustive:
+        range: boolean
+        required: true
+  EPCoverage:
+    description: Captured/retained graph counts and explicit omissions. No common upstream build or exhaustive
+      retrieval is assumed.
+    attributes:
+      queries:
+        range: EPQueryOutcomes
+        required: true
+        inlined: true
+      bioindex_queries:
+        range: EPBioIndexCoverage
+        required: true
+        multivalued: true
+        inlined_as_list: true
+        inlined: true
+      captured_nodes:
+        range: EPCount
+        required: true
+      captured_unique_edges:
+        range: EPCount
+        required: true
+      retained_nodes:
+        range: EPCount
+        required: true
+      retained_edges:
+        range: EPCount
+        required: true
+      omitted_node_ids:
+        range: string
+        required: true
+        multivalued: true
+        inlined_as_list: true
+      omitted_edge_ids:
+        range: string
+        required: true
+        multivalued: true
+        inlined_as_list: true
+      ranking:
+        range: string
+        required: true
+      upstream_total:
+        range: EPCount
+      same_upstream_build_verified:
+        range: boolean
+        required: true
+  EPBuildPolicy:
+    description: Deterministic retention limits. A byte limit does not replace the agent-model tokenizer budget.
+    attributes:
+      max_nodes:
+        range: EPPositiveCount
+        required: true
+      max_edges:
+        range: EPPositiveCount
+        required: true
+      max_package_bytes:
+        range: EPPositiveCount
+        required: true
+      max_anchors:
+        range: EPPositiveCount
+        required: true
+      max_dismech_mechanisms:
+        range: EPPositiveCount
+        required: true
+      max_candidates_per_target:
+        range: EPPositiveCount
+        required: true
+      retain_node_ids:
+        range: string
+        multivalued: true
+        inlined_as_list: true
+      allow_incomplete_capture:
+        range: boolean
+        required: true
+  EPInstruction:
+    description: Exact frozen authoring instruction artifact.
+    attributes:
+      artifact_id:
+        range: string
+        required: true
+      path:
+        range: string
+        required: true
+      sha256:
+        range: EPSha256
+        required: true
+  EPAuthoring:
+    description: Frozen skill and scientific contracts, with the exact selected question required for each
+      authored account.
+    attributes:
+      assembly_builder:
+        range: EPBuilderPin
+        required: true
+        inlined: true
+      skill:
+        range: EPInstruction
+        required: true
+        inlined: true
+      contract:
+        range: EPInstruction
+        required: true
+        inlined: true
+      references:
+        range: EPInstruction
+        required: true
+        multivalued: true
+        inlined_as_list: true
+        inlined: true
+      required_question:
+        range: EPKnowledgeGapID
+        required: true
+      max_accounts:
+        range: EPPositiveCount
+        required: true
+  EPExternalEvidence:
+    description: Initial enrichment configuration. Queries and assertions are added to a later append-only
+      ledger, never this frozen package.
+    attributes:
+      status:
+        range: EPNotQueried
+        required: true
+      selected_graphs:
+        range: string
+        required: true
+        multivalued: true
+        inlined_as_list: true
+      ledger:
+        range: EPRawObject
+        required: true
+        multivalued: true
+        inlined_as_list: true
+        inlined: true
+        maximum_cardinality: 0
+      assertions:
+        range: EPRawObject
+        required: true
+        multivalued: true
+        inlined_as_list: true
+        inlined: true
+        maximum_cardinality: 0
+  EPReadiness:
+    description: Capture validity and remaining worker checks; capture completeness is not dispatch authorization.
+    attributes:
+      input_capture_complete:
+        range: boolean
+        required: true
+      capture_blockers:
+        range: string
+        required: true
+        multivalued: true
+        inlined_as_list: true
+      agent_dispatch_validated:
+        range: boolean
+        required: true
+      remaining_checks:
+        range: string
+        required: true
+        multivalued: true
+        inlined_as_list: true
+  EPDapperContext:
+    description: Trusted hydrated DAPPER objects. Imported classes are reused from the pinned snapshot, not
+      redefined. Identity digests and dependency closure require the DAPPER validator.
+    attributes:
+      prefixes:
+        range: EPPrefix
+        required: true
+        multivalued: true
+        inlined: true
+        inlined_as_list: false
+      files:
+        range: File
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+      c2m2_files:
+        range: C2M2File
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+      activities:
+        range: Activity
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+      gene_sets:
+        range: GeneSet
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+      gene_set_collections:
+        range: GeneSetCollection
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+      gene_programs:
+        range: GeneProgram
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+      cell_states:
+        range: CellState
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+      datasets:
+        range: Dataset
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+      sets:
+        range: Set
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+      mechanistic_models:
+        range: MechanisticModel
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+      propositions:
+        range: Proposition
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+      claims:
+        range: Claim
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+      scientific_accounts:
+        range: ScientificAccount
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+      questions:
+        range: Question
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+      knowledge_gaps:
+        range: KnowledgeGap
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+      paragraphs:
+        range: Paragraph
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+      claim_scores:
+        range: ClaimScore
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+      causal_steps:
+        range: CausalStep
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+      mechanisms:
+        range: Mechanism
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+      evidence_items:
+        range: EvidenceItem
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+      nanopublications:
+        range: Nanopublication
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+      nanopub_assertions:
+        range: NanopubAssertion
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+      nanopub_provenances:
+        range: NanopubProvenance
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+      nanopub_publication_infos:
+        range: NanopubPublicationInfo
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+      nanopub_signatures:
+        range: NanopubSignature
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+      agentic_workspaces:
+        range: AgenticWorkspace
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+      persons:
+        range: Person
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+      organizations:
+        range: Organization
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+      awards:
+        range: Award
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+      publications:
+        range: Publication
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+      licenses:
+        range: License
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+      lineage_steps:
+        range: LineageStep
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+      recommended_citations:
+        range: RecommendedCitation
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+      drs_objects:
+        range: DrsObject
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+      data_use_terms:
+        range: DataUseTerm
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+      ro_crate_packages:
+        range: RoCratePackage
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+      bio_compute_objects:
+        range: BioComputeObject
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+      mirror_provenances:
+        range: MirrorProvenance
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+  EvidencePackage:
+    description: Frozen application input for the scientific-account agent. Stable application sections are
+      closed; only raw source boundaries are extensible.
+    tree_root: true
+    attributes:
+      package_version:
+        range: string
+        required: true
+        equals_string: reveal.evidence-package/0.2-draft
+      prefixes:
+        range: EPPrefix
+        required: true
+        multivalued: true
+        inlined: true
+        inlined_as_list: false
+      identifier_policy:
+        range: EPIdentifierPolicy
+        required: true
+        inlined: true
+      builder:
+        range: EPBuilderPin
+        required: true
+        inlined: true
+      dapper_pin:
+        range: EPDapperPin
+        required: true
+        inlined: true
+      selection:
+        range: EPSelection
+        required: true
+        inlined: true
+      dismech:
+        range: EPDismechContext
+        required: true
+        inlined: true
+      pigean:
+        range: EPPigeanEvidence
+        required: true
+        inlined: true
+      entities:
+        range: EPEntities
+        required: true
+        inlined: true
+      dapper_context:
+        range: EPDapperContext
+        required: true
+        inlined: true
+      source_artifacts:
+        range: EPSourceArtifact
+        required: true
+        multivalued: true
+        inlined: true
+        inlined_as_list: false
+        minimum_cardinality: 1
+      coverage:
+        range: EPCoverage
+        required: true
+        inlined: true
+      policy:
+        range: EPBuildPolicy
+        required: true
+        inlined: true
+      external_evidence:
+        range: EPExternalEvidence
+        required: true
+        inlined: true
+      authoring:
+        range: EPAuthoring
+        required: true
+        inlined: true
+      readiness:
+        range: EPReadiness
+        required: true
+        inlined: true

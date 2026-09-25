@@ -1,0 +1,11 @@
+{
+  "openapi_sha256": "477343e0f267e0b88a93eb31baef8d2b387de9fb142c102c43ee50171c99326f",
+  "schema_sha256": "219769c9874a3c0a7d6972360d5847a8b344e412a8b9f4e2648f059682440345",
+  "dapper_snapshot_sha256": "801fb347c54c036c15345d132d302171fc6cd74c1f75a03a5c59c937f5ed7d11",
+  "paths": 26,
+  "operations": 30,
+  "component_schemas": 337,
+  "request_exchanges": 41,
+  "version": "0.2.0-draft",
+  "examples_are_contract_fixtures": true
+}

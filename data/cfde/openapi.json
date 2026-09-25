@@ -1,0 +1,1133 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "BioIndex",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/bio/indexes": {
+      "get": {
+        "tags": [
+          "bio"
+        ],
+        "summary": "Api List Indexes",
+        "description": "Return all queryable indexes. This also refreshes the internal\ncache of the table so the server doesn't need to be bounced when\nthe table is updated (very rare!).",
+        "operationId": "api_list_indexes_api_bio_indexes_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/bio/match/{index}": {
+      "get": {
+        "tags": [
+          "bio"
+        ],
+        "summary": "Api Match",
+        "description": "Return all the unique keys for a value-indexed table.",
+        "operationId": "api_match_api_bio_match__index__get",
+        "parameters": [
+          {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Index"
+            },
+            "name": "index",
+            "in": "path"
+          },
+          {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Q"
+            },
+            "name": "q",
+            "in": "query"
+          },
+          {
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "title": "Limit"
+            },
+            "name": "limit",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/bio/count/{index}": {
+      "get": {
+        "tags": [
+          "bio"
+        ],
+        "summary": "Api Count Index",
+        "description": "Query the database and estimate how many records will be returned.",
+        "operationId": "api_count_index_api_bio_count__index__get",
+        "parameters": [
+          {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Index"
+            },
+            "name": "index",
+            "in": "path"
+          },
+          {
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Q"
+            },
+            "name": "q",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/bio/keys/{index}/{arity}": {
+      "get": {
+        "tags": [
+          "bio"
+        ],
+        "summary": "Api Keys Index",
+        "description": "Query the database and return all non-locus keys.",
+        "operationId": "api_keys_index_api_bio_keys__index___arity__get",
+        "parameters": [
+          {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Index"
+            },
+            "name": "index",
+            "in": "path"
+          },
+          {
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Arity"
+            },
+            "name": "arity",
+            "in": "path"
+          },
+          {
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Columns"
+            },
+            "name": "columns",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/bio/varIdLookup/{rsid}": {
+      "get": {
+        "tags": [
+          "bio"
+        ],
+        "summary": "Api Lookup Variant For Rs Id",
+        "description": "Lookup the variant ID for a given rsID.",
+        "operationId": "api_lookup_variant_for_rs_id_api_bio_varIdLookup__rsid__get",
+        "parameters": [
+          {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Rsid"
+            },
+            "name": "rsid",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/bio/query/{index}": {
+      "get": {
+        "tags": [
+          "bio"
+        ],
+        "summary": "Api Query Index",
+        "description": "Query the database for records matching the query parameter and\nread the records from s3.",
+        "operationId": "api_query_index_api_bio_query__index__get",
+        "parameters": [
+          {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Index"
+            },
+            "name": "index",
+            "in": "path"
+          },
+          {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Q"
+            },
+            "name": "q",
+            "in": "query"
+          },
+          {
+            "required": false,
+            "schema": {
+              "title": "Fmt",
+              "default": "row"
+            },
+            "name": "fmt",
+            "in": "query"
+          },
+          {
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "title": "Limit"
+            },
+            "name": "limit",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "head": {
+        "tags": [
+          "bio"
+        ],
+        "summary": "Api Test Index",
+        "description": "Query the database for records matching the query parameter. Don't\nread the records from S3, but instead set the Content-Length to the\ntotal number of bytes what would be read. If the total number of\nbytes read exceeds a pre-configured server limit, then a 413\nresponse will be returned.",
+        "operationId": "api_test_index_api_bio_query__index__head",
+        "parameters": [
+          {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Index"
+            },
+            "name": "index",
+            "in": "path"
+          },
+          {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Q"
+            },
+            "name": "q",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/bio/schema": {
+      "get": {
+        "tags": [
+          "bio"
+        ],
+        "summary": "Api Schema",
+        "description": "Returns the GraphQL schema definition (SDL).",
+        "operationId": "api_schema_api_bio_schema_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/bio/query": {
+      "post": {
+        "tags": [
+          "bio"
+        ],
+        "summary": "Api Query Gql",
+        "description": "Treat the body of the POST as a GraphQL query to be resolved.",
+        "operationId": "api_query_gql_api_bio_query_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/bio/cont": {
+      "get": {
+        "tags": [
+          "bio"
+        ],
+        "summary": "Api Cont",
+        "description": "Decode a signed continuation token and resume the paginated query.",
+        "operationId": "api_cont_api_bio_cont_get",
+        "parameters": [
+          {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Token"
+            },
+            "name": "token",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/portal/groups": {
+      "get": {
+        "tags": [
+          "portal"
+        ],
+        "summary": "Api Portal Groups",
+        "description": "Returns the list of portals available.",
+        "operationId": "api_portal_groups_api_portal_groups_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/portal/restrictions": {
+      "get": {
+        "tags": [
+          "portal"
+        ],
+        "summary": "Api Portal Restrictions",
+        "description": "Returns all restrictions for the current user.",
+        "operationId": "api_portal_restrictions_api_portal_restrictions_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/portal/phenotypes": {
+      "get": {
+        "tags": [
+          "portal"
+        ],
+        "summary": "Api Portal Phenotypes",
+        "description": "Returns all available phenotypes or just those for a given\ndisease group.",
+        "operationId": "api_portal_phenotypes_api_portal_phenotypes_get",
+        "parameters": [
+          {
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Q"
+            },
+            "name": "q",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/portal/complications": {
+      "get": {
+        "tags": [
+          "portal"
+        ],
+        "summary": "Api Portal Complications",
+        "description": "Returns all available complication phenotype pairs.",
+        "operationId": "api_portal_complications_api_portal_complications_get",
+        "parameters": [
+          {
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Q"
+            },
+            "name": "q",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/portal/datasets": {
+      "get": {
+        "tags": [
+          "portal"
+        ],
+        "summary": "Api Portal Datasets",
+        "description": "Returns all available datasets for a given disease group.",
+        "operationId": "api_portal_datasets_api_portal_datasets_get",
+        "parameters": [
+          {
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Q"
+            },
+            "name": "q",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/portal/documentation": {
+      "get": {
+        "tags": [
+          "portal"
+        ],
+        "summary": "Api Portal Documentation",
+        "description": "Returns all available phenotypes or just those for a given\nportal group.",
+        "operationId": "api_portal_documentation_api_portal_documentation_get",
+        "parameters": [
+          {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Q"
+            },
+            "name": "q",
+            "in": "query"
+          },
+          {
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Group"
+            },
+            "name": "group",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/portal/documentations": {
+      "get": {
+        "tags": [
+          "portal"
+        ],
+        "summary": "Api Portal Documentations",
+        "operationId": "api_portal_documentations_api_portal_documentations_get",
+        "parameters": [
+          {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Q"
+            },
+            "name": "q",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/portal/systems": {
+      "get": {
+        "tags": [
+          "portal"
+        ],
+        "summary": "Api Portal Systems",
+        "description": "Returns system-disease-phenotype for all systems.",
+        "operationId": "api_portal_systems_api_portal_systems_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/portal/links": {
+      "get": {
+        "tags": [
+          "portal"
+        ],
+        "summary": "Api Portal Links",
+        "description": "Returns one - or all - redirect links.",
+        "operationId": "api_portal_links_api_portal_links_get",
+        "parameters": [
+          {
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Q"
+            },
+            "name": "q",
+            "in": "query"
+          },
+          {
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Group"
+            },
+            "name": "group",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/raw/plot/dataset/{dataset}/{file}": {
+      "get": {
+        "tags": [
+          "raw"
+        ],
+        "summary": "Api Raw Plot Dataset",
+        "description": "Returns a raw, image plot for a dataset.",
+        "operationId": "api_raw_plot_dataset_api_raw_plot_dataset__dataset___file__get",
+        "parameters": [
+          {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Dataset"
+            },
+            "name": "dataset",
+            "in": "path"
+          },
+          {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "File"
+            },
+            "name": "file",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/raw/plot/phenotype/{phenotype}/{file}": {
+      "get": {
+        "tags": [
+          "raw"
+        ],
+        "summary": "Api Raw Plot Phenotype",
+        "description": "Returns a raw, image plot for the bottom-line analysis of a phenotype.",
+        "operationId": "api_raw_plot_phenotype_api_raw_plot_phenotype__phenotype___file__get",
+        "parameters": [
+          {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Phenotype"
+            },
+            "name": "phenotype",
+            "in": "path"
+          },
+          {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "File"
+            },
+            "name": "file",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/raw/plot/phenotype/{phenotype}/{ancestry}/{file}": {
+      "get": {
+        "tags": [
+          "raw"
+        ],
+        "summary": "Api Raw Plot Phenotype Ancestry",
+        "description": "Returns a raw, image plot for the bottom-line analysis of a phenotype.",
+        "operationId": "api_raw_plot_phenotype_ancestry_api_raw_plot_phenotype__phenotype___ancestry___file__get",
+        "parameters": [
+          {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Phenotype"
+            },
+            "name": "phenotype",
+            "in": "path"
+          },
+          {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Ancestry"
+            },
+            "name": "ancestry",
+            "in": "path"
+          },
+          {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "File"
+            },
+            "name": "file",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/raw/file/{file}": {
+      "get": {
+        "tags": [
+          "raw"
+        ],
+        "summary": "Api Raw File",
+        "description": "Returns a raw file, revalidated against its S3 ETag.",
+        "operationId": "api_raw_file_api_raw_file__file__get",
+        "parameters": [
+          {
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "File"
+            },
+            "name": "file",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/enrichr/enrichr": {
+      "post": {
+        "tags": [
+          "enrichr"
+        ],
+        "summary": "Api Enrichr",
+        "description": "Proxy a gene list to the public Enrichr service and return the\nenrichment results for the requested gene-set library.",
+        "operationId": "api_enrichr_api_enrichr_enrichr_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnrichrRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Api Health",
+        "description": "Liveness. The process answering at all is the whole check.",
+        "operationId": "api_health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ready": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Api Ready",
+        "description": "Readiness. Round-trip a query against each portal's database - which\nconnecting alone does not prove - and report per portal. A single\nunreachable portal leaves the task in rotation, as the others are\nstill servable, so this only fails when they all do.",
+        "operationId": "api_ready_ready_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/": {
+      "get": {
+        "summary": "Index",
+        "description": "SPA demonstration page.\n\nPortalResolveMiddleware rewrites /<portal>/ to /, so this one route serves\nevery portal root. The bare server root resolves no portal, and the page's\nrelative API calls would have nothing to query, so it stays a 404.",
+        "operationId": "index__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "EnrichrRequest": {
+        "properties": {
+          "gene_set_library": {
+            "type": "string",
+            "title": "Gene Set Library",
+            "default": "KEGG_2015"
+          },
+          "gene_list": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Gene List"
+          },
+          "gene_list_desc": {
+            "type": "string",
+            "title": "Gene List Desc"
+          }
+        },
+        "type": "object",
+        "required": [
+          "gene_list",
+          "gene_list_desc"
+        ],
+        "title": "EnrichrRequest"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

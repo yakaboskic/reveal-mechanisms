@@ -1,0 +1,25 @@
+{
+  "reviewed_date": "2026-09-24",
+  "viewer": "index.html",
+  "viewer_sha256": "cc00782bc7957d4ee50fa3d5fc334c61587487ca64aa80e17fd2f78cf2c19472",
+  "localhost_render": "passed",
+  "workflow_deep_links": "passed",
+  "paired_paragraph_job_example": "passed",
+  "console_errors_observed": [],
+  "standalone_external_scripts_and_styles": [],
+  "direct_file_browser_test": "blocked by browser URL policy; not attempted through another browser",
+  "backend_requests_executed": false,
+  "flow": {
+    "file": "flow.html",
+    "sha256": "36c80637895e2a9868b4cb7566b010fa54cb2ca31e0c0c5c3ebca1f40f260b76",
+    "checks": [
+      "diagram rendering and arrows",
+      "step selection opens paired examples",
+      "analysis submission and missing-anchor response",
+      "paragraph request and queued response",
+      "back-to-diagram control",
+      "API reference to flow navigation"
+    ],
+    "console_errors_observed": []
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "prisma_models": 20,
+  "live_tables": 11,
+  "defined_not_applied": [
+    "dismech_causal_edges",
+    "dismech_discussions",
+    "dismech_documents",
+    "dismech_gap_attachments",
+    "dismech_hypotheses",
+    "dismech_imports",
+    "dismech_mechanisms",
+    "dismech_ontology_terms",
+    "dismech_vocabulary"
+  ],
+  "unmapped_live_tables": [],
+  "applied_column_mismatches": [],
+  "check_scope": "Applied table/column names, nullability, native SQL types, declared compound keys/indexes and foreign-key columns/targets compared with captured DDL; Prisma validate passed. SQL remains authority for collations, CHECK, on-update timestamps and implicit index names.",
+  "prisma_validation": {
+    "passed": true,
+    "prisma": "7.10.0",
+    "node": "24.19.0",
+    "command": "node schema/prisma/node_modules/prisma/build/index.js validate --config schema/prisma/prisma.config.ts"
+  },
+  "applied_native_type_and_declared_constraint_mismatches": []
+}

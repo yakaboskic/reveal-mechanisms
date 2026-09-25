@@ -1,0 +1,59 @@
+{
+  "openapi": "3.1.1",
+  "openapi_sha256": "477343e0f267e0b88a93eb31baef8d2b387de9fb142c102c43ee50171c99326f",
+  "paths": 26,
+  "operations": 30,
+  "local_refs_resolved": 587,
+  "request_body_examples_validated": 7,
+  "response_examples_validated": 169,
+  "parameter_examples_validated": 77,
+  "request_exchanges_validated": 41,
+  "dapper_documents": {
+    "scientific-account.dapper.json": {
+      "nodes": 52,
+      "profile": "scientific-account",
+      "errors": 0,
+      "warnings": [
+        {
+          "check": "activity-inputs",
+          "message": "Activity 'CFDE GeneSet catalog encoding' declares no inputs"
+        }
+      ]
+    },
+    "paragraph.dapper.json": {
+      "nodes": 54,
+      "profile": "reveal-paragraph",
+      "errors": 0,
+      "warnings": [
+        {
+          "check": "activity-inputs",
+          "message": "Activity 'CFDE GeneSet catalog encoding' declares no inputs"
+        }
+      ]
+    },
+    "knowledge-gap.dapper.json": {
+      "nodes": 1,
+      "identity_and_scientific_content": "passed",
+      "profile": "standalone inquiry; no terminal profile exists upstream"
+    }
+  },
+  "citation_records_validated": 13,
+  "negative_cases_rejected": [
+    "client-selected draft owner",
+    "job kind mismatch",
+    "missing optimistic version",
+    "invented DAPPER claim field",
+    "unminted account reference",
+    "zero citation metadata revision",
+    "probability above one",
+    "job result kind mismatch",
+    "successful job without a result",
+    "free-text inquiry in composer",
+    "client-edited DisMech context",
+    "source gap missing source identity"
+  ],
+  "cfde_artifact_checksum": "passed",
+  "existing_geneset_payload_and_identity_preserved": "dapper:GeneSet.I1UZhVhKU-YDerPLIxtnZOGlTXNAlrgD",
+  "no_live_backend_or_agent_executed": true,
+  "passed": true
+}

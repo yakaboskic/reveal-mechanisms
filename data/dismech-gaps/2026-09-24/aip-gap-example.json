@@ -1,0 +1,95 @@
+{
+  "gap": {
+    "id": "dismech:disorders/AIP-related_pituitary_adenoma_predisposition#discussion:gap_aip_ahr_branch_tumor_growth_causality",
+    "discussion_id": "gap_aip_ahr_branch_tumor_growth_causality",
+    "source_file": "kb/disorders/AIP-related_pituitary_adenoma_predisposition.yaml",
+    "source_pointer": "/discussions/0",
+    "document_id": "dismech:disorders/AIP-related_pituitary_adenoma_predisposition",
+    "document_name": "AIP-related pituitary adenoma predisposition",
+    "disease_term": {
+      "preferred_term": "AIP-related pituitary adenoma predisposition",
+      "term": {
+        "id": "MONDO:1060231",
+        "label": "AIP-related pituitary adenoma predisposition"
+      }
+    },
+    "source_kind": "disorders",
+    "kind": "KNOWLEDGE_GAP",
+    "status": "OPEN",
+    "is_gap": true,
+    "has_stable_source_id": true,
+    "raw": {
+      "discussion_id": "gap_aip_ahr_branch_tumor_growth_causality",
+      "prompt": "Does altered AIP-AHR transcriptional signaling directly promote somatotroph tumor growth or invasiveness in human AIP-mutant pituitary adenomas, beyond the demonstrated cell-model effects on AHR target genes and ligand-dependent growth hormone secretion?",
+      "kind": "KNOWLEDGE_GAP",
+      "status": "OPEN",
+      "attaches_to": [
+        "pathophysiology#Reduced AIP-AHR co-chaperone binding function",
+        "pathophysiology#Dysregulated AHR target-gene transcriptional response",
+        "pathophysiology#Altered ligand-dependent growth hormone secretion",
+        "phenotypes#Growth hormone excess"
+      ],
+      "rationale": "The AIP-AHR branch now has a supported immediate outcome: altered AHR target-gene transcription and altered kynurenine-dependent GH secretion in GH3 cells. What remains unresolved is whether that branch is a causal driver of the human macroadenoma growth and invasiveness phenotype, rather than a measurable molecular/endocrine readout of AIP loss.",
+      "evidence": [
+        {
+          "reference": "PMID:27080473",
+          "reference_title": "AIP mutations impair AhR signaling in pituitary adenoma patients fibroblasts and in GH3 cells.",
+          "supports": "SUPPORT",
+          "evidence_source": "IN_VITRO",
+          "snippet": "Germline mutations in the aryl hydrocarbon receptor-interacting protein (AIP) gene predispose humans to pituitary adenomas through unknown molecular mechanisms.",
+          "explanation": "This frames the AIP-AHR pathway as a mechanistic hypothesis while leaving the causal bridge to human pituitary tumor growth unresolved."
+        }
+      ]
+    }
+  },
+  "attachments": [
+    {
+      "gap_id": "dismech:disorders/AIP-related_pituitary_adenoma_predisposition#discussion:gap_aip_ahr_branch_tumor_growth_causality",
+      "attachment_index": 0,
+      "source_reference": "pathophysiology#Reduced AIP-AHR co-chaperone binding function",
+      "target_document_id": "dismech:disorders/AIP-related_pituitary_adenoma_predisposition",
+      "target_source_file": "kb/disorders/AIP-related_pituitary_adenoma_predisposition.yaml",
+      "target_kind": "pathophysiology",
+      "resolution": "resolved",
+      "target_pointer": "/pathophysiology/3",
+      "target_id": "dismech:disorders/AIP-related_pituitary_adenoma_predisposition#/pathophysiology/3",
+      "target_label": "Reduced AIP-AHR co-chaperone binding function"
+    },
+    {
+      "gap_id": "dismech:disorders/AIP-related_pituitary_adenoma_predisposition#discussion:gap_aip_ahr_branch_tumor_growth_causality",
+      "attachment_index": 1,
+      "source_reference": "pathophysiology#Dysregulated AHR target-gene transcriptional response",
+      "target_document_id": "dismech:disorders/AIP-related_pituitary_adenoma_predisposition",
+      "target_source_file": "kb/disorders/AIP-related_pituitary_adenoma_predisposition.yaml",
+      "target_kind": "pathophysiology",
+      "resolution": "resolved",
+      "target_pointer": "/pathophysiology/4",
+      "target_id": "dismech:disorders/AIP-related_pituitary_adenoma_predisposition#/pathophysiology/4",
+      "target_label": "Dysregulated AHR target-gene transcriptional response"
+    },
+    {
+      "gap_id": "dismech:disorders/AIP-related_pituitary_adenoma_predisposition#discussion:gap_aip_ahr_branch_tumor_growth_causality",
+      "attachment_index": 2,
+      "source_reference": "pathophysiology#Altered ligand-dependent growth hormone secretion",
+      "target_document_id": "dismech:disorders/AIP-related_pituitary_adenoma_predisposition",
+      "target_source_file": "kb/disorders/AIP-related_pituitary_adenoma_predisposition.yaml",
+      "target_kind": "pathophysiology",
+      "resolution": "resolved",
+      "target_pointer": "/pathophysiology/5",
+      "target_id": "dismech:disorders/AIP-related_pituitary_adenoma_predisposition#/pathophysiology/5",
+      "target_label": "Altered ligand-dependent growth hormone secretion"
+    },
+    {
+      "gap_id": "dismech:disorders/AIP-related_pituitary_adenoma_predisposition#discussion:gap_aip_ahr_branch_tumor_growth_causality",
+      "attachment_index": 3,
+      "source_reference": "phenotypes#Growth hormone excess",
+      "target_document_id": "dismech:disorders/AIP-related_pituitary_adenoma_predisposition",
+      "target_source_file": "kb/disorders/AIP-related_pituitary_adenoma_predisposition.yaml",
+      "target_kind": "phenotypes",
+      "resolution": "resolved",
+      "target_pointer": "/phenotypes/2",
+      "target_id": "dismech:disorders/AIP-related_pituitary_adenoma_predisposition#/phenotypes/2",
+      "target_label": "Growth hormone excess"
+    }
+  ]
+}

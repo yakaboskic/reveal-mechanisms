@@ -1,0 +1,373 @@
+{
+  "documents": [
+    {
+      "path": "README.md",
+      "title": "REVEAL Mechanisms",
+      "lines": 63,
+      "sha256": "03fa7dc1b830ff0219d329f57fceb040cded61ba7a5244e2c8a027bb96685832",
+      "historical": false
+    },
+    {
+      "path": "docs/agent-evidence-integration.md",
+      "title": "Claude Code, Upstash Box, and Proto-OKN evidence",
+      "lines": 79,
+      "sha256": "a0deaeca666a1caf08fe08a6799ae502d8f474a380bda4b673079ec7e24e7c00",
+      "historical": false
+    },
+    {
+      "path": "docs/agent-output-contract.md",
+      "title": "Research-agent output and worker acceptance boundary",
+      "lines": 40,
+      "sha256": "f9f2a0c7c15c5b9b3bc59313e2271f592016ee84bf0e7d14c218c17d3ddde17f",
+      "historical": false
+    },
+    {
+      "path": "docs/api-discovery.md",
+      "title": "CFDE BioIndex \u2014 verified query recipes",
+      "lines": 136,
+      "sha256": "8e774a1aea9c912a345488a737d6d6bd97637587dfb96ca222264f82cbcb2117",
+      "historical": false
+    },
+    {
+      "path": "docs/authentication.md",
+      "title": "Login and researcher identity",
+      "lines": 158,
+      "sha256": "e7ae079108bd67e4fe32c0d8349dcaecd4d8707b71c3cd35e7da7ca70d489ce4",
+      "historical": false
+    },
+    {
+      "path": "docs/citation-standard.md",
+      "title": "DAPPER object citations \u2014 REVEAL profile v1",
+      "lines": 157,
+      "sha256": "472f4a694f17fde94dd2d491add90e936d24ad6a80507250c9fb7c11c583a2a0",
+      "historical": false
+    },
+    {
+      "path": "docs/dapper-integration.md",
+      "title": "REVEAL integration with current DAPPER",
+      "lines": 149,
+      "sha256": "1f62e69f7a3d552c92c5399be8135a9c890a118bd6fc09925a041a297fe20d6d",
+      "historical": false
+    },
+    {
+      "path": "docs/data-inventory.md",
+      "title": "Extracted data inventory",
+      "lines": 122,
+      "sha256": "2cf76997af65564fad09f45bce654fe9b150e262a609cbf23621cc5f6c609523",
+      "historical": false
+    },
+    {
+      "path": "docs/database-readiness.md",
+      "title": "Aurora MySQL readiness and persistence",
+      "lines": 120,
+      "sha256": "55f023e74b23daf30e4c7169511baee0a42dc766c4217d75638bb23fd4c18709",
+      "historical": false
+    },
+    {
+      "path": "docs/design-package-audit.md",
+      "title": "Design package audit and document map",
+      "lines": 119,
+      "sha256": "01c989bfd43a60b35c7a8924ac114072dc2b978362a86b6bf5bf694049b57d7b",
+      "historical": false
+    },
+    {
+      "path": "docs/design-plan-2026-09-15.md",
+      "title": "CFDE REVEAL Mechanisms \u2014 design plan",
+      "lines": 356,
+      "sha256": "16d203007e0fb297fecbd1442f53fce5ab9fb89f722335d6a9f6d1cb04a0098b",
+      "historical": true
+    },
+    {
+      "path": "docs/design-plan-2026-09-24-v2.md",
+      "title": "REVEAL Mechanisms \u2014 revised design plan",
+      "lines": 362,
+      "sha256": "5fb7f91dbdfacc60130ebb08403b9d98663802370efcac0eb056c6df9f01cc1b",
+      "historical": true
+    },
+    {
+      "path": "docs/design-plan-2026-09-24-v3.md",
+      "title": "REVEAL Mechanisms \u2014 revised design plan",
+      "lines": 266,
+      "sha256": "9875b38c942920f1e946fdbed48a30c33811a7ae0f2e48b068517081287057ec",
+      "historical": true
+    },
+    {
+      "path": "docs/design-plan-2026-09-24-v4.md",
+      "title": "REVEAL Mechanisms \u2014 revised design plan",
+      "lines": 282,
+      "sha256": "632bc4ef082e648c83af02ab909976074dfa2c45411365d28747685d986a8859",
+      "historical": true
+    },
+    {
+      "path": "docs/design-plan-2026-09-24-v5.md",
+      "title": "REVEAL Mechanisms \u2014 revised design plan",
+      "lines": 298,
+      "sha256": "654f4435299a4389d9bba780fdbf26fe6c7e000fd661b5529f5dc9680fa38d87",
+      "historical": true
+    },
+    {
+      "path": "docs/design-plan-2026-09-24-v6.md",
+      "title": "REVEAL Mechanisms \u2014 revised design plan",
+      "lines": 323,
+      "sha256": "c0d3765cfda87032e4b307265f10acbb9fe51a369f88de4bf6ad132f1b1efb88",
+      "historical": true
+    },
+    {
+      "path": "docs/design-plan-2026-09-24-v7.md",
+      "title": "REVEAL Mechanisms \u2014 revised design plan",
+      "lines": 339,
+      "sha256": "08f615979fcb4619df95401aa1343fda0ffe823d7e50fe27bd8a717f6c515cfa",
+      "historical": true
+    },
+    {
+      "path": "docs/design-plan-2026-09-24-v8.md",
+      "title": "REVEAL Mechanisms \u2014 revised design plan",
+      "lines": 355,
+      "sha256": "ff0e8bc85a1c6cb50e694fe281d3c4e06880d9f895bf5a907a5e1bb06e9d2129",
+      "historical": true
+    },
+    {
+      "path": "docs/design-plan-2026-09-24-v9.md",
+      "title": "REVEAL Mechanisms \u2014 revised design plan",
+      "lines": 361,
+      "sha256": "50f832e485e3fe3e3e9236e552aa68b9b5ab9ca0ae483850227b7bec9353463c",
+      "historical": true
+    },
+    {
+      "path": "docs/design-plan-2026-09-25-v10.md",
+      "title": "REVEAL Mechanisms \u2014 revised design plan",
+      "lines": 374,
+      "sha256": "f149f220ae07b67ff10a72a96a7a1d99fbfd53c2d6d44dc3ffbdddd51146d322",
+      "historical": true
+    },
+    {
+      "path": "docs/design-plan-2026-09-25-v11.md",
+      "title": "REVEAL Mechanisms \u2014 revised design plan",
+      "lines": 420,
+      "sha256": "7709ba0cc52e7ddbe869633d57d2c4bc66ae374097f6732361e3b7f9d8647659",
+      "historical": true
+    },
+    {
+      "path": "docs/design-plan.md",
+      "title": "REVEAL Mechanisms \u2014 consolidated design plan",
+      "lines": 193,
+      "sha256": "ce5dd66ef1440890f8c25bc026022ac4dbf64ff3283c50d992673daac348c75e",
+      "historical": false
+    },
+    {
+      "path": "docs/dismech-import.md",
+      "title": "DisMech database import",
+      "lines": 147,
+      "sha256": "d7fc7433dda6593a01e945bc18e0a76e2a3d4b7a65bdbc322d06868aa64b1757",
+      "historical": false
+    },
+    {
+      "path": "docs/eaggl-factor-import.md",
+      "title": "EAGGL bundle \u2192 factor database and name embeddings",
+      "lines": 144,
+      "sha256": "d898b2a1e9240e0def1d6c401a2b87fcaf54a12f526ed6d77830a2af33313ef4",
+      "historical": false
+    },
+    {
+      "path": "docs/evidence-package-builder.md",
+      "title": "Collect and build an evidence package",
+      "lines": 123,
+      "sha256": "8d45b6b9407b2c38c285c33bca3ea1f37a6c889248c52e2815325f77d41cf6fb",
+      "historical": false
+    },
+    {
+      "path": "docs/evidence-package.md",
+      "title": "Evidence package for ScientificAccount generation",
+      "lines": 303,
+      "sha256": "5df39c86f998fa398bf75751692983e72f3b06c9abd15834f114b031a92cd2d9",
+      "historical": false
+    },
+    {
+      "path": "docs/gateway-contract.md",
+      "title": "Authentication gateway contract",
+      "lines": 48,
+      "sha256": "1981381c6468c49fc55d73401046acc50408b40e06f3db5ed35465e0f910d0d5",
+      "historical": false
+    },
+    {
+      "path": "docs/geneset-import.md",
+      "title": "CFDE \u2192 DAPPER GeneSet inventory",
+      "lines": 106,
+      "sha256": "066675f3622537e042f983930354006f75f3a292b0b5049e3d060e388bb9f3f9",
+      "historical": false
+    },
+    {
+      "path": "docs/implementation-handoff.md",
+      "title": "Implementation handoff",
+      "lines": 72,
+      "sha256": "2ce4345f7e037e7c4da1ee044c69573dd8b260ad5110c8cd67e1b2457488b6ad",
+      "historical": false
+    },
+    {
+      "path": "docs/interactive-api-inventory.md",
+      "title": "Interactive CFDE API inventory",
+      "lines": 135,
+      "sha256": "09a24184d0771680273697a6f3dea3683cb57125a6baa5b6cfcd7d5faa537f7b",
+      "historical": false
+    },
+    {
+      "path": "docs/pigean-claim-model.md",
+      "title": "PIGEAN/EAGGL claim templates \u2014 biological propositions and result evidence",
+      "lines": 570,
+      "sha256": "8b797269d45a2a4feabe00fbac84df7c99ebaa72affcf6154c89c7ce7fcdcf08",
+      "historical": false
+    },
+    {
+      "path": "docs/pigean-evidence-profile.md",
+      "title": "Superseded evidence-profile draft",
+      "lines": 10,
+      "sha256": "c0444bf52f5742f50773e0a9079e11dfc2218c758884dd6b3d053d60db213524",
+      "historical": false
+    },
+    {
+      "path": "docs/scientific-account-construction.md",
+      "title": "How the agent constructs a ScientificAccount",
+      "lines": 224,
+      "sha256": "841ba75f1169cfbe21ecc826f127c5537e21080addfa4d06d40fa711c5dae897",
+      "historical": false
+    },
+    {
+      "path": "docs/scientific-account-framing.md",
+      "title": "ScientificAccount framing and example-data audit",
+      "lines": 96,
+      "sha256": "993a2119262492936bbd076fc17b57fb547ad8912242935d2cf0e681a384641b",
+      "historical": true
+    },
+    {
+      "path": "docs/scientific-account-linting.md",
+      "title": "Agent account linter and pinned DAPPER startup",
+      "lines": 99,
+      "sha256": "a120856d153dcb22a399406dd43e96d118181eef3d3ce1436156169e13ac26fb",
+      "historical": false
+    },
+    {
+      "path": "schema/README.md",
+      "title": "Evidence-package schema",
+      "lines": 68,
+      "sha256": "46d2f1a5801facff7f605d4a843fd59215d5d7b7b6846ed04bc4775ecd1ed98c",
+      "historical": false
+    },
+    {
+      "path": "schema/prisma/README.md",
+      "title": "Prisma schema for REVEAL",
+      "lines": 86,
+      "sha256": "b1602387102e122623a9fe5df3d0dcd0e8f4e746d141cb82cbc510a5a33e9a7f",
+      "historical": false
+    },
+    {
+      "path": "api/README.md",
+      "title": "REVEAL API implementation contract",
+      "lines": 73,
+      "sha256": "6bc8d1255e2552f9b1734eb53e152564f4b0e622329a3ef7b3bfdc8f438f98fb",
+      "historical": false
+    },
+    {
+      "path": "design/README.md",
+      "title": "Frontend design study 01",
+      "lines": 174,
+      "sha256": "bf0283633cc98e8723758c5c830e4df622064daca3ba4affe17f95ae231d59fd",
+      "historical": false
+    },
+    {
+      "path": "design/contract-review.md",
+      "title": "HTML study \u2014 contract alignment and amendments",
+      "lines": 113,
+      "sha256": "e271da43bff5a23bff2a60af4bca074019c900d41017352571c66c4c96f9d962",
+      "historical": false
+    },
+    {
+      "path": "design/data/cad-account/README.md",
+      "title": "CAD-in-T2D ScientificAccount design packet",
+      "lines": 50,
+      "sha256": "9db04b28409b74824c6a85eb05391c8ff671cc1da74ed527d0f7ac4a83550480",
+      "historical": false
+    },
+    {
+      "path": "services/backend/README.md",
+      "title": "REVEAL backend components",
+      "lines": 98,
+      "sha256": "edb7ed9c7f2962715da845dbe1cba75e9df8766d1f4aa4b658c9ca3aeedd2122",
+      "historical": false
+    },
+    {
+      "path": "services/backend/agent-skills/construct-scientific-account/SKILL.md",
+      "title": "Construct a ScientificAccount",
+      "lines": 77,
+      "sha256": "01fee0f2e05f0e331fb8ee81ca9a887e54f3436430dc7ec577ed7a51a623c793",
+      "historical": false
+    }
+  ],
+  "missing_local_targets": [],
+  "external_workspace_dependencies": [
+    {
+      "document": "docs/design-plan-2026-09-24-v2.md",
+      "target": "../../dapper/schema/docs/claims.md",
+      "historical": true
+    },
+    {
+      "document": "docs/design-plan-2026-09-24-v2.md",
+      "target": "../../dapper/schema/docs/claims.md",
+      "historical": true
+    },
+    {
+      "document": "docs/design-plan-2026-09-24-v3.md",
+      "target": "../../dapper/schema/docs/claims.md",
+      "historical": true
+    },
+    {
+      "document": "docs/design-plan-2026-09-24-v4.md",
+      "target": "../../dapper/schema/docs/claims.md",
+      "historical": true
+    },
+    {
+      "document": "docs/design-plan-2026-09-24-v5.md",
+      "target": "../../dapper/schema/docs/claims.md",
+      "historical": true
+    },
+    {
+      "document": "docs/design-plan-2026-09-24-v6.md",
+      "target": "../../dapper/schema/docs/claims.md",
+      "historical": true
+    },
+    {
+      "document": "docs/design-plan-2026-09-24-v7.md",
+      "target": "../../dapper/schema/docs/claims.md",
+      "historical": true
+    },
+    {
+      "document": "docs/design-plan-2026-09-24-v8.md",
+      "target": "../../dapper/schema/docs/claims.md",
+      "historical": true
+    },
+    {
+      "document": "docs/design-plan-2026-09-24-v9.md",
+      "target": "../../dapper/schema/docs/claims.md",
+      "historical": true
+    },
+    {
+      "document": "docs/design-plan-2026-09-25-v10.md",
+      "target": "../../dapper/schema/docs/claims.md",
+      "historical": true
+    },
+    {
+      "document": "docs/design-plan-2026-09-25-v11.md",
+      "target": "../../dapper/schema/docs/claims.md",
+      "historical": true
+    },
+    {
+      "document": "docs/scientific-account-framing.md",
+      "target": "../../dapper/schema/docs/claims.md",
+      "historical": true
+    },
+    {
+      "document": "docs/scientific-account-framing.md",
+      "target": "../../dapper/schema/scientific_claims.py",
+      "historical": true
+    }
+  ]
+}

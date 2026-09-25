@@ -1,0 +1,134 @@
+{
+  "operation_id": "getJobEvents",
+  "case": "request",
+  "method": "GET",
+  "path_template": "/v1/jobs/{job_id}/events",
+  "request": {
+    "url": "https://api.reveal.example.org/v1/jobs/44444444-4444-4444-8444-444444444444/events?after=0&limit=100",
+    "path": {
+      "job_id": "44444444-4444-4444-8444-444444444444"
+    },
+    "query": {
+      "after": "0",
+      "limit": 100
+    },
+    "headers": {
+      "Last-Event-ID": "0",
+      "Authorization": "Bearer <trusted-gateway-assertion>",
+      "Accept": "application/json"
+    },
+    "body": null
+  },
+  "responses": {
+    "200": {
+      "content_type": "application/json",
+      "examples": {
+        "completed_events": {
+          "items": [
+            {
+              "id": "1",
+              "job_id": "44444444-4444-4444-8444-444444444444",
+              "occurred_at": "2026-09-24T16:01:00Z",
+              "event_type": "status",
+              "status": "queued",
+              "stage": "queued",
+              "message": "Illustrative analysis job is queued.",
+              "result": null,
+              "detail": null
+            },
+            {
+              "id": "2",
+              "job_id": "44444444-4444-4444-8444-444444444444",
+              "occurred_at": "2026-09-24T16:01:00Z",
+              "event_type": "activity",
+              "status": "running",
+              "stage": "preparing_evidence",
+              "message": "Retained 17 nodes and 16 edges in this bounded captured example.",
+              "result": null,
+              "detail": {
+                "kind": "preparation",
+                "state": "completed",
+                "source": "worker",
+                "call_id": null,
+                "tool_name": null,
+                "selected_kg": null,
+                "display_arguments": null,
+                "output_excerpt": null,
+                "artifact_sha256": "9a55d126679291a95fa3d35f544915610134075eaf110f62f77ec8ee870b6ae2",
+                "duration_ms": null,
+                "counts": {
+                  "scope": "retained",
+                  "nodes": 17,
+                  "edges": 16,
+                  "truncated": true,
+                  "snapshot_sha256": "9a55d126679291a95fa3d35f544915610134075eaf110f62f77ec8ee870b6ae2"
+                }
+              }
+            },
+            {
+              "id": "3",
+              "job_id": "44444444-4444-4444-8444-444444444444",
+              "occurred_at": "2026-09-24T16:01:00Z",
+              "event_type": "activity",
+              "status": "running",
+              "stage": "authoring_account",
+              "message": "Inspecting the captured PIGEAN observations.",
+              "result": null,
+              "detail": {
+                "kind": "agent_message",
+                "state": "started",
+                "source": "harness",
+                "call_id": null,
+                "tool_name": null,
+                "selected_kg": null,
+                "display_arguments": null,
+                "output_excerpt": "Public activity fixture; no live agent was run.",
+                "artifact_sha256": "9a55d126679291a95fa3d35f544915610134075eaf110f62f77ec8ee870b6ae2",
+                "duration_ms": null,
+                "counts": null
+              }
+            },
+            {
+              "id": "4",
+              "job_id": "44444444-4444-4444-8444-444444444444",
+              "occurred_at": "2026-09-24T16:01:00Z",
+              "event_type": "result",
+              "status": "succeeded",
+              "stage": "complete",
+              "message": "Illustrative saved account is available.",
+              "result": {
+                "kind": "analysis",
+                "request_id": "33333333-3333-4333-8333-333333333333",
+                "account_ids": [
+                  "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd"
+                ],
+                "enrichment": [
+                  {
+                    "graph": "biomarkerkg",
+                    "status": "skipped",
+                    "source_claim_ids": [],
+                    "detail": "Contract fixture; no MCP agent run was performed."
+                  },
+                  {
+                    "graph": "prokn",
+                    "status": "skipped",
+                    "source_claim_ids": [],
+                    "detail": "Contract fixture; no MCP agent run was performed."
+                  }
+                ],
+                "paragraph_job_ids": [
+                  "55555555-5555-4555-8555-555555555555"
+                ],
+                "evidence_package_sha256": "9a55d126679291a95fa3d35f544915610134075eaf110f62f77ec8ee870b6ae2"
+              },
+              "detail": null
+            }
+          ],
+          "next_after": "4",
+          "terminal": true
+        }
+      }
+    }
+  },
+  "curl": "curl -X GET 'https://api.reveal.example.org/v1/jobs/44444444-4444-4444-8444-444444444444/events?after=0&limit=100' -H 'Last-Event-ID: 0' -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Accept: application/json'"
+}

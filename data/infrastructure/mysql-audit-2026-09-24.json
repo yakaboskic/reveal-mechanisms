@@ -1,0 +1,31 @@
+{
+  "audited_at": "2026-09-24T12:42:29.624211+00:00",
+  "host": "aurora-giant-bioindex.cluster-cxrzznxifeib.us-east-1.rds.amazonaws.com",
+  "user": "cyaka",
+  "proposed_database": "cyaka_reveal_mechanisms",
+  "mode": "read_only",
+  "database_created": false,
+  "creation_executed": false,
+  "connected": true,
+  "version": "8.0.42",
+  "version_comment": "6252a59a",
+  "authenticated_account": "cyaka@%",
+  "tls_cipher": "TLS_AES_256_GCM_SHA384",
+  "relevant_grants": [
+    {
+      "privileges": "USAGE",
+      "scope": "*.*"
+    },
+    {
+      "privileges": "ALL PRIVILEGES",
+      "scope": "`cyaka\\_%`.*"
+    }
+  ],
+  "project_database_visible": false,
+  "aurora_version_variable": "3.10.3",
+  "mysql_vector_function_probe": {
+    "supported": null,
+    "error_code": 1044,
+    "error": "Access denied for user 'cyaka'@'%' to database 'information_schema'"
+  }
+}

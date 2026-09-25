@@ -1,0 +1,472 @@
+{
+  "snapshot_sha256": "683c7744d0acd5ec54cab630fd47b45c5ce457f6f50bb184da0013700f695569",
+  "root_schema_sha256": "a086c26886c4f16c96ebe4f9411af6376ec8dc72a3bcd3a81b1e4d0edaa94cbb",
+  "dependencies": {
+    "linkml": "1.11.1",
+    "linkml-runtime": "1.11.1",
+    "rdflib": "7.6.0",
+    "jsonschema": "4.26.0",
+    "PyYAML": "6.0.2",
+    "pytest": "9.1.1"
+  },
+  "classes": {
+    "Question": {
+      "required": [
+        "id",
+        "text"
+      ],
+      "hashable": [
+        "about_entities",
+        "access_level",
+        "alternate_identifier",
+        "controlled_access",
+        "funded_by",
+        "has_contributor",
+        "has_creator",
+        "has_license",
+        "has_recommended_citation",
+        "is_described_by",
+        "name",
+        "scope",
+        "text",
+        "was_attributed_to",
+        "was_derived_from",
+        "was_generated_by"
+      ],
+      "unhashable": [
+        "has_mirror_provenance"
+      ]
+    },
+    "KnowledgeGap": {
+      "required": [
+        "gap_description",
+        "id",
+        "text"
+      ],
+      "hashable": [
+        "about_entities",
+        "access_level",
+        "alternate_identifier",
+        "controlled_access",
+        "funded_by",
+        "gap_description",
+        "gap_kind",
+        "has_contributor",
+        "has_creator",
+        "has_license",
+        "has_recommended_citation",
+        "is_described_by",
+        "name",
+        "scope",
+        "text",
+        "was_attributed_to",
+        "was_derived_from",
+        "was_generated_by"
+      ],
+      "unhashable": [
+        "has_mirror_provenance"
+      ]
+    },
+    "ScientificAccount": {
+      "required": [
+        "component_claims",
+        "context",
+        "id",
+        "was_attributed_to",
+        "was_generated_by"
+      ],
+      "hashable": [
+        "access_level",
+        "alternate_identifier",
+        "assumptions",
+        "closing_remarks",
+        "component_claims",
+        "conclusion_claims",
+        "context",
+        "controlled_access",
+        "funded_by",
+        "has_contributor",
+        "has_creator",
+        "has_license",
+        "has_recommended_citation",
+        "hypothesis",
+        "is_described_by",
+        "mechanistic_model",
+        "name",
+        "question",
+        "was_attributed_to",
+        "was_derived_from",
+        "was_generated_by"
+      ],
+      "unhashable": [
+        "has_mirror_provenance"
+      ]
+    },
+    "Paragraph": {
+      "required": [
+        "id",
+        "scientific_account",
+        "text"
+      ],
+      "hashable": [
+        "access_level",
+        "alternate_identifier",
+        "citations",
+        "controlled_access",
+        "funded_by",
+        "has_contributor",
+        "has_creator",
+        "has_license",
+        "has_recommended_citation",
+        "is_described_by",
+        "language",
+        "location",
+        "name",
+        "publication",
+        "scientific_account",
+        "text",
+        "was_attributed_to",
+        "was_derived_from",
+        "was_generated_by"
+      ],
+      "unhashable": [
+        "has_mirror_provenance"
+      ]
+    },
+    "CitationOccurrence": {
+      "required": [
+        "citation_metadata_revision",
+        "end",
+        "start",
+        "target_id"
+      ],
+      "hashable": [],
+      "unhashable": []
+    },
+    "Claim": {
+      "required": [
+        "id",
+        "proposition",
+        "was_attributed_to",
+        "was_generated_by"
+      ],
+      "hashable": [
+        "access_level",
+        "alternate_identifier",
+        "controlled_access",
+        "direction",
+        "dismech_class",
+        "dismech_disease_term",
+        "dismech_entry_key",
+        "dismech_source_url",
+        "funded_by",
+        "has_contributor",
+        "has_creator",
+        "has_evidence",
+        "has_license",
+        "has_recommended_citation",
+        "has_score",
+        "is_described_by",
+        "name",
+        "proposition",
+        "source_locator",
+        "statement",
+        "status",
+        "was_attributed_to",
+        "was_derived_from",
+        "was_generated_by"
+      ],
+      "unhashable": [
+        "asserted_in",
+        "has_mirror_provenance"
+      ]
+    },
+    "Proposition": {
+      "required": [
+        "id",
+        "statement"
+      ],
+      "hashable": [
+        "mechanistic_model",
+        "name",
+        "negated",
+        "object_entity",
+        "proposition_kind",
+        "relation",
+        "scope",
+        "statement",
+        "subject_entity"
+      ],
+      "unhashable": []
+    },
+    "ClaimScore": {
+      "required": [
+        "id",
+        "interpretation",
+        "metric",
+        "score_kind",
+        "value"
+      ],
+      "hashable": [
+        "interpretation",
+        "metric",
+        "name",
+        "score_kind",
+        "value"
+      ],
+      "unhashable": []
+    },
+    "EvidenceItem": {
+      "required": [
+        "id"
+      ],
+      "hashable": [
+        "access_level",
+        "alternate_identifier",
+        "assumptions",
+        "context",
+        "controlled_access",
+        "direction",
+        "evidence_source",
+        "explanation",
+        "from_nanopub",
+        "funded_by",
+        "has_contributor",
+        "has_creator",
+        "has_license",
+        "has_recommended_citation",
+        "is_described_by",
+        "mechanistic_model",
+        "name",
+        "reference",
+        "reference_title",
+        "snippet",
+        "source_claims",
+        "target_proposition",
+        "was_attributed_to",
+        "was_derived_from",
+        "was_generated_by"
+      ],
+      "unhashable": [
+        "has_mirror_provenance"
+      ]
+    },
+    "GeneSet": {
+      "required": [
+        "id"
+      ],
+      "hashable": [
+        "access_level",
+        "alternate_identifier",
+        "assay",
+        "controlled_access",
+        "data_type",
+        "dcc_url",
+        "description",
+        "drc_url",
+        "funded_by",
+        "genome_build",
+        "gmt_entry",
+        "has_contributor",
+        "has_creator",
+        "has_gmt_file",
+        "has_license",
+        "has_recommended_citation",
+        "in_gmt_file",
+        "is_described_by",
+        "member_type",
+        "members",
+        "n_genes",
+        "n_members",
+        "n_sets",
+        "name",
+        "organism",
+        "term",
+        "term_prefix",
+        "was_attributed_to",
+        "was_derived_from",
+        "was_generated_by"
+      ],
+      "unhashable": [
+        "has_mirror_provenance",
+        "in_gene_set_collection"
+      ]
+    },
+    "GeneSetCollection": {
+      "required": [
+        "id"
+      ],
+      "hashable": [
+        "access_level",
+        "alternate_identifier",
+        "assay",
+        "controlled_access",
+        "data_type",
+        "dcc_url",
+        "description",
+        "drc_url",
+        "funded_by",
+        "genome_build",
+        "has_contributor",
+        "has_creator",
+        "has_gmt_file",
+        "has_license",
+        "has_recommended_citation",
+        "is_described_by",
+        "member_type",
+        "members",
+        "n_genes",
+        "n_members",
+        "n_sets",
+        "name",
+        "organism",
+        "term_prefix",
+        "was_attributed_to",
+        "was_derived_from",
+        "was_generated_by"
+      ],
+      "unhashable": [
+        "has_mirror_provenance"
+      ]
+    },
+    "File": {
+      "required": [
+        "id"
+      ],
+      "hashable": [
+        "description",
+        "filename",
+        "md5",
+        "mime_type",
+        "name",
+        "sha256",
+        "size_in_bytes"
+      ],
+      "unhashable": [
+        "drs_representation",
+        "location"
+      ]
+    },
+    "Activity": {
+      "required": [
+        "id"
+      ],
+      "hashable": [
+        "activity_type",
+        "ancestry",
+        "code_version",
+        "command",
+        "container_image",
+        "dcc_url",
+        "description",
+        "drc_url",
+        "entrypoint",
+        "has_agentic_workspace",
+        "has_lineage_step",
+        "name",
+        "observed_command",
+        "repo_url",
+        "script_url",
+        "software_name",
+        "software_version",
+        "trait"
+      ],
+      "unhashable": [
+        "generated_at_time"
+      ]
+    },
+    "AgenticWorkspace": {
+      "required": [
+        "id"
+      ],
+      "hashable": [
+        "agent_model",
+        "agent_role",
+        "name",
+        "regeneration_prompt",
+        "workspace_key"
+      ],
+      "unhashable": [
+        "last_run",
+        "platform",
+        "workspace_url"
+      ]
+    }
+  },
+  "import_compatibility": {
+    "records_scanned": 801934,
+    "identity_and_closed_schema_samples_passed": 82,
+    "activity_identity_and_closed_schema_passed": true,
+    "present_fields": [
+      "alternate_identifier",
+      "id",
+      "member_type",
+      "name",
+      "term",
+      "term_prefix",
+      "was_derived_from",
+      "was_generated_by"
+    ],
+    "field_shapes": [
+      {
+        "fields": [
+          "alternate_identifier",
+          "id",
+          "member_type",
+          "name",
+          "term",
+          "term_prefix",
+          "was_derived_from",
+          "was_generated_by"
+        ],
+        "count": 45595
+      },
+      {
+        "fields": [
+          "alternate_identifier",
+          "id",
+          "member_type",
+          "name",
+          "term",
+          "was_derived_from",
+          "was_generated_by"
+        ],
+        "count": 756339
+      }
+    ],
+    "added_hashable_fields": [
+      "gmt_entry",
+      "in_gmt_file"
+    ],
+    "removed_hashable_fields": [],
+    "note": "Field coverage scanned for all records; identity/schema replay is sampled, not a new full import validation."
+  },
+  "gap_mapping": {
+    "count": 3367,
+    "kinds": {
+      "KNOWLEDGE_GAP": 2604,
+      "HUMAN_MODEL_MISMATCH": 763
+    },
+    "missing_nonblank_prompt": 0,
+    "missing_nonblank_rationale": 4,
+    "missing_rationale_examples": [
+      "dismech:disorders/Congenital_Merosin-deficient_Muscular_Dystrophy_1A#discussion:mdc1a-gap-1",
+      "dismech:disorders/Congenital_Merosin-deficient_Muscular_Dystrophy_1A#discussion:mdc1a-gap-2",
+      "dismech:disorders/HFM1-related_gametogenic_failure#discussion:gap_hfm1_female_phenotype_severity",
+      "dismech:disorders/HFM1-related_gametogenic_failure#discussion:gap_hfm1_microtese_success_by_variant"
+    ],
+    "with_disease_term_id": 3216
+  },
+  "application_boundaries": {
+    "file_location_changes_payload_without_changing_id": true,
+    "geneset_inverse_collection_link_changes_payload_without_changing_id": true,
+    "gap_context_changes_id": true,
+    "external_curie_expansion_can_change_id": true,
+    "large_collection_identity_limit": "input exceeds DAPPER-ID-1 limit of 10000 triples: 10003",
+    "scientific_account_profile": {
+      "class": "ScientificAccount",
+      "min": 1,
+      "max": 1
+    }
+  }
+}

@@ -1,0 +1,100 @@
+{
+  "operation_id": "listResearchRequests",
+  "case": "request",
+  "method": "GET",
+  "path_template": "/v1/research-requests",
+  "request": {
+    "url": "https://api.reveal.example.org/v1/research-requests?limit=20",
+    "path": {},
+    "query": {
+      "limit": 20
+    },
+    "headers": {
+      "Authorization": "Bearer <trusted-gateway-assertion>",
+      "Accept": "application/json"
+    },
+    "body": null
+  },
+  "responses": {
+    "200": {
+      "content_type": "application/json",
+      "examples": {
+        "history": {
+          "items": [
+            {
+              "id": "33333333-3333-4333-8333-333333333333",
+              "owner_user_id": "11111111-1111-4111-8111-111111111111",
+              "source_draft_id": "22222222-2222-4222-8222-222222222222",
+              "source_draft_version": 2,
+              "composer": {
+                "source_gap": {
+                  "id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+                  "source_id": "dismech:disorders/Coronary_Artery_Disease#discussion:cad_pgsxc_reverse_causation",
+                  "source_revision": "8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd"
+                },
+                "eaggl_anchors": [
+                  {
+                    "reference": {
+                      "source": "eaggl",
+                      "source_id": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                      "source_revision": "5797893b517def4fdc82f285c9bf835195f9f88eddfb6409cbf3b1e31dd63d83",
+                      "dapper_id": "dapper:Mechanism.MyhahXB55tDUS667sJzeJZ40BeeQBWOR"
+                    },
+                    "origin": "manual",
+                    "suggestion_id": null
+                  }
+                ],
+                "dismissed_source_ids": [],
+                "mechanism_subquery": "CADinT2D",
+                "model": "cfde-inc-v2",
+                "selected_kgs": [
+                  "biomarkerkg",
+                  "prokn"
+                ]
+              },
+              "question_id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+              "document": {
+                "knowledge_gaps": [
+                  {
+                    "text": "Are the CAD PGS×context interactions driven by adverse exposures causally amplifying genetic risk, or are some \"contexts\" actually downstream readouts of incipient disease (reverse causation)?",
+                    "gap_description": "Population PGS×context analyses (Nagpal & Gibson 2026, PMID:42443528) are largely unable to establish the causality of specific contexts. dismech separates true environmental exposures (smoking, high-fat diet, sedentary lifestyle) from biochemical readouts (LDL, HDL, C-reactive protein); the biochemical \"contexts\" are prime reverse-causation suspects, since they may be partly downstream of the atherosclerotic process rather than upstream drivers, and behavioural contexts such as reduced physical activity may be rapid responses to incipient angina rather than causes. Distinguishing genuine amplification of genetic effects from reverse causation determines whether the modelled interventions (e.g. lowering cholesterol in high-PGS smokers) would actually reduce risk.",
+                    "gap_kind": "KNOWLEDGE_GAP",
+                    "scope": "Coronary Artery Disease",
+                    "about_entities": [
+                      "http://purl.obolibrary.org/obo/MONDO_0021661"
+                    ],
+                    "id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk"
+                  }
+                ]
+              },
+              "attribution": {
+                "user_id": "11111111-1111-4111-8111-111111111111",
+                "person_id": "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he",
+                "display_name": "Example Researcher",
+                "orcid": null,
+                "orcid_authenticated": false,
+                "observed_at": "2026-09-24T16:00:00Z",
+                "principal_kind": "registered"
+              },
+              "submitted_at": "2026-09-24T16:01:00Z",
+              "linked_dismech_context": [
+                {
+                  "source": "dismech",
+                  "source_id": "dismech:disorders/Coronary_Artery_Disease#/pathophysiology/0",
+                  "source_revision": "d7ea32f7d5b2101e19136522bece815085f1aee34898ab451acda840ae5809dc",
+                  "dapper_id": "dapper:Mechanism.Tbd3TXttvLnVp5rlCDkdPYOWlFOfRUG2"
+                }
+              ]
+            }
+          ],
+          "page": {
+            "next_cursor": null,
+            "has_more": false,
+            "snapshot_id": "illustrative-contract-snapshot"
+          }
+        }
+      }
+    }
+  },
+  "curl": "curl -X GET 'https://api.reveal.example.org/v1/research-requests?limit=20' -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Accept: application/json'"
+}

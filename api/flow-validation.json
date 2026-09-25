@@ -1,0 +1,11 @@
+{
+  "openapi_sha256": "477343e0f267e0b88a93eb31baef8d2b387de9fb142c102c43ee50171c99326f",
+  "operations_mapped": 30,
+  "exchanges_mapped": 41,
+  "main_steps": 10,
+  "support_paths": 3,
+  "all_operations_mapped": true,
+  "all_exchanges_reachable": true,
+  "flow_html_sha256": "3748c329cd3035541b775fc3daa7006fd8179985c291973b98b9553d6be8f239",
+  "passed": true
+}

@@ -1,0 +1,72 @@
+{
+  "url": "https://dev.cfdeknowledge.org/api/interactive/catalog?entity_type=factor&q=age&limit=8&model=cfde-inc-v2",
+  "method": "GET",
+  "request": null,
+  "retrieved_at": "2026-09-24T12:40:42.710982+00:00",
+  "status": 200,
+  "content_type": "application/json",
+  "body_sha256": "68bea307cf094e57a821b500fbb255ec7302def8243a7cd4845c23c9f71f4514",
+  "body_bytes": 2596,
+  "response": {
+    "entity_type": "factor",
+    "items": [
+      {
+        "node_id": "factor:gcat_trait:gcat_trait_language_measurement:cfde-inc-v2:Factor5",
+        "node_type": "factor",
+        "node_key": "Factor5",
+        "label": "AMP_AD__all_brain__AMP_AD_MAYO_CBE_Diagnosis_OTHER-CONTROL_ALL_up___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K36726853_dn",
+        "subtitle": "language measurement (Factor5)"
+      },
+      {
+        "node_id": "factor:gcat_trait:gcat_trait_presubiculum_volume:cfde-inc-v2:Factor1",
+        "node_type": "factor",
+        "node_key": "Factor1",
+        "label": "AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K26122955_up",
+        "subtitle": "presubiculum volume (Factor1)"
+      },
+      {
+        "node_id": "factor:gcat_trait:gcat_trait_susceptibility_to_hepatitis_A_infection_measurement:cfde-inc-v2:Factor1",
+        "node_type": "factor",
+        "node_key": "Factor1",
+        "label": "AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K26122955_up",
+        "subtitle": "susceptibility to hepatitis A infection measurement (Factor1)"
+      },
+      {
+        "node_id": "factor:rare_v2:Orphanet_319328:cfde-inc-v2:Factor2",
+        "node_type": "factor",
+        "node_key": "Factor2",
+        "label": "AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_dn___PsychENCODE__all_signatures__PsychENCODE_geneM2",
+        "subtitle": "Inherited renal cancer-predisposing syndrome (Factor2)"
+      },
+      {
+        "node_id": "factor:rare_v2:Orphanet_93618:cfde-inc-v2:Factor5",
+        "node_type": "factor",
+        "node_key": "Factor5",
+        "label": "AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_up___LINCS_L1000__all_signatures__LINCS_L1000_CRISPR_KO_SRD5A1_dn",
+        "subtitle": "Rare cause of hypertension (Factor5)"
+      },
+      {
+        "node_id": "factor:portal:toastUNDETER:cfde-inc-v2:Factor2",
+        "node_type": "factor",
+        "node_key": "Factor2",
+        "label": "AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_up___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K11573765_up",
+        "subtitle": "TOAST other undetermined (Factor2)"
+      },
+      {
+        "node_id": "factor:rare_v2:Orphanet_156171:cfde-inc-v2:Factor6",
+        "node_type": "factor",
+        "node_key": "Factor6",
+        "label": "AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_up___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K24220535_dn",
+        "subtitle": "Retinal ciliopathy due to mutation in the RPGR gene (Factor6)"
+      },
+      {
+        "node_id": "factor:rare_v2:Orphanet_98496:cfde-inc-v2:Factor22",
+        "node_type": "factor",
+        "node_key": "Factor22",
+        "label": "AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_up___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K61386375_up",
+        "subtitle": "Rare peripheral neuropathy (Factor22)"
+      }
+    ]
+  },
+  "elapsed_seconds": 0.615
+}

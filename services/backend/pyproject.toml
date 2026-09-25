@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "reveal-backend"
+version = "0.1.0"
+description = "Backend components for REVEAL Mechanisms"
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.26,<3", "certifi>=2024.2.2"]
+
+[project.optional-dependencies]
+eaggl = ["scipy>=1.11,<2", "PyMySQL==1.1.2", "python-dotenv>=1.0,<2"]
+dismech = ["PyMySQL==1.1.2", "python-dotenv>=1.0,<2"]
+evidence = ["PyYAML==6.0.2", "linkml==1.11.1", "rdflib==7.6.0"]
+
+[tool.setuptools.packages.find]
+where = ["src"]

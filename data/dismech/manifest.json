@@ -1,0 +1,119 @@
+{
+  "source_repository": "https://github.com/monarch-initiative/dismech",
+  "source_path": "/Users/cyakaboski/src/research/dismech",
+  "source_commit": "df3884a8bba34370ecc0b3a49d956e7f0523bb28",
+  "source_has_local_changes": false,
+  "retrieved_at": "2026-09-15T16:48:51.565602+00:00",
+  "complete": true,
+  "yaml_files": 3361,
+  "schema_files": 14,
+  "documents_by_kind": {
+    "comorbidities": 26,
+    "disorders": 2948,
+    "groupings": 102,
+    "hypotheses": 107,
+    "module_collections": 3,
+    "modules": 174,
+    "surrogate_endpoints": 1
+  },
+  "mechanism_records": 19959,
+  "causal_edges": 37149,
+  "unique_mechanism_labels": 18387,
+  "ontology_terms": 21382,
+  "vocabulary_entries": 54690,
+  "vocabulary_by_kind": {
+    "disease_a": 14,
+    "disease_b": 16,
+    "mechanism": 18387,
+    "biological_processes": 3866,
+    "module_conformance": 624,
+    "cell_types": 1341,
+    "gene_products": 57,
+    "phenotype_term": 7525,
+    "upstream_disorder": 1,
+    "mechanism_reference": 60,
+    "disease_term": 3506,
+    "inheritance_term": 35,
+    "gene_term": 3234,
+    "gene": 1002,
+    "molecular_functions": 968,
+    "treatment_term": 1551,
+    "genes": 2588,
+    "target_phenotypes": 1156,
+    "therapeutic_agent": 1432,
+    "diagnosis_term": 739,
+    "locations": 827,
+    "chemical_entities": 462,
+    "organism": 33,
+    "imaging_finding_term": 127,
+    "located_in": 79,
+    "biomarker_term": 634,
+    "predicate": 11,
+    "value": 163,
+    "subtype_term": 1642,
+    "cellular_components": 273,
+    "finding_term": 390,
+    "experiment_type": 349,
+    "tissue_term": 76,
+    "assays": 309,
+    "triggers": 33,
+    "protein_complexes": 52,
+    "regimen_term": 16,
+    "target_gene": 40,
+    "exposure_term": 318,
+    "infectious_agent_term": 175,
+    "food_source": 12,
+    "core_clinical_characteristics": 96,
+    "additional_requirements": 7,
+    "exclusion_criteria": 28,
+    "sample_types": 137,
+    "pathways": 17,
+    "cell_type_term": 26,
+    "environment_context": 17,
+    "exposures": 4,
+    "inclusion_criteria": 91,
+    "hosts": 26,
+    "mappings_list": 61,
+    "perturbations": 24,
+    "food": 7,
+    "life_cycle_stage_term": 15,
+    "laboratory_requirements": 4,
+    "imaging_requirements": 4,
+    "mechanism_synonym": 3
+  },
+  "enum_definitions": 138,
+  "enum_values": 1192,
+  "files": {
+    "entities.jsonl.gz": {
+      "rows": 3361,
+      "sha256": "fc740e553f2bdc03c3aceb85181e3b52cbc6ea55700bab1502ad01aadb57dee9"
+    },
+    "mechanisms.jsonl.gz": {
+      "rows": 19959,
+      "sha256": "64ed32704e539132a01b37836dc74ae82b1d91ca749548958c7c1dbdab601be6"
+    },
+    "causal-edges.jsonl.gz": {
+      "rows": 37149,
+      "sha256": "dabcf4cf712e68b37e07a3afbfe85e02829bdab84157fa96b4aa00ccec10f17b"
+    },
+    "hypotheses.jsonl.gz": {
+      "rows": 1025,
+      "sha256": "a5c7a73841b1436c6e5a40375af6d415264c7a832c090989d2e87ec70b153147"
+    },
+    "ontology-terms.jsonl.gz": {
+      "rows": 21382,
+      "sha256": "0a17c79eac873f69ddbf35f35cd95cceae67d34cb1c22647cf92d33f270febe6"
+    },
+    "vocabulary.jsonl.gz": {
+      "rows": 54690,
+      "sha256": "1d68cb93e9d521141f018d498d35f55c13cb627ad438097e0255b2645073cbcd"
+    }
+  },
+  "errors": [],
+  "limits": [
+    "Observed ontology bindings only; not full external ontology vocabularies",
+    "Source assertions and evidence retained without independent scientific validation",
+    "Mechanism names are lexical entries, not global concept identities",
+    "Downstream target references are preserved; cross-record resolution is deferred"
+  ]
+}

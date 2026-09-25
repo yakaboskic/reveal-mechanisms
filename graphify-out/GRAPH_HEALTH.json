@@ -1,0 +1,203 @@
+{
+  "node_count": 1718,
+  "unverified_node_count": 0,
+  "raw_edge_count": 4887,
+  "non_object_edges": 0,
+  "missing_endpoint_edges": 0,
+  "dangling_endpoint_edges": 0,
+  "self_loop_edges": 0,
+  "valid_candidate_edges": 4887,
+  "exact_duplicate_edges": 0,
+  "directed_unique_endpoint_pairs": 4625,
+  "directed_same_endpoint_collapsed_edges": 262,
+  "undirected_unique_endpoint_pairs": 4583,
+  "undirected_same_endpoint_collapsed_edges": 304,
+  "same_endpoint_group_count": 142,
+  "relation_variant_groups": 21,
+  "source_file_variant_groups": 1,
+  "source_location_variant_groups": 120,
+  "context_variant_groups": 1,
+  "post_build_graph_type": "Graph",
+  "post_build_node_count": 1718,
+  "post_build_edge_count": 4583,
+  "post_build_error": "",
+  "producer_suppression": {
+    "path": "/Users/cyakaboski/.local/share/uv/tools/graphifyy/lib/python3.13/site-packages/graphify/extract.py",
+    "total_sites": 10,
+    "sites": [
+      {
+        "line": 1055,
+        "name": "seen_ids",
+        "tuple_arity": 0,
+        "sample": "seen_ids = {n[\"id\"] for n in nodes}"
+      },
+      {
+        "line": 1205,
+        "name": "seen_ids",
+        "tuple_arity": 0,
+        "sample": "seen_ids = {n[\"id\"] for n in nodes}"
+      },
+      {
+        "line": 1207,
+        "name": "seen_doc_refs",
+        "tuple_arity": 0,
+        "sample": "seen_doc_refs: set[str] = set()"
+      },
+      {
+        "line": 1630,
+        "name": "seen_ids",
+        "tuple_arity": 0,
+        "sample": "seen_ids: set[str] = {n[\"id\"] for n in nodes}"
+      },
+      {
+        "line": 2099,
+        "name": "seen_keys",
+        "tuple_arity": 0,
+        "sample": "seen_keys: set[tuple] = set()"
+      },
+      {
+        "line": 3034,
+        "name": "seen_ids",
+        "tuple_arity": 0,
+        "sample": "seen_ids: set[str] = set()"
+      },
+      {
+        "line": 3142,
+        "name": "seen_ids",
+        "tuple_arity": 0,
+        "sample": "seen_ids: set[str] = set()"
+      },
+      {
+        "line": 3221,
+        "name": "seen_ids",
+        "tuple_arity": 0,
+        "sample": "seen_ids: set[str] = set()"
+      },
+      {
+        "line": 3736,
+        "name": "seen_ids",
+        "tuple_arity": 0,
+        "sample": "seen_ids: set[str] = set()"
+      },
+      {
+        "line": 3737,
+        "name": "seen_edges",
+        "tuple_arity": 4,
+        "sample": "seen_edges: set[tuple[str, str, str, str | None]] = set()"
+      }
+    ],
+    "error": ""
+  },
+  "examples": [
+    {
+      "source": "api_openapi_components_schemas_citationmetadata",
+      "target": "api_openapi_components_schemas_citationprovenance",
+      "edge_count": 8,
+      "relations": [
+        "references"
+      ],
+      "source_files": [
+        "api/openapi.json"
+      ],
+      "source_locations": [
+        "#/components/schemas/CitationMetadata/properties/date_provenance/properties/first_minted_at/$ref",
+        "#/components/schemas/CitationMetadata/properties/date_provenance/properties/generated_at/$ref",
+        "#/components/schemas/CitationMetadata/properties/date_provenance/properties/imported_at/$ref",
+        "#/components/schemas/CitationMetadata/properties/date_provenance/properties/original_issued_date/$ref",
+        "#/components/schemas/CitationMetadata/properties/date_provenance/properties/published_at/$ref",
+        "#/components/schemas/CitationMetadata/properties/notices/items/properties/source/$ref",
+        "#/components/schemas/CitationMetadata/properties/source_revisions/items/properties/source/$ref",
+        "#/components/schemas/CitationMetadata/properties/title_derivation/properties/source/$ref"
+      ],
+      "contexts": [
+        ""
+      ]
+    },
+    {
+      "source": "api_openapi_operation_createjob",
+      "target": "api_openapi_components_schemas_problem",
+      "edge_count": 6,
+      "relations": [
+        "references"
+      ],
+      "source_files": [
+        "api/openapi.json"
+      ],
+      "source_locations": [
+        "#/paths/~1v1~1jobs/post/responses/401/content/application~1problem+json/schema/$ref",
+        "#/paths/~1v1~1jobs/post/responses/404/content/application~1problem+json/schema/$ref",
+        "#/paths/~1v1~1jobs/post/responses/409/content/application~1problem+json/schema/$ref",
+        "#/paths/~1v1~1jobs/post/responses/422/content/application~1problem+json/schema/$ref",
+        "#/paths/~1v1~1jobs/post/responses/429/content/application~1problem+json/schema/$ref",
+        "#/paths/~1v1~1jobs/post/responses/503/content/application~1problem+json/schema/$ref"
+      ],
+      "contexts": [
+        ""
+      ]
+    },
+    {
+      "source": "schema_evidence_package_epbuildpolicy",
+      "target": "schema_evidence_package_eppositivecount",
+      "edge_count": 6,
+      "relations": [
+        "references"
+      ],
+      "source_files": [
+        "schema/evidence-package.yaml"
+      ],
+      "source_locations": [
+        "classes.EPBuildPolicy.attributes.max_anchors",
+        "classes.EPBuildPolicy.attributes.max_candidates_per_target",
+        "classes.EPBuildPolicy.attributes.max_dismech_mechanisms",
+        "classes.EPBuildPolicy.attributes.max_edges",
+        "classes.EPBuildPolicy.attributes.max_nodes",
+        "classes.EPBuildPolicy.attributes.max_package_bytes"
+      ],
+      "contexts": [
+        ""
+      ]
+    },
+    {
+      "source": "api_openapi_operation_updatedraft",
+      "target": "api_openapi_components_schemas_problem",
+      "edge_count": 5,
+      "relations": [
+        "references"
+      ],
+      "source_files": [
+        "api/openapi.json"
+      ],
+      "source_locations": [
+        "#/paths/~1v1~1drafts~1{draft_id}/patch/responses/401/content/application~1problem+json/schema/$ref",
+        "#/paths/~1v1~1drafts~1{draft_id}/patch/responses/404/content/application~1problem+json/schema/$ref",
+        "#/paths/~1v1~1drafts~1{draft_id}/patch/responses/409/content/application~1problem+json/schema/$ref",
+        "#/paths/~1v1~1drafts~1{draft_id}/patch/responses/422/content/application~1problem+json/schema/$ref",
+        "#/paths/~1v1~1drafts~1{draft_id}/patch/responses/429/content/application~1problem+json/schema/$ref"
+      ],
+      "contexts": [
+        ""
+      ]
+    },
+    {
+      "source": "api_openapi_operation_suggestmechanisms",
+      "target": "api_openapi_components_schemas_problem",
+      "edge_count": 5,
+      "relations": [
+        "references"
+      ],
+      "source_files": [
+        "api/openapi.json"
+      ],
+      "source_locations": [
+        "#/paths/~1v1~1mechanisms~1suggest/post/responses/401/content/application~1problem+json/schema/$ref",
+        "#/paths/~1v1~1mechanisms~1suggest/post/responses/404/content/application~1problem+json/schema/$ref",
+        "#/paths/~1v1~1mechanisms~1suggest/post/responses/422/content/application~1problem+json/schema/$ref",
+        "#/paths/~1v1~1mechanisms~1suggest/post/responses/429/content/application~1problem+json/schema/$ref",
+        "#/paths/~1v1~1mechanisms~1suggest/post/responses/503/content/application~1problem+json/schema/$ref"
+      ],
+      "contexts": [
+        ""
+      ]
+    }
+  ]
+}

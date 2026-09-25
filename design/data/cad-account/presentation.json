@@ -1,0 +1,670 @@
+{
+  "mode": "Authored design example; no live agent or KG retrieval",
+  "gap_source_id": "dismech:disorders/Coronary_Artery_Disease#discussion:cad_pgsxc_reverse_causation",
+  "gap_source": {
+    "id": "dismech:disorders/Coronary_Artery_Disease#discussion:cad_pgsxc_reverse_causation",
+    "discussion_id": "cad_pgsxc_reverse_causation",
+    "source_file": "kb/disorders/Coronary_Artery_Disease.yaml",
+    "source_pointer": "/discussions/0",
+    "document_id": "dismech:disorders/Coronary_Artery_Disease",
+    "document_name": "Coronary Artery Disease",
+    "disease_term": {
+      "preferred_term": "coronary atherosclerosis",
+      "term": {
+        "id": "MONDO:0021661",
+        "label": "coronary atherosclerosis"
+      }
+    },
+    "source_kind": "disorders",
+    "kind": "KNOWLEDGE_GAP",
+    "status": "OPEN",
+    "is_gap": true,
+    "has_stable_source_id": true,
+    "raw": {
+      "discussion_id": "cad_pgsxc_reverse_causation",
+      "prompt": "Are the CAD PGS×context interactions driven by adverse exposures causally amplifying genetic risk, or are some \"contexts\" actually downstream readouts of incipient disease (reverse causation)?",
+      "kind": "KNOWLEDGE_GAP",
+      "status": "OPEN",
+      "attaches_to": [
+        "pathophysiology#Endothelial Dysfunction",
+        "biochemical#LDL Cholesterol",
+        "biochemical#C-Reactive Protein",
+        "environmental#Smoking"
+      ],
+      "rationale": "Population PGS×context analyses (Nagpal & Gibson 2026, PMID:42443528) are largely unable to establish the causality of specific contexts. dismech separates true environmental exposures (smoking, high-fat diet, sedentary lifestyle) from biochemical readouts (LDL, HDL, C-reactive protein); the biochemical \"contexts\" are prime reverse-causation suspects, since they may be partly downstream of the atherosclerotic process rather than upstream drivers, and behavioural contexts such as reduced physical activity may be rapid responses to incipient angina rather than causes. Distinguishing genuine amplification of genetic effects from reverse causation determines whether the modelled interventions (e.g. lowering cholesterol in high-PGS smokers) would actually reduce risk.",
+      "proposed_experiments": [
+        {
+          "experiment_id": "cad_pgsxc_mr_direction",
+          "name": "Mendelian randomization of exposure-to-CAD direction across PGS strata",
+          "description": "Use bidirectional / multivariable Mendelian randomization to test whether each candidate context (LDL, HDL, C-reactive protein, smoking) causally affects CAD versus being a consequence of subclinical disease, and whether the causal effect estimate scales with polygenic liability as the amplification model predicts.",
+          "decision_criterion": "A context is retained as a causal amplifier if MR supports exposure-to-disease directionality and the exposure-attributable risk difference increases across increasing PGS strata; it is flagged as a reverse-causation suspect otherwise."
+        },
+        {
+          "experiment_id": "cad_pgsxc_prospective_temporal",
+          "name": "Prospective incident-CAD analysis restricted to pre-diagnosis exposure windows",
+          "description": "Restrict exposures to measurements taken well before diagnosis and repeat the PGS×context liability-threshold modelling on incident cases only, to reduce the chance that exposure values reflect behavioural responses to early disease.",
+          "decision_criterion": "Amplification is supported if the PGS×context deviation from additivity persists when only pre-diagnosis exposure windows and incident cases are used."
+        }
+      ]
+    }
+  },
+  "factor_source_id": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+  "claim_views": {
+    "dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km": {
+      "group": "Genes → mechanism",
+      "label": "SHH",
+      "illustrative": false
+    },
+    "dapper:Claim.Uv7_cT46DdsqZMvk5nh8G48qOIKvhRgc": {
+      "group": "Genes → mechanism",
+      "label": "GLI3",
+      "illustrative": false
+    },
+    "dapper:Claim.I2mf6PJ0DPF5_nnbiBjAhgjlUCOiUZZ9": {
+      "group": "Genes → mechanism",
+      "label": "TCF7L2",
+      "illustrative": false
+    },
+    "dapper:Claim.Kd3psmdr4G9AlD0UU1E1Vu6AjpKaQYWE": {
+      "group": "Gene sets → mechanism",
+      "label": "AMP AD / GTEx brain-aging set",
+      "illustrative": false
+    },
+    "dapper:Claim.NBafdtdEE2Uabs-8pZqurv7SoWpg7Yhi": {
+      "group": "Gene sets → mechanism",
+      "label": "PsychENCODE geneM16 set",
+      "illustrative": false
+    },
+    "dapper:Claim.Oe2UZeV7oMY4NsMHyB8h4HJO1FH4nSGF": {
+      "group": "Genes → trait",
+      "label": "SHH",
+      "illustrative": false
+    },
+    "dapper:Claim.2idJniYU4zCtCN6puy8XZ2mzo9Mq6c5p": {
+      "group": "Genes → trait",
+      "label": "GLI3",
+      "illustrative": false
+    },
+    "dapper:Claim.H5icBYm5JLM3_T-b1mMfH65Nc0zMhZzH": {
+      "group": "Genes → trait",
+      "label": "TCF7L2",
+      "illustrative": false
+    },
+    "dapper:Claim.xzV_35EYnLl-zy03YbmhfBk_ynNbl7H9": {
+      "group": "Gene sets → trait",
+      "label": "AMP AD / GTEx brain-aging set",
+      "illustrative": false
+    },
+    "dapper:Claim.SYqCJXxCVXDpwflRSdZnkVLzGLO_vi_r": {
+      "group": "Gene sets → trait",
+      "label": "PsychENCODE geneM16 set",
+      "illustrative": false
+    },
+    "dapper:Claim.x7aCVQ1uTkYKLJo32ZyAGMGZaAGCSvWV": {
+      "group": "Genes → gene sets",
+      "label": "SHH → AMP AD / GTEx brain-aging set",
+      "illustrative": true
+    },
+    "dapper:Claim.uzqyfwuhf59hSTdravdcr4cTxuitWGx-": {
+      "group": "Genes → gene sets",
+      "label": "TCF7L2 → PsychENCODE geneM16 set",
+      "illustrative": true
+    }
+  },
+  "evidence_views": {
+    "dapper:EvidenceItem.1Sq7f12tg9y1afcop6HdNCwT4vNBk0-H": {
+      "origin": "captured",
+      "graph": "CFDE",
+      "locator": "pigean-gene-factor.response.json#/data/0",
+      "metrics": [
+        {
+          "metric": "factor_value",
+          "value": 0.5042,
+          "meaning": "Mechanism loading"
+        }
+      ]
+    },
+    "dapper:EvidenceItem.YN7PV1PkRn3wAY5eX7voYINQIrYZpd8x": {
+      "origin": "captured",
+      "graph": "CFDE",
+      "locator": "pigean-gene-factor.response.json#/data/3",
+      "metrics": [
+        {
+          "metric": "factor_value",
+          "value": 0.3245,
+          "meaning": "Mechanism loading"
+        }
+      ]
+    },
+    "dapper:EvidenceItem.4j1Kh6qQTrMLAMh2i8HOqwY-E1jBEC4G": {
+      "origin": "captured",
+      "graph": "CFDE",
+      "locator": "pigean-gene-factor.response.json#/data/1",
+      "metrics": [
+        {
+          "metric": "factor_value",
+          "value": 0.3813,
+          "meaning": "Mechanism loading"
+        }
+      ]
+    },
+    "dapper:EvidenceItem.TmJpftCshV-2i4dhf6jejSdst3s6VSib": {
+      "origin": "captured",
+      "graph": "CFDE",
+      "locator": "pigean-gene-set-factor.response.json#/data/0",
+      "metrics": [
+        {
+          "metric": "factor_value",
+          "value": 1.0,
+          "meaning": "Mechanism loading"
+        }
+      ]
+    },
+    "dapper:EvidenceItem.e_woYuSIytDbJ7bWIRGY0q6K8vCabcFw": {
+      "origin": "captured",
+      "graph": "CFDE",
+      "locator": "pigean-gene-set-factor.response.json#/data/2",
+      "metrics": [
+        {
+          "metric": "factor_value",
+          "value": 0.4518,
+          "meaning": "Mechanism loading"
+        }
+      ]
+    },
+    "dapper:EvidenceItem.QMnxv6KQF0En3XH-b9ruB3myjTEYc1a9": {
+      "origin": "captured",
+      "graph": "CFDE",
+      "locator": "pigean-gene-factor.response.json#/data/0",
+      "metrics": [
+        {
+          "metric": "combined",
+          "value": 3.86,
+          "meaning": "Gene–trait relevance score"
+        },
+        {
+          "metric": "log_bf",
+          "value": 2.14,
+          "meaning": "Source-reported log_bf"
+        },
+        {
+          "metric": "prior",
+          "value": 1.72,
+          "meaning": "Source-reported prior"
+        }
+      ]
+    },
+    "dapper:EvidenceItem.kvUX6sx8doykSMMmWJe0FEet-fPmMxpN": {
+      "origin": "captured",
+      "graph": "CFDE",
+      "locator": "pigean-gene-factor.response.json#/data/3",
+      "metrics": [
+        {
+          "metric": "combined",
+          "value": 1.98,
+          "meaning": "Gene–trait relevance score"
+        },
+        {
+          "metric": "log_bf",
+          "value": 0.474,
+          "meaning": "Source-reported log_bf"
+        },
+        {
+          "metric": "prior",
+          "value": 1.51,
+          "meaning": "Source-reported prior"
+        }
+      ]
+    },
+    "dapper:EvidenceItem.KU2TsRllsq60RcwOPrk5OGbnX6QX4kvT": {
+      "origin": "captured",
+      "graph": "CFDE",
+      "locator": "pigean-gene-factor.response.json#/data/1",
+      "metrics": [
+        {
+          "metric": "combined",
+          "value": 2.42,
+          "meaning": "Gene–trait relevance score"
+        },
+        {
+          "metric": "log_bf",
+          "value": 2.33,
+          "meaning": "Source-reported log_bf"
+        },
+        {
+          "metric": "prior",
+          "value": 0.0873,
+          "meaning": "Source-reported prior"
+        }
+      ]
+    },
+    "dapper:EvidenceItem.LG9zY-dbXmGT8ldum4A8LrmAHFAvSyBm": {
+      "origin": "captured",
+      "graph": "CFDE",
+      "locator": "pigean-gene-set-factor.response.json#/data/0",
+      "metrics": [
+        {
+          "metric": "beta",
+          "value": 0.115,
+          "meaning": "Gene-set effect estimate"
+        },
+        {
+          "metric": "beta_uncorrected",
+          "value": 0.119,
+          "meaning": "Uncorrected effect estimate"
+        }
+      ]
+    },
+    "dapper:EvidenceItem.O0yC2UWrCiEd7Iw-S3hgW070oHE_x8hm": {
+      "origin": "captured",
+      "graph": "CFDE",
+      "locator": "pigean-gene-set-factor.response.json#/data/2",
+      "metrics": [
+        {
+          "metric": "beta",
+          "value": 0.00729,
+          "meaning": "Gene-set effect estimate"
+        },
+        {
+          "metric": "beta_uncorrected",
+          "value": 0.0586,
+          "meaning": "Uncorrected effect estimate"
+        }
+      ]
+    },
+    "dapper:EvidenceItem.2uQrn7wZLvOA2uUhncD6zCHmyIB_N5Jh": {
+      "origin": "illustrative",
+      "graph": "ProKN",
+      "locator": "illustrative-kg-assertions.json#/assertions/0",
+      "metrics": []
+    },
+    "dapper:EvidenceItem.KIcbQc5Jr6Ac4zUJr52D7SlNWXmDeElR": {
+      "origin": "captured",
+      "graph": "CFDE",
+      "locator": "pigean-gene-factor.response.json and pigean-gene-set-factor.response.json; shared Factor1 neighborhood",
+      "metrics": []
+    },
+    "dapper:EvidenceItem.YkOjbB_uxlxEhXe6VEJ5-zDGTfEh5Iek": {
+      "origin": "illustrative",
+      "graph": "ProKN",
+      "locator": "illustrative-kg-assertions.json#/assertions/0",
+      "metrics": []
+    },
+    "dapper:EvidenceItem.-2rU_GVD34ddH6jrpbtOyP3TZq-y3c1q": {
+      "origin": "illustrative",
+      "graph": "BiomarkerKG",
+      "locator": "illustrative-kg-assertions.json#/assertions/1",
+      "metrics": []
+    },
+    "dapper:EvidenceItem.1raZeL7bxIDn9SyULEBH0z1Yj4Lds5-k": {
+      "origin": "captured",
+      "graph": "CFDE",
+      "locator": "pigean-gene-factor.response.json and pigean-gene-set-factor.response.json; shared Factor1 neighborhood",
+      "metrics": []
+    },
+    "dapper:EvidenceItem.j6xtY8mzZ5SGHhlKOH1bOMu2lXp5idpW": {
+      "origin": "illustrative",
+      "graph": "BiomarkerKG",
+      "locator": "illustrative-kg-assertions.json#/assertions/1",
+      "metrics": []
+    }
+  },
+  "source_files": {
+    "dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ": {
+      "path": "data/cad-account/sources/pigean-gene-factor.response.json",
+      "origin": "captured",
+      "payload": {
+        "profile": {
+          "fetch": 0.4385114439937752,
+          "query": 0.05519808499957435
+        },
+        "index": "pigean-gene-factor",
+        "q": [
+          "CADinT2D",
+          "cfde-inc-v2",
+          "Factor1"
+        ],
+        "count": 8,
+        "restricted": 0,
+        "progress": {
+          "bytes_read": 2945,
+          "bytes_total": 6295,
+          "filtered": 0
+        },
+        "page": 1,
+        "limit": 8,
+        "data": [
+          {
+            "combined": 3.86,
+            "factor": "Factor1",
+            "factor_value": 0.5042,
+            "gene": "SHH",
+            "gene_set_size": "cfde-inc-v2",
+            "label": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+            "label_factor": "Factor1",
+            "log_bf": 2.14,
+            "phenotype": "CADinT2D",
+            "prior": 1.72,
+            "trait_group": "portal"
+          },
+          {
+            "combined": 2.42,
+            "factor": "Factor1",
+            "factor_value": 0.3813,
+            "gene": "TCF7L2",
+            "gene_set_size": "cfde-inc-v2",
+            "label": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+            "label_factor": "Factor1",
+            "log_bf": 2.33,
+            "phenotype": "CADinT2D",
+            "prior": 0.0873,
+            "trait_group": "portal"
+          },
+          {
+            "combined": 2.07,
+            "factor": "Factor1",
+            "factor_value": 0.3377,
+            "gene": "SIX2",
+            "gene_set_size": "cfde-inc-v2",
+            "label": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+            "label_factor": "Factor1",
+            "log_bf": 2.06,
+            "phenotype": "CADinT2D",
+            "prior": 0.0101,
+            "trait_group": "portal"
+          },
+          {
+            "combined": 1.98,
+            "factor": "Factor1",
+            "factor_value": 0.3245,
+            "gene": "GLI3",
+            "gene_set_size": "cfde-inc-v2",
+            "label": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+            "label_factor": "Factor1",
+            "log_bf": 0.474,
+            "phenotype": "CADinT2D",
+            "prior": 1.51,
+            "trait_group": "portal"
+          },
+          {
+            "combined": 1.73,
+            "factor": "Factor1",
+            "factor_value": 0.2899,
+            "gene": "FGF13",
+            "gene_set_size": "cfde-inc-v2",
+            "label": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+            "label_factor": "Factor1",
+            "log_bf": 1.77,
+            "phenotype": "CADinT2D",
+            "prior": -0.0446,
+            "trait_group": "portal"
+          },
+          {
+            "combined": 1.66,
+            "factor": "Factor1",
+            "factor_value": 0.2801,
+            "gene": "EYA2",
+            "gene_set_size": "cfde-inc-v2",
+            "label": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+            "label_factor": "Factor1",
+            "log_bf": 1.68,
+            "phenotype": "CADinT2D",
+            "prior": -0.0237,
+            "trait_group": "portal"
+          },
+          {
+            "combined": 1.65,
+            "factor": "Factor1",
+            "factor_value": 0.2787,
+            "gene": "CTNNB1",
+            "gene_set_size": "cfde-inc-v2",
+            "label": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+            "label_factor": "Factor1",
+            "log_bf": 0.173,
+            "phenotype": "CADinT2D",
+            "prior": 1.48,
+            "trait_group": "portal"
+          },
+          {
+            "combined": 1.65,
+            "factor": "Factor1",
+            "factor_value": 0.2787,
+            "gene": "WNT4",
+            "gene_set_size": "cfde-inc-v2",
+            "label": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+            "label_factor": "Factor1",
+            "log_bf": 1.62,
+            "phenotype": "CADinT2D",
+            "prior": 0.033,
+            "trait_group": "portal"
+          }
+        ],
+        "continuation": null,
+        "nonce": "rGzm4WeKYfhq7e8JNChQ7V_Hp7ludYB7cisdJXA7WzI"
+      }
+    },
+    "dapper:File.Dt0S38v_sLn5jiOAVXMrMWTrXBLnsn83": {
+      "path": "data/cad-account/sources/pigean-gene-set-factor.response.json",
+      "origin": "captured",
+      "payload": {
+        "profile": {
+          "fetch": 0.40679741199710406,
+          "query": 0.04978166299406439
+        },
+        "index": "pigean-gene-set-factor",
+        "q": [
+          "CADinT2D",
+          "cfde-inc-v2",
+          "Factor1"
+        ],
+        "count": 8,
+        "restricted": 0,
+        "progress": {
+          "bytes_read": 3867,
+          "bytes_total": 25226,
+          "filtered": 0
+        },
+        "page": 1,
+        "limit": 8,
+        "data": [
+          {
+            "beta": 0.115,
+            "beta_uncorrected": 0.119,
+            "factor": "Factor1",
+            "factor_value": 1.0,
+            "gene_set": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+            "gene_set_size": "cfde-inc-v2",
+            "label": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+            "label_factor": "Factor1",
+            "phenotype": "CADinT2D",
+            "rs_score": 0.9840045398876323,
+            "trait_group": "portal"
+          },
+          {
+            "beta": 0.00121,
+            "beta_uncorrected": 0.121,
+            "factor": "Factor1",
+            "factor_value": 0.759,
+            "gene_set": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis_AD-OTHER_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+            "gene_set_size": "cfde-inc-v2",
+            "label": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+            "label_factor": "Factor1",
+            "phenotype": "CADinT2D",
+            "rs_score": 0.9849404917274122,
+            "trait_group": "portal"
+          },
+          {
+            "beta": 0.00729,
+            "beta_uncorrected": 0.0586,
+            "factor": "Factor1",
+            "factor_value": 0.4518,
+            "gene_set": "PsychENCODE__all_signatures__PsychENCODE_geneM16",
+            "gene_set_size": "cfde-inc-v2",
+            "label": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+            "label_factor": "Factor1",
+            "phenotype": "CADinT2D",
+            "rs_score": 0.9732207436257954,
+            "trait_group": "portal"
+          },
+          {
+            "beta": 0.0239,
+            "beta_uncorrected": 0.142,
+            "factor": "Factor1",
+            "factor_value": 0.4065,
+            "gene_set": "IGVF__IGVFDS4003HZAB__IGVF_Perturb_Seq_chr5:173234812-173235812_dn",
+            "gene_set_size": "cfde-inc-v2",
+            "label": "IGVF__IGVFDS6332VCTO__IGVF_Perturb_Seq_NKX2-5_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_succinylcholine-chloride_dn",
+            "label_factor": "Factor2",
+            "phenotype": "CADinT2D",
+            "rs_score": 0.994767986045101,
+            "trait_group": "portal"
+          },
+          {
+            "beta": 0.0,
+            "beta_uncorrected": 0.000551,
+            "factor": "Factor1",
+            "factor_value": 0.3238,
+            "gene_set": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_SourceDiagnosis_AD-PATH_AGE_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+            "gene_set_size": "cfde-inc-v2",
+            "label": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+            "label_factor": "Factor1",
+            "phenotype": "CADinT2D",
+            "rs_score": 0.9525995556394983,
+            "trait_group": "portal"
+          },
+          {
+            "beta": 0.00873,
+            "beta_uncorrected": 0.118,
+            "factor": "Factor1",
+            "factor_value": 0.246,
+            "gene_set": "IGVF__IGVFDS6332VCTO__IGVF_Perturb_Seq_ZFP64_up",
+            "gene_set_size": "cfde-inc-v2",
+            "label": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+            "label_factor": "Factor1",
+            "phenotype": "CADinT2D",
+            "rs_score": 0.9835365639677423,
+            "trait_group": "portal"
+          },
+          {
+            "beta": 0.00918,
+            "beta_uncorrected": 0.0274,
+            "factor": "Factor1",
+            "factor_value": 0.2186,
+            "gene_set": "GTEx__small_intestine__GTEx_aging_SmallIntestine_20-29_50-59_up",
+            "gene_set_size": "cfde-inc-v2",
+            "label": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+            "label_factor": "Factor1",
+            "phenotype": "CADinT2D",
+            "rs_score": 0.9642555041281244,
+            "trait_group": "portal"
+          },
+          {
+            "beta": 3.53e-06,
+            "beta_uncorrected": 0.000737,
+            "factor": "Factor1",
+            "factor_value": 0.1849,
+            "gene_set": "IGVF__IGVFDS2266YDVM__IGVF_Perturb_Seq_chr5:88882966-88883966_dn",
+            "gene_set_size": "cfde-inc-v2",
+            "label": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+            "label_factor": "Factor1",
+            "phenotype": "CADinT2D",
+            "rs_score": 0.9537449059538898,
+            "trait_group": "portal"
+          }
+        ],
+        "continuation": null,
+        "nonce": "SdopSvqfZyRKjzOJ7K2-Sc-ep5I3n1ryTTZeY_beYs4"
+      }
+    },
+    "dapper:File.eG0HM7wVGbDLt-99TA-OMnMeKqdIircT": {
+      "path": "data/cad-account/sources/dismech-gap.source.json",
+      "origin": "captured",
+      "payload": {
+        "id": "dismech:disorders/Coronary_Artery_Disease#discussion:cad_pgsxc_reverse_causation",
+        "discussion_id": "cad_pgsxc_reverse_causation",
+        "source_file": "kb/disorders/Coronary_Artery_Disease.yaml",
+        "source_pointer": "/discussions/0",
+        "document_id": "dismech:disorders/Coronary_Artery_Disease",
+        "document_name": "Coronary Artery Disease",
+        "disease_term": {
+          "preferred_term": "coronary atherosclerosis",
+          "term": {
+            "id": "MONDO:0021661",
+            "label": "coronary atherosclerosis"
+          }
+        },
+        "source_kind": "disorders",
+        "kind": "KNOWLEDGE_GAP",
+        "status": "OPEN",
+        "is_gap": true,
+        "has_stable_source_id": true,
+        "raw": {
+          "discussion_id": "cad_pgsxc_reverse_causation",
+          "prompt": "Are the CAD PGS×context interactions driven by adverse exposures causally amplifying genetic risk, or are some \"contexts\" actually downstream readouts of incipient disease (reverse causation)?",
+          "kind": "KNOWLEDGE_GAP",
+          "status": "OPEN",
+          "attaches_to": [
+            "pathophysiology#Endothelial Dysfunction",
+            "biochemical#LDL Cholesterol",
+            "biochemical#C-Reactive Protein",
+            "environmental#Smoking"
+          ],
+          "rationale": "Population PGS×context analyses (Nagpal & Gibson 2026, PMID:42443528) are largely unable to establish the causality of specific contexts. dismech separates true environmental exposures (smoking, high-fat diet, sedentary lifestyle) from biochemical readouts (LDL, HDL, C-reactive protein); the biochemical \"contexts\" are prime reverse-causation suspects, since they may be partly downstream of the atherosclerotic process rather than upstream drivers, and behavioural contexts such as reduced physical activity may be rapid responses to incipient angina rather than causes. Distinguishing genuine amplification of genetic effects from reverse causation determines whether the modelled interventions (e.g. lowering cholesterol in high-PGS smokers) would actually reduce risk.",
+          "proposed_experiments": [
+            {
+              "experiment_id": "cad_pgsxc_mr_direction",
+              "name": "Mendelian randomization of exposure-to-CAD direction across PGS strata",
+              "description": "Use bidirectional / multivariable Mendelian randomization to test whether each candidate context (LDL, HDL, C-reactive protein, smoking) causally affects CAD versus being a consequence of subclinical disease, and whether the causal effect estimate scales with polygenic liability as the amplification model predicts.",
+              "decision_criterion": "A context is retained as a causal amplifier if MR supports exposure-to-disease directionality and the exposure-attributable risk difference increases across increasing PGS strata; it is flagged as a reverse-causation suspect otherwise."
+            },
+            {
+              "experiment_id": "cad_pgsxc_prospective_temporal",
+              "name": "Prospective incident-CAD analysis restricted to pre-diagnosis exposure windows",
+              "description": "Restrict exposures to measurements taken well before diagnosis and repeat the PGS×context liability-threshold modelling on incident cases only, to reduce the chance that exposure values reflect behavioural responses to early disease.",
+              "decision_criterion": "Amplification is supported if the PGS×context deviation from additivity persists when only pre-diagnosis exposure windows and incident cases are used."
+            }
+          ]
+        }
+      }
+    },
+    "dapper:File._FB2fhvDopxDEHgoDgf2Hk4jE0wxilag": {
+      "path": "data/cad-account/sources/illustrative-kg-assertions.json",
+      "origin": "illustrative",
+      "payload": {
+        "illustrative": true,
+        "retrieved": false,
+        "purpose": "Design-only membership and KG evidence interactions",
+        "assertions": [
+          {
+            "id": "mock-prokn-1",
+            "graph": "ProKN",
+            "statement": "SHH is a member of the retained AMP AD / GTEx gene set.",
+            "subject": "SHH",
+            "gene_set": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+            "status": "invented for UI design; membership unverified"
+          },
+          {
+            "id": "mock-biomarkerkg-1",
+            "graph": "BiomarkerKG",
+            "statement": "TCF7L2 is a member of the PsychENCODE geneM16 gene set.",
+            "subject": "TCF7L2",
+            "gene_set": "PsychENCODE__all_signatures__PsychENCODE_geneM16",
+            "status": "invented for UI design; membership unverified"
+          }
+        ]
+      }
+    }
+  },
+  "gene_set_labels": {
+    "dapper:GeneSet.I1UZhVhKU-YDerPLIxtnZOGlTXNAlrgD": "AMP AD / GTEx brain-aging set",
+    "dapper:GeneSet.zQ8X81n_J-Fuv0zNRp1iQQXqIzuAOzGP": "PsychENCODE geneM16 set"
+  },
+  "coverage": "Captured CFDE neighborhood: 8 genes, 8 gene sets, 1 mechanism; 16 direct edges. This account selects 3 genes and 2 sets. Contextual retrieval added no distinct edges.",
+  "graph_counts": {
+    "nodes": 17,
+    "edges": 16
+  },
+  "account_id": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
+  "gap_id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+  "schema_pin": "2026-09-24-v8"
+}

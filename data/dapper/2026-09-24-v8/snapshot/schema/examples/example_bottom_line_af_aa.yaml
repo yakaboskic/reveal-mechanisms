@@ -1,0 +1,286 @@
+# DAPPER mapping of the supplied AF / AA bottom-line provenance payload.
+# This is a reconstruction, not independently verified execution provenance.
+# 11 logical Datasets (including the final published result), 9 Activities,
+# and 1 actual output File. S3 prefix collections are Datasets, not C2M2Files.
+# Source-inferred QC and staging resources remain explicitly labeled in their
+# descriptions. No C2M2 registration, DRS service, checksums, immutable object
+# versions, runtime commands, run timestamps, or attribution are invented.
+# See schema/docs/bottom-line-results.md for the mapping and remaining gaps.
+# DAPPER IDs hash these metadata records; they do not prove the file bytes.
+# Re-mint with: uv run schema/identity/dapper_identity.py assign <this-file>
+
+datasets:
+- id: dapper:Dataset.CBE87jpWVPa6Xtocr66ztw75eR0CUw53
+  name: Published bottom-line summary statistics for AF / AA
+  resource_type: dataset
+  description: Logical dataset distributed as AF.sumstats.tsv.gz. AF is the legacy label for atrial fibrillation
+    (KPN.TRAIT:0000096); AA is the source-reported ancestry grouping defined by AncestryEnum. The publication
+    lineage below is reconstructed from the supplied payload; no run log or immutable snapshot was supplied.
+  has_file:
+  - dapper:File.Sf9jY_kufGEpt-DvD_g50VXIGPmKJUvd
+  was_generated_by: dapper:Activity.wMK0LlkCOyQA4vHDOtd4DXEMB5eFBYuH
+  ancestry: AA
+  trait: KPN.TRAIT:0000096
+- id: dapper:Dataset.Gz2zsoX5-igyIm3-xReWbHnzoS0jdALK
+  name: QC variants for GWAS / Verma2024_MVPTraits_AA / AF
+  description: 'QC variants for GWAS / Verma2024_MVPTraits_AA / AF Source reconstruction: inferred from
+    intake VariantQCStage output convention; not observed in the supplied listing. Source context: phenotype=AF;
+    method=GWAS; dataset=Verma2024_MVPTraits_AA.'
+  resource_type: dataset
+  location: s3://dig-analysis-data/variants_qc/GWAS/Verma2024_MVPTraits_AA/AF/
+  trait: KPN.TRAIT:0000096
+- id: dapper:Dataset.BWKQgck6_EuYqli-nUhf4idMva7PaEXc
+  name: Partitioned variants for Verma2024_MVPTraits_AA / AF / AA / rare=true
+  description: 'Partitioned variants for Verma2024_MVPTraits_AA / AF / AA / rare=true Reported by the
+    source listing; this mapping does not independently verify execution or object contents. Source context:
+    phenotype=AF; ancestry=AA; dataset=Verma2024_MVPTraits_AA; rare=true.'
+  resource_type: dataset
+  location: s3://dig-analysis-data/out/metaanalysis/variants/AF/dataset=Verma2024_MVPTraits_AA/ancestry=AA/rare=true/
+  ancestry: AA
+  trait: KPN.TRAIT:0000096
+- id: dapper:Dataset.55Yo5xFteAvMx0zZhJj4UQX3V5snJCvr
+  name: Bottom-line variants input for GWAS / Verma2024_MVPTraits_AA / AF
+  description: 'Bottom-line variants input for GWAS / Verma2024_MVPTraits_AA / AF Reported by the source
+    listing; this mapping does not independently verify execution or object contents. Source context:
+    phenotype=AF; method=GWAS; dataset=Verma2024_MVPTraits_AA.'
+  resource_type: dataset
+  location: s3://dig-analysis-data/variants/GWAS/Verma2024_MVPTraits_AA/AF/
+  trait: KPN.TRAIT:0000096
+- id: dapper:Dataset.HhHSUeVRFFwAZEmlE8IjbTIsRQys2auF
+  name: Partitioned variants for Verma2024_MVPTraits_AA / AF / AA / rare=false
+  description: 'Partitioned variants for Verma2024_MVPTraits_AA / AF / AA / rare=false Reported by the
+    source listing; this mapping does not independently verify execution or object contents. Source context:
+    phenotype=AF; ancestry=AA; dataset=Verma2024_MVPTraits_AA; rare=false.'
+  resource_type: dataset
+  location: s3://dig-analysis-data/out/metaanalysis/variants/AF/dataset=Verma2024_MVPTraits_AA/ancestry=AA/rare=false/
+  ancestry: AA
+  trait: KPN.TRAIT:0000096
+- id: dapper:Dataset.SicTAPNCqhzzaJOaYg6Vq9db-sbgi6lv
+  name: Processed intake variants for GWAS / Verma2024_MVPTraits_AA / AF
+  description: 'Processed intake variants for GWAS / Verma2024_MVPTraits_AA / AF Reported by the source
+    listing; this mapping does not independently verify execution or object contents. Source context:
+    phenotype=AF; method=GWAS; dataset=Verma2024_MVPTraits_AA.'
+  resource_type: dataset
+  location: s3://dig-analysis-data/variants_processed/GWAS/Verma2024_MVPTraits_AA/AF/
+  trait: KPN.TRAIT:0000096
+- id: dapper:Dataset.ugmepmTewEes2jJo2osDAHN8bJfLiBS2
+  name: Raw variants input for GWAS / Verma2024_MVPTraits_AA / AF
+  description: 'Raw variants input for GWAS / Verma2024_MVPTraits_AA / AF Reported by the source listing;
+    this mapping does not independently verify execution or object contents. Source context: phenotype=AF;
+    method=GWAS; dataset=Verma2024_MVPTraits_AA.'
+  resource_type: dataset
+  location: s3://dig-analysis-data/variants_raw/GWAS/Verma2024_MVPTraits_AA/AF/
+  trait: KPN.TRAIT:0000096
+- id: dapper:Dataset.iUhoUuY1dx0PRPXQVwKtp5py8ZS6zkDe
+  name: Bottom-line ancestry-specific staging for AF / AA
+  description: 'Bottom-line ancestry-specific staging for AF / AA Source reconstruction: inferred from
+    bottom-line runAncestrySpecific.sh output convention; not observed in the supplied listing. Source
+    context: phenotype=AF; ancestry=AA.'
+  resource_type: dataset
+  location: s3://dig-analysis-data/out/metaanalysis/bottom-line/staging/ancestry-specific/AF/ancestry=AA/
+  ancestry: AA
+  trait: KPN.TRAIT:0000096
+- id: dapper:Dataset.GTARVQid8l0mZnIl2L2cOPcGtK6ygfFx
+  name: min_p ancestry-specific result for AF / AA
+  description: 'min_p ancestry-specific result for AF / AA Reported by the source listing; this mapping
+    does not independently verify execution or object contents. Source context: phenotype=AF; ancestry=AA.'
+  resource_type: dataset
+  location: s3://dig-analysis-data/out/metaanalysis/min_p/ancestry-specific/AF/ancestry=AA/
+  access_level: controlled
+  ancestry: AA
+  trait: KPN.TRAIT:0000096
+- id: dapper:Dataset.RWjiToUI81IM8sivxPQPVk9sVmGy1n6K
+  name: Bottom-line ancestry-specific result for AF / AA
+  description: 'Bottom-line ancestry-specific result for AF / AA Reported by the source listing; this
+    mapping does not independently verify execution or object contents. Source context: phenotype=AF;
+    ancestry=AA.'
+  resource_type: dataset
+  location: s3://dig-analysis-data/out/metaanalysis/bottom-line/ancestry-specific/AF/ancestry=AA/
+  access_level: controlled
+  ancestry: AA
+  trait: KPN.TRAIT:0000096
+- id: dapper:Dataset.4EC-XcQb7QEYoqD8sz_LyE6qIhBOpJkw
+  name: largest ancestry-specific result for AF / AA
+  description: 'largest ancestry-specific result for AF / AA Reported by the source listing; this mapping
+    does not independently verify execution or object contents. Source context: phenotype=AF; ancestry=AA.'
+  resource_type: dataset
+  location: s3://dig-analysis-data/out/metaanalysis/largest/ancestry-specific/AF/ancestry=AA/
+  access_level: controlled
+  ancestry: AA
+  trait: KPN.TRAIT:0000096
+files:
+- id: dapper:File.Sf9jY_kufGEpt-DvD_g50VXIGPmKJUvd
+  name: Open-data bottom-line endpoint for AF / AA
+  description: Open-data bottom-line endpoint for AF / AA Reported by the source listing; this mapping
+    does not independently verify execution or object contents.
+  filename: AF.sumstats.tsv.gz
+  location: s3://dig-open-bottom-line-analysis-stg/bottom-line/AA/AF.sumstats.tsv.gz
+activities:
+- id: dapper:Activity.94PDmbHlfTIk4N3YjRCA228rZkj0UhES
+  name: Intake QC for GWAS / Verma2024_MVPTraits_AA / AF
+  description: 'Intake QC for GWAS / Verma2024_MVPTraits_AA / AF Source reconstruction: not observed in
+    the supplied listing; execution is not confirmed. Source context: phenotype=AF; method=GWAS; dataset=Verma2024_MVPTraits_AA.'
+  activity_type: VariantQCStage
+  script_url: https://github.com/broadinstitute/dig-aggregator-methods/blob/master/intake/src/main/scala/VariantQCStage.scala
+  repo_url: https://github.com/broadinstitute/dig-aggregator-methods
+  trait: KPN.TRAIT:0000096
+- id: dapper:Activity.tig07MyHPkjrjPCICzwyYSmSC5Q-Qyzz
+  name: Bottom-line ancestry-specific METAL for AF / AA
+  description: 'Bottom-line ancestry-specific METAL for AF / AA Reported by the source listing; this mapping
+    does not independently verify execution or object contents. Source context: phenotype=AF; ancestry=AA.'
+  activity_type: AncestrySpecificStage
+  script_url: https://github.com/broadinstitute/dig-aggregator-methods/blob/master/bottom-line/src/main/scala/AncestrySpecificStage.scala
+  repo_url: https://github.com/broadinstitute/dig-aggregator-methods
+  ancestry: AA
+  trait: KPN.TRAIT:0000096
+- id: dapper:Activity.tbsm6H_mp9OyS89s7VlJUbXrAQmO1reg
+  name: Bottom-line largest for AF / AA
+  description: 'Bottom-line largest for AF / AA Reported by the source listing; this mapping does not
+    independently verify execution or object contents. Source context: phenotype=AF; ancestry=AA.'
+  activity_type: LargestStage
+  script_url: https://github.com/broadinstitute/dig-aggregator-methods/blob/master/bottom-line/src/main/scala/LargestStage.scala
+  repo_url: https://github.com/broadinstitute/dig-aggregator-methods
+  ancestry: AA
+  trait: KPN.TRAIT:0000096
+- id: dapper:Activity.SRoNsij7iPwof5SOe6a7fJZkk07Civ_l
+  name: Intake scaling for GWAS / Verma2024_MVPTraits_AA / AF
+  description: 'Intake scaling for GWAS / Verma2024_MVPTraits_AA / AF Reported by the source listing;
+    this mapping does not independently verify execution or object contents. Source context: phenotype=AF;
+    method=GWAS; dataset=Verma2024_MVPTraits_AA.'
+  activity_type: VariantScalingStage
+  script_url: https://github.com/broadinstitute/dig-aggregator-methods/blob/master/intake/src/main/scala/VariantScalingStage.scala
+  repo_url: https://github.com/broadinstitute/dig-aggregator-methods
+  trait: KPN.TRAIT:0000096
+- id: dapper:Activity.AJP5BWt1E6ywmpShv8AoVlyJf9Jm3K-8
+  name: Bottom-line partitioning for Verma2024_MVPTraits_AA / AF
+  description: 'Bottom-line partitioning for Verma2024_MVPTraits_AA / AF Reported by the source listing;
+    this mapping does not independently verify execution or object contents. Source context: phenotype=AF;
+    method=GWAS; dataset=Verma2024_MVPTraits_AA.'
+  activity_type: PartitionStage
+  script_url: https://github.com/broadinstitute/dig-aggregator-methods/blob/master/bottom-line/src/main/scala/PartitionStage.scala
+  repo_url: https://github.com/broadinstitute/dig-aggregator-methods
+  trait: KPN.TRAIT:0000096
+- id: dapper:Activity.wMK0LlkCOyQA4vHDOtd4DXEMB5eFBYuH
+  name: Open-data publication for AF / AA
+  description: 'Open-data publication for AF / AA Reported by the source listing; this mapping does not
+    independently verify execution or object contents. Source context: phenotype=AF; ancestry=AA.'
+  activity_type: OpenDataTransferStage
+  script_url: https://github.com/broadinstitute/dig-aggregator-methods/blob/master/bottom-line/src/main/scala/OpenDataTransferStage.scala
+  repo_url: https://github.com/broadinstitute/dig-aggregator-methods
+  ancestry: AA
+  trait: KPN.TRAIT:0000096
+- id: dapper:Activity.wRnnpxHn3SWDUcYn3hmo4xEvAwQnvn_Z
+  name: Bottom-line min_p for AF / AA
+  description: 'Bottom-line min_p for AF / AA Reported by the source listing; this mapping does not independently
+    verify execution or object contents. Source context: phenotype=AF; ancestry=AA.'
+  activity_type: MinPStage
+  script_url: https://github.com/broadinstitute/dig-aggregator-methods/blob/master/bottom-line/src/main/scala/MinPStage.scala
+  repo_url: https://github.com/broadinstitute/dig-aggregator-methods
+  ancestry: AA
+  trait: KPN.TRAIT:0000096
+- id: dapper:Activity.3KWWRAWXP0Y0dH0oeJucV7O1ZvzXuIsH
+  name: Intake variant processing for GWAS / Verma2024_MVPTraits_AA / AF
+  description: 'Intake variant processing for GWAS / Verma2024_MVPTraits_AA / AF Reported by the source
+    listing; this mapping does not independently verify execution or object contents. Source context:
+    phenotype=AF; method=GWAS; dataset=Verma2024_MVPTraits_AA.'
+  activity_type: VariantProcessingStage
+  script_url: https://github.com/broadinstitute/dig-aggregator-methods/blob/master/intake/src/main/scala/VariantProcessingStage.scala
+  repo_url: https://github.com/broadinstitute/dig-aggregator-methods
+  trait: KPN.TRAIT:0000096
+- id: dapper:Activity.ZCS2sbOByw7pVdaYwCQI5W56Apt5M2hK
+  name: Bottom-line ancestry-specific load for AF / AA
+  description: 'Bottom-line ancestry-specific load for AF / AA Reported by the source listing; this mapping
+    does not independently verify execution or object contents. Source context: phenotype=AF; ancestry=AA.'
+  activity_type: LoadAncestrySpecificStage
+  script_url: https://github.com/broadinstitute/dig-aggregator-methods/blob/master/bottom-line/src/main/scala/LoadAncestrySpecificStage.scala
+  repo_url: https://github.com/broadinstitute/dig-aggregator-methods
+  ancestry: AA
+  trait: KPN.TRAIT:0000096
+used_edges:
+- subject: dapper:Activity.94PDmbHlfTIk4N3YjRCA228rZkj0UhES
+  predicate: prov:used
+  object: dapper:Dataset.SicTAPNCqhzzaJOaYg6Vq9db-sbgi6lv
+  edge_role: data_input
+- subject: dapper:Activity.tig07MyHPkjrjPCICzwyYSmSC5Q-Qyzz
+  predicate: prov:used
+  object: dapper:Dataset.HhHSUeVRFFwAZEmlE8IjbTIsRQys2auF
+  edge_role: data_input
+- subject: dapper:Activity.tbsm6H_mp9OyS89s7VlJUbXrAQmO1reg
+  predicate: prov:used
+  object: dapper:Dataset.BWKQgck6_EuYqli-nUhf4idMva7PaEXc
+  edge_role: data_input
+- subject: dapper:Activity.tbsm6H_mp9OyS89s7VlJUbXrAQmO1reg
+  predicate: prov:used
+  object: dapper:Dataset.HhHSUeVRFFwAZEmlE8IjbTIsRQys2auF
+  edge_role: data_input
+- subject: dapper:Activity.SRoNsij7iPwof5SOe6a7fJZkk07Civ_l
+  predicate: prov:used
+  object: dapper:Dataset.Gz2zsoX5-igyIm3-xReWbHnzoS0jdALK
+  edge_role: data_input
+- subject: dapper:Activity.AJP5BWt1E6ywmpShv8AoVlyJf9Jm3K-8
+  predicate: prov:used
+  object: dapper:Dataset.55Yo5xFteAvMx0zZhJj4UQX3V5snJCvr
+  edge_role: data_input
+- subject: dapper:Activity.wMK0LlkCOyQA4vHDOtd4DXEMB5eFBYuH
+  predicate: prov:used
+  object: dapper:Dataset.GTARVQid8l0mZnIl2L2cOPcGtK6ygfFx
+  edge_role: data_input
+- subject: dapper:Activity.wMK0LlkCOyQA4vHDOtd4DXEMB5eFBYuH
+  predicate: prov:used
+  object: dapper:Dataset.RWjiToUI81IM8sivxPQPVk9sVmGy1n6K
+  edge_role: data_input
+- subject: dapper:Activity.wMK0LlkCOyQA4vHDOtd4DXEMB5eFBYuH
+  predicate: prov:used
+  object: dapper:Dataset.4EC-XcQb7QEYoqD8sz_LyE6qIhBOpJkw
+  edge_role: data_input
+- subject: dapper:Activity.wRnnpxHn3SWDUcYn3hmo4xEvAwQnvn_Z
+  predicate: prov:used
+  object: dapper:Dataset.BWKQgck6_EuYqli-nUhf4idMva7PaEXc
+  edge_role: data_input
+- subject: dapper:Activity.wRnnpxHn3SWDUcYn3hmo4xEvAwQnvn_Z
+  predicate: prov:used
+  object: dapper:Dataset.HhHSUeVRFFwAZEmlE8IjbTIsRQys2auF
+  edge_role: data_input
+- subject: dapper:Activity.3KWWRAWXP0Y0dH0oeJucV7O1ZvzXuIsH
+  predicate: prov:used
+  object: dapper:Dataset.ugmepmTewEes2jJo2osDAHN8bJfLiBS2
+  edge_role: data_input
+- subject: dapper:Activity.ZCS2sbOByw7pVdaYwCQI5W56Apt5M2hK
+  predicate: prov:used
+  object: dapper:Dataset.BWKQgck6_EuYqli-nUhf4idMva7PaEXc
+  edge_role: data_input
+- subject: dapper:Activity.ZCS2sbOByw7pVdaYwCQI5W56Apt5M2hK
+  predicate: prov:used
+  object: dapper:Dataset.iUhoUuY1dx0PRPXQVwKtp5py8ZS6zkDe
+  edge_role: data_input
+was_generated_by_edges:
+- subject: dapper:Dataset.Gz2zsoX5-igyIm3-xReWbHnzoS0jdALK
+  predicate: prov:wasGeneratedBy
+  object: dapper:Activity.94PDmbHlfTIk4N3YjRCA228rZkj0UhES
+- subject: dapper:Dataset.BWKQgck6_EuYqli-nUhf4idMva7PaEXc
+  predicate: prov:wasGeneratedBy
+  object: dapper:Activity.AJP5BWt1E6ywmpShv8AoVlyJf9Jm3K-8
+- subject: dapper:Dataset.55Yo5xFteAvMx0zZhJj4UQX3V5snJCvr
+  predicate: prov:wasGeneratedBy
+  object: dapper:Activity.SRoNsij7iPwof5SOe6a7fJZkk07Civ_l
+- subject: dapper:Dataset.HhHSUeVRFFwAZEmlE8IjbTIsRQys2auF
+  predicate: prov:wasGeneratedBy
+  object: dapper:Activity.AJP5BWt1E6ywmpShv8AoVlyJf9Jm3K-8
+- subject: dapper:Dataset.SicTAPNCqhzzaJOaYg6Vq9db-sbgi6lv
+  predicate: prov:wasGeneratedBy
+  object: dapper:Activity.3KWWRAWXP0Y0dH0oeJucV7O1ZvzXuIsH
+- subject: dapper:Dataset.iUhoUuY1dx0PRPXQVwKtp5py8ZS6zkDe
+  predicate: prov:wasGeneratedBy
+  object: dapper:Activity.tig07MyHPkjrjPCICzwyYSmSC5Q-Qyzz
+- subject: dapper:Dataset.GTARVQid8l0mZnIl2L2cOPcGtK6ygfFx
+  predicate: prov:wasGeneratedBy
+  object: dapper:Activity.wRnnpxHn3SWDUcYn3hmo4xEvAwQnvn_Z
+- subject: dapper:Dataset.RWjiToUI81IM8sivxPQPVk9sVmGy1n6K
+  predicate: prov:wasGeneratedBy
+  object: dapper:Activity.ZCS2sbOByw7pVdaYwCQI5W56Apt5M2hK
+- subject: dapper:Dataset.4EC-XcQb7QEYoqD8sz_LyE6qIhBOpJkw
+  predicate: prov:wasGeneratedBy
+  object: dapper:Activity.tbsm6H_mp9OyS89s7VlJUbXrAQmO1reg
+- subject: dapper:File.Sf9jY_kufGEpt-DvD_g50VXIGPmKJUvd
+  predicate: prov:wasGeneratedBy
+  object: dapper:Activity.wMK0LlkCOyQA4vHDOtd4DXEMB5eFBYuH

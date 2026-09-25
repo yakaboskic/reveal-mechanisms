@@ -1,0 +1,38 @@
+{
+  "captured_at": "2026-09-24T14:25:47.872782+00:00",
+  "scope": "Read-only citation design compatibility audit; no schema edits or object minting",
+  "base_commit": "ebfc471049240c23d6ce1d3d40cd2785b35e6443",
+  "files": {
+    "schema/dapper.yaml": "57ee8933ea10cdb0b2c09331a5ca4a84e9b85577e599b365bdabd889e2935b08",
+    "schema/claims.yaml": "791fd4c257d47f2d81f9bcbd9ea9c6d61473e8b79f4c922485ab0cfe1d14171d",
+    "schema/identity/dapper_identity.py": "32b5d4da6ef6291abb263e0034858489f09c66541c2eea058d6855810e3041c5",
+    "schema/docs/claims.md": "042ebd66c7065f57d07169eb29c18cbb543646f547d9f789e10b052a9083a463"
+  },
+  "observations": {
+    "citable_classes": [
+      "Claim",
+      "Question",
+      "KnowledgeGap"
+    ],
+    "person_fields": [
+      "given_name",
+      "family_name",
+      "orcid"
+    ],
+    "provenance": [
+      "has_creator",
+      "has_contributor",
+      "was_attributed_to",
+      "was_generated_by"
+    ],
+    "recommended_citation_fields": [
+      "citation_text",
+      "required_elements"
+    ],
+    "has_recommended_citation_hashable": true,
+    "claim_asserted_in_hashable": false,
+    "activity_generated_at_time_hashable": false,
+    "citation_metadata_record": "Proposed REVEAL registry record; not an existing DAPPER class"
+  },
+  "identity_constraint": "Keep post-mint citation records outside the target digest; a hashable citation that includes the target digest would introduce a cycle."
+}

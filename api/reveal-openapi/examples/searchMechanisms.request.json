@@ -1,0 +1,66 @@
+{
+  "operation_id": "searchMechanisms",
+  "case": "request",
+  "method": "GET",
+  "path_template": "/v1/mechanisms/search",
+  "request": {
+    "url": "https://api.reveal.example.org/v1/mechanisms/search?q=Endothelial+dysfunction&mode=semantic&source=dismech&model=cfde-inc-v2&limit=20",
+    "path": {},
+    "query": {
+      "q": "Endothelial dysfunction",
+      "mode": "semantic",
+      "source": "dismech",
+      "model": "cfde-inc-v2",
+      "limit": 20
+    },
+    "headers": {
+      "Accept": "application/json"
+    },
+    "body": null
+  },
+  "responses": {
+    "200": {
+      "content_type": "application/json",
+      "examples": {
+        "illustrative_mechanism_match": {
+          "items": [
+            {
+              "record": {
+                "source": "dismech",
+                "source_id": "dismech:disorders/Coronary_Artery_Disease#/pathophysiology/0",
+                "source_revision": "d7ea32f7d5b2101e19136522bece815085f1aee34898ab451acda840ae5809dc",
+                "object_class": "Mechanism",
+                "object": {
+                  "description": "At atherosclerosis-prone arterial sites, disturbed flow is associated with endothelial stress and senescence, while reduced endothelial nitric-oxide biosynthesis represents the vasomotor dysfunction that impairs dilation. This nonconforming coronary endothelial-function branch is modeled separately from the conserved subendothelial apoB-retention trigger. The cited disturbed-flow evidence derives from mouse carotid arteries and human carotid plaques, so its transfer to coronary endothelial dysfunction is explicitly partial.",
+                  "id": "dapper:Mechanism.Tbd3TXttvLnVp5rlCDkdPYOWlFOfRUG2",
+                  "name": "Endothelial Dysfunction"
+                },
+                "disease_label": "Coronary Artery Disease"
+              },
+              "ranking": {
+                "value": 0.83,
+                "metric": "cosine_similarity",
+                "rank": 1
+              }
+            }
+          ],
+          "page": {
+            "next_cursor": null,
+            "has_more": false,
+            "snapshot_id": "illustrative-contract-snapshot"
+          },
+          "search": {
+            "query": "Endothelial dysfunction",
+            "mode": "semantic",
+            "corpus_snapshot": "illustrative-contract-snapshot",
+            "embedding_model": "pritamdeka/BioBERT-mnli-snli-scinli-scitail-mednli-stsb",
+            "embedding_revision": null,
+            "template_version": "illustrative-template-v1",
+            "score_aggregation": null
+          }
+        }
+      }
+    }
+  },
+  "curl": "curl -X GET 'https://api.reveal.example.org/v1/mechanisms/search?q=Endothelial+dysfunction&mode=semantic&source=dismech&model=cfde-inc-v2&limit=20' -H 'Accept: application/json'"
+}

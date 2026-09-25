@@ -1,0 +1,13 @@
+{
+  "data_integrity_checks": "passed",
+  "gap_sample_count": 14,
+  "hubmap_nodes": 438,
+  "hubmap_edges": 79,
+  "hubmap_sets": 358,
+  "hubmap_gene_union": 964,
+  "limitations": [
+    "No schema migration, login or agent was executed.",
+    "HuBMAP IDs preserved from corrected export; not re-minted under the API pin.",
+    "Source paths are recorded locations, not public download links."
+  ]
+}

@@ -1,0 +1,131 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:reveal:agent-output:1",
+  "type": "object",
+  "properties": {
+    "format": {
+      "type": "string",
+      "const": "reveal.agent-output/1"
+    },
+    "job_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "attempt": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "succeeded",
+        "insufficient_evidence",
+        "failed",
+        "cancelled"
+      ]
+    },
+    "input_package_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "runtime_manifest_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "ledger_manifest_sha256": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "accounts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "pattern": "^output/[A-Za-z0-9_.-]+\\.(yaml|json)$"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "account_id": {
+            "type": "string",
+            "pattern": "^dapper:ScientificAccount\\.[A-Za-z0-9_-]{32}$"
+          },
+          "lint_report_sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        },
+        "required": [
+          "path",
+          "sha256",
+          "account_id",
+          "lint_report_sha256"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 3
+    },
+    "reason": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "format",
+    "job_id",
+    "attempt",
+    "status",
+    "input_package_sha256",
+    "runtime_manifest_sha256",
+    "ledger_manifest_sha256",
+    "accounts",
+    "reason"
+  ],
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "succeeded"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "accounts": {
+            "minItems": 1
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "accounts": {
+            "maxItems": 0
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  ]
+}

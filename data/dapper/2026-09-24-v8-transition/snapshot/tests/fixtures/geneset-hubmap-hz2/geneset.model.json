@@ -1,0 +1,23 @@
+{
+  "extractor_name": "unsigned_term_gene",
+  "inputs": {
+    "genome_build": "hg38",
+    "organism": "human"
+  },
+  "library": "HuBMAP",
+  "model_group": "HZ",
+  "model_id": "HZ2",
+  "model_label": "asctb_augmented",
+  "naming": {
+    "comparison_style": "unsigned_term",
+    "gene_set_pattern": "HuBMAP_<term>"
+  },
+  "parameters": {
+    "augmentation_threshold": "0.67",
+    "cap_multiplier": "4",
+    "gmt_min_genes": 5,
+    "term_prefix": "HuBMAP"
+  },
+  "schema_version": "1",
+  "workflow_name": "hubmap_asctb_augmented"
+}

@@ -1,0 +1,25 @@
+{
+  "source": "https://cfde-dev.hugeampkpnbi.org",
+  "model": "cfde-inc-v2",
+  "started_at": "2026-09-15T16:56:07.961268+00:00",
+  "finished_at": "2026-09-15T16:56:08.512755+00:00",
+  "phenotype_model_keys": 3778,
+  "successful_queries": 3778,
+  "factor_records": 18419,
+  "restricted_queries": 0,
+  "complete": true,
+  "errors": [],
+  "source_anomalies": [
+    {
+      "type": "phenotype_case_mismatch",
+      "query_key": "gcat_trait_orofacial_cleft",
+      "returned_phenotype": "gcat_trait_Orofacial_cleft",
+      "factor": "Factor3",
+      "source_url": "https://cfde-dev.hugeampkpnbi.org/api/bio/query/pigean-factor?q=gcat_trait_orofacial_cleft%2Ccfde-inc-v2"
+    }
+  ],
+  "scope": "All phenotype keys advertised by pigean-factor/2 for this model; other models excluded",
+  "sha256": "9a46c8a426b1630b68d99c38f4e13bb25e05aecbca35d8da7e07a1c08517859d",
+  "query_retrieved_at_min": "2026-09-15T16:46:22.602139+00:00",
+  "query_retrieved_at_max": "2026-09-15T16:54:55.910829+00:00"
+}

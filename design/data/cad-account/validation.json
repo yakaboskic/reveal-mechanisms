@@ -1,0 +1,21 @@
+{
+  "identity": "passed",
+  "scientific_references": "passed",
+  "dapper_profile": "scientific-account",
+  "schema_errors": 0,
+  "claims": 12,
+  "propositions": 12,
+  "evidence_items": 16,
+  "paragraph_profile": "passed",
+  "citation_registry_links": "passed",
+  "displayed_source_metrics": "passed",
+  "captured_gene_sets_preserved": true,
+  "mock_membership_not_added_to_genesets": true,
+  "warnings": [
+    {
+      "check": "activity-inputs",
+      "message": "Activity 'CFDE GeneSet catalog encoding' declares no inputs"
+    }
+  ],
+  "scope": "Design fixture validation; not scientific validation of authored assessments."
+}

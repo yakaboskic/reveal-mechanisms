@@ -1,0 +1,68 @@
+........................................................................ [ 25%]
+........................................................................ [ 50%]
+..F......................................................F.............. [ 75%]
+.......................................................................  [100%]
+=================================== FAILURES ===================================
+______ test_inverse_membership_does_not_change_ids_or_create_hash_cycles _______
+
+rows = {'prefixes': {'EXGENE': 'urn:example:gene:'}, 'files': [{'id': 'dapper:File.71tWGS-PbGUXPR1jD_ZsXMJDbsnWtr3N', 'name':...cKi', 'name': 'Second illustrative gene set', 'alternate_identifier': ['geneset_2'], 'member_type': 'gene', ...}], ...}
+sv = SchemaView(schema=SchemaDefinition({
+  'name': 'dapper',
+  'description': ('A LinkML data model for DAPPER, the NIH Da...ypes.yaml'
+})}, importmap={}, modifications=0, uuid='ae92b8a6-b927-49d5-9c58-42f00516448e', _hash=-1023892838672897044)
+
+    def test_inverse_membership_does_not_change_ids_or_create_hash_cycles(rows, sv):
+        assert all(row["in_gene_set_collection"] == [rows["gene_set_collections"][0]["id"]]
+                   for row in rows["gene_sets"])
+        mapping = assign_ids(rows, sv)
+>       assert all(old == new for old, new in mapping.items())
+E       assert False
+E        +  where False = all(<generator object test_inverse_membership_does_not_change_ids_or_create_hash_cycles.<locals>.<genexpr> at 0x12ade3bc0>)
+
+tests/test_gene_set_collections.py:109: AssertionError
+______________ test_corrected_hubmap_example_and_export_are_clean ______________
+
+sv = SchemaView(schema=SchemaDefinition({
+  'name': 'dapper',
+  'description': ('A LinkML data model for DAPPER, the NIH Da...ypes.yaml'
+})}, importmap={}, modifications=0, uuid='ae92b8a6-b927-49d5-9c58-42f00516448e', _hash=-1023892838672897044)
+tmp_path = PosixPath('/private/var/folders/x7/6z7r3y9d1slf3b8trz4_grhr0000gn/T/pytest-of-cyakaboski/pytest-49/test_corrected_hubmap_example_0')
+context = (Vocabulary(node_groups={'files': 'File', 'c2m2_files': 'C2M2File', 'activities': 'Activity', 'gene_sets': 'GeneSet', ...tps://broadinstitute.github.io/dapper/ns#error_domain'}), <linkml.validator.validator.Validator object at 0x12a63ad90>)
+
+    def test_corrected_hubmap_example_and_export_are_clean(sv, tmp_path, context):
+        original = yaml.safe_load((EXAMPLES / "example_geneset_hubmap.yaml").read_text())
+        assert len(original["c2m2_files"]) == 1
+        assert len(original["files"]) == 74
+        assert all("persistent_id" not in n and "c2m2_uuid" not in n for n in original["files"])
+        assert all("local_id" not in n for n in original["files"] + original["c2m2_files"])
+        gene_set = original["gene_set_collections"][0]
+        assert gene_set["name"] == "HuBMAP ASCT+B gene-set library (HZ1)"
+        assert gene_set["alternate_identifier"] == ["unsigned_term_gene:2b85b11457a52cc7e0d6950a"]
+        gmt = next(n for n in original["c2m2_files"] if n["filename"] == "genesets.gmt")
+        assert gene_set["has_gmt_file"] == gmt["id"]
+        content = (EXAMPLES / "data/hubmap_hz1.genesets.gmt").read_bytes()
+        assert len(content) == gmt["size_in_bytes"]
+        assert base64.b64encode(hashlib.md5(content).digest()).decode() == gmt["md5"]
+        assert hashlib.sha256(content).hexdigest() == gmt["sha256"]
+        rows = {r[0]: r[2:] for r in (line.split("\t") for line in content.decode().splitlines())}
+        assert len(original["gene_sets"]) == len(rows) == gene_set["n_sets"] == 358
+        assert gene_set["n_genes"] == len({g for genes in rows.values() for g in genes}) == 964
+        assert set(gene_set["members"]) == {n["id"] for n in original["gene_sets"]}
+        for row in original["gene_sets"]:
+            assert row["members"] == ["HGNC.SYMBOL:" + g for g in rows[row["gmt_entry"]]]
+            assert row["alternate_identifier"] == [row["gmt_entry"]]
+            assert row["in_gene_set_collection"] == [gene_set["id"]]
+            assert row["in_gmt_file"] == gmt["id"]
+            assert row["n_genes"] == len(set(row["members"]))
+        assert not any("dcc_url" in node or "drc_url" in node
+                       for group in ("files", "c2m2_files", "activities", "gene_set_collections", "gene_sets") for node in original[group])
+>       assert not report(original, tmp_path, sv, context).findings
+E       AssertionError: assert not [Finding(severity='error', check='identity', where='gene_sets[0]', message='content hashes to dapper:GeneSet.d2HdDYwLp...e id addresses different content', why='Re-mint with `uv run schema/identity/dapper_identity.py assign <file>`.'), ...]
+E        +  where [Finding(severity='error', check='identity', where='gene_sets[0]', message='content hashes to dapper:GeneSet.d2HdDYwLp...e id addresses different content', why='Re-mint with `uv run schema/identity/dapper_identity.py assign <file>`.'), ...] = Report(path=PosixPath('/private/var/folders/x7/6z7r3y9d1slf3b8trz4_grhr0000gn/T/pytest-of-cyakaboski/pytest-49/test_co...h `uv run schema/identity/dapper_identity.py assign <file>`.')], counts={'nodes': 436, 'edges': 77, 'raw_sources': 36}).findings
+E        +    where Report(path=PosixPath('/private/var/folders/x7/6z7r3y9d1slf3b8trz4_grhr0000gn/T/pytest-of-cyakaboski/pytest-49/test_co...h `uv run schema/identity/dapper_identity.py assign <file>`.')], counts={'nodes': 436, 'edges': 77, 'raw_sources': 36}) = report({'prefixes': {'humgen': 'file:///humgen/', 'HGNC.SYMBOL': 'https://identifiers.org/hgnc.symbol:'}, 'gene_set_collectio...rary (GMT)', 'description': 'File record for Genesets.gmt (role: gmt_library)', 'filename': 'genesets.gmt', ...}], ...}, PosixPath('/private/var/folders/x7/6z7r3y9d1slf3b8trz4_grhr0000gn/T/pytest-of-cyakaboski/pytest-49/test_corrected_hubmap_example_0'), SchemaView(schema=SchemaDefinition({\n  'name': 'dapper',\n  'description': ('A LinkML data model for DAPPER, the NIH Da...ypes.yaml'\n})}, importmap={}, modifications=0, uuid='ae92b8a6-b927-49d5-9c58-42f00516448e', _hash=-1023892838672897044), (Vocabulary(node_groups={'files': 'File', 'c2m2_files': 'C2M2File', 'activities': 'Activity', 'gene_sets': 'GeneSet', ...tps://broadinstitute.github.io/dapper/ns#error_domain'}), <linkml.validator.validator.Validator object at 0x12a63ad90>))
+
+tests/test_document_prefixes.py:205: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_gene_set_collections.py::test_inverse_membership_does_not_change_ids_or_create_hash_cycles
+FAILED tests/test_document_prefixes.py::test_corrected_hubmap_example_and_export_are_clean
+2 failed, 285 passed in 35.71s

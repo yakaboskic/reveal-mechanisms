@@ -1,0 +1,766 @@
+{
+  "dapper_schema_pin": "2026-09-24-v8",
+  "paragraph": {
+    "id": "dapper:Paragraph.uSYa1LdXNPuwlSgsCz3oZ7IfrVoztroD",
+    "scientific_account": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
+    "language": "en",
+    "was_generated_by": "dapper:Activity.XZK6LpSUO5eTobg5XZa95h3ywTGGvdRM",
+    "was_attributed_to": [
+      "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+    ],
+    "text": "The selected CAD knowledge gap asks whether context amplifies genetic risk or instead reflects incipient disease. In the captured CAD-in-T2D analysis, SHH, GLI3 and TCF7L2 are implicated in mechanism Factor1 by EAGGL loadings of 0.5042, 0.3245 and 0.3813, respectively. The AMP AD / GTEx brain-aging and PsychENCODE geneM16 programs are also implicated in this mechanism by their gene-set loadings. PIGEAN gene–trait and gene-set–trait results further connect these genes and programs to CAD in people with type 2 diabetes. Illustrative, unverified KG membership assertions connect SHH to the AMP AD / GTEx set and TCF7L2 to the PsychENCODE set; these links demonstrate a possible evidence connection and are not retrieved biological findings. Taken together, these assessments prioritize a shared mechanism for investigating the gap, but do not resolve whether exposures amplify genetic risk or are downstream readouts. Temporal or intervention evidence is still needed.",
+    "citations": [
+      {
+        "target_id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+        "citation_metadata_revision": 1,
+        "start": 0,
+        "end": 113,
+        "exact_text": "The selected CAD knowledge gap asks whether context amplifies genetic risk or instead reflects incipient disease."
+      },
+      {
+        "target_id": "dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km",
+        "citation_metadata_revision": 1,
+        "start": 114,
+        "end": 269,
+        "exact_text": "In the captured CAD-in-T2D analysis, SHH, GLI3 and TCF7L2 are implicated in mechanism Factor1 by EAGGL loadings of 0.5042, 0.3245 and 0.3813, respectively."
+      },
+      {
+        "target_id": "dapper:Claim.Uv7_cT46DdsqZMvk5nh8G48qOIKvhRgc",
+        "citation_metadata_revision": 1,
+        "start": 114,
+        "end": 269,
+        "exact_text": "In the captured CAD-in-T2D analysis, SHH, GLI3 and TCF7L2 are implicated in mechanism Factor1 by EAGGL loadings of 0.5042, 0.3245 and 0.3813, respectively."
+      },
+      {
+        "target_id": "dapper:Claim.I2mf6PJ0DPF5_nnbiBjAhgjlUCOiUZZ9",
+        "citation_metadata_revision": 1,
+        "start": 114,
+        "end": 269,
+        "exact_text": "In the captured CAD-in-T2D analysis, SHH, GLI3 and TCF7L2 are implicated in mechanism Factor1 by EAGGL loadings of 0.5042, 0.3245 and 0.3813, respectively."
+      },
+      {
+        "target_id": "dapper:Claim.Kd3psmdr4G9AlD0UU1E1Vu6AjpKaQYWE",
+        "citation_metadata_revision": 1,
+        "start": 270,
+        "end": 398,
+        "exact_text": "The AMP AD / GTEx brain-aging and PsychENCODE geneM16 programs are also implicated in this mechanism by their gene-set loadings."
+      },
+      {
+        "target_id": "dapper:Claim.NBafdtdEE2Uabs-8pZqurv7SoWpg7Yhi",
+        "citation_metadata_revision": 1,
+        "start": 270,
+        "end": 398,
+        "exact_text": "The AMP AD / GTEx brain-aging and PsychENCODE geneM16 programs are also implicated in this mechanism by their gene-set loadings."
+      },
+      {
+        "target_id": "dapper:Claim.Oe2UZeV7oMY4NsMHyB8h4HJO1FH4nSGF",
+        "citation_metadata_revision": 1,
+        "start": 399,
+        "end": 523,
+        "exact_text": "PIGEAN gene–trait and gene-set–trait results further connect these genes and programs to CAD in people with type 2 diabetes."
+      },
+      {
+        "target_id": "dapper:Claim.2idJniYU4zCtCN6puy8XZ2mzo9Mq6c5p",
+        "citation_metadata_revision": 1,
+        "start": 399,
+        "end": 523,
+        "exact_text": "PIGEAN gene–trait and gene-set–trait results further connect these genes and programs to CAD in people with type 2 diabetes."
+      },
+      {
+        "target_id": "dapper:Claim.H5icBYm5JLM3_T-b1mMfH65Nc0zMhZzH",
+        "citation_metadata_revision": 1,
+        "start": 399,
+        "end": 523,
+        "exact_text": "PIGEAN gene–trait and gene-set–trait results further connect these genes and programs to CAD in people with type 2 diabetes."
+      },
+      {
+        "target_id": "dapper:Claim.xzV_35EYnLl-zy03YbmhfBk_ynNbl7H9",
+        "citation_metadata_revision": 1,
+        "start": 399,
+        "end": 523,
+        "exact_text": "PIGEAN gene–trait and gene-set–trait results further connect these genes and programs to CAD in people with type 2 diabetes."
+      },
+      {
+        "target_id": "dapper:Claim.SYqCJXxCVXDpwflRSdZnkVLzGLO_vi_r",
+        "citation_metadata_revision": 1,
+        "start": 399,
+        "end": 523,
+        "exact_text": "PIGEAN gene–trait and gene-set–trait results further connect these genes and programs to CAD in people with type 2 diabetes."
+      },
+      {
+        "target_id": "dapper:Claim.x7aCVQ1uTkYKLJo32ZyAGMGZaAGCSvWV",
+        "citation_metadata_revision": 1,
+        "start": 524,
+        "end": 743,
+        "exact_text": "Illustrative, unverified KG membership assertions connect SHH to the AMP AD / GTEx set and TCF7L2 to the PsychENCODE set; these links demonstrate a possible evidence connection and are not retrieved biological findings."
+      },
+      {
+        "target_id": "dapper:Claim.uzqyfwuhf59hSTdravdcr4cTxuitWGx-",
+        "citation_metadata_revision": 1,
+        "start": 524,
+        "end": 743,
+        "exact_text": "Illustrative, unverified KG membership assertions connect SHH to the AMP AD / GTEx set and TCF7L2 to the PsychENCODE set; these links demonstrate a possible evidence connection and are not retrieved biological findings."
+      },
+      {
+        "target_id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+        "citation_metadata_revision": 1,
+        "start": 744,
+        "end": 971,
+        "exact_text": "Taken together, these assessments prioritize a shared mechanism for investigating the gap, but do not resolve whether exposures amplify genetic risk or are downstream readouts. Temporal or intervention evidence is still needed."
+      },
+      {
+        "target_id": "dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km",
+        "citation_metadata_revision": 1,
+        "start": 744,
+        "end": 971,
+        "exact_text": "Taken together, these assessments prioritize a shared mechanism for investigating the gap, but do not resolve whether exposures amplify genetic risk or are downstream readouts. Temporal or intervention evidence is still needed."
+      },
+      {
+        "target_id": "dapper:Claim.Uv7_cT46DdsqZMvk5nh8G48qOIKvhRgc",
+        "citation_metadata_revision": 1,
+        "start": 744,
+        "end": 971,
+        "exact_text": "Taken together, these assessments prioritize a shared mechanism for investigating the gap, but do not resolve whether exposures amplify genetic risk or are downstream readouts. Temporal or intervention evidence is still needed."
+      },
+      {
+        "target_id": "dapper:Claim.I2mf6PJ0DPF5_nnbiBjAhgjlUCOiUZZ9",
+        "citation_metadata_revision": 1,
+        "start": 744,
+        "end": 971,
+        "exact_text": "Taken together, these assessments prioritize a shared mechanism for investigating the gap, but do not resolve whether exposures amplify genetic risk or are downstream readouts. Temporal or intervention evidence is still needed."
+      },
+      {
+        "target_id": "dapper:Claim.Kd3psmdr4G9AlD0UU1E1Vu6AjpKaQYWE",
+        "citation_metadata_revision": 1,
+        "start": 744,
+        "end": 971,
+        "exact_text": "Taken together, these assessments prioritize a shared mechanism for investigating the gap, but do not resolve whether exposures amplify genetic risk or are downstream readouts. Temporal or intervention evidence is still needed."
+      },
+      {
+        "target_id": "dapper:Claim.NBafdtdEE2Uabs-8pZqurv7SoWpg7Yhi",
+        "citation_metadata_revision": 1,
+        "start": 744,
+        "end": 971,
+        "exact_text": "Taken together, these assessments prioritize a shared mechanism for investigating the gap, but do not resolve whether exposures amplify genetic risk or are downstream readouts. Temporal or intervention evidence is still needed."
+      }
+    ]
+  },
+  "citation_records": [
+    {
+      "target_id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+      "target_class": "KnowledgeGap",
+      "dapper_schema_version": "sha256:219769c9874a3c0a7d6972360d5847a8b344e412a8b9f4e2648f059682440345",
+      "dapper_identity_profile": "DAPPER-ID-1",
+      "object_payload_ref": "http://127.0.0.1:8767/data/cad-account/scientific-account.json",
+      "metadata_revision": 1,
+      "citation_profile_version": "reveal-citation-v1",
+      "title": "Are the CAD PGS×context interactions driven by adverse exposures causally amplifying genetic risk, or are some \"contexts\" actually downstream readouts of incipient disease (reverse causation)?",
+      "title_derivation": {
+        "method": "inquiry_text",
+        "version": "1",
+        "source": {
+          "source_ref": "urn:example:cad-account-design"
+        }
+      },
+      "language": "en",
+      "byline": [],
+      "origin": "imported",
+      "generated_at": null,
+      "first_minted_at": "2026-09-24T16:00:00Z",
+      "published_at": null,
+      "original_issued_date": null,
+      "imported_at": "2026-09-24T16:00:00Z",
+      "issued_date": "2026-09-24",
+      "issued_basis": "first_minted_at",
+      "date_provenance": {
+        "first_minted_at": {
+          "source_ref": "urn:example:reveal:contract-fixture"
+        },
+        "imported_at": {
+          "source_ref": "urn:example:reveal:contract-fixture"
+        }
+      },
+      "publisher": null,
+      "repository": "REVEAL design examples — unpublished",
+      "canonical_url": "http://127.0.0.1:8767/data/cad-account/scientific-account.json#/knowledge_gaps/0",
+      "access_level": "private",
+      "publication_state": "unpublished"
+    },
+    {
+      "target_id": "dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km",
+      "target_class": "Claim",
+      "dapper_schema_version": "sha256:219769c9874a3c0a7d6972360d5847a8b344e412a8b9f4e2648f059682440345",
+      "dapper_identity_profile": "DAPPER-ID-1",
+      "object_payload_ref": "http://127.0.0.1:8767/data/cad-account/scientific-account.json",
+      "metadata_revision": 1,
+      "citation_profile_version": "reveal-citation-v1",
+      "title": "The EAGGL result supports SHH involvement in this mechanism through its reported loading of 0.5042 under cfde-inc-v2.",
+      "title_derivation": {
+        "method": "assessment_statement",
+        "version": "1",
+        "source": {
+          "source_ref": "urn:example:cad-account-design"
+        }
+      },
+      "language": "en",
+      "byline": [
+        {
+          "agent_id": "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he",
+          "kind": "person",
+          "given_name": "Design",
+          "family_name": "Example",
+          "roles": [
+            "agent_operator"
+          ],
+          "source": {
+            "source_ref": "urn:example:cad-account-design"
+          }
+        }
+      ],
+      "origin": "native",
+      "generated_at": null,
+      "first_minted_at": "2026-09-24T16:00:00Z",
+      "published_at": null,
+      "issued_date": "2026-09-24",
+      "issued_basis": "first_minted_at",
+      "date_provenance": {
+        "first_minted_at": {
+          "source_ref": "urn:example:reveal:contract-fixture"
+        }
+      },
+      "publisher": null,
+      "repository": "REVEAL design examples — unpublished",
+      "canonical_url": "http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/0",
+      "access_level": "private",
+      "publication_state": "unpublished"
+    },
+    {
+      "target_id": "dapper:Claim.Uv7_cT46DdsqZMvk5nh8G48qOIKvhRgc",
+      "target_class": "Claim",
+      "dapper_schema_version": "sha256:219769c9874a3c0a7d6972360d5847a8b344e412a8b9f4e2648f059682440345",
+      "dapper_identity_profile": "DAPPER-ID-1",
+      "object_payload_ref": "http://127.0.0.1:8767/data/cad-account/scientific-account.json",
+      "metadata_revision": 1,
+      "citation_profile_version": "reveal-citation-v1",
+      "title": "The EAGGL result supports GLI3 involvement in this mechanism through its reported loading of 0.3245 under cfde-inc-v2.",
+      "title_derivation": {
+        "method": "assessment_statement",
+        "version": "1",
+        "source": {
+          "source_ref": "urn:example:cad-account-design"
+        }
+      },
+      "language": "en",
+      "byline": [
+        {
+          "agent_id": "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he",
+          "kind": "person",
+          "given_name": "Design",
+          "family_name": "Example",
+          "roles": [
+            "agent_operator"
+          ],
+          "source": {
+            "source_ref": "urn:example:cad-account-design"
+          }
+        }
+      ],
+      "origin": "native",
+      "generated_at": null,
+      "first_minted_at": "2026-09-24T16:00:00Z",
+      "published_at": null,
+      "issued_date": "2026-09-24",
+      "issued_basis": "first_minted_at",
+      "date_provenance": {
+        "first_minted_at": {
+          "source_ref": "urn:example:reveal:contract-fixture"
+        }
+      },
+      "publisher": null,
+      "repository": "REVEAL design examples — unpublished",
+      "canonical_url": "http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/1",
+      "access_level": "private",
+      "publication_state": "unpublished"
+    },
+    {
+      "target_id": "dapper:Claim.I2mf6PJ0DPF5_nnbiBjAhgjlUCOiUZZ9",
+      "target_class": "Claim",
+      "dapper_schema_version": "sha256:219769c9874a3c0a7d6972360d5847a8b344e412a8b9f4e2648f059682440345",
+      "dapper_identity_profile": "DAPPER-ID-1",
+      "object_payload_ref": "http://127.0.0.1:8767/data/cad-account/scientific-account.json",
+      "metadata_revision": 1,
+      "citation_profile_version": "reveal-citation-v1",
+      "title": "The EAGGL result supports TCF7L2 involvement in this mechanism through its reported loading of 0.3813 under cfde-inc-v2.",
+      "title_derivation": {
+        "method": "assessment_statement",
+        "version": "1",
+        "source": {
+          "source_ref": "urn:example:cad-account-design"
+        }
+      },
+      "language": "en",
+      "byline": [
+        {
+          "agent_id": "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he",
+          "kind": "person",
+          "given_name": "Design",
+          "family_name": "Example",
+          "roles": [
+            "agent_operator"
+          ],
+          "source": {
+            "source_ref": "urn:example:cad-account-design"
+          }
+        }
+      ],
+      "origin": "native",
+      "generated_at": null,
+      "first_minted_at": "2026-09-24T16:00:00Z",
+      "published_at": null,
+      "issued_date": "2026-09-24",
+      "issued_basis": "first_minted_at",
+      "date_provenance": {
+        "first_minted_at": {
+          "source_ref": "urn:example:reveal:contract-fixture"
+        }
+      },
+      "publisher": null,
+      "repository": "REVEAL design examples — unpublished",
+      "canonical_url": "http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/2",
+      "access_level": "private",
+      "publication_state": "unpublished"
+    },
+    {
+      "target_id": "dapper:Claim.Kd3psmdr4G9AlD0UU1E1Vu6AjpKaQYWE",
+      "target_class": "Claim",
+      "dapper_schema_version": "sha256:219769c9874a3c0a7d6972360d5847a8b344e412a8b9f4e2648f059682440345",
+      "dapper_identity_profile": "DAPPER-ID-1",
+      "object_payload_ref": "http://127.0.0.1:8767/data/cad-account/scientific-account.json",
+      "metadata_revision": 1,
+      "citation_profile_version": "reveal-citation-v1",
+      "title": "The EAGGL result supports involvement of the AMP AD / GTEx brain-aging set, with a loading of 1.0 on mechanism Factor1.",
+      "title_derivation": {
+        "method": "assessment_statement",
+        "version": "1",
+        "source": {
+          "source_ref": "urn:example:cad-account-design"
+        }
+      },
+      "language": "en",
+      "byline": [
+        {
+          "agent_id": "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he",
+          "kind": "person",
+          "given_name": "Design",
+          "family_name": "Example",
+          "roles": [
+            "agent_operator"
+          ],
+          "source": {
+            "source_ref": "urn:example:cad-account-design"
+          }
+        }
+      ],
+      "origin": "native",
+      "generated_at": null,
+      "first_minted_at": "2026-09-24T16:00:00Z",
+      "published_at": null,
+      "issued_date": "2026-09-24",
+      "issued_basis": "first_minted_at",
+      "date_provenance": {
+        "first_minted_at": {
+          "source_ref": "urn:example:reveal:contract-fixture"
+        }
+      },
+      "publisher": null,
+      "repository": "REVEAL design examples — unpublished",
+      "canonical_url": "http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/3",
+      "access_level": "private",
+      "publication_state": "unpublished"
+    },
+    {
+      "target_id": "dapper:Claim.NBafdtdEE2Uabs-8pZqurv7SoWpg7Yhi",
+      "target_class": "Claim",
+      "dapper_schema_version": "sha256:219769c9874a3c0a7d6972360d5847a8b344e412a8b9f4e2648f059682440345",
+      "dapper_identity_profile": "DAPPER-ID-1",
+      "object_payload_ref": "http://127.0.0.1:8767/data/cad-account/scientific-account.json",
+      "metadata_revision": 1,
+      "citation_profile_version": "reveal-citation-v1",
+      "title": "The EAGGL result supports involvement of the PsychENCODE geneM16 set, with a loading of 0.4518 on mechanism Factor1.",
+      "title_derivation": {
+        "method": "assessment_statement",
+        "version": "1",
+        "source": {
+          "source_ref": "urn:example:cad-account-design"
+        }
+      },
+      "language": "en",
+      "byline": [
+        {
+          "agent_id": "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he",
+          "kind": "person",
+          "given_name": "Design",
+          "family_name": "Example",
+          "roles": [
+            "agent_operator"
+          ],
+          "source": {
+            "source_ref": "urn:example:cad-account-design"
+          }
+        }
+      ],
+      "origin": "native",
+      "generated_at": null,
+      "first_minted_at": "2026-09-24T16:00:00Z",
+      "published_at": null,
+      "issued_date": "2026-09-24",
+      "issued_basis": "first_minted_at",
+      "date_provenance": {
+        "first_minted_at": {
+          "source_ref": "urn:example:reveal:contract-fixture"
+        }
+      },
+      "publisher": null,
+      "repository": "REVEAL design examples — unpublished",
+      "canonical_url": "http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/4",
+      "access_level": "private",
+      "publication_state": "unpublished"
+    },
+    {
+      "target_id": "dapper:Claim.Oe2UZeV7oMY4NsMHyB8h4HJO1FH4nSGF",
+      "target_class": "Claim",
+      "dapper_schema_version": "sha256:219769c9874a3c0a7d6972360d5847a8b344e412a8b9f4e2648f059682440345",
+      "dapper_identity_profile": "DAPPER-ID-1",
+      "object_payload_ref": "http://127.0.0.1:8767/data/cad-account/scientific-account.json",
+      "metadata_revision": 1,
+      "citation_profile_version": "reveal-citation-v1",
+      "title": "PIGEAN supports SHH trait-level involvement with a combined relevance score of 3.86; this is distinct from its mechanism loading.",
+      "title_derivation": {
+        "method": "assessment_statement",
+        "version": "1",
+        "source": {
+          "source_ref": "urn:example:cad-account-design"
+        }
+      },
+      "language": "en",
+      "byline": [
+        {
+          "agent_id": "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he",
+          "kind": "person",
+          "given_name": "Design",
+          "family_name": "Example",
+          "roles": [
+            "agent_operator"
+          ],
+          "source": {
+            "source_ref": "urn:example:cad-account-design"
+          }
+        }
+      ],
+      "origin": "native",
+      "generated_at": null,
+      "first_minted_at": "2026-09-24T16:00:00Z",
+      "published_at": null,
+      "issued_date": "2026-09-24",
+      "issued_basis": "first_minted_at",
+      "date_provenance": {
+        "first_minted_at": {
+          "source_ref": "urn:example:reveal:contract-fixture"
+        }
+      },
+      "publisher": null,
+      "repository": "REVEAL design examples — unpublished",
+      "canonical_url": "http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/5",
+      "access_level": "private",
+      "publication_state": "unpublished"
+    },
+    {
+      "target_id": "dapper:Claim.2idJniYU4zCtCN6puy8XZ2mzo9Mq6c5p",
+      "target_class": "Claim",
+      "dapper_schema_version": "sha256:219769c9874a3c0a7d6972360d5847a8b344e412a8b9f4e2648f059682440345",
+      "dapper_identity_profile": "DAPPER-ID-1",
+      "object_payload_ref": "http://127.0.0.1:8767/data/cad-account/scientific-account.json",
+      "metadata_revision": 1,
+      "citation_profile_version": "reveal-citation-v1",
+      "title": "PIGEAN supports GLI3 trait-level involvement with a combined relevance score of 1.98; this is distinct from its mechanism loading.",
+      "title_derivation": {
+        "method": "assessment_statement",
+        "version": "1",
+        "source": {
+          "source_ref": "urn:example:cad-account-design"
+        }
+      },
+      "language": "en",
+      "byline": [
+        {
+          "agent_id": "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he",
+          "kind": "person",
+          "given_name": "Design",
+          "family_name": "Example",
+          "roles": [
+            "agent_operator"
+          ],
+          "source": {
+            "source_ref": "urn:example:cad-account-design"
+          }
+        }
+      ],
+      "origin": "native",
+      "generated_at": null,
+      "first_minted_at": "2026-09-24T16:00:00Z",
+      "published_at": null,
+      "issued_date": "2026-09-24",
+      "issued_basis": "first_minted_at",
+      "date_provenance": {
+        "first_minted_at": {
+          "source_ref": "urn:example:reveal:contract-fixture"
+        }
+      },
+      "publisher": null,
+      "repository": "REVEAL design examples — unpublished",
+      "canonical_url": "http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/6",
+      "access_level": "private",
+      "publication_state": "unpublished"
+    },
+    {
+      "target_id": "dapper:Claim.H5icBYm5JLM3_T-b1mMfH65Nc0zMhZzH",
+      "target_class": "Claim",
+      "dapper_schema_version": "sha256:219769c9874a3c0a7d6972360d5847a8b344e412a8b9f4e2648f059682440345",
+      "dapper_identity_profile": "DAPPER-ID-1",
+      "object_payload_ref": "http://127.0.0.1:8767/data/cad-account/scientific-account.json",
+      "metadata_revision": 1,
+      "citation_profile_version": "reveal-citation-v1",
+      "title": "PIGEAN supports TCF7L2 trait-level involvement with a combined relevance score of 2.42; this is distinct from its mechanism loading.",
+      "title_derivation": {
+        "method": "assessment_statement",
+        "version": "1",
+        "source": {
+          "source_ref": "urn:example:cad-account-design"
+        }
+      },
+      "language": "en",
+      "byline": [
+        {
+          "agent_id": "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he",
+          "kind": "person",
+          "given_name": "Design",
+          "family_name": "Example",
+          "roles": [
+            "agent_operator"
+          ],
+          "source": {
+            "source_ref": "urn:example:cad-account-design"
+          }
+        }
+      ],
+      "origin": "native",
+      "generated_at": null,
+      "first_minted_at": "2026-09-24T16:00:00Z",
+      "published_at": null,
+      "issued_date": "2026-09-24",
+      "issued_basis": "first_minted_at",
+      "date_provenance": {
+        "first_minted_at": {
+          "source_ref": "urn:example:reveal:contract-fixture"
+        }
+      },
+      "publisher": null,
+      "repository": "REVEAL design examples — unpublished",
+      "canonical_url": "http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/7",
+      "access_level": "private",
+      "publication_state": "unpublished"
+    },
+    {
+      "target_id": "dapper:Claim.xzV_35EYnLl-zy03YbmhfBk_ynNbl7H9",
+      "target_class": "Claim",
+      "dapper_schema_version": "sha256:219769c9874a3c0a7d6972360d5847a8b344e412a8b9f4e2648f059682440345",
+      "dapper_identity_profile": "DAPPER-ID-1",
+      "object_payload_ref": "http://127.0.0.1:8767/data/cad-account/scientific-account.json",
+      "metadata_revision": 1,
+      "citation_profile_version": "reveal-citation-v1",
+      "title": "PIGEAN supports trait-level involvement of the AMP AD / GTEx brain-aging set, with beta=0.115 and beta_uncorrected=0.119.",
+      "title_derivation": {
+        "method": "assessment_statement",
+        "version": "1",
+        "source": {
+          "source_ref": "urn:example:cad-account-design"
+        }
+      },
+      "language": "en",
+      "byline": [
+        {
+          "agent_id": "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he",
+          "kind": "person",
+          "given_name": "Design",
+          "family_name": "Example",
+          "roles": [
+            "agent_operator"
+          ],
+          "source": {
+            "source_ref": "urn:example:cad-account-design"
+          }
+        }
+      ],
+      "origin": "native",
+      "generated_at": null,
+      "first_minted_at": "2026-09-24T16:00:00Z",
+      "published_at": null,
+      "issued_date": "2026-09-24",
+      "issued_basis": "first_minted_at",
+      "date_provenance": {
+        "first_minted_at": {
+          "source_ref": "urn:example:reveal:contract-fixture"
+        }
+      },
+      "publisher": null,
+      "repository": "REVEAL design examples — unpublished",
+      "canonical_url": "http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/8",
+      "access_level": "private",
+      "publication_state": "unpublished"
+    },
+    {
+      "target_id": "dapper:Claim.SYqCJXxCVXDpwflRSdZnkVLzGLO_vi_r",
+      "target_class": "Claim",
+      "dapper_schema_version": "sha256:219769c9874a3c0a7d6972360d5847a8b344e412a8b9f4e2648f059682440345",
+      "dapper_identity_profile": "DAPPER-ID-1",
+      "object_payload_ref": "http://127.0.0.1:8767/data/cad-account/scientific-account.json",
+      "metadata_revision": 1,
+      "citation_profile_version": "reveal-citation-v1",
+      "title": "PIGEAN supports trait-level involvement of the PsychENCODE geneM16 set, with beta=0.00729 and beta_uncorrected=0.0586.",
+      "title_derivation": {
+        "method": "assessment_statement",
+        "version": "1",
+        "source": {
+          "source_ref": "urn:example:cad-account-design"
+        }
+      },
+      "language": "en",
+      "byline": [
+        {
+          "agent_id": "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he",
+          "kind": "person",
+          "given_name": "Design",
+          "family_name": "Example",
+          "roles": [
+            "agent_operator"
+          ],
+          "source": {
+            "source_ref": "urn:example:cad-account-design"
+          }
+        }
+      ],
+      "origin": "native",
+      "generated_at": null,
+      "first_minted_at": "2026-09-24T16:00:00Z",
+      "published_at": null,
+      "issued_date": "2026-09-24",
+      "issued_basis": "first_minted_at",
+      "date_provenance": {
+        "first_minted_at": {
+          "source_ref": "urn:example:reveal:contract-fixture"
+        }
+      },
+      "publisher": null,
+      "repository": "REVEAL design examples — unpublished",
+      "canonical_url": "http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/9",
+      "access_level": "private",
+      "publication_state": "unpublished"
+    },
+    {
+      "target_id": "dapper:Claim.x7aCVQ1uTkYKLJo32ZyAGMGZaAGCSvWV",
+      "target_class": "Claim",
+      "dapper_schema_version": "sha256:219769c9874a3c0a7d6972360d5847a8b344e412a8b9f4e2648f059682440345",
+      "dapper_identity_profile": "DAPPER-ID-1",
+      "object_payload_ref": "http://127.0.0.1:8767/data/cad-account/scientific-account.json",
+      "metadata_revision": 1,
+      "citation_profile_version": "reveal-citation-v1",
+      "title": "For this illustrative scenario, a mock ProKN assertion supports SHH membership in the AMP AD / GTEx brain-aging set. The membership is unverified.",
+      "title_derivation": {
+        "method": "assessment_statement",
+        "version": "1",
+        "source": {
+          "source_ref": "urn:example:cad-account-design"
+        }
+      },
+      "language": "en",
+      "byline": [
+        {
+          "agent_id": "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he",
+          "kind": "person",
+          "given_name": "Design",
+          "family_name": "Example",
+          "roles": [
+            "agent_operator"
+          ],
+          "source": {
+            "source_ref": "urn:example:cad-account-design"
+          }
+        }
+      ],
+      "origin": "native",
+      "generated_at": null,
+      "first_minted_at": "2026-09-24T16:00:00Z",
+      "published_at": null,
+      "issued_date": "2026-09-24",
+      "issued_basis": "first_minted_at",
+      "date_provenance": {
+        "first_minted_at": {
+          "source_ref": "urn:example:reveal:contract-fixture"
+        }
+      },
+      "publisher": null,
+      "repository": "REVEAL design examples — unpublished",
+      "canonical_url": "http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/10",
+      "access_level": "private",
+      "publication_state": "unpublished"
+    },
+    {
+      "target_id": "dapper:Claim.uzqyfwuhf59hSTdravdcr4cTxuitWGx-",
+      "target_class": "Claim",
+      "dapper_schema_version": "sha256:219769c9874a3c0a7d6972360d5847a8b344e412a8b9f4e2648f059682440345",
+      "dapper_identity_profile": "DAPPER-ID-1",
+      "object_payload_ref": "http://127.0.0.1:8767/data/cad-account/scientific-account.json",
+      "metadata_revision": 1,
+      "citation_profile_version": "reveal-citation-v1",
+      "title": "For this illustrative scenario, a mock BiomarkerKG assertion supports TCF7L2 membership in the PsychENCODE geneM16 set. The membership is unverified.",
+      "title_derivation": {
+        "method": "assessment_statement",
+        "version": "1",
+        "source": {
+          "source_ref": "urn:example:cad-account-design"
+        }
+      },
+      "language": "en",
+      "byline": [
+        {
+          "agent_id": "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he",
+          "kind": "person",
+          "given_name": "Design",
+          "family_name": "Example",
+          "roles": [
+            "agent_operator"
+          ],
+          "source": {
+            "source_ref": "urn:example:cad-account-design"
+          }
+        }
+      ],
+      "origin": "native",
+      "generated_at": null,
+      "first_minted_at": "2026-09-24T16:00:00Z",
+      "published_at": null,
+      "issued_date": "2026-09-24",
+      "issued_basis": "first_minted_at",
+      "date_provenance": {
+        "first_minted_at": {
+          "source_ref": "urn:example:reveal:contract-fixture"
+        }
+      },
+      "publisher": null,
+      "repository": "REVEAL design examples — unpublished",
+      "canonical_url": "http://127.0.0.1:8767/data/cad-account/scientific-account.json#/claims/11",
+      "access_level": "private",
+      "publication_state": "unpublished"
+    }
+  ]
+}

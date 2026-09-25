@@ -1,0 +1,35 @@
+{
+  "url": "https://cfde-dev.hugeampkpnbi.org/api/bio/query/pigean-gene-set-genes?q=LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K09454191_up%2Ccfde-inc-v2",
+  "retrieved_at": "2026-09-15T16:49:41.282249+00:00",
+  "index": "pigean-gene-set-genes",
+  "keys": [
+    "LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K09454191_up",
+    "cfde-inc-v2"
+  ],
+  "complete": true,
+  "restricted": 0,
+  "pages": [
+    {
+      "profile": {
+        "fetch": 2.712000423343852e-06,
+        "query": 0.0016311789995597792
+      },
+      "index": "pigean-gene-set-genes",
+      "q": [
+        "LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K09454191_up",
+        "cfde-inc-v2"
+      ],
+      "count": 0,
+      "restricted": 0,
+      "progress": {
+        "bytes_read": 0,
+        "bytes_total": 0,
+        "filtered": 0
+      },
+      "page": 1,
+      "limit": null
+    }
+  ],
+  "row_count": 0,
+  "data": []
+}

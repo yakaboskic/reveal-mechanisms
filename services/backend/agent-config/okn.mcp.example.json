@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "proto-okn": {
+      "type": "http",
+      "url": "https://apps.okn.us/okn-mcp-dev/mcp"
+    }
+  }
+}

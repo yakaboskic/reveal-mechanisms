@@ -1,0 +1,22 @@
+{
+  "reviewed_on": "2026-09-25",
+  "html_sha256": "f0858f53a2f006dcd639c865aef44dcc2f8911876ba371cfbc8b4c1fef6b9820",
+  "checks": {
+    "fuzzy_search": "AIP exact, alzhiemer and diabtes typos, unrelated-query no-match passed",
+    "search_input": "Only selects existing DisMech gaps; free-text action removed",
+    "selected_question": "Non-editable source question, same screen",
+    "linked_dismech": "Collapsed by default; inspectable only; no remove/checkbox controls",
+    "labels": "Find more mechanisms; Linked DisMech mechanisms",
+    "guidance": "Anchor on possible genetic mechanisms to explore evidence for answering this gap.",
+    "animation": "Real example question observed; stopped when search focused/typed; never populates input value",
+    "source_integrity": "Existing DAPPER payloads unchanged",
+    "syntax": "node --check passed",
+    "browser_console": "No log entries",
+    "documentation_links": 55
+  },
+  "limitations": [
+    "Fuzzy matching uses a 13-record local sample.",
+    "Animation reduced-motion branch is implemented, not tested in a separate browser preference run.",
+    "Production OpenAPI amendments are recorded, not regenerated; no backend or agent executed."
+  ]
+}

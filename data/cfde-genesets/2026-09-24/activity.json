@@ -1,0 +1,7 @@
+{
+  "name": "CFDE GeneSet catalog encoding",
+  "activity_type": "CFDEGeneSetCatalogImport",
+  "description": "Encodes advertised CFDE named gene-set identities; not the original biological gene-set creation activity.",
+  "command": "cfde-geneset-catalog-v1 model=cfde-inc-v2",
+  "id": "dapper:Activity.VM0nxPd0QVsZJ-7qw4WjAvXtEiFMehqx"
+}

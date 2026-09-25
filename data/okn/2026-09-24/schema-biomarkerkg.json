@@ -1,0 +1,222 @@
+{
+  "endpoint": "https://apps.okn.us/okn-mcp-dev/mcp",
+  "captured_at": "2026-09-24T13:35:26.560801+00:00",
+  "request": {
+    "jsonrpc": "2.0",
+    "id": 4,
+    "method": "tools/call",
+    "params": {
+      "name": "get_schema",
+      "arguments": {
+        "shortname": "biomarkerkg",
+        "compact": true
+      }
+    }
+  },
+  "response": {
+    "jsonrpc": "2.0",
+    "id": 4,
+    "result": {
+      "content": [
+        {
+          "type": "text",
+          "text": "{\n  \"shortname\": \"biomarkerkg\",\n  \"schema\": {\n    \"classes\": {\n      \"columns\": [\n        \"uri\",\n        \"label\",\n        \"description\",\n        \"type\"\n      ],\n      \"data\": [\n        [\n          \"http://purl.obolibrary.org/obo/OBCI_0000002\",\n          \"diagnostic biomarker\",\n          \"A biomarker that is used to detect or confirm the presence of a disease or condition of interest or to identify individuals with a subtype of the disease.\",\n          \"Class\"\n        ],\n        [\n          \"http://purl.obolibrary.org/obo/OBCI_0000003\",\n          \"monitoring biomarker\",\n          \"A biomarker that is measured serially to assess the status of a disease or medical condition, or for evidence of exposure to (or effect of) a medical product or an environmental agent.\",\n          \"Class\"\n        ],\n        [\n          \"http://purl.obolibrary.org/obo/OBCI_0000004\",\n          \"pharmacodynamic/response biomarker\",\n          \"A biomarker that is used to show that a biological response has occurred in an individual who has been exposed to a medical product or an environmental agent.\",\n          \"Class\"\n        ],\n        [\n          \"http://purl.obolibrary.org/obo/OBCI_0000005\",\n          \"predictive biomarker\",\n          \"A biomarker that is used to identify individuals who are more likely than similar individuals without the biomarker to experience a favorable or unfavorable effect from exposure to a medical product or an environmental agent.\",\n          \"Class\"\n        ],\n        [\n          \"http://purl.obolibrary.org/obo/OBCI_0000006\",\n          \"prognostic biomarker\",\n          \"A biomarker that is used to identify the likelihood of a clinical event, disease recurrence or progression in patients who have the disease or medical condition of interest.\",\n          \"Class\"\n        ],\n        [\n          \"http://purl.obolibrary.org/obo/OBCI_0000008\",\n          \"susceptibility/risk biomarker\",\n          \"A biomarker that is used to indicate the potential for developing a disease or medical condition in an individual who does not currently have clinically apparent disease or the medical condition.\",\n          \"Class\"\n        ],\n        [\n          \"http://purl.uniprot.org/core/Protein\",\n          \"Protein\",\n          \"A protein record from the UniProt core ontology, used here as the assessed molecular entity that a biomarker is measured on.\",\n          \"Class\"\n        ]\n      ],\n      \"count\": 7\n    },\n    \"predicates\": {\n      \"columns\": [\n        \"uri\",\n        \"label\",\n        \"description\",\n        \"type\",\n        \"source_class\",\n        \"target_class\",\n        \"has_edge_properties\"\n      ],\n      \"data\": [\n        [\n          \"http://purl.obolibrary.org/obo/OBCI_1000002\",\n          \"diagnostic for\",\n          \"A relationship between a biomarker 'b' and a disease or condition of clinical interest 'd', where the presence or occurrence of 'b' is used to infer the presence or occurrence of 'd' or determine its subtype.\",\n          \"Predicate\",\n          \"http://purl.obolibrary.org/obo/OBCI_0000002|http://purl.obolibrary.org/obo/OBCI_0000003|http://purl.obolibrary.org/obo/OBCI_0000004|http://purl.obolibrary.org/obo/OBCI_0000005|http://purl.obolibrary.org/obo/OBCI_0000006|http://purl.obolibrary.org/obo/OBCI_0000008\",\n          \"\",\n          false\n        ],\n        [\n          \"http://purl.obolibrary.org/obo/OBCI_1000003\",\n          \"monitors status of\",\n          \"A relationship between a serially-measured biomarker 'b' and a disease or condition of clinical interest 'd', where 'b' is used to infer the status of 'd'.\",\n          \"Predicate\",\n          \"http://purl.obolibrary.org/obo/OBCI_0000002|http://purl.obolibrary.org/obo/OBCI_0000003|http://purl.obolibrary.org/obo/OBCI_0000004|http://purl.obolibrary.org/obo/OBCI_0000005|http://purl.obolibrary.org/obo/OBCI_0000006|http://purl.obolibrary.org/obo/OBCI_0000008\",\n          \"\",\n          false\n        ],\n        [\n          \"http://purl.obolibrary.org/obo/OBCI_1000006\",\n          \"prognostic for\",\n          \"A relationship between a biomarker 'b' and a disease or condition of clinical interest 'd', where the presence or occurrence of 'b' is used to infer the likelihood of a clinical event, disease recurrence or progression in patients who have 'd'.\",\n          \"Predicate\",\n          \"http://purl.obolibrary.org/obo/OBCI_0000002|http://purl.obolibrary.org/obo/OBCI_0000003|http://purl.obolibrary.org/obo/OBCI_0000004|http://purl.obolibrary.org/obo/OBCI_0000005|http://purl.obolibrary.org/obo/OBCI_0000006|http://purl.obolibrary.org/obo/OBCI_0000008\",\n          \"\",\n          false\n        ],\n        [\n          \"http://purl.obolibrary.org/obo/OBCI_1000008\",\n          \"indicates risk of developing\",\n          \"A relationship between a biomarker 'b' and a disease or condition of clinical interest 'd', where the presence or occurrence of 'b' is used to infer the potential for developing 'd' in an individual that currently does not have 'd'.\",\n          \"Predicate\",\n          \"http://purl.obolibrary.org/obo/OBCI_0000002|http://purl.obolibrary.org/obo/OBCI_0000003|http://purl.obolibrary.org/obo/OBCI_0000004|http://purl.obolibrary.org/obo/OBCI_0000005|http://purl.obolibrary.org/obo/OBCI_0000006|http://purl.obolibrary.org/obo/OBCI_0000008\",\n          \"\",\n          false\n        ],\n        [\n          \"http://purl.obolibrary.org/obo/OBCI_1000009\",\n          \"indicated by above normal level of\",\n          \"A relationship between a biomarker 'b' and its assessed entity 'e', whereby the level of 'e' is--to some statistically significant degree--above the range typically considered normal (for an individual or population of interest).\",\n          \"Predicate\",\n          \"http://purl.obolibrary.org/obo/OBCI_0000002|http://purl.obolibrary.org/obo/OBCI_0000003|http://purl.obolibrary.org/obo/OBCI_0000004|http://purl.obolibrary.org/obo/OBCI_0000005|http://purl.obolibrary.org/obo/OBCI_0000006|http://purl.obolibrary.org/obo/OBCI_0000008\",\n          \"http://purl.uniprot.org/core/Protein\",\n          false\n        ],\n        [\n          \"http://purl.obolibrary.org/obo/OBCI_1000011\",\n          \"has BEST classification\",\n          \"A relationship between a biomarker 'b' and its purpose as defined by the BEST classification system.\",\n          \"Predicate\",\n          \"http://purl.obolibrary.org/obo/OBCI_0000002|http://purl.obolibrary.org/obo/OBCI_0000003|http://purl.obolibrary.org/obo/OBCI_0000004|http://purl.obolibrary.org/obo/OBCI_0000005|http://purl.obolibrary.org/obo/OBCI_0000006|http://purl.obolibrary.org/obo/OBCI_0000008\",\n          \"\",\n          false\n        ],\n        [\n          \"http://purl.obolibrary.org/obo/OBCI_1000015\",\n          \"indicated by below normal level of\",\n          \"A relationship between a biomarker 'b' and its assessed entity 'e', whereby the level of 'e' is--to some statistically significant degree--below the range typically considered normal (for an individual or population of interest).\",\n          \"Predicate\",\n          \"http://purl.obolibrary.org/obo/OBCI_0000002|http://purl.obolibrary.org/obo/OBCI_0000003|http://purl.obolibrary.org/obo/OBCI_0000004|http://purl.obolibrary.org/obo/OBCI_0000005|http://purl.obolibrary.org/obo/OBCI_0000006|http://purl.obolibrary.org/obo/OBCI_0000008\",\n          \"http://purl.uniprot.org/core/Protein\",\n          false\n        ],\n        [\n          \"http://purl.obolibrary.org/obo/OBCI_1000016\",\n          \"indicated by presence of\",\n          \"A relationship between a biomarker 'b' and its assessed entity 'e', whereby 'e' is found to be present in cases where it is typically absent (in an individual or population of interest).\",\n          \"Predicate\",\n          \"http://purl.obolibrary.org/obo/OBCI_0000002|http://purl.obolibrary.org/obo/OBCI_0000003|http://purl.obolibrary.org/obo/OBCI_0000004|http://purl.obolibrary.org/obo/OBCI_0000005|http://purl.obolibrary.org/obo/OBCI_0000006|http://purl.obolibrary.org/obo/OBCI_0000008\",\n          \"http://purl.uniprot.org/core/Protein\",\n          false\n        ],\n        [\n          \"http://purl.obolibrary.org/obo/OBCI_1000017\",\n          \"indicated by absence of\",\n          \"A relationship between a biomarker 'b' and its assessed entity 'e', whereby 'e' is found to be absent in cases where it is typically present (in an individual or population of interest).\",\n          \"Predicate\",\n          \"http://purl.obolibrary.org/obo/OBCI_0000002|http://purl.obolibrary.org/obo/OBCI_0000003|http://purl.obolibrary.org/obo/OBCI_0000004|http://purl.obolibrary.org/obo/OBCI_0000005|http://purl.obolibrary.org/obo/OBCI_0000006|http://purl.obolibrary.org/obo/OBCI_0000008\",\n          \"http://purl.uniprot.org/core/Protein\",\n          false\n        ],\n        [\n          \"http://purl.obolibrary.org/obo/OBCI_1000018\",\n          \"determined using sample from\",\n          \"A relationship between a biomarker 'b' and an anatomical source 'a', whereby a sample of 'a' is used to determine some quality of an assessed entity 'e'.\",\n          \"Predicate\",\n          \"http://purl.obolibrary.org/obo/OBCI_0000002|http://purl.obolibrary.org/obo/OBCI_0000003|http://purl.obolibrary.org/obo/OBCI_0000004|http://purl.obolibrary.org/obo/OBCI_0000005|http://purl.obolibrary.org/obo/OBCI_0000006|http://purl.obolibrary.org/obo/OBCI_0000008\",\n          \"\",\n          false\n        ],\n        [\n          \"http://purl.org/dc/terms/source\",\n          \"source\",\n          \"A related resource from which the biomarker assertion is derived, such as the BiomarkerKB record or supporting literature.\",\n          \"Predicate\",\n          \"http://purl.obolibrary.org/obo/OBCI_0000002|http://purl.obolibrary.org/obo/OBCI_0000003|http://purl.obolibrary.org/obo/OBCI_0000004|http://purl.obolibrary.org/obo/OBCI_0000005|http://purl.obolibrary.org/obo/OBCI_0000006|http://purl.obolibrary.org/obo/OBCI_0000008\",\n          \"\",\n          false\n        ],\n        [\n          \"http://www.w3.org/2000/01/rdf-schema#label\",\n          \"label\",\n          \"A human-readable name for the subject resource.\",\n          \"Predicate\",\n          \"http://purl.obolibrary.org/obo/OBCI_0000002|http://purl.obolibrary.org/obo/OBCI_0000003|http://purl.obolibrary.org/obo/OBCI_0000004|http://purl.obolibrary.org/obo/OBCI_0000005|http://purl.obolibrary.org/obo/OBCI_0000006|http://purl.obolibrary.org/obo/OBCI_0000008|http://purl.uniprot.org/core/Protein\",\n          \"\",\n          false\n        ]\n      ],\n      \"count\": 12\n    },\n    \"edge_properties\": {},\n    \"node_properties\": {\n      \"columns\": [\n        \"uri\",\n        \"label\",\n        \"description\",\n        \"type\",\n        \"class\"\n      ],\n      \"data\": [],\n      \"count\": 0\n    }\n  },\n  \"next_step\": \"Before joining on a predicate whose objects are ontology terms (diseases, chemicals, genes, anatomy), call probe_namespaces('biomarkerkg', <predicate>) to see which identifier scheme actually populates it (e.g. MONDO vs DOID vs NCIT) and how many of each. Pick the richest namespace \u2014 do NOT infer the ontology from the predicate or KG name, and do not give up if your first guess has no hierarchy in ubergraph. If the id you need isn't on an obvious predicate, call find_crosswalks('biomarkerkg'): ontology ids are often attached via rdfs:seeAlso / owl:sameAs / skos:exactMatch rather than a domain predicate.\"\n}"
+        }
+      ],
+      "structuredContent": {
+        "shortname": "biomarkerkg",
+        "schema": {
+          "classes": {
+            "columns": [
+              "uri",
+              "label",
+              "description",
+              "type"
+            ],
+            "data": [
+              [
+                "http://purl.obolibrary.org/obo/OBCI_0000002",
+                "diagnostic biomarker",
+                "A biomarker that is used to detect or confirm the presence of a disease or condition of interest or to identify individuals with a subtype of the disease.",
+                "Class"
+              ],
+              [
+                "http://purl.obolibrary.org/obo/OBCI_0000003",
+                "monitoring biomarker",
+                "A biomarker that is measured serially to assess the status of a disease or medical condition, or for evidence of exposure to (or effect of) a medical product or an environmental agent.",
+                "Class"
+              ],
+              [
+                "http://purl.obolibrary.org/obo/OBCI_0000004",
+                "pharmacodynamic/response biomarker",
+                "A biomarker that is used to show that a biological response has occurred in an individual who has been exposed to a medical product or an environmental agent.",
+                "Class"
+              ],
+              [
+                "http://purl.obolibrary.org/obo/OBCI_0000005",
+                "predictive biomarker",
+                "A biomarker that is used to identify individuals who are more likely than similar individuals without the biomarker to experience a favorable or unfavorable effect from exposure to a medical product or an environmental agent.",
+                "Class"
+              ],
+              [
+                "http://purl.obolibrary.org/obo/OBCI_0000006",
+                "prognostic biomarker",
+                "A biomarker that is used to identify the likelihood of a clinical event, disease recurrence or progression in patients who have the disease or medical condition of interest.",
+                "Class"
+              ],
+              [
+                "http://purl.obolibrary.org/obo/OBCI_0000008",
+                "susceptibility/risk biomarker",
+                "A biomarker that is used to indicate the potential for developing a disease or medical condition in an individual who does not currently have clinically apparent disease or the medical condition.",
+                "Class"
+              ],
+              [
+                "http://purl.uniprot.org/core/Protein",
+                "Protein",
+                "A protein record from the UniProt core ontology, used here as the assessed molecular entity that a biomarker is measured on.",
+                "Class"
+              ]
+            ],
+            "count": 7
+          },
+          "predicates": {
+            "columns": [
+              "uri",
+              "label",
+              "description",
+              "type",
+              "source_class",
+              "target_class",
+              "has_edge_properties"
+            ],
+            "data": [
+              [
+                "http://purl.obolibrary.org/obo/OBCI_1000002",
+                "diagnostic for",
+                "A relationship between a biomarker 'b' and a disease or condition of clinical interest 'd', where the presence or occurrence of 'b' is used to infer the presence or occurrence of 'd' or determine its subtype.",
+                "Predicate",
+                "http://purl.obolibrary.org/obo/OBCI_0000002|http://purl.obolibrary.org/obo/OBCI_0000003|http://purl.obolibrary.org/obo/OBCI_0000004|http://purl.obolibrary.org/obo/OBCI_0000005|http://purl.obolibrary.org/obo/OBCI_0000006|http://purl.obolibrary.org/obo/OBCI_0000008",
+                "",
+                false
+              ],
+              [
+                "http://purl.obolibrary.org/obo/OBCI_1000003",
+                "monitors status of",
+                "A relationship between a serially-measured biomarker 'b' and a disease or condition of clinical interest 'd', where 'b' is used to infer the status of 'd'.",
+                "Predicate",
+                "http://purl.obolibrary.org/obo/OBCI_0000002|http://purl.obolibrary.org/obo/OBCI_0000003|http://purl.obolibrary.org/obo/OBCI_0000004|http://purl.obolibrary.org/obo/OBCI_0000005|http://purl.obolibrary.org/obo/OBCI_0000006|http://purl.obolibrary.org/obo/OBCI_0000008",
+                "",
+                false
+              ],
+              [
+                "http://purl.obolibrary.org/obo/OBCI_1000006",
+                "prognostic for",
+                "A relationship between a biomarker 'b' and a disease or condition of clinical interest 'd', where the presence or occurrence of 'b' is used to infer the likelihood of a clinical event, disease recurrence or progression in patients who have 'd'.",
+                "Predicate",
+                "http://purl.obolibrary.org/obo/OBCI_0000002|http://purl.obolibrary.org/obo/OBCI_0000003|http://purl.obolibrary.org/obo/OBCI_0000004|http://purl.obolibrary.org/obo/OBCI_0000005|http://purl.obolibrary.org/obo/OBCI_0000006|http://purl.obolibrary.org/obo/OBCI_0000008",
+                "",
+                false
+              ],
+              [
+                "http://purl.obolibrary.org/obo/OBCI_1000008",
+                "indicates risk of developing",
+                "A relationship between a biomarker 'b' and a disease or condition of clinical interest 'd', where the presence or occurrence of 'b' is used to infer the potential for developing 'd' in an individual that currently does not have 'd'.",
+                "Predicate",
+                "http://purl.obolibrary.org/obo/OBCI_0000002|http://purl.obolibrary.org/obo/OBCI_0000003|http://purl.obolibrary.org/obo/OBCI_0000004|http://purl.obolibrary.org/obo/OBCI_0000005|http://purl.obolibrary.org/obo/OBCI_0000006|http://purl.obolibrary.org/obo/OBCI_0000008",
+                "",
+                false
+              ],
+              [
+                "http://purl.obolibrary.org/obo/OBCI_1000009",
+                "indicated by above normal level of",
+                "A relationship between a biomarker 'b' and its assessed entity 'e', whereby the level of 'e' is--to some statistically significant degree--above the range typically considered normal (for an individual or population of interest).",
+                "Predicate",
+                "http://purl.obolibrary.org/obo/OBCI_0000002|http://purl.obolibrary.org/obo/OBCI_0000003|http://purl.obolibrary.org/obo/OBCI_0000004|http://purl.obolibrary.org/obo/OBCI_0000005|http://purl.obolibrary.org/obo/OBCI_0000006|http://purl.obolibrary.org/obo/OBCI_0000008",
+                "http://purl.uniprot.org/core/Protein",
+                false
+              ],
+              [
+                "http://purl.obolibrary.org/obo/OBCI_1000011",
+                "has BEST classification",
+                "A relationship between a biomarker 'b' and its purpose as defined by the BEST classification system.",
+                "Predicate",
+                "http://purl.obolibrary.org/obo/OBCI_0000002|http://purl.obolibrary.org/obo/OBCI_0000003|http://purl.obolibrary.org/obo/OBCI_0000004|http://purl.obolibrary.org/obo/OBCI_0000005|http://purl.obolibrary.org/obo/OBCI_0000006|http://purl.obolibrary.org/obo/OBCI_0000008",
+                "",
+                false
+              ],
+              [
+                "http://purl.obolibrary.org/obo/OBCI_1000015",
+                "indicated by below normal level of",
+                "A relationship between a biomarker 'b' and its assessed entity 'e', whereby the level of 'e' is--to some statistically significant degree--below the range typically considered normal (for an individual or population of interest).",
+                "Predicate",
+                "http://purl.obolibrary.org/obo/OBCI_0000002|http://purl.obolibrary.org/obo/OBCI_0000003|http://purl.obolibrary.org/obo/OBCI_0000004|http://purl.obolibrary.org/obo/OBCI_0000005|http://purl.obolibrary.org/obo/OBCI_0000006|http://purl.obolibrary.org/obo/OBCI_0000008",
+                "http://purl.uniprot.org/core/Protein",
+                false
+              ],
+              [
+                "http://purl.obolibrary.org/obo/OBCI_1000016",
+                "indicated by presence of",
+                "A relationship between a biomarker 'b' and its assessed entity 'e', whereby 'e' is found to be present in cases where it is typically absent (in an individual or population of interest).",
+                "Predicate",
+                "http://purl.obolibrary.org/obo/OBCI_0000002|http://purl.obolibrary.org/obo/OBCI_0000003|http://purl.obolibrary.org/obo/OBCI_0000004|http://purl.obolibrary.org/obo/OBCI_0000005|http://purl.obolibrary.org/obo/OBCI_0000006|http://purl.obolibrary.org/obo/OBCI_0000008",
+                "http://purl.uniprot.org/core/Protein",
+                false
+              ],
+              [
+                "http://purl.obolibrary.org/obo/OBCI_1000017",
+                "indicated by absence of",
+                "A relationship between a biomarker 'b' and its assessed entity 'e', whereby 'e' is found to be absent in cases where it is typically present (in an individual or population of interest).",
+                "Predicate",
+                "http://purl.obolibrary.org/obo/OBCI_0000002|http://purl.obolibrary.org/obo/OBCI_0000003|http://purl.obolibrary.org/obo/OBCI_0000004|http://purl.obolibrary.org/obo/OBCI_0000005|http://purl.obolibrary.org/obo/OBCI_0000006|http://purl.obolibrary.org/obo/OBCI_0000008",
+                "http://purl.uniprot.org/core/Protein",
+                false
+              ],
+              [
+                "http://purl.obolibrary.org/obo/OBCI_1000018",
+                "determined using sample from",
+                "A relationship between a biomarker 'b' and an anatomical source 'a', whereby a sample of 'a' is used to determine some quality of an assessed entity 'e'.",
+                "Predicate",
+                "http://purl.obolibrary.org/obo/OBCI_0000002|http://purl.obolibrary.org/obo/OBCI_0000003|http://purl.obolibrary.org/obo/OBCI_0000004|http://purl.obolibrary.org/obo/OBCI_0000005|http://purl.obolibrary.org/obo/OBCI_0000006|http://purl.obolibrary.org/obo/OBCI_0000008",
+                "",
+                false
+              ],
+              [
+                "http://purl.org/dc/terms/source",
+                "source",
+                "A related resource from which the biomarker assertion is derived, such as the BiomarkerKB record or supporting literature.",
+                "Predicate",
+                "http://purl.obolibrary.org/obo/OBCI_0000002|http://purl.obolibrary.org/obo/OBCI_0000003|http://purl.obolibrary.org/obo/OBCI_0000004|http://purl.obolibrary.org/obo/OBCI_0000005|http://purl.obolibrary.org/obo/OBCI_0000006|http://purl.obolibrary.org/obo/OBCI_0000008",
+                "",
+                false
+              ],
+              [
+                "http://www.w3.org/2000/01/rdf-schema#label",
+                "label",
+                "A human-readable name for the subject resource.",
+                "Predicate",
+                "http://purl.obolibrary.org/obo/OBCI_0000002|http://purl.obolibrary.org/obo/OBCI_0000003|http://purl.obolibrary.org/obo/OBCI_0000004|http://purl.obolibrary.org/obo/OBCI_0000005|http://purl.obolibrary.org/obo/OBCI_0000006|http://purl.obolibrary.org/obo/OBCI_0000008|http://purl.uniprot.org/core/Protein",
+                "",
+                false
+              ]
+            ],
+            "count": 12
+          },
+          "edge_properties": {},
+          "node_properties": {
+            "columns": [
+              "uri",
+              "label",
+              "description",
+              "type",
+              "class"
+            ],
+            "data": [],
+            "count": 0
+          }
+        },
+        "next_step": "Before joining on a predicate whose objects are ontology terms (diseases, chemicals, genes, anatomy), call probe_namespaces('biomarkerkg', <predicate>) to see which identifier scheme actually populates it (e.g. MONDO vs DOID vs NCIT) and how many of each. Pick the richest namespace \u2014 do NOT infer the ontology from the predicate or KG name, and do not give up if your first guess has no hierarchy in ubergraph. If the id you need isn't on an obvious predicate, call find_crosswalks('biomarkerkg'): ontology ids are often attached via rdfs:seeAlso / owl:sameAs / skos:exactMatch rather than a domain predicate."
+      },
+      "isError": false
+    }
+  }
+}

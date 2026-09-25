@@ -1,0 +1,14 @@
+{
+  "runs": [
+    {
+      "date": "2026-09-25T19:24:52.885659+00:00",
+      "input_tokens": null,
+      "output_tokens": null,
+      "files": 194,
+      "status": "unavailable",
+      "note": "Host-agent tool returns no per-agent token usage; not zero usage."
+    }
+  ],
+  "total_input_tokens": null,
+  "total_output_tokens": null
+}

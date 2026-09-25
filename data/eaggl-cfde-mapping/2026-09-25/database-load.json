@@ -1,0 +1,20 @@
+{
+  "run_id": "272cfa19d093257863d7e7134776229dbc9b9b018d974e6b311285686833ec31",
+  "status": "complete",
+  "apply": true,
+  "counts": {
+    "eaggl_factors": 4037,
+    "cfde_catalog_factors": 18419,
+    "matched_factors": 1756,
+    "unmatched_factors": 2281,
+    "gene_set_summary_links": 8780,
+    "resolved_gene_set_links": 4056,
+    "unresolved_gene_set_links": 4724,
+    "distinct_resolved_gene_sets": 3733
+  },
+  "unmatched_by_reason": {
+    "trait_not_in_cfde_catalog": 832,
+    "factor_number_not_in_cfde_catalog": 1449
+  },
+  "verified": true
+}

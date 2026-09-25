@@ -1,0 +1,86 @@
+{
+  "snapshot_sha256": "ebcc0845c90f5ff5305d13797646552c21d64e872e5e7079fa67f2fb158eff12",
+  "root_schema_sha256": "219769c9874a3c0a7d6972360d5847a8b344e412a8b9f4e2648f059682440345",
+  "dependencies": {
+    "linkml": "1.11.1",
+    "linkml-runtime": "1.11.1",
+    "rdflib": "7.6.0",
+    "jsonschema": "4.26.0",
+    "PyYAML": "6.0.2",
+    "pytest": "9.1.1"
+  },
+  "import_compatibility": {
+    "records_scanned": 801934,
+    "identity_and_closed_schema_samples_passed": 82,
+    "activity_identity_and_closed_schema_passed": true,
+    "present_fields": [
+      "alternate_identifier",
+      "id",
+      "member_type",
+      "name",
+      "term",
+      "term_prefix",
+      "was_derived_from",
+      "was_generated_by"
+    ],
+    "field_shapes": [
+      {
+        "fields": [
+          "alternate_identifier",
+          "id",
+          "member_type",
+          "name",
+          "term",
+          "term_prefix",
+          "was_derived_from",
+          "was_generated_by"
+        ],
+        "count": 45595
+      },
+      {
+        "fields": [
+          "alternate_identifier",
+          "id",
+          "member_type",
+          "name",
+          "term",
+          "was_derived_from",
+          "was_generated_by"
+        ],
+        "count": 756339
+      }
+    ],
+    "added_hashable_fields": [],
+    "removed_hashable_fields": [],
+    "note": "Field coverage scanned for all records; identity/schema replay is sampled, not a new full import validation."
+  },
+  "gap_mapping": {
+    "count": 3367,
+    "kinds": {
+      "KNOWLEDGE_GAP": 2604,
+      "HUMAN_MODEL_MISMATCH": 763
+    },
+    "missing_nonblank_prompt": 0,
+    "missing_nonblank_rationale": 4,
+    "missing_rationale_examples": [
+      "dismech:disorders/Congenital_Merosin-deficient_Muscular_Dystrophy_1A#discussion:mdc1a-gap-1",
+      "dismech:disorders/Congenital_Merosin-deficient_Muscular_Dystrophy_1A#discussion:mdc1a-gap-2",
+      "dismech:disorders/HFM1-related_gametogenic_failure#discussion:gap_hfm1_female_phenotype_severity",
+      "dismech:disorders/HFM1-related_gametogenic_failure#discussion:gap_hfm1_microtese_success_by_variant"
+    ],
+    "with_disease_term_id": 3216
+  },
+  "application_boundaries": {
+    "file_location_changes_payload_without_changing_id": true,
+    "geneset_inverse_collection_link_changes_payload_without_changing_id": true,
+    "geneset_gmt_representation_changes_payload_without_changing_id": true,
+    "gap_context_changes_id": true,
+    "external_curie_expansion_can_change_id": true,
+    "large_collection_identity_limit": "input exceeds DAPPER-ID-1 limit of 10000 triples: 10003",
+    "scientific_account_profile": {
+      "class": "ScientificAccount",
+      "min": 1,
+      "max": 1
+    }
+  }
+}

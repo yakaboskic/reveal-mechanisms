@@ -1,0 +1,11 @@
+{
+  "run_id": "272cfa19d093257863d7e7134776229dbc9b9b018d974e6b311285686833ec31",
+  "eaggl_import_id": "a548ad801c11551de74f04a4cb2ecce65e776a443d2730a01ec6e17d89a6f1bc",
+  "eaggl_factor_id": "22q112_deletion_syndrome_Orphanet_567::Factor1",
+  "eaggl_label": "22q11 Deletion Effects",
+  "model": "cfde-inc-v2",
+  "match_method": "exact_trait_factor_number",
+  "status": "unmatched",
+  "reason": "trait_not_in_cfde_catalog",
+  "gene_sets": []
+}

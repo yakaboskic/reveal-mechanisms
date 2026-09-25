@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>REVEAL API reference</title>
+  <!-- SWAGGER_CSS -->
+  <style>
+    :root { color-scheme: light; --ink:#16334a; --blue:#2463eb; --soft:#eef5ff; --line:#d9e3ec; --body:#193b52; }
+    * { box-sizing:border-box; }
+    body { margin:0; color:var(--body); background:white; font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    a { color:#1b50bd; text-underline-offset:3px; }
+    button,select { font:inherit; }
+    button,a,select,summary,input { outline-offset:4px; }
+    :focus-visible { outline:3px solid var(--blue); }
+    .page-head,.guide,.samples { max-width:1200px; margin:auto; padding:28px 28px; }
+    .page-head { display:flex; justify-content:space-between; align-items:center; gap:30px; padding-top:38px; }
+    h1,h2 { color:var(--ink); font-family:"Trebuchet MS",sans-serif; line-height:1.15; margin:0 0 14px; }
+    h1 { font-size:38px; font-weight:700; letter-spacing:-1px; }
+    h2 { font-size:23px; }
+    p { margin:0; max-width:75ch; }
+    .intro { max-width:65ch; color:#40586c; }
+    .downloads { display:flex; flex-wrap:wrap; gap:10px; flex-shrink:0; }
+    .downloads a { display:block; padding:10px 16px; border:1px solid var(--line); border-radius:6px; text-decoration:none; font-weight:600; white-space:nowrap; }
+    .downloads a:first-child { background:var(--blue); border-color:var(--blue); color:white; }
+    .contract-note { background:var(--soft); border-block:1px solid #d3e3fc; }
+    .contract-note p { max-width:1144px; margin:auto; padding:12px 0; font-size:14px; }
+    .guide { padding-block:26px 20px; }
+    .workflow { display:flex; list-style:none; padding:0; margin:17px 0 0; gap:0; counter-reset:step; flex-wrap:wrap; }
+    .workflow li { counter-increment:step; display:flex; align-items:center; min-height:44px; }
+    .workflow a { display:flex; align-items:center; gap:9px; text-decoration:none; font-weight:600; padding:6px 15px 6px 0; }
+    .workflow a::before { content:counter(step); background:var(--soft); color:var(--blue); border-radius:50%; width:26px; height:26px; text-align:center; font-size:13px; line-height:26px; }
+    .workflow li:not(:last-child)::after { content:""; height:1px; width:22px; background:var(--line); margin-right:15px; }
+    .samples { padding-top:0; padding-bottom:20px; }
+    details.sample-panel { border:1px solid var(--line); border-radius:6px; }
+    .sample-panel>summary { padding:13px 17px; font-weight:600; cursor:pointer; }
+    .sample-body { padding:0 18px 18px; }
+    .sample-body label { font-weight:600; display:block; margin-top:4px; font-size:14px; }
+    #example-select { max-width:100%; width:100%; padding:9px; border:1px solid #adbdcc; background:white; border-radius:4px; margin:5px 0 15px; }
+    .exchange { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+    .exchange section { min-width:0; }
+    .code-head { display:flex; align-items:center; justify-content:space-between; gap:10px; font-size:14px; }
+    .code-head h3 { font-size:14px; margin:0; font-weight:600; }
+    .copy { padding:3px 10px; border:1px solid var(--line); border-radius:4px; background:white; color:var(--ink); cursor:pointer; }
+    pre { margin:8px 0 0; background:#f4f7fa; color:#19344e; border-radius:4px; padding:14px; font:12px/1.65 ui-monospace,SFMono-Regular,Consolas,monospace; overflow:auto; max-height:340px; white-space:pre-wrap; overflow-wrap:anywhere; }
+    .sample-note { font-size:13px; margin-bottom:12px; color:#536879; }
+    .reference-heading { max-width:1200px; padding:12px 28px 0; margin:auto; }
+    .reference-heading p { font-size:14px; }
+    footer { max-width:1200px; margin:30px auto 0; padding:22px 28px 32px; border-top:1px solid var(--line); color:#536879; font-size:13px; }
+    .swagger-ui .wrapper { max-width:1200px; padding:0 28px; }
+    .swagger-ui .info,.swagger-ui .scheme-container { display:none; }
+    .swagger-ui .filter-container { padding-top:18px; }
+    .swagger-ui .opblock-tag { font-size:21px; color:var(--ink); border-color:var(--line); }
+    .swagger-ui .opblock-tag small { font-size:13px; }
+    .swagger-ui .opblock { box-shadow:none; }
+    .swagger-ui .opblock-summary-path { font-size:14px; overflow-wrap:anywhere; }
+    .swagger-ui .opblock-summary-description { font-size:13px; }
+    .swagger-ui .btn.authorize,.swagger-ui .authorization__btn { display:none; }
+    .swagger-ui .opblock .opblock-summary-method { min-width:68px; }
+    @media(max-width:850px) {
+      .page-head { align-items:flex-start; flex-direction:column; gap:18px; }
+      .contract-note p { padding:12px 28px; }
+      .exchange { grid-template-columns:1fr; }
+      .workflow { gap:6px 16px; }
+      .workflow li:not(:last-child)::after { display:none; }
+    }
+    @media(max-width:560px) {
+      h1 { font-size:30px; }
+      .page-head,.guide,.samples,.reference-heading,footer { padding-inline:18px; }
+      .contract-note p { padding-inline:18px; }
+      .swagger-ui .wrapper { padding:0 12px; }
+      .swagger-ui .opblock .opblock-summary { flex-wrap:wrap; }
+      .swagger-ui .opblock-summary-description { flex-basis:100%; padding:6px 0; }
+      .swagger-ui .opblock-summary-path { max-width:calc(100% - 86px); font-size:12px; }
+      .swagger-ui .opblock .opblock-summary-method { min-width:54px; font-size:12px; }
+      .downloads a { padding:8px 13px; }
+    }
+    @media(prefers-reduced-motion:reduce) { * { scroll-behavior:auto !important; } }
+  </style>
+</head>
+<body>
+  <header class="page-head">
+    <div><h1>REVEAL API reference</h1><p class="intro">From a research question to an inspectable scientific account.<br>DAPPER content, durable citations, and shared agent jobs.</p></div>
+    <nav class="downloads" aria-label="Download specification"><a href="openapi.json" id="json-download" download="openapi.json">OpenAPI JSON</a><a href="openapi.yaml" id="yaml-download" download="openapi.yaml">YAML</a></nav>
+  </header>
+  <aside class="contract-note"><p><strong>Draft 0.1.0</strong> · <span id="operation-count">25</span> operations · OpenAPI 3.1.1 · DAPPER-ID-1<br>Implementation handoff. Examples use captured source data and illustrative jobs. Live API calls are disabled.</p></aside>
+  <section class="guide" aria-labelledby="flow-title"><h2 id="flow-title">Follow the research workflow</h2><p>Both analysis and paragraph generation are jobs. Every analysis starts with at least one EAGGL anchor. <a href="flow.html">Open the interaction diagram with request/response examples</a>.</p>
+    <ol class="workflow">
+      <li><a href="#/Knowledge%20gaps/searchKnowledgeGaps">Find a gap</a></li>
+      <li><a href="#/Mechanisms/suggestMechanisms">Select anchors</a></li>
+      <li><a href="#/Drafts/createDraft">Save a draft</a></li>
+      <li><a href="#/Jobs/createJob">Start a job</a></li>
+      <li><a href="#/Scientific%20content/getAccount">Inspect claims</a></li>
+      <li><a href="#/Citations/renderCitations">Render citations</a></li>
+    </ol>
+  </section>
+  <section class="samples" aria-label="Paired request and response examples"><details class="sample-panel"><summary>Browse paired request and response examples</summary><div class="sample-body">
+    <label for="example-select">Endpoint and example</label><select id="example-select"></select>
+    <p class="sample-note">These are contract fixtures. Replace the example host, credentials and fixture IDs when connecting an implementation.</p>
+    <div class="exchange"><section><div class="code-head"><h3>Request · curl</h3><button class="copy" data-copy="request-code">Copy</button></div><pre id="request-code"></pre></section><section><div class="code-head"><h3 id="response-heading">Response</h3><button class="copy" data-copy="response-code">Copy</button></div><pre id="response-code"></pre></section></div>
+    <span id="copy-status" role="status" aria-live="polite"></span>
+  </div></details></section>
+  <section class="reference-heading"><h2>Endpoints and schemas</h2><p>Expand an operation to inspect its parameters, DAPPER models, named examples, and errors. Filter by section name below.</p></section>
+  <main id="swagger-ui"></main>
+  <footer><p>Scientific models come from the frozen September 24 DAPPER snapshot. Jobs, drafts, search rankings and source aliases are application records. GeneSet membership and construction provenance remain explicitly unknown where the source inventory does not supply them.</p><p id="schema-pin"></p><p>Swagger UI 5.33.0 · Apache 2.0. Bundled assets work offline.</p></footer>
+  <!-- SWAGGER_JS -->
+  <!-- REVEAL_DATA -->
+  <script>
+    const spec = window.REVEAL_SPEC, exchanges = window.REVEAL_EXCHANGES;
+    document.getElementById('operation-count').textContent = Object.values(spec.paths).reduce((n,p) => n + Object.keys(p).length, 0);
+    document.getElementById('schema-pin').textContent = 'DAPPER schema SHA-256: ' + spec['x-dapper-dependency'].schema_sha256;
+    for (const [id,data,type] of [['json-download',JSON.stringify(spec,null,2)+'\n','application/json'],['yaml-download',window.REVEAL_YAML,'application/yaml']]) {
+      document.getElementById(id).href = URL.createObjectURL(new Blob([data],{type}));
+    }
+    const select = document.getElementById('example-select');
+    exchanges.forEach((ex,i) => { const option=document.createElement('option'); option.value=i; option.textContent=ex.method+' '+ex.path_template+' — '+ex.case.replaceAll('_',' '); select.append(option); });
+    select.value=exchanges.findIndex(ex => ex.operation_id==='searchKnowledgeGaps');
+    function showExample() {
+      const ex=exchanges[Number(select.value)], [status,response]=Object.entries(ex.responses)[0];
+      document.getElementById('request-code').textContent=ex.curl;
+      const values=Object.values(response.examples);
+      document.getElementById('response-code').textContent=typeof values[0]==='string' && values.length===1 ? values[0] : JSON.stringify(values.length===1?values[0]:response.examples,null,2);
+      document.getElementById('response-heading').textContent='Response · '+status+' · '+response.content_type;
+    }
+    select.addEventListener('change',showExample);showExample();
+    document.querySelectorAll('[data-copy]').forEach(button => button.addEventListener('click',async()=>{
+      const text=document.getElementById(button.dataset.copy).textContent;
+      try { await navigator.clipboard.writeText(text);document.getElementById('copy-status').textContent='Copied to clipboard.'; }
+      catch { const range=document.createRange();range.selectNodeContents(document.getElementById(button.dataset.copy));const selection=window.getSelection();selection.removeAllRanges();selection.addRange(range);document.getElementById('copy-status').textContent='Text selected. Use your keyboard copy command.'; }
+    }));
+    window.ui=SwaggerUIBundle({spec,dom_id:'#swagger-ui',deepLinking:true,filter:true,docExpansion:'none',
+      defaultModelsExpandDepth:0,defaultModelExpandDepth:2,supportedSubmitMethods:[],validatorUrl:null,
+      persistAuthorization:false,displayRequestDuration:false,showExtensions:false,syntaxHighlight:{activated:true,theme:'agate'}});
+    // Swagger parses deep links on initialization; route the workflow links
+    // through its action as well so they open collapsed operations immediately.
+    document.querySelectorAll('.workflow a').forEach(link => link.addEventListener('click',event=>{
+      event.preventDefault();ui.layoutActions.parseDeepLinkHash(decodeURIComponent(link.hash));
+    }));
+  </script>
+</body>
+</html>

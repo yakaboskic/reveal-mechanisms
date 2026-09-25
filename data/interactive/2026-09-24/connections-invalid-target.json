@@ -1,0 +1,34 @@
+{
+  "url": "https://dev.cfdeknowledge.org/api/interactive/connections",
+  "method": "POST",
+  "request": {
+    "anchor_items": [
+      {
+        "node_id": "factor:gcat_trait:gcat_trait_language_measurement:cfde-inc-v2:Factor5",
+        "label": "AMP_AD__all_brain__AMP_AD_MAYO_CBE_Diagnosis_OTHER-CONTROL_ALL_up___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K36726853_dn",
+        "subtitle": "language measurement (Factor5)",
+        "node_type": "factor"
+      },
+      {
+        "node_id": "factor:gcat_trait:gcat_trait_presubiculum_volume:cfde-inc-v2:Factor1",
+        "label": "AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K26122955_up",
+        "subtitle": "presubiculum volume (Factor1)",
+        "node_type": "factor"
+      }
+    ],
+    "context": "",
+    "reducer": "mean",
+    "connection_scope": "direct",
+    "limit": 100,
+    "exclude_node_ids": [
+      "factor:gcat_trait:gcat_trait_language_measurement:cfde-inc-v2:Factor5",
+      "factor:gcat_trait:gcat_trait_presubiculum_volume:cfde-inc-v2:Factor1"
+    ],
+    "model": "cfde-inc-v2",
+    "target_type": "invalid_probe"
+  },
+  "retrieved_at": "2026-09-24T12:45:40.921575+00:00",
+  "status": 422,
+  "error_body": "{\"detail\":[{\"type\":\"string_pattern_mismatch\",\"loc\":[\"body\",\"target_type\"],\"msg\":\"String should match pattern '^(gene|trait|factor|gene_set)$'\",\"input\":\"invalid_probe\",\"ctx\":{\"pattern\":\"^(gene|trait|factor|gene_set)$\"}}]}",
+  "elapsed_seconds": 0.452
+}

@@ -1,0 +1,41 @@
+# Synthetic PR #27 review fixture; all names, checksums, and locations are illustrative.
+# Observed against PR head 6f606bff1411e3e7ed8ff876ac565c128adf68d5.
+# Fixed linter: FAIL; the intended validation error is reported.
+# Finding 3: a Supersedes edge names two nodes that are absent from this document.
+# Supersedes has no endpoint-type configuration; the URNs do not match DAPPER digests.
+# Expected: FAIL; every edge endpoint must resolve, even without type constraints.
+# Before fix: PASS, 0 errors and 0 warnings. Neither missing endpoint is reported.
+
+datasets:
+- id: dapper:Dataset.a_20OP9amdhJhqMqKfdEnLDTADUE_VxX
+  name: Synthetic final result
+  resource_type: dataset
+activities:
+- id: dapper:Activity.N2ZGhLItamKdVSSbX1mQNpzIQEwmMxne
+  name: Analyze input
+  command: python analyze.py input.tsv
+files:
+- id: dapper:File.7uSMFgEazvyYU9HPfkEhdODpDwjqPrHM
+  filename: input.tsv
+  sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+drs_objects:
+- id: dapper:DrsObject.u9TZbI23plbenZHXFKk-yqNpWM_rDMzS
+  name: Result bytes
+  self_uri: drs://example.org/result
+  checksum_sha256: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+was_generated_by_edges:
+- subject: dapper:Dataset.a_20OP9amdhJhqMqKfdEnLDTADUE_VxX
+  predicate: prov:wasGeneratedBy
+  object: dapper:Activity.N2ZGhLItamKdVSSbX1mQNpzIQEwmMxne
+used_edges:
+- subject: dapper:Activity.N2ZGhLItamKdVSSbX1mQNpzIQEwmMxne
+  predicate: prov:used
+  object: dapper:File.7uSMFgEazvyYU9HPfkEhdODpDwjqPrHM
+has_drs_object_edges:
+- subject: dapper:Dataset.a_20OP9amdhJhqMqKfdEnLDTADUE_VxX
+  predicate: dapper:hasDrsObject
+  object: dapper:DrsObject.u9TZbI23plbenZHXFKk-yqNpWM_rDMzS
+supersedes_edges:
+- subject: urn:example:missing-new-nanopublication
+  predicate: npx:supersedes
+  object: urn:example:missing-old-nanopublication

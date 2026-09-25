@@ -1,0 +1,25 @@
+{
+  "reviewed_on": "2026-09-25",
+  "preview_url": "http://127.0.0.1:8767/",
+  "html_sha256": "feea277ed570133bdcf82df1a6454a3616e4f862c67962cd2f0bcafd353ff553",
+  "browser": "Codex in-app browser",
+  "checks": {
+    "white_minimal_homepage": "visually reviewed",
+    "natural_language_trending_questions": "verified",
+    "mock_account_counts": "24/11/38 labeled sample",
+    "same_page_gap_selection_and_chips": "visually reviewed",
+    "local_gap_search": "AIP result verified",
+    "zero_anchor_submission_guard": "verified through removal",
+    "submit_identity_choices": "ORCID, Google and anonymous rendered",
+    "anonymous_job_continuation": "inquiry preserved",
+    "six_stage_simulation": "advanced to result",
+    "account_evidence_and_paragraph": "rendered with source claim and two durable citations",
+    "hubmap_provenance": "358-set selector, source-file search and source coverage rendered",
+    "browser_console": "no log entries after final reload"
+  },
+  "limitations": [
+    "No live sessions, agents, requests, persistence or citation rendering service executed.",
+    "No separate mobile viewport run; responsive styles are present.",
+    "Current-account construction coverage remains catalog-only; HuBMAP is a separate exemplar."
+  ]
+}

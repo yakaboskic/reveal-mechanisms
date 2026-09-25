@@ -1,0 +1,20 @@
+{
+  "date": "2026-09-25",
+  "artifact_sha256": "25adb8e2e4ef4d00781836a25e04c9678c37347ad57de602862c676a2731c890",
+  "scope": "Preparation checklist, agent workspace, and example account transition",
+  "checks": [
+    "JavaScript syntax check passed",
+    "Preparation shows completion marks, then collapses when agent work starts",
+    "Working agent displays pulse, current task, non-checklist tool feed, and draft account excerpt",
+    "Completion renders the existing ScientificAccount, original question, claim and closing remarks",
+    "Example is explicitly labeled unrelated to the selected gap",
+    "Proposition, Evidence and Provenance inspection work without resetting the selected gap",
+    "Back to activity preserves original question and mechanism anchor chips",
+    "Stopping during agent work transitions to Stopped and shows no account result",
+    "Browser runtime logs empty during review"
+  ],
+  "limits": [
+    "HTML playback only; no agent execution, API calls or persistence",
+    "Responsive and reduced-motion CSS supplied; not device-emulated in this review"
+  ]
+}

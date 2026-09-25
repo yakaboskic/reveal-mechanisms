@@ -1,0 +1,41 @@
+{
+  "audited_at": "2026-09-24T13:40:14.705000+00:00",
+  "repository": "/Users/cyakaboski/src/research/dapper",
+  "base_commit": "ebfc471049240c23d6ce1d3d40cd2785b35e6443",
+  "schema_has_local_changes": true,
+  "files": {
+    "schema/docs/claims.md": {
+      "sha256": "f4f05ad16dc1130ffcc8cecf9da674fc69a16f9e034f00b503b2310aafbe459e"
+    },
+    "schema/claims.yaml": {
+      "sha256": "cc6699d123ce5e311d3add45f10f8231244bfc8c584c0bd67b2b9d2a1f2b643f"
+    },
+    "schema/dapper.yaml": {
+      "sha256": "e41fffdf63241dcd1ffc9499fd32866915d291093e2b14f4e9f3bdb81aadb2fe"
+    },
+    "schema/identity/README.md": {
+      "sha256": "477bdf7f6b79648ba627acbaec1749bea43253d6fc4008cd93c350194d07c174"
+    },
+    "schema/identity/dapper_identity.py": {
+      "sha256": "ec3237693af354ccd6667754509027dbcbdd95892813ea58f44274bdb48312d1"
+    },
+    "schema/scientific_claims.py": {
+      "sha256": "9d1889bd2781781bafa3c7f79361cea5a544b9a57627db4f7387101d02c3a799"
+    },
+    "schema/examples/example_scientific_account.yaml": {
+      "sha256": "1ca31d53b52c9c4f18a1c205e2c4640fd7374b8be70655cdfb83a769f032c9f2"
+    }
+  },
+  "findings": {
+    "scientific_account_in_working_schema": true,
+    "paragraph_in_working_schema": true,
+    "identity_doc_groups_include_both": true,
+    "scientific_content_checker_present": true,
+    "account_gap_currently_literal": true,
+    "knowledge_gap_class_found": false,
+    "paragraph_citation_spans_implemented": false,
+    "interpretations_represented_by": "EvidenceItem with source_claims and target_proposition",
+    "identity_profile": "DAPPER-ID-1"
+  },
+  "scope_note": "Read-only inspection of an evolving, uncommitted working tree; not a released upstream contract or independent lint/test run."
+}

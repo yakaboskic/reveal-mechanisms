@@ -1,0 +1,230 @@
+{
+  "operation_id": "renderCitations",
+  "case": "apa",
+  "method": "POST",
+  "path_template": "/v1/citations/render",
+  "request": {
+    "url": "https://api.reveal.example.org/v1/citations/render",
+    "path": {},
+    "query": {},
+    "headers": {
+      "Content-Type": "application/json",
+      "Accept": "application/json"
+    },
+    "body": {
+      "paragraph_id": "dapper:Paragraph.uSYa1LdXNPuwlSgsCz3oZ7IfrVoztroD",
+      "style": "apa",
+      "locale": "en-US"
+    }
+  },
+  "responses": {
+    "200": {
+      "content_type": "application/json",
+      "examples": {
+        "illustrative_rendering_shape": {
+          "paragraph_id": "dapper:Paragraph.uSYa1LdXNPuwlSgsCz3oZ7IfrVoztroD",
+          "style": "apa",
+          "locale": "en-US",
+          "in_text": [
+            {
+              "occurrence_index": 0,
+              "label": "(Illustrative citation 1)"
+            },
+            {
+              "occurrence_index": 1,
+              "label": "(Illustrative citation 2)"
+            },
+            {
+              "occurrence_index": 2,
+              "label": "(Illustrative citation 3)"
+            },
+            {
+              "occurrence_index": 3,
+              "label": "(Illustrative citation 4)"
+            },
+            {
+              "occurrence_index": 4,
+              "label": "(Illustrative citation 5)"
+            },
+            {
+              "occurrence_index": 5,
+              "label": "(Illustrative citation 6)"
+            },
+            {
+              "occurrence_index": 6,
+              "label": "(Illustrative citation 7)"
+            },
+            {
+              "occurrence_index": 7,
+              "label": "(Illustrative citation 8)"
+            },
+            {
+              "occurrence_index": 8,
+              "label": "(Illustrative citation 9)"
+            },
+            {
+              "occurrence_index": 9,
+              "label": "(Illustrative citation 10)"
+            },
+            {
+              "occurrence_index": 10,
+              "label": "(Illustrative citation 11)"
+            },
+            {
+              "occurrence_index": 11,
+              "label": "(Illustrative citation 12)"
+            },
+            {
+              "occurrence_index": 12,
+              "label": "(Illustrative citation 13)"
+            },
+            {
+              "occurrence_index": 13,
+              "label": "(Illustrative citation 14)"
+            },
+            {
+              "occurrence_index": 14,
+              "label": "(Illustrative citation 15)"
+            },
+            {
+              "occurrence_index": 15,
+              "label": "(Illustrative citation 16)"
+            },
+            {
+              "occurrence_index": 16,
+              "label": "(Illustrative citation 17)"
+            },
+            {
+              "occurrence_index": 17,
+              "label": "(Illustrative citation 18)"
+            },
+            {
+              "occurrence_index": 18,
+              "label": "(Illustrative citation 19)"
+            }
+          ],
+          "bibliography": [
+            {
+              "target_id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+              "citation_metadata_revision": 1,
+              "text": "Illustrative formatted entry: Are the CAD PGS×context interactions driven by adverse exposures causally amplifying genetic risk, or are some \"contexts\" actually downstream readouts of incipient disease (reverse causation)?"
+            },
+            {
+              "target_id": "dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km",
+              "citation_metadata_revision": 1,
+              "text": "Illustrative formatted entry: The EAGGL result supports SHH involvement in this mechanism through its reported loading of 0.5042 under cfde-inc-v2."
+            },
+            {
+              "target_id": "dapper:Claim.Uv7_cT46DdsqZMvk5nh8G48qOIKvhRgc",
+              "citation_metadata_revision": 1,
+              "text": "Illustrative formatted entry: The EAGGL result supports GLI3 involvement in this mechanism through its reported loading of 0.3245 under cfde-inc-v2."
+            },
+            {
+              "target_id": "dapper:Claim.I2mf6PJ0DPF5_nnbiBjAhgjlUCOiUZZ9",
+              "citation_metadata_revision": 1,
+              "text": "Illustrative formatted entry: The EAGGL result supports TCF7L2 involvement in this mechanism through its reported loading of 0.3813 under cfde-inc-v2."
+            },
+            {
+              "target_id": "dapper:Claim.Kd3psmdr4G9AlD0UU1E1Vu6AjpKaQYWE",
+              "citation_metadata_revision": 1,
+              "text": "Illustrative formatted entry: The EAGGL result supports involvement of the AMP AD / GTEx brain-aging set, with a loading of 1.0 on mechanism Factor1."
+            },
+            {
+              "target_id": "dapper:Claim.NBafdtdEE2Uabs-8pZqurv7SoWpg7Yhi",
+              "citation_metadata_revision": 1,
+              "text": "Illustrative formatted entry: The EAGGL result supports involvement of the PsychENCODE geneM16 set, with a loading of 0.4518 on mechanism Factor1."
+            },
+            {
+              "target_id": "dapper:Claim.Oe2UZeV7oMY4NsMHyB8h4HJO1FH4nSGF",
+              "citation_metadata_revision": 1,
+              "text": "Illustrative formatted entry: PIGEAN supports SHH trait-level involvement with a combined relevance score of 3.86; this is distinct from its mechanism loading."
+            },
+            {
+              "target_id": "dapper:Claim.2idJniYU4zCtCN6puy8XZ2mzo9Mq6c5p",
+              "citation_metadata_revision": 1,
+              "text": "Illustrative formatted entry: PIGEAN supports GLI3 trait-level involvement with a combined relevance score of 1.98; this is distinct from its mechanism loading."
+            },
+            {
+              "target_id": "dapper:Claim.H5icBYm5JLM3_T-b1mMfH65Nc0zMhZzH",
+              "citation_metadata_revision": 1,
+              "text": "Illustrative formatted entry: PIGEAN supports TCF7L2 trait-level involvement with a combined relevance score of 2.42; this is distinct from its mechanism loading."
+            },
+            {
+              "target_id": "dapper:Claim.xzV_35EYnLl-zy03YbmhfBk_ynNbl7H9",
+              "citation_metadata_revision": 1,
+              "text": "Illustrative formatted entry: PIGEAN supports trait-level involvement of the AMP AD / GTEx brain-aging set, with beta=0.115 and beta_uncorrected=0.119."
+            },
+            {
+              "target_id": "dapper:Claim.SYqCJXxCVXDpwflRSdZnkVLzGLO_vi_r",
+              "citation_metadata_revision": 1,
+              "text": "Illustrative formatted entry: PIGEAN supports trait-level involvement of the PsychENCODE geneM16 set, with beta=0.00729 and beta_uncorrected=0.0586."
+            },
+            {
+              "target_id": "dapper:Claim.x7aCVQ1uTkYKLJo32ZyAGMGZaAGCSvWV",
+              "citation_metadata_revision": 1,
+              "text": "Illustrative formatted entry: For this illustrative scenario, a mock ProKN assertion supports SHH membership in the AMP AD / GTEx brain-aging set. The membership is unverified."
+            },
+            {
+              "target_id": "dapper:Claim.uzqyfwuhf59hSTdravdcr4cTxuitWGx-",
+              "citation_metadata_revision": 1,
+              "text": "Illustrative formatted entry: For this illustrative scenario, a mock BiomarkerKG assertion supports TCF7L2 membership in the PsychENCODE geneM16 set. The membership is unverified."
+            },
+            {
+              "target_id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+              "citation_metadata_revision": 1,
+              "text": "Illustrative formatted entry: Are the CAD PGS×context interactions driven by adverse exposures causally amplifying genetic risk, or are some \"contexts\" actually downstream readouts of incipient disease (reverse causation)?"
+            },
+            {
+              "target_id": "dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km",
+              "citation_metadata_revision": 1,
+              "text": "Illustrative formatted entry: The EAGGL result supports SHH involvement in this mechanism through its reported loading of 0.5042 under cfde-inc-v2."
+            },
+            {
+              "target_id": "dapper:Claim.Uv7_cT46DdsqZMvk5nh8G48qOIKvhRgc",
+              "citation_metadata_revision": 1,
+              "text": "Illustrative formatted entry: The EAGGL result supports GLI3 involvement in this mechanism through its reported loading of 0.3245 under cfde-inc-v2."
+            },
+            {
+              "target_id": "dapper:Claim.I2mf6PJ0DPF5_nnbiBjAhgjlUCOiUZZ9",
+              "citation_metadata_revision": 1,
+              "text": "Illustrative formatted entry: The EAGGL result supports TCF7L2 involvement in this mechanism through its reported loading of 0.3813 under cfde-inc-v2."
+            },
+            {
+              "target_id": "dapper:Claim.Kd3psmdr4G9AlD0UU1E1Vu6AjpKaQYWE",
+              "citation_metadata_revision": 1,
+              "text": "Illustrative formatted entry: The EAGGL result supports involvement of the AMP AD / GTEx brain-aging set, with a loading of 1.0 on mechanism Factor1."
+            },
+            {
+              "target_id": "dapper:Claim.NBafdtdEE2Uabs-8pZqurv7SoWpg7Yhi",
+              "citation_metadata_revision": 1,
+              "text": "Illustrative formatted entry: The EAGGL result supports involvement of the PsychENCODE geneM16 set, with a loading of 0.4518 on mechanism Factor1."
+            }
+          ],
+          "rendering_manifest": {
+            "processor": "illustrative-fixture-not-a-live-CSL-renderer",
+            "processor_version": "not-executed",
+            "style_sha256": "afe11e828285ce8cbd2cb8cb83a64abfda72b97b161bd2dd804e2b48a1dda7f2",
+            "locale_sha256": "fbd2f07f46156bb0d579e74a52a35508994805c967e5f69c936854f647583a80",
+            "citation_profile": "reveal-citation-v1",
+            "metadata_checksums": [
+              "306c4606778eb6f2eb6411b364e243f5b0786d6d7a61c05b51c31f551e1981ab",
+              "1205fb78f9243d4a022d9a2acad739be6a7c241ec73ab0c6080a9b50e2d98d17",
+              "7658174fe5bc1cbdb83946229fb82ba985ec12ca6d3ee8fe0a7886c1c8cc66a5",
+              "6012812bb116c56ef025b4e3358749fc85f5facbcf40fcae348a2d2f6c3080bd",
+              "d8bfe22f88d213babcec7294fd87ecf0555786b6fb8d1ea8d767404238872d17",
+              "b0dbc25d65ec82016f243aace5a31ac857779e2572494c5e824ccd3874f24321",
+              "313c50b86ef1c2e72cc7f9bb153358c4d6bbc4756394f4db6f46cf6081d81faa",
+              "85b9fd4a03bafffa15205d89930269f778ac7869c4bafe243b362d9347ea7199",
+              "5399fb22793d4facfcb9a520b2e180d7e54e5efc09f8ac00e2cb682acf3bafc8",
+              "2ca11f90839779fc69b12a1654c58b119760ecd65c7dec8c5311cb4f4c576d77",
+              "a75fb10cce324121baa73fb88729d8dbb81447ba05ee4269a006fd5c558db44e",
+              "a60f33c63764b123e64d7bc13b9fae19b500f2f045b04b4c40ce82ab270266b0",
+              "9f50dc779c021fcceef1574ef290fe6dd9fc5713d9ca71cd1fe31243eef6a815"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "curl": "curl -X POST https://api.reveal.example.org/v1/citations/render -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"locale\":\"en-US\",\"paragraph_id\":\"dapper:Paragraph.uSYa1LdXNPuwlSgsCz3oZ7IfrVoztroD\",\"style\":\"apa\"}'"
+}

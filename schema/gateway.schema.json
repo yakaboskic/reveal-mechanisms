@@ -1,0 +1,175 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:reveal:gateway:1",
+  "$defs": {
+    "AnonymousProvisionInput": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "AnonymousProvisionResult": {
+      "type": "object",
+      "properties": {
+        "user_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "principal_kind": {
+          "type": "string",
+          "const": "anonymous"
+        },
+        "workspace_expires_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "user_id",
+        "principal_kind",
+        "workspace_expires_at"
+      ],
+      "additionalProperties": false
+    },
+    "VerifiedIdentityInput": {
+      "type": "object",
+      "properties": {
+        "issuer": {
+          "type": "string",
+          "format": "uri"
+        },
+        "subject": {
+          "type": "string",
+          "minLength": 1
+        },
+        "display_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "email": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "email"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "email_verified": {
+          "type": "boolean"
+        },
+        "orcid": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "uri"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "orcid_authenticated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "issuer",
+        "subject",
+        "display_name",
+        "email",
+        "email_verified",
+        "orcid",
+        "orcid_authenticated"
+      ],
+      "additionalProperties": false
+    },
+    "PrincipalResult": {
+      "type": "object",
+      "properties": {
+        "user_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "principal_kind": {
+          "type": "string",
+          "enum": [
+            "anonymous",
+            "registered"
+          ]
+        }
+      },
+      "required": [
+        "user_id",
+        "principal_kind"
+      ],
+      "additionalProperties": false
+    },
+    "WorkspaceClaimInput": {
+      "type": "object",
+      "properties": {
+        "anonymous_session_assertion": {
+          "type": "string",
+          "minLength": 1
+        },
+        "verified_login_assertion": {
+          "type": "string",
+          "minLength": 1
+        },
+        "consent": {
+          "type": "boolean",
+          "const": true
+        }
+      },
+      "required": [
+        "anonymous_session_assertion",
+        "verified_login_assertion",
+        "consent"
+      ],
+      "additionalProperties": false
+    },
+    "WorkspaceClaimResult": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "upgraded",
+            "transferred"
+          ]
+        },
+        "user_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "principal_kind": {
+          "type": "string",
+          "const": "registered"
+        },
+        "source_retired": {
+          "type": "boolean"
+        },
+        "historical_attribution_unchanged": {
+          "const": true,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "mode",
+        "user_id",
+        "principal_kind",
+        "source_retired",
+        "historical_attribution_unchanged"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

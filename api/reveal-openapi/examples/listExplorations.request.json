@@ -1,0 +1,61 @@
+{
+  "operation_id": "listExplorations",
+  "case": "request",
+  "method": "GET",
+  "path_template": "/v1/me/explorations",
+  "request": {
+    "url": "https://api.reveal.example.org/v1/me/explorations?limit=20",
+    "path": {},
+    "query": {
+      "limit": 20
+    },
+    "headers": {
+      "Authorization": "Bearer <trusted-gateway-assertion>",
+      "Accept": "application/json"
+    },
+    "body": null
+  },
+  "responses": {
+    "200": {
+      "content_type": "application/json",
+      "examples": {
+        "history": {
+          "items": [
+            {
+              "source_gap": {
+                "id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+                "source_id": "dismech:disorders/Coronary_Artery_Disease#discussion:cad_pgsxc_reverse_causation",
+                "source_revision": "8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd"
+              },
+              "knowledge_gap": {
+                "text": "Are the CAD PGS×context interactions driven by adverse exposures causally amplifying genetic risk, or are some \"contexts\" actually downstream readouts of incipient disease (reverse causation)?",
+                "gap_description": "Population PGS×context analyses (Nagpal & Gibson 2026, PMID:42443528) are largely unable to establish the causality of specific contexts. dismech separates true environmental exposures (smoking, high-fat diet, sedentary lifestyle) from biochemical readouts (LDL, HDL, C-reactive protein); the biochemical \"contexts\" are prime reverse-causation suspects, since they may be partly downstream of the atherosclerotic process rather than upstream drivers, and behavioural contexts such as reduced physical activity may be rapid responses to incipient angina rather than causes. Distinguishing genuine amplification of genetic effects from reverse causation determines whether the modelled interventions (e.g. lowering cholesterol in high-PGS smokers) would actually reduce risk.",
+                "gap_kind": "KNOWLEDGE_GAP",
+                "scope": "Coronary Artery Disease",
+                "about_entities": [
+                  "http://purl.obolibrary.org/obo/MONDO_0021661"
+                ],
+                "id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk"
+              },
+              "last_explored_at": "2026-09-24T16:00:00Z",
+              "draft_id": "22222222-2222-4222-8222-222222222222",
+              "scientific_accounts": {
+                "count": 1,
+                "scope": "owner_exact_gap",
+                "as_of": "2026-09-24T16:00:00Z",
+                "ranking": "curated",
+                "window_days": null
+              }
+            }
+          ],
+          "page": {
+            "next_cursor": null,
+            "has_more": false,
+            "snapshot_id": "illustrative-contract-snapshot"
+          }
+        }
+      }
+    }
+  },
+  "curl": "curl -X GET 'https://api.reveal.example.org/v1/me/explorations?limit=20' -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Accept: application/json'"
+}

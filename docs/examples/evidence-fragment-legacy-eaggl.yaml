@@ -1,0 +1,274 @@
+package_version: reveal.evidence-package/0.1-draft
+prefixes:
+  eaggl: 'urn:eaggl:record:'
+  gene: 'urn:eaggl:legacy-711-trait-capped-union:gene:'
+identifier_policy:
+  source_local_prefixes:
+  - eaggl
+  - gene
+  opaque_fields:
+  - native_id
+  - factor_id
+  - row_factor_id
+  - gene_set_annotations
+  interpretation: URNs identify source-local records; they do not establish equivalence to current CFDE
+    or external gene authorities.
+mode: legacy_source_fragment
+dispatch_ready: false
+source_namespace: eaggl:legacy-711-trait-capped-union
+cfde_inc_v2_mapping: not_established
+pigean:
+  model: null
+  mechanisms:
+    eaggl:legacy-711-trait-capped-union:CAD::Factor1:
+      native_id: CAD::Factor1
+      display_name: Lipoprotein Metabolism and Clearance
+      fit:
+        trait: CAD
+        factor: Factor1
+        model: null
+      gene_loadings:
+        status: ok
+        items:
+          gene:APOB:
+            metric: capped_gene_loading
+            value: 1.0
+            reported_text: '1.0'
+            source_locator:
+              artifact_id: capped_factor_gene_loadings.tsv.gz
+              row_factor_id: CAD::Factor1
+              column: APOB
+            transformation:
+              operation: cap_at_one
+              original_loading: 1.216
+              source_locator:
+                artifact_id: capped_entries.tsv.gz
+                row_factor_id: CAD::Factor1
+                gene: APOB
+          gene:APOA4:
+            metric: capped_gene_loading
+            value: 1.0
+            reported_text: '1.0'
+            source_locator:
+              artifact_id: capped_factor_gene_loadings.tsv.gz
+              row_factor_id: CAD::Factor1
+              column: APOA4
+            transformation:
+              operation: cap_at_one
+              original_loading: 1.106
+              source_locator:
+                artifact_id: capped_entries.tsv.gz
+                row_factor_id: CAD::Factor1
+                gene: APOA4
+          gene:APOA2:
+            metric: capped_gene_loading
+            value: 1.0
+            reported_text: '1.0'
+            source_locator:
+              artifact_id: capped_factor_gene_loadings.tsv.gz
+              row_factor_id: CAD::Factor1
+              column: APOA2
+            transformation:
+              operation: cap_at_one
+              original_loading: 1.096
+              source_locator:
+                artifact_id: capped_entries.tsv.gz
+                row_factor_id: CAD::Factor1
+                gene: APOA2
+          gene:APOE:
+            metric: capped_gene_loading
+            value: 1.0
+            reported_text: '1.0'
+            source_locator:
+              artifact_id: capped_factor_gene_loadings.tsv.gz
+              row_factor_id: CAD::Factor1
+              column: APOE
+            transformation:
+              operation: cap_at_one
+              original_loading: 1.09
+              source_locator:
+                artifact_id: capped_entries.tsv.gz
+                row_factor_id: CAD::Factor1
+                gene: APOE
+          gene:APOA1:
+            metric: capped_gene_loading
+            value: 1.0
+            reported_text: '1.0'
+            source_locator:
+              artifact_id: capped_factor_gene_loadings.tsv.gz
+              row_factor_id: CAD::Factor1
+              column: APOA1
+            transformation:
+              operation: cap_at_one
+              original_loading: 1.084
+              source_locator:
+                artifact_id: capped_entries.tsv.gz
+                row_factor_id: CAD::Factor1
+                gene: APOA1
+      gene_set_loadings:
+        status: not_available
+        items: {}
+      gene_set_annotations:
+      - REACTOME_PLASMA_LIPOPROTEIN_ASSEMBLY_REMODELING_AND_CLEARANCE
+      - GOBP_REGULATION_OF_PLASMA_LIPOPROTEIN_PARTICLE_LEVELS
+      - GOBP_GLYCEROLIPID_METABOLIC_PROCESS
+      - GOBP_PROTEIN_LIPID_COMPLEX_ORGANIZATION
+      - WP_CHOLESTEROL_METABOLISM
+      trait_loadings:
+        status: not_available
+        items: {}
+      metadata_row:
+        factor_id: CAD::Factor1
+        trait: CAD
+        factor: Factor1
+        factor_number: '1'
+        label: Lipoprotein Metabolism and Clearance
+        gene_set_score: '3'
+        gene_score: '0.269'
+        top_genes: APOB,APOA4,APOA2,APOE,APOA1
+        top_gene_sets: REACTOME_PLASMA_LIPOPROTEIN_ASSEMBLY_REMODELING_AND_CLEARANCE,GOBP_REGULATION_OF_PLASMA_LIPOPROTEIN_PARTICLE_LEVELS,GOBP_GLYCEROLIPID_METABOLIC_PROCESS,GOBP_PROTEIN_LIPID_COMPLEX_ORGANIZATION,WP_CHOLESTEROL_METABOLISM
+        source_gene_rows: '431'
+        aligned_gene_rows: '431'
+        nonzero_gene_loadings: '399'
+        raw_loading_l1: '31.76216204372789'
+        raw_loading_l2: '4.502662013194449'
+        source_gc: /Users/lmaisura/Desktop/EAGGL/Traits_v2/CAD/sigma=2/size=small/gc.out
+      coverage:
+        retained_genes: 5
+        source_nonzero_gene_loadings: 399
+        selection: source top_genes annotation
+      interpretation: Capped membership-like scores, not calibrated probabilities. Top-gene-set labels
+        have no per-set loading in this metadata row.
+    eaggl:legacy-711-trait-capped-union:CAD::Factor8:
+      native_id: CAD::Factor8
+      display_name: Vascular Development and Migration
+      fit:
+        trait: CAD
+        factor: Factor8
+        model: null
+      gene_loadings:
+        status: ok
+        items:
+          gene:VEGFA:
+            metric: capped_gene_loading
+            value: 1.0
+            reported_text: '1.0'
+            source_locator:
+              artifact_id: capped_factor_gene_loadings.tsv.gz
+              row_factor_id: CAD::Factor8
+              column: VEGFA
+            transformation:
+              operation: cap_at_one
+              original_loading: 1.631
+              source_locator:
+                artifact_id: capped_entries.tsv.gz
+                row_factor_id: CAD::Factor8
+                gene: VEGFA
+          gene:KDR:
+            metric: capped_gene_loading
+            value: 1.0
+            reported_text: '1.0'
+            source_locator:
+              artifact_id: capped_factor_gene_loadings.tsv.gz
+              row_factor_id: CAD::Factor8
+              column: KDR
+            transformation:
+              operation: cap_at_one
+              original_loading: 1.458
+              source_locator:
+                artifact_id: capped_entries.tsv.gz
+                row_factor_id: CAD::Factor8
+                gene: KDR
+          gene:NRP1:
+            metric: capped_gene_loading
+            value: 1.0
+            reported_text: '1.0'
+            source_locator:
+              artifact_id: capped_factor_gene_loadings.tsv.gz
+              row_factor_id: CAD::Factor8
+              column: NRP1
+            transformation:
+              operation: cap_at_one
+              original_loading: 1.183
+              source_locator:
+                artifact_id: capped_entries.tsv.gz
+                row_factor_id: CAD::Factor8
+                gene: NRP1
+          gene:VEGFC:
+            metric: capped_gene_loading
+            value: 1.0
+            reported_text: '1.0'
+            source_locator:
+              artifact_id: capped_factor_gene_loadings.tsv.gz
+              row_factor_id: CAD::Factor8
+              column: VEGFC
+            transformation:
+              operation: cap_at_one
+              original_loading: 1.05
+              source_locator:
+                artifact_id: capped_entries.tsv.gz
+                row_factor_id: CAD::Factor8
+                gene: VEGFC
+          gene:TEK:
+            metric: capped_gene_loading
+            value: 1.0
+            reported_text: '1.0'
+            source_locator:
+              artifact_id: capped_factor_gene_loadings.tsv.gz
+              row_factor_id: CAD::Factor8
+              column: TEK
+            transformation:
+              operation: cap_at_one
+              original_loading: 1.024
+              source_locator:
+                artifact_id: capped_entries.tsv.gz
+                row_factor_id: CAD::Factor8
+                gene: TEK
+      gene_set_loadings:
+        status: not_available
+        items: {}
+      gene_set_annotations:
+      - GOBP_BLOOD_VESSEL_MORPHOGENESIS
+      - GOBP_POSITIVE_REGULATION_OF_LOCOMOTION
+      - GOBP_REGULATION_OF_VASCULATURE_DEVELOPMENT
+      - GOBP_TISSUE_MIGRATION
+      - GOBP_REGULATION_OF_ENDOTHELIAL_CELL_MIGRATION
+      trait_loadings:
+        status: not_available
+        items: {}
+      metadata_row:
+        factor_id: CAD::Factor8
+        trait: CAD
+        factor: Factor8
+        factor_number: '8'
+        label: Vascular Development and Migration
+        gene_set_score: '0.577'
+        gene_score: '0.159'
+        top_genes: VEGFA,KDR,NRP1,VEGFC,TEK
+        top_gene_sets: GOBP_BLOOD_VESSEL_MORPHOGENESIS,GOBP_POSITIVE_REGULATION_OF_LOCOMOTION,GOBP_REGULATION_OF_VASCULATURE_DEVELOPMENT,GOBP_TISSUE_MIGRATION,GOBP_REGULATION_OF_ENDOTHELIAL_CELL_MIGRATION
+        source_gene_rows: '431'
+        aligned_gene_rows: '431'
+        nonzero_gene_loadings: '385'
+        raw_loading_l1: '32.19132029356878'
+        raw_loading_l2: '4.344410812295777'
+        source_gc: /Users/lmaisura/Desktop/EAGGL/Traits_v2/CAD/sigma=2/size=small/gc.out
+      coverage:
+        retained_genes: 5
+        source_nonzero_gene_loadings: 385
+        selection: source top_genes annotation
+      interpretation: Capped membership-like scores, not calibrated probabilities. Top-gene-set labels
+        have no per-set loading in this metadata row.
+  traits: {}
+source_artifacts:
+  factor_metadata.tsv:
+    sha256: 974c610ebaeaa6b03e32b9ea301db3f740706719d174b7b2ab75413e4faa4a3c
+    upstream_relative_path: data/factor_metadata.tsv
+  capped_factor_gene_loadings.tsv.gz:
+    sha256: 109dc5eb25071296d576026f2f7b78f30788659439b8e6aeabdf6f73bdcf55b7
+    upstream_relative_path: data/capped_factor_gene_loadings.tsv.gz
+  capped_entries.tsv.gz:
+    sha256: 445c5b91a957e8e166f90df60aca51ab0cd8df35cb87aa706d9be5d3d121e400
+    upstream_relative_path: data/capped_entries.tsv.gz
+  analysis_summary.json:
+    sha256: 832ad3a1080736d9b458493bb7512fdea1882ea7ddd98f1bd614cb8cee4caf10
+    upstream_relative_path: data/analysis_summary.json

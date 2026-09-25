@@ -1,0 +1,972 @@
+{
+  "README.md": {
+    "category": "document",
+    "node_count": 5,
+    "file_node": "readme"
+  },
+  "api/README.md": {
+    "category": "document",
+    "node_count": 8,
+    "file_node": "api_readme"
+  },
+  "api/browser-review.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_browser_review"
+  },
+  "api/examples/cancelJob.request.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_examples_canceljob_request"
+  },
+  "api/examples/cfde-response.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_examples_cfde_response"
+  },
+  "api/examples/citation-registry.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_examples_citation_registry"
+  },
+  "api/examples/createDraft.question_and_anchor.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_examples_createdraft_question_and_anchor"
+  },
+  "api/examples/createJob.analysis.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_examples_createjob_analysis"
+  },
+  "api/examples/createJob.paragraph.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_examples_createjob_paragraph"
+  },
+  "api/examples/dismech-gap.source.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_examples_dismech_gap_source"
+  },
+  "api/examples/evidence-package/evidence-package.json": {
+    "category": "code",
+    "node_count": 0,
+    "file_node": "api_examples_evidence_package_evidence_package"
+  },
+  "api/examples/evidence-package/evidence-package.yaml": {
+    "category": "document",
+    "node_count": 7,
+    "file_node": "api_examples_evidence_package_evidence_package"
+  },
+  "api/examples/evidence-package/manifest.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_examples_evidence_package_manifest"
+  },
+  "api/examples/exchanges.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_examples_exchanges"
+  },
+  "api/examples/exportParagraph.bibtex.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_examples_exportparagraph_bibtex"
+  },
+  "api/examples/exportParagraph.latex.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_examples_exportparagraph_latex"
+  },
+  "api/examples/exportParagraph.request.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_examples_exportparagraph_request"
+  },
+  "api/examples/exportParagraph.rich-text.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_examples_exportparagraph_rich_text"
+  },
+  "api/examples/factors/5310bb9500e8b9f48b5d495b2c89171118b41b167546016c26decdd85c8cdad1.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_examples_factors_5310bb9500e8b9f48b5d495b2c89171118b41b167546016c26decdd85c8cdad1"
+  },
+  "api/examples/factors/5797893b517def4fdc82f285c9bf835195f9f88eddfb6409cbf3b1e31dd63d83.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_examples_factors_5797893b517def4fdc82f285c9bf835195f9f88eddfb6409cbf3b1e31dd63d83"
+  },
+  "api/examples/factors/8c0b7811bbc9b871001a03b1b42d771c54bfab466d964aa05712abfdf4179ed3.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_examples_factors_8c0b7811bbc9b871001a03b1b42d771c54bfab466d964aa05712abfdf4179ed3"
+  },
+  "api/examples/factors/b0539131e3a9d0c4f5dad10e0f2ebe1f3365cd53bc0831c2d3b293885d482167.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_examples_factors_b0539131e3a9d0c4f5dad10e0f2ebe1f3365cd53bc0831c2d3b293885d482167"
+  },
+  "api/examples/factors/ddba1b382a8f44d13696e7f6c17966521337db67e1a9fecbb513ff3f095418ca.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_examples_factors_ddba1b382a8f44d13696e7f6c17966521337db67e1a9fecbb513ff3f095418ca"
+  },
+  "api/examples/getAccount.request.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_examples_getaccount_request"
+  },
+  "api/examples/getCitation.apa.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_examples_getcitation_apa"
+  },
+  "api/examples/getCitation.biblatex.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_examples_getcitation_biblatex"
+  },
+  "api/examples/getCitation.bibtex.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_examples_getcitation_bibtex"
+  },
+  "api/examples/getCitation.csl-json.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_examples_getcitation_csl_json"
+  },
+  "api/examples/getCitation.mla.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_examples_getcitation_mla"
+  },
+  "api/examples/getCitation.request.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_examples_getcitation_request"
+  },
+  "api/examples/getClaim.request.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_examples_getclaim_request"
+  },
+  "api/examples/getDraft.request.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_examples_getdraft_request"
+  },
+  "api/examples/getEvidencePackage.request.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_examples_getevidencepackage_request"
+  },
+  "api/examples/getGeneSet.request.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_examples_getgeneset_request"
+  },
+  "api/examples/getJob.paragraph.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_examples_getjob_paragraph"
+  },
+  "api/examples/getJob.request.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_examples_getjob_request"
+  },
+  "api/examples/getJobEvents.request.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_examples_getjobevents_request"
+  },
+  "api/examples/getJobEvents.sse.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_examples_getjobevents_sse"
+  },
+  "api/examples/getKnowledgeGap.request.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_examples_getknowledgegap_request"
+  },
+  "api/examples/getMe.request.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_examples_getme_request"
+  },
+  "api/examples/getMechanism.request.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_examples_getmechanism_request"
+  },
+  "api/examples/getParagraph.request.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_examples_getparagraph_request"
+  },
+  "api/examples/getResearchRequest.request.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_examples_getresearchrequest_request"
+  },
+  "api/examples/illustrative-kg-assertions.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_examples_illustrative_kg_assertions"
+  },
+  "api/examples/knowledge-gap.dapper.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_examples_knowledge_gap_dapper"
+  },
+  "api/examples/listAccounts.request.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_examples_listaccounts_request"
+  },
+  "api/examples/listDrafts.request.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_examples_listdrafts_request"
+  },
+  "api/examples/listExplorations.request.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_examples_listexplorations_request"
+  },
+  "api/examples/listJobs.request.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_examples_listjobs_request"
+  },
+  "api/examples/listKnowledgeGaps.request.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_examples_listknowledgegaps_request"
+  },
+  "api/examples/listResearchRequests.request.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_examples_listresearchrequests_request"
+  },
+  "api/examples/paragraph.dapper.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_examples_paragraph_dapper"
+  },
+  "api/examples/pigean-gene-factor.response.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_examples_pigean_gene_factor_response"
+  },
+  "api/examples/pigean-gene-set-factor.response.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_examples_pigean_gene_set_factor_response"
+  },
+  "api/examples/recordExploration.selected_gap.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_examples_recordexploration_selected_gap"
+  },
+  "api/examples/renderCitations.apa.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_examples_rendercitations_apa"
+  },
+  "api/examples/research-statement.md": {
+    "category": "document",
+    "node_count": 4,
+    "file_node": "api_examples_research_statement"
+  },
+  "api/examples/resolveDapperObject.request.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_examples_resolvedapperobject_request"
+  },
+  "api/examples/rich-text.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_examples_rich_text"
+  },
+  "api/examples/scientific-account.dapper.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_examples_scientific_account_dapper"
+  },
+  "api/examples/searchKnowledgeGaps.request.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_examples_searchknowledgegaps_request"
+  },
+  "api/examples/searchMechanisms.request.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_examples_searchmechanisms_request"
+  },
+  "api/examples/suggestMechanisms.dismech_context.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_examples_suggestmechanisms_dismech_context"
+  },
+  "api/examples/updateDraft.save_revision_two.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_examples_updatedraft_save_revision_two"
+  },
+  "api/flow-map.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_flow_map"
+  },
+  "api/flow-validation.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_flow_validation"
+  },
+  "api/flow.md": {
+    "category": "document",
+    "node_count": 2,
+    "file_node": "api_flow"
+  },
+  "api/manifest.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_manifest"
+  },
+  "api/openapi.json": {
+    "category": "code",
+    "node_count": 368,
+    "file_node": "api_openapi"
+  },
+  "api/openapi.yaml": {
+    "category": "document",
+    "node_count": 31,
+    "file_node": "api_openapi"
+  },
+  "api/paragraph-profile.yaml": {
+    "category": "document",
+    "node_count": 2,
+    "file_node": "api_paragraph_profile"
+  },
+  "api/validation.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "api_validation"
+  },
+  "design/README.md": {
+    "category": "document",
+    "node_count": 4,
+    "file_node": "design_readme"
+  },
+  "design/account-view.js": {
+    "category": "code",
+    "node_count": 41,
+    "file_node": "design_account_view"
+  },
+  "design/build_account_example.py": {
+    "category": "code",
+    "node_count": 17,
+    "file_node": "design_build_account_example"
+  },
+  "design/build_evidence_package_example.py": {
+    "category": "code",
+    "node_count": 16,
+    "file_node": "design_build_evidence_package_example"
+  },
+  "design/build_prototype.py": {
+    "category": "code",
+    "node_count": 5,
+    "file_node": "design_build_prototype"
+  },
+  "design/contract-review.md": {
+    "category": "document",
+    "node_count": 4,
+    "file_node": "design_contract_review"
+  },
+  "design/index.html": {
+    "category": "document",
+    "node_count": 7,
+    "file_node": "design_index"
+  },
+  "design/prototype.html": {
+    "category": "document",
+    "node_count": 7,
+    "file_node": "design_prototype"
+  },
+  "design/workspace-view.js": {
+    "category": "code",
+    "node_count": 22,
+    "file_node": "design_workspace_view"
+  },
+  "docs/agent-evidence-integration.md": {
+    "category": "document",
+    "node_count": 7,
+    "file_node": "docs_agent_evidence_integration"
+  },
+  "docs/agent-output-contract.md": {
+    "category": "document",
+    "node_count": 5,
+    "file_node": "docs_agent_output_contract"
+  },
+  "docs/api-discovery.md": {
+    "category": "document",
+    "node_count": 5,
+    "file_node": "docs_api_discovery"
+  },
+  "docs/authentication.md": {
+    "category": "document",
+    "node_count": 7,
+    "file_node": "docs_authentication"
+  },
+  "docs/citation-standard.md": {
+    "category": "document",
+    "node_count": 6,
+    "file_node": "docs_citation_standard"
+  },
+  "docs/dapper-integration.md": {
+    "category": "document",
+    "node_count": 8,
+    "file_node": "docs_dapper_integration"
+  },
+  "docs/data-inventory.md": {
+    "category": "document",
+    "node_count": 5,
+    "file_node": "docs_data_inventory"
+  },
+  "docs/database-readiness.md": {
+    "category": "document",
+    "node_count": 4,
+    "file_node": "docs_database_readiness"
+  },
+  "docs/design-package-audit.md": {
+    "category": "document",
+    "node_count": 4,
+    "file_node": "docs_design_package_audit"
+  },
+  "docs/design-plan-2026-09-15.md": {
+    "category": "document",
+    "node_count": 2,
+    "file_node": "docs_design_plan_2026_09_15"
+  },
+  "docs/design-plan-2026-09-24-v2.md": {
+    "category": "document",
+    "node_count": 2,
+    "file_node": "docs_design_plan_2026_09_24_v2"
+  },
+  "docs/design-plan-2026-09-24-v3.md": {
+    "category": "document",
+    "node_count": 2,
+    "file_node": "docs_design_plan_2026_09_24_v3"
+  },
+  "docs/design-plan-2026-09-24-v4.md": {
+    "category": "document",
+    "node_count": 2,
+    "file_node": "docs_design_plan_2026_09_24_v4"
+  },
+  "docs/design-plan-2026-09-24-v5.md": {
+    "category": "document",
+    "node_count": 2,
+    "file_node": "docs_design_plan_2026_09_24_v5"
+  },
+  "docs/design-plan-2026-09-24-v6.md": {
+    "category": "document",
+    "node_count": 2,
+    "file_node": "docs_design_plan_2026_09_24_v6"
+  },
+  "docs/design-plan-2026-09-24-v7.md": {
+    "category": "document",
+    "node_count": 2,
+    "file_node": "docs_design_plan_2026_09_24_v7"
+  },
+  "docs/design-plan-2026-09-24-v8.md": {
+    "category": "document",
+    "node_count": 2,
+    "file_node": "docs_design_plan_2026_09_24_v8"
+  },
+  "docs/design-plan-2026-09-24-v9.md": {
+    "category": "document",
+    "node_count": 2,
+    "file_node": "docs_design_plan_2026_09_24_v9"
+  },
+  "docs/design-plan-2026-09-25-v10.md": {
+    "category": "document",
+    "node_count": 2,
+    "file_node": "docs_design_plan_2026_09_25_v10"
+  },
+  "docs/design-plan-2026-09-25-v11.md": {
+    "category": "document",
+    "node_count": 3,
+    "file_node": "docs_design_plan_2026_09_25_v11"
+  },
+  "docs/design-plan.md": {
+    "category": "document",
+    "node_count": 14,
+    "file_node": "docs_design_plan"
+  },
+  "docs/dismech-import.md": {
+    "category": "document",
+    "node_count": 6,
+    "file_node": "docs_dismech_import"
+  },
+  "docs/eaggl-cfde-links.md": {
+    "category": "document",
+    "node_count": 6,
+    "file_node": "docs_eaggl_cfde_links"
+  },
+  "docs/eaggl-factor-import.md": {
+    "category": "document",
+    "node_count": 7,
+    "file_node": "docs_eaggl_factor_import"
+  },
+  "docs/evidence-package-builder.md": {
+    "category": "document",
+    "node_count": 8,
+    "file_node": "docs_evidence_package_builder"
+  },
+  "docs/evidence-package.md": {
+    "category": "document",
+    "node_count": 10,
+    "file_node": "docs_evidence_package"
+  },
+  "docs/examples/evidence-fragment-legacy-eaggl.json": {
+    "category": "code",
+    "node_count": 0,
+    "file_node": "docs_examples_evidence_fragment_legacy_eaggl"
+  },
+  "docs/examples/evidence-fragment-legacy-eaggl.yaml": {
+    "category": "document",
+    "node_count": 5,
+    "file_node": "docs_examples_evidence_fragment_legacy_eaggl"
+  },
+  "docs/examples/evidence-package-cad/evidence-package.json": {
+    "category": "code",
+    "node_count": 0,
+    "file_node": "docs_examples_evidence_package_cad_evidence_package"
+  },
+  "docs/examples/evidence-package-cad/evidence-package.yaml": {
+    "category": "document",
+    "node_count": 5,
+    "file_node": "docs_examples_evidence_package_cad_evidence_package"
+  },
+  "docs/examples/evidence-package-cad/validation.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "docs_examples_evidence_package_cad_validation"
+  },
+  "docs/gateway-contract.md": {
+    "category": "document",
+    "node_count": 6,
+    "file_node": "docs_gateway_contract"
+  },
+  "docs/geneset-import.md": {
+    "category": "document",
+    "node_count": 5,
+    "file_node": "docs_geneset_import"
+  },
+  "docs/implementation-handoff.md": {
+    "category": "document",
+    "node_count": 4,
+    "file_node": "docs_implementation_handoff"
+  },
+  "docs/interactive-api-inventory.md": {
+    "category": "document",
+    "node_count": 5,
+    "file_node": "docs_interactive_api_inventory"
+  },
+  "docs/pigean-claim-model.md": {
+    "category": "document",
+    "node_count": 13,
+    "file_node": "docs_pigean_claim_model"
+  },
+  "docs/pigean-evidence-profile.md": {
+    "category": "document",
+    "node_count": 2,
+    "file_node": "docs_pigean_evidence_profile"
+  },
+  "docs/scientific-account-construction.md": {
+    "category": "document",
+    "node_count": 13,
+    "file_node": "docs_scientific_account_construction"
+  },
+  "docs/scientific-account-framing.md": {
+    "category": "document",
+    "node_count": 4,
+    "file_node": "docs_scientific_account_framing"
+  },
+  "docs/scientific-account-linting.md": {
+    "category": "document",
+    "node_count": 5,
+    "file_node": "docs_scientific_account_linting"
+  },
+  "schema/README.md": {
+    "category": "document",
+    "node_count": 3,
+    "file_node": "schema_readme"
+  },
+  "schema/agent-output.schema.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "schema_agent_output_schema"
+  },
+  "schema/evidence-package.schema.json": {
+    "category": "code",
+    "node_count": 172,
+    "file_node": "schema_evidence_package_schema"
+  },
+  "schema/evidence-package.yaml": {
+    "category": "document",
+    "node_count": 113,
+    "file_node": "schema_evidence_package"
+  },
+  "schema/gateway.schema.json": {
+    "category": "code",
+    "node_count": 7,
+    "file_node": "schema_gateway_schema"
+  },
+  "schema/migrations/001_gene_set_inventory.sql": {
+    "category": "code",
+    "node_count": 4,
+    "file_node": "schema_migrations_001_gene_set_inventory"
+  },
+  "schema/migrations/002_eaggl_factors.sql": {
+    "category": "code",
+    "node_count": 9,
+    "file_node": "schema_migrations_002_eaggl_factors"
+  },
+  "schema/migrations/003_dismech.sql": {
+    "category": "code",
+    "node_count": 10,
+    "file_node": "schema_migrations_003_dismech"
+  },
+  "schema/migrations/004_eaggl_cfde_links.sql": {
+    "category": "code",
+    "node_count": 4,
+    "file_node": "schema_migrations_004_eaggl_cfde_links"
+  },
+  "schema/prisma/README.md": {
+    "category": "document",
+    "node_count": 3,
+    "file_node": "schema_prisma_readme"
+  },
+  "schema/prisma/package.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "schema_prisma_package"
+  },
+  "schema/prisma/prisma.config.ts": {
+    "category": "code",
+    "node_count": 7,
+    "file_node": "schema_prisma_prisma_config"
+  },
+  "schema/prisma/schema.prisma": {
+    "category": "document",
+    "node_count": 24,
+    "file_node": "schema_prisma_schema"
+  },
+  "scripts/api-flow-stages.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "scripts_api_flow_stages"
+  },
+  "scripts/audit_dapper_integration.py": {
+    "category": "code",
+    "node_count": 4,
+    "file_node": "scripts_audit_dapper_integration"
+  },
+  "scripts/audit_mysql.py": {
+    "category": "code",
+    "node_count": 7,
+    "file_node": "scripts_audit_mysql"
+  },
+  "scripts/build_api_flow.py": {
+    "category": "code",
+    "node_count": 4,
+    "file_node": "scripts_build_api_flow"
+  },
+  "scripts/build_api_viewer.py": {
+    "category": "code",
+    "node_count": 3,
+    "file_node": "scripts_build_api_viewer"
+  },
+  "scripts/build_evidence_package.py": {
+    "category": "code",
+    "node_count": 2,
+    "file_node": "scripts_build_evidence_package"
+  },
+  "scripts/build_openapi.py": {
+    "category": "code",
+    "node_count": 28,
+    "file_node": "scripts_build_openapi"
+  },
+  "scripts/evidence_package_schema.py": {
+    "category": "code",
+    "node_count": 2,
+    "file_node": "scripts_evidence_package_schema"
+  },
+  "scripts/extract_dismech.py": {
+    "category": "code",
+    "node_count": 9,
+    "file_node": "scripts_extract_dismech"
+  },
+  "scripts/extract_dismech_gaps.py": {
+    "category": "code",
+    "node_count": 3,
+    "file_node": "scripts_extract_dismech_gaps"
+  },
+  "scripts/import_cfde_genesets.py": {
+    "category": "code",
+    "node_count": 27,
+    "file_node": "scripts_import_cfde_genesets"
+  },
+  "scripts/import_dismech.py": {
+    "category": "code",
+    "node_count": 5,
+    "file_node": "scripts_import_dismech"
+  },
+  "scripts/import_eaggl_factors.py": {
+    "category": "code",
+    "node_count": 5,
+    "file_node": "scripts_import_eaggl_factors"
+  },
+  "scripts/link_eaggl_cfde.py": {
+    "category": "code",
+    "node_count": 2,
+    "file_node": "scripts_link_eaggl_cfde"
+  },
+  "scripts/lint_scientific_account.py": {
+    "category": "code",
+    "node_count": 2,
+    "file_node": "scripts_lint_scientific_account"
+  },
+  "scripts/openapi_current.py": {
+    "category": "code",
+    "node_count": 7,
+    "file_node": "scripts_openapi_current"
+  },
+  "scripts/probe_interactive_api.py": {
+    "category": "code",
+    "node_count": 6,
+    "file_node": "scripts_probe_interactive_api"
+  },
+  "scripts/pull_cfde.py": {
+    "category": "code",
+    "node_count": 6,
+    "file_node": "scripts_pull_cfde"
+  },
+  "scripts/requirements-audit.txt": {
+    "category": "document",
+    "node_count": 2,
+    "file_node": "scripts_requirements_audit"
+  },
+  "scripts/requirements-dismech.txt": {
+    "category": "document",
+    "node_count": 2,
+    "file_node": "scripts_requirements_dismech"
+  },
+  "scripts/requirements-eaggl.txt": {
+    "category": "document",
+    "node_count": 2,
+    "file_node": "scripts_requirements_eaggl"
+  },
+  "scripts/requirements-genesets.txt": {
+    "category": "document",
+    "node_count": 4,
+    "file_node": "scripts_requirements_genesets"
+  },
+  "scripts/requirements-openapi.txt": {
+    "category": "document",
+    "node_count": 7,
+    "file_node": "scripts_requirements_openapi"
+  },
+  "scripts/requirements.txt": {
+    "category": "document",
+    "node_count": 2,
+    "file_node": "scripts_requirements"
+  },
+  "scripts/start_research_agent.py": {
+    "category": "code",
+    "node_count": 2,
+    "file_node": "scripts_start_research_agent"
+  },
+  "scripts/test_geneset_import.py": {
+    "category": "code",
+    "node_count": 22,
+    "file_node": "scripts_test_geneset_import"
+  },
+  "scripts/test_ingestion.py": {
+    "category": "code",
+    "node_count": 10,
+    "file_node": "scripts_test_ingestion"
+  },
+  "scripts/validate_genesets.py": {
+    "category": "code",
+    "node_count": 4,
+    "file_node": "scripts_validate_genesets"
+  },
+  "scripts/validate_openapi.py": {
+    "category": "code",
+    "node_count": 4,
+    "file_node": "scripts_validate_openapi"
+  },
+  "scripts/validate_revision_inventory.py": {
+    "category": "code",
+    "node_count": 7,
+    "file_node": "scripts_validate_revision_inventory"
+  },
+  "scripts/validate_snapshots.py": {
+    "category": "code",
+    "node_count": 3,
+    "file_node": "scripts_validate_snapshots"
+  },
+  "scripts/verify_geneset_database.py": {
+    "category": "code",
+    "node_count": 2,
+    "file_node": "scripts_verify_geneset_database"
+  },
+  "scripts/write_inventory.py": {
+    "category": "code",
+    "node_count": 2,
+    "file_node": "scripts_write_inventory"
+  },
+  "services/backend/README.md": {
+    "category": "document",
+    "node_count": 4,
+    "file_node": "services_backend_readme"
+  },
+  "services/backend/agent-config/okn.mcp.example.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "services_backend_agent_config_okn_mcp_example"
+  },
+  "services/backend/agent-runtime/dapper-release.json": {
+    "category": "code",
+    "node_count": 1,
+    "file_node": "services_backend_agent_runtime_dapper_release"
+  },
+  "services/backend/agent-skills/construct-scientific-account/SKILL.md": {
+    "category": "document",
+    "node_count": 3,
+    "file_node": "services_backend_agent_skills_construct_scientific_account_skill"
+  },
+  "services/backend/pyproject.toml": {
+    "category": "code",
+    "node_count": 4,
+    "file_node": "services_backend_pyproject"
+  },
+  "services/backend/src/reveal_backend/__init__.py": {
+    "category": "code",
+    "node_count": 2,
+    "file_node": "services_backend_src_reveal_backend_init"
+  },
+  "services/backend/src/reveal_backend/dapper_release.py": {
+    "category": "code",
+    "node_count": 7,
+    "file_node": "services_backend_src_reveal_backend_dapper_release"
+  },
+  "services/backend/src/reveal_backend/dismech_import.py": {
+    "category": "code",
+    "node_count": 21,
+    "file_node": "services_backend_src_reveal_backend_dismech_import"
+  },
+  "services/backend/src/reveal_backend/eaggl_bundle.py": {
+    "category": "code",
+    "node_count": 16,
+    "file_node": "services_backend_src_reveal_backend_eaggl_bundle"
+  },
+  "services/backend/src/reveal_backend/eaggl_cfde_links.py": {
+    "category": "code",
+    "node_count": 13,
+    "file_node": "services_backend_src_reveal_backend_eaggl_cfde_links"
+  },
+  "services/backend/src/reveal_backend/eaggl_database.py": {
+    "category": "code",
+    "node_count": 5,
+    "file_node": "services_backend_src_reveal_backend_eaggl_database"
+  },
+  "services/backend/src/reveal_backend/eaggl_embeddings.py": {
+    "category": "code",
+    "node_count": 16,
+    "file_node": "services_backend_src_reveal_backend_eaggl_embeddings"
+  },
+  "services/backend/src/reveal_backend/embedding_client.py": {
+    "category": "code",
+    "node_count": 25,
+    "file_node": "services_backend_src_reveal_backend_embedding_client"
+  },
+  "services/backend/src/reveal_backend/evidence_collector.py": {
+    "category": "code",
+    "node_count": 15,
+    "file_node": "services_backend_src_reveal_backend_evidence_collector"
+  },
+  "services/backend/src/reveal_backend/evidence_package.py": {
+    "category": "code",
+    "node_count": 30,
+    "file_node": "services_backend_src_reveal_backend_evidence_package"
+  },
+  "services/backend/src/reveal_backend/evidence_schema.py": {
+    "category": "code",
+    "node_count": 11,
+    "file_node": "services_backend_src_reveal_backend_evidence_schema"
+  },
+  "services/backend/src/reveal_backend/mysql_database.py": {
+    "category": "code",
+    "node_count": 5,
+    "file_node": "services_backend_src_reveal_backend_mysql_database"
+  },
+  "services/backend/src/reveal_backend/scientific_account_lint.py": {
+    "category": "code",
+    "node_count": 9,
+    "file_node": "services_backend_src_reveal_backend_scientific_account_lint"
+  },
+  "services/backend/tests/dismech_fixture.py": {
+    "category": "code",
+    "node_count": 5,
+    "file_node": "services_backend_tests_dismech_fixture"
+  },
+  "services/backend/tests/test_dismech.py": {
+    "category": "code",
+    "node_count": 12,
+    "file_node": "services_backend_tests_test_dismech"
+  },
+  "services/backend/tests/test_dismech_mysql.py": {
+    "category": "code",
+    "node_count": 10,
+    "file_node": "services_backend_tests_test_dismech_mysql"
+  },
+  "services/backend/tests/test_eaggl.py": {
+    "category": "code",
+    "node_count": 48,
+    "file_node": "services_backend_tests_test_eaggl"
+  },
+  "services/backend/tests/test_eaggl_cfde_links.py": {
+    "category": "code",
+    "node_count": 16,
+    "file_node": "services_backend_tests_test_eaggl_cfde_links"
+  },
+  "services/backend/tests/test_embedding_client.py": {
+    "category": "code",
+    "node_count": 14,
+    "file_node": "services_backend_tests_test_embedding_client"
+  },
+  "services/backend/tests/test_evidence_package.py": {
+    "category": "code",
+    "node_count": 26,
+    "file_node": "services_backend_tests_test_evidence_package"
+  },
+  "services/backend/tests/test_evidence_schema.py": {
+    "category": "code",
+    "node_count": 13,
+    "file_node": "services_backend_tests_test_evidence_schema"
+  },
+  "services/backend/tests/test_scientific_account_lint.py": {
+    "category": "code",
+    "node_count": 16,
+    "file_node": "services_backend_tests_test_scientific_account_lint"
+  }
+}

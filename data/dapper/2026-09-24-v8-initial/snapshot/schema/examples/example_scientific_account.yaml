@@ -1,0 +1,147 @@
+# Fictional study: no experiment or analysis was performed. Gene X is a placeholder.
+# Citation revision 1 is illustrative; no registry issuance or publication is asserted.
+files:
+- id: dapper:File.dlZbJ0zCoRO2G6KxKE6CemF5BjSEqpdx
+  filename: illustrative-insulin-measurements.tsv
+  description: Fictional measurements for explaining the schema; no experiment was performed.
+activities:
+- id: dapper:Activity.rrQUgfNVqOY9I5O57CP-dZXdUyZ7Tg9V
+  name: Illustrative gene-silencing comparison
+  description: Fictional analysis of an experiment; not executed.
+- id: dapper:Activity.rJvYJs3E8H462i5skAJd0wqaCeielMLR
+  name: Illustrative interpretation and account assembly
+  description: Authored explanation of the fictional claims and their assumptions.
+propositions:
+- id: dapper:Proposition.i88tTQJulkM9id5Y33f9DorhIYWMyRIF
+  name: Measured insulin release
+  statement: In the illustrative experiment, cells with reduced Gene X activity released less insulin
+    than control cells.
+  proposition_kind: RESULT
+  scope: The fictional experiment and its tested cell-culture conditions.
+- id: dapper:Proposition.AIYgxZW1AzwxOIoNTWSE7qBBNqr9Uw9T
+  name: Gene X and insulin secretion
+  statement: Gene X contributes to insulin secretion in pancreatic beta cells under the tested conditions.
+  proposition_kind: BIOLOGICAL_INTERPRETATION
+  scope: Pancreatic beta cells under the tested conditions; no whole-organism or disease effect is asserted.
+claims:
+- id: dapper:Claim.E6lBNsXuszkhDW1aoEW979Gn_bgkae8u
+  name: Result assessment
+  proposition: dapper:Proposition.i88tTQJulkM9id5Y33f9DorhIYWMyRIF
+  statement: In the illustrative experiment, cells with reduced Gene X activity released less insulin
+    than control cells.
+  direction: SUPPORTS
+  was_generated_by: dapper:Activity.rrQUgfNVqOY9I5O57CP-dZXdUyZ7Tg9V
+  was_attributed_to:
+  - urn:example:research-team
+  was_derived_from:
+  - dapper:File.dlZbJ0zCoRO2G6KxKE6CemF5BjSEqpdx
+- id: dapper:Claim.J_MoVKlyBqXW95jmnjAPFewUr-_kU0sy
+  name: Biological interpretation
+  proposition: dapper:Proposition.AIYgxZW1AzwxOIoNTWSE7qBBNqr9Uw9T
+  statement: Our illustrative assessment supports a role for Gene X in insulin secretion under the tested
+    conditions.
+  direction: SUPPORTS
+  has_evidence:
+  - dapper:EvidenceItem.VxsR5HfHFiFaHwNpqnQr1DfVUuEJms8j
+  was_generated_by: dapper:Activity.rJvYJs3E8H462i5skAJd0wqaCeielMLR
+  was_attributed_to:
+  - urn:example:research-team
+evidence_items:
+- id: dapper:EvidenceItem.VxsR5HfHFiFaHwNpqnQr1DfVUuEJms8j
+  name: From the measured difference to the biological interpretation
+  source_claims:
+  - dapper:Claim.E6lBNsXuszkhDW1aoEW979Gn_bgkae8u
+  target_proposition: dapper:Proposition.AIYgxZW1AzwxOIoNTWSE7qBBNqr9Uw9T
+  direction: SUPPORTS
+  explanation: The reduction in insulin release is interpreted as evidence that Gene X contributes to
+    secretion.
+  context: The interpretation uses a perturbation model connecting reduced gene activity to secretion
+    in the tested cell culture.
+  assumptions:
+  - The measured difference is not explained by fewer surviving cells or an unrelated effect of the intervention.
+  was_attributed_to:
+  - urn:example:research-team
+  was_generated_by: dapper:Activity.rJvYJs3E8H462i5skAJd0wqaCeielMLR
+scientific_accounts:
+- id: dapper:ScientificAccount.4EdFhOCSYboZhnZiHbT3qnyYeqyyvbIs
+  name: Gene X and insulin secretion — fictional study
+  question: dapper:KnowledgeGap.dvL4cOp3O-yhGn3s5PK63aAuMagUmARz
+  hypothesis: dapper:Proposition.AIYgxZW1AzwxOIoNTWSE7qBBNqr9Uw9T
+  context: In this fictional study, we compared insulin release from pancreatic beta cells with reduced
+    Gene X activity against control cells. No experiment was performed; this account illustrates the data
+    model.
+  component_claims:
+  - dapper:Claim.E6lBNsXuszkhDW1aoEW979Gn_bgkae8u
+  - dapper:Claim.J_MoVKlyBqXW95jmnjAPFewUr-_kU0sy
+  conclusion_claims:
+  - dapper:Claim.J_MoVKlyBqXW95jmnjAPFewUr-_kU0sy
+  closing_remarks: The interpretation is limited to the tested cell-culture conditions.
+  was_generated_by: dapper:Activity.rJvYJs3E8H462i5skAJd0wqaCeielMLR
+  was_attributed_to:
+  - urn:example:research-team
+used_edges:
+- subject: dapper:Activity.rrQUgfNVqOY9I5O57CP-dZXdUyZ7Tg9V
+  predicate: prov:used
+  object: dapper:File.dlZbJ0zCoRO2G6KxKE6CemF5BjSEqpdx
+- subject: dapper:Activity.rJvYJs3E8H462i5skAJd0wqaCeielMLR
+  predicate: prov:used
+  object: dapper:Claim.E6lBNsXuszkhDW1aoEW979Gn_bgkae8u
+paragraphs:
+- id: dapper:Paragraph.Z4CkFWxNfR1cz0eWjCauYSgrPZivUuKw
+  name: Results paragraph — fictional study
+  scientific_account: dapper:ScientificAccount.4EdFhOCSYboZhnZiHbT3qnyYeqyyvbIs
+  text: 'What role does Gene X play in insulin secretion? The contribution of Gene X to insulin secretion
+    has not been established in this fictional system. Hypothesis under investigation: Gene X contributes
+    to insulin secretion in pancreatic beta cells under the tested conditions. Scope: Pancreatic beta
+    cells under the tested conditions; no whole-organism or disease effect is asserted. In this fictional
+    study, we compared insulin release from pancreatic beta cells with reduced Gene X activity against
+    control cells. No experiment was performed; this account illustrates the data model. In the illustrative
+    experiment, cells with reduced Gene X activity released less insulin than control cells. Scope: The
+    fictional experiment and its tested cell-culture conditions. Assessment direction: supports. Our illustrative
+    assessment supports a role for Gene X in insulin secretion under the tested conditions. Assessment
+    direction: supports. Evidence contribution: supports. The reduction in insulin release is interpreted
+    as evidence that Gene X contributes to secretion. The interpretation uses a perturbation model connecting
+    reduced gene activity to secretion in the tested cell culture. Interpretation assumes: The measured
+    difference is not explained by fewer surviving cells or an unrelated effect of the intervention. The
+    interpretation is limited to the tested cell-culture conditions.'
+  language: en
+  citations:
+  - target_id: dapper:KnowledgeGap.dvL4cOp3O-yhGn3s5PK63aAuMagUmARz
+    citation_metadata_revision: 1
+    start: 0
+    end: 48
+    exact_text: What role does Gene X play in insulin secretion?
+  - target_id: dapper:Claim.E6lBNsXuszkhDW1aoEW979Gn_bgkae8u
+    citation_metadata_revision: 1
+    start: 583
+    end: 691
+    exact_text: In the illustrative experiment, cells with reduced Gene X activity released less insulin
+      than control cells.
+  - target_id: dapper:Claim.J_MoVKlyBqXW95jmnjAPFewUr-_kU0sy
+    citation_metadata_revision: 1
+    start: 796
+    end: 900
+    exact_text: Our illustrative assessment supports a role for Gene X in insulin secretion under the
+      tested conditions.
+_illustrative:
+- dapper:File.dlZbJ0zCoRO2G6KxKE6CemF5BjSEqpdx
+- dapper:Activity.rrQUgfNVqOY9I5O57CP-dZXdUyZ7Tg9V
+- dapper:Activity.rJvYJs3E8H462i5skAJd0wqaCeielMLR
+- dapper:Proposition.i88tTQJulkM9id5Y33f9DorhIYWMyRIF
+- dapper:Proposition.AIYgxZW1AzwxOIoNTWSE7qBBNqr9Uw9T
+- dapper:Claim.E6lBNsXuszkhDW1aoEW979Gn_bgkae8u
+- dapper:Claim.J_MoVKlyBqXW95jmnjAPFewUr-_kU0sy
+- dapper:EvidenceItem.VxsR5HfHFiFaHwNpqnQr1DfVUuEJms8j
+- dapper:ScientificAccount.4EdFhOCSYboZhnZiHbT3qnyYeqyyvbIs
+- dapper:Paragraph.Z4CkFWxNfR1cz0eWjCauYSgrPZivUuKw
+- dapper:KnowledgeGap.dvL4cOp3O-yhGn3s5PK63aAuMagUmARz
+knowledge_gaps:
+- id: dapper:KnowledgeGap.dvL4cOp3O-yhGn3s5PK63aAuMagUmARz
+  name: Unknown contribution of Gene X to insulin secretion
+  text: What role does Gene X play in insulin secretion?
+  gap_description: The contribution of Gene X to insulin secretion has not been established in this fictional
+    system.
+  gap_kind: KNOWLEDGE_GAP
+  about_entities:
+  - urn:example:gene:X
+  - urn:example:process:insulin-secretion

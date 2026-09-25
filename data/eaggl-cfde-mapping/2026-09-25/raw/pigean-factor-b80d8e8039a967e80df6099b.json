@@ -1,0 +1,75 @@
+{
+  "url": "https://cfde-dev.hugeampkpnbi.org/api/bio/query/pigean-factor?q=2hrG%2Ccfde-inc-v2",
+  "retrieved_at": "2026-09-25T18:40:55.223442+00:00",
+  "index": "pigean-factor",
+  "keys": [
+    "2hrG",
+    "cfde-inc-v2"
+  ],
+  "complete": true,
+  "restricted": 0,
+  "pages": [
+    {
+      "profile": {
+        "fetch": 0.2931121260044165,
+        "query": 0.027010662015527487
+      },
+      "index": "pigean-factor",
+      "q": [
+        "2hrG",
+        "cfde-inc-v2"
+      ],
+      "count": 3,
+      "restricted": 0,
+      "progress": {
+        "bytes_read": 2573,
+        "bytes_total": 2573,
+        "filtered": 0
+      },
+      "page": 1,
+      "limit": null
+    }
+  ],
+  "row_count": 3,
+  "data": [
+    {
+      "anchor_any_joint": 1.0,
+      "anchor_any_marginal": 1.0,
+      "factor": "Factor1",
+      "gene_set_size": "cfde-inc-v2",
+      "label": "GOBP_GLUCOSE_METABOLIC_PROCESS",
+      "lambda": 0.00668,
+      "phenotype": "2hrG",
+      "top_gene_sets": "GOBP_GLUCOSE_METABOLIC_PROCESS;AMP_AD__all_brain__AMP_AD_MSSM_PHG_Diagnosis.Sex_AD-CONTROL_FEMALE_up___LINCS_L1000__all_signatures__LINCS_L1000_CRISPR_KO_SGK2_up;GOBP_INTRACELLULAR_GLUCOSE_HOMEOSTASIS;GOBP_CARBOHYDRATE_HOMEOSTASIS;GOBP_HORMONE_TRANSPORT",
+      "top_genes": "ADCY5;SORCS1;SFMBT2;TSHZ2;PLXNA2",
+      "trait_group": "portal",
+      "cluster": "Factor1"
+    },
+    {
+      "anchor_any_joint": 0.906,
+      "anchor_any_marginal": 0.906,
+      "factor": "Factor2",
+      "gene_set_size": "cfde-inc-v2",
+      "label": "GEO_BULK__GSE155832__GEO_BULK_GSE155832_Tgfb1VsControl72h_up___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K68463857_dn",
+      "lambda": 0.00837,
+      "phenotype": "2hrG",
+      "top_gene_sets": "GEO_BULK__GSE155832__GEO_BULK_GSE155832_Tgfb1VsControl72h_up___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K68463857_dn;IGVF__IGVFDS2266YDVM__IGVF_Perturb_Seq_chr10:8054203-8055203_up___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K03733288_dn;IGVF__IGVFDS6332VCTO__IGVF_Perturb_Seq_SOX11_up___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K89637567_dn;GTEx__colon__GTEx_aging_Colon_20-29_30-39_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K50950731_dn;IGVF__IGVFDS2266YDVM__IGVF_Perturb_Seq_chr8:144475835-144476835_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K50950731_dn",
+      "top_genes": "OLFM1;NUCKS1;PER2;LRRN3;GAS1",
+      "trait_group": "portal",
+      "cluster": "Factor2"
+    },
+    {
+      "anchor_any_joint": 0.562,
+      "anchor_any_marginal": 0.562,
+      "factor": "Factor3",
+      "gene_set_size": "cfde-inc-v2",
+      "label": "GEO_BULK__GSE78853__GEO_BULK_GSE78853_NortriptylineVsEthanolVehicle_dn___LINCS_L1000__all_signatures__LINCS_L1000_CRISPR_KO_TBC1D16_dn",
+      "lambda": 0.00712,
+      "phenotype": "2hrG",
+      "top_gene_sets": "GEO_BULK__GSE78853__GEO_BULK_GSE78853_NortriptylineVsEthanolVehicle_dn___LINCS_L1000__all_signatures__LINCS_L1000_CRISPR_KO_TBC1D16_dn;LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K76680796_up___PsychENCODE__all_signatures__PsychENCODE_geneM1;IGVF__IGVFDS2266YDVM__IGVF_Perturb_Seq_chr8:144475835-144476835_up___LINCS_L1000__all_signatures__LINCS_L1000_CRISPR_KO_FHAD1_dn;GEO_BULK__GSE78853__GEO_BULK_GSE78853_NortriptylineVsEthanolVehicle_dn___LINCS_L1000__all_signatures__LINCS_L1000_CRISPR_KO_MAP4K2_dn;LINCS_L1000__all_signatures__LINCS_L1000_CRISPR_KO_BCKDK_up___PsychENCODE__all_signatures__PsychENCODE_geneM1",
+      "top_genes": "KIRREL3;IYD;CHST9;INS;ASTN1",
+      "trait_group": "portal",
+      "cluster": "Factor3"
+    }
+  ]
+}

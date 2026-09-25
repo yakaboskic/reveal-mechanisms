@@ -1,0 +1,635 @@
+{
+  "url": "https://dev.cfdeknowledge.org/api/interactive/connections",
+  "method": "POST",
+  "request": {
+    "anchor_items": [
+      {
+        "node_id": "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K26122955_up",
+        "node_type": "gene_set",
+        "node_key": "AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K26122955_up",
+        "label": "AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K26122955_up",
+        "subtitle": "Gene set",
+        "id": "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K26122955_up",
+        "type": "gene_set"
+      }
+    ],
+    "context": "",
+    "target_type": "gene",
+    "reducer": "mean",
+    "connection_scope": "direct",
+    "limit": 8,
+    "exclude_node_ids": [
+      "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K26122955_up"
+    ],
+    "model": "cfde-inc-v2"
+  },
+  "retrieved_at": "2026-09-24T12:45:40.329517+00:00",
+  "status": 200,
+  "content_type": "application/json",
+  "body_sha256": "c2bf0fcbe9994093abbdbc4dd633affe78da097bd0b0d309dff9a6c3e61588fa",
+  "body_bytes": 15780,
+  "response": {
+    "candidates": [
+      {
+        "candidate": {
+          "node_id": "gene:DGKA",
+          "node_type": "gene",
+          "node_key": "DGKA",
+          "label": "DGKA",
+          "subtitle": "Gene",
+          "id": "gene:DGKA",
+          "type": "gene"
+        },
+        "aggregate_score": 1.0,
+        "raw_max_score": 1.0,
+        "raw_mean_score": 1.0,
+        "support_path_count": 1,
+        "support_anchor_count": 1,
+        "anchor_count": 1,
+        "supporting_paths": [
+          {
+            "anchor_id": "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K26122955_up",
+            "family": "gene_gene_set_membership",
+            "relation": "direct",
+            "raw_score": 1.0,
+            "normalized_score": 1.0,
+            "path_nodes": [
+              "gene:DGKA",
+              "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K26122955_up"
+            ],
+            "extra": {}
+          }
+        ],
+        "edges": [
+          {
+            "id": "44c1b29a55f69aed",
+            "source": "gene:DGKA",
+            "target": "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K26122955_up",
+            "weight": 1.0,
+            "label": "gene gene set membership",
+            "relation": "direct",
+            "family": "gene_gene_set_membership",
+            "raw_score": 1.0,
+            "normalized_score": 1.0,
+            "path_nodes": [
+              "gene:DGKA",
+              "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K26122955_up"
+            ],
+            "extra": {}
+          }
+        ]
+      },
+      {
+        "candidate": {
+          "node_id": "gene:EXOSC7",
+          "node_type": "gene",
+          "node_key": "EXOSC7",
+          "label": "EXOSC7",
+          "subtitle": "Gene",
+          "id": "gene:EXOSC7",
+          "type": "gene"
+        },
+        "aggregate_score": 1.0,
+        "raw_max_score": 1.0,
+        "raw_mean_score": 1.0,
+        "support_path_count": 1,
+        "support_anchor_count": 1,
+        "anchor_count": 1,
+        "supporting_paths": [
+          {
+            "anchor_id": "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K26122955_up",
+            "family": "gene_gene_set_membership",
+            "relation": "direct",
+            "raw_score": 1.0,
+            "normalized_score": 1.0,
+            "path_nodes": [
+              "gene:EXOSC7",
+              "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K26122955_up"
+            ],
+            "extra": {}
+          }
+        ],
+        "edges": [
+          {
+            "id": "27d56669a6e8fc54",
+            "source": "gene:EXOSC7",
+            "target": "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K26122955_up",
+            "weight": 1.0,
+            "label": "gene gene set membership",
+            "relation": "direct",
+            "family": "gene_gene_set_membership",
+            "raw_score": 1.0,
+            "normalized_score": 1.0,
+            "path_nodes": [
+              "gene:EXOSC7",
+              "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K26122955_up"
+            ],
+            "extra": {}
+          }
+        ]
+      },
+      {
+        "candidate": {
+          "node_id": "gene:FAM3A",
+          "node_type": "gene",
+          "node_key": "FAM3A",
+          "label": "FAM3A",
+          "subtitle": "Gene",
+          "id": "gene:FAM3A",
+          "type": "gene"
+        },
+        "aggregate_score": 1.0,
+        "raw_max_score": 1.0,
+        "raw_mean_score": 1.0,
+        "support_path_count": 1,
+        "support_anchor_count": 1,
+        "anchor_count": 1,
+        "supporting_paths": [
+          {
+            "anchor_id": "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K26122955_up",
+            "family": "gene_gene_set_membership",
+            "relation": "direct",
+            "raw_score": 1.0,
+            "normalized_score": 1.0,
+            "path_nodes": [
+              "gene:FAM3A",
+              "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K26122955_up"
+            ],
+            "extra": {}
+          }
+        ],
+        "edges": [
+          {
+            "id": "07018f894449f87d",
+            "source": "gene:FAM3A",
+            "target": "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K26122955_up",
+            "weight": 1.0,
+            "label": "gene gene set membership",
+            "relation": "direct",
+            "family": "gene_gene_set_membership",
+            "raw_score": 1.0,
+            "normalized_score": 1.0,
+            "path_nodes": [
+              "gene:FAM3A",
+              "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K26122955_up"
+            ],
+            "extra": {}
+          }
+        ]
+      },
+      {
+        "candidate": {
+          "node_id": "gene:HCFC1R1",
+          "node_type": "gene",
+          "node_key": "HCFC1R1",
+          "label": "HCFC1R1",
+          "subtitle": "",
+          "id": "gene:HCFC1R1",
+          "type": "gene"
+        },
+        "aggregate_score": 1.0,
+        "raw_max_score": 1.0,
+        "raw_mean_score": 1.0,
+        "support_path_count": 1,
+        "support_anchor_count": 1,
+        "anchor_count": 1,
+        "supporting_paths": [
+          {
+            "anchor_id": "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K26122955_up",
+            "family": "gene_gene_set_membership",
+            "relation": "direct",
+            "raw_score": 1.0,
+            "normalized_score": 1.0,
+            "path_nodes": [
+              "gene:HCFC1R1",
+              "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K26122955_up"
+            ],
+            "extra": {}
+          }
+        ],
+        "edges": [
+          {
+            "id": "3fdd8e66398726c5",
+            "source": "gene:HCFC1R1",
+            "target": "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K26122955_up",
+            "weight": 1.0,
+            "label": "gene gene set membership",
+            "relation": "direct",
+            "family": "gene_gene_set_membership",
+            "raw_score": 1.0,
+            "normalized_score": 1.0,
+            "path_nodes": [
+              "gene:HCFC1R1",
+              "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K26122955_up"
+            ],
+            "extra": {}
+          }
+        ]
+      },
+      {
+        "candidate": {
+          "node_id": "gene:MGMT",
+          "node_type": "gene",
+          "node_key": "MGMT",
+          "label": "MGMT",
+          "subtitle": "Gene",
+          "id": "gene:MGMT",
+          "type": "gene"
+        },
+        "aggregate_score": 1.0,
+        "raw_max_score": 1.0,
+        "raw_mean_score": 1.0,
+        "support_path_count": 1,
+        "support_anchor_count": 1,
+        "anchor_count": 1,
+        "supporting_paths": [
+          {
+            "anchor_id": "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K26122955_up",
+            "family": "gene_gene_set_membership",
+            "relation": "direct",
+            "raw_score": 1.0,
+            "normalized_score": 1.0,
+            "path_nodes": [
+              "gene:MGMT",
+              "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K26122955_up"
+            ],
+            "extra": {}
+          }
+        ],
+        "edges": [
+          {
+            "id": "7c9fb6b96d189ad8",
+            "source": "gene:MGMT",
+            "target": "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K26122955_up",
+            "weight": 1.0,
+            "label": "gene gene set membership",
+            "relation": "direct",
+            "family": "gene_gene_set_membership",
+            "raw_score": 1.0,
+            "normalized_score": 1.0,
+            "path_nodes": [
+              "gene:MGMT",
+              "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K26122955_up"
+            ],
+            "extra": {}
+          }
+        ]
+      },
+      {
+        "candidate": {
+          "node_id": "gene:PFDN5",
+          "node_type": "gene",
+          "node_key": "PFDN5",
+          "label": "PFDN5",
+          "subtitle": "Gene",
+          "id": "gene:PFDN5",
+          "type": "gene"
+        },
+        "aggregate_score": 1.0,
+        "raw_max_score": 1.0,
+        "raw_mean_score": 1.0,
+        "support_path_count": 1,
+        "support_anchor_count": 1,
+        "anchor_count": 1,
+        "supporting_paths": [
+          {
+            "anchor_id": "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K26122955_up",
+            "family": "gene_gene_set_membership",
+            "relation": "direct",
+            "raw_score": 1.0,
+            "normalized_score": 1.0,
+            "path_nodes": [
+              "gene:PFDN5",
+              "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K26122955_up"
+            ],
+            "extra": {}
+          }
+        ],
+        "edges": [
+          {
+            "id": "7b7bb0121dbc20c6",
+            "source": "gene:PFDN5",
+            "target": "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K26122955_up",
+            "weight": 1.0,
+            "label": "gene gene set membership",
+            "relation": "direct",
+            "family": "gene_gene_set_membership",
+            "raw_score": 1.0,
+            "normalized_score": 1.0,
+            "path_nodes": [
+              "gene:PFDN5",
+              "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K26122955_up"
+            ],
+            "extra": {}
+          }
+        ]
+      },
+      {
+        "candidate": {
+          "node_id": "gene:PRAF2",
+          "node_type": "gene",
+          "node_key": "PRAF2",
+          "label": "PRAF2",
+          "subtitle": "",
+          "id": "gene:PRAF2",
+          "type": "gene"
+        },
+        "aggregate_score": 1.0,
+        "raw_max_score": 1.0,
+        "raw_mean_score": 1.0,
+        "support_path_count": 1,
+        "support_anchor_count": 1,
+        "anchor_count": 1,
+        "supporting_paths": [
+          {
+            "anchor_id": "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K26122955_up",
+            "family": "gene_gene_set_membership",
+            "relation": "direct",
+            "raw_score": 1.0,
+            "normalized_score": 1.0,
+            "path_nodes": [
+              "gene:PRAF2",
+              "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K26122955_up"
+            ],
+            "extra": {}
+          }
+        ],
+        "edges": [
+          {
+            "id": "84e0aac4a7107693",
+            "source": "gene:PRAF2",
+            "target": "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K26122955_up",
+            "weight": 1.0,
+            "label": "gene gene set membership",
+            "relation": "direct",
+            "family": "gene_gene_set_membership",
+            "raw_score": 1.0,
+            "normalized_score": 1.0,
+            "path_nodes": [
+              "gene:PRAF2",
+              "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K26122955_up"
+            ],
+            "extra": {}
+          }
+        ]
+      },
+      {
+        "candidate": {
+          "node_id": "gene:PSMD13",
+          "node_type": "gene",
+          "node_key": "PSMD13",
+          "label": "PSMD13",
+          "subtitle": "Gene",
+          "id": "gene:PSMD13",
+          "type": "gene"
+        },
+        "aggregate_score": 1.0,
+        "raw_max_score": 1.0,
+        "raw_mean_score": 1.0,
+        "support_path_count": 1,
+        "support_anchor_count": 1,
+        "anchor_count": 1,
+        "supporting_paths": [
+          {
+            "anchor_id": "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K26122955_up",
+            "family": "gene_gene_set_membership",
+            "relation": "direct",
+            "raw_score": 1.0,
+            "normalized_score": 1.0,
+            "path_nodes": [
+              "gene:PSMD13",
+              "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K26122955_up"
+            ],
+            "extra": {}
+          }
+        ],
+        "edges": [
+          {
+            "id": "2076d62f1bea4272",
+            "source": "gene:PSMD13",
+            "target": "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K26122955_up",
+            "weight": 1.0,
+            "label": "gene gene set membership",
+            "relation": "direct",
+            "family": "gene_gene_set_membership",
+            "raw_score": 1.0,
+            "normalized_score": 1.0,
+            "path_nodes": [
+              "gene:PSMD13",
+              "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K26122955_up"
+            ],
+            "extra": {}
+          }
+        ]
+      }
+    ],
+    "graph": {
+      "nodes": [
+        {
+          "node_id": "gene:DGKA",
+          "node_type": "gene",
+          "node_key": "DGKA",
+          "label": "DGKA",
+          "subtitle": "Gene",
+          "id": "gene:DGKA",
+          "type": "gene"
+        },
+        {
+          "node_id": "gene:EXOSC7",
+          "node_type": "gene",
+          "node_key": "EXOSC7",
+          "label": "EXOSC7",
+          "subtitle": "Gene",
+          "id": "gene:EXOSC7",
+          "type": "gene"
+        },
+        {
+          "node_id": "gene:FAM3A",
+          "node_type": "gene",
+          "node_key": "FAM3A",
+          "label": "FAM3A",
+          "subtitle": "Gene",
+          "id": "gene:FAM3A",
+          "type": "gene"
+        },
+        {
+          "node_id": "gene:HCFC1R1",
+          "node_type": "gene",
+          "node_key": "HCFC1R1",
+          "label": "HCFC1R1",
+          "subtitle": "",
+          "id": "gene:HCFC1R1",
+          "type": "gene"
+        },
+        {
+          "node_id": "gene:MGMT",
+          "node_type": "gene",
+          "node_key": "MGMT",
+          "label": "MGMT",
+          "subtitle": "Gene",
+          "id": "gene:MGMT",
+          "type": "gene"
+        },
+        {
+          "node_id": "gene:PFDN5",
+          "node_type": "gene",
+          "node_key": "PFDN5",
+          "label": "PFDN5",
+          "subtitle": "Gene",
+          "id": "gene:PFDN5",
+          "type": "gene"
+        },
+        {
+          "node_id": "gene:PRAF2",
+          "node_type": "gene",
+          "node_key": "PRAF2",
+          "label": "PRAF2",
+          "subtitle": "",
+          "id": "gene:PRAF2",
+          "type": "gene"
+        },
+        {
+          "node_id": "gene:PSMD13",
+          "node_type": "gene",
+          "node_key": "PSMD13",
+          "label": "PSMD13",
+          "subtitle": "Gene",
+          "id": "gene:PSMD13",
+          "type": "gene"
+        }
+      ],
+      "edges": [
+        {
+          "id": "44c1b29a55f69aed",
+          "source": "gene:DGKA",
+          "target": "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K26122955_up",
+          "weight": 1.0,
+          "label": "gene gene set membership",
+          "relation": "direct",
+          "family": "gene_gene_set_membership",
+          "raw_score": 1.0,
+          "normalized_score": 1.0,
+          "path_nodes": [
+            "gene:DGKA",
+            "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K26122955_up"
+          ],
+          "extra": {}
+        },
+        {
+          "id": "27d56669a6e8fc54",
+          "source": "gene:EXOSC7",
+          "target": "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K26122955_up",
+          "weight": 1.0,
+          "label": "gene gene set membership",
+          "relation": "direct",
+          "family": "gene_gene_set_membership",
+          "raw_score": 1.0,
+          "normalized_score": 1.0,
+          "path_nodes": [
+            "gene:EXOSC7",
+            "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K26122955_up"
+          ],
+          "extra": {}
+        },
+        {
+          "id": "07018f894449f87d",
+          "source": "gene:FAM3A",
+          "target": "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K26122955_up",
+          "weight": 1.0,
+          "label": "gene gene set membership",
+          "relation": "direct",
+          "family": "gene_gene_set_membership",
+          "raw_score": 1.0,
+          "normalized_score": 1.0,
+          "path_nodes": [
+            "gene:FAM3A",
+            "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K26122955_up"
+          ],
+          "extra": {}
+        },
+        {
+          "id": "3fdd8e66398726c5",
+          "source": "gene:HCFC1R1",
+          "target": "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K26122955_up",
+          "weight": 1.0,
+          "label": "gene gene set membership",
+          "relation": "direct",
+          "family": "gene_gene_set_membership",
+          "raw_score": 1.0,
+          "normalized_score": 1.0,
+          "path_nodes": [
+            "gene:HCFC1R1",
+            "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K26122955_up"
+          ],
+          "extra": {}
+        },
+        {
+          "id": "7c9fb6b96d189ad8",
+          "source": "gene:MGMT",
+          "target": "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K26122955_up",
+          "weight": 1.0,
+          "label": "gene gene set membership",
+          "relation": "direct",
+          "family": "gene_gene_set_membership",
+          "raw_score": 1.0,
+          "normalized_score": 1.0,
+          "path_nodes": [
+            "gene:MGMT",
+            "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K26122955_up"
+          ],
+          "extra": {}
+        },
+        {
+          "id": "7b7bb0121dbc20c6",
+          "source": "gene:PFDN5",
+          "target": "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K26122955_up",
+          "weight": 1.0,
+          "label": "gene gene set membership",
+          "relation": "direct",
+          "family": "gene_gene_set_membership",
+          "raw_score": 1.0,
+          "normalized_score": 1.0,
+          "path_nodes": [
+            "gene:PFDN5",
+            "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K26122955_up"
+          ],
+          "extra": {}
+        },
+        {
+          "id": "84e0aac4a7107693",
+          "source": "gene:PRAF2",
+          "target": "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K26122955_up",
+          "weight": 1.0,
+          "label": "gene gene set membership",
+          "relation": "direct",
+          "family": "gene_gene_set_membership",
+          "raw_score": 1.0,
+          "normalized_score": 1.0,
+          "path_nodes": [
+            "gene:PRAF2",
+            "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K26122955_up"
+          ],
+          "extra": {}
+        },
+        {
+          "id": "2076d62f1bea4272",
+          "source": "gene:PSMD13",
+          "target": "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K26122955_up",
+          "weight": 1.0,
+          "label": "gene gene set membership",
+          "relation": "direct",
+          "family": "gene_gene_set_membership",
+          "raw_score": 1.0,
+          "normalized_score": 1.0,
+          "path_nodes": [
+            "gene:PSMD13",
+            "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_CBE_SourceDiagnosis_AD-PATH_AGE_ALL_dn___LINCS_L1000__all_signatures__LINCS_L1000_Chem_Pert_BRD-K26122955_up"
+          ],
+          "extra": {}
+        }
+      ]
+    },
+    "candidate_count": 8
+  },
+  "elapsed_seconds": 0.591
+}

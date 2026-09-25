@@ -1,0 +1,15 @@
+# REVEAL application profile; the pinned upstream DAPPER files are unchanged.
+# A paragraph consumes its saved account, making the Paragraph the terminal.
+reveal-paragraph:
+  title: Saved paragraph expression
+  terminal:
+    class: Paragraph
+    min: 1
+    max: 1
+  required_edges:
+    - group: was_generated_by_edges
+      object_class: Activity
+      min: 1
+      severity: error
+      why: A paragraph must identify its expression activity.
+  activities_require_inputs: warning

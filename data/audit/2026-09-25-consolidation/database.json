@@ -1,0 +1,545 @@
+{
+  "audited_at": "2026-09-25T18:11:58.083414+00:00",
+  "mode": "read_only",
+  "database": "cyaka_reveal_mechanisms",
+  "schema_mutated": false,
+  "tls_cipher": "TLS_AES_256_GCM_SHA384",
+  "version": "8.0.42",
+  "tables": {
+    "cfde_gene_set_aliases": {
+      "rows": 801934,
+      "ddl_sha256": "c18841a30e593764b9f9373a00285f84730c4fd9b1db579ccd0342111a9863af",
+      "ddl": "CREATE TABLE `cfde_gene_set_aliases` (\n  `import_id` char(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n  `node_id_sha256` char(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n  `model` varchar(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n  `source_key` text CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,\n  `node_id` text CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,\n  `dapper_id` varchar(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n  `provenance` json NOT NULL,\n  PRIMARY KEY (`import_id`,`node_id_sha256`),\n  KEY `lookup_node` (`model`,`node_id_sha256`),\n  KEY `lookup_dapper` (`dapper_id`),\n  CONSTRAINT `cfde_gene_set_aliases_ibfk_1` FOREIGN KEY (`import_id`) REFERENCES `gene_set_imports` (`import_id`),\n  CONSTRAINT `cfde_gene_set_aliases_ibfk_2` FOREIGN KEY (`dapper_id`) REFERENCES `dapper_objects` (`id`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
+      "columns": [
+        {
+          "name": "import_id",
+          "type": "char(64)",
+          "nullable": false,
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "node_id_sha256",
+          "type": "char(64)",
+          "nullable": false,
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "model",
+          "type": "varchar(64)",
+          "nullable": false,
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "source_key",
+          "type": "text",
+          "nullable": false,
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "node_id",
+          "type": "text",
+          "nullable": false,
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "dapper_id",
+          "type": "varchar(128)",
+          "nullable": false,
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "provenance",
+          "type": "json",
+          "nullable": false,
+          "default": null,
+          "extra": ""
+        }
+      ]
+    },
+    "dapper_objects": {
+      "rows": 801935,
+      "ddl_sha256": "34a0b0384437edb19ba13d8a55e30d05aa04a2acb95a152d9d22724ed7efcec1",
+      "ddl": "CREATE TABLE `dapper_objects` (\n  `id` varchar(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n  `class_name` varchar(64) CHARACTER SET ascii COLLATE ascii_general_ci NOT NULL,\n  `identity_profile` varchar(32) CHARACTER SET ascii COLLATE ascii_general_ci NOT NULL,\n  `payload_sha256` char(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n  `payload` json NOT NULL,\n  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  PRIMARY KEY (`id`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
+      "columns": [
+        {
+          "name": "id",
+          "type": "varchar(128)",
+          "nullable": false,
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "class_name",
+          "type": "varchar(64)",
+          "nullable": false,
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "identity_profile",
+          "type": "varchar(32)",
+          "nullable": false,
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "payload_sha256",
+          "type": "char(64)",
+          "nullable": false,
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "payload",
+          "type": "json",
+          "nullable": false,
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "nullable": false,
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED"
+        }
+      ]
+    },
+    "eaggl_embedding_runs": {
+      "rows": 1,
+      "ddl_sha256": "9bb7d0077715911f1f9f8e88edd12fead6072e12a5b3dadbd064e0c290a11589",
+      "ddl": "CREATE TABLE `eaggl_embedding_runs` (\n  `run_id` char(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n  `import_id` char(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n  `config` json NOT NULL,\n  `dimensions` int unsigned NOT NULL,\n  `expected_rows` int unsigned NOT NULL,\n  `loaded_rows` int unsigned NOT NULL DEFAULT '0',\n  `status` varchar(16) NOT NULL,\n  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  PRIMARY KEY (`run_id`),\n  KEY `import_id` (`import_id`),\n  CONSTRAINT `eaggl_embedding_runs_ibfk_1` FOREIGN KEY (`import_id`) REFERENCES `eaggl_imports` (`import_id`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
+      "columns": [
+        {
+          "name": "run_id",
+          "type": "char(64)",
+          "nullable": false,
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "import_id",
+          "type": "char(64)",
+          "nullable": false,
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "config",
+          "type": "json",
+          "nullable": false,
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "dimensions",
+          "type": "int unsigned",
+          "nullable": false,
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "expected_rows",
+          "type": "int unsigned",
+          "nullable": false,
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "loaded_rows",
+          "type": "int unsigned",
+          "nullable": false,
+          "default": "0",
+          "extra": ""
+        },
+        {
+          "name": "status",
+          "type": "varchar(16)",
+          "nullable": false,
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "nullable": false,
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED"
+        }
+      ]
+    },
+    "eaggl_factors": {
+      "rows": 4037,
+      "ddl_sha256": "fb1f384ac617267f2591612359fcda945eb56b8b359f23d453d0056c28fe3697",
+      "ddl": "CREATE TABLE `eaggl_factors` (\n  `import_id` char(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n  `factor_index` int unsigned NOT NULL,\n  `factor_id` text CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,\n  `factor_id_sha256` char(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n  `trait` text CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,\n  `label` text NOT NULL,\n  `input_sha256` char(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n  `metadata` json NOT NULL,\n  PRIMARY KEY (`import_id`,`factor_index`),\n  UNIQUE KEY `factor_lookup` (`import_id`,`factor_id_sha256`),\n  CONSTRAINT `eaggl_factors_ibfk_1` FOREIGN KEY (`import_id`) REFERENCES `eaggl_imports` (`import_id`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
+      "columns": [
+        {
+          "name": "import_id",
+          "type": "char(64)",
+          "nullable": false,
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "factor_index",
+          "type": "int unsigned",
+          "nullable": false,
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "factor_id",
+          "type": "text",
+          "nullable": false,
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "factor_id_sha256",
+          "type": "char(64)",
+          "nullable": false,
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "trait",
+          "type": "text",
+          "nullable": false,
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "label",
+          "type": "text",
+          "nullable": false,
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "input_sha256",
+          "type": "char(64)",
+          "nullable": false,
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "metadata",
+          "type": "json",
+          "nullable": false,
+          "default": null,
+          "extra": ""
+        }
+      ]
+    },
+    "eaggl_gene_loadings": {
+      "rows": 2553330,
+      "ddl_sha256": "95865080aa2042adf46c7841fd3f04d45f045241d7bb5bcd03472c14177f6c00",
+      "ddl": "CREATE TABLE `eaggl_gene_loadings` (\n  `import_id` char(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n  `factor_index` int unsigned NOT NULL,\n  `gene_index` int unsigned NOT NULL,\n  `loading` double NOT NULL,\n  PRIMARY KEY (`import_id`,`factor_index`,`gene_index`),\n  KEY `import_id` (`import_id`,`gene_index`),\n  CONSTRAINT `eaggl_gene_loadings_ibfk_1` FOREIGN KEY (`import_id`, `factor_index`) REFERENCES `eaggl_factors` (`import_id`, `factor_index`),\n  CONSTRAINT `eaggl_gene_loadings_ibfk_2` FOREIGN KEY (`import_id`, `gene_index`) REFERENCES `eaggl_genes` (`import_id`, `gene_index`),\n  CONSTRAINT `eaggl_gene_loadings_chk_1` CHECK (((`loading` > 0) and (`loading` <= 1)))\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
+      "columns": [
+        {
+          "name": "import_id",
+          "type": "char(64)",
+          "nullable": false,
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "factor_index",
+          "type": "int unsigned",
+          "nullable": false,
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "gene_index",
+          "type": "int unsigned",
+          "nullable": false,
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "loading",
+          "type": "double",
+          "nullable": false,
+          "default": null,
+          "extra": ""
+        }
+      ]
+    },
+    "eaggl_genes": {
+      "rows": 18477,
+      "ddl_sha256": "d6c6f300716e360d6567454a856d8463cd0882deb68d9b4e3895dfe67d60146d",
+      "ddl": "CREATE TABLE `eaggl_genes` (\n  `import_id` char(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n  `gene_index` int unsigned NOT NULL,\n  `symbol` text CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,\n  PRIMARY KEY (`import_id`,`gene_index`),\n  CONSTRAINT `eaggl_genes_ibfk_1` FOREIGN KEY (`import_id`) REFERENCES `eaggl_imports` (`import_id`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
+      "columns": [
+        {
+          "name": "import_id",
+          "type": "char(64)",
+          "nullable": false,
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "gene_index",
+          "type": "int unsigned",
+          "nullable": false,
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "symbol",
+          "type": "text",
+          "nullable": false,
+          "default": null,
+          "extra": ""
+        }
+      ]
+    },
+    "eaggl_graph_edges": {
+      "rows": 8535,
+      "ddl_sha256": "5e527dcf5ae2c56a62bc0b065e2c709fc0fed732331c2ac921650eff565c84bc",
+      "ddl": "CREATE TABLE `eaggl_graph_edges` (\n  `import_id` char(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n  `parent_index` int unsigned NOT NULL,\n  `child_index` int unsigned NOT NULL,\n  PRIMARY KEY (`import_id`,`parent_index`,`child_index`),\n  KEY `import_id` (`import_id`,`child_index`),\n  CONSTRAINT `eaggl_graph_edges_ibfk_1` FOREIGN KEY (`import_id`, `parent_index`) REFERENCES `eaggl_graph_nodes` (`import_id`, `node_index`),\n  CONSTRAINT `eaggl_graph_edges_ibfk_2` FOREIGN KEY (`import_id`, `child_index`) REFERENCES `eaggl_graph_nodes` (`import_id`, `node_index`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
+      "columns": [
+        {
+          "name": "import_id",
+          "type": "char(64)",
+          "nullable": false,
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "parent_index",
+          "type": "int unsigned",
+          "nullable": false,
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "child_index",
+          "type": "int unsigned",
+          "nullable": false,
+          "default": null,
+          "extra": ""
+        }
+      ]
+    },
+    "eaggl_graph_nodes": {
+      "rows": 5682,
+      "ddl_sha256": "834aedb6968bd6b752131fa44c958308e2874d2ee167ce7bc8e89e16b35bb324",
+      "ddl": "CREATE TABLE `eaggl_graph_nodes` (\n  `import_id` char(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n  `node_index` int unsigned NOT NULL,\n  `node_id` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,\n  `factor_index` int unsigned DEFAULT NULL,\n  `payload` json NOT NULL,\n  PRIMARY KEY (`import_id`,`node_index`),\n  UNIQUE KEY `node_lookup` (`import_id`,`node_id`),\n  KEY `import_id` (`import_id`,`factor_index`),\n  CONSTRAINT `eaggl_graph_nodes_ibfk_1` FOREIGN KEY (`import_id`) REFERENCES `eaggl_imports` (`import_id`),\n  CONSTRAINT `eaggl_graph_nodes_ibfk_2` FOREIGN KEY (`import_id`, `factor_index`) REFERENCES `eaggl_factors` (`import_id`, `factor_index`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
+      "columns": [
+        {
+          "name": "import_id",
+          "type": "char(64)",
+          "nullable": false,
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "node_index",
+          "type": "int unsigned",
+          "nullable": false,
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "node_id",
+          "type": "varchar(255)",
+          "nullable": false,
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "factor_index",
+          "type": "int unsigned",
+          "nullable": true,
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "payload",
+          "type": "json",
+          "nullable": false,
+          "default": null,
+          "extra": ""
+        }
+      ]
+    },
+    "eaggl_imports": {
+      "rows": 1,
+      "ddl_sha256": "f49a89d765f3ea3e404a408a05b46d53efbb1dcf1f30d9e54df739fb8512fcb9",
+      "ddl": "CREATE TABLE `eaggl_imports` (\n  `import_id` char(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n  `source_namespace` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,\n  `source_version` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,\n  `status` varchar(16) NOT NULL,\n  `manifest` json NOT NULL,\n  `progress` json NOT NULL,\n  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  PRIMARY KEY (`import_id`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
+      "columns": [
+        {
+          "name": "import_id",
+          "type": "char(64)",
+          "nullable": false,
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "source_namespace",
+          "type": "varchar(128)",
+          "nullable": false,
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "source_version",
+          "type": "varchar(255)",
+          "nullable": false,
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "status",
+          "type": "varchar(16)",
+          "nullable": false,
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "manifest",
+          "type": "json",
+          "nullable": false,
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "progress",
+          "type": "json",
+          "nullable": false,
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "nullable": false,
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED"
+        }
+      ]
+    },
+    "eaggl_name_embeddings": {
+      "rows": 3103,
+      "ddl_sha256": "57e8df051ff85b1b3277c7f4e90fb74a193f17d31a1e700a37e442be20c5e7b5",
+      "ddl": "CREATE TABLE `eaggl_name_embeddings` (\n  `run_id` char(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n  `input_sha256` char(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n  `input_text` text NOT NULL,\n  `vector` mediumblob NOT NULL,\n  `vector_sha256` char(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n  PRIMARY KEY (`run_id`,`input_sha256`),\n  CONSTRAINT `eaggl_name_embeddings_ibfk_1` FOREIGN KEY (`run_id`) REFERENCES `eaggl_embedding_runs` (`run_id`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci",
+      "columns": [
+        {
+          "name": "run_id",
+          "type": "char(64)",
+          "nullable": false,
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "input_sha256",
+          "type": "char(64)",
+          "nullable": false,
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "input_text",
+          "type": "text",
+          "nullable": false,
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "vector",
+          "type": "mediumblob",
+          "nullable": false,
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "vector_sha256",
+          "type": "char(64)",
+          "nullable": false,
+          "default": null,
+          "extra": ""
+        }
+      ]
+    },
+    "gene_set_imports": {
+      "rows": 1,
+      "ddl_sha256": "4cc3f6cbd9c6785cb2ab69fe15697351aa3479285a35a496484dd88bcfe46c65",
+      "ddl": "CREATE TABLE `gene_set_imports` (\n  `import_id` char(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n  `model` varchar(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,\n  `status` varchar(16) CHARACTER SET ascii COLLATE ascii_general_ci NOT NULL,\n  `loaded_rows` int unsigned NOT NULL DEFAULT '0',\n  `expected_rows` int unsigned NOT NULL,\n  `manifest` json NOT NULL,\n  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n  PRIMARY KEY (`import_id`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
+      "columns": [
+        {
+          "name": "import_id",
+          "type": "char(64)",
+          "nullable": false,
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "model",
+          "type": "varchar(64)",
+          "nullable": false,
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "status",
+          "type": "varchar(16)",
+          "nullable": false,
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "loaded_rows",
+          "type": "int unsigned",
+          "nullable": false,
+          "default": "0",
+          "extra": ""
+        },
+        {
+          "name": "expected_rows",
+          "type": "int unsigned",
+          "nullable": false,
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "manifest",
+          "type": "json",
+          "nullable": false,
+          "default": null,
+          "extra": ""
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "nullable": false,
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp",
+          "nullable": false,
+          "default": "CURRENT_TIMESTAMP",
+          "extra": "DEFAULT_GENERATED on update CURRENT_TIMESTAMP"
+        }
+      ]
+    }
+  },
+  "connected": true,
+  "gene_set_imports_statuses": {
+    "complete": 1
+  },
+  "eaggl_imports_statuses": {
+    "complete": 1
+  },
+  "eaggl_embedding_runs_statuses": {
+    "complete": 1
+  }
+}
