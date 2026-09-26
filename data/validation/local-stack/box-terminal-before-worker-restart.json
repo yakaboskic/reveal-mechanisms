@@ -1,0 +1,27 @@
+{
+  "box_id": "boss-hermit-53702",
+  "observation_method": "read-only Upstash AsyncBox.get and root Python read of status/runtime/public-event count; no remote writes or inference launches",
+  "observed_status": {
+    "completed_at": "2026-09-25T21:05:11.513227+00:00",
+    "reason": null,
+    "status": "succeeded"
+  },
+  "runtime": {
+    "job_id": "be002a14-6915-42e5-ab9b-9db0c1acdef2",
+    "attempt": 1,
+    "started_at": "2026-09-25T21:01:03.997992+00:00",
+    "completed_at": "2026-09-25T21:05:11.119640+00:00",
+    "cost_usd": 0.5700206999999999,
+    "execution_limits": {
+      "max_budget_usd": 3.0,
+      "max_turns": 40,
+      "timeout_seconds": 900
+    }
+  },
+  "public_event_count": 297,
+  "ledger_finalized": true,
+  "output_filenames": [
+    "account-1.json"
+  ],
+  "source": "Actual read-only tool result from exec session77867; recorded without repeating remote request"
+}

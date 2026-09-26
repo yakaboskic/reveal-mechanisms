@@ -55,6 +55,8 @@ enums:
       ok: {}
       ok_limit_reached: {}
       empty: {}
+      omitted:
+        description: Captured observations exist but none remain in this collection after retention or required graph joins; not a zero-result query.
       not_available: {}
       not_queried: {}
       not_captured: {}

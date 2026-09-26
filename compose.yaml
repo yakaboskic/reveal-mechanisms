@@ -1,0 +1,39 @@
+name: reveal-mechanisms
+x-backend: &backend
+  build:
+    context: .
+    dockerfile: services/backend/Dockerfile
+  image: reveal-mechanisms-backend:local
+  env_file: .env
+  environment:
+    REVEAL_DAPPER_ROOT: /app/.runtime/dapper
+    REVEAL_DISMECH_SOURCE: /app/dismech
+    REVEAL_ARTIFACTS_DIR: /app/.runtime/artifacts
+    REVEAL_MYSQL_CA_FILE: /app/runtime-ca.pem
+    REVEAL_EXECUTION_MODE: ${REVEAL_EXECUTION_MODE:-box}
+  volumes:
+    - ./.runtime/artifacts:/app/.runtime/artifacts
+    - ./.runtime/dapper:/app/.runtime/dapper:ro
+    - ${REVEAL_DISMECH_SOURCE:-../dismech}:/app/dismech:ro
+    - ${REVEAL_MYSQL_CA_FILE:?Set REVEAL_MYSQL_CA_FILE to the trusted Aurora CA bundle}:/app/runtime-ca.pem:ro
+  extra_hosts:
+    - host.docker.internal:host-gateway
+  init: true
+  stop_grace_period: 120s
+services:
+  api:
+    <<: *backend
+    ports:
+      - "127.0.0.1:${REVEAL_API_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz',timeout=20)"]
+      interval: 15s
+      timeout: 25s
+      start_period: 120s
+      retries: 5
+  worker:
+    <<: *backend
+    command: ["python", "-m", "reveal_backend.worker"]
+    depends_on:
+      api:
+        condition: service_healthy

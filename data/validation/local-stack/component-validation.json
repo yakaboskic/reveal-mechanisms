@@ -1,0 +1,30 @@
+{
+  "checked_at": "2026-09-25T22:12:29.585700+00:00",
+  "backend": {
+    "command": "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=services/backend/src .venv/bin/python -B -m unittest discover -s services/backend/tests -v",
+    "tests_run": 177,
+    "passed": 169,
+    "skipped": 8,
+    "skip_scope": "Optional external/disposable database tests",
+    "elapsed_seconds": 113.443,
+    "log_sha256": "fa9c51a37b9a4facdaf0a8e935c5c800d3b664f3769b572b3b83a2d8b9410ff9",
+    "status": "passed",
+    "scope": "Full suite including scientific prompt baseline, batched transport/persistence, actual checkpoint-failure recovery, stream mapping, heartbeat, terminal backlog, capture recovery and indexed read-only replay"
+  },
+  "frontend": {
+    "tests_passed": 9,
+    "typescript": "passed",
+    "production_build": "passed before final CSS-only citation wrapping rule",
+    "final_css_verification": "Next development compilation and actual 390px Paragraph/reference page passed; desktop viewport restored"
+  },
+  "startup": {
+    "tests_passed": 7,
+    "status": "passed"
+  },
+  "openapi": {
+    "operations": 31,
+    "validated_response_examples": 173,
+    "validated_request_exchanges": 42,
+    "status": "passed"
+  }
+}

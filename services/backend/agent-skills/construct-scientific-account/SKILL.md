@@ -31,7 +31,7 @@ Read the supplied pinned DAPPER schema for any object fields you author. Do not 
 - Resolve CURIE fields using the package's `prefixes` and `identifier_policy`; use the pinned DAPPER resolver, reject unknown/conflicting prefixes, and preserve absolute URIs. Source-local URNs do not prove external entity identity. Resolve opaque DisMech record aliases through source locators and mappings, not the reserved DisMech vocabulary prefix. Do not rewrite existing minted objects while resolving references.
 - Read source rows through their exact artifact/locator, not just the display label. Retain original numeric precision, metric names and provenance.
 - Mechanism `factor_value`, trait `combined/log_bf/prior`, gene-set `beta/beta_uncorrected`, interactive normalized ranking and semantic cosine are different quantities. No conversion into a shared confidence or probability is established.
-- Respect `empty`, `not_queried`, `not_available`, `failed`, historical `not_captured` and truncation. Check scope differences before combining observations. Repeated projections/endpoints/contextual edges are not independent corroboration.
+- Respect `empty`, `omitted`, `not_queried`, `not_available`, `failed`, historical `not_captured` and truncation. `omitted` means captured observations were excluded from the retained collection; it is not a zero-result query or evidence of absence. Check scope differences before combining observations. Repeated projections/endpoints/contextual edges are not independent corroboration.
 - Gene-set catalog identity is not verified membership or original construction provenance. A shared factor does not imply a gene belongs to a connected set. `_up`/`_dn`, loading sign and a source label do not establish disease amplification/inhibition, tissue specificity or causality.
 - For a legacy bundle, preserve its capped scores and namespace. Do not substitute legacy IDs into `cfde-inc-v2` or treat hierarchy union scores as posterior probabilities. Only source-backed mappings may connect versions.
 
@@ -39,11 +39,13 @@ Read the supplied pinned DAPPER schema for any object fields you author. Do not 
 
 Use only the worker-provided, read-only evidence tools and selected graphs, within the package budgets. Inspect KG schemas and verify entity cross-references and biological scope before querying. Retain assertions, qualifiers, source publications and conflicts. If identity remains unresolved, record that limitation instead of asserting equivalence.
 
+Before authoring biological interpretations, investigate each selected graph: inspect its schema once, then make one relevant, bounded `query_graph` call (`limit` at most 10) using an entity or scoped term from the frozen observations. A schema read alone is not a biological evidence search. Prefer a resolved absolute entity IRI; a `contains` search is discovery and does not establish entity identity. At most one additional targeted query per graph may resolve a promising hit. If the schema demonstrates incompatibility or a tool failure prevents a safe query, state the specific limitation instead of forcing an irrelevant query or claiming a search completed. Record actual completed, empty, failed or skipped outcomes in the account's coverage limitations. Empty/error results do not support biological absence. Only relevant captured assertions with verified identity and scope can support an interpretation; functional annotation alone does not distinguish the causal alternatives in the selected gap.
+
 Every attempted call, including empty/error results, must be captured by the worker's evidence ledger with exact request/result artifacts and source locators. Do not alter the initial package. If complete capture or graph enforcement is unavailable, stop external retrieval and return that enrichment limitation. No additional CFDE expansion is authorized by this skill.
 
 ## Author the smallest useful account
 
-1. Choose scoped biological Propositions that help address the unknown. A gene loading can inform “Gene G is involved in mechanism M relevant to trait T.” The observed loading belongs in evidence; the Proposition expresses biological content using `BIOLOGICAL_INTERPRETATION`.
+1. Choose scoped biological Propositions that help address the unknown. A gene loading can motivate a candidate involvement hypothesis scoped to the selected factor/trait model and retained observations. It does not establish biological function or pathway membership. The observed loading belongs in evidence; the Proposition expresses the limited interpretation using `BIOLOGICAL_INTERPRETATION`.
 2. Give each Claim one Proposition. Its statement summarizes its assessment, the evidence basis, uncertainty and conflicting lines. Use the direction supported by the interpretation; a regulatory inhibition claim can have evidence direction `SUPPORTS`.
 3. For every EvidenceItem, set one `target_proposition` matching its owning Claim, reference authorized source Files through `was_derived_from`, retain exact locators in `context`, and explain how the observation bears on this Proposition. Preserve verbatim snippets where available. Reuse sources across separate evidence uses when targets differ.
 4. Prefer one biological Claim with artifact-based evidence in simple cases. Separate source-result Claims are optional when independent citation, assessment or typed scores add value. Do not create a duplicate Claim merely to restate the loading. No graph-path EvidenceItem extension is permitted.
@@ -52,6 +54,14 @@ Every attempted call, including empty/error results, must be captured by the wor
 7. Represent a new substantive scientific conclusion in the closing as its own assessed component Claim. A one-Claim account omits `conclusion_claims`; otherwise they are an optional ordered subset, with at least one component outside that subset under the current profile.
 
 There is no fixed required number of Claims and no requirement to use all four templates. If the package cannot support a useful account, return the explicit insufficient-evidence outcome with the missing observations instead of manufacturing claims.
+
+### Check every scientific field against its source
+
+An association or factor loading alone provides **no evidence distinguishing upstream causation, downstream readout, reverse causation or pleiotropy**. Do not call it even weak, limited, suggestive or consistent-with evidence favoring one causal direction. A later disclaimer that causality is unproven or that the gap remains open does not repair an unsupported positive assertion elsewhere.
+
+Check each Proposition statement and scope, Claim statement and assessment, EvidenceItem explanation/context/snippet, and account synthesis separately against the exact cited observations. Remove unsupported assertions from each field. Do not fill missing evidence with remembered gene functions, pathway assignments, tissue specificity, temporal order or regulatory direction. Labels and co-loadings do not supply those facts. A retrieved annotation supports only its actual assertion in its verified entity and biological scope; it does not automatically favor an upstream mechanism over a downstream readout.
+
+An association-only account can present a narrowly scoped candidate involvement hypothesis while explicitly leaving the causal gap unresolved. Explain which future observation could test it without treating that proposed experiment as existing support. Keep public progress messages brief and put the detailed assessment in the output document; do not duplicate it in a long final table or narrative.
 
 ## Return authored objects for backend assembly
 

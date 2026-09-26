@@ -1,0 +1,48 @@
+{
+  "checked_at": "2026-09-25T20:10:00.555264+00:00",
+  "mode": "deterministic",
+  "readiness": {
+    "status": "ready",
+    "database": "aurora-mysql",
+    "tls": true,
+    "sources": {
+      "dismech_import": "4062563df48bbc8aa418b7add0af083115184e70c1d909e66ab70d505087e395",
+      "gaps": 3367,
+      "mapping_run": "272cfa19d093257863d7e7134776229dbc9b9b018d974e6b311285686833ec31",
+      "mapped_factors": 1756,
+      "embedding_run": "d4c0300978778453c847c7c3447a316e55b1b0cfe469c647f148ecc1a77f57d7"
+    },
+    "execution_mode": "deterministic"
+  },
+  "checks": [
+    "gateway rejects a write without Origin",
+    "separate anonymous sessions provision separate Aurora owners with HttpOnly cookies",
+    "real imported DisMech and mapped EAGGL records resolve through the frontend gateway",
+    "draft creation retry is idempotent",
+    "another anonymous owner cannot retrieve or list the draft",
+    "draft update increments version, retries once, and rejects a stale version",
+    "submission retry creates one immutable request and one job",
+    "cancellation is persisted, terminal, and repeatable",
+    "event replay resumes strictly after the persisted event ID",
+    "frozen request preserves selected revisions and is isolated with its job"
+  ],
+  "owner_user_id": "d7518fff-f1eb-41e9-8de6-37ecdbdd8759",
+  "other_user_id": "6cef3367-2e22-42a4-8635-5073c923bd05",
+  "source_gap": {
+    "id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+    "source_id": "dismech:disorders/Coronary_Artery_Disease#discussion:cad_pgsxc_reverse_causation",
+    "source_revision": "00f2a71dca11fd7d4a8c835ea9e978037dcbef88d3fb050c5e74192db2bd7338"
+  },
+  "factor_source_id": "factor:portal:2hrG:cfde-inc-v2:Factor1",
+  "draft_id": "8c1bd3a8-f5f6-4729-8566-f1b313871f6b",
+  "job_id": "da0e3496-5c03-4714-be8c-ed60138cc772",
+  "research_request_id": "f115b85c-da7e-4afa-8edb-1646081e2519",
+  "event_ids": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "draft_version": 2,
+  "status": "passed"
+}

@@ -1,0 +1,59 @@
+{
+  "format": "reveal.scientific-grounding/1",
+  "accepted": false,
+  "model": "claude-sonnet-4-6",
+  "checked_at": "2026-09-25T20:17:25.212747Z",
+  "method": "independent-model-source-review",
+  "document_sha256": "db8576d439b1b4db03798004fdd8a803c8b3e7388a0364bb67518ee4a4eeaa57",
+  "package_sha256": "9a55d126679291a95fa3d35f544915610134075eaf110f62f77ec8ee870b6ae2",
+  "ledger_sha256": "6212616874bf22de92d30b2ea9d290b5631c03e4886da384c021f8fc9da3645f",
+  "input_tokens_measured": 33755,
+  "usage": {
+    "input_tokens": 34243,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "cache_creation": {
+      "ephemeral_5m_input_tokens": 0,
+      "ephemeral_1h_input_tokens": 0
+    },
+    "output_tokens": 1173,
+    "service_tier": "standard",
+    "inference_geo": "global"
+  },
+  "estimated_max_usd": 0.153489,
+  "review": {
+    "claims": [
+      {
+        "verdict": "supported",
+        "finding": "SHH has the highest factor_value (0.5042) among top-8 genes in CADinT2D Factor1, combined score 3.86, log_bf 2.14, prior 1.72. TCF7L2 (0.3813), SIX2 (0.3377), GLI3 (0.3245), FGF13 (0.2899), EYA2 (0.2801), CTNNB1 and WNT4 (both 0.2787) are the remaining top-8 genes. These values are directly confirmed in the PIGEAN output.",
+        "source_refs": [
+          "/package/pigean/mechanisms/factor:portal:CADinT2D:cfde-inc-v2:Factor1/gene_loadings/items/gene:SHH/source_ref",
+          "/package/pigean/mechanisms/factor:portal:CADinT2D:cfde-inc-v2:Factor1/gene_loadings/items/gene:TCF7L2/source_ref",
+          "/package/pigean/traits/trait:portal:CADinT2D/gene_associations/items/gene:SHH/observations/0/source_ref"
+        ],
+        "claim_id": "_:claim-shh-factor-result"
+      },
+      {
+        "verdict": "overstated",
+        "finding": "Factor loadings and gene-trait scores for SHH, GLI3, CTNNB1, WNT4, and TCF7L2 are confirmed as statistical associations within EAGGL Factor1. However, the inference that these loadings establish Hedgehog/Wnt developmental signaling as a biological mechanism, and especially the conclusion that reverse causation is 'implausible' for this gene class, is not supported by the evidence. A factor loading indicates a gene's weight in a latent statistical factor; it does not establish causal direction, tissue of action, or the mechanism through which genetic variants act. Furthermore, trait_loadings for Factor1 are explicitly empty, so no direct quantitative link between this factor and the PGS-by-context interactions from Nagpal & Gibson 2026 is present. The claim that these loadings are 'not compatible with a reverse-causation explanation from incipient CAD or T2D' conflates germline variant biology with the reverse-causation question posed in the gap, which concerns whether measured contextual variables (LDL, CRP, physical activity) are downstream of disease\u2014not whether GWAS loci themselves are causal.",
+        "source_refs": [
+          "/package/pigean/mechanisms/factor:portal:CADinT2D:cfde-inc-v2:Factor1/gene_loadings/items/gene:SHH/source_ref",
+          "/package/pigean/mechanisms/factor:portal:CADinT2D:cfde-inc-v2:Factor1/trait_loadings/status",
+          "/package/pigean/mechanisms/factor:portal:CADinT2D:cfde-inc-v2:Factor1/gene_set_loadings/items/gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn/source_ref"
+        ],
+        "claim_id": "_:claim-shh-hedgehog-interp"
+      }
+    ],
+    "synthesis": {
+      "verdict": "overstated",
+      "finding": "The account correctly reports PIGEAN Factor1 gene loadings and gene-trait scores for the CADinT2D trait, which are directly supported by the evidence package. However, the closing scientific claim\u2014that the Hedgehog/Wnt gene composition of Factor1 provides partial evidence against reverse causation for the biochemical contexts in the gap\u2014is overstated. The knowledge gap specifically asks whether biochemical 'contexts' (LDL, CRP, physical activity) measured in PGS-by-context interaction analyses are downstream of incipient disease. Factor loadings of developmental genes in a latent PIGEAN factor do not address this question: they characterize genetic association architecture, not the causal status of the environmental/biochemical moderators. Trait loadings for Factor1 are empty, so no direct bridge to the PGS-by-context effect sizes is established. The account's own assumptions acknowledge these limitations, yet the closing remarks assert partial resolution of the gap, which is not warranted by the available evidence. The gap remains fully open as the account itself concedes, rendering the 'partial resolution' framing an overstatement.",
+      "source_refs": [
+        "/package/pigean/mechanisms/factor:portal:CADinT2D:cfde-inc-v2:Factor1/trait_loadings/status",
+        "/package/pigean/mechanisms/factor:portal:CADinT2D:cfde-inc-v2:Factor1/gene_loadings/items/gene:SHH/source_ref",
+        "/package/dismech/knowledge_gap/source_ref"
+      ]
+    }
+  },
+  "limitation": "Fallible model review of captured evidence; not independent experimental confirmation.",
+  "validation_case": "Rejected live draft snapshot; not structurally accepted scientific output"
+}

@@ -17,3 +17,9 @@ data/cfde-genesets/*/raw/
 data/eaggl/captures/
 # Live evidence captures are immutable local run artifacts, potentially large.
 data/evidence-captures/
+
+# Local stack process state, trusted runtime checkout, logs and private artifacts.
+.runtime/
+artifacts/
+.next/
+*.tsbuildinfo

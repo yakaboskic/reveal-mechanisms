@@ -107,7 +107,8 @@ def gz_records(path):
 
 def collect_package(*, gap_id, factor_ids, output, dapper, project_root, dismech_source, dismech_index,
                     geneset_import, model='cfde-inc-v2', limit=100, max_nodes=250, max_edges=1000,
-                    client_factory=HttpCaptureClient):
+                    client_factory=HttpCaptureClient, geneset_resolver=None,
+                    selected_graphs=('biomarkerkg', 'prokn'), max_accounts=3,selection_metadata=None):
     """Resolve input IDs, retrieve bounded evidence, freeze sources, then build.
 
     The local DisMech index and GeneSet export are configurable source adapters;
@@ -131,6 +132,9 @@ def collect_package(*, gap_id, factor_ids, output, dapper, project_root, dismech
     hashes = {r['path']: r['sha256'] for r in decode((dismech_index / 'source-files.json').read_bytes())}
     attachments = [a for a in gz_records(dismech_index / 'gap-attachments.jsonl.gz') if a['gap_id'] == gap_record['id']]
     store = CaptureStore(output)
+    if selection_metadata:
+        require(set(selection_metadata['origins'])==set(factor_ids),'Selection provenance differs from selected anchors')
+        store.add('selection-provenance',canonical_json(selection_metadata),'json',filename='selection-provenance.json')
     client = client_factory(store)
 
     def document(relative):
@@ -204,7 +208,9 @@ def collect_package(*, gap_id, factor_ids, output, dapper, project_root, dismech
         catalog_by_trait, factor_by_trait = {}, {}
 
         def query(name, index, keys):
-            url = BIOINDEX_BASE + '/api/bio/query/' + index + '?' + urlencode({'q': ','.join(keys), 'limit': limit})
+            # Factor catalog resolution is separate from evidence retention;
+            # lowering candidates must never lose a selected FactorN anchor.
+            url = BIOINDEX_BASE + '/api/bio/query/' + index + '?' + urlencode({'q': ','.join(keys), 'limit': 100 if index=='pigean-factor' else limit})
             capture_id, wrapper = client.request(name, url)
             body_id = capture_id + '.body'
             require(body_id in store.blobs, 'HTTP capture is missing its exact response body')
@@ -244,7 +250,18 @@ def collect_package(*, gap_id, factor_ids, output, dapper, project_root, dismech
                 identity = candidate['candidate']['node_id']
                 require(identity not in candidates, 'Duplicate typed candidate')
                 candidates[identity] = candidate
-        ranking = sorted(candidates, key=lambda k: (-finite(candidates[k]['aggregate_score'], 'candidate score'), k))
+        database_resolution = None
+        unresolved_sets = set()
+        if geneset_resolver:
+            candidate_sets = {identity for identity in candidates if identity.startswith('gene_set:')}
+            database_resolution = geneset_resolver(candidate_sets, model)
+            resolved_sets = {row['node_id'] for row in database_resolution[2]}
+            unresolved_sets = candidate_sets - resolved_sets
+            store.add('geneset-alias-resolution', canonical_json({'gene_set_import_id': decode(database_resolution[0])['import_id'],
+                'requested_node_ids': sorted(candidate_sets), 'resolved_node_ids': sorted(resolved_sets),
+                'unresolved_node_ids': sorted(unresolved_sets),
+                'policy': 'Keep mapped factor anchors; omit only unresolved GeneSet candidates from retained graph. Raw query results remain captured.'}), 'json')
+        ranking = sorted((identity for identity in candidates if identity not in unresolved_sets), key=lambda k: (-finite(candidates[k]['aggregate_score'], 'candidate score'), k))
         retained = sorted(set(factor_ids) | set(ranking[:max_nodes - len(factor_ids)]))
         contextual_id, _ = client.request('contextual', INTERACTIVE_BASE + '/api/interactive/contextual-edges',
                                           {'node_ids': retained, 'model': model})
@@ -263,7 +280,13 @@ def collect_package(*, gap_id, factor_ids, output, dapper, project_root, dismech
         # Resolve the retained set aliases against the completed import, preserving its DAPPER objects.
         wanted = {k for k in retained if k.startswith('gene_set:')}
         set_bindings = {}
-        manifest = decode((geneset_import / 'manifest.json').read_bytes())
+        if geneset_resolver:
+            manifest_bytes, activity, all_database_rows = database_resolution
+            database_rows = [row for row in all_database_rows if row['node_id'] in wanted]
+        else:
+            manifest_bytes = (geneset_import / 'manifest.json').read_bytes()
+            activity = decode((geneset_import / 'activity.json').read_bytes())
+        manifest = decode(manifest_bytes)
         require(manifest['complete'] and manifest['model'] == model and manifest['encoded_rows'] == manifest['expected_rows'], 'Incomplete/wrong-model GeneSet import')
         def file_sha(path):
             import hashlib
@@ -271,10 +294,11 @@ def collect_package(*, gap_id, factor_ids, output, dapper, project_root, dismech
             with path.open('rb') as stream:
                 for chunk in iter(lambda: stream.read(1024 * 1024), b''): digest.update(chunk)
             return digest.hexdigest()
-        require(file_sha(geneset_import / 'records.jsonl.gz') == manifest['records_sha256'], 'GeneSet import checksum mismatch')
-        require(file_sha(geneset_import / 'activity.json') == manifest['activity_sha256'], 'GeneSet activity checksum mismatch')
+        if not geneset_resolver:
+            require(file_sha(geneset_import / 'records.jsonl.gz') == manifest['records_sha256'], 'GeneSet import checksum mismatch')
+            require(file_sha(geneset_import / 'activity.json') == manifest['activity_sha256'], 'GeneSet activity checksum mismatch')
         selected_rows = []
-        for row in (gz_records(geneset_import / 'records.jsonl.gz') if wanted else []):
+        for row in (database_rows if geneset_resolver else gz_records(geneset_import / 'records.jsonl.gz') if wanted else []):
             if row['node_id'] in wanted and row['model'] == model:
                 require(row['node_id'] not in set_bindings, 'Duplicate GeneSet source alias')
                 context['gene_sets'].append(row['gene_set']); selected_rows.append(row)
@@ -283,8 +307,8 @@ def collect_package(*, gap_id, factor_ids, output, dapper, project_root, dismech
                                                'provenance_refs': [ref('geneset-import')]}
                 if set(set_bindings) == wanted: break
         require(set(set_bindings) == wanted, f'Missing GeneSet aliases in import: {sorted(wanted - set(set_bindings))}')
-        context['activities'].append(decode((geneset_import / 'activity.json').read_bytes()))
-        store.add('geneset-import', (geneset_import / 'manifest.json').read_bytes(), 'json')
+        context['activities'].append(activity)
+        store.add('geneset-import', manifest_bytes, 'json')
         store.add('geneset-selected-records', canonical_json(sorted(selected_rows, key=lambda r: r['node_id'])), 'json')
         context['prefixes'] = prefixes
         instructions = []
@@ -302,8 +326,9 @@ def collect_package(*, gap_id, factor_ids, output, dapper, project_root, dismech
                                        'dismech_record_ids': 'Opaque aliases resolved through source_ref and source revision.', 'preserve_existing_dapper_payloads': True},
                 'dapper_pin': {'name': 'configured-snapshot', 'snapshot_sha256': dapper.manifest['snapshot_sha256']},
                 'selection': {'knowledge_gap_id': gap_node['id'], 'dismech_mechanism_ids': sorted(dismech['mechanisms']),
-                              'eaggl_mechanism_ids': factor_ids, 'origins': {k: 'user_supplied' for k in factor_ids}, 'dismissed_eaggl_ids': [],
-                              'semantic_retrieval': {'status': 'not_computed', 'embedding_run_id': None},
+                              'eaggl_mechanism_ids': factor_ids, 'origins': (selection_metadata or {}).get('origins',{k:'user_supplied' for k in factor_ids}),
+                              'dismissed_eaggl_ids': (selection_metadata or {}).get('dismissed_eaggl_ids',[]),
+                              'semantic_retrieval': (selection_metadata or {}).get('semantic_retrieval',{'status':'not_computed','embedding_run_id':None}),
                               'expansion_policy': {'rounds': 1, 'reducer': 'mean', 'connection_scope': 'direct', 'context': ''}},
                 'dismech': dismech, 'mechanisms': mechanisms, 'gene_sets': set_bindings, 'dapper_context': context,
                 'captures': {'connections': {k: {'status': 'captured', 'artifact_id': v[0]} for k, v in responses.items()},
@@ -311,9 +336,9 @@ def collect_package(*, gap_id, factor_ids, output, dapper, project_root, dismech
                 'artifacts': store.artifacts,
                 'policy': {'max_nodes': max_nodes, 'max_edges': max_edges, 'max_package_bytes': 2_000_000, 'max_anchors': 10,
                            'max_dismech_mechanisms': 10, 'max_candidates_per_target': 100, 'retain_node_ids': retained, 'allow_incomplete_capture': False},
-                'authoring': {'skill': instructions[0], 'contract': instructions[1], 'references': instructions[2:], 'required_question': gap_node['id'], 'max_accounts': 3,
+                'authoring': {'skill': instructions[0], 'contract': instructions[1], 'references': instructions[2:], 'required_question': gap_node['id'], 'max_accounts': max_accounts,
                               'assembly_builder': {'version': BUILD_VERSION, 'source_sha256': sha256(builder_bytes)}},
-                'external_evidence': {'status': 'not_queried', 'selected_graphs': ['biomarkerkg', 'prokn'], 'ledger': [], 'assertions': []}}
+                'external_evidence': {'status': 'not_queried', 'selected_graphs': list(selected_graphs), 'ledger': [], 'assertions': []}}
         (store.directory / 'build-input.json').write_bytes(canonical_json(spec))
         built = build_package(spec, store.blobs, dapper)
         built.write(store.directory / 'package')

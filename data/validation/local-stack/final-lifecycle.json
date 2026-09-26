@@ -1,0 +1,58 @@
+{
+  "shutdown": {
+    "observed_at": "2026-09-25T22:05:06.631834+00:00",
+    "project": "reveal-6ffae89bba",
+    "phase": "final live success shutdown",
+    "repeated_down": true,
+    "project_containers": 0,
+    "frontend_port_available": true,
+    "api_port_available": true,
+    "process_state_absent": true,
+    "pre_stop_nonterminal_jobs": 0,
+    "research_box_deleted": true,
+    "paragraph_box_deleted": true
+  },
+  "restarted": {
+    "observed_at": "2026-09-25T22:06:59.565912+00:00",
+    "frontend_pid": 93017,
+    "project_containers": [
+      "be213ea474a1",
+      "dde022d60a52"
+    ],
+    "ready": {
+      "status": "ready",
+      "database": "aurora-mysql",
+      "tls": true,
+      "sources": {
+        "dismech_import": "4062563df48bbc8aa418b7add0af083115184e70c1d909e66ab70d505087e395",
+        "gaps": 3367,
+        "mapping_run": "272cfa19d093257863d7e7134776229dbc9b9b018d974e6b311285686833ec31",
+        "mapped_factors": 1756,
+        "embedding_run": "d4c0300978778453c847c7c3447a316e55b1b0cfe469c647f148ecc1a77f57d7"
+      },
+      "execution_mode": "box"
+    }
+  },
+  "healthy_repeat": {
+    "observed_at": "2026-09-25T22:07:47.781674+00:00",
+    "frontend_pid_unchanged": true,
+    "container_ids_unchanged": true
+  },
+  "final": {
+    "execution_mode": "box",
+    "frontend_url": "http://localhost:3000",
+    "api_url": "http://127.0.0.1:8000",
+    "nonterminal_jobs": 0,
+    "nonterminal_checked_at": "2026-09-25T22:08:12.156299+00:00",
+    "stop_command": "./scripts/dev-down.sh",
+    "aurora_data_and_artifacts_preserved": true
+  },
+  "browser_persistence": {
+    "account_id": "dapper:ScientificAccount.mZ1WzVP3O9i63nEZCHLBk-vMbZkEICZV",
+    "paragraph_id": "dapper:Paragraph.Wc-KnUcXFLc4YfAkVkjtEdIj3-OHS1m0",
+    "draft_id": "2f8a4a4f-da93-4823-9ea7-5b5dbcc0eb94",
+    "same_anonymous_workspace": true,
+    "account_and_paragraph_rendered_after_restart": true,
+    "workspace_account_and_draft_history": true
+  }
+}

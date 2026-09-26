@@ -1,0 +1,27 @@
+{
+  "operation_id": "downloadArtifact",
+  "case": "request",
+  "method": "GET",
+  "path_template": "/v1/artifacts/{sha256}",
+  "request": {
+    "url": "https://api.reveal.example.org/v1/artifacts/dc0bfbd8c23271a7e0a6d2285a90de9be7698f2ede9465b6d5877bbd24e96006",
+    "path": {
+      "sha256": "dc0bfbd8c23271a7e0a6d2285a90de9be7698f2ede9465b6d5877bbd24e96006"
+    },
+    "query": {},
+    "headers": {
+      "Authorization": "Bearer <trusted-gateway-assertion>",
+      "Accept": "*/*"
+    },
+    "body": null
+  },
+  "responses": {
+    "200": {
+      "content_type": "*/*",
+      "examples": {
+        "captured_bytes": "{\"candidates\":[],\"graph\":{\"nodes\":[],\"edges\":[]},\"candidate_count\":0}"
+      }
+    }
+  },
+  "curl": "curl -X GET https://api.reveal.example.org/v1/artifacts/dc0bfbd8c23271a7e0a6d2285a90de9be7698f2ede9465b6d5877bbd24e96006 -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Accept: */*'"
+}

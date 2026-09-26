@@ -1,0 +1,26 @@
+[
+  {
+    "filename": "research-statement.md",
+    "downloaded_filename": "research-statement (1).md",
+    "bytes": 2466,
+    "sha256": "14162b355e08bc83eda8fbe0ab1e958214a7aaeb43f0ea5a4646e54a5ce29593",
+    "all_exact_targets_present": true,
+    "download_modified_at": 1790373750.0093222
+  },
+  {
+    "filename": "research-statement.tex",
+    "downloaded_filename": "research-statement (2).tex",
+    "bytes": 1520,
+    "sha256": "f35319f3b0c6b655360649012813b6ca57fa890e1bd6050f0349da42105cfc1f",
+    "all_exact_targets_present": true,
+    "download_modified_at": 1790373782.8865435
+  },
+  {
+    "filename": "references.bib",
+    "downloaded_filename": "references (1).bib",
+    "bytes": 2384,
+    "sha256": "e28334f445fb08e9d1356d609f7b50d690226b5f0c6284c5ffc10a24ff7388e7",
+    "all_exact_targets_present": true,
+    "download_modified_at": 1790373790.2001958
+  }
+]

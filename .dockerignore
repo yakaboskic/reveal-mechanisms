@@ -1,0 +1,16 @@
+.git
+.env
+.env.*
+.venv
+.runtime
+**/node_modules
+**/__pycache__
+**/*.pyc
+data/cfde/raw
+data/eaggl/captures
+data/evidence-captures
+data/cfde-genesets/**/raw
+data/cfde-genesets/**/records.jsonl.gz
+schema/prisma/node_modules
+schema/prisma/generated
+services/frontend/.next

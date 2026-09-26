@@ -1,0 +1,21 @@
+{
+  "checked_at": "2026-09-25T19:34:57.059522+00:00",
+  "tables": {
+    "cfde_gene_set_aliases": 801934,
+    "dapper_objects": 801935,
+    "eaggl_cfde_factor_links": 1756,
+    "eaggl_cfde_gene_set_links": 8780,
+    "eaggl_cfde_link_runs": 1,
+    "eaggl_embedding_runs": 1,
+    "eaggl_factors": 4037,
+    "eaggl_gene_loadings": 2553330,
+    "eaggl_genes": 18477,
+    "eaggl_graph_edges": 8535,
+    "eaggl_graph_nodes": 5682,
+    "eaggl_imports": 1,
+    "eaggl_name_embeddings": 3103,
+    "gene_set_imports": 1
+  },
+  "mode": "read-only schema backup before additive migrations",
+  "tls_cipher": "TLS_AES_256_GCM_SHA384"
+}

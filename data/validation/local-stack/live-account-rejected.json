@@ -1,0 +1,80 @@
+{
+  "status": "correctly_rejected",
+  "job_id": "be002a14-6915-42e5-ab9b-9db0c1acdef2",
+  "box_id": "boss-hermit-53702",
+  "attempt": 1,
+  "dispatch_sha256": "d77cc239c7fb0f322e204852f14f0b04f2a18be2b1d86d1103f8ce41e9e5c79d",
+  "remote_started_at": "2026-09-25T21:01:03.997992+00:00",
+  "remote_completed_at": "2026-09-25T21:05:11.119640+00:00",
+  "authoring_cost_usd": 0.5700206999999999,
+  "ledger_complete": true,
+  "ledger_calls": 17,
+  "ledger_statuses": {
+    "completed": 14,
+    "failed": 3
+  },
+  "selected_graph_query_calls": [],
+  "grounding": {
+    "accepted": false,
+    "checked_at": "2026-09-25T21:29:16.943741Z",
+    "document_sha256": "71bbcf7f6da6e02aca9c5866455a5201c7f66b19cac7522b41d932bf5aaa1865",
+    "estimated_max_usd": 0.091071,
+    "format": "reveal.scientific-grounding/1",
+    "input_tokens_measured": 12949,
+    "ledger_sha256": "3f2fe6cacdf4d4e1c7d6f23b08ede7a2f60abf5daffcf5f09065d3a185d8e28d",
+    "limitation": "Fallible model review of captured evidence; not independent experimental confirmation.",
+    "method": "independent-model-source-review",
+    "model": "claude-sonnet-4-6",
+    "package_sha256": "d77cc239c7fb0f322e204852f14f0b04f2a18be2b1d86d1103f8ce41e9e5c79d",
+    "review": {
+      "claims": [
+        {
+          "claim_id": "dapper:Claim.B7GL7sIoPTVaFqZaxCdh6IKd9QuFZTLW",
+          "finding": "The data record at /data/0 in gene-factor-1955f25e8788.attempt-1.body confirms LPL factor_value=0.3439, combined=5.9, log_bf=3.9, prior=1.99 on Factor1 for CAD, and it is the highest loading among the four retained genes (LPL, SIRT3, FURIN, TIMP3). The claim accurately reports these values and correctly notes query-limit status.",
+          "source_refs": [
+            "/package/pigean/mechanisms/factor:portal:CAD:cfde-inc-v2:Factor1/gene_loadings/items/gene:LPL/source_ref",
+            "/package/pigean/candidates/gene:LPL/source_ref"
+          ],
+          "verdict": "supported"
+        },
+        {
+          "claim_id": "dapper:Claim.zLQYXpCcuto0iOWvCzyQ-LJ5qB3oj5ud",
+          "finding": "The PIGEAN factor loading for LPL on Factor1 (factor_value=0.3439) is confirmed by the source data. The account is careful to note that a loading alone cannot establish temporal precedence or exclude reverse causation. However, the evidence item states this association provides 'weak evidence against reverse causation for LPL specifically' \u2014 a causal directional inference that a factor loading or gene-set label cannot support. A statistical enrichment of LPL within GOBP_STEROL_METABOLIC_PROCESS does not distinguish upstream causal contribution from downstream readout or pleiotropy. The claim otherwise correctly qualifies the limitation of the PIGEAN observation.",
+          "source_refs": [
+            "/package/pigean/mechanisms/factor:portal:CAD:cfde-inc-v2:Factor1/gene_loadings/items/gene:LPL/source_ref",
+            "/package/pigean/mechanisms/factor:portal:CAD:cfde-inc-v2:Factor1/source_ref"
+          ],
+          "verdict": "overstated"
+        }
+      ],
+      "synthesis": {
+        "finding": "The scientific account correctly identifies LPL's factor loading on the GOBP_STEROL_METABOLIC_PROCESS CAD factor as confirmed by the source data, and it appropriately frames this as not resolving the reverse-causation gap. However, the account \u2014 through its evidence item \u2014 asserts that the association is 'consistent with causal contribution rather than a purely downstream readout, providing weak evidence against reverse causation for LPL specifically.' A GWAS-derived factor loading and gene-set label designation cannot distinguish causal upstream contribution from downstream or pleiotropic associations; the knowledge gap explicitly concerns whether PGS\u00d7context interactions reflect causal amplification or reverse causation, and this observation provides no directional evidence on that question. The closing statement that 'the gap's central question remains unresolved' is valid, but it partially contradicts the evidence item's claim of weak evidence against reverse causation, making the overall account mildly overstated in its biological interpretation.",
+        "source_refs": [
+          "/package/pigean/mechanisms/factor:portal:CAD:cfde-inc-v2:Factor1/gene_loadings/items/gene:LPL/source_ref",
+          "/package/dismech/knowledge_gap/source_ref",
+          "/package/pigean/mechanisms/factor:portal:CAD:cfde-inc-v2:Factor1/source_ref"
+        ],
+        "verdict": "overstated"
+      }
+    },
+    "usage": {
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 0,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0,
+      "inference_geo": "global",
+      "input_tokens": 13437,
+      "output_tokens": 828,
+      "service_tier": "standard"
+    }
+  },
+  "failure": {
+    "error_type": "EvidenceBuildError",
+    "message": "Independent source-grounding review rejected unsupported or overstated scientific content"
+  },
+  "candidate_sha256": "71bbcf7f6da6e02aca9c5866455a5201c7f66b19cac7522b41d932bf5aaa1865",
+  "accepted_aurora_account": false,
+  "note": "Candidate file named accepted-1.json is a structurally minted intermediate; independent review rejected it before application publication. The numerical observation is supported; causal direction is not."
+}

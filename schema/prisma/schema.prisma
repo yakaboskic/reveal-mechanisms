@@ -13,6 +13,26 @@ datasource db {
   provider = "mysql"
 }
 
+// Application migration 005: exact versioned contract payloads with separately
+// indexed ownership. Short repository transactions serialize on the lock row.
+model RevealRecord {
+  kind       String @db.VarChar(40)
+  id         String @db.VarChar(255)
+  owner_id   String @db.VarChar(64)
+  version    BigInt @default(1)
+  payload    Json
+  updated_at String @db.VarChar(32)
+  @@id([kind,id])
+  @@index([owner_id,kind], map: "reveal_owner_kind")
+  @@map("reveal_records")
+}
+
+model RevealTransactionLock {
+  id       Int @id
+  revision BigInt @default(0)
+  @@map("reveal_transaction_lock")
+}
+
 model CfdeGeneSetAlias {
   eaggl_cfde_gene_set_links EagglCfdeGeneSetLink[]
   import_id                 String                 @db.Char(64)

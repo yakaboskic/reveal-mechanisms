@@ -1,0 +1,23 @@
+{
+  "processor": "citeproc-js",
+  "processor_version": "2.4.63",
+  "quickjs_version": "1.19.4",
+  "sources": {
+    "citeproc.js": "https://registry.npmjs.org/citeproc/-/citeproc-2.4.63.tgz",
+    "CITEPROC-LICENSE": "https://registry.npmjs.org/citeproc/-/citeproc-2.4.63.tgz",
+    "apa.csl": "https://raw.githubusercontent.com/citation-style-language/styles/2e9355847feffe53d0e9f82cd8ee119c4a0ff2db/apa.csl",
+    "mla.csl": "https://raw.githubusercontent.com/citation-style-language/styles/2e9355847feffe53d0e9f82cd8ee119c4a0ff2db/modern-language-association.csl",
+    "en-US.xml": "https://raw.githubusercontent.com/citation-style-language/locales/a89adece41013402236e2c9020972d7e931fbab8/locales-en-US.xml",
+    "LICENSE-CPAL-1.0.txt": "https://raw.githubusercontent.com/spdx/license-list-data/main/text/CPAL-1.0.txt",
+    "LICENSE-AGPL-3.0.txt": "https://www.gnu.org/licenses/agpl-3.0.txt"
+  },
+  "sha256": {
+    "citeproc.js": "55abba1a8b8b48c14323fd053f9646013b4b7a0c977938064ecf5195a502b9f1",
+    "CITEPROC-LICENSE": "b96ca8e1716f93449b480083c7510c18d129fa9afa4644d62c6347c06177ce30",
+    "apa.csl": "1ece4fb3c295e66d04b4394e295aa58a87741ceeef1658192437eb9953c2f13e",
+    "mla.csl": "e1432698ef28938d044b06bd45ddcc57d6b974cec25f71007075646a11f99484",
+    "en-US.xml": "ac864c7c21166b4390d82c31792cdc509400727fa0060b43d8aa17e07f9cb079",
+    "LICENSE-CPAL-1.0.txt": "54cef60295bdffd5d41904338632538db1f3cdcd4c5f7ea5bb021d04eef14d92",
+    "LICENSE-AGPL-3.0.txt": "0d96a4ff68ad6d4b6f1f30f713b18d5184912ba8dd389f86aa7710db079abcb0"
+  }
+}

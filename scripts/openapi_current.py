@@ -92,6 +92,7 @@ def schemas(b):
         'counts':null(obj({'scope':enum('retrieved','retained'),'nodes':{'type':'integer','minimum':0},'edges':{'type':'integer','minimum':0},
             'truncated':{'type':'boolean'},'snapshot_sha256':digest}))},
         description='Observable activity only; never private reasoning or secrets. Missing metrics stay null. Explicit call states drive UI completion; narrative arrival is not tool completion. Large outputs use artifact references.'))
+    S['ActivityDetail']['properties']['message_delta']={'type':'boolean','description':'True only for incremental public text. Adjacent marked agent-message events may be concatenated for display while preserving original event IDs for replay. Absent or false denotes a complete standalone message.'}
     S['JobEvent']['properties']['event_type']['enum']+=['activity']
     S['JobEvent']['properties']['detail']=null(ref('ActivityDetail'));S['JobEvent']['required'].append('detail')
     b.add('ParagraphState',obj({'status':enum('queued','running','succeeded','failed','cancelled','not_requested'),'job_id':null(uuid),'paragraph_id':null(did('Paragraph'))}))
@@ -216,6 +217,17 @@ def endpoints(b,f,e):
     b.operation('/v1/jobs/{job_id}/evidence-package','get','getEvidencePackage','Jobs','Inspect the frozen agent input',
         'Owner-authorized analysis-job package. Return 409 EVIDENCE_PACKAGE_NOT_READY before freeze, 404 for unavailable/non-analysis jobs. Exact package hash and LinkML schema are independent of later tool ledger/output. Recorded source paths are not public download URLs. The example is a real bounded capture; the account example is separately authored and not a validated output of this capture.',
         'EvidencePackageResult',{'captured_input':e['evidence_package']},parameters=[b.parameter('job_id','path',string(format='uuid'),b.JOB_ID,True)],errors=('401','404','409','429'))
+    source_root=b.ROOT/'api/examples/evidence-package'
+    artifact=min(e['evidence_package']['package']['source_artifacts'].values(),key=lambda a:(source_root/a['path']).stat().st_size)
+    artifact_text=(source_root/artifact['path']).read_text()
+    download=b.operation('/v1/artifacts/{sha256}','get','downloadArtifact','Scientific content','Download an authorized captured source',
+        'Download exact captured bytes after owner authorization and SHA-256 verification. A digest is not an access grant. The File metadata describes the media type; the response uses attachment disposition, private no-store caching and nosniff. Missing captures remain explicitly unavailable; this route never fetches mutable source URLs.',
+        string(format='binary'),{'captured_bytes':artifact_text},parameters=[b.parameter('sha256','path',string(pattern='^[a-f0-9]{64}$'),artifact['sha256'],True)],errors=('401','404','503'))
+    download['responses']['200']['content']={'*/*':download['responses']['200']['content']['application/json']}
+    for exchange in b.EXCHANGES:
+        if exchange['operation_id']=='downloadArtifact':
+            exchange['request']['headers']['Accept']='*/*'
+            exchange['responses']['200']['content_type']='*/*'
     exports={}
     p=b.ROOT/'design/data/cad-account'
     targets=list({(c['target_id'],c['citation_metadata_revision']):c for c in f['paragraph']['citations']}.keys())

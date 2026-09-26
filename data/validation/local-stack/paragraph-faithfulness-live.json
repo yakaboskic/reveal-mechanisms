@@ -1,0 +1,42 @@
+{
+  "format": "reveal.paragraph-faithfulness/1",
+  "model": "claude-sonnet-4-6",
+  "checked_at": "2026-09-25T20:37:06.197480Z",
+  "input_tokens_measured": 2460,
+  "usage": {
+    "input_tokens": 2716,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "cache_creation": {
+      "ephemeral_5m_input_tokens": 0,
+      "ephemeral_1h_input_tokens": 0
+    },
+    "output_tokens": 378,
+    "service_tier": "standard",
+    "inference_geo": "global"
+  },
+  "estimated_max_usd": 0.059604,
+  "accepted": true,
+  "input_sha256": "7de08fc5750c011b3f8e04e33111fcaa44cf97bf2d0a766ab0c7c97ac19251ff",
+  "output_sha256": "7b998dfaff220e762d24889af434efe0dc54318f2054e32d4dc1736825c7f0c9",
+  "review": {
+    "segments": [
+      {
+        "segment_index": 0,
+        "faithful": true,
+        "finding": "The segment accurately frames the knowledge gap (CAD PGS\u00d7context interactions as genuine upstream exposures vs. downstream disease readouts) and correctly states that the account evaluates SHH gene-factor evidence from PIGEAN cfde-inc-v2 for CADinT2D Factor1. The citation targets dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk, whose gap_description matches the framing. No unsupported scientific assertions are introduced."
+      },
+      {
+        "segment_index": 1,
+        "faithful": true,
+        "finding": "All numerical values (factor_value=0.5042, combined=3.86, log_bf=2.14, prior=1.72) and the claim that SHH has the highest factor loading among top-8 genes are directly supported by the cited Claim (dapper:Claim.IKAB-6I1EYeYmqnuYGL33hM8fp84QolL) and its underlying evidence item. The characterization as a 'cautious candidate-gene hypothesis' matches the Claim and Proposition wording."
+      },
+      {
+        "segment_index": 2,
+        "faithful": true,
+        "finding": "This uncited connective segment accurately summarizes limitations stated in the ScientificAccount and Claim: inability to establish causal direction, tissue specificity, or temporal precedence; uncertainty about upstream vs. downstream role of SHH; and the need for experimental evidence or Mendelian randomisation to resolve reverse causation. No new material scientific assertions are introduced beyond what is in the accepted content."
+      }
+    ]
+  },
+  "limitation": "Fallible model check of fidelity to the accepted account."
+}

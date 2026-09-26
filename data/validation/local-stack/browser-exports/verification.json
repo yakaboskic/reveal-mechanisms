@@ -1,0 +1,23 @@
+{
+  "actual_browser_downloads": [
+    {
+      "file": "research-statement.md",
+      "sha256": "766fbf625bcdc3ff8f6f0bd11cec5dbd2b6000bd9f4f9a6fa8d3f3a5c38d3f86",
+      "bytes": 402
+    },
+    {
+      "file": "research-statement.tex",
+      "sha256": "bada05608fa6e0b69d71550da23743d5def43008cb627a448d2b16b596c46675",
+      "bytes": 420
+    },
+    {
+      "file": "references.bib",
+      "sha256": "e7bb0da25e6aa2db65b5996f01c65fadc0fbe31a7bfceafd17c10264c8b024fe",
+      "bytes": 520
+    }
+  ],
+  "claim_id": "dapper:Claim.eETZorG7bt4idUW2Pl2Ig8SriK3PGRa7",
+  "citation_metadata_revision": 1,
+  "paragraph_id": "dapper:Paragraph.ehIezAcpd3jQUre98sRgyXDQTF7dfezl",
+  "account_id": "dapper:ScientificAccount.d7iWlrHihZgJ0ns-ARmLtK2fnqZSdHyg"
+}

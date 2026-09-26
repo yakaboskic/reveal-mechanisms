@@ -1,0 +1,552 @@
+{
+  "status": "passed",
+  "recorded_at": "2026-09-25T21:47:53.591651+00:00",
+  "prior_failure_report": "live-browser-validation.json",
+  "browser": "Chrome same anonymous workspace restored after full stopped-state restart",
+  "readiness": {
+    "status": "ready",
+    "database": "aurora-mysql",
+    "tls": true,
+    "sources": {
+      "dismech_import": "4062563df48bbc8aa418b7add0af083115184e70c1d909e66ab70d505087e395",
+      "gaps": 3367,
+      "mapping_run": "272cfa19d093257863d7e7134776229dbc9b9b018d974e6b311285686833ec31",
+      "mapped_factors": 1756,
+      "embedding_run": "d4c0300978778453c847c7c3447a316e55b1b0cfe469c647f148ecc1a77f57d7"
+    },
+    "execution_mode": "box"
+  },
+  "selection": {
+    "gap_id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+    "native_anchor_id": "factor:portal:CAD:cfde-inc-v2:Factor1",
+    "label": "Lipoprotein Metabolism and Clearance",
+    "origin": "manual",
+    "selected_kgs": [
+      "biomarkerkg",
+      "prokn"
+    ],
+    "unavailable_requested_trait": "CADinT2D (zero existing mapped records)"
+  },
+  "draft_id": "2f8a4a4f-da93-4823-9ea7-5b5dbcc0eb94",
+  "checks": {
+    "full_backend": {
+      "passed": 169,
+      "skipped": 8
+    },
+    "frontend_tests": 9,
+    "frontend_typecheck": "passed",
+    "frontend_production_build": "passed"
+  },
+  "changes_before_retry": [
+    "all-field causal inference guardrails",
+    "bounded selected-graph investigation with explicit outcome",
+    "atomic bounded public-event persistence batches",
+    "recoverable checkpoint database failures"
+  ],
+  "job_id": "431fcc31-46e7-42a3-8f8b-5ff0be1e9403",
+  "browser_submission_observed_at": "2026-09-25T21:48:12.892683+00:00",
+  "token_budget": {
+    "attempts": [
+      {
+        "input_tokens": 26171,
+        "package_sha256": "c3b8c166ed576b525709dd2790c017cdb0b94b55420693e953ca8a7574441cc7",
+        "retained_edges": 8,
+        "retained_nodes": 9
+      },
+      {
+        "input_tokens": 22155,
+        "package_sha256": "80b306057a832dced2d0384c8be58c0d503a9de759b8cf89a93e99eee77a93f5",
+        "retained_edges": 4,
+        "retained_nodes": 5
+      }
+    ],
+    "budget": 24000,
+    "count": 22155,
+    "enforced": true,
+    "method": "anthropic-count-tokens",
+    "model": "claude-sonnet-4-6",
+    "original_package_sha256": "c3b8c166ed576b525709dd2790c017cdb0b94b55420693e953ca8a7574441cc7",
+    "package_sha256": "80b306057a832dced2d0384c8be58c0d503a9de759b8cf89a93e99eee77a93f5",
+    "reduced": true
+  },
+  "dispatch": {
+    "binding": {
+      "budget": 24000,
+      "mode": "box",
+      "model": "claude-sonnet-4-6",
+      "original_sha256": "c3b8c166ed576b525709dd2790c017cdb0b94b55420693e953ca8a7574441cc7"
+    },
+    "format": "reveal.dispatch-input/1",
+    "measurement": {
+      "attempts": [
+        {
+          "input_tokens": 26171,
+          "package_sha256": "c3b8c166ed576b525709dd2790c017cdb0b94b55420693e953ca8a7574441cc7",
+          "retained_edges": 8,
+          "retained_nodes": 9
+        },
+        {
+          "input_tokens": 22155,
+          "package_sha256": "80b306057a832dced2d0384c8be58c0d503a9de759b8cf89a93e99eee77a93f5",
+          "retained_edges": 4,
+          "retained_nodes": 5
+        }
+      ],
+      "budget": 24000,
+      "count": 22155,
+      "enforced": true,
+      "method": "anthropic-count-tokens",
+      "model": "claude-sonnet-4-6",
+      "original_package_sha256": "c3b8c166ed576b525709dd2790c017cdb0b94b55420693e953ca8a7574441cc7",
+      "package_sha256": "80b306057a832dced2d0384c8be58c0d503a9de759b8cf89a93e99eee77a93f5",
+      "reduced": true
+    },
+    "path": "dispatch/package/evidence-package.json",
+    "sha256": "80b306057a832dced2d0384c8be58c0d503a9de759b8cf89a93e99eee77a93f5",
+    "coverage": {
+      "bioindex_queries": [
+        {
+          "artifact_id": "gene-factor-1955f25e8788.attempt-1.body",
+          "continuation_present": false,
+          "exhaustive": false,
+          "limit": 8,
+          "progress": {
+            "bytes_read": 2479,
+            "bytes_total": 71331,
+            "filtered": 0
+          },
+          "returned_rows": 8
+        },
+        {
+          "artifact_id": "gene_set-factor-1955f25e8788.attempt-1.body",
+          "continuation_present": false,
+          "exhaustive": false,
+          "limit": 8,
+          "progress": {
+            "bytes_read": 4080,
+            "bytes_total": 299462,
+            "filtered": 0
+          },
+          "returned_rows": 8
+        },
+        {
+          "artifact_id": "gene-trait-d58464173c02.attempt-1.body",
+          "continuation_present": false,
+          "exhaustive": false,
+          "limit": 8,
+          "progress": {
+            "bytes_read": 2489,
+            "bytes_total": 2747410,
+            "filtered": 0
+          },
+          "returned_rows": 8
+        },
+        {
+          "artifact_id": "gene_set-trait-d58464173c02.attempt-1.body",
+          "continuation_present": false,
+          "exhaustive": false,
+          "limit": 8,
+          "progress": {
+            "bytes_read": 3798,
+            "bytes_total": 1776063,
+            "filtered": 0
+          },
+          "returned_rows": 8
+        }
+      ],
+      "captured_nodes": 17,
+      "captured_unique_edges": 16,
+      "omitted_edge_ids": [
+        "147bc7fc569b1da8",
+        "28d2578f4794355d",
+        "2d149d84950d8890",
+        "300ab559c3aa1dd2",
+        "44284d89e9048adc",
+        "6031d798acfb6f74",
+        "778dd8b3f95c0347",
+        "7de8239bd20cd5a5",
+        "afcf7998cee310e6",
+        "d5c6618f5176b9bd",
+        "ef584af109e7e537",
+        "f0e8ed762982109c"
+      ],
+      "omitted_node_ids": [
+        "gene:APOE",
+        "gene:C1S",
+        "gene:HTRA1",
+        "gene:INS",
+        "gene_set:GOBP_LIPID_BIOSYNTHETIC_PROCESS",
+        "gene_set:GOBP_LIPID_HOMEOSTASIS",
+        "gene_set:GOBP_LIPID_LOCALIZATION",
+        "gene_set:GOBP_ORGANIC_HYDROXY_COMPOUND_TRANSPORT",
+        "gene_set:GOBP_STEROL_HOMEOSTASIS",
+        "gene_set:GOBP_STEROL_METABOLIC_PROCESS",
+        "gene_set:GOBP_STEROL_TRANSPORT",
+        "gene_set:mp_abnormal_cholesterol_homeostasis"
+      ],
+      "queries": {
+        "contextual": "ok",
+        "factor": "empty",
+        "gene": "ok_limit_reached",
+        "gene_set": "ok_limit_reached",
+        "trait": "empty"
+      },
+      "ranking": "aggregate_score descending; exact node ID ascending on ties",
+      "retained_edges": 4,
+      "retained_nodes": 5,
+      "same_upstream_build_verified": false,
+      "upstream_total": null
+    }
+  },
+  "box_id": "natural-mutt-93356",
+  "attempt": 1,
+  "browser_checks": {
+    "saved_selection_and_anonymous_session_after_restart": true,
+    "corrected_stream_coherent_text_and_named_tools": true,
+    "reload_during_execution_same_job_replayed": true,
+    "conclusions_primary": true,
+    "claims_initially_collapsed": true,
+    "keyboard_tab_switch": true,
+    "automatic_paragraph_pending": true,
+    "claim_inspection": true,
+    "evidence_exact_file_and_row": true,
+    "provenance_activity_and_payloads": true,
+    "word_copy_ui_success": true,
+    "word_clipboard_bridge": "empty; native Word paste not verified",
+    "latex_companion_guidance": true,
+    "citations_rendered": 4,
+    "unique_references": 3,
+    "citation_metadata_revision": 1,
+    "knowledge_gap_citation_exact_resolver": true,
+    "knowledge_gap_metadata_revision": 1,
+    "mobile_conclusions": {
+      "width": 390,
+      "height": 844,
+      "document_width": 390,
+      "visual_inspection": "passed"
+    },
+    "account_survived_full_restart": true,
+    "paragraph_survived_full_restart": true,
+    "workspace_account_history_survived": true,
+    "workspace_saved_draft_and_latest_success_survived": true,
+    "mobile_paragraph": {
+      "width": 390,
+      "height": 844,
+      "document_width_before_fix": 514,
+      "document_width_after_fix": 390,
+      "fix": "references overflow-wrap:anywhere",
+      "visual_inspection": "paragraph and wrapped references passed",
+      "viewport_reset": true
+    },
+    "citation_anchor_navigation": true
+  },
+  "delivery_observations": [
+    {
+      "observed_at": "2026-09-25T21:48:44.180697+00:00",
+      "phase": "created",
+      "cursor": 0,
+      "last_event_id": 5
+    },
+    {
+      "observed_at": "2026-09-25T21:49:30.241989+00:00",
+      "phase": "running",
+      "cursor": 56,
+      "last_event_id": 64
+    },
+    {
+      "observed_at": "2026-09-25T21:51:28.220795+00:00",
+      "phase": "running",
+      "cursor": 125,
+      "last_event_id": 130,
+      "lease_until": "2026-09-25T21:52:52.167060Z"
+    },
+    {
+      "observed_at": "2026-09-25T21:54:21.951552+00:00",
+      "phase": "running",
+      "cursor": 173,
+      "last_event_id": 178,
+      "lease_until": "2026-09-25T21:55:47.872840Z"
+    },
+    {
+      "observed_at": "2026-09-25T21:57:32.191112+00:00",
+      "phase": "running",
+      "cursor": 401,
+      "last_event_id": 406,
+      "lease_until": "2026-09-25T21:58:45.806392Z"
+    }
+  ],
+  "account_id": "dapper:ScientificAccount.mZ1WzVP3O9i63nEZCHLBk-vMbZkEICZV",
+  "paragraph_job_id": "36d411a1-f24f-4cb7-be66-6ed517394d8d",
+  "research_terminal_at": "2026-09-25T21:58:46.174939Z",
+  "box_deleted": true,
+  "remote_final_cursor": 445,
+  "job_final_event_id": 452,
+  "runtime": {
+    "started_at": "2026-09-25T21:48:48.479355+00:00",
+    "completed_at": "2026-09-25T21:56:40.392990+00:00",
+    "cost_usd": 1.00698705,
+    "execution_limits": {
+      "max_budget_usd": 3.0,
+      "max_turns": 40,
+      "timeout_seconds": 900
+    },
+    "model": "claude-sonnet-4-6",
+    "harness_version": "2.1.282"
+  },
+  "trusted_validation": {
+    "valid": true,
+    "counts": {
+      "edges": 1,
+      "errors": 0,
+      "nodes": 10,
+      "raw_sources": 7,
+      "warnings": 0
+    },
+    "grounding_accepted": true,
+    "grounding_checked_at": "2026-09-25T21:58:19.216405Z",
+    "document_sha256": "33650ff85542adea776add9f3b39034eb3c50fb6431dbdf89ea728c8c0cf2248"
+  },
+  "ledger": {
+    "complete": true,
+    "calls": 33,
+    "statuses": {
+      "completed": 28,
+      "failed": 3,
+      "empty": 2
+    },
+    "selected_graph_calls": [
+      {
+        "tool": "get_schema",
+        "graph": "biomarkerkg",
+        "status": "completed",
+        "sequence": 8,
+        "request": {
+          "credential_redactions": 0,
+          "path": "artifacts/dc4973316fcdd7d0c3969a8f3d0143c4190584321a39d6c9eeaef19af5f6f29d.json",
+          "sha256": "dc4973316fcdd7d0c3969a8f3d0143c4190584321a39d6c9eeaef19af5f6f29d",
+          "size_bytes": 57
+        },
+        "response": {
+          "credential_redactions": 0,
+          "path": "artifacts/123478e06048e05e0c212d98b06e90ff44860ec937be73a880e51424e17e3c1a.json",
+          "sha256": "123478e06048e05e0c212d98b06e90ff44860ec937be73a880e51424e17e3c1a",
+          "size_bytes": 21186
+        }
+      },
+      {
+        "tool": "get_schema",
+        "graph": "prokn",
+        "status": "completed",
+        "sequence": 10,
+        "request": {
+          "credential_redactions": 0,
+          "path": "artifacts/ad2ced805f26769e312fc95e8ca3c28755df559e3b88ba809913b5e77a3d1891.json",
+          "sha256": "ad2ced805f26769e312fc95e8ca3c28755df559e3b88ba809913b5e77a3d1891",
+          "size_bytes": 51
+        },
+        "response": {
+          "credential_redactions": 0,
+          "path": "artifacts/2dcfd02d13e62a5a0162c0fc86a41e0d6fc4876e98ee616e1b3d0088bd7fe745.json",
+          "sha256": "2dcfd02d13e62a5a0162c0fc86a41e0d6fc4876e98ee616e1b3d0088bd7fe745",
+          "size_bytes": 134468
+        }
+      },
+      {
+        "tool": "query_graph",
+        "graph": "prokn",
+        "status": "completed",
+        "sequence": 15,
+        "request": {
+          "credential_redactions": 0,
+          "path": "artifacts/8e3d1570c387531481ca7b8dae39c127ccccaf8b360fb2ac54c2c1693d68ef85.json",
+          "sha256": "8e3d1570c387531481ca7b8dae39c127ccccaf8b360fb2ac54c2c1693d68ef85",
+          "size_bytes": 80
+        },
+        "response": {
+          "credential_redactions": 0,
+          "path": "artifacts/72d30a8e41a8db8773b541605f796f94368d2e99a1ddde2cbbf3aafa372248d3.json",
+          "sha256": "72d30a8e41a8db8773b541605f796f94368d2e99a1ddde2cbbf3aafa372248d3",
+          "size_bytes": 7448
+        }
+      },
+      {
+        "tool": "query_graph",
+        "graph": "biomarkerkg",
+        "status": "completed",
+        "sequence": 17,
+        "request": {
+          "credential_redactions": 0,
+          "path": "artifacts/1633525a5c830081ba0c40a8b53dd77d7de98e66d77bf0779879a60840f77949.json",
+          "sha256": "1633525a5c830081ba0c40a8b53dd77d7de98e66d77bf0779879a60840f77949",
+          "size_bytes": 91
+        },
+        "response": {
+          "credential_redactions": 0,
+          "path": "artifacts/1131f56306d20a8faaf4e5dc830bfa72155f6e36db89d1e6cbc3868b50fdd0fc.json",
+          "sha256": "1131f56306d20a8faaf4e5dc830bfa72155f6e36db89d1e6cbc3868b50fdd0fc",
+          "size_bytes": 708
+        }
+      },
+      {
+        "tool": "query_graph",
+        "graph": "prokn",
+        "status": "empty",
+        "sequence": 19,
+        "request": {
+          "credential_redactions": 0,
+          "path": "artifacts/747f441955ef30b8fedcebd89da486020f90c56395760893375972c684baa4a3.json",
+          "sha256": "747f441955ef30b8fedcebd89da486020f90c56395760893375972c684baa4a3",
+          "size_bytes": 109
+        },
+        "response": {
+          "credential_redactions": 0,
+          "path": "artifacts/88e6ddbfca53393b8ce3398ea37e60538087306bd2b5789b40287d8f521a8ae5.json",
+          "sha256": "88e6ddbfca53393b8ce3398ea37e60538087306bd2b5789b40287d8f521a8ae5",
+          "size_bytes": 1029
+        }
+      },
+      {
+        "tool": "query_graph",
+        "graph": "biomarkerkg",
+        "status": "empty",
+        "sequence": 21,
+        "request": {
+          "credential_redactions": 0,
+          "path": "artifacts/84ace5246df2a546ddbeb1333ac5088e9d5e95dbc1e15090179322b615a03539.json",
+          "sha256": "84ace5246df2a546ddbeb1333ac5088e9d5e95dbc1e15090179322b615a03539",
+          "size_bytes": 121
+        },
+        "response": {
+          "credential_redactions": 0,
+          "path": "artifacts/88e6ddbfca53393b8ce3398ea37e60538087306bd2b5789b40287d8f521a8ae5.json",
+          "sha256": "88e6ddbfca53393b8ce3398ea37e60538087306bd2b5789b40287d8f521a8ae5",
+          "size_bytes": 1029
+        }
+      }
+    ]
+  },
+  "timing": {
+    "remote_completion_to_research_terminal_seconds": 125.781949,
+    "interpretation": "Observed total includes backlog capture, trusted validation, independent model review, and Aurora publication; not isolated batch latency."
+  },
+  "source_download": {
+    "file_id": "dapper:File.954X3TydI2AIzz0zCsmq4zQhATTWRIaq",
+    "filename": "gene-factor-1955f25e8788.attempt-1.body.json",
+    "bytes": 2485,
+    "sha256": "a7ddfb379ef54fe5b14a88ab9deb29c40a3ec84f87c22d6a2ba06e73fd9da1ac",
+    "matches_dapper_file": true
+  },
+  "paragraph": {
+    "id": "dapper:Paragraph.Wc-KnUcXFLc4YfAkVkjtEdIj3-OHS1m0",
+    "job_id": "36d411a1-f24f-4cb7-be66-6ed517394d8d",
+    "grounding": {
+      "accepted": true,
+      "checked_at": "2026-09-25T22:00:41.759209Z",
+      "estimated_max_usd": 0.062796,
+      "format": "reveal.paragraph-faithfulness/1",
+      "input_sha256": "7bbeb1417c78136a282652eb905bd9621da9a2d4aa8b0aa1a238fc07e9c18f0c",
+      "input_tokens_measured": 3524,
+      "limitation": "Fallible model check of fidelity to the accepted account.",
+      "model": "claude-sonnet-4-6",
+      "output_sha256": "f9c3a9c192357e2ecbbecbd8066292a543874ab09dedb46d6bcbbea822ac7166",
+      "review": {
+        "segments": [
+          {
+            "faithful": true,
+            "finding": "The segment correctly frames the PIGEAN cfde-inc-v2 Factor1 for CAD as labeled GOBP_STEROL_METABOLIC_PROCESS and accurately characterizes the purpose as assessing LPL's candidacy relative to the open knowledge gap about upstream causal amplification vs. downstream biochemical readouts. The cited KnowledgeGap (zNV20nhHamt-a4CeAktQQPoAivOJe6xk) directly describes this open question. No new scientific assertions are introduced.",
+            "segment_index": 0
+          },
+          {
+            "faithful": true,
+            "finding": "The four retained candidates (LPL, SIRT3, FURIN, TIMP3), LPL's factor loading (0.3439), combined PIGEAN score (5.9), log_bf (3.9), and prior (1.99) are all explicitly stated in the cited Claims (oHAogBRdetx6fDiakfRSC0LunxjGDR0E and NZs1bmu2UfabvcU9OGLiAWrLIt_XDE61) and the underlying ScientificAccount. The characterization of LPL as the top candidate based on highest factor loading and combined score is supported. No unsupported assertions introduced.",
+            "segment_index": 1
+          },
+          {
+            "faithful": true,
+            "finding": "The segment accurately reflects Claim NZs1bmu2UfabvcU9OGLiAWrLIt_XDE61, which explicitly states the CFDE factor association cannot resolve whether LPL reflects upstream genetic risk amplification or a downstream metabolic readout, and that the knowledge gap remains open. The mention of Mendelian randomization and prospective biomarker data as needed evidence matches the ScientificAccount's closing remarks. The association is correctly kept as association, not causation, and the gap remains open as required.",
+            "segment_index": 2
+          }
+        ]
+      },
+      "usage": {
+        "cache_creation": {
+          "ephemeral_1h_input_tokens": 0,
+          "ephemeral_5m_input_tokens": 0
+        },
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "inference_geo": "global",
+        "input_tokens": 3780,
+        "output_tokens": 450,
+        "service_tier": "standard"
+      }
+    },
+    "profile": {
+      "findings": [],
+      "profile": "reveal-paragraph",
+      "valid": true
+    },
+    "runtime": {
+      "started_at": "2026-09-25T21:59:39.548929+00:00",
+      "completed_at": "2026-09-25T22:00:14.676087+00:00",
+      "cost_usd": 0.09836204999999999,
+      "execution_limits": {
+        "max_budget_usd": 3.0,
+        "max_turns": 40,
+        "timeout_seconds": 900
+      },
+      "model": "claude-sonnet-4-6"
+    },
+    "box_id": "absolute-polecat-03575",
+    "box_deleted": true,
+    "attempt": 1,
+    "remote_final_cursor": 34,
+    "job_final_event_id": 40,
+    "completed_at": "2026-09-25T22:00:52.652999Z"
+  },
+  "exports": [
+    {
+      "filename": "research-statement.md",
+      "downloaded_filename": "research-statement (1).md",
+      "bytes": 2466,
+      "sha256": "14162b355e08bc83eda8fbe0ab1e958214a7aaeb43f0ea5a4646e54a5ce29593",
+      "all_exact_targets_present": true,
+      "download_modified_at": 1790373750.0093222
+    },
+    {
+      "filename": "research-statement.tex",
+      "downloaded_filename": "research-statement (2).tex",
+      "bytes": 1520,
+      "sha256": "f35319f3b0c6b655360649012813b6ca57fa890e1bd6050f0349da42105cfc1f",
+      "all_exact_targets_present": true,
+      "download_modified_at": 1790373782.8865435
+    },
+    {
+      "filename": "references.bib",
+      "downloaded_filename": "references (1).bib",
+      "bytes": 2384,
+      "sha256": "e28334f445fb08e9d1356d609f7b50d690226b5f0c6284c5ffc10a24ff7388e7",
+      "all_exact_targets_present": true,
+      "download_modified_at": 1790373790.2001958
+    }
+  ],
+  "completed_validation_at": "2026-09-25T22:11:15.659184+00:00",
+  "verification_scope": {
+    "frontend_tests": 9,
+    "typecheck": "passed",
+    "production_build": "passed before final one-rule CSS wrapping correction",
+    "final_css": "compiled by running Next dev/HMR and verified in actual mobile browser; production build not repeated to avoid disrupting healthy stack",
+    "native_word_paste": "not verified; browser copy success but automation clipboard bridge returned empty",
+    "real_google_orcid_login": "not tested; OAuth credentials absent"
+  },
+  "final_state": {
+    "stack": "healthy",
+    "execution_mode": "box",
+    "nonterminal_jobs": 0,
+    "research_and_paragraph_boxes_deleted": true,
+    "base_url": "http://localhost:3000",
+    "account_url": "http://localhost:3000/accounts/dapper%3AScientificAccount.mZ1WzVP3O9i63nEZCHLBk-vMbZkEICZV",
+    "lifecycle_report": "final-lifecycle.json",
+    "stop_command": "./scripts/dev-down.sh"
+  }
+}

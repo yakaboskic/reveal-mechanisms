@@ -13,6 +13,7 @@ from unittest.mock import patch
 from reveal_backend.evidence_collector import CaptureStore, HttpCaptureClient, collect_package, parse_factor
 from reveal_backend.evidence_package import (DapperRuntime, EvidenceBuildError, build_package, canonical_json,
                                             decode, load_build_input, pointer, sha256)
+from reveal_backend.evidence_schema import load_generated_schema, validate_package_shape
 
 ROOT = Path(__file__).resolve().parents[3]
 FACTOR = 'factor:portal:CADinT2D:cfde-inc-v2:Factor1'
@@ -131,6 +132,34 @@ class EvidencePackageTests(unittest.TestCase):
         self.assertTrue(any('pigean-gene-phenotype?' in u for u, _ in self.calls))
         self.assertTrue(any('pigean-gene-set-phenotype?' in u for u, _ in self.calls))
 
+    def test_frozen_browser_selection_provenance_survives_collection(self):
+        dismissed=FACTOR.rsplit(':',1)[0]+':Factor2'
+        metadata={'origins':{FACTOR:'automatic'},'dismissed_eaggl_ids':[dismissed],
+            'semantic_retrieval':{'status':'computed','embedding_run_id':'frozen-embedding'},
+            'frozen_binding':{'mapping_run_id':'original-mapping','embedding_run_id':'frozen-embedding'}}
+        built=collect_package(gap_id=GAP,factor_ids=[FACTOR],output=self.root/'browser-selection',dapper=self.runtime,
+            project_root=ROOT,dismech_source=self.source,dismech_index=ROOT/'data/dismech-gaps/2026-09-24',
+            geneset_import=self.imported,limit=8,client_factory=FixtureClient,selection_metadata=metadata)
+        self.assertEqual(built.package['selection']['origins'],{FACTOR:'automatic'})
+        self.assertEqual(built.package['selection']['dismissed_eaggl_ids'],[dismissed])
+        self.assertEqual(built.package['selection']['semantic_retrieval'],metadata['semantic_retrieval'])
+        captured=built.package['source_artifacts']['selection-provenance']
+        self.assertEqual(decode((self.root/'browser-selection/package'/captured['path']).read_bytes()),metadata)
+
+    def test_database_unmapped_candidate_is_explicitly_omitted_without_disabling_anchor(self):
+        with gzip.open(self.imported/'records.jsonl.gz','rt') as stream: rows=[json.loads(line) for line in stream]
+        missing=rows[0]['node_id']
+        def resolver(wanted,model):
+            return ((self.imported/'manifest.json').read_bytes(),decode((self.imported/'activity.json').read_bytes()),
+                    [row for row in rows if row['node_id'] in wanted and row['node_id']!=missing])
+        built=collect_package(gap_id=GAP,factor_ids=[FACTOR],output=self.root/'partial-database-aliases',dapper=self.runtime,
+            project_root=ROOT,dismech_source=self.source,dismech_index=ROOT/'data/dismech-gaps/2026-09-24',
+            geneset_import=self.imported,geneset_resolver=resolver,limit=8,client_factory=FixtureClient)
+        self.assertIn(FACTOR,built.package['selection']['eaggl_mechanism_ids'])
+        self.assertIn(missing,built.package['coverage']['omitted_node_ids'])
+        self.assertNotIn(missing,built.package['pigean']['graph']['node_ids'])
+        self.assertIn('geneset-alias-resolution',built.package['source_artifacts'])
+
     def test_real_values_contextual_dedup_and_no_invented_similarity(self):
         packet = self.built.package
         shh = packet['pigean']['mechanisms'][FACTOR]['gene_loadings']['items']['gene:SHH']
@@ -216,6 +245,23 @@ class EvidencePackageTests(unittest.TestCase):
         self.assertEqual(len(result['coverage']['omitted_node_ids']), 13)
         spec['policy']['max_package_bytes'] = 100
         with self.assertRaisesRegex(EvidenceBuildError, 'byte budget'): self.build(spec)
+
+    def test_all_pruned_observations_are_omitted_not_empty_source_results(self):
+        spec = deepcopy(self.spec)
+        spec['policy']['retain_node_ids'] = [FACTOR]
+        spec['policy']['max_nodes'] = 1
+        result = self.build(spec).package
+        mechanism = result['pigean']['mechanisms'][FACTOR]
+        for kind in ('gene', 'gene_set'):
+            collection = mechanism[kind + '_loadings']
+            self.assertEqual(collection['items'], {})
+            self.assertEqual(collection['status'], 'omitted')
+            self.assertEqual(collection['query_status'], self.built.package['coverage']['queries'][kind])
+            trait = result['pigean']['traits'][mechanism['fit']['trait_id']]
+            self.assertEqual(trait[kind + '_associations']['status'], 'omitted')
+        self.assertEqual(result['coverage']['queries']['factor'], 'empty')
+        self.assertEqual(result['source_artifacts'], self.built.package['source_artifacts'])
+        validate_package_shape(result, load_generated_schema(ROOT/'schema/evidence-package.schema.json'))
 
     def test_conflicting_duplicate_edge_and_wrong_query_model_rejected(self):
         for mutation, message in [('edge', 'Conflicting duplicate edge'), ('model', 'target/model mismatch')]:

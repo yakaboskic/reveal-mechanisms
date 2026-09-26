@@ -4132,6 +4132,7 @@
         "ok",
         "ok_limit_reached",
         "empty",
+        "omitted",
         "not_available",
         "not_queried",
         "not_captured",

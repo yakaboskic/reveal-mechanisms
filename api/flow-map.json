@@ -1,5 +1,5 @@
 {
-  "openapi_sha256": "477343e0f267e0b88a93eb31baef8d2b387de9fb142c102c43ee50171c99326f",
+  "openapi_sha256": "0eb62f9ff95e3de2100d9d57b253221c2a19850ebaac5bb889c8e55390928d7e",
   "steps": [
     {
       "id": "gap",
@@ -104,7 +104,8 @@
         "getAccount.request",
         "getClaim.request",
         "getGeneSet.request",
-        "resolveDapperObject.request"
+        "resolveDapperObject.request",
+        "downloadArtifact.request"
       ],
       "rules": [
         "Conclusions and Research statement are divider tabs.",
@@ -241,6 +242,6 @@
       ]
     }
   ],
-  "operation_count": 30,
-  "exchange_count": 41
+  "operation_count": 31,
+  "exchange_count": 42
 }

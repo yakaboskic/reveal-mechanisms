@@ -1,0 +1,217 @@
+{
+  "checked_at": "2026-09-25T21:59:48.431816+00:00",
+  "status": "accepted_and_persisted",
+  "job_id": "431fcc31-46e7-42a3-8f8b-5ff0be1e9403",
+  "box_id": "natural-mutt-93356",
+  "attempt": 1,
+  "account_id": "dapper:ScientificAccount.mZ1WzVP3O9i63nEZCHLBk-vMbZkEICZV",
+  "claim_ids": [
+    "dapper:Claim.oHAogBRdetx6fDiakfRSC0LunxjGDR0E",
+    "dapper:Claim.NZs1bmu2UfabvcU9OGLiAWrLIt_XDE61"
+  ],
+  "remote_started_at": "2026-09-25T21:48:48.479355+00:00",
+  "remote_completed_at": "2026-09-25T21:56:40.392990+00:00",
+  "authoring_cost_usd": 1.00698705,
+  "package_sha256": "80b306057a832dced2d0384c8be58c0d503a9de759b8cf89a93e99eee77a93f5",
+  "document_sha256": "33650ff85542adea776add9f3b39034eb3c50fb6431dbdf89ea728c8c0cf2248",
+  "ledger_complete": true,
+  "ledger_calls": 33,
+  "ledger_statuses": {
+    "completed": 28,
+    "failed": 3,
+    "empty": 2
+  },
+  "selected_graph_calls": [
+    {
+      "sequence": 8,
+      "tool": "get_schema",
+      "selected_graph": "biomarkerkg",
+      "status": "completed",
+      "request": {
+        "arguments": {
+          "graph": "biomarkerkg"
+        },
+        "tool": "get_schema"
+      },
+      "response_sha256": "123478e06048e05e0c212d98b06e90ff44860ec937be73a880e51424e17e3c1a",
+      "response_size_bytes": 21186
+    },
+    {
+      "sequence": 10,
+      "tool": "get_schema",
+      "selected_graph": "prokn",
+      "status": "completed",
+      "request": {
+        "arguments": {
+          "graph": "prokn"
+        },
+        "tool": "get_schema"
+      },
+      "response_sha256": "2dcfd02d13e62a5a0162c0fc86a41e0d6fc4876e98ee616e1b3d0088bd7fe745",
+      "response_size_bytes": 134468
+    },
+    {
+      "sequence": 15,
+      "tool": "query_graph",
+      "selected_graph": "prokn",
+      "status": "completed",
+      "request": {
+        "arguments": {
+          "contains": "LPL",
+          "graph": "prokn",
+          "limit": 10
+        },
+        "tool": "query_graph"
+      },
+      "response_sha256": "72d30a8e41a8db8773b541605f796f94368d2e99a1ddde2cbbf3aafa372248d3",
+      "response_size_bytes": 7448
+    },
+    {
+      "sequence": 17,
+      "tool": "query_graph",
+      "selected_graph": "biomarkerkg",
+      "status": "completed",
+      "request": {
+        "arguments": {
+          "contains": "coronary",
+          "graph": "biomarkerkg",
+          "limit": 10
+        },
+        "tool": "query_graph"
+      },
+      "response_sha256": "1131f56306d20a8faaf4e5dc830bfa72155f6e36db89d1e6cbc3868b50fdd0fc",
+      "response_size_bytes": 708
+    },
+    {
+      "sequence": 19,
+      "tool": "query_graph",
+      "selected_graph": "prokn",
+      "status": "empty",
+      "request": {
+        "arguments": {
+          "graph": "prokn",
+          "limit": 10,
+          "subject": "http://purl.uniprot.org/genes/LPL"
+        },
+        "tool": "query_graph"
+      },
+      "response_sha256": "88e6ddbfca53393b8ce3398ea37e60538087306bd2b5789b40287d8f521a8ae5",
+      "response_size_bytes": 1029
+    },
+    {
+      "sequence": 21,
+      "tool": "query_graph",
+      "selected_graph": "biomarkerkg",
+      "status": "empty",
+      "request": {
+        "arguments": {
+          "graph": "biomarkerkg",
+          "limit": 10,
+          "object": "http://purl.obolibrary.org/obo/DOID_3393"
+        },
+        "tool": "query_graph"
+      },
+      "response_sha256": "88e6ddbfca53393b8ce3398ea37e60538087306bd2b5789b40287d8f521a8ae5",
+      "response_size_bytes": 1029
+    }
+  ],
+  "box_capture_cleanup_complete": true,
+  "structural_validation": {
+    "counts": {
+      "edges": 1,
+      "errors": 0,
+      "nodes": 10,
+      "raw_sources": 7,
+      "warnings": 0
+    },
+    "dapper_release": {
+      "checked_files": 34,
+      "commit": "c0cfce549baded068aa9e82f81a1400025614b51",
+      "lock_sha256": "3f07f48396ab893ed0fae8ad0101e0c2ac1bc36161e91cc2525d5ed0aeb0140f",
+      "repository": "https://github.com/broadinstitute/dapper.git",
+      "tag": "0.2.0-a1"
+    },
+    "document_sha256": "33650ff85542adea776add9f3b39034eb3c50fb6431dbdf89ea728c8c0cf2248",
+    "evidence_package_sha256": "80b306057a832dced2d0384c8be58c0d503a9de759b8cf89a93e99eee77a93f5",
+    "findings": [],
+    "mode": "final",
+    "profile": "scientific-account",
+    "remaining_acceptance_checks": [
+      "trusted attribution and job ownership",
+      "exact source locators and metric agreement",
+      "external-evidence ledger and tool policy",
+      "scientific support and synthesis review"
+    ],
+    "report_version": "reveal.account-lint/1",
+    "scientific_grounding_evaluated": false,
+    "strict": false,
+    "valid": true
+  },
+  "grounding_review": {
+    "accepted": true,
+    "checked_at": "2026-09-25T21:58:19.216405Z",
+    "document_sha256": "33650ff85542adea776add9f3b39034eb3c50fb6431dbdf89ea728c8c0cf2248",
+    "estimated_max_usd": 0.109032,
+    "format": "reveal.scientific-grounding/1",
+    "input_tokens_measured": 18936,
+    "ledger_sha256": "e0953624258c19fdac1b47b14a8852b0969f7c8f5bcd663381e979a62ef213e2",
+    "limitation": "Fallible model review of captured evidence; not independent experimental confirmation.",
+    "method": "independent-model-source-review",
+    "model": "claude-sonnet-4-6",
+    "package_sha256": "80b306057a832dced2d0384c8be58c0d503a9de759b8cf89a93e99eee77a93f5",
+    "review": {
+      "claims": [
+        {
+          "claim_id": "dapper:Claim.oHAogBRdetx6fDiakfRSC0LunxjGDR0E",
+          "finding": "LPL factor_value of 0.3439, combined score 5.9, log_bf 3.9, and prior 1.99 on CAD Factor1 (cfde-inc-v2) are directly reported in the evidence package and LPL's values are the highest among the four retained candidates (LPL, SIRT3, FURIN, TIMP3).",
+          "source_refs": [
+            "/package/pigean/candidates/gene:LPL/candidate/edges/0",
+            "/package/pigean/mechanisms/factor:portal:CAD:cfde-inc-v2:Factor1/gene_loadings/items/gene:LPL/source_ref"
+          ],
+          "verdict": "supported"
+        },
+        {
+          "claim_id": "dapper:Claim.NZs1bmu2UfabvcU9OGLiAWrLIt_XDE61",
+          "finding": "LPL is correctly identified as the top candidate by factor loading and combined score among four genes on GOBP_STEROL_METABOLIC_PROCESS-labeled CAD Factor1. The claim appropriately acknowledges that a factor loading alone does not establish whether LPL is an upstream amplifier or downstream readout, and explicitly states the knowledge gap remains open\u2014consistent with the evidence and the gap's requirements.",
+          "source_refs": [
+            "/package/pigean/mechanisms/factor:portal:CAD:cfde-inc-v2:Factor1/source_label",
+            "/package/pigean/mechanisms/factor:portal:CAD:cfde-inc-v2:Factor1/gene_loadings/items/gene:LPL/source_ref",
+            "/package/pigean/mechanisms/factor:portal:CAD:cfde-inc-v2:Factor1/gene_loadings/items/gene:FURIN/source_ref",
+            "/package/pigean/mechanisms/factor:portal:CAD:cfde-inc-v2:Factor1/gene_loadings/items/gene:SIRT3/source_ref",
+            "/package/pigean/mechanisms/factor:portal:CAD:cfde-inc-v2:Factor1/gene_loadings/items/gene:TIMP3/source_ref"
+          ],
+          "verdict": "supported"
+        }
+      ],
+      "synthesis": {
+        "finding": "The scientific account accurately reports the four PIGEAN Factor1 CAD gene candidates and their scores, correctly labels the factor as GOBP_STEROL_METABOLIC_PROCESS-associated, and explicitly notes that a factor loading cannot distinguish upstream causal amplification from downstream readout\u2014which is precisely the open knowledge gap. The account appropriately declares the gap remains unresolved, correctly characterizes the biomarkerkg and prokn graph queries as non-resolving (empty results), and proposes MR and prospective incident-CAD analyses as future experiments rather than claiming completed evidence. No invented entities, mechanisms, or experiments are presented as completed. The closing statement is a bounded, honest partial answer consistent with the selected gap.",
+        "source_refs": [
+          "/package/pigean/mechanisms/factor:portal:CAD:cfde-inc-v2:Factor1/source_label",
+          "/package/pigean/mechanisms/factor:portal:CAD:cfde-inc-v2:Factor1/gene_loadings/items/gene:LPL/source_ref",
+          "/graph_calls/2/response/content/0/text",
+          "/graph_calls/3/response/content/0/text",
+          "/package/dismech/knowledge_gap/source_id"
+        ],
+        "verdict": "supported"
+      }
+    },
+    "usage": {
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 0,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0,
+      "inference_geo": "global",
+      "input_tokens": 19424,
+      "output_tokens": 843,
+      "service_tier": "standard"
+    }
+  },
+  "independent_inspection": {
+    "causal_direction_overclaim_found": false,
+    "metrics_match_retained_source_observations": true,
+    "minor_prose_limitation": "EvidenceItem calls the gene-factor record a CFDE interactive endpoint; the exact linked capture is the BioIndex response. File identity, locator, numeric metrics and machine-readable provenance are correct. No document rewrite was performed."
+  },
+  "publication_and_restart_evidence": "live-browser-retry-validation.json"
+}

@@ -1,0 +1,2 @@
+# Independently pinned worker SDK; install alongside backend requirements.
+upstash-box==0.3.0

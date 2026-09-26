@@ -135,6 +135,7 @@ Read closing remarks; open associated claims on demand.
 - `GET /v1/claims/{dapper_id}` — [request request/response](examples/getClaim.request.json)
 - `GET /v1/gene-sets/{dapper_id}` — [request request/response](examples/getGeneSet.request.json)
 - `GET /v1/objects/{dapper_id}` — [request request/response](examples/resolveDapperObject.request.json)
+- `GET /v1/artifacts/{sha256}` — [request request/response](examples/downloadArtifact.request.json)
 
 - Conclusions and Research statement are divider tabs.
 - Claims open inline; no auto-opened first claim. Dedicated claim page has Assessment, Proposition, Evidence and Provenance tabs.
@@ -257,4 +258,4 @@ Request cancellation or recover from stale save/event cursor.
 
 Requests/responses are taken from the existing validated OpenAPI exchange library. The CADinT2D analysis/paragraph sequence is internally linked. The CAD source-selected gap now frames the request and account. The evidence package is a separate captured input; the authored account is not its validated agent output. Semantic scores and agent outputs remain illustrative fixtures.
 
-The mapping covers 30 operations and all 41 exchanges. OpenAPI SHA-256: `477343e0f267e0b88a93eb31baef8d2b387de9fb142c102c43ee50171c99326f`. No endpoints or payloads were changed to build this diagram.
+The mapping covers 31 operations and all 42 exchanges. OpenAPI SHA-256: `0eb62f9ff95e3de2100d9d57b253221c2a19850ebaac5bb889c8e55390928d7e`. No endpoints or payloads were changed to build this diagram.

@@ -1,0 +1,10 @@
+{
+  "observed_at": "2026-09-25T21:33:16.281324+00:00",
+  "phase": "after first live terminal failure before corrected retry",
+  "repeated_down": true,
+  "project_containers": 0,
+  "frontend_port_available": true,
+  "api_port_available": true,
+  "process_state_absent": true,
+  "aurora_and_artifacts_preserved": true
+}

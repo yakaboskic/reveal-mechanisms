@@ -1,0 +1,12 @@
+[
+  {
+    "path": "data/evidence-packages/cad-builder-v1/evidence-package.json",
+    "bytes": 111243,
+    "input_tokens": 45395
+  },
+  {
+    "path": ".runtime/artifacts/0f8bf98a-3ee2-4193-8448-1d98b039b2ad/evidence/package/evidence-package.json",
+    "bytes": 578779,
+    "input_tokens": 245527
+  }
+]

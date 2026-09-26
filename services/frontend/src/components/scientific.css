@@ -1,0 +1,137 @@
+/* Scientific reading surfaces follow the assembled account prototype. */
+.reading-page:has(>.scientific.account-study){padding-top:20px}
+.scientific.account-study{padding:0;color:var(--ink,#20293a)}
+.account-study [hidden]{display:none!important}
+.account-topbar{display:flex;justify-content:space-between;align-items:center;gap:20px;min-height:40px;margin-bottom:28px;font-size:12px;color:#5a7090}
+.account-topbar a{min-height:40px;display:inline-flex;align-items:center;line-height:1.6;color:#5a7090}
+.account-gap{margin:0 0 26px}
+.account-gap .gap-source{font-size:12px;color:#6b7b91;margin:0 0 10px}
+.account-gap h1,.claim-page-heading h1{font-size:21px;line-height:1.6;font-weight:450;letter-spacing:-.35px;max-width:68ch;margin:0 0 18px;overflow-wrap:anywhere}
+.account-mechanisms{display:flex;flex-wrap:wrap;gap:7px}
+.account-mechanism{display:inline-block;max-width:100%;padding:6px 10px;font-size:11px;line-height:1.6;color:#55739d;background:#f3f7fd;border:1px solid #dce5f2;border-radius:7px;overflow-wrap:anywhere}
+.account-study .account-summary{padding:0 0 30px}
+.account-study .account-summary h2{font-size:18px;line-height:1.55;font-weight:500;margin:0 0 13px;letter-spacing:-.2px}
+.account-conclusions,.account-study .research-prose{font-size:14px;line-height:1.9;color:var(--reading,#4d5e76);max-width:80ch;margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
+.account-study .reading-tabs{gap:28px;margin:0 0 26px;overflow-x:auto;overflow-y:hidden}
+.account-study .reading-tabs button{min-height:45px;font-size:13px;padding:10px 0 12px}
+.account-study .scope-disclosure{margin:16px 0 10px;max-width:85ch}
+.account-study .scope-disclosure p{font-size:12px;line-height:1.85;color:#6b7b91;white-space:pre-wrap;overflow-wrap:anywhere}
+.account-claims-section{border-top:1px solid #e5eaf1;border-bottom:1px solid #e5eaf1;scroll-margin-top:22px}
+.account-claims-toggle{display:flex;align-items:center;justify-content:space-between;gap:20px;width:100%;min-height:65px;padding:16px 0;text-align:left;font-size:14px;color:#4f6380}
+.account-claims-toggle>span:first-child{display:flex;align-items:center;gap:8px}
+.account-claims-toggle small{font-size:11px;color:#74849b}
+.claims-toggle-caret,.claim-selection-caret{color:#9aa8bb;font-size:18px;transition:transform .15s}
+.account-claims-toggle[aria-expanded=true] .claims-toggle-caret,.account-claim-option[aria-expanded=true] .claim-selection-caret{transform:rotate(180deg)}
+.account-claims-body{padding:6px 0 26px}
+.claim-search-toolbar{display:flex;gap:8px;align-items:center;margin-bottom:14px}
+.claim-search{display:flex;align-items:center;gap:9px;min-width:0;flex:1;border:1px solid #e3e8ef;border-radius:9px;padding:0 11px;background:#fff;color:#91a0b3}
+.claim-search:focus-within{border-color:#a8bfe6;box-shadow:0 0 0 2px #edf3ff}
+.claim-search svg{flex-shrink:0}
+.claim-search input{width:100%;min-width:0;height:42px;border:0;background:transparent;font-size:13px;color:#40516a;padding:0;outline:none}
+.claim-search input::placeholder{color:#748298}
+.claim-filter-toggle{display:flex;align-items:center;justify-content:center;gap:6px;min-height:43px;padding:0 10px;border:1px solid #e3e8ef;border-radius:9px;font-size:12px;color:#61738e;white-space:nowrap}
+.claim-filter-toggle:hover,.claim-filter-toggle[aria-expanded=true]{background:#f7f9fc}
+.claim-filter-toggle.has-filter{color:#3565ae;border-color:#dce6f8;background:#f4f7fe}
+.claim-filter-count{font-size:10px;color:#3565ae;background:#e5edfc;border-radius:8px;min-width:16px;line-height:16px}
+.claim-filters{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:15px}
+.claim-filters button{font-size:12px;color:#64748d;border:1px solid transparent;border-radius:14px;padding:6px 9px;min-height:36px}
+.claim-filters button[aria-pressed=true]{color:#3565ae;background:#f0f5ff;border-color:#e1e9f9}
+.account-claim-results{display:grid;gap:4px}
+.account-claim-card{border:1px solid transparent;border-radius:9px;scroll-margin:24px;min-width:0}
+.account-claim-card.is-expanded{border-color:#dfe7f3;background:#fafcff}
+.account-claim-option{display:grid;grid-template-columns:24px minmax(0,1fr) 12px;gap:7px;width:100%;text-align:left;padding:14px 10px;margin:0;border-radius:8px}
+.account-claim-option:hover{background:#f8faff}
+.account-claim-option[aria-expanded=true]{background:#f4f7fe;border-radius:8px 8px 0 0}
+.claim-ref{font-size:11px;color:#74849b;padding-top:3px}
+.claim-option-text{display:block;font-size:13px;line-height:1.7;font-weight:400;color:#40536f;overflow-wrap:anywhere}
+.claim-option-meta{display:flex;column-gap:12px;row-gap:3px;flex-wrap:wrap;align-items:center;font-size:11px;line-height:1.7;color:#74849b;margin-top:6px}
+.claim-inline-body{padding:16px 28px 20px 41px}
+.claim-inline-assessment{font-size:13px;line-height:1.85;color:#4d5e76;max-width:85ch;margin:0 0 12px;overflow-wrap:anywhere}
+.claim-inline-status{display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:#6b7d96;margin-bottom:13px}
+.claim-inline-sources{display:grid;gap:9px;max-width:560px;margin-bottom:12px}
+.claim-inline-sources p{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;font-size:12px;color:#617894;margin:0}
+.claim-inline-sources small{font-size:11px;color:#748399}
+.claim-page-link{display:inline-flex;align-items:center;gap:8px;min-height:38px;font-size:12px;color:#406da8}
+.claim-empty{padding:35px 16px;text-align:center;font-size:12px;color:#74849b}
+.claim-empty p{font-size:14px;color:#61728b;margin:0 0 5px}
+.claim-empty button{display:block;margin:12px auto 0;color:#456eae;min-height:36px;font-size:12px}
+.account-records{margin-top:23px;font-size:12px;color:#6c7d94}
+.account-records>p{max-width:85ch;line-height:1.8}
+.account-records>a{font-size:12px;display:inline-flex;min-height:36px;align-items:center}
+.technical-disclosure{margin:14px 0;color:#6c7d94}
+.technical-disclosure>summary,.account-records>summary{font-size:12px;color:#72839b;min-height:38px}
+.claim-page.account-study{max-width:960px;padding:20px 28px 72px;margin:auto}
+.claim-page-heading{padding:6px 0 22px}
+.claim-page-kind{font-size:12px;color:#6b7b91;margin:0 0 10px}
+.claim-page-account{font-size:12px;color:#748399;margin:0;line-height:1.7}
+.claim-page-account a{color:#5c769a}
+.claim-detail-panel{padding:0;border:0;background:transparent}
+.claim-detail-panel>[role=tabpanel]{max-width:80ch}
+.claim-detail-panel h2,.claim-detail-panel h3{font-size:15px;line-height:1.6;color:#354963;font-weight:550;margin:0 0 12px}
+.claim-detail-panel h4{font-size:12px;font-weight:500;color:#6b7b91;margin:0 0 6px}
+.claim-detail-panel p{font-size:14px;line-height:1.85;color:#4d5e76;overflow-wrap:anywhere}
+.claim-detail-panel .detail-proposition{font-size:15px;color:#405571;max-width:78ch}
+.claim-detail-panel .small-note{font-size:12px;line-height:1.75;color:#6b7b91}
+.scientific-keyval{display:grid;grid-template-columns:100px minmax(0,1fr);gap:12px;font-size:13px;margin:22px 0;line-height:1.8}
+.scientific-keyval dt{color:#6b7b91}
+.scientific-keyval dd{margin:0;color:#425875;overflow-wrap:anywhere}
+.claim-evidence{padding:24px 0;border-bottom:1px solid #e7ecf3}
+.claim-evidence:first-of-type{padding-top:0}
+.evidence-heading{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:10px}
+.evidence-heading h3{font-size:13px;color:#48617f;margin:0}
+.evidence-direction{font-size:11px;color:#496999;background:#edf3ff;border-radius:5px;padding:2px 6px}
+.source-assessment{margin:20px 0;padding-left:14px;border-left:2px solid #e6edf6}
+.source-assessment p{font-size:13px;margin:7px 0}
+.evidence-metrics{display:grid;gap:6px;margin:12px 0}
+.metric-observation{display:flex;align-items:center;justify-content:space-between;gap:14px;font-size:12px;line-height:1.6;color:#6b7c93;padding:3px 0}
+.metric-observation b{font-size:15px;font-weight:550;font-variant-numeric:tabular-nums;color:#385574;white-space:nowrap}
+.metric-observation small{font-size:11px}
+.source-locator{font-size:12px!important;overflow-wrap:anywhere}
+.source-snippet{font-size:12px;line-height:1.8;white-space:pre-wrap;overflow-wrap:anywhere;background:#f7f9fc;color:#71819b;border-radius:6px;padding:12px;margin:10px 0}
+.source-artifact-card{padding:14px 0;border-top:1px solid #edf1f5}
+.source-artifact-heading{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap}
+.source-artifact-heading>div{min-width:0;flex:1}
+.source-artifact-heading a{font-size:13px;color:#496e9f;overflow-wrap:anywhere}
+.source-artifact-heading small{font-size:11px;color:#72839b;margin-top:4px}
+.source-artifact-card .technical-disclosure{margin:4px 0 0}
+.construction-provenance,.referenced-records{border-top:1px solid #e7ecf3;margin-top:24px;padding-top:24px}
+.referenced-records>a{display:block;font-size:13px;line-height:1.8;margin:8px 0;overflow-wrap:anywhere}
+.account-study .research-downloads{column-gap:22px;row-gap:6px;margin:24px 0 7px}
+.account-study .paragraph-export-note{font-size:12px;color:#708098;line-height:1.7;margin:0 0 26px;max-width:76ch}
+.account-study .research-references{max-width:80ch;overflow-wrap:anywhere;border-top:1px solid #edf0f5;padding-top:22px;margin:22px 0 0}
+.account-study .research-references h3{font-size:14px;color:#4d6380;margin:0 0 16px}
+.research-references h3 span{font-size:12px;color:#73849a;margin-left:5px}
+.research-references ol{padding-left:21px;margin:0;font-size:11px;color:#8391a5}
+.research-references li{padding-left:7px;margin:0 0 20px;scroll-margin:30px;border-radius:5px}
+.account-study .research-references li p{font-size:13px;line-height:1.8;color:#66778f;margin:0 0 4px}
+.reference-title{color:#46668f;font:inherit}
+.reference-meta{font-size:11px;line-height:1.7;color:#73839a}
+.formatted-reference summary{font-size:11px;padding:6px 0;color:#8291a6}
+.account-study .formatted-reference p{font-size:12px!important;color:#74849b!important}
+.research-references li:target,.research-references li:focus{background:#f2f6fc;outline:2px solid #e0e9f7;outline-offset:7px}
+.account-preview{margin:20px 0}
+.account-preview-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:12px}
+.account-preview-heading h3{font-size:14px;font-weight:500;color:#4f6380;margin:0}
+.account-preview-heading>span{font-size:11px;color:#718399}
+.account-result{padding:23px;border:1px solid #e1e8f2;border-radius:12px;background:#fff}
+.account-result h4{font-size:16px;font-weight:500;line-height:1.6;color:#354963;margin:0 0 12px}
+.account-result-closing{font-size:13px;line-height:1.85;color:#4d5e76;margin:0;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:5;overflow:hidden;overflow-wrap:anywhere}
+.account-facts{display:flex;gap:18px;flex-wrap:wrap;margin:17px 0 16px;color:#71819a;font-size:12px}
+.account-facts b{font-weight:550;color:#506079}
+.account-result-actions{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-top:18px}
+.inspect-account{display:inline-flex;align-items:center;gap:16px;min-height:38px;font-size:13px;color:#416ba4}
+.account-parts{display:flex;align-items:center;flex-wrap:wrap;column-gap:14px;row-gap:0}
+.account-parts>a{font-size:12px;color:#5b789f;min-height:38px;display:inline-flex;align-items:center}
+.account-paragraph-status{font-size:11px;color:#718399}
+@media(max-width:740px){.account-topbar{margin-bottom:24px;align-items:flex-start;gap:18px}.account-topbar>a:last-child{text-align:right;justify-content:flex-end}.account-gap{margin-bottom:24px}.account-gap h1,.claim-page-heading h1{font-size:19px;line-height:1.6}.account-study .reading-tabs{gap:22px}.account-study .reading-tabs button{font-size:12px;min-height:44px}.account-conclusions,.account-study .research-prose{font-size:14px;line-height:1.85}.claim-inline-body{padding:15px 14px 18px 41px}.claim-page.account-study{padding:12px 20px 48px}.scientific-keyval{grid-template-columns:85px minmax(0,1fr)}.claim-detail-panel .reading-tabs{gap:clamp(14px,4vw,22px);flex-wrap:nowrap}.account-study .research-downloads{gap:6px 18px}.account-result{padding:18px}.account-result-actions{align-items:flex-start;row-gap:2px}.account-parts{column-gap:10px}.source-artifact-heading{align-items:flex-start}}
+@media(prefers-reduced-motion:reduce){.claims-toggle-caret,.claim-selection-caret{transition:none}}
+@media(max-width:360px){.claim-detail-panel .reading-tabs{gap:12px}.claim-detail-panel .reading-tabs button{font-size:11px}}
+
+.account-study .statement-progress{margin-left:6px;color:#6382b9}
+.manual-paragraph-copy{margin:16px 0 24px}
+.manual-paragraph-copy label{display:block;font-size:12px;color:#61728b;margin-bottom:8px}
+.manual-paragraph-copy textarea{width:100%;max-width:100%;resize:vertical;padding:12px;border:1px solid #dce4ee;border-radius:8px;background:#fafcff;color:#4d5e76;font-size:13px;line-height:1.7}
+.manual-paragraph-copy>div{display:flex;gap:18px;flex-wrap:wrap}
+.paragraph-technical>a{font-size:12px;display:inline-flex;min-height:36px;align-items:center}
+.scientific-json{max-width:100%;white-space:pre-wrap;overflow-wrap:anywhere;font:11px/1.75 ui-monospace,monospace;color:#526780;background:#f5f7fb;border-radius:8px;padding:14px}
+@media(max-width:740px){.reading-page:has(>.scientific.account-study){padding-top:12px}}

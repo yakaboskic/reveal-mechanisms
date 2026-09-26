@@ -103,7 +103,8 @@
         "getAccount.request",
         "getClaim.request",
         "getGeneSet.request",
-        "resolveDapperObject.request"
+        "resolveDapperObject.request",
+        "downloadArtifact.request"
       ],
       "rules": [
         "Conclusions and Research statement are divider tabs.",

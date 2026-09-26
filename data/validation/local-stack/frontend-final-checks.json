@@ -1,0 +1,24 @@
+{
+  "tests": {
+    "passed": 9,
+    "failed": 0
+  },
+  "typecheck": "passed",
+  "production_build": "passed",
+  "includes": [
+    "explicit-delta presentation preserving original events",
+    "visible native trait/factor selection",
+    "safe same-origin source artifact download",
+    "exact saved-record citation resolver"
+  ],
+  "checked_while": "stack stopped after first live scientific rejection",
+  "subsequent_css_only_change": {
+    "file": "services/frontend/src/app/globals.css",
+    "change": ".references overflow-wrap:anywhere",
+    "actual_browser_verified": true,
+    "mobile_before_document_width": 514,
+    "mobile_after_document_width": 390,
+    "viewport_width": 390,
+    "production_build_repeated": false
+  }
+}

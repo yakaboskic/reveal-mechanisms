@@ -1,0 +1,100 @@
+{
+  "measured_at": "2026-09-25T21:20:33.126794+00:00",
+  "measurement": "Five sequential read-only verified-TLS connections per surface; SELECT1, indexed current job and queue reads; ROLLBACK. No write lock, mutations, or credentials in report.",
+  "host_median_seconds": {
+    "connect_seconds": 1.1170783340057824,
+    "select_1_seconds": 0.13022999998065643,
+    "indexed_job_seconds": 0.1227113330096472,
+    "indexed_queue_seconds": 0.12390345800668001,
+    "rollback_seconds": 0.1425141670042649
+  },
+  "active_worker_container_median_seconds": {
+    "connect_seconds": 1.1281534169993392,
+    "select_1_seconds": 0.13152554199950828,
+    "indexed_job_seconds": 0.1312453340005959,
+    "indexed_queue_seconds": 0.12752029100010986,
+    "rollback_seconds": 0.14584358299998712
+  },
+  "sample_count_per_surface": 5,
+  "implementation_before_read_path_optimization": {
+    "new_remote_event_sql_statements": 10,
+    "commit_round_trips": 1,
+    "opens_connection_for_each_event": true,
+    "sse_read_sql_statements": 4,
+    "sse_commit_round_trips": 1,
+    "sse_uses_global_exclusive_write_mutex": true,
+    "sse_fetches_all_owner_events_before_python_filter": true
+  },
+  "derived_not_observed": {
+    "method": "connection median + 11 * SELECT1 median; excludes lock contention, larger payloads, retries, and other job stages",
+    "seconds_per_event_baseline_estimate": 2.575,
+    "minutes_for_297_events_baseline_estimate": 12.746,
+    "applies_to": "Historical implementation before bounded batch persistence"
+  },
+  "limitation": "Historical measurements above separate observable event delivery from remote inference and evidence retrieval. The current implementation additionally removes SSE write-lock contention and persists bounded event batches; post-change end-to-end latency is pending live integration measurement.",
+  "read_path_optimization": {
+    "sse_job_get_and_readiness_use_read_only_consistent_snapshots": true,
+    "sse_global_write_mutex": false,
+    "event_query": "Owner-scoped job/padded-sequence primary-key range, ORDER BY id, LIMIT+1",
+    "aurora_read_only_verification": {
+      "read_only_snapshot_completed": true,
+      "elapsed_seconds": 2.0801727079960983,
+      "tls_verified": true,
+      "returned_rows": 21,
+      "sql_limit": 21,
+      "selected_index": "PRIMARY",
+      "access_type": "range",
+      "estimated_examined_rows": 118,
+      "extra": "Using where"
+    },
+    "remaining_limitation": "Connections remain fresh per transaction. Worker now supports bounded bulk batches; live delivery latency after batching is pending measurement."
+  },
+  "bounded_event_batch_optimization": {
+    "event_cap": 20,
+    "compact_utf8_json_byte_cap": 262144,
+    "individual_public_events_preserved": true,
+    "individual_remote_deduplication_preserved": true,
+    "cursor_checkpoint_after_durable_chunk": true,
+    "measured_sqlite_statement_count": {
+      "one_event": 5,
+      "twenty_events": 5,
+      "bulk_insert_statements": 1,
+      "job_update_statements": 1,
+      "excludes": "SQLite BEGIN and COMMIT; Aurora additionally executes the existing write-mutex SELECT"
+    },
+    "regression_test_module": "services/backend/tests/test_event_batches.py",
+    "new_regression_tests": 8,
+    "focused_suite": {
+      "ran": 27,
+      "passed": 27,
+      "skipped": 0,
+      "seconds": 1.636
+    },
+    "live_latency_after_batching": {
+      "job_id": "431fcc31-46e7-42a3-8f8b-5ff0be1e9403",
+      "remote_public_events": 445,
+      "remote_completion_to_research_terminal_seconds": 125.781949,
+      "interpretation": "Observed total includes backlog capture, trusted validation, independent model review, and Aurora publication; not isolated batch latency.",
+      "evidence": "live-browser-retry-validation.json"
+    },
+    "aurora_batch_statement_count_from_code": {
+      "sql_statements": 6,
+      "commit_round_trips": 1,
+      "method": "Five storage statements measured in isolated SQLite regression, plus the existing Aurora transaction-lock SELECT; no new Aurora write benchmark performed.",
+      "additional_control_transactions": "Remote cursor checkpoints and cancellation checks are separate transactions."
+    },
+    "focused_recovery_transport_suite": {
+      "ran": 49,
+      "passed": 49,
+      "skipped": 0,
+      "seconds": 1.245
+    },
+    "full_backend_suite": {
+      "ran": 177,
+      "passed": 169,
+      "skipped": 8,
+      "seconds": 113.443,
+      "log_sha256": "fa9c51a37b9a4facdaf0a8e935c5c800d3b664f3769b572b3b83a2d8b9410ff9"
+    }
+  }
+}

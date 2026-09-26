@@ -431,6 +431,10 @@ def build_package(spec, blobs, dapper):
         require(retained <= requested_nodes, 'Retained nodes were not included in contextual query')
 
     mechanisms, traits = {}, {}
+    observed_loadings = {(edge['source'], kind) for edge in edges.values()
+                         for kind in ('gene', 'gene_set', 'trait')
+                         if edge['family'] == 'factor_' + kind + '_direct'}
+    queried_trait_collections, observed_trait_collections = set(), set()
     for identity, binding in sorted(spec['mechanisms'].items()):
         node = bound_node(binding['dapper_id'], 'Mechanism')
         fit = binding['fit']; trait_id = fit['trait_id']; resolver.expand(trait_id)
@@ -451,7 +455,8 @@ def build_package(spec, blobs, dapper):
             require(response['q'] == [fit['phenotype'], model], 'Trait query scope mismatch')
             require(response['index'] == 'pigean-' + kind.replace('_', '-') + '-phenotype', 'Trait index mismatch')
             trait_collection = traits[trait_id][kind + '_associations']
-            if not trait_collection['items']: trait_collection['status'] = 'empty'
+            queried_trait_collections.add((trait_id, kind))
+            if response['data']: observed_trait_collections.add((trait_id, kind))
             for i, row in enumerate(response['data']):
                 require((row['phenotype'], row['trait_group'], row['gene_set_size']) ==
                         (fit['phenotype'], fit['trait_group'], model), 'Trait row scope mismatch')
@@ -471,6 +476,10 @@ def build_package(spec, blobs, dapper):
         response = source(ref(artifact_id)); fit = mechanisms[mechanism_id]['fit']
         require(response['q'] == [fit['phenotype'], model, fit['factor']], 'BioIndex query scope mismatch')
         require(response['index'] == 'pigean-' + kind.replace('_', '-') + '-factor', 'BioIndex index mismatch')
+        queried_trait_collections.add((fit['trait_id'], kind))
+        if response['data']:
+            observed_loadings.add((mechanism_id, kind))
+            observed_trait_collections.add((fit['trait_id'], kind))
         bioindex_coverage.append({'artifact_id': artifact_id, 'returned_rows': len(response['data']),
                                  'limit': response.get('limit'), 'continuation_present': bool(response.get('continuation')),
                                  'progress': response.get('progress'), 'exhaustive': False})
@@ -513,11 +522,26 @@ def build_package(spec, blobs, dapper):
             collection['status'] = 'ok'
 
     entities = {'genes': {}, 'gene_sets': {}}
-    for mechanism in mechanisms.values():
+    for identity, mechanism in mechanisms.items():
         for collection, target in [('gene_loadings', 'gene'), ('gene_set_loadings', 'gene_set'), ('trait_loadings', 'trait')]:
             mechanism[collection]['query_status'] = query_states[target]
-            if not mechanism[collection]['items'] and query_states[target] in ('ok', 'ok_limit_reached', 'empty'):
-                mechanism[collection]['status'] = 'empty'
+            if not mechanism[collection]['items']:
+                if (identity, target) in observed_loadings:
+                    mechanism[collection]['status'] = 'omitted'
+                elif query_states[target] == 'empty':
+                    mechanism[collection]['status'] = 'empty'
+                elif query_states[target] in ('ok', 'ok_limit_reached'):
+                    # A positive multi-anchor query with no observation for this
+                    # anchor is not a successful zero-result query for the anchor.
+                    mechanism[collection]['status'] = 'not_available'
+    for identity, trait in traits.items():
+        for kind in ('gene', 'gene_set'):
+            collection = trait[kind + '_associations']
+            if not collection['items']:
+                if (identity, kind) in observed_trait_collections:
+                    collection['status'] = 'omitted'
+                elif (identity, kind) in queried_trait_collections:
+                    collection['status'] = 'empty'
     for identity in sorted(retained - set(anchors)):
         kind = candidates[identity]['node']['node_type']
         if kind == 'gene':

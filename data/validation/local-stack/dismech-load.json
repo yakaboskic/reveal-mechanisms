@@ -1,0 +1,28 @@
+{
+  "import_id": "4062563df48bbc8aa418b7add0af083115184e70c1d909e66ab70d505087e395",
+  "database": "cyaka_reveal_mechanisms",
+  "status": "complete",
+  "apply": true,
+  "counts": {
+    "documents": 3361,
+    "mechanisms": 19959,
+    "causal_edges": 37149,
+    "hypotheses": 1025,
+    "ontology_terms": 21382,
+    "vocabulary": 54690,
+    "discussions": 4051,
+    "knowledge_gaps": 3367,
+    "gap_attachments": 6422
+  },
+  "gaps_by_kind": {
+    "KNOWLEDGE_GAP": 2604,
+    "HUMAN_MODEL_MISMATCH": 763
+  },
+  "attachment_resolution": {
+    "whole_section": 79,
+    "resolved": 6329,
+    "ambiguous_target": 10,
+    "whole_document": 4
+  },
+  "verified": true
+}

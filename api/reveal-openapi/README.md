@@ -1,6 +1,6 @@
 # REVEAL API implementation contract
 
-**OpenAPI 3.1.1 · contract 0.2.0-draft · design v12.1 · September 25, 2026.** This is a proposed API, not a running service. It aligns with the [consolidated plan](../docs/design-plan.md), approved HTML interaction and current evidence-package schema. It has **30 operations**, with schemas and paired input/output examples for every operation. The v12.1 update changes retrieval/routing guidance; public wire shapes are unchanged.
+**OpenAPI 3.1.1 · contract 0.2.0-draft · design v12.1 · September 25, 2026.** This contract is implemented by the local FastAPI service; see [startup instructions](../docs/local-development.md) and [runtime validation](../docs/validation-report.md). It aligns with the [consolidated plan](../docs/design-plan.md), approved HTML interaction and current evidence-package schema. It has **31 operations**, with schemas and paired input/output examples for every operation. The implementation adds an authorized captured-artifact download route without changing scientific identities.
 
 ## Open and share
 
@@ -28,12 +28,15 @@ Open [the API viewer](http://127.0.0.1:8765/) or [interactive flow](http://127.0
 | Analysis / paragraph work | `GET/POST /v1/jobs`; `GET /v1/jobs/{id}`, `/events`; `POST /cancel` | `JobCreate`, `Job`, `AnalysisResult`, `ParagraphResult`, typed `JobEvent` |
 | Frozen agent input | `GET /v1/jobs/{id}/evidence-package` | `EvidencePackageResult`; actual generated LinkML `EvidencePackage` schema bundled as components |
 | Scientific inspection | `GET /v1/accounts/{id}`, `/claims/{id}`, `/gene-sets/{id}`, `/paragraphs/{id}`, `/objects/{id}` | Hydrated DAPPER documents, exact payload checksums, schema pins, coverage and authorized artifacts |
+| Captured source bytes | `GET /v1/artifacts/{sha256}` | Owner-authorized, checksum-verified attachment bytes; never a mutable upstream fetch |
 | Personal workspace | `GET /v1/accounts`; `GET/POST /v1/me/explorations` | `AccountList`, `ExplorationInput`, `ExplorationList` |
 | Render and export | `GET /v1/citations/{id}`; `POST /v1/citations/render`; `GET /v1/paragraphs/{id}/export` | Registry metadata/formats, `CitationRendering`, `ParagraphExport` |
 
 No arbitrary Question input is accepted by Composer. `source_gap` identifies the exact imported DisMech observation; backend resolves immutable scientific text and linked DisMech mechanisms. Drafts may be empty, but jobs require one selected gap and 1–10 resolved `cfde-inc-v2` anchors. Five automatic defaults are total across linked mechanisms, removable and deduplicated. Initial retrieval searches the existing EAGGL embeddings joined to the [populated exact-trait/factor crosswalk](../docs/eaggl-cfde-links.md), with 1,756 mapped factors. Filter mapped candidates before the top-five cutoff; return fewer if necessary. Label/gene agreement and full current-model re-embedding are not requirements.
 
 Search/detail/suggestion responses keep the existing `EagglFactor` shape: native CFDE `source_id` / `cfde_anchor.node_id`, source revision, DAPPER Mechanism and catalog File. A friendly EAGGL label can be presented through `cfde_anchor.label` without rewriting scientific identity. The backend binds the originating source hit, embedding run and mapping run to the saved selection/request; `SourceRef.source_revision` remains the scientific source revision. These application bindings do not require new public endpoints or a new evidence-package field. Join the mapping's ranked GeneSet references through existing aliases for object navigation; full evidence collection still uses the interactive and BioIndex calls. See [routing and revision rules](../docs/design-plan.md#initial-crosswalk-backed-retrieval-contract).
+
+The local implementation supports lexical/fuzzy knowledge-gap search and existing EAGGL semantic retrieval. Gap semantic/hybrid modes return an explicit unavailable-mode error; no gap embedding corpus is fabricated. DisMech mechanism search loads the complete 19,959-record corpus on demand. Pure semantic mechanism search requires `source=eaggl`; hybrid search can combine EAGGL retrieval with DisMech lexical results.
 
 ## Evidence, DAPPER and agent outputs
 
@@ -57,6 +60,8 @@ Events use per-job monotonic IDs; JSON replay or SSE. `Last-Event-ID` and `after
 Accept each account with a transactional paragraph outbox entry. Analysis result carries separate paragraph job IDs; account detail carries research-statement status. Analysis success does not wait for paragraph success. Default generation deduplicates by account payload, citation pins, settings and skill version; explicit paragraph jobs allow retry/focus changes without new research.
 
 Provenance resolution is bounded upstream traversal (depth≤5, nodes≤250), with explicit completeness/missing references and opaque continuation. No unauthorized IDs are exposed. Recorded local File locations do not imply a download; artifact access has availability and verification metadata. GeneSet membership/construction coverage remains explicit.
+
+Each provenance page repeats its unchanged terminal root and adds upstream nodes. Use `max_nodes` of at least two for continuation; one returns only the root and explicit missing references. Signed cursors bind the owner, root payload, full immutable document and traversal limits.
 
 Citations pin immutable metadata revisions and code-point spans. Registry revisions never fall back silently to latest. DAPPER digest is not a registered DOI. `/export` returns JSON with content/filename/media type, complete citation targets and required companion files; rich text supplies HTML/plain text, LaTeX uses `\cite` and reminds users to fetch `references.bib`. Actual canonical URLs, CSL implementation/style/locale pins and access checks are service work. APA/MLA examples remain formatting-shape fixtures, not measured CSL-renderer output.
 

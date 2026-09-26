@@ -1,0 +1,9 @@
+{
+  "source": "actual owner-scoped browser download",
+  "file": "catalog-62bd637171ba.attempt-1.json",
+  "bytes": 816,
+  "sha256": "aca5b3fa6542f90f3bdb59368737b0c7e06d232ccf1d5b959767f3101a8ce56c",
+  "matches_persisted_dapper_file": true,
+  "other_anonymous_owner": "c1b07e7b-c8de-4d26-9bbf-caf2100b7587",
+  "other_owner_response": 404
+}

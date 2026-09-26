@@ -1,0 +1,405 @@
+"""Real Upstash Box transport using the pinned SDK and a trusted Claude runner."""
+from __future__ import annotations
+import asyncio
+import base64
+import hashlib
+import io
+import json
+import os
+from pathlib import Path, PurePosixPath
+import re
+import shlex
+import tarfile
+import tempfile
+import time
+
+from .agent_execution import (ExecutionRequest, ExecutionResult, MAX_EMIT_BATCH_BYTES,
+                              MAX_EMIT_BATCH_EVENTS, emit_batch_size)
+from .box_mcp import GRAPHS
+
+CLAUDE_VERSION = '2.1.282'
+MODEL = 'claude-sonnet-4-6'
+REMOTE_PYTHON = '/reveal/venv/bin/python'
+REMOTE_MODULE = 'reveal_backend.box_remote'
+CAPTURE_MARKER = '.box-capture-complete.json'
+TERMINAL_STATUSES = ('succeeded', 'failed', 'cancelled', 'insufficient_evidence')
+
+
+class BoxConfigurationError(ValueError):
+    pass
+
+
+class BoxTransportError(RuntimeError):
+    """Recovery must reuse the persisted remote handle after this exception."""
+
+
+def atomic_capture_marker(path, value):
+    """Only the trusted local transport writes this marker, outside agent output."""
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(dir=path.parent, prefix='.capture-', delete=False) as output:
+            temporary = Path(output.name)
+            output.write(json.dumps(value, sort_keys=True).encode())
+            output.flush(); os.fsync(output.fileno())
+        temporary.replace(path)
+        descriptor = os.open(path.parent, os.O_RDONLY)
+        try: os.fsync(descriptor)
+        finally: os.close(descriptor)
+    except OSError as exc:
+        raise BoxTransportError('Local capture checkpoint is not durable; retain the remote handle') from exc
+    finally:
+        if temporary:
+            temporary.unlink(missing_ok=True)
+
+
+def capture_binding(request, handle):
+    return {'job_id': request.job_id, 'attempt': request.attempt, 'kind': request.kind,
+            'box_id': handle['box_id'], 'selected_graphs': list(request.selected_graphs),
+            'input_sha256': hashlib.sha256(request.input_path.read_bytes()).hexdigest()}
+
+
+def read_capture_marker(request, handle):
+    path = request.output_dir / CAPTURE_MARKER
+    if not path.exists(): return None
+    try:
+        marker = json.loads(path.read_text())
+        if marker['format'] != 'reveal.box-capture/1' or marker['binding'] != capture_binding(request, handle):
+            raise ValueError('Capture binding differs')
+        if marker['state']['status'] not in TERMINAL_STATUSES or type(marker['cleanup_complete']) is not bool:
+            raise ValueError('Capture is not terminal')
+        if not isinstance(marker['files'], dict) or not marker['files']:
+            raise ValueError('Capture files are missing')
+        total = 0
+        for name, expected in marker['files'].items():
+            relative = PurePosixPath(name)
+            target = request.output_dir / name
+            if relative.is_absolute() or '..' in relative.parts or target.is_symlink() or not target.resolve().is_relative_to(request.output_dir.resolve()):
+                raise ValueError('Capture path escapes attempt')
+            raw = target.read_bytes(); total += len(raw)
+            if len(raw) > 8_000_000 or total > 40_000_000 or len(raw) != expected['size_bytes'] or hashlib.sha256(raw).hexdigest() != expected['sha256']:
+                raise ValueError('Captured bytes changed')
+        return marker
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        raise BoxTransportError('Trusted local capture is incomplete or changed; recovery cannot accept it') from exc
+
+
+def captured_result(request, handle, marker):
+    files = marker['files']
+    accounts = tuple(request.output_dir / name for name in sorted(files)
+                     if re.fullmatch(r'output/account-[1-3]\.(json|yaml|yml)', name))
+    def found(name): return request.output_dir / name if name in files else None
+    return ExecutionResult(marker['state']['status'], request.output_dir, account_paths=accounts,
+                           paragraph_path=found('output/paragraph.json'), runtime_manifest_path=found('runtime.json'),
+                           ledger_manifest_path=found('ledger/manifest.json'), reason=marker['state'].get('reason'),
+                           remote_handle=handle)
+
+
+def verified_box_not_found(exc):
+    try:
+        from upstash_box.errors import BoxError
+    except ImportError:
+        return False
+    return isinstance(exc, BoxError) and exc.status_code == 404
+
+
+def public_event_batches(events, cursor, stream_id, secrets):
+    """Bound already available events without coalescing, clipping or waiting."""
+    secrets = tuple(secrets)
+    chunk = []
+    for index, item in enumerate(events, start=cursor + 1):
+        payload = dict(item['payload'], remote_sequence=index, remote_stream_id=stream_id)
+        encoded = json.dumps(payload, ensure_ascii=False)
+        for secret in secrets:
+            encoded = encoded.replace(secret, '[REDACTED]')
+        event = (item['type'], json.loads(encoded))
+        if emit_batch_size([event]) > MAX_EMIT_BATCH_BYTES:
+            raise BoxTransportError('Public event exceeds delivery limit; retain the remote cursor and capture')
+        if chunk and (len(chunk) == MAX_EMIT_BATCH_EVENTS or emit_batch_size([*chunk, event]) > MAX_EMIT_BATCH_BYTES):
+            yield chunk
+            chunk = []
+        chunk.append(event)
+    if chunk:
+        yield chunk
+
+
+def required_environment(environ=None):
+    environment = os.environ if environ is None else environ
+    return [key for key in ('UPSTASH_BOX_API_KEY', 'ANTHROPIC_API_KEY') if not environment.get(key)]
+
+
+def make_bundle(project_root: Path, request: ExecutionRequest):
+    """Explicit file allowlist: never upload project .env, caches or unrelated code."""
+    source = project_root / 'services/backend/src/reveal_backend'
+    files = {}
+    for name in ('__init__.py', 'evidence_package.py', 'dapper_release.py', 'scientific_account_lint.py',
+                 'box_remote.py', 'box_stream.py', 'box_mcp.py'):
+        files['bundle/services/backend/src/reveal_backend/' + name] = (source / name).read_bytes()
+    relative = ['scripts/lint_scientific_account.py', 'services/backend/agent-runtime/dapper-release.json',
+                'services/backend/agent-skills/construct-scientific-account/SKILL.md',
+                'services/backend/agent-skills/write-cited-paragraph/SKILL.md',
+                'docs/evidence-package.md', 'docs/scientific-account-construction.md', 'docs/pigean-claim-model.md',
+                'docs/dapper-integration.md', 'docs/agent-evidence-integration.md', 'docs/scientific-account-linting.md']
+    for name in relative:
+        files['bundle/' + name] = (project_root / name).read_bytes()
+    if request.input_path.stat().st_size > 8_000_000:
+        raise BoxConfigurationError('Frozen input exceeds the byte budget')
+    data = request.input_path.read_bytes()
+    value = json.loads(data)
+    if request.kind == 'research':
+        from jsonschema import FormatChecker
+        from jsonschema.validators import validator_for
+        schema = json.loads((project_root / 'schema/evidence-package.schema.json').read_text())
+        validator_for(schema)(schema, format_checker=FormatChecker()).validate(value)
+        if value.get('readiness', {}).get('input_capture_complete') is not True:
+            raise BoxConfigurationError('Evidence capture is incomplete; paid execution is disabled')
+        if set(value['external_evidence']['selected_graphs']) != set(request.selected_graphs):
+            raise BoxConfigurationError('Selected graphs do not match the frozen evidence package')
+        files['input/evidence-package.json'] = data
+        input_bytes = len(data)
+        for item in value['source_artifacts'].values():
+            path = PurePosixPath(item['path'])
+            origin = (request.input_path.parent / str(path)).resolve()
+            if path.is_absolute() or '..' in path.parts or not origin.is_relative_to(request.input_path.parent.resolve()):
+                raise BoxConfigurationError('Source artifact path escapes input bundle')
+            input_bytes += origin.stat().st_size
+            if origin.stat().st_size > 8_000_000 or input_bytes > 40_000_000:
+                raise BoxConfigurationError('Source artifacts exceed the input byte budget')
+            content = origin.read_bytes()
+            if hashlib.sha256(content).hexdigest() != item['sha256']:
+                raise BoxConfigurationError('Source artifact checksum mismatch')
+            files['input/' + str(path)] = content
+    elif request.kind == 'paragraph':
+        if value.get('format') != 'reveal.paragraph-input/1' or request.selected_graphs:
+            raise BoxConfigurationError('Invalid paragraph input format or external graph selection')
+        files['input/paragraph-input.json'] = data
+    else:
+        raise BoxConfigurationError('Unsupported execution kind')
+    result = io.BytesIO()
+    with tarfile.open(fileobj=result, mode='w:gz') as archive:
+        for name, content in files.items():
+            if len(content) > 8_000_000:
+                raise BoxConfigurationError('Input artifact exceeds limit')
+            info = tarfile.TarInfo(name)
+            info.size, info.mode, info.mtime = len(content), 0o644, 0
+            archive.addfile(info, io.BytesIO(content))
+    if result.tell() > 25_000_000:
+        raise BoxConfigurationError('Input bundle exceeds limit')
+    return result.getvalue()
+
+
+class BoxExecutionAdapter:
+    def __init__(self, project_root: Path, *, environ=None, box_factory=None, poll_interval=0.7):
+        self.project_root = Path(project_root).resolve()
+        self.environ = os.environ if environ is None else environ
+        self.box_factory = box_factory
+        self.poll_interval = poll_interval
+
+    async def command(self, box, command):
+        try:
+            run = await box.exec.command(command)
+        except Exception as exc:
+            raise BoxTransportError('Box command transport interrupted; retain the remote handle') from exc
+        if str(run.status) != 'completed':
+            # Do not interpolate remote command/stderr: credentials could occur there.
+            raise BoxTransportError('Box command did not complete; inspect protected remote diagnostics')
+        return run.result
+
+    async def remote(self, box, action, *args):
+        command = ['sudo', '-n', 'env', 'PYTHONDONTWRITEBYTECODE=1',
+                   'PYTHONPATH=/reveal/bundle/services/backend/src', REMOTE_PYTHON,
+                   '-B', '-m', REMOTE_MODULE, action, *[str(x) for x in args]]
+        return await self.command(box, shlex.join(command))
+
+    async def prepare(self, box, request, bundle):
+        await box.files.write(path='/tmp/reveal-bundle.tgz', content=base64.b64encode(bundle).decode(), encoding='base64')
+        config = {'job_id': request.job_id, 'attempt': request.attempt, 'kind': request.kind,
+                  'selected_graphs': list(request.selected_graphs), 'timeout_seconds': request.timeout_seconds,
+                  'max_budget_usd': request.max_budget_usd, 'max_turns': request.max_turns,
+                  'model': self.environ.get('REVEAL_CLAUDE_MODEL', MODEL), 'claude_version': CLAUDE_VERSION,
+                  'input_sha256': hashlib.sha256(request.input_path.read_bytes()).hexdigest()}
+        config['validation_feedback'] = list(request.validation_feedback)
+        await box.files.write(path='/tmp/reveal-request.json', content=json.dumps(config))
+        # Setup is a trusted static command; no model-authored shell or credentials.
+        bootstrap = '''set -eu
+sudo mkdir -p /reveal/state
+sudo tar -xzf /tmp/reveal-bundle.tgz -C /reveal
+sudo mv /tmp/reveal-request.json /reveal/request.json
+sudo useradd --create-home --uid 1999 --shell /usr/sbin/nologin reveal-agent
+sudo apt-get update -qq
+sudo apt-get install -y -qq python3-venv
+sudo python3 -m venv /reveal/venv
+sudo /reveal/venv/bin/pip -q install PyYAML==6.0.2 linkml==1.11.1 rdflib==7.6.0
+sudo mkdir /reveal/claude
+sudo npm install --prefix /reveal/claude --no-audit --no-fund @anthropic-ai/claude-code@''' + CLAUDE_VERSION + '''
+sudo chmod 755 /reveal
+sudo chmod 755 /reveal/state
+sudo /reveal/claude/node_modules/.bin/claude --version
+'''
+        await box.files.write(path='/tmp/reveal-bootstrap.sh', content=bootstrap)
+        await self.command(box, 'sh /tmp/reveal-bootstrap.sh')
+        # Secret only uses structured SDK file input, then root-only protection before launch.
+        await box.files.write(path='/tmp/reveal-credential.json', content=json.dumps({'ANTHROPIC_API_KEY': self.environ['ANTHROPIC_API_KEY']}))
+        await self.command(box, 'sudo mv /tmp/reveal-credential.json /reveal/credentials.json && sudo chown root:root /reveal/credentials.json && sudo chmod 600 /reveal/credentials.json')
+        # After installation only Anthropic and the fixed evidence service are reachable.
+        await box.update_network_policy({'mode': 'custom', 'allowed_domains': ['api.anthropic.com', 'apps.okn.us', 'github.com']})
+        # DAPPER clone is intentionally fresh and requires github.com after policy tightening.
+
+    async def execute(self, request, emit, cancelled, checkpoint):
+        missing = required_environment(self.environ)
+        if missing:
+            raise BoxConfigurationError('Missing required environment: ' + ', '.join(missing))
+        if set(request.selected_graphs) - set(GRAPHS) or not 1 <= request.attempt or not 10 <= request.timeout_seconds <= 3600:
+            raise BoxConfigurationError('Invalid execution graph, attempt or time limit')
+        if not 0 < request.max_budget_usd <= 25 or not 1 <= request.max_turns <= 100:
+            raise BoxConfigurationError('Invalid execution budget')
+        if len(request.validation_feedback) > 10 or any(not isinstance(x, str) or len(x) > 4000 for x in request.validation_feedback):
+            raise BoxConfigurationError('Validation feedback exceeds limits')
+        bundle = make_bundle(self.project_root, request) if not request.remote_handle else None
+        request.output_dir.mkdir(parents=True, exist_ok=True)
+        if self.box_factory is None:
+            from upstash_box import AsyncBox
+            factory = AsyncBox
+        else:
+            factory = self.box_factory
+        box, handle, terminal = None, dict(request.remote_handle or {}), False
+        marker = None
+        checkpointed = bool(request.remote_handle)
+        try:
+            if handle:
+                if handle.get('job_id') != request.job_id or handle.get('attempt') != request.attempt:
+                    raise BoxConfigurationError('Remote handle belongs to a different attempt')
+                marker = read_capture_marker(request, handle)
+                if marker and (marker['cleanup_complete'] or handle.get('phase') == 'deleted'):
+                    handle['phase'] = 'deleted'
+                    try: await checkpoint(handle.copy())
+                    except Exception as exc:
+                        raise BoxTransportError('Completed local capture awaits its cleanup checkpoint') from exc
+                    return captured_result(request, handle, marker)
+                try:
+                    box = await factory.get(handle['box_id'], api_key=self.environ['UPSTASH_BOX_API_KEY'])
+                except Exception as exc:
+                    if marker and verified_box_not_found(exc):
+                        marker['cleanup_complete'] = True
+                        atomic_capture_marker(request.output_dir / CAPTURE_MARKER, marker)
+                        handle['phase'] = 'deleted'
+                        try: await checkpoint(handle.copy())
+                        except Exception as checkpoint_error:
+                            raise BoxTransportError('Verified deleted Box awaits its cleanup checkpoint') from checkpoint_error
+                        return captured_result(request, handle, marker)
+                    raise BoxTransportError('Box reconnect failed; retain the existing handle') from exc
+                if marker:
+                    terminal = True  # Complete local capture; only acknowledged cleanup remains.
+                    return captured_result(request, handle, marker)
+            else:
+                box = await factory.create(runtime='node', api_key=self.environ['UPSTASH_BOX_API_KEY'],
+                                           labels=['reveal', 'job-' + hashlib.sha256(request.job_id.encode()).hexdigest()[:16], 'attempt-' + str(request.attempt)])
+                handle = {'box_id': box.id, 'job_id': request.job_id, 'attempt': request.attempt, 'cursor': 0,
+                          'phase': 'created', 'created_at': time.time()}
+                await checkpoint(handle.copy())  # Persist before any paid model execution.
+                checkpointed = True
+                await emit('agent_started', {'message': 'Preparing an isolated agent runtime.'})
+                try:
+                    await self.prepare(box, request, bundle)
+                except Exception as exc:
+                    raise BoxTransportError('Box preparation interrupted; recover using its saved handle') from exc
+                handle['phase'] = 'prepared'; await checkpoint(handle.copy())
+            # A resumed running attempt must reach cancel/poll/collect so its
+            # durable tool ledger is finalized before the Box is deleted.
+            if handle['phase'] != 'running' and await cancelled():
+                terminal = True
+                return ExecutionResult('cancelled', request.output_dir, reason='Cancelled before execution', remote_handle=handle)
+            if handle['phase'] == 'created':
+                # Preparation interrupted: never reuse a partly constructed trusted workspace.
+                terminal = True
+                return ExecutionResult('failed', request.output_dir, reason='Runtime preparation interrupted; retry with a fresh attempt', remote_handle=handle)
+            if handle['phase'] == 'prepared':
+                # Idempotent remote flock/status guard makes uncertain launch recovery safe.
+                launch = 'sudo -n env PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/reveal/bundle/services/backend/src nohup /reveal/venv/bin/python -B -m reveal_backend.box_remote run > /tmp/reveal-runner.log 2>&1 < /dev/null &'
+                await self.command(box, launch)
+                handle['phase'] = 'running'; await checkpoint(handle.copy())
+            errors = 0
+            while True:
+                if await cancelled():
+                    await self.remote(box, 'cancel')
+                try:
+                    batch = json.loads(await self.remote(box, 'poll', handle['cursor']))
+                    errors = 0
+                except (BoxTransportError, OSError, ValueError):
+                    errors += 1
+                    if errors > 3:
+                        raise BoxTransportError('Box polling disconnected; resume the same persisted handle')
+                    await asyncio.sleep(min(errors, 3)); continue
+                if batch['cursor'] != handle['cursor'] + len(batch['events']):
+                    raise BoxTransportError('Remote event cursor is inconsistent; retain the saved handle')
+                chunks = public_event_batches(batch['events'], handle['cursor'],
+                    handle['box_id'] + ':' + request.job_id + ':' + str(request.attempt),
+                    (self.environ[key] for key in ('ANTHROPIC_API_KEY', 'UPSTASH_BOX_API_KEY')))
+                batch_emit = getattr(emit, 'emit_batch', None)
+                for chunk_index, chunk in enumerate(chunks):
+                    if chunk_index and await cancelled():
+                        await self.remote(box, 'cancel')
+                    if callable(batch_emit):
+                        await batch_emit(chunk)
+                        handle['cursor'] = chunk[-1][1]['remote_sequence']
+                        await checkpoint(handle.copy())
+                    else:
+                        for kind, payload in chunk:
+                            await emit(kind, payload)
+                            handle['cursor'] = payload['remote_sequence']
+                            await checkpoint(handle.copy())
+                state = batch['state']
+                remote_terminal = state['status'] in TERMINAL_STATUSES
+                if remote_terminal and not batch['has_more']:
+                    break
+                # A terminal runner already froze its ledger. Slow callback
+                # delivery must not cancel or abandon its remaining event pages.
+                if not remote_terminal and time.time() - handle['created_at'] > request.timeout_seconds + 420:
+                    await self.remote(box, 'cancel')
+                    # Wait for trusted terminal state and ledger freeze. A
+                    # timeout must not race collection against in-flight writes.
+                    if time.time() - handle['created_at'] > request.timeout_seconds + 480:
+                        raise BoxTransportError('Box cancellation not yet finalized; resume the existing handle')
+                await asyncio.sleep(self.poll_interval)
+            captured = json.loads(await self.remote(box, 'collect'))
+            total, captured_files = 0, {}
+            for name, encoded in captured['files'].items():
+                relative = PurePosixPath(name)
+                if relative.is_absolute() or '..' in relative.parts:
+                    raise BoxTransportError('Remote artifact path escapes attempt')
+                content = base64.b64decode(encoded, validate=True); total += len(content)
+                if any(self.environ[key].encode() in content for key in ('ANTHROPIC_API_KEY', 'UPSTASH_BOX_API_KEY')):
+                    raise BoxTransportError('Credential material detected in an output artifact; capture rejected')
+                if len(content) > 8_000_000 or total > 40_000_000:
+                    raise BoxTransportError('Remote artifact exceeds capture limit')
+                target = request.output_dir / str(relative)
+                try:
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    with target.open('wb') as output:
+                        output.write(content); output.flush(); os.fsync(output.fileno())
+                except OSError as exc:
+                    raise BoxTransportError('Local artifact capture interrupted; retain the remote handle') from exc
+                captured_files[name] = {'sha256': hashlib.sha256(content).hexdigest(), 'size_bytes': len(content)}
+            marker = {'format': 'reveal.box-capture/1', 'binding': capture_binding(request, handle),
+                      'state': state, 'files': captured_files, 'cleanup_complete': False}
+            atomic_capture_marker(request.output_dir / CAPTURE_MARKER, marker)
+            terminal = True  # Delete only after all attempt artifacts are durable locally.
+            return captured_result(request, handle, marker)
+        finally:
+            if box:
+                cleanup_error = None
+                if terminal or not checkpointed:
+                    try:
+                        await box.delete()
+                        if marker:
+                            marker['cleanup_complete'] = True
+                            atomic_capture_marker(request.output_dir / CAPTURE_MARKER, marker)
+                        handle['phase'] = 'deleted'; await checkpoint(handle.copy())
+                    except Exception as exc:
+                        await emit('warning', {'code': 'box_cleanup_pending', 'message': 'Remote Box cleanup needs retry.'})
+                        cleanup_error = BoxTransportError('Box deletion or cleanup checkpoint interrupted; retain captured artifacts and remote handle')
+                        cleanup_error.__cause__ = exc
+                await box.aclose()
+                if cleanup_error:
+                    # A terminal job would never reclaim a leaked Box. Keep the
+                    # lease recoverable until remote cleanup is acknowledged.
+                    raise cleanup_error

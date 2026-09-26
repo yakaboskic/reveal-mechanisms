@@ -1,0 +1,47 @@
+{
+  "format": "reveal.scientific-grounding/1",
+  "accepted": true,
+  "model": "claude-sonnet-4-6",
+  "checked_at": "2026-09-25T20:28:58.871634Z",
+  "input_tokens_measured": 33195,
+  "usage": {
+    "input_tokens": 33683,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "cache_creation": {
+      "ephemeral_5m_input_tokens": 0,
+      "ephemeral_1h_input_tokens": 0
+    },
+    "output_tokens": 493,
+    "service_tier": "standard",
+    "inference_geo": "global"
+  },
+  "estimated_max_usd": 0.151809,
+  "method": "independent-model-source-review",
+  "document_sha256": "7daf55e1468af2c92f4409029ec7cacc651794ba90982ed08f8a7e4fc9403dee",
+  "package_sha256": "9a55d126679291a95fa3d35f544915610134075eaf110f62f77ec8ee870b6ae2",
+  "ledger_sha256": "bd2bc45026c626fedc37755baf0b5f9cc5589b7313ac4a39d65935e41bb489ae",
+  "review": {
+    "claims": [
+      {
+        "verdict": "supported",
+        "finding": "The claim that SHH has the highest PIGEAN factor loading (factor_value=0.5042, combined=3.86, log_bf=2.14, prior=1.72) among the top-8 genes for CADinT2D Factor1 (cfde-inc-v2) is directly confirmed by the gene-factor query artifact. The claim explicitly and correctly limits its interpretation to a statistical association, noting that causal direction, tissue specificity, and pathway membership cannot be inferred from the loading alone.",
+        "source_refs": [
+          "/package/pigean/candidates/gene:SHH/candidate/edges/0",
+          "/package/pigean/mechanisms/factor:portal:CADinT2D:cfde-inc-v2:Factor1/gene_loadings/items/gene:SHH/source_ref"
+        ],
+        "claim_id": "dapper:Claim.IKAB-6I1EYeYmqnuYGL33hM8fp84QolL"
+      }
+    ],
+    "synthesis": {
+      "verdict": "supported",
+      "finding": "The scientific account accurately describes SHH as a top-loading candidate gene for CADinT2D Factor1 based on the PIGEAN cfde-inc-v2 statistical model, with appropriate caveats that the loading cannot establish causal direction or resolve the knowledge gap's reverse-causation question. The closing remarks correctly state the gap remains unresolved, which is an appropriate bounded partial answer: the factor loading constitutes a hypothesis-generating signal only, and the proposed MR and prospective experiments (suggested rather than completed) are what would be needed to address causality. The account does not overstate resolution of the gap and clearly distinguishes the statistical observation from the causal inference required by the gap.",
+      "source_refs": [
+        "/package/pigean/candidates/gene:SHH/candidate/edges/0",
+        "/package/pigean/mechanisms/factor:portal:CADinT2D:cfde-inc-v2:Factor1/gene_loadings/items/gene:SHH/source_ref",
+        "/package/dismech/knowledge_gap/source_ref"
+      ]
+    }
+  },
+  "limitation": "Fallible model review of captured evidence; not independent experimental confirmation."
+}

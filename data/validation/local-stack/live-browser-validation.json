@@ -1,0 +1,320 @@
+{
+  "status": "failed_scientific_validation",
+  "recorded_at": "2026-09-25T20:59:06.428118+00:00",
+  "browser": "Chrome dedicated REVEAL validation session",
+  "base_url": "http://localhost:3000",
+  "execution_mode": "box",
+  "readiness": {
+    "status": "ready",
+    "database": "aurora-mysql",
+    "tls": true,
+    "sources": {
+      "dismech_import": "4062563df48bbc8aa418b7add0af083115184e70c1d909e66ab70d505087e395",
+      "gaps": 3367,
+      "mapping_run": "272cfa19d093257863d7e7134776229dbc9b9b018d974e6b311285686833ec31",
+      "mapped_factors": 1756,
+      "embedding_run": "d4c0300978778453c847c7c3447a316e55b1b0cfe469c647f148ecc1a77f57d7"
+    },
+    "execution_mode": "box"
+  },
+  "selection": {
+    "gap_id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+    "native_anchor_id": "factor:portal:CAD:cfde-inc-v2:Factor1",
+    "label": "Lipoprotein Metabolism and Clearance",
+    "origin": "manual",
+    "selected_kgs": [
+      "biomarkerkg",
+      "prokn"
+    ],
+    "unavailable_requested_trait": "CADinT2D (zero existing mapped records)"
+  },
+  "prelaunch_checks": {
+    "public_semantic_suggestions": "passed after fixing null retrieval audit owner",
+    "concurrent_readiness_http": 200,
+    "concurrent_readiness_seconds": 2.356334,
+    "frontend_typecheck": "passed",
+    "startup_tests": 7,
+    "backend_tests": 143,
+    "backend_optional_skips": 8,
+    "backend_total": 151,
+    "backend_tests_after_recovery_fix": 146,
+    "backend_optional_skips_after_recovery_fix": 8
+  },
+  "draft_id": "2f8a4a4f-da93-4823-9ea7-5b5dbcc0eb94",
+  "job_id": "be002a14-6915-42e5-ab9b-9db0c1acdef2",
+  "dispatch": {
+    "path": ".runtime/artifacts/be002a14-6915-42e5-ab9b-9db0c1acdef2/evidence/dispatch/package/evidence-package.json",
+    "sha256": "d77cc239c7fb0f322e204852f14f0b04f2a18be2b1d86d1103f8ce41e9e5c79d",
+    "measurement": {
+      "attempts": [
+        {
+          "input_tokens": 26189,
+          "package_sha256": "a5bcde6b005cdeea0a326fe1a8c943960dec8aca816a1235bbe7a0cb656ec671",
+          "retained_edges": 8,
+          "retained_nodes": 9
+        },
+        {
+          "input_tokens": 22173,
+          "package_sha256": "d77cc239c7fb0f322e204852f14f0b04f2a18be2b1d86d1103f8ce41e9e5c79d",
+          "retained_edges": 4,
+          "retained_nodes": 5
+        }
+      ],
+      "budget": 24000,
+      "count": 22173,
+      "enforced": true,
+      "method": "anthropic-count-tokens",
+      "model": "claude-sonnet-4-6",
+      "original_package_sha256": "a5bcde6b005cdeea0a326fe1a8c943960dec8aca816a1235bbe7a0cb656ec671",
+      "package_sha256": "d77cc239c7fb0f322e204852f14f0b04f2a18be2b1d86d1103f8ce41e9e5c79d",
+      "reduced": true
+    },
+    "coverage": {
+      "bioindex_queries": [
+        {
+          "artifact_id": "gene-factor-1955f25e8788.attempt-1.body",
+          "continuation_present": false,
+          "exhaustive": false,
+          "limit": 8,
+          "progress": {
+            "bytes_read": 2479,
+            "bytes_total": 71331,
+            "filtered": 0
+          },
+          "returned_rows": 8
+        },
+        {
+          "artifact_id": "gene_set-factor-1955f25e8788.attempt-1.body",
+          "continuation_present": false,
+          "exhaustive": false,
+          "limit": 8,
+          "progress": {
+            "bytes_read": 4080,
+            "bytes_total": 299462,
+            "filtered": 0
+          },
+          "returned_rows": 8
+        },
+        {
+          "artifact_id": "gene-trait-d58464173c02.attempt-1.body",
+          "continuation_present": false,
+          "exhaustive": false,
+          "limit": 8,
+          "progress": {
+            "bytes_read": 2489,
+            "bytes_total": 2747410,
+            "filtered": 0
+          },
+          "returned_rows": 8
+        },
+        {
+          "artifact_id": "gene_set-trait-d58464173c02.attempt-1.body",
+          "continuation_present": false,
+          "exhaustive": false,
+          "limit": 8,
+          "progress": {
+            "bytes_read": 3798,
+            "bytes_total": 1776063,
+            "filtered": 0
+          },
+          "returned_rows": 8
+        }
+      ],
+      "captured_nodes": 17,
+      "captured_unique_edges": 16,
+      "omitted_edge_ids": [
+        "147bc7fc569b1da8",
+        "28d2578f4794355d",
+        "2d149d84950d8890",
+        "300ab559c3aa1dd2",
+        "44284d89e9048adc",
+        "6031d798acfb6f74",
+        "778dd8b3f95c0347",
+        "7de8239bd20cd5a5",
+        "afcf7998cee310e6",
+        "d5c6618f5176b9bd",
+        "ef584af109e7e537",
+        "f0e8ed762982109c"
+      ],
+      "omitted_node_ids": [
+        "gene:APOE",
+        "gene:C1S",
+        "gene:HTRA1",
+        "gene:INS",
+        "gene_set:GOBP_LIPID_BIOSYNTHETIC_PROCESS",
+        "gene_set:GOBP_LIPID_HOMEOSTASIS",
+        "gene_set:GOBP_LIPID_LOCALIZATION",
+        "gene_set:GOBP_ORGANIC_HYDROXY_COMPOUND_TRANSPORT",
+        "gene_set:GOBP_STEROL_HOMEOSTASIS",
+        "gene_set:GOBP_STEROL_METABOLIC_PROCESS",
+        "gene_set:GOBP_STEROL_TRANSPORT",
+        "gene_set:mp_abnormal_cholesterol_homeostasis"
+      ],
+      "queries": {
+        "contextual": "ok",
+        "factor": "empty",
+        "gene": "ok_limit_reached",
+        "gene_set": "ok_limit_reached",
+        "trait": "empty"
+      },
+      "ranking": "aggregate_score descending; exact node ID ascending on ties",
+      "retained_edges": 4,
+      "retained_nodes": 5,
+      "same_upstream_build_verified": false,
+      "upstream_total": null
+    },
+    "selection": {
+      "dismech_mechanism_ids": [
+        "dismech:disorders/Coronary_Artery_Disease#/pathophysiology/0"
+      ],
+      "dismissed_eaggl_ids": [
+        "factor:portal:AAC:cfde-inc-v2:Factor3",
+        "factor:portal:RRinterval:cfde-inc-v2:Factor1",
+        "factor:portal:RVSVI:cfde-inc-v2:Factor1",
+        "factor:portal:SVI:cfde-inc-v2:Factor1"
+      ],
+      "eaggl_mechanism_ids": [
+        "factor:portal:CAD:cfde-inc-v2:Factor1"
+      ],
+      "expansion_policy": {
+        "connection_scope": "direct",
+        "context": "",
+        "reducer": "mean",
+        "rounds": 1
+      },
+      "knowledge_gap_id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+      "origins": {
+        "factor:portal:CAD:cfde-inc-v2:Factor1": "manual"
+      },
+      "semantic_retrieval": {
+        "embedding_run_id": "d4c0300978778453c847c7c3447a316e55b1b0cfe469c647f148ecc1a77f57d7",
+        "status": "not_computed"
+      }
+    }
+  },
+  "reconnect_during_research": "same job and persisted activity after reload",
+  "box_id": "boss-hermit-53702",
+  "remote_launch_verified": "running phase persisted before observable Claude message",
+  "worker_recovery": {
+    "reason": "Attempt lease lost while synchronous per-event database work starved the async heartbeat",
+    "before": {
+      "job_id": "be002a14-6915-42e5-ab9b-9db0c1acdef2",
+      "attempt": 1,
+      "box_id": "boss-hermit-53702",
+      "phase": "running",
+      "cursor": 1,
+      "dispatch_sha256": "d77cc239c7fb0f322e204852f14f0b04f2a18be2b1d86d1103f8ce41e9e5c79d"
+    },
+    "plan": "Build fixed source; SIGKILL and recreate only local worker; resume same remote attempt without new model launch",
+    "before_replacement": {
+      "job_id": "be002a14-6915-42e5-ab9b-9db0c1acdef2",
+      "status": "running",
+      "attempt": 1,
+      "remote": {
+        "box_id": "boss-hermit-53702",
+        "phase": "running",
+        "cursor": 1
+      },
+      "dispatch_input": {
+        "kind": "analysis",
+        "mode": "box",
+        "path": "evidence/dispatch/package/evidence-package.json",
+        "model": "claude-sonnet-4-6",
+        "sha256": "d77cc239c7fb0f322e204852f14f0b04f2a18be2b1d86d1103f8ce41e9e5c79d"
+      }
+    },
+    "capture_files_before": 0,
+    "operation": "Completed scoped SIGKILL and recreation of verified local worker after remote terminal proof; same remote handle reused.",
+    "review": "Initial risk rejection corrected with original explicit worker-restart acceptance and saved terminal Box proof; revised review approved.",
+    "after_samples": [
+      {
+        "job_id": "be002a14-6915-42e5-ab9b-9db0c1acdef2",
+        "status": "running",
+        "attempt": 1,
+        "last_event_id": "51",
+        "lease_until": "2026-09-25T21:15:56.249823Z",
+        "worker_id": "c1777b1a3aac:deae0011-46aa-4d80-9f8e-85cb6a5ca936",
+        "remote": {
+          "box_id": "boss-hermit-53702",
+          "phase": "running",
+          "cursor": 1
+        },
+        "dispatch_input": {
+          "kind": "analysis",
+          "mode": "box",
+          "path": "evidence/dispatch/package/evidence-package.json",
+          "model": "claude-sonnet-4-6",
+          "sha256": "d77cc239c7fb0f322e204852f14f0b04f2a18be2b1d86d1103f8ce41e9e5c79d"
+        },
+        "observed_at": "2026-09-25T21:14:35.012577+00:00"
+      }
+    ]
+  },
+  "stream_fix_browser_observation": {
+    "mode": "actual same-job replay through recovered worker, API SSE and Chrome UI",
+    "coalesced_text_before": " check",
+    "coalesced_text_after": " check the dismech file for the selected mechanism.",
+    "same_ax_text_node": 72,
+    "tool_names_observed": [
+      "Read",
+      "Glob"
+    ],
+    "legacy_fragments_unchanged": true
+  },
+  "local_capture_observed_at": "2026-09-25T21:29:44.881936+00:00",
+  "runtime": {
+    "job_id": "be002a14-6915-42e5-ab9b-9db0c1acdef2",
+    "attempt": 1,
+    "started_at": "2026-09-25T21:01:03.997992+00:00",
+    "completed_at": "2026-09-25T21:05:11.119640+00:00",
+    "cost_usd": 0.5700206999999999,
+    "execution_limits": {
+      "max_budget_usd": 3.0,
+      "max_turns": 40,
+      "timeout_seconds": 900
+    }
+  },
+  "terminal": {
+    "job_id": "be002a14-6915-42e5-ab9b-9db0c1acdef2",
+    "status": "failed",
+    "failure": {
+      "code": "VALIDATION_FAILED",
+      "message": "The attempt failed scientific validation. The saved draft and existing accounts are preserved.",
+      "retryable": true
+    },
+    "result": null,
+    "completed_at": "2026-09-25T21:29:18.403113Z",
+    "account_count_for_owner": 0,
+    "attempt": 1,
+    "remote": {
+      "box_id": "boss-hermit-53702",
+      "phase": "deleted",
+      "cursor": 297
+    },
+    "dispatch_input": {
+      "kind": "analysis",
+      "mode": "box",
+      "path": "evidence/dispatch/package/evidence-package.json",
+      "model": "claude-sonnet-4-6",
+      "sha256": "d77cc239c7fb0f322e204852f14f0b04f2a18be2b1d86d1103f8ce41e9e5c79d"
+    }
+  },
+  "ledger": {
+    "complete": true,
+    "calls": 17,
+    "tool_counts": {
+      "Read": 7,
+      "Glob": 2,
+      "mcp__reveal__write_account_draft": 2,
+      "write_account_draft": 2,
+      "mcp__reveal__lint_account": 2,
+      "lint_account": 2
+    },
+    "status_counts": {
+      "completed": 14,
+      "failed": 3
+    },
+    "selected_graph_calls": []
+  },
+  "browser_failure": "Research could not complete; saved draft retained; Return to question available; no published account"
+}

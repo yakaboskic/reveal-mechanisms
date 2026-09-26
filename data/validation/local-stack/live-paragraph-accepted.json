@@ -1,0 +1,87 @@
+{
+  "checked_at": "2026-09-25T22:01:37.383842+00:00",
+  "status": "passed",
+  "job_id": "36d411a1-f24f-4cb7-be66-6ed517394d8d",
+  "paragraph_id": "dapper:Paragraph.Wc-KnUcXFLc4YfAkVkjtEdIj3-OHS1m0",
+  "account_id": "dapper:ScientificAccount.mZ1WzVP3O9i63nEZCHLBk-vMbZkEICZV",
+  "remote_started_at": "2026-09-25T21:59:39.548929+00:00",
+  "remote_completed_at": "2026-09-25T22:00:14.676087+00:00",
+  "authoring_cost_usd": 0.09836204999999999,
+  "ledger_complete": true,
+  "tool_calls": [
+    {
+      "tool": "Read",
+      "status": "completed"
+    },
+    {
+      "tool": "Read",
+      "status": "completed"
+    },
+    {
+      "tool": "Write",
+      "status": "completed"
+    }
+  ],
+  "fresh_graph_calls": 0,
+  "original_account_nodes": 10,
+  "original_account_nodes_unchanged": true,
+  "citation_count": 4,
+  "citation_target_count": 3,
+  "exact_codepoint_spans": true,
+  "citation_revisions": [
+    1,
+    1,
+    1,
+    1
+  ],
+  "profile_validation": {
+    "findings": [],
+    "profile": "reveal-paragraph",
+    "valid": true
+  },
+  "independent_faithfulness": {
+    "accepted": true,
+    "checked_at": "2026-09-25T22:00:41.759209Z",
+    "estimated_max_usd": 0.062796,
+    "format": "reveal.paragraph-faithfulness/1",
+    "input_sha256": "7bbeb1417c78136a282652eb905bd9621da9a2d4aa8b0aa1a238fc07e9c18f0c",
+    "input_tokens_measured": 3524,
+    "limitation": "Fallible model check of fidelity to the accepted account.",
+    "model": "claude-sonnet-4-6",
+    "output_sha256": "f9c3a9c192357e2ecbbecbd8066292a543874ab09dedb46d6bcbbea822ac7166",
+    "review": {
+      "segments": [
+        {
+          "faithful": true,
+          "finding": "The segment correctly frames the PIGEAN cfde-inc-v2 Factor1 for CAD as labeled GOBP_STEROL_METABOLIC_PROCESS and accurately characterizes the purpose as assessing LPL's candidacy relative to the open knowledge gap about upstream causal amplification vs. downstream biochemical readouts. The cited KnowledgeGap (zNV20nhHamt-a4CeAktQQPoAivOJe6xk) directly describes this open question. No new scientific assertions are introduced.",
+          "segment_index": 0
+        },
+        {
+          "faithful": true,
+          "finding": "The four retained candidates (LPL, SIRT3, FURIN, TIMP3), LPL's factor loading (0.3439), combined PIGEAN score (5.9), log_bf (3.9), and prior (1.99) are all explicitly stated in the cited Claims (oHAogBRdetx6fDiakfRSC0LunxjGDR0E and NZs1bmu2UfabvcU9OGLiAWrLIt_XDE61) and the underlying ScientificAccount. The characterization of LPL as the top candidate based on highest factor loading and combined score is supported. No unsupported assertions introduced.",
+          "segment_index": 1
+        },
+        {
+          "faithful": true,
+          "finding": "The segment accurately reflects Claim NZs1bmu2UfabvcU9OGLiAWrLIt_XDE61, which explicitly states the CFDE factor association cannot resolve whether LPL reflects upstream genetic risk amplification or a downstream metabolic readout, and that the knowledge gap remains open. The mention of Mendelian randomization and prospective biomarker data as needed evidence matches the ScientificAccount's closing remarks. The association is correctly kept as association, not causation, and the gap remains open as required.",
+          "segment_index": 2
+        }
+      ]
+    },
+    "usage": {
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 0,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0,
+      "inference_geo": "global",
+      "input_tokens": 3780,
+      "output_tokens": 450,
+      "service_tier": "standard"
+    }
+  },
+  "box_id": "absolute-polecat-03575",
+  "box_deleted": true,
+  "browser_exports_and_restart_evidence": "live-browser-retry-validation.json"
+}

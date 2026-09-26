@@ -1,0 +1,38 @@
+{
+  "scope": "Actual previously captured CADinT2D sources rebuilt with current builder metadata; no new retrieval or model inference",
+  "measurement": {
+    "method": "anthropic-count-tokens",
+    "budget": 24000,
+    "enforced": true,
+    "model": "claude-sonnet-4-6",
+    "attempts": [
+      {
+        "input_tokens": 44890,
+        "package_sha256": "bfff6d21d455eecb406ab5c5fc6a6dec9ad6199a69e8dfed20183ebbf801125b",
+        "retained_nodes": 17,
+        "retained_edges": 16
+      },
+      {
+        "input_tokens": 26128,
+        "package_sha256": "f22d87c919524a83e339f52de2a46971585a6becde32449f0b37bd571b828cf8",
+        "retained_nodes": 6,
+        "retained_edges": 5
+      },
+      {
+        "input_tokens": 21416,
+        "package_sha256": "7122217cb96a6fb23c06f912906c81a4aa186ba8a0c58b3f7d22a35d215c2b00",
+        "retained_nodes": 3,
+        "retained_edges": 2
+      }
+    ],
+    "count": 21416,
+    "reduced": true,
+    "original_package_sha256": "bfff6d21d455eecb406ab5c5fc6a6dec9ad6199a69e8dfed20183ebbf801125b",
+    "package_sha256": "7122217cb96a6fb23c06f912906c81a4aa186ba8a0c58b3f7d22a35d215c2b00"
+  },
+  "chosen_path": "/Users/cyakaboski/src/research/reveal-mechanisms/.runtime/cad-budget-validation-final/dispatch/package/evidence-package.json",
+  "gene_observations": {
+    "factor:portal:CADinT2D:cfde-inc-v2:Factor1": 1
+  },
+  "source_bytes_preserved": true
+}

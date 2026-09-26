@@ -5,19 +5,19 @@ info:
   version: 0.2.0-draft
   summary: DAPPER scientific content, knowledge-gap search, and shared analysis/paragraph
     jobs.
-  description: 'Implementation contract; this backend is not deployed. Scientific
-    schemas are generated from the pinned DAPPER schema. Application envelopes handle
-    ownership, drafts, search, jobs and pagination. All DAPPER IDs in scientific examples
-    are computed, not placeholders. Research/job/user timestamps and semantic rankings
-    are illustrative; no Claude Code or embedding run was performed. The account fixture
-    is the approved 12-claim HTML example: captured CFDE observations plus explicitly
-    invented KG/membership assertions, never a production grounding-pass example.
-    The evidence package is a separately verified live capture, not a claim that this
-    example account was generated from it. Examples using example.org are not live
-    resources. Do not treat example output as published research.'
+  description: 'Local API implementation contract; production deployment is deferred.
+    Scientific schemas are generated from the pinned DAPPER schema. Application envelopes
+    handle ownership, drafts, search, jobs and pagination. All DAPPER IDs in scientific
+    examples are computed, not placeholders. Research/job/user timestamps and semantic
+    rankings are illustrative; no Claude Code or embedding run was performed. The
+    account fixture is the approved 12-claim HTML example: captured CFDE observations
+    plus explicitly invented KG/membership assertions, never a production grounding-pass
+    example. The evidence package is a separately verified live capture, not a claim
+    that this example account was generated from it. Examples using example.org are
+    not live resources. Do not treat example output as published research.'
 servers:
 - url: http://localhost:8000
-  description: Proposed local backend; configure your implementation
+  description: Local Docker Compose backend
 - url: https://api.reveal.example.org
   description: Reserved example domain; replace for deployment
 tags:
@@ -9730,6 +9730,81 @@ paths:
         label: request
         source: 'curl -X GET https://api.reveal.example.org/v1/jobs/44444444-4444-4444-8444-444444444444/evidence-package
           -H ''Authorization: Bearer <trusted-gateway-assertion>'' -H ''Accept: application/json'''
+  /v1/artifacts/{sha256}:
+    get:
+      operationId: downloadArtifact
+      tags:
+      - Scientific content
+      summary: Download an authorized captured source
+      description: Download exact captured bytes after owner authorization and SHA-256
+        verification. A digest is not an access grant. The File metadata describes
+        the media type; the response uses attachment disposition, private no-store
+        caching and nosniff. Missing captures remain explicitly unavailable; this
+        route never fetches mutable source URLs.
+      parameters:
+      - name: sha256
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+        example: dc0bfbd8c23271a7e0a6d2285a90de9be7698f2ede9465b6d5877bbd24e96006
+        description: ''
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            '*/*':
+              schema:
+                type: string
+                format: binary
+              examples:
+                captured_bytes:
+                  summary: Captured bytes
+                  value: '{"candidates":[],"graph":{"nodes":[],"edges":[]},"candidate_count":0}'
+          headers:
+            X-Request-ID:
+              description: Correlation ID for this HTTP request.
+              schema:
+                type: string
+                format: uuid
+        '401':
+          description: Authentication Required
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                authentication_required:
+                  summary: Authentication required
+                  value: *id001
+        '404':
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                not_found:
+                  summary: Not found
+                  value: *id005
+        '503':
+          description: Dependency Unavailable
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                dependency_unavailable:
+                  summary: Dependency unavailable
+                  value: *id014
+      security:
+      - GatewayAssertion: []
+      x-codeSamples:
+      - lang: Shell
+        label: request
+        source: 'curl -X GET https://api.reveal.example.org/v1/artifacts/dc0bfbd8c23271a7e0a6d2285a90de9be7698f2ede9465b6d5877bbd24e96006
+          -H ''Authorization: Bearer <trusted-gateway-assertion>'' -H ''Accept: */*'''
   /v1/paragraphs/{dapper_id}/export:
     get:
       operationId: exportParagraph
@@ -10496,10 +10571,11 @@ components:
       scheme: bearer
       bearerFormat: JWT
       description: Short-lived assertion issued by a trusted Next.js/auth gateway
-        after Google/ORCID login or trusted anonymous session bootstrap. EC2 validates
-        signature/algorithm/issuer/audience/expiry and resolves the external subject
-        to an internal user ID. Never send provider access tokens or Auth.js cookies
-        as this bearer. Public operations permit anonymous access only to public records.
+        after Google/ORCID login or trusted anonymous session bootstrap. The backend
+        validates signature/algorithm/issuer/audience/expiry and resolves the external
+        subject to an internal user ID. Never send provider access tokens or Auth.js
+        cookies as this bearer. Public operations permit anonymous access only to
+        public records.
   schemas:
     DapperAccessLevelEnum:
       description: Coarse access classification for the dataset.
@@ -18514,6 +18590,11 @@ components:
             - snapshot_sha256
             additionalProperties: false
           - type: 'null'
+        message_delta:
+          type: boolean
+          description: True only for incremental public text. Adjacent marked agent-message
+            events may be concatenated for display while preserving original event
+            IDs for replay. Absent or false denotes a complete standalone message.
       required:
       - kind
       - state
@@ -21920,6 +22001,7 @@ components:
       - ok
       - ok_limit_reached
       - empty
+      - omitted
       - not_available
       - not_queried
       - not_captured
