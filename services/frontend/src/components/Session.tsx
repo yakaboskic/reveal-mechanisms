@@ -68,10 +68,10 @@ export function Session({ children }: { children: ReactNode }) {
     {children}
   </SessionContext.Provider>;
 }
-export function ProviderButtons({ disabled = false, beforeLogin }: { disabled?: boolean; beforeLogin?: () => void }) {
+export function ProviderButtons({ disabled = false, onLogin }: { disabled?: boolean; onLogin?: (provider: "google" | "orcid") => void }) {
   const { status } = useIdentity();
   return <>{(["orcid", "google"] as const).map(provider => <div key={provider}>
-    <button className="provider" disabled={disabled || !status.providers[provider]} onClick={() => { beforeLogin?.(); void signIn(provider, { callbackUrl: window.location.origin + "/" }); }}>
+    <button className="provider" disabled={disabled || !status.providers[provider]} onClick={() => { if (onLogin) onLogin(provider); else void signIn(provider, { callbackUrl: window.location.origin + "/" }); }}>
       <span aria-hidden="true">{provider === "orcid" ? "iD" : "G"}</span>Continue with {provider === "orcid" ? "ORCID" : "Google"}
     </button>{!status.providers[provider] && <small>{provider === "orcid" ? "ORCID" : "Google"} sign-in is not configured.</small>}
   </div>)}</>;

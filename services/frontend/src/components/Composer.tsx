@@ -1,14 +1,17 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { signIn } from "next-auth/react";
 import { api, ApiError, messageOf, terminal, type Schema } from "@/lib/client";
 import { applySuggestions, emptyComposer, factorSelection, removeAnchor, selectedGap } from "@/lib/composer";
 import { ProviderButtons, useIdentity } from "./Session";
 import { Activity } from "./Activity";
 import { AccountPreview, Record } from "./Scientific";
 import { loadFeaturedGaps } from "@/lib/featured-gaps";
+import { rememberSubmission, restoreSubmission, type SubmissionAttempt, type SubmissionMethod, type SubmissionStage } from "@/lib/submission";
+import { SubmissionProgress } from "./SubmissionProgress";
 
 const storageKey = "reveal:composer";
-type LocalDraft = { composer: Schema<"Composer">; gap: Schema<"GapRecord"> | null; factors: Record<string, Schema<"EagglFactor">>; draft: Schema<"Draft"> | null; owner: string | null; job?: Schema<"Job"> | null };
+type LocalDraft = { composer: Schema<"Composer">; gap: Schema<"GapRecord"> | null; factors: Record<string, Schema<"EagglFactor">>; draft: Schema<"Draft"> | null; owner: string | null; job?: Schema<"Job"> | null; submitKey?: { binding: string; key: string } | null };
 export function Composer() {
   const { me, ready, refresh } = useIdentity();
   const [composer, setComposer] = useState(emptyComposer);
@@ -22,7 +25,11 @@ export function Composer() {
   const [suggesting, setSuggesting] = useState(false); const [limitations, setLimitations] = useState<string[]>([]);
   const [saveState, setSaveState] = useState("Kept in this browser"); const [conflict, setConflict] = useState(false);
   const [error, setError] = useState(""); const [booted, setBooted] = useState(false);
-  const [job, setJob] = useState<Schema<"Job"> | null>(null); const [submitting, setSubmitting] = useState(false);
+  const [job, setJob] = useState<Schema<"Job"> | null>(null);
+  const [submission, setSubmission] = useState<{ stage: SubmissionStage; error?: string } | null>(null);
+  const pendingSubmission = useRef<SubmissionAttempt | null>(null);
+  const submissionRunning = useRef(false);
+  const submissionResumed = useRef(false);
   const [example, setExample] = useState("What would you like to understand?"); const [focused, setFocused] = useState(false);
   const [showResults, setShowResults] = useState(true);
   const pendingResultFocus = useRef(false);
@@ -31,23 +38,38 @@ export function Composer() {
   const dialog = useRef<HTMLDialogElement>(null);
   const draftRef = useRef(draft); const currentRef = useRef(composer); const loadedOwner = useRef<string | null>(null);
   const saveEpoch = useRef(0);
+  const restoreEpoch = useRef(0);
+  const mounted = useRef(false);
   const suggestionRequest = useRef<AbortController | null>(null);
   const saveQueue = useRef<Promise<Schema<"Draft"> | null>>(Promise.resolve(null));
-  const requestKeys = useRef(new Map<string, string>()); const submitKey = useRef<{ binding: string; key: string } | null>(null); const anonymousKey = useRef<string | null>(null);
-  const getKey = (body: string) => { if (!requestKeys.current.has(body)) requestKeys.current.set(body, crypto.randomUUID()); return requestKeys.current.get(body)!; };
+  const requestKeys = useRef(new Map<string, string>()); const submitKey = useRef<{ binding: string; key: string } | null>(null);
+  const getKey = (body: string) => {
+    if (!requestKeys.current.has(body)) requestKeys.current.set(body, crypto.randomUUID());
+    if (pendingSubmission.current) { pendingSubmission.current.requestKeys = [...requestKeys.current]; rememberSubmission(pendingSubmission.current); }
+    return requestKeys.current.get(body)!;
+  };
   currentRef.current = composer;
-  useEffect(() => () => { suggestionRequest.current?.abort(); }, []);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; suggestionRequest.current?.abort(); }; }, []);
   useEffect(() => {
     try {
       const local = JSON.parse(sessionStorage.getItem(storageKey) || "null") as LocalDraft | null;
-      if (local) { setComposer(local.composer); setGap(local.gap); setFactors(local.factors); setDraft(local.draft); draftRef.current = local.draft; loadedOwner.current = local.owner; if (local.job) setJob(local.job); }
+      if (local) { setComposer(local.composer); setGap(local.gap); setFactors(local.factors); setDraft(local.draft); draftRef.current = local.draft; loadedOwner.current = local.owner; submitKey.current = local.submitKey || null; if (local.job) setJob(local.job); }
     } catch { sessionStorage.removeItem(storageKey); }
+    const pending = restoreSubmission();
+    if (pending) {
+      pendingSubmission.current = pending;
+      setComposer(pending.composer); currentRef.current = pending.composer;
+      if (pending.gap) setGap(pending.gap);
+      setDraft(pending.draft); draftRef.current = pending.draft; loadedOwner.current = pending.owner;
+      requestKeys.current = new Map(pending.requestKeys); submitKey.current = pending.submitKey;
+      setJob(null); setSubmission({ stage: "signing-in" });
+    }
     setBooted(true);
-    void api.gaps().then(value => loadFeaturedGaps(api, value.items)).then(setTrending).catch(e => setError(messageOf(e)));
+    if (!pending) void api.gaps().then(value => loadFeaturedGaps(api, value.items)).then(setTrending).catch(e => setError(messageOf(e)));
   }, []);
   useEffect(() => {
     if (!booted) return;
-    sessionStorage.setItem(storageKey, JSON.stringify({ composer, gap, factors, draft, owner: me?.user_id || loadedOwner.current, job } satisfies LocalDraft));
+    sessionStorage.setItem(storageKey, JSON.stringify({ composer, gap, factors, draft, owner: me?.user_id || loadedOwner.current, job, submitKey: submitKey.current } satisfies LocalDraft));
   }, [composer, gap, factors, draft, job, booted, me?.user_id]);
   useEffect(() => {
     if (!ready || !booted || !me) return;
@@ -55,24 +77,25 @@ export function Composer() {
     loadedOwner.current = me.user_id;
   }, [me?.user_id, ready, booted]);
   useEffect(() => {
-    if (!booted || !ready) return;
+    if (!booted || !ready || pendingSubmission.current) return;
     const params = new URLSearchParams(window.location.search);
     const draftId = params.get("draft"); const gapId = params.get("gap"); const jobId = params.get("job");
-    let active = true;
+    let active = true; const epoch = restoreEpoch.current;
+    const canRestore = () => active && !pendingSubmission.current && epoch === restoreEpoch.current;
     const restore = async () => {
       try {
         if (draftId && me) {
           const value = await api.draft(draftId);
           const source = value.composer.source_gap ? await api.gap(value.composer.source_gap.id) : null;
-          if (!active) return;
+          if (!canRestore()) return;
           saveEpoch.current++; draftRef.current = value; setDraft(value); setSaveState("Saved"); setComposer(value.composer); setGap(source); setJob(null);
         } else if (gapId) {
-          const source = await api.gap(gapId); if (!active) return;
+          const source = await api.gap(gapId); if (!canRestore()) return;
           if (currentRef.current.source_gap?.id === source.object.id && currentRef.current.source_gap.source_revision === source.source.source_revision) setGap(source);
           else await selectGap(source);
         }
-        if (jobId && me) { const value = await api.job(jobId); if (active) setJob(value); }
-      } catch (failure) { if (active) setError(messageOf(failure)); }
+        if (jobId && me) { const value = await api.job(jobId); if (canRestore()) setJob(value); }
+      } catch (failure) { if (canRestore()) setError(messageOf(failure)); }
     };
     void restore(); return () => { active = false; };
   }, [booted, ready, me?.user_id]);
@@ -153,13 +176,14 @@ export function Composer() {
     }); saveQueue.current = queued; return queued;
   };
   useEffect(() => {
-    if (!booted || !me || !composer.source_gap || job || conflict || suggesting) return;
+    if (!booted || !me || !composer.source_gap || job || conflict || suggesting || submission) return;
     const timer = setTimeout(() => { void save(composer).catch(e => setError(messageOf(e))); }, 1000);
     return () => clearTimeout(timer);
-  }, [composer, me?.user_id, booted, job, conflict, suggesting]);
+  }, [composer, me?.user_id, booted, job, conflict, suggesting, submission]);
   useEffect(() => {
-    if (!booted || !ready || !me || !sessionStorage.getItem("reveal:submit-after-login")) return;
-    sessionStorage.removeItem("reveal:submit-after-login"); void launch();
+    if (!booted || !ready || !pendingSubmission.current || submissionResumed.current) return;
+    submissionResumed.current = true;
+    void provision(pendingSubmission.current);
   }, [booted, ready, me?.user_id]);
   useEffect(() => {
     const missing = composer.eaggl_anchors.filter(anchor => { const factor = factors[anchor.reference.source_id]; return !factor || factor.source_revision !== anchor.reference.source_revision || factor.object.id !== anchor.reference.dapper_id; });
@@ -199,28 +223,101 @@ export function Composer() {
     }
     await suggest(next);
   }
-  const launch = async () => {
-    if (submitting || !currentRef.current.source_gap || !currentRef.current.eaggl_anchors.length) return;
-    setSubmitting(true); setError("");
+  const submissionFailed = (failure: unknown) => {
+    setSubmission(current => ({ stage: current?.stage || "signing-in", error: messageOf(failure) }));
+  };
+  const beginSubmission = (method: SubmissionMethod) => {
+    if (pendingSubmission.current || submissionRunning.current || !currentRef.current.source_gap || !currentRef.current.eaggl_anchors.length) return null;
+    const attempt: SubmissionAttempt = {
+      method, question: gap?.object.text || "", gap, composer: structuredClone(currentRef.current),
+      draft: draftRef.current, owner: me?.user_id || loadedOwner.current,
+      anonymousKey: crypto.randomUUID(), requestKeys: [...requestKeys.current], submitKey: submitKey.current,
+    };
+    restoreEpoch.current++;
+    pendingSubmission.current = attempt; submissionResumed.current = true;
+    rememberSubmission(attempt);
+    setError(""); dialog.current?.close();
+    setSubmission({ stage: method === "session" ? "saving" : "signing-in" });
+    return attempt;
+  };
+  async function provision(attempt: SubmissionAttempt, confirmedIdentity = me) {
+    if (submissionRunning.current) return;
+    submissionRunning.current = true;
+    setSubmission({ stage: "signing-in" });
     try {
-      const saved = await save(); if (!saved) throw new Error("Save the draft before submitting.");
-      await api.explore({ source_gap: saved.composer.source_gap!, draft_id: saved.id });
+      let identity = confirmedIdentity;
+      if (attempt.method === "anonymous" && !identity) {
+        const response = await fetch("/api/session/anonymous", { method: "POST", headers: { "content-type": "application/json", "Idempotency-Key": attempt.anonymousKey }, body: "{}" });
+        const value = await response.json(); if (!response.ok) throw new Error(value.detail || "Anonymous continuation is unavailable. Please try again.");
+        identity = await refresh();
+      }
+      if (!identity) identity = await refresh();
+      if (attempt.method === "google" || attempt.method === "orcid") {
+        if (new URLSearchParams(window.location.search).has("error") || identity?.principal_kind !== "registered") throw new Error("Sign-in was not completed. Try signing in again, or return to your question to choose another option.");
+      }
+      if (!identity) throw new Error("We could not confirm your session. Please try again. Your question and anchors are saved in this browser.");
+      // Authentication can change the owner while this function is awaiting a response.
+      // Set the owner before saving so the identity effect cannot discard a new draft.
+      if (attempt.owner && attempt.owner !== identity.user_id) {
+        saveEpoch.current++; draftRef.current = null; setDraft(null); attempt.draft = null;
+        requestKeys.current.clear(); submitKey.current = null; attempt.submitKey = null; attempt.requestKeys = [];
+      }
+      loadedOwner.current = identity.user_id; attempt.owner = identity.user_id;
+      rememberSubmission(attempt);
+      setSubmission({ stage: "saving" });
+      const saved = await save(attempt.composer);
+      if (!saved) throw new Error("Your draft changed while it was being saved. Please try again.");
+      attempt.draft = saved; rememberSubmission(attempt);
       const binding = `${saved.id}:${saved.version}`;
       if (submitKey.current?.binding !== binding) submitKey.current = { binding, key: crypto.randomUUID() };
+      attempt.submitKey = submitKey.current; rememberSubmission(attempt);
+      setSubmission({ stage: "submitting" });
       const result = await api.submit({ kind: "analysis", draft_id: saved.id, draft_version: saved.version }, submitKey.current.key);
       setJob(result);
-      const url = new URL(window.location.href); url.searchParams.set("draft", saved.id); url.searchParams.set("job", result.id);
-      window.history.replaceState(null, "", url); dialog.current?.close();
-    } catch (failure) { setError(messageOf(failure)); } finally { setSubmitting(false); }
+      const url = new URL(window.location.href); url.searchParams.set("draft", saved.id); url.searchParams.set("job", result.id); url.searchParams.delete("error");
+      if (mounted.current) window.history.replaceState(null, "", url);
+      try { sessionStorage.setItem(storageKey, JSON.stringify({ composer: saved.composer, gap, factors, draft: saved, owner: identity.user_id, job: result, submitKey: submitKey.current } satisfies LocalDraft)); } catch { /* Keep the confirmed job in memory when storage is unavailable. */ }
+      pendingSubmission.current = null; rememberSubmission(null); setSubmission(null);
+      if (mounted.current) requestAnimationFrame(() => document.getElementById("submitted-question")?.focus());
+      // Recording the visit is bookkeeping; it must not delay or block a research job.
+      void api.explore({ source_gap: saved.composer.source_gap!, draft_id: saved.id }).catch(() => {});
+    } catch (failure) { submissionFailed(failure); }
+    finally { submissionRunning.current = false; }
+  }
+  const launch = () => { const attempt = beginSubmission("session"); if (attempt) void provision(attempt); };
+  const anonymous = () => { const attempt = beginSubmission("anonymous"); if (attempt) void provision(attempt); };
+  const redirectToProvider = async (provider: "google" | "orcid") => {
+    if (submissionRunning.current) return;
+    submissionRunning.current = true;
+    setSubmission({ stage: "signing-in" });
+    try { await signIn(provider, { callbackUrl: window.location.origin + "/" }); }
+    catch (failure) { submissionFailed(failure); }
+    finally { submissionRunning.current = false; }
   };
-  const anonymous = async () => {
-    setSubmitting(true); setError("");
-    try {
-      anonymousKey.current ||= crypto.randomUUID();
-      const response = await fetch("/api/session/anonymous", { method: "POST", headers: { "content-type": "application/json", "Idempotency-Key": anonymousKey.current }, body: "{}" });
-      const value = await response.json(); if (!response.ok) throw new Error(value.detail);
-      await refresh(); dialog.current?.close(); setSubmitting(false); await launch();
-    } catch (failure) { setError(messageOf(failure)); setSubmitting(false); }
+  const oauth = (provider: "google" | "orcid") => { if (beginSubmission(provider)) void redirectToProvider(provider); };
+  const retrySubmission = async () => {
+    const attempt = pendingSubmission.current; if (!attempt || submissionRunning.current) return;
+    if (attempt.method === "google" || attempt.method === "orcid") {
+      if (new URLSearchParams(window.location.search).has("error")) { void redirectToProvider(attempt.method); return; }
+      // A failed session read does not mean the provider sign-in failed.
+      if (me?.principal_kind !== "registered") {
+        submissionRunning.current = true; setSubmission({ stage: "signing-in" });
+        const identity = await refresh(); submissionRunning.current = false;
+        if (identity?.principal_kind === "registered") void provision(attempt, identity);
+        else void redirectToProvider(attempt.method);
+        return;
+      }
+    }
+    void provision(attempt);
+  };
+  const backToQuestion = () => {
+    if (submissionRunning.current) return;
+    // Keep the retry binding even when the user dismisses an uncertain submission.
+    // Returning here after a reload must recover the same job, not create another.
+    try { sessionStorage.setItem(storageKey, JSON.stringify({ composer, gap, factors, draft: draftRef.current, owner: loadedOwner.current, job, submitKey: submitKey.current } satisfies LocalDraft)); } catch { /* The binding stays in memory when storage is unavailable. */ }
+    pendingSubmission.current = null; rememberSubmission(null); setSubmission(null); setError("");
+    const url = new URL(window.location.href); url.searchParams.delete("error"); window.history.replaceState(null, "", url);
+    requestAnimationFrame(() => document.querySelector<HTMLButtonElement>(".gap-submit")?.focus());
   };
   const reset = () => { setJob(null); submitKey.current = null; const url = new URL(window.location.href); url.searchParams.delete("job"); window.history.replaceState(null, "", url); };
   const accountIds = job?.result?.kind === "analysis" ? job.result.account_ids : [];
@@ -237,11 +334,12 @@ export function Composer() {
     return anchor && factor?.source_revision === anchor.reference.source_revision && factor.object.id === anchor.reference.dapper_id ? factor : undefined;
   };
   const anchorName = (id: string) => selectedFactor(id)?.cfde_anchor.label || selectedFactor(id)?.object.name || selectedFactor(id)?.cfde_anchor.subtitle || id;
+  if (submission) return <SubmissionProgress stage={submission.stage} provider={pendingSubmission.current?.method} question={pendingSubmission.current?.question} error={submission.error} onRetry={retrySubmission} onBack={backToQuestion} retryLabel={pendingSubmission.current?.method === "google" || pendingSubmission.current?.method === "orcid" ? "Try again" : "Retry"} />;
   return <main id="main" className={`composer-page prototype-composer ${gap ? "has-gap" : ""} ${job ? "has-job" : ""} ${job && terminal(job.status) ? "job-complete" : ""}`}>
     {!gap && <p className="invitation">Help us close these <a href="https://dismech.monarchinitiative.org/app/discussions/index.html" target="_blank" rel="noopener noreferrer">knowledge gaps</a></p>}
     <section className={`question-shell ${job ? "submitted" : ""}`} aria-label="Knowledge gap and mechanism anchors">
       {!gap ? <div className="gap-input-wrap"><label className="sr-only" htmlFor="gap-search">Search DisMech knowledge gaps</label><input id="gap-search" type="search" role="combobox" aria-autocomplete="list" aria-expanded={!!query.trim() && showResults && !!results.length} value={query} autoComplete="off" onChange={e => { setQuery(e.target.value); setResults([]); setSearching(!!e.target.value.trim()); pendingResultFocus.current = false; setError(""); setShowResults(true); }} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)} onKeyDown={e => { if ((e.key === "ArrowDown" || e.key === "Enter") && query.trim()) { e.preventDefault(); focusResult(); } if (e.key === "Escape") { setShowResults(false); pendingResultFocus.current = false; } }} placeholder={focused ? "Search DisMech knowledge gaps" : ""} aria-controls="gap-results-list" />{!query && !focused && <span className="idle-question" aria-hidden="true">{example}</span>}<button className="send search-arrow" disabled={!query.trim()} aria-label="Show matching knowledge gaps" title="Show matching knowledge gaps" onClick={focusResult}><span aria-hidden="true">↑</span></button></div> : <>
-        <div className="selected-question-row"><h1 className="selected-question">{gap.object.text}</h1>{!job && <button className="clear-question" aria-label="Search for a different knowledge gap" onClick={clearGap}>×</button>}</div>
+        <div className="selected-question-row"><h1 id="submitted-question" tabIndex={job ? -1 : undefined} className="selected-question">{gap.object.text}</h1>{!job && <button className="clear-question" aria-label="Search for a different knowledge gap" onClick={clearGap}>×</button>}</div>
         <div className="inline-context">
           {!job && <><div className="question-meta"><button className="subtle" onClick={() => setInspection({ title: "About this knowledge gap", description: gap.object.gap_description, value: gap })}>About this knowledge gap ↗</button><span>DisMech</span></div><p className="anchor-guidance">Anchor on possible genetic mechanisms to explore evidence for answering this gap.</p><div className="chip-group-label">Mechanism anchors <span>{composer.eaggl_anchors.length}</span>{suggesting && <span role="status">Finding anchors…</span>}{!!limitations.length && <button className="matching-note" onClick={() => setInspection({ title: "About mechanism matching", description: limitations.join(" "), value: { model: composer.model, automatic_anchors: composer.eaggl_anchors.filter(anchor => anchor.origin === "automatic").length } })}>About matching</button>}</div></>}
           <div className="anchor-chips" aria-label="Selected mechanism anchors">{composer.eaggl_anchors.map(anchor => <span className="chip" key={anchor.reference.source_id}><button className="label" title={[anchorName(anchor.reference.source_id), selectedFactor(anchor.reference.source_id)?.cfde_anchor.subtitle].filter(Boolean).join(" · ")} onClick={() => setInspection({ title: selectedFactor(anchor.reference.source_id)?.cfde_anchor.label || "Mechanism anchor", description: selectedFactor(anchor.reference.source_id)?.object.description, value: selectedFactor(anchor.reference.source_id) || anchor })}>{anchorName(anchor.reference.source_id)}</button>{!job && <button className="remove" aria-label={`Remove ${anchorName(anchor.reference.source_id)}`} onClick={() => setComposer(current => removeAnchor(current, anchor.reference.source_id))}>×</button>}</span>)}{!job && <button className="chip-add" aria-expanded={adding} aria-controls="factor-picker" aria-label="Add a mechanism anchor" onClick={() => { setAdding(!adding); if (!adding) requestAnimationFrame(() => document.getElementById("mechanism-search")?.focus()); }}>+</button>}</div>
@@ -253,7 +351,7 @@ export function Composer() {
               <details><summary>Additional knowledge graphs</summary><div className="checks">{(["biomarkerkg", "prokn"] as const).map(kg => <label key={kg}><input type="checkbox" checked={composer.selected_kgs.includes(kg)} onChange={e => setComposer(c => ({ ...c, selected_kgs: e.target.checked ? [...c.selected_kgs, kg] : c.selected_kgs.filter(k => k !== kg) }))} />{kg === "prokn" ? "ProKN" : "BiomarkerKG"}</label>)}</div></details>
             </div>
             <span className="sr-only" role="status">{me ? saveState : "Selections kept in this browser"}</span>
-            <div className="submit-row"><button className="gap-submit" aria-label={submitting ? "Submitting analysis" : "Let’s close this gap"} disabled={!composer.eaggl_anchors.length || suggesting || submitting || conflict || !ready} onClick={() => me ? void launch() : dialog.current?.showModal()}><span>{submitting ? "Submitting…" : "Let’s close this gap"}</span><span className="send" aria-hidden="true"><span>↑</span></span></button></div>
+            <div className="submit-row"><button className="gap-submit" aria-label="Let’s close this gap" disabled={!composer.eaggl_anchors.length || suggesting || conflict || !ready} onClick={() => me ? void launch() : dialog.current?.showModal()}><span>Let’s close this gap</span><span className="send" aria-hidden="true"><span>↑</span></span></button></div>
           </>}
         </div>
       </>}
@@ -264,6 +362,6 @@ export function Composer() {
     {conflict && <div className="conflict"><p>This draft changed in another session. Your edits are retained here.</p><button onClick={async () => { if (!draftRef.current) return; const latest = await api.draft(draftRef.current.id); draftRef.current = latest; setDraft(latest); setComposer(latest.composer); setConflict(false); setError(""); }}>Load saved version</button><button onClick={() => { draftRef.current = null; setDraft(null); setConflict(false); setError(""); void save().catch(e => setError(messageOf(e))); }}>Save my edits as a new draft</button></div>}
     {job && <><Activity key={job.id} initial={job} onJob={setJob} />{accountIds.map(id => <AccountPreview key={id} id={id} />)}{terminal(job.status) && <button className="text-button return-to-question" onClick={reset}>Return to question</button>}</>}
     <dialog ref={inspectionDialog} className="inspection-dialog" aria-labelledby="inspection-title" onClose={() => setInspection(null)}><div className="inspection-heading"><h2 id="inspection-title">{inspection?.title}</h2><button aria-label="Close record" onClick={() => inspectionDialog.current?.close()}>×</button></div><div className="inspection-body">{inspection?.title === "About this knowledge gap" && <p>{gap?.object.text}</p>}{inspection?.description && <><h3>{inspection.title === "About this knowledge gap" ? "What remains unknown" : "Context"}</h3><p>{inspection.description}</p></>}<details open={!inspection?.description}><summary>Source evidence and record</summary><Record value={inspection?.value} /></details></div></dialog>
-    <dialog ref={dialog} className="auth-dialog" aria-labelledby="auth-title"><button className="dialog-close" aria-label="Close sign-in choices" onClick={() => dialog.current?.close()}>×</button><h2 id="auth-title">Continue your exploration</h2><p>Sign in to keep your work, or continue anonymously.</p><ProviderButtons beforeLogin={() => sessionStorage.setItem("reveal:submit-after-login", "1")} /><div className="or">or</div><button className="provider" disabled={submitting} onClick={anonymous}>Continue anonymously</button><small>Your selected question and anchors stay with you. Anonymous access depends on this browser session.</small>{error && <p role="alert" className="error">{error}</p>}</dialog>
+    <dialog ref={dialog} className="auth-dialog" aria-labelledby="auth-title"><button className="dialog-close" aria-label="Close sign-in choices" onClick={() => dialog.current?.close()}>×</button><h2 id="auth-title">Continue your exploration</h2><p>Sign in to keep your work, or continue anonymously.</p><ProviderButtons onLogin={oauth} /><div className="or">or</div><button className="provider" onClick={anonymous}>Continue anonymously</button><small>Your selected question and anchors stay with you. Anonymous access depends on this browser session.</small>{error && <p role="alert" className="error">{error}</p>}</dialog>
   </main>;
 }
