@@ -111,6 +111,14 @@ The output is `reveal.evidence-package/0.2-draft`, implementing the [evidence-pa
 
 The final worker must still bind trusted attribution and job ownership, measure tokens for the selected model, and enforce runtime/tool budgets before dispatch. The builder's byte cap is not a substitute for that tokenizer check. Proto-OKN enrichment remains a later append-only ledger; this initial package does not fabricate external assertions or a ScientificAccount.
 
+### Initial model reading and token measurement
+
+The live worker measures the exact research prompt and `dispatch-view.json` with the configured model's token-count endpoint before execution. The default 24,000-token preparation limit applies to those initial bytes; it excludes harness instructions and subsequent source/tool reads and is not a total-run token cap. Runtime cost, duration and tool limits apply separately.
+
+The reading view contains the scientific fields, selected identities, scores, source references and coverage from the chosen canonical package. It defers the repeated `source_artifacts` catalogue and `dapper_context.files` collection to exact read-only lookups. The full canonical package and every captured source remain available unchanged. The view is a separate application document, not a replacement schema-valid evidence package. Agents must read exact cited source rows before authoring; metadata deferral does not authorize invented provenance or interpretations.
+
+The frozen dispatch manifest binds the package, view, prompt, model and measurement hashes. Candidate reduction still uses the deterministic builder, preserves every selected anchor, and records omissions. Sidecars live outside the builder-owned package directory so interrupted manifest publication can recover without changing its immutable file set. Legacy frozen inputs retain their earlier full-package measurement scope.
+
 ### Python entry points
 
 `collect_package(...)` accepts factor/gap IDs and configured source adapters; it returns a `BuiltPackage`. `build_package(spec, blobs, runtime)` accepts frozen bytes directly for service/worker integration. `BuiltPackage.write(directory)` publishes a fully validated bundle through a temporary directory.

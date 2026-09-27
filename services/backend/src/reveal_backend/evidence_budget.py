@@ -8,6 +8,8 @@ import tempfile
 import httpx
 
 from .evidence_package import DapperRuntime, build_package, canonical_json, decode, load_build_input, require, sha256
+from .dispatch_view import (BUDGET_FILENAME, BUDGET_SCOPE, VIEW_FILENAME, VIEW_FORMAT, dispatch_view,
+                            measured_input, research_prompt, validate_dispatch_budget)
 from .evidence_schema import load_generated_schema, validate_package_shape
 from .runtime_config import ROOT, setting
 
@@ -25,20 +27,25 @@ def count_tokens(data: bytes, model: str) -> int:
 
 
 def atomic_json(path, value):
+    atomic_bytes(path, canonical_json(value))
+
+
+def atomic_bytes(path, value):
     path = Path(path)
     with tempfile.NamedTemporaryFile(dir=path.parent, prefix='.dispatch-', delete=False) as output:
         temporary = Path(output.name)
-        output.write(canonical_json(value))
+        output.write(value)
     try:
         temporary.replace(path)
     finally:
         temporary.unlink(missing_ok=True)
 
 
-def fit_input_budget(package_path, mode, budget):
+def fit_input_budget(package_path, mode, budget, validation_feedback=()):
     """Return (immutable chosen path, package, measurements) before paid execution.
 
-    Preserve all selected anchors and exact captured sources. If needed, retain
+    Measure the exact initial reading view plus shared research instructions.
+    The canonical package and all source files remain complete. If needed, retain
     fewer existing ranked candidates and their GeneSet projections, rebuilding
     through the original deterministic validator. Raw captures are never edited,
     rerequested, or summarized by a model. The package reports every omission.
@@ -52,12 +59,12 @@ def fit_input_budget(package_path, mode, budget):
     with lock_path.open('a+b') as lock:
         fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
         try:
-            return _fit_input_budget_locked(package_path, mode, budget)
+            return _fit_input_budget_locked(package_path, mode, budget, validation_feedback)
         finally:
             fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
 
 
-def _fit_input_budget_locked(package_path, mode, budget):
+def _fit_input_budget_locked(package_path, mode, budget, validation_feedback=()):
     root = package_path.parent.parent
     require(mode in ('box', 'deterministic'), 'Unknown evidence execution mode')
     require(type(budget) is int and budget > 0, 'Evidence token budget must be positive')
@@ -77,12 +84,34 @@ def _fit_input_budget_locked(package_path, mode, budget):
         if mode == 'box':
             require(saved['measurement']['enforced'] and saved['measurement']['count'] <= budget,
                     'Frozen dispatch input exceeds its measured budget')
+        if 'dispatch_view' in saved:
+            view_binding = saved['dispatch_view']
+            view_path = (root / view_binding['path']).resolve()
+            budget_path = (root / view_binding['budget_path']).resolve()
+            require(view_path.is_relative_to(root) and budget_path.is_relative_to(root),
+                    'Frozen dispatch sidecar path escapes source capture')
+            require(sha256(view_path.read_bytes()) == view_binding['sha256'] and
+                    sha256(budget_path.read_bytes()) == view_binding['budget_sha256'],
+                    'Frozen dispatch view or measurement changed')
+            prompt = research_prompt(decode(raw)['external_evidence']['selected_graphs'], validation_feedback)
+            validate_dispatch_budget(raw, view_path.read_bytes(), decode(budget_path.read_bytes()), prompt, model)
+            require(decode(budget_path.read_bytes())['measurement'] == saved['measurement'],
+                    'Frozen dispatch measurements differ')
+        elif mode == 'box':
+            # Historical captures measured only the canonical package, not the
+            # new initial prompt/view. Preserve their frozen bytes and describe
+            # that scope honestly; do not relabel the old count as a view count.
+            require(not validation_feedback, 'Legacy frozen input needs fresh preparation to budget review feedback')
+            return chosen, decode(raw), {**saved['measurement'],
+                'scope': 'legacy canonical package only; research prompt and dispatch view were not measured'}
         return chosen, decode(raw), saved['measurement']
 
     if cache.exists():
         return cached()
     measurement = {'method': 'anthropic-count-tokens' if mode == 'box' else 'development-byte-upper-bound',
                    'budget': budget, 'enforced': mode == 'box', 'model': model, 'attempts': []}
+    if mode == 'box':
+        measurement.update(scope=BUDGET_SCOPE, view_format=VIEW_FORMAT)
     chosen, data, package, built = package_path, original_data, original, None
     spec = blobs = runtime = None
     ranking = sorted(original['pigean']['candidates'],
@@ -90,20 +119,39 @@ def _fit_input_budget_locked(package_path, mode, budget):
     anchors = original['selection']['eaggl_mechanism_ids']
     candidate_count = len(ranking)
     for _ in range(10):
-        count = count_tokens(data, model) if mode == 'box' else len(data)
+        initial = measured_input(data, validation_feedback) if mode == 'box' else data
+        count = count_tokens(initial, model) if mode == 'box' else len(data)
         measurement['attempts'].append({'input_tokens': count, 'package_sha256': sha256(data),
+                                        'input_sha256': sha256(initial),
                                         'retained_nodes': package['coverage']['retained_nodes'],
                                         'retained_edges': package['coverage']['retained_edges']})
         if mode == 'deterministic' or count <= budget:
             measurement.update(count=count, reduced=built is not None,
-                               original_package_sha256=binding['original_sha256'], package_sha256=sha256(data))
+                               original_package_sha256=binding['original_sha256'], package_sha256=sha256(data),
+                               input_sha256=sha256(initial))
             validate_package_shape(package, load_generated_schema(ROOT / 'schema/evidence-package.schema.json'))
             if built is not None:
                 chosen = root / 'dispatch/package/evidence-package.json'
                 built.write(chosen.parent)
-            atomic_json(cache, {'format': 'reveal.dispatch-input/1', 'binding': binding,
+            frozen = {'format': 'reveal.dispatch-input/1', 'binding': binding,
                                 'path': str(chosen.relative_to(root)), 'sha256': sha256(data),
-                                'measurement': measurement})
+                                'measurement': measurement}
+            if mode == 'box':
+                view = dispatch_view(data)
+                prompt = research_prompt(package['external_evidence']['selected_graphs'], validation_feedback)
+                view_budget = {'format': 'reveal.dispatch-budget/1', 'view_format': VIEW_FORMAT,
+                               'package_sha256': sha256(data), 'view_sha256': sha256(view),
+                               'prompt_sha256': sha256(prompt.encode()), 'measurement': measurement}
+                validate_dispatch_budget(data, view, view_budget, prompt, model)
+                # Keep sidecars outside the exact-file-set builder directory.
+                # A crash before manifest publication can then replay the
+                # unchanged built package and publish its sidecars again.
+                atomic_json(root / BUDGET_FILENAME, view_budget)
+                atomic_bytes(root / VIEW_FILENAME, view)
+                frozen['dispatch_view'] = {'format': VIEW_FORMAT, 'sha256': sha256(view),
+                                          'path': VIEW_FILENAME, 'budget_path': BUDGET_FILENAME,
+                                          'budget_sha256': sha256(canonical_json(view_budget))}
+            atomic_json(cache, frozen)
             return chosen, package, measurement
         if candidate_count == 0:
             atomic_json(root / 'dispatch-budget-failure.json', measurement)

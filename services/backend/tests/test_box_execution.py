@@ -192,7 +192,7 @@ class DraftHydrationTests(unittest.TestCase):
 
 
 class ResearchPromptTests(unittest.TestCase):
-    def prepared_prompt(self, selected_graphs, feedback=()):
+    def prepared_prompt(self, selected_graphs, feedback=(), frozen_budget=False, tamper_view=False):
         """Exercise normal setup without a network clone or a model invocation."""
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp); state = root / 'state'; state.mkdir()
@@ -207,9 +207,27 @@ class ResearchPromptTests(unittest.TestCase):
                 'selected_graphs': list(selected_graphs), 'model': 'test-model', 'claude_version': 'test-version',
                 'timeout_seconds': 60, 'max_budget_usd': 1, 'max_turns': 10, 'input_sha256': 'frozen-input'}
             if feedback: request['validation_feedback'] = list(feedback)
+            if frozen_budget:
+                from reveal_backend.dispatch_view import BUDGET_SCOPE, VIEW_FORMAT, dispatch_view, measured_input, research_prompt
+                from reveal_backend.evidence_package import sha256
+                (root / 'input').mkdir()
+                view = dispatch_view(package.read_bytes())
+                budget = {'format': 'reveal.dispatch-budget/1', 'view_format': VIEW_FORMAT,
+                    'package_sha256': sha256(package.read_bytes()), 'view_sha256': sha256(view),
+                    'prompt_sha256': sha256(research_prompt(selected_graphs, feedback).encode()),
+                    'measurement': {'scope': BUDGET_SCOPE, 'enforced': True, 'count': 1000, 'budget': 24000,
+                        'model': request['model'], 'input_sha256': sha256(measured_input(package.read_bytes(), feedback))}}
+                (root / 'input/dispatch-budget.json').write_text(json.dumps(budget))
+                (root / 'input/dispatch-view.json').write_bytes(view + (b'changed' if tamper_view else b''))
             with patch.multiple(box_remote, BASE=root, STATE=state), patch.object(box_remote, 'protect'), \
                     patch('reveal_backend.dapper_release.prepare_agent_workspace', return_value=runtime):
                 _, manifest, prompt = box_remote.setup(request)
+            from reveal_backend.dispatch_view import dispatch_view, research_prompt
+            self.assertEqual(prompt, research_prompt(selected_graphs, feedback))
+            self.assertEqual((work / 'input/dispatch-view.json').read_bytes(), dispatch_view(package.read_bytes()))
+            self.assertEqual(manifest['dispatch_view_sha256'], __import__('hashlib').sha256(dispatch_view(package.read_bytes())).hexdigest())
+            self.assertEqual(manifest['research_prompt_sha256'], __import__('hashlib').sha256(prompt.encode()).hexdigest())
+            self.assertEqual(json.loads((work / 'input/package-sections/dapper-files.json').read_bytes()), [])
             return prompt, manifest
 
     def test_normal_runner_without_feedback_checks_every_scientific_field(self):
@@ -233,7 +251,7 @@ class ResearchPromptTests(unittest.TestCase):
                 prompt, _ = self.prepared_prompt(graphs)
                 definitions = {tool['name']: tool for tool in ScopedTools(graphs, Ledger(Path(temp), 'job', 1)).definitions()}
                 if graphs:
-                    self.assertIn('enabled graphs are exactly ' + json.dumps(list(graphs)), prompt)
+                    self.assertIn('enabled graphs are exactly ' + json.dumps(sorted(graphs)), prompt)
                     for tool in ('get_schema', 'query_graph'):
                         self.assertIn('mcp__reveal__' + tool, prompt)
                         self.assertEqual(definitions[tool]['inputSchema']['properties']['graph']['enum'], list(graphs))
@@ -250,6 +268,15 @@ class ResearchPromptTests(unittest.TestCase):
         prompt, _ = self.prepared_prompt(('prokn',), ('Prior source-specific review feedback.',))
         self.assertIn(box_remote.research_authoring_requirements(('prokn',)), prompt)
         self.assertIn('Prior source-specific review feedback.', prompt)
+
+    def test_remote_honors_frozen_measurement_including_feedback(self):
+        _, manifest = self.prepared_prompt(('prokn',), ('Previously rejected directional assertion.',), frozen_budget=True)
+        self.assertEqual(manifest['dispatch_budget']['measurement']['count'], 1000)
+        self.assertEqual(manifest['dispatch_budget']['view_sha256'], manifest['dispatch_view_sha256'])
+
+    def test_remote_rejects_changed_supplied_view_before_model_execution(self):
+        with self.assertRaises(ValueError):
+            self.prepared_prompt((), frozen_budget=True, tamper_view=True)
 
 
 class DeliveryBatchTests(unittest.TestCase):

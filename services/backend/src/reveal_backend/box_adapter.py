@@ -132,7 +132,7 @@ def make_bundle(project_root: Path, request: ExecutionRequest):
     source = project_root / 'services/backend/src/reveal_backend'
     files = {}
     for name in ('__init__.py', 'evidence_package.py', 'dapper_release.py', 'scientific_account_lint.py',
-                 'box_remote.py', 'box_stream.py', 'box_mcp.py'):
+                 'box_remote.py', 'box_stream.py', 'box_mcp.py', 'dispatch_view.py'):
         files['bundle/services/backend/src/reveal_backend/' + name] = (source / name).read_bytes()
     relative = ['scripts/lint_scientific_account.py', 'services/backend/agent-runtime/dapper-release.json',
                 'services/backend/agent-skills/construct-scientific-account/SKILL.md',
@@ -155,6 +155,40 @@ def make_bundle(project_root: Path, request: ExecutionRequest):
         if set(value['external_evidence']['selected_graphs']) != set(request.selected_graphs):
             raise BoxConfigurationError('Selected graphs do not match the frozen evidence package')
         files['input/evidence-package.json'] = data
+        from .dispatch_view import BUDGET_FILENAME, VIEW_FILENAME, research_prompt, validate_dispatch_budget
+        budget_path = request.input_path.parent / BUDGET_FILENAME
+        view_path = request.input_path.parent / VIEW_FILENAME
+        frozen_view = None
+        # A resumed worker may bypass fit_input_budget. Require the same frozen
+        # sidecars even if both were removed after its queue snapshot was saved.
+        for parent in list(request.input_path.resolve().parents)[:3]:
+            manifest_path = parent / 'dispatch-input.json'
+            if not manifest_path.exists():
+                continue
+            frozen_input = json.loads(manifest_path.read_bytes())
+            if (parent / frozen_input['path']).resolve() == request.input_path.resolve():
+                if frozen_input['sha256'] != hashlib.sha256(data).hexdigest():
+                    raise BoxConfigurationError('Frozen dispatch package changed')
+                frozen_view = frozen_input.get('dispatch_view')
+                if frozen_view:
+                    view_path = (parent / frozen_view['path']).resolve()
+                    budget_path = (parent / frozen_view['budget_path']).resolve()
+                    if not view_path.is_relative_to(parent) or not budget_path.is_relative_to(parent):
+                        raise BoxConfigurationError('Frozen dispatch sidecar path escapes source capture')
+                break
+        if frozen_view and not (budget_path.exists() and view_path.exists()):
+            raise BoxConfigurationError('Frozen dispatch view or budget is missing')
+        if budget_path.exists() or view_path.exists():
+            if not (budget_path.exists() and view_path.exists()):
+                raise BoxConfigurationError('Frozen dispatch view or budget is missing')
+            budget_data, view_data = budget_path.read_bytes(), view_path.read_bytes()
+            if frozen_view and (hashlib.sha256(view_data).hexdigest() != frozen_view['sha256'] or
+                                hashlib.sha256(budget_data).hexdigest() != frozen_view['budget_sha256']):
+                raise BoxConfigurationError('Frozen dispatch view or measurement changed')
+            validate_dispatch_budget(data, view_data, json.loads(budget_data),
+                                     research_prompt(request.selected_graphs, request.validation_feedback))
+            files['input/' + BUDGET_FILENAME] = budget_data
+            files['input/' + VIEW_FILENAME] = view_data
         input_bytes = len(data)
         for item in value['source_artifacts'].values():
             path = PurePosixPath(item['path'])

@@ -22,6 +22,8 @@ import time
 
 from .box_mcp import DraftValidationError, Ledger, PolicyError, ScopedTools, canonical, serve, stamp
 from .box_stream import ClaudeStream, SecretFilter, StreamProtocolError
+from .dispatch_view import (BUDGET_FILENAME, VIEW_FILENAME, dispatch_view, research_authoring_requirements,
+                            research_prompt, validate_dispatch_budget)
 
 BASE = Path('/reveal')
 STATE = BASE / 'state'
@@ -50,22 +52,6 @@ def protect(root):
         os.chown(path, 0, 0)
         os.chmod(path, 0o555 if path.is_dir() or os.access(path, os.X_OK) else 0o444)
 
-
-def research_authoring_requirements(selected_graphs):
-    """Baseline scientific constraints apply even without prior review feedback."""
-    instructions = '''Scientific grounding requirements:
-An association or factor loading alone provides no evidence distinguishing upstream causation, downstream readout, reverse causation, or pleiotropy. Do not describe it as even weak, limited, suggestive, or consistent-with evidence favoring one causal direction over another. A disclaimer that causality is unproven or the gap remains open does not repair an unsupported directional assertion elsewhere.
-Audit every Proposition statement/scope, Claim statement and assessment, EvidenceItem explanation/context/snippet, and ScientificAccount closing_remarks separately against its exact cited source. Remove unsupported positive assertions from each field; qualifying a different field is insufficient. Do not add remembered gene functions, pathway membership, tissue specificity, temporal precedence, or regulatory direction from model knowledge, gene symbols, set labels, or co-loading. Retrieved assertions must resolve the same entity and biological scope, and support the particular interpretation; functional annotation alone does not resolve the gap's causal alternatives.
-A useful association-only biological interpretation may identify a candidate's involvement in the selected factor/trait model, scoped to the retained observations, with the causal question explicitly unresolved. Distinguish that limited hypothesis from established biological function. Proposed follow-up measurements are future tests, not observed support. If no useful scoped interpretation is supported, return insufficient_evidence.
-Before quoting a number, read its exact cited artifact and JSON pointer. Preserve the metric and numeric value from that source, not a different graph score. Prefer one biological Claim with a direct File-derived EvidenceItem when useful; a duplicate source-result Claim is optional.
-Selected graph investigation:'''
-    if selected_graphs:
-        instructions += '\nThe enabled graphs are exactly ' + json.dumps(list(selected_graphs)) + '. Before authoring biological interpretations, investigate each selected graph using mcp__reveal__get_schema once, then mcp__reveal__query_graph for one relevant source-derived entity or scoped term with limit=10 or less. A schema read alone is not a biological evidence search. Use a resolved absolute entity IRI when available; otherwise a contains search is discovery only and any hit needs identity and scope verification before use. Allow at most one additional targeted query per graph to resolve a promising hit. Do not force an irrelevant query: if the schema demonstrates incompatibility or a tool failure prevents a safe query, record that specific limitation and do not claim a search completed. Never query unselected graphs. Preserve the actual completed, empty, failed or skipped outcome in the account limitations; empty or failed searches are not biological absence. Use only the returned trusted capture descriptor for any new evidence File and exact locator. The worker retains every attempted request/result, including errors and empty results; do not invent or edit ledger records.'
-    else:
-        instructions += '\nNo external graphs are selected. External graph tools are unavailable; work from the frozen package and state its coverage limitations.'
-    return instructions + '''
-Representation requirements: Put EvidenceItems in evidence_items and reference their IDs via has_evidence. Use absolute urn:reveal:tmp:NAME IDs for new objects, never blank-node _: IDs. Omit authored runtime/attribution fields and invented actors, activities or timestamps; the trusted backend supplies them. Do not set mechanistic_model to a Mechanism (that slot requires a MechanisticModel). Cite the exact mechanism in scope/context or ordinary provenance when appropriate.
-Keep public narration brief: short progress updates at meaningful transitions, then a concise completion or limitation message. Put the detailed scientific assessment in the output document; do not repeat it as a final table or long narrative.'''
 
 
 def setup(request):
@@ -105,8 +91,23 @@ def setup(request):
         excerpt_path = sections / 'authoring-schema-excerpt.yaml'
         excerpt_path.write_text(yaml.safe_dump(excerpt, sort_keys=False))
         views[str(excerpt_path.relative_to(work))] = hashlib.sha256(excerpt_path.read_bytes()).hexdigest()
-        skill = work / 'services/backend/agent-skills/construct-scientific-account/SKILL.md'
-        prompt = f'Read {skill}. Frozen evidence package: {package}. Line-readable identical per-section views are in {sections}; start with selection.json, pigean.json, source_artifacts.json and dapper_context.json. authoring-schema-excerpt.yaml contains exact relevant class and slot definitions from the pinned schema. Use the pinned DAPPER schema in {runtime["dapper_root"]}/schema for fields you author, and only the selected evidence tools. Prefer one small useful account and one scoped Claim grounded in an exact CFDE observation when scientifically justified. Write 1–3 self-contained account documents as /reveal/output/account-1.yaml (or .json). Use mcp__reveal__write_account_draft to write authored nodes and automatically hydrate exact referenced trusted source nodes; this avoids retyping source objects. Draft-lint every account using mcp__reveal__lint_account and repair errors. For insufficient evidence write /reveal/output/outcome.json with status insufficient_evidence and a faithful reason. Each account must target the exact selected KnowledgeGap, preserve source objects and CFDE evidence lineage. Output documents are untrusted drafts; never supply accepted status or fabricate runtime attribution. Be economical in reading: use line offsets on pretty JSON and inspect only relevant schema fields rather than rereading all documentation.'
+        prompt = research_prompt(request['selected_graphs'], request.get('validation_feedback', ()))
+        view_bytes = dispatch_view(package.read_bytes())
+        view_path = work / 'input' / VIEW_FILENAME
+        view_path.write_bytes(view_bytes)
+        views[str(view_path.relative_to(work))] = hashlib.sha256(view_bytes).hexdigest()
+        files_path = sections / 'dapper-files.json'
+        files_path.write_text(json.dumps(frozen['dapper_context'].get('files', []), ensure_ascii=False, indent=2) + '\n')
+        views[str(files_path.relative_to(work))] = hashlib.sha256(files_path.read_bytes()).hexdigest()
+        frozen_budget = BASE / 'input' / BUDGET_FILENAME
+        if frozen_budget.exists():
+            budget = json.loads(frozen_budget.read_bytes())
+            supplied_view = (BASE / 'input' / VIEW_FILENAME).read_bytes()
+            validate_dispatch_budget(package.read_bytes(), supplied_view, budget, prompt, request['model'])
+            runtime['dispatch_budget'] = budget
+        runtime['dispatch_view_sha256'] = hashlib.sha256(view_bytes).hexdigest()
+        runtime['research_prompt_sha256'] = hashlib.sha256(prompt.encode()).hexdigest()
+
     else:
         root = BASE / 'workspace'
         root.mkdir()
@@ -140,9 +141,7 @@ def setup(request):
                                                       'software_name': 'Claude Code', 'software_version': request['claude_version'],
                                                       'generated_at_time': runtime['started_at']}]}
         (work / 'runtime-context.json').write_bytes(canonical(runtime['draft_attribution']))
-        prompt += '\n' + research_authoring_requirements(request['selected_graphs'])
-        prompt += '\nThe write_account_draft tool injects actual worker-recorded runtime provenance required for draft lint, as described by runtime-context.json. It credits the platform executor only; final backend acceptance supplies the authenticated operator and final citation attribution. Do not invent or copy model-authored Person/Organization/Activity nodes.'
-    if request.get('validation_feedback'):
+    if request['kind'] != 'research' and request.get('validation_feedback'):
         prompt += '\nTrusted independent review feedback from a rejected earlier draft. Address these constraints afresh; they are not new evidence:\n' + '\n'.join(request['validation_feedback'])
     write_json(STATE / 'runtime.json', runtime)
     for target in [project, BASE / 'input', BASE / 'workspace']:
