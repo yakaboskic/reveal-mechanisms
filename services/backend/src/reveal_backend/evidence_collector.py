@@ -20,6 +20,30 @@ from .evidence_package import (BUILD_VERSION, EvidenceBuildError, INPUT_VERSION,
 
 INTERACTIVE_BASE = 'https://dev.cfdeknowledge.org'
 BIOINDEX_BASE = 'https://cfde-dev.hugeampkpnbi.org'
+DISMECH_PREFIX_ALIASES = {'hgnc': 'HGNC'}
+
+
+def add_source_prefixes(value, namespaces, prefixes):
+    """Declare known source spellings without rewriting captured identifiers.
+
+    Real DisMech gene terms use lowercase hgnc although its schema declares
+    HGNC. Both spellings resolve through the already selected canonical binding
+    (the pinned DAPPER namespace takes precedence over DisMech's schema).
+    Unknown spellings remain errors; this is not general case folding.
+    """
+    if isinstance(value, dict):
+        for key, child in value.items():
+            if key in ('id', 'reference') and isinstance(child, str) and ':' in child and not re.search(r'\s', child) and not child.startswith(('http:', 'https:', 'urn:')):
+                prefix = child.split(':', 1)[0]
+                canonical = DISMECH_PREFIX_ALIASES.get(prefix, prefix)
+                require(canonical in namespaces, f'Unknown DisMech CURIE prefix: {prefix}')
+                require(prefix not in namespaces or namespaces[prefix] == namespaces[canonical],
+                        f'Conflicting DisMech CURIE alias binding: {prefix}')
+                prefixes[prefix] = namespaces[canonical]
+            add_source_prefixes(child, namespaces, prefixes)
+    elif isinstance(value, list):
+        for child in value:
+            add_source_prefixes(child, namespaces, prefixes)
 
 
 class CaptureStore:
@@ -160,17 +184,7 @@ def collect_package(*, gap_id, factor_ids, output, dapper, project_root, dismech
         prefixes = {name: namespaces[name] for name in ['dapper', 'MONDO', 'CL', 'PMID', 'GO', 'ECTO']}
         prefixes.update(factor='urn:cfde:factor:', gene='urn:cfde:gene:', gene_set='urn:cfde:gene_set:',
                         trait='urn:cfde:trait:', cfde='urn:cfde:record:')
-        def add_prefixes(value):
-            if isinstance(value, dict):
-                for k, v in value.items():
-                    if k in ('id', 'reference') and isinstance(v, str) and ':' in v and not re.search(r'\s', v) and not v.startswith(('http:', 'https:', 'urn:')):
-                        prefix = v.split(':', 1)[0]
-                        require(prefix in namespaces, f'Unknown DisMech CURIE prefix: {prefix}')
-                        prefixes[prefix] = namespaces[prefix]
-                    add_prefixes(v)
-            elif isinstance(value, list):
-                for v in value: add_prefixes(v)
-        add_prefixes(raw_gap)
+        add_source_prefixes(raw_gap, namespaces, prefixes)
         gap_node = {'text': raw_gap['prompt'], 'gap_description': raw_gap.get('rationale') or raw_gap['prompt'],
                     'gap_kind': gap_record['kind'], 'scope': gap_record['document_name']}
         disease_curie = (gap_record.get('disease_term') or {}).get('term', {}).get('id')
@@ -186,7 +200,7 @@ def collect_package(*, gap_id, factor_ids, output, dapper, project_root, dismech
             if attachment['resolution'] in ('resolved', 'whole_section', 'whole_document'):
                 artifact_id, target_doc = document(attachment['target_source_file'])
                 location = ref(artifact_id, attachment['target_pointer']); raw = pointer(target_doc, attachment['target_pointer'])
-                add_prefixes(raw)
+                add_source_prefixes(raw, namespaces, prefixes)
                 item['source_ref'] = location
                 if attachment['target_kind'] == 'pathophysiology' and attachment['resolution'] == 'resolved':
                     node = {'name': raw['name'], 'description': raw.get('description', raw['name'])}

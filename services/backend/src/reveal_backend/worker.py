@@ -223,6 +223,7 @@ class Worker:
                     raise BoxTransportError('Observable event persistence interrupted; replay the durable cursor') from exc
         emit=EventEmitter()
         lease=asyncio.create_task(lease_loop())
+        phase='evidence_preparation'
         try:
             if await cancelled() and not queue.get('remote_handle'):
                 jobs.finish(self.repository,job['id'],token,'cancelled'); return
@@ -282,6 +283,7 @@ class Worker:
                 current,q=pair; q['dispatch_input']=snapshot; tx.put('queue',job['id'],current['owner_user_id'],q)
             if await cancelled() and not queue.get('remote_handle'):
                 jobs.finish(self.repository,job['id'],token,'cancelled'); return
+            phase='agent_execution'
             await emit('stage',{'stage':'starting_agent' if job['kind']=='analysis' else 'authoring_paragraph','message':'Starting the configured execution adapter.'})
             adapter=self.adapter
             if adapter is None:
@@ -300,6 +302,7 @@ class Worker:
             if result.status!='succeeded':
                 failure={'code':'AGENT_EXECUTION_FAILED','message':result.reason or 'The execution did not complete.','retryable':True} if result.status=='failed' else None
                 jobs.finish(self.repository,job['id'],token,result.status,failure=failure); return
+            phase='scientific_validation'
             if mode=='box': validate_execution_ledger(result,request,snapshot['model'])
             await emit('stage',{'stage':'validating','message':'Validating scientific identities, source fidelity and provenance.'})
             if job['kind']=='analysis':
@@ -345,11 +348,17 @@ class Worker:
                         return
             # Scientific exceptions are retained as bounded local diagnostics;
             # API errors do not echo third-party headers/URLs/credentials.
-            diagnostic={'error_type':type(exc).__name__,'message':str(exc)[:3000] if not isinstance(exc,OSError) else 'Operating system error'}
+            diagnostic={'phase':phase,'error_type':type(exc).__name__,'message':str(exc)[:3000] if not isinstance(exc,OSError) else 'Operating system error'}
             (directory/'failure.json').write_bytes(canonical_json(diagnostic))
-            jobs.finish(self.repository,job['id'],token,'failed',failure={'code':'VALIDATION_FAILED' if isinstance(exc,ValueError) else 'WORKER_FAILED',
-                'message':'The attempt failed '+('scientific validation' if isinstance(exc,ValueError) else 'during preparation or execution')+'. The saved draft and existing accounts are preserved.','retryable':True})
-            log.error('Job %s failed (%s)',job['id'],type(exc).__name__)
+            if phase=='evidence_preparation':
+                code,message='EVIDENCE_PREPARATION_FAILED','The source evidence could not be prepared.'
+            elif phase=='scientific_validation' and isinstance(exc,ValueError):
+                code,message='VALIDATION_FAILED','The attempt failed scientific validation.'
+            else:
+                code,message='WORKER_FAILED','The attempt failed during execution.'
+            jobs.finish(self.repository,job['id'],token,'failed',failure={'code':code,
+                'message':message+' The saved draft and existing accounts are preserved.','retryable':True})
+            log.error('Job %s failed during %s (%s)',job['id'],phase,type(exc).__name__)
         finally:
             lease.cancel()
             try: await lease

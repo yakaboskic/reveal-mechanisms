@@ -10,7 +10,7 @@ import unittest
 from urllib.parse import parse_qs, urlparse
 from unittest.mock import patch
 
-from reveal_backend.evidence_collector import CaptureStore, HttpCaptureClient, collect_package, parse_factor
+from reveal_backend.evidence_collector import CaptureStore, HttpCaptureClient, add_source_prefixes, collect_package, parse_factor
 from reveal_backend.evidence_package import (DapperRuntime, EvidenceBuildError, build_package, canonical_json,
                                             decode, load_build_input, pointer, sha256)
 from reveal_backend.evidence_schema import load_generated_schema, validate_package_shape
@@ -131,6 +131,71 @@ class EvidencePackageTests(unittest.TestCase):
             self.assertEqual(request['context'], '')
         self.assertTrue(any('pigean-gene-phenotype?' in u for u, _ in self.calls))
         self.assertTrue(any('pigean-gene-set-phenotype?' in u for u, _ in self.calls))
+
+    def test_real_t2d_lowercase_hgnc_collects_with_exact_source_payloads(self):
+        # Portable fixture assembled from committed, exact T2D raw records.
+        # Its reconstructed source bytes have their own checksum, not the live
+        # YAML checksum. CFDE transport is the existing explicit test fixture.
+        mechanisms = decode((ROOT/'data/dismech/t2d-mechanisms.json').read_bytes())
+        index = ROOT/'data/dismech-gaps/2026-09-24'
+        with gzip.open(index/'knowledge-gaps.jsonl.gz','rt') as stream:
+            gaps = [json.loads(line) for line in stream if 'dismech:disorders/Type_2_Diabetes_Mellitus' in line]
+        gaps = [row for row in gaps if row['document_id']=='dismech:disorders/Type_2_Diabetes_Mellitus']
+        chosen = next(row for row in gaps if row['discussion_id']=='gap_t2d_beta_cell_dedifferentiation_reversibility')
+        with gzip.open(index/'gap-attachments.jsonl.gz','rt') as stream:
+            attachments = [json.loads(line) for line in stream if 'dismech:disorders/Type_2_Diabetes_Mellitus' in line]
+        attachments = [row for row in attachments if row['gap_id']==chosen['id']]
+        document = {'pathophysiology':[row['raw'] for row in sorted(mechanisms,key=lambda row:int(row['json_pointer'].rsplit('/',1)[1]))],
+                    'discussions':[row['raw'] for row in sorted(gaps,key=lambda row:int(row['source_pointer'].rsplit('/',1)[1]))]}
+        source_bytes = canonical_json(document)
+        self.assertIn(b'hgnc:',source_bytes)
+        directory = self.root/'t2d-prefix'; source=directory/'source'; frozen=directory/'index'
+        source_path=source/chosen['source_file']; source_path.parent.mkdir(parents=True); source_path.write_bytes(source_bytes)
+        (source/'src/dismech/schema').mkdir(parents=True)
+        (source/'src/dismech/schema/dismech.yaml').write_bytes(canonical_json({'prefixes':{
+            'HGNC':'https://www.genenames.org/data/gene-symbol-report/#!/hgnc_id/',
+            **{name:f'http://purl.obolibrary.org/obo/{name}_' for name in ('GO','ECTO','NCBITaxon','NCIT','UBERON')}}}))
+        frozen.mkdir(parents=True)
+        manifest=decode((index/'manifest.json').read_bytes())
+        for filename,rows in [('knowledge-gaps.jsonl.gz',gaps),('gap-attachments.jsonl.gz',attachments)]:
+            with gzip.open(frozen/filename,'wt') as stream:
+                for row in rows: stream.write(json.dumps(row)+'\n')
+            manifest['files'][filename]['sha256']=sha256((frozen/filename).read_bytes())
+        (frozen/'manifest.json').write_bytes(canonical_json(manifest))
+        (frozen/'source-files.json').write_bytes(canonical_json([{'path':chosen['source_file'],'sha256':sha256(source_bytes)}]))
+        built=collect_package(gap_id=chosen['id'],factor_ids=[FACTOR],output=directory/'capture',dapper=self.runtime,
+            project_root=ROOT,dismech_source=source,dismech_index=frozen,geneset_import=self.imported,
+            limit=8,client_factory=FixtureClient)
+        packet=built.package
+        self.assertEqual(packet['selection']['knowledge_gap_id'],'dapper:KnowledgeGap.m6gVKa2vVfnyJR8191TfE6T0BNlUFy4p')
+        self.assertEqual(packet['prefixes']['hgnc'],str(self.runtime.schema.namespaces()['HGNC']))
+        resolver=self.runtime.resolver(packet['prefixes'])
+        self.assertEqual(resolver.expand('hgnc:11892'),resolver.expand('HGNC:11892'))
+        validate_package_shape(packet,load_generated_schema(ROOT/'schema/evidence-package.schema.json'))
+        self.runtime.validate(packet['dapper_context'])
+        captured=next(artifact for artifact in packet['source_artifacts'].values() if artifact['filename']=='Type_2_Diabetes_Mellitus.yaml')
+        self.assertEqual(captured['sha256'],sha256(source_bytes))
+        self.assertEqual(source_path.read_bytes(),source_bytes)
+        self.assertEqual((directory/'capture/package'/captured['path']).read_bytes(),source_bytes)
+        source_names={row['raw']['name'] for row in mechanisms}
+        source_nodes=[node for node in packet['dapper_context']['mechanisms'] if node['name'] in source_names]
+        self.assertEqual(len(source_nodes),3)
+        for node in source_nodes:
+            original=next(row for row in mechanisms if row['raw']['name']==node['name'])
+            expected={'name':original['raw']['name'],'description':original['raw'].get('description',original['raw']['name'])}
+            self.assertEqual(node['id'],self.runtime.compute_id(expected,'Mechanism',self.runtime.schema))
+
+    def test_hgnc_alias_does_not_allow_unknown_or_conflicting_prefixes(self):
+        namespaces={'HGNC':'http://identifiers.org/hgnc/'}
+        raw={'genes':[{'term':{'id':'hgnc:11892'}}]}; before=deepcopy(raw); prefixes={}
+        add_source_prefixes(raw,namespaces,prefixes)
+        self.assertEqual(raw,before)
+        self.assertEqual(prefixes,{'hgnc':namespaces['HGNC']})
+        for unknown in ('hGnC:11892','unknown:11892'):
+            with self.subTest(unknown=unknown),self.assertRaisesRegex(EvidenceBuildError,'Unknown DisMech CURIE prefix'):
+                add_source_prefixes({'id':unknown},namespaces,{})
+        with self.assertRaisesRegex(EvidenceBuildError,'Conflicting DisMech CURIE alias'):
+            add_source_prefixes(raw,{**namespaces,'hgnc':'https://example.invalid/'},{})
 
     def test_frozen_browser_selection_provenance_survives_collection(self):
         dismissed=FACTOR.rsplit(':',1)[0]+':Factor2'
