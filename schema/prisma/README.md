@@ -1,18 +1,24 @@
 # Prisma schema for REVEAL
 
-`schema.prisma` has 23 models: the 11 original Aurora tables for DAPPER GeneSets
-and EAGGL, three application crosswalk tables from `../migrations/004_eaggl_cfde_links.sql`,
-plus nine DisMech tables from `../migrations/003_dismech.sql`. Existing
-tables were read with `SHOW CREATE TABLE` over verified TLS; those exact definitions
-and migrations 003/004 were recreated and checked in disposable MySQL 8.0.42.
-Prisma validation, client generation, and a schema diff including all 23 table
-definitions against that database pass. The crosswalk is described in
-[EAGGL → CFDE links](../../docs/eaggl-cfde-links.md).
+`schema.prisma` has 28 models: the 11 original Aurora tables for DAPPER GeneSets
+and EAGGL, three crosswalk tables from migration 004, nine DisMech source tables
+from migration 003, two application tables from migration 005, and three
+persistent DisMech embedding tables from migration 006. The crosswalk is
+described in [EAGGL → CFDE links](../../docs/eaggl-cfde-links.md).
 
-**September 25 state:** the original consolidation audit mapped [11 live tables](../../data/audit/2026-09-25-consolidation/database.json); its [column/nullability comparison and Prisma validation](../../data/audit/2026-09-25-consolidation/prisma.json) passed without DDL. The later [crosswalk load verification](../../data/eaggl-cfde-mapping/2026-09-25/database-verification.json) records **14 applied tables** and successful validation/client generation/schema comparison for the updated 23-model schema. Nine DisMech models remain pending.
+The original tables were read with `SHOW CREATE TABLE` over verified TLS. Those
+definitions and migrations 003/004 were recreated and checked in disposable
+MySQL 8.0.42; the historical 23-model schema passed validation, generation, and
+database comparison. The current 28-model schema passes Prisma validation;
+that check alone does not apply a migration or establish a new live schema diff.
+The [DisMech readback report](../../data/validation/local-stack/dismech-verification.json)
+records the completed source import, including all 19,959 mechanisms and 3,367
+knowledge gaps.
 
-DisMech is defined here but has not yet been applied to Aurora. Use the
-[Python importer](../../docs/dismech-import.md) to apply its migration and load data.
+Source import and vector backfill are explicit operations. Use the
+[source importer](../../docs/dismech-import.md) for a new DisMech snapshot and the
+[persistent embedding pipeline](../../docs/dismech-embeddings.md) for migration
+006, its calibrated context vectors, and independent database verification.
 
 ## Install and generate
 

@@ -253,6 +253,10 @@ class SQLiteMySQLAdapter:
     def __init__(self, path):
         self.db = sqlite3.connect(path)
         self.db.execute('PRAGMA foreign_keys=ON')
+        import hashlib
+        def raw(value): return value.encode('utf-8') if isinstance(value,str) else bytes(value)
+        self.db.create_function('SHA2',2,lambda value,bits: hashlib.sha256(raw(value)).hexdigest() if value is not None and bits==256 else None)
+        self.db.create_function('OCTET_LENGTH',1,lambda value: len(raw(value)) if value is not None else None)
         self.fail_after_insert = None
         self.lock_available = True
         self.lock_released = False
@@ -290,6 +294,7 @@ class SQLiteCursor:
             sql = re.sub(r'\bUNSIGNED\b', '', sql)
             sql = re.sub(r'UNIQUE KEY \w+\s*\(', 'UNIQUE (', sql)
             sql = re.sub(r'ENGINE=InnoDB DEFAULT CHARSET=utf8mb4', '', sql)
+        sql = re.sub(r'\s+FORCE INDEX\s*\(PRIMARY\)', '', sql)
         return self.cursor.execute(sql.replace('%s', '?'), values)
 
     def executemany(self, sql, rows):

@@ -18,6 +18,7 @@ export function Composer() {
   const [query, setQuery] = useState(""); const [searching, setSearching] = useState(false);
   const [results, setResults] = useState<Schema<"GapRecord">[]>([]); const [trending, setTrending] = useState<Schema<"GapRecord">[]>([]);
   const [matches, setMatches] = useState<Schema<"EagglFactor">[]>([]); const [adding, setAdding] = useState(false);
+  const [findingMatches, setFindingMatches] = useState(false);
   const [suggesting, setSuggesting] = useState(false); const [limitations, setLimitations] = useState<string[]>([]);
   const [saveState, setSaveState] = useState("Kept in this browser"); const [conflict, setConflict] = useState(false);
   const [error, setError] = useState(""); const [booted, setBooted] = useState(false);
@@ -30,10 +31,12 @@ export function Composer() {
   const dialog = useRef<HTMLDialogElement>(null);
   const draftRef = useRef(draft); const currentRef = useRef(composer); const loadedOwner = useRef<string | null>(null);
   const saveEpoch = useRef(0);
+  const suggestionRequest = useRef<AbortController | null>(null);
   const saveQueue = useRef<Promise<Schema<"Draft"> | null>>(Promise.resolve(null));
   const requestKeys = useRef(new Map<string, string>()); const submitKey = useRef<{ binding: string; key: string } | null>(null); const anonymousKey = useRef<string | null>(null);
   const getKey = (body: string) => { if (!requestKeys.current.has(body)) requestKeys.current.set(body, crypto.randomUUID()); return requestKeys.current.get(body)!; };
   currentRef.current = composer;
+  useEffect(() => () => { suggestionRequest.current?.abort(); }, []);
   useEffect(() => {
     try {
       const local = JSON.parse(sessionStorage.getItem(storageKey) || "null") as LocalDraft | null;
@@ -88,10 +91,20 @@ export function Composer() {
     }
   }, [results, searching]);
   useEffect(() => {
-    if (!adding || !composer.mechanism_subquery.trim()) { setMatches([]); return; }
-    const controller = new AbortController();
-    const timer = setTimeout(() => void api.mechanisms(composer.mechanism_subquery, controller.signal).then(value => setMatches(value.items.flatMap(hit => hit.record.source === "eaggl" ? [hit.record] : []))).catch(e => { if (!controller.signal.aborted) setError(messageOf(e)); }), 250);
-    return () => { clearTimeout(timer); controller.abort(); };
+    setMatches([]);
+    if (!adding || !composer.mechanism_subquery.trim()) { setFindingMatches(false); return; }
+    const controller = new AbortController(); setFindingMatches(true);
+    let semanticFinished = false;
+    // Show cheap label matches while semantic retrieval runs after typing settles.
+    const labelsTimer = setTimeout(() => void api.mechanisms(composer.mechanism_subquery, controller.signal, "lexical").then(value => {
+      if (!controller.signal.aborted && !semanticFinished) setMatches(value.items.flatMap(hit => hit.record.source === "eaggl" ? [hit.record] : []));
+    }).catch(() => { /* The combined search below reports any retrieval failure. */ }), 250);
+    const relatedTimer = setTimeout(() => void api.mechanisms(composer.mechanism_subquery, controller.signal, "hybrid").then(value => {
+      if (!controller.signal.aborted) { semanticFinished = true; setMatches(value.items.flatMap(hit => hit.record.source === "eaggl" ? [hit.record] : [])); }
+    }).catch(e => { if (!controller.signal.aborted) setError(messageOf(e)); }).finally(() => {
+      if (!controller.signal.aborted) setFindingMatches(false);
+    }), 800);
+    return () => { clearTimeout(labelsTimer); clearTimeout(relatedTimer); controller.abort(); };
   }, [composer.mechanism_subquery, adding]);
   useEffect(() => {
     if (query || focused || gap) return;
@@ -140,10 +153,10 @@ export function Composer() {
     }); saveQueue.current = queued; return queued;
   };
   useEffect(() => {
-    if (!booted || !me || !composer.source_gap || job || conflict) return;
+    if (!booted || !me || !composer.source_gap || job || conflict || suggesting) return;
     const timer = setTimeout(() => { void save(composer).catch(e => setError(messageOf(e))); }, 1000);
     return () => clearTimeout(timer);
-  }, [composer, me?.user_id, booted, job, conflict]);
+  }, [composer, me?.user_id, booted, job, conflict, suggesting]);
   useEffect(() => {
     if (!booted || !ready || !me || !sessionStorage.getItem("reveal:submit-after-login")) return;
     sessionStorage.removeItem("reveal:submit-after-login"); void launch();
@@ -161,12 +174,16 @@ export function Composer() {
   const rememberFactors = (values: Schema<"EagglFactor">[]) => setFactors(current => ({ ...current, ...Object.fromEntries(values.map(f => [f.source_id, f])) }));
   const suggest = async (snapshot: Schema<"Composer">) => {
     if (!snapshot.source_gap) return;
+    suggestionRequest.current?.abort();
+    const controller = new AbortController(); suggestionRequest.current = controller;
     setSuggesting(true);
     try {
-      const value = await api.suggest({ source_gap: snapshot.source_gap, manual_eaggl_anchors: snapshot.eaggl_anchors.filter(a => a.origin === "manual").map(a => a.reference), dismissed_source_ids: snapshot.dismissed_source_ids, subquery: snapshot.mechanism_subquery, mode: "semantic", model: "cfde-inc-v2" });
+      const value = await api.suggest({ source_gap: snapshot.source_gap, manual_eaggl_anchors: snapshot.eaggl_anchors.filter(a => a.origin === "manual").map(a => a.reference), dismissed_source_ids: snapshot.dismissed_source_ids, subquery: snapshot.mechanism_subquery, mode: "semantic", model: "cfde-inc-v2" }, controller.signal);
+      if (controller.signal.aborted) return;
       rememberFactors(value.automatic_anchors.map(item => item.factor)); setLimitations(value.limitations);
-      setComposer(current => current.source_gap?.id === snapshot.source_gap?.id ? applySuggestions(current, value) : current);
-    } catch (failure) { setError(messageOf(failure)); } finally { setSuggesting(false); }
+      setComposer(current => current.source_gap?.id === snapshot.source_gap?.id && current.source_gap?.source_revision === snapshot.source_gap?.source_revision ? applySuggestions(current, value) : current);
+    } catch (failure) { if (!controller.signal.aborted) setError(messageOf(failure)); }
+    finally { if (suggestionRequest.current === controller) { suggestionRequest.current = null; setSuggesting(false); } }
   };
   async function selectGap(value: Schema<"GapRecord">) {
     saveEpoch.current++;
@@ -208,6 +225,7 @@ export function Composer() {
   const reset = () => { setJob(null); submitKey.current = null; const url = new URL(window.location.href); url.searchParams.delete("job"); window.history.replaceState(null, "", url); };
   const accountIds = job?.result?.kind === "analysis" ? job.result.account_ids : [];
   const clearGap = () => {
+    suggestionRequest.current?.abort(); suggestionRequest.current = null; setSuggesting(false); setLimitations([]);
     saveEpoch.current++; setGap(null); setComposer(emptyComposer()); setDraft(null); draftRef.current = null; setError(""); setAdding(false); setQuery("");
     const url = new URL(window.location.href); ["draft", "gap", "job"].forEach(key => url.searchParams.delete(key)); window.history.replaceState(null, "", url);
     requestAnimationFrame(() => document.getElementById("gap-search")?.focus());
@@ -218,7 +236,7 @@ export function Composer() {
     const anchor = composer.eaggl_anchors.find(item => item.reference.source_id === id); const factor = factors[id];
     return anchor && factor?.source_revision === anchor.reference.source_revision && factor.object.id === anchor.reference.dapper_id ? factor : undefined;
   };
-  const anchorName = (id: string) => selectedFactor(id)?.cfde_anchor.subtitle || selectedFactor(id)?.cfde_anchor.label || selectedFactor(id)?.object.name || id;
+  const anchorName = (id: string) => selectedFactor(id)?.cfde_anchor.label || selectedFactor(id)?.object.name || selectedFactor(id)?.cfde_anchor.subtitle || id;
   return <main id="main" className={`composer-page prototype-composer ${gap ? "has-gap" : ""} ${job ? "has-job" : ""} ${job && terminal(job.status) ? "job-complete" : ""}`}>
     {!gap && <p className="invitation">Help us close these <a href="https://dismech.monarchinitiative.org/app/discussions/index.html" target="_blank" rel="noopener noreferrer">knowledge gaps</a></p>}
     <section className={`question-shell ${job ? "submitted" : ""}`} aria-label="Knowledge gap and mechanism anchors">
@@ -226,11 +244,11 @@ export function Composer() {
         <div className="selected-question-row"><h1 className="selected-question">{gap.object.text}</h1>{!job && <button className="clear-question" aria-label="Search for a different knowledge gap" onClick={clearGap}>×</button>}</div>
         <div className="inline-context">
           {!job && <><div className="question-meta"><button className="subtle" onClick={() => setInspection({ title: "About this knowledge gap", description: gap.object.gap_description, value: gap })}>About this knowledge gap ↗</button><span>DisMech</span></div><p className="anchor-guidance">Anchor on possible genetic mechanisms to explore evidence for answering this gap.</p><div className="chip-group-label">Mechanism anchors <span>{composer.eaggl_anchors.length}</span>{suggesting && <span role="status">Finding anchors…</span>}{!!limitations.length && <button className="matching-note" onClick={() => setInspection({ title: "About mechanism matching", description: limitations.join(" "), value: { model: composer.model, automatic_anchors: composer.eaggl_anchors.filter(anchor => anchor.origin === "automatic").length } })}>About matching</button>}</div></>}
-          <div className="anchor-chips" aria-label="Selected mechanism anchors">{composer.eaggl_anchors.map(anchor => <span className="chip" key={anchor.reference.source_id}><button className="label" title={anchorName(anchor.reference.source_id)} onClick={() => setInspection({ title: selectedFactor(anchor.reference.source_id)?.cfde_anchor.label || "Mechanism anchor", description: selectedFactor(anchor.reference.source_id)?.object.description, value: selectedFactor(anchor.reference.source_id) || anchor })}>{anchorName(anchor.reference.source_id)}</button>{!job && <button className="remove" aria-label={`Remove ${anchorName(anchor.reference.source_id)}`} onClick={() => setComposer(current => removeAnchor(current, anchor.reference.source_id))}>×</button>}</span>)}{!job && <button className="chip-add" aria-expanded={adding} aria-controls="factor-picker" aria-label="Add a mechanism anchor" onClick={() => { setAdding(!adding); if (!adding) requestAnimationFrame(() => document.getElementById("mechanism-search")?.focus()); }}>+</button>}</div>
+          <div className="anchor-chips" aria-label="Selected mechanism anchors">{composer.eaggl_anchors.map(anchor => <span className="chip" key={anchor.reference.source_id}><button className="label" title={[anchorName(anchor.reference.source_id), selectedFactor(anchor.reference.source_id)?.cfde_anchor.subtitle].filter(Boolean).join(" · ")} onClick={() => setInspection({ title: selectedFactor(anchor.reference.source_id)?.cfde_anchor.label || "Mechanism anchor", description: selectedFactor(anchor.reference.source_id)?.object.description, value: selectedFactor(anchor.reference.source_id) || anchor })}>{anchorName(anchor.reference.source_id)}</button>{!job && <button className="remove" aria-label={`Remove ${anchorName(anchor.reference.source_id)}`} onClick={() => setComposer(current => removeAnchor(current, anchor.reference.source_id))}>×</button>}</span>)}{!job && <button className="chip-add" aria-expanded={adding} aria-controls="factor-picker" aria-label="Add a mechanism anchor" onClick={() => { setAdding(!adding); if (!adding) requestAnimationFrame(() => document.getElementById("mechanism-search")?.focus()); }}>+</button>}</div>
           {!job && <>
             {!composer.eaggl_anchors.length && !suggesting && <p className="anchor-required" role="status">Add at least one mechanism anchor to continue.</p>}
             <div className="context-disclosures">
-              <details id="factor-picker" open={adding} onToggle={e => setAdding(e.currentTarget.open)}><summary>Find more mechanisms</summary><label className="sr-only" htmlFor="mechanism-search">Search possible genetic mechanisms</label><input id="mechanism-search" type="search" className="field" value={composer.mechanism_subquery} onChange={e => setComposer(c => ({ ...c, mechanism_subquery: e.target.value }))} placeholder="Search possible genetic mechanisms" />{matches.map(factor => <button className="mechanism-match" key={factor.source_id} title={factor.source_id} disabled={composer.eaggl_anchors.length >= 10 || composer.eaggl_anchors.some(a => a.reference.source_id === factor.source_id)} onClick={() => { rememberFactors([factor]); setComposer(c => ({ ...c, eaggl_anchors: [...c.eaggl_anchors, factorSelection(factor, "manual")], dismissed_source_ids: c.dismissed_source_ids.filter(id => id !== factor.source_id) })); }}><span>{factor.cfde_anchor.subtitle || factor.cfde_anchor.label || factor.object.name}</span><span aria-hidden="true">+</span></button>)}{!!composer.mechanism_subquery && !matches.length && <p className="muted">No mapped anchors found.</p>}<button className="text-button" disabled={suggesting} onClick={() => { const next = { ...composer, dismissed_source_ids: [], eaggl_anchors: composer.eaggl_anchors.filter(a => a.origin === "manual") }; setComposer(next); void suggest(next); }}>Reset suggestions</button><small>Up to five automatic anchors. Removed anchors stay dismissed until reset.</small></details>
+              <details id="factor-picker" open={adding} onToggle={e => setAdding(e.currentTarget.open)}><summary>Find more mechanisms</summary><label className="sr-only" htmlFor="mechanism-search">Search possible genetic mechanisms</label><input id="mechanism-search" type="search" className="field" value={composer.mechanism_subquery} onChange={e => setComposer(c => ({ ...c, mechanism_subquery: e.target.value }))} placeholder="Search possible genetic mechanisms" />{matches.map(factor => <button className="mechanism-match" key={factor.source_id} title={factor.cfde_anchor.subtitle || factor.source_id} disabled={composer.eaggl_anchors.length >= 10 || composer.eaggl_anchors.some(a => a.reference.source_id === factor.source_id)} onClick={() => { rememberFactors([factor]); setComposer(c => ({ ...c, eaggl_anchors: [...c.eaggl_anchors, factorSelection(factor, "manual")], dismissed_source_ids: c.dismissed_source_ids.filter(id => id !== factor.source_id) })); }}><span>{factor.cfde_anchor.label || factor.object.name || factor.cfde_anchor.subtitle}</span><span aria-hidden="true">+</span></button>)}{findingMatches && <p className="muted" role="status">{matches.length ? "Finding related mechanisms…" : "Finding mechanisms…"}</p>}{!!composer.mechanism_subquery.trim() && !findingMatches && !matches.length && <p className="muted">No mapped anchors found.</p>}<button className="text-button" disabled={suggesting} onClick={() => { const next = { ...composer, dismissed_source_ids: [], eaggl_anchors: composer.eaggl_anchors.filter(a => a.origin === "manual") }; setComposer(next); void suggest(next); }}>Reset suggestions</button><small>Up to five automatic anchors. Removed anchors stay dismissed until reset.</small></details>
               <details><summary>Linked DisMech mechanisms <span className="disclosure-count">{linkedMechanisms.length} linked</span></summary><p className="muted">Mechanisms linked to this curated knowledge gap. Source context is read-only.</p>{linkedMechanisms.map((item, i) => <button className="linked-mechanism" key={i} onClick={() => setInspection({ title: item.label || "DisMech source context", value: item })}><span>{item.label || item.source_reference}<small>{item.target_kind} · {item.resolution.replaceAll("_", " ")}</small></span><span aria-hidden="true">↗</span></button>)}{!linkedMechanisms.length && <p className="muted">No linked mechanisms in this source observation.</p>}</details>
               <details><summary>Additional knowledge graphs</summary><div className="checks">{(["biomarkerkg", "prokn"] as const).map(kg => <label key={kg}><input type="checkbox" checked={composer.selected_kgs.includes(kg)} onChange={e => setComposer(c => ({ ...c, selected_kgs: e.target.checked ? [...c.selected_kgs, kg] : c.selected_kgs.filter(k => k !== kg) }))} />{kg === "prokn" ? "ProKN" : "BiomarkerKG"}</label>)}</div></details>
             </div>

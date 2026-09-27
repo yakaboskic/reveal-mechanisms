@@ -43,6 +43,8 @@ The collector also needs the exact DisMech YAML source checkout corresponding to
 
 Do not run `prisma db push`, reset the database, reimport the GeneSet catalog, or regenerate the existing factor embeddings. Routine startup performs none of these operations.
 
+Persistent DisMech context vectors have a separate [explicit preparation and backfill pipeline](dismech-embeddings.md). Migration 006 adds their run, vector, and source-binding tables; loading them preserves the existing EAGGL embeddings. Complete and verify that pipeline before selecting its run for automatic suggestions. Neither startup nor a browser request should start a bulk backfill.
+
 ## Start and stop
 
 ```bash

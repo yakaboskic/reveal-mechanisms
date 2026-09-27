@@ -52,3 +52,23 @@ rather than being inferred from generated prose.
 The real saved account is intentionally less elaborate than the illustrative
 prototype: its generated title and structured relationship/anchor fields are
 absent. This audit corrects presentation without fabricating those fields.
+
+## Mechanism labels and responsive search
+
+Anchor chips and mechanism-picker rows now show the EAGGL mechanism label (for
+example, “Beta Cell Dysfunction and Diabetes”). The trait/factor identifier stays
+in the tooltip and source record; selections retain their exact native IDs and
+source revisions.
+
+The picker shows lexical label matches after a short debounce, then incorporates
+semantic matches once typing settles. Loading is explicit, obsolete requests are
+cancelled, and late responses cannot replace a newer query or gap. Draft autosave
+waits for automatic suggestions to finish, avoiding a redundant empty-anchor
+write while the suggestion request is using Aurora. Browser-local recovery
+continues throughout.
+
+An isolated browser regression checked desktop and 390px mobile layouts, labels,
+identifier tooltips, early lexical results, loading feedback, clearing a pending
+suggestion, and authenticated autosave after suggestions. It used a real catalog
+record with intercepted suggestion/authentication/write responses; it did not
+launch research jobs or mutate user drafts.

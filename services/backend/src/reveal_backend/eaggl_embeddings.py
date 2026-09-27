@@ -4,8 +4,12 @@ from __future__ import annotations
 import json
 import logging
 import os
+from collections import OrderedDict
+from concurrent.futures import Future
 from pathlib import Path
 import sqlite3
+import threading
+import time
 
 import numpy as np
 
@@ -131,17 +135,118 @@ def read_embeddings(output, factors, import_id, run_id=None):
         connection.close()
 
 
+class QueryVectorCache:
+    """Bounded process-local vectors, with one request for overlapping misses.
+
+    Scope includes the immutable embedding run and full configuration. Only
+    validated vectors are published; failures reach current waiters and are
+    removed so subsequent requests can retry. No query text is persisted.
+    """
+    def __init__(self, max_entries=512, ttl_seconds=3600):
+        self.max_entries, self.ttl_seconds = max_entries, ttl_seconds
+        self.values = OrderedDict()
+        self.pending = {}
+        self.lock = threading.Lock()
+
+    def get(self, texts, scope, fetch):
+        keys = [(scope, text_hash(text)) for text in texts]
+        available, waiting, owned = {}, {}, {}
+        with self.lock:
+            current = time.monotonic()
+            for key, text in zip(keys, texts):
+                cached = self.values.get(key)
+                if cached is not None and current - cached[0] >= self.ttl_seconds:
+                    del self.values[key]
+                    cached = None
+                if cached is not None:
+                    self.values.move_to_end(key)
+                    available[key] = cached[1]
+                else:
+                    future = self.pending.get(key)
+                    if future is None:
+                        future = self.pending[key] = Future()
+                        owned[key] = (text, future)
+                    waiting[key] = future
+        if owned:
+            try:
+                vectors = fetch([text for text, _ in owned.values()])
+                completed = []
+                with self.lock:
+                    current = time.monotonic()
+                    for (key, (_, future)), vector in zip(owned.items(), vectors):
+                        vector.setflags(write=False)
+                        self.values[key] = (current, vector)
+                        self.pending.pop(key)
+                        completed.append((future, vector))
+                    while len(self.values) > self.max_entries:
+                        self.values.popitem(last=False)
+                for future, vector in completed:
+                    future.set_result(vector)
+            except BaseException as error:
+                with self.lock:
+                    for key in owned:
+                        self.pending.pop(key, None)
+                for _, future in owned.values():
+                    if not future.done():
+                        future.set_exception(error)
+                raise
+        # Stack preserves duplicate occurrences and context order without
+        # exposing mutable cached vectors to callers.
+        return np.stack([available[key] if key in available else waiting[key].result() for key in keys])
+
+
 class FactorSearchIndex:
     """Keep this small matrix in a backend worker; compute top-k only when requested."""
 
     def __init__(self, factors, run, rows):
         self.factors, self.run = factors, run
+        rows = list(rows)
+        if any(text_hash(row[1]) != row[0] for row in rows):
+            raise ValueError('Imported embedding text/hash mismatch')
         by_hash = {r[0]: decode_vector(r[2], r[3], run['dimensions']) for r in rows}
         matrix = np.stack([by_hash[f['input_sha256']] for f in factors]).astype(np.float64)
         self.matrix = matrix / np.linalg.norm(matrix, axis=1, keepdims=True)
         self.by_id = {f['factor_id']: i for i, f in enumerate(factors)}
+        self.query_cache = QueryVectorCache()
+        self.imported_scope = (run['run_id'], text_hash(canonical(run['config'])), run['dimensions'])
+        self.imported_vectors = {}
+        for sha, text, _, _ in rows:
+            vector = by_hash[sha].astype(np.float64)
+            vector /= np.linalg.norm(vector)
+            vector.setflags(write=False)
+            self.imported_vectors[sha] = (text, vector)
 
-    def search(self, *, query=None, factor_id=None, top_k=10, trait=None, embedder=get_embeddings):
+    def query_vectors(self, texts, *, embedder=get_embeddings):
+        if not texts or any(not isinstance(text, str) or not text.strip() for text in texts):
+            raise ValueError('Queries cannot be blank')
+        config = self.run['config']
+        dimensions = self.matrix.shape[1]
+        scope = (self.run['run_id'], text_hash(canonical(config)), dimensions)
+
+        def fetch(missing):
+            raw = embedder(missing, model=config['model'], provider=config['provider'],
+                service_url=config['service_url'], max_workers=1, max_retries=2, timeout=30)
+            validate_vectors(raw, len(missing), dimensions)
+            # Validation must not reduce the precision used by per-context
+            # suggestion scoring (custom embedders may return float64).
+            vectors = np.asarray(raw, dtype=np.float64)
+            return vectors / np.linalg.norm(vectors, axis=1, keepdims=True)
+
+        imported = {}
+        if scope == self.imported_scope:
+            for text in texts:
+                candidate = self.imported_vectors.get(text_hash(text))
+                if candidate is not None and candidate[0] == text:
+                    imported[text] = candidate[1]
+        missing = [text for text in texts if text not in imported]
+        if missing:
+            resolved = self.query_cache.get(missing, scope, fetch)
+            imported.update(zip(missing, resolved))
+        # Return an independent matrix while preserving every occurrence and
+        # its original position, including mixed imported and novel text.
+        return np.stack([imported[text] for text in texts])
+
+    def search(self, *, query=None, factor_id=None, top_k=10, trait=None, embedder=get_embeddings, query_vector=None):
         if (query is None) == (factor_id is None) or top_k < 1:
             raise ValueError('Choose one query or factor ID and a positive top_k')
         if factor_id is not None:
@@ -149,11 +254,12 @@ class FactorSearchIndex:
         else:
             if not query.strip():
                 raise ValueError('Query cannot be blank')
-            config = self.run['config']
-            vector = validate_vectors(embedder([query.strip()], model=config['model'], provider=config['provider'],
-                service_url=config['service_url'], max_workers=1, max_retries=2, timeout=30),
-                1, self.run['dimensions'])[0].astype(np.float64)
-            vector /= np.linalg.norm(vector)
+            if query_vector is None:
+                vector = self.query_vectors([query.strip()], embedder=embedder)[0]
+            else:
+                vector = np.asarray(query_vector, dtype=np.float64)
+                if vector.shape != (self.matrix.shape[1],) or not np.isfinite(vector).all() or not np.isclose(np.linalg.norm(vector), 1):
+                    raise ValueError('Imported query vector must be finite and normalized in the target space')
         scores = self.matrix @ vector
         eligible = [i for i, f in enumerate(self.factors)
                     if f['factor_id'] != factor_id and (trait is None or f['trait'] == trait)]
@@ -195,4 +301,7 @@ def database_search_index(connection, import_id, run_id):
         names = {f['input_sha256']: f['label'].strip() for f in factors}
         if any(text_hash(r[1]) != r[0] or names[r[0]] != r[1] for r in rows):
             raise ValueError('Embedding text/hash mismatch')
+        run['calibration'] = [{'input_sha256': sha, 'input_text': text,
+            'vector': decode_vector(blob, checksum, dimensions).tolist(), 'vector_sha256': checksum}
+            for sha, text, blob, checksum in sorted(rows, key=lambda row: row[0])[:3]]
     return FactorSearchIndex(factors, run, rows)

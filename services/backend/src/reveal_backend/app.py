@@ -242,18 +242,26 @@ def search_mechanisms(q: str='', mode: str='hybrid', limit: int=20,source:str='a
 
 @app.post('/v1/mechanisms/suggest')
 async def suggest(request: Request):
-    body=await request.json(); validate(body,'SuggestInput'); gap=catalog.selected(body['source_gap'])
+    body=await request.json()
+    # Source preparation and durable audit writes can both touch Aurora. Keep
+    # the entire synchronous path off the event loop, including cached results.
+    return await asyncio.to_thread(build_suggestions,body)
+
+def build_suggestions(body):
+    validate(body,'SuggestInput'); gap=catalog.selected(body['source_gap'])
     exclude=set(body['dismissed_source_ids']) | {s['source_id'] for s in body['manual_eaggl_anchors']}
     contexts=[(a['target']['source_id'],catalog.mechanisms[a['target']['source_id']]['object']['description']) for a in gap['attachments'] if a['target'] and a['target']['source_id'] in catalog.mechanisms]
     query=body.get('subquery') or ' '.join(text for _,text in contexts) or gap['object']['text']
     if body.get('subquery'): contexts=[('mechanism_subquery',body['subquery'])]
     if not contexts: contexts=[(gap['object']['id'],gap['object']['text'])]
     remaining=max(0,5-len(body['manual_eaggl_anchors']))
-    items=await asyncio.to_thread(catalog.suggest_factors,contexts,body.get('mode','semantic'),remaining,exclude)
+    precomputed=not bool(body.get('subquery'))
+    items=catalog.suggest_factors(contexts,body.get('mode','semantic'),remaining,exclude,precomputed=precomputed)
+    context_provenance=catalog.context_embedding_provenance(contexts) if precomputed else {'context_embedding_origin':'user_subquery'}
     suggestion_id=uid()
     with repo.transaction() as tx:
-        tx.put('suggestion',suggestion_id,'catalog',{'mode':body.get('mode','semantic'),'embedding_run_id':catalog.embedding_run,'mapping_run_id':catalog.mapping_run,
-            'hits':{x['record']['source_id']:{'ranking':x['ranking'],'matched_context_ids':x['contexts']} for x in items}})
+        tx.insert_many([('suggestion',suggestion_id,'catalog',{'mode':body.get('mode','semantic'),'embedding_run_id':catalog.embedding_run,'mapping_run_id':catalog.mapping_run,
+            **context_provenance,'hits':{x['record']['source_id']:{'ranking':x['ranking'],'matched_context_ids':x['contexts']} for x in items}})])
     return {'suggestion_id':suggestion_id,'automatic_anchors':[{'factor':x['record'],'ranking':x['ranking'],'matched_context_ids':x['contexts']} for x in items],
         'automatic_target_count':5,'search':catalog.provenance(query,body.get('mode','semantic'),True),'limitations':['Retrieval similarity is not evidence of biological support.']}
 

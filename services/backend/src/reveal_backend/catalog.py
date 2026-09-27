@@ -10,6 +10,7 @@ from .runtime_config import ROOT, setting, mysql_connection
 from .evidence_package import DapperRuntime, canonical_json, sha256
 from .eaggl_embeddings import database_search_index
 from .embedding_client import get_embeddings
+from .dismech_embeddings import context_input, load_context_vectors
 import numpy as np
 
 class Catalog:
@@ -57,6 +58,22 @@ class Catalog:
                     cursor.execute('SELECT f.factor_id,f.label,l.cfde_node_id,l.payload FROM eaggl_cfde_factor_links l JOIN eaggl_factors f ON f.import_id=l.eaggl_import_id AND f.factor_index=l.factor_index WHERE l.run_id=%s', (self.mapping_run,))
                     factor_rows = cursor.fetchall()
                 self.index = database_search_index(connection, self.eaggl_import, self.embedding_run)
+                # Import-time vectors cover all source mechanisms. Readiness
+                # preloads only those currently used by gaps plus exact fallback
+                # questions, so the first automatic suggestion does no I/O.
+                context_ids = {row['id'] for row in mechanism_rows}
+                inputs = [context_input(row['id'], 'mechanism', self.file_hashes[row['source_file']],
+                    row.get('description') or row['name']) for row in mechanism_rows]
+                inputs.extend(context_input(row['id'], 'knowledge_gap', self.file_hashes[row['source_file']], row['raw']['prompt'])
+                    for row in gap_rows if not any(item.get('target_id') in context_ids for item in attachments[row['id']]))
+                try:
+                    self.dismech_embeddings = load_context_vectors(connection, self.dismech_import, self.index.run, inputs,
+                        run_id=setting('REVEAL_DISMECH_EMBEDDING_RUN_ID'))
+                    self.context_text_vectors = {row['input_sha256']: (row['input_text'], self.dismech_embeddings['vectors'][identity])
+                        for identity, row in self.dismech_embeddings['bindings'].items()}
+                except Exception as error:
+                    raise Problem(503, 'DISMECH_EMBEDDINGS_NOT_READY',
+                        'Import and verify compatible DisMech context embeddings before automatic retrieval.') from error
             finally: connection.close()
             self.mechanisms, self.gaps, self.by_source, self.bindings = {}, {}, {}, {}
             for row in mechanism_rows:
@@ -151,12 +168,12 @@ class Catalog:
             if score: scored.append((score, gap))
         scored.sort(key=lambda r: (-r[0], r[1]['source']['source_id']))
         return [{'gap': g, 'ranking': {'value': s, 'metric': 'fuzzy_similarity' if mode=='fuzzy' else 'lexical_rank', 'rank': i+1}} for i,(s,g) in enumerate(scored[:limit])]
-    def search_factors(self, query, mode='semantic', limit=20, exclude=()):
+    def search_factors(self, query, mode='semantic', limit=20, exclude=(), *, query_vector=None):
         self.load()
         if mode=='hybrid':
             combined={}
             for family in ('semantic','lexical'):
-                for item in self.search_factors(query,family,len(self.factors),exclude):
+                for item in self.search_factors(query,family,len(self.factors),exclude,query_vector=query_vector):
                     identity=item['record']['source_id']
                     if identity not in combined: combined[identity]=[0,item['record']]
                     combined[identity][0]+=1/(60+item['ranking']['rank'])
@@ -164,7 +181,10 @@ class Catalog:
             return [{'record':record,'ranking':{'value':score,'metric':'reciprocal_rank_fusion','rank':i+1}} for i,(score,record) in enumerate(ranked)]
         if mode == 'semantic' and query.strip():
             # Retrieve the full small index, filter mappings and deduplicate BEFORE cutoff.
-            rows = self.index.search(query=query, top_k=len(self.index.factors))
+            if query_vector is None:
+                imported = getattr(self, 'context_text_vectors', {}).get(sha256(query.strip().encode('utf-8')))
+                if imported and imported[0] == query.strip(): query_vector = imported[1]
+            rows = self.index.search(query=query, top_k=len(self.index.factors), query_vector=query_vector)
             candidates = [(row['cosine_similarity'], self.factor_legacy[row['factor_id']]) for row in rows if row['factor_id'] in self.factor_legacy]
             metric = 'cosine_similarity'
         else:
@@ -184,18 +204,57 @@ class Catalog:
             if len(result) == limit: break
         return result
 
-    def suggest_factors(self,contexts,mode,remaining,exclude):
+    def stored_context_inputs(self, contexts):
+        stored = getattr(self, 'dismech_embeddings', None)
+        if stored is None:
+            raise Problem(503, 'DISMECH_EMBEDDINGS_NOT_READY', 'Compatible imported DisMech context vectors are unavailable.')
+        inputs = []
+        for identity, text in contexts:
+            if identity in self.mechanisms:
+                source = self.mechanisms[identity]
+                row = context_input(source['source_id'], 'mechanism', source['source_revision'], text)
+            elif identity in self.gaps:
+                source = self.gaps[identity]['source']
+                row = context_input(source['source_id'], 'knowledge_gap', source['source_revision'], text)
+            else:
+                raise Problem(503, 'DISMECH_EMBEDDINGS_NOT_READY', 'The selected source context has no imported vector binding.')
+            if stored['bindings'].get(row['source_id']) != row or row['source_id'] not in stored['vectors']:
+                raise Problem(503, 'DISMECH_EMBEDDINGS_NOT_READY', 'The imported context vector does not match the exact source revision and text.')
+            inputs.append(row)
+        return inputs
+
+    def context_embedding_provenance(self, contexts):
+        inputs = self.stored_context_inputs(contexts)
+        stored = self.dismech_embeddings
+        return {'dismech_embedding_run_id': stored['run_id'], 'dismech_import_id': self.dismech_import,
+                'context_embedding_templates': stored['config']['templates'],
+                'context_embedding_inputs': [{key: value for key, value in row.items() if key != 'input_text'} for row in inputs]}
+
+    def runtime_query_vectors(self, texts):
+        imported = getattr(self, 'context_text_vectors', {})
+        known = [imported.get(sha256(text.encode('utf-8'))) for text in texts]
+        missing = [i for i, (text, row) in enumerate(zip(texts, known)) if row is None or row[0] != text]
+        resolved = {i: row[1] for i, row in enumerate(known) if i not in missing}
+        if missing:
+            fresh = self.index.query_vectors([texts[i] for i in missing], embedder=get_embeddings)
+            resolved.update(zip(missing, fresh))
+        return np.stack([resolved[i] for i in range(len(texts))])
+
+    def suggest_factors(self,contexts,mode,remaining,exclude,*,precomputed=False):
         self.load()
         if not remaining: return []
+        stored_vectors = None
+        if precomputed:
+            inputs = self.stored_context_inputs(contexts)
+            stored_vectors = np.stack([self.dismech_embeddings['vectors'][row['source_id']] for row in inputs])
         if mode=='semantic':
-            config=self.index.run['config']
-            vectors=np.asarray(get_embeddings([text for _,text in contexts],model=config['model'],provider=config['provider'],
-                service_url=config['service_url'],max_workers=1,max_retries=2,timeout=30),dtype=float)
-            if vectors.shape!=(len(contexts),self.index.matrix.shape[1]) or not np.isfinite(vectors).all():
-                raise Problem(503,'EMBEDDING_UNAVAILABLE','The embedding service returned incompatible vectors.')
-            lengths=np.linalg.norm(vectors,axis=1)
-            if np.any(lengths==0): raise Problem(503,'EMBEDDING_UNAVAILABLE','The embedding service returned a zero vector.')
-            scores=self.index.matrix @ (vectors/lengths[:,None]).T
+            vectors = stored_vectors
+            if vectors is None:
+                try:
+                    vectors=self.runtime_query_vectors([text for _,text in contexts])
+                except ValueError as error:
+                    raise Problem(503,'EMBEDDING_UNAVAILABLE','The embedding service returned incompatible vectors.') from error
+            scores=self.index.matrix @ vectors.T
             candidates={}
             for index,factor in enumerate(self.index.factors):
                 record=self.factor_legacy.get(factor['factor_id'])
@@ -206,8 +265,8 @@ class Catalog:
                     candidates[record['source_id']]={'record':record,'ranking':{'value':score,'metric':'cosine_similarity','rank':1},'contexts':matched}
         else:
             candidates={}
-            for context_id,text in contexts:
-                for item in self.search_factors(text,mode,5,exclude):
+            for position,(context_id,text) in enumerate(contexts):
+                for item in self.search_factors(text,mode,5,exclude,query_vector=None if stored_vectors is None else stored_vectors[position]):
                     identity=item['record']['source_id']; old=candidates.get(identity)
                     if old is None or item['ranking']['value']>old['ranking']['value']: candidates[identity]={**item,'contexts':[context_id]}
         items=sorted(candidates.values(),key=lambda x:(-x['ranking']['value'],x['record']['source_id']))[:remaining]

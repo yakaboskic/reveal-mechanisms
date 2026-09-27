@@ -1,5 +1,5 @@
-// Aurora's original 11 tables, migration 004's application links, and the pending
-// DisMech migration 003. All 23 definitions verified against MySQL 8.0.42.
+// Scientific imports and additive application migrations, including migration
+// 006's persistent DisMech embeddings. Apply migrations explicitly.
 // SQL migrations are authoritative for collations, CHECK constraints and
 // database-managed ON UPDATE timestamps. Do not use db push on Aurora.
 // DisMech knowledge gaps: DismechDiscussion rows where is_gap = true.
@@ -168,6 +168,7 @@ model DismechImport {
   dismech_documents      DismechDocument[]
   dismech_ontology_terms DismechOntologyTerm[]
   dismech_vocabulary     DismechVocabulary[]
+  dismech_embedding_runs DismechEmbeddingRun[]
 
   @@map("dismech_imports")
 }
@@ -227,9 +228,64 @@ model EagglEmbeddingRun {
   created_at            DateTime             @default(now()) @db.Timestamp(0)
   eaggl_imports         EagglImport          @relation(fields: [import_id], references: [import_id], onDelete: NoAction, onUpdate: NoAction, map: "eaggl_embedding_runs_ibfk_1")
   eaggl_name_embeddings EagglNameEmbedding[]
+  dismech_embedding_runs DismechEmbeddingRun[]
 
   @@index([import_id], map: "import_id")
   @@map("eaggl_embedding_runs")
+}
+
+// Migration 006: source-bound query vectors compatible with an existing EAGGL
+// run. Neither these records nor their Prisma definitions replace source rows.
+model DismechEmbeddingRun {
+  run_id                 String                  @id @db.Char(64)
+  dismech_import_id       String                  @db.Char(64)
+  eaggl_embedding_run_id  String                  @db.Char(64)
+  config                 Json
+  dimensions             Int                     @db.UnsignedInt
+  expected_bindings      Int                     @db.UnsignedInt
+  expected_vectors       Int                     @db.UnsignedInt
+  loaded_bindings        Int                     @default(0) @db.UnsignedInt
+  loaded_vectors         Int                     @default(0) @db.UnsignedInt
+  calibration            Json
+  status                 String                  @db.VarChar(16)
+  created_at             DateTime                @default(now()) @db.Timestamp(0)
+  dismech_imports        DismechImport           @relation(fields: [dismech_import_id], references: [import_id], onDelete: NoAction, onUpdate: NoAction, map: "dismech_embedding_runs_ibfk_1")
+  eaggl_embedding_runs   EagglEmbeddingRun        @relation(fields: [eaggl_embedding_run_id], references: [run_id], onDelete: NoAction, onUpdate: NoAction, map: "dismech_embedding_runs_ibfk_2")
+  dismech_embedding_vectors DismechEmbeddingVector[]
+  dismech_embedding_inputs  DismechEmbeddingInput[]
+
+  @@index([dismech_import_id], map: "dismech_import_id")
+  @@index([eaggl_embedding_run_id], map: "eaggl_embedding_run_id")
+  @@map("dismech_embedding_runs")
+}
+
+model DismechEmbeddingVector {
+  run_id                 String                 @db.Char(64)
+  input_sha256           String                 @db.Char(64)
+  input_text             String                 @db.LongText
+  vector                 Bytes                  @db.MediumBlob
+  vector_sha256          String                 @db.Char(64)
+  dismech_embedding_runs DismechEmbeddingRun     @relation(fields: [run_id], references: [run_id], onDelete: NoAction, onUpdate: NoAction, map: "dismech_embedding_vectors_ibfk_1")
+  dismech_embedding_inputs DismechEmbeddingInput[]
+
+  @@id([run_id, input_sha256])
+  @@map("dismech_embedding_vectors")
+}
+
+model DismechEmbeddingInput {
+  run_id                   String                 @db.Char(64)
+  source_id_sha256          String                 @db.Char(64)
+  source_id                String                 @db.Text
+  source_kind              String                 @db.VarChar(32)
+  source_revision          String                 @db.Char(64)
+  template                 String                 @db.VarChar(64)
+  input_sha256             String                 @db.Char(64)
+  dismech_embedding_runs   DismechEmbeddingRun     @relation(fields: [run_id], references: [run_id], onDelete: NoAction, onUpdate: NoAction, map: "dismech_embedding_inputs_ibfk_1")
+  dismech_embedding_vectors DismechEmbeddingVector @relation(fields: [run_id, input_sha256], references: [run_id, input_sha256], onDelete: NoAction, onUpdate: NoAction, map: "dismech_embedding_inputs_ibfk_2")
+
+  @@id([run_id, source_id_sha256])
+  @@index([run_id, input_sha256], map: "run_id")
+  @@map("dismech_embedding_inputs")
 }
 
 model EagglFactor {
