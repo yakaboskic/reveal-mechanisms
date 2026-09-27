@@ -4,6 +4,7 @@ import { signIn, signOut } from "next-auth/react";
 import Link from "next/link";
 import { selectedGap } from "@/lib/composer";
 import { api, messageOf, type Schema } from "@/lib/client";
+import { withRequestDeadline } from "@/lib/request-deadline";
 
 type SessionStatus = { canClaim: boolean; providers: { google: boolean; orcid: boolean } };
 type SessionContextType = { me: Schema<"Me"> | null; ready: boolean; status: SessionStatus; refresh: () => Promise<Schema<"Me"> | null> };
@@ -19,7 +20,10 @@ export function Session({ children }: { children: ReactNode }) {
   const [claimMessage, setClaimMessage] = useState("");
   const refresh = async () => {
     try {
-      const state = await fetch("/api/session/status", { cache: "no-store" }).then(r => r.json()); setStatus(state);
+      const state = await withRequestDeadline(signal => fetch("/api/session/status", { cache: "no-store", signal }).then(r => {
+        if (!r.ok) throw new Error("Your session could not be checked. Please retry.");
+        return r.json();
+      })); setStatus(state);
       const identity = state.principal ? await api.me() : null; setMe(identity); return identity;
     } catch { setMe(null); return null; } finally { setReady(true); }
   };

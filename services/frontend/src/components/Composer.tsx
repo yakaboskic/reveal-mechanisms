@@ -1,6 +1,5 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { signIn } from "next-auth/react";
 import { api, ApiError, messageOf, terminal, type Schema } from "@/lib/client";
 import { applySuggestions, emptyComposer, factorSelection, removeAnchor, selectedGap } from "@/lib/composer";
 import { ProviderButtons, useIdentity } from "./Session";
@@ -9,6 +8,8 @@ import { AccountPreview, Record } from "./Scientific";
 import { loadFeaturedGaps } from "@/lib/featured-gaps";
 import { rememberSubmission, restoreSubmission, type SubmissionAttempt, type SubmissionMethod, type SubmissionStage } from "@/lib/submission";
 import { SubmissionProgress } from "./SubmissionProgress";
+import { withRequestDeadline } from "@/lib/request-deadline";
+import { providerRedirect } from "@/lib/provider-redirect";
 
 const storageKey = "reveal:composer";
 type LocalDraft = { composer: Schema<"Composer">; gap: Schema<"GapRecord"> | null; factors: Record<string, Schema<"EagglFactor">>; draft: Schema<"Draft"> | null; owner: string | null; job?: Schema<"Job"> | null; submitKey?: { binding: string; key: string } | null };
@@ -40,6 +41,7 @@ export function Composer() {
   const saveEpoch = useRef(0);
   const restoreEpoch = useRef(0);
   const mounted = useRef(false);
+  const hydrated = useRef(false);
   const suggestionRequest = useRef<AbortController | null>(null);
   const saveQueue = useRef<Promise<Schema<"Draft"> | null>>(Promise.resolve(null));
   const requestKeys = useRef(new Map<string, string>()); const submitKey = useRef<{ binding: string; key: string } | null>(null);
@@ -51,11 +53,17 @@ export function Composer() {
   currentRef.current = composer;
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; suggestionRequest.current?.abort(); }; }, []);
   useEffect(() => {
+    // Fast Refresh replays effects while preserving refs and active promises.
+    // Rehydrating then would reset a failed attempt to a spinner without resuming it.
+    if (hydrated.current) return;
+    hydrated.current = true;
     try {
       const local = JSON.parse(sessionStorage.getItem(storageKey) || "null") as LocalDraft | null;
       if (local) { setComposer(local.composer); setGap(local.gap); setFactors(local.factors); setDraft(local.draft); draftRef.current = local.draft; loadedOwner.current = local.owner; submitKey.current = local.submitKey || null; if (local.job) setJob(local.job); }
     } catch { sessionStorage.removeItem(storageKey); }
-    const pending = restoreSubmission();
+    // An explicit job link always opens that job, even if another submission
+    // left a pending browser snapshot after a lost response.
+    const pending = new URLSearchParams(window.location.search).has("job") ? null : restoreSubmission();
     if (pending) {
       pendingSubmission.current = pending;
       setComposer(pending.composer); currentRef.current = pending.composer;
@@ -84,17 +92,19 @@ export function Composer() {
     const canRestore = () => active && !pendingSubmission.current && epoch === restoreEpoch.current;
     const restore = async () => {
       try {
+        // Show an existing job without waiting for its editable draft or source
+        // description. Those independent reads can be slow on remote storage.
+        if (jobId && me) { const value = await api.job(jobId); if (canRestore()) setJob(value); }
         if (draftId && me) {
           const value = await api.draft(draftId);
           const source = value.composer.source_gap ? await api.gap(value.composer.source_gap.id) : null;
           if (!canRestore()) return;
-          saveEpoch.current++; draftRef.current = value; setDraft(value); setSaveState("Saved"); setComposer(value.composer); setGap(source); setJob(null);
+          saveEpoch.current++; draftRef.current = value; setDraft(value); setSaveState("Saved"); setComposer(value.composer); setGap(source); if (!jobId) setJob(null);
         } else if (gapId) {
           const source = await api.gap(gapId); if (!canRestore()) return;
           if (currentRef.current.source_gap?.id === source.object.id && currentRef.current.source_gap.source_revision === source.source.source_revision) setGap(source);
           else await selectGap(source);
         }
-        if (jobId && me) { const value = await api.job(jobId); if (canRestore()) setJob(value); }
       } catch (failure) { if (canRestore()) setError(messageOf(failure)); }
     };
     void restore(); return () => { active = false; };
@@ -247,11 +257,12 @@ export function Composer() {
     try {
       let identity = confirmedIdentity;
       if (attempt.method === "anonymous" && !identity) {
-        const response = await fetch("/api/session/anonymous", { method: "POST", headers: { "content-type": "application/json", "Idempotency-Key": attempt.anonymousKey }, body: "{}" });
-        const value = await response.json(); if (!response.ok) throw new Error(value.detail || "Anonymous continuation is unavailable. Please try again.");
+        await withRequestDeadline(async signal => {
+          const response = await fetch("/api/session/anonymous", { method: "POST", headers: { "content-type": "application/json", "Idempotency-Key": attempt.anonymousKey }, body: "{}", signal });
+          const value = await response.json(); if (!response.ok) throw new Error(value.detail || "Anonymous continuation is unavailable. Please try again.");
+        });
         identity = await refresh();
-      }
-      if (!identity) identity = await refresh();
+      } else if (!identity) identity = await refresh();
       if (attempt.method === "google" || attempt.method === "orcid") {
         if (new URLSearchParams(window.location.search).has("error") || identity?.principal_kind !== "registered") throw new Error("Sign-in was not completed. Try signing in again, or return to your question to choose another option.");
       }
@@ -290,7 +301,7 @@ export function Composer() {
     if (submissionRunning.current) return;
     submissionRunning.current = true;
     setSubmission({ stage: "signing-in" });
-    try { await signIn(provider, { callbackUrl: window.location.origin + "/" }); }
+    try { window.location.assign(await providerRedirect(provider, window.location.origin + "/")); }
     catch (failure) { submissionFailed(failure); }
     finally { submissionRunning.current = false; }
   };

@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 /** Intercepted browser regression. No real login, draft write, or paid job.
- * Run against an already running frontend:
+ * Run against an already running development frontend:
  *   node services/frontend/scripts/check-submission.mjs
  * Optional: SUBMISSION_BASE_URL, SUBMISSION_AUDIT_DIR, PLAYWRIGHT_MODULE,
- * PLAYWRIGHT_EXECUTABLE_PATH. Playwright is an external test tool, not a runtime dependency.
+ * PLAYWRIGHT_EXECUTABLE_PATH, SUBMISSION_SCENARIO_FILTER (regular expression).
+ * Playwright is an external test tool, not a runtime dependency.
  */
 import assert from 'node:assert/strict';
 import { access, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
@@ -80,10 +81,11 @@ async function harness(name, options = {}) {
   page.setDefaultTimeout(10000);
   const state = {
     authenticated: Boolean(options.signed), oauthReturned: false, requests: [], errors: [], unexpected: [], draft: null,
-    anonymous: 0, status: 0, authenticatedStatus: 0, me: 0, drafts: 0, jobs: 0, oauth: 0,
+    anonymous: 0, status: 0, authenticatedStatus: 0, me: 0, drafts: 0, jobs: 0, oauth: 0, csrf: 0,
     restoreReads: 0,
-    gates: Object.fromEntries(['anonymous', 'status', 'me', 'draft', 'job', 'oauth', 'restore'].map(key => [key, gate()])),
+    gates: Object.fromEntries(['anonymous', 'status', 'me', 'draft', 'job', 'oauth', 'csrf', 'restore'].map(key => [key, gate()])),
   };
+  if (!options.holdCsrf) state.gates.csrf.release();
   page.on('pageerror', error => state.errors.push(error.message));
   const fulfilled = (route, json, status = 200) => route.fulfill({ status, json }).catch(error => {
     if (!/closed|cancel|handled/i.test(error.message)) throw error;
@@ -160,11 +162,17 @@ async function harness(name, options = {}) {
       google: { id: 'google', name: 'Google', type: 'oauth', signinUrl: `${origin}/api/auth/signin/google`, callbackUrl: `${origin}/api/auth/callback/google` },
       orcid: { id: 'orcid', name: 'ORCID', type: 'oauth', signinUrl: `${origin}/api/auth/signin/orcid`, callbackUrl: `${origin}/api/auth/callback/orcid` },
     });
-    if (path === '/api/auth/csrf') return fulfilled(route, { csrfToken: 'intercepted-browser-test-token' });
+    if (path === '/api/auth/csrf') {
+      state.csrf++;
+      await state.gates.csrf.promise;
+      return fulfilled(route, { csrfToken: 'intercepted-browser-test-token' });
+    }
     if (['/api/auth/signin/google', '/api/auth/signin/orcid'].includes(path) && request.method() === 'POST') {
       state.oauth++;
       await state.gates.oauth.promise;
-      state.authenticated = true; state.oauthReturned = true;
+      if (state.oauth >= (options.oauthAuthenticateAfter || 1)) {
+        state.authenticated = true; state.oauthReturned = true;
+      }
       return fulfilled(route, { url: `${origin}/?submission-regression-oauth-return=1` });
     }
     if (path === '/api/auth/session') return fulfilled(route, {});
@@ -175,7 +183,7 @@ async function harness(name, options = {}) {
   report.scenarios.push(result);
   return { page, state, result, async close() {
     for (const value of Object.values(state.gates)) value.release();
-    result.requestCounts = Object.fromEntries(['anonymous', 'status', 'me', 'drafts', 'jobs', 'oauth'].map(key => [key, state[key]]));
+    result.requestCounts = Object.fromEntries(['anonymous', 'status', 'me', 'drafts', 'jobs', 'oauth', 'csrf'].map(key => [key, state[key]]));
     result.pageErrors = state.errors; result.blockedUnexpectedRequests = state.unexpected;
     await context.close();
   } };
@@ -341,6 +349,74 @@ async function oauthReturn(provider) {
     h.result.checks.push('OAuth return restores pending intent and full-page preparation before session lookup completes');
   } finally { await h.close(); }
 }
+async function oauthDeadline(provider, phase) {
+  const h = await harness(`${provider}-${phase}-deadline-recovery`, {
+    holdCsrf: phase === 'csrf', oauthAuthenticateAfter: phase === 'oauth' ? 2 : 1,
+  });
+  try {
+    for (const [key, value] of Object.entries(h.state.gates)) if (key !== phase) value.release();
+    const heldPath = phase === 'csrf' ? '/api/auth/csrf' : `/api/auth/signin/${provider}`;
+    // Simulate a transport that still delivers its first response after abort.
+    // The request deadline must win independently of the browser's cancellation.
+    await h.page.addInitScript(path => {
+      const original = window.fetch.bind(window); let held = false;
+      window.fetch = async (input, init) => {
+        const url = typeof input === 'string' ? input : input.url;
+        if (!held && new URL(url, location.href).pathname === path) {
+          held = true;
+          const response = await original(input, { ...init, signal: undefined });
+          window.__lateOAuthResponseDelivered = true;
+          return response;
+        }
+        return original(input, init);
+      };
+    }, heldPath);
+    await choose(h);
+    await h.page.clock.install();
+    const buttonName = `Continue with ${provider === 'google' ? 'Google' : 'ORCID'}`;
+    await rapidClick(h.page.getByRole('button', { name: buttonName, exact: true }));
+    await until(() => h.state[phase] === 1, `held ${provider} ${phase} request`);
+    await progress(h, 'signing-in');
+    await h.page.clock.fastForward(30_050);
+    const error = h.page.locator('main.submission-page[data-submission-state="error"]');
+    await error.waitFor({ timeout: 2000 });
+    assert.match(await error.getByRole('alert').innerText(), /sign-in.*longer.*retry/i);
+    assert.equal(h.state.drafts, 0); assert.equal(h.state.jobs, 0);
+    await screenshot(h, `${provider}-${phase}-deadline`);
+    if (phase === 'oauth') {
+      const before = h.page.url();
+      await error.getByRole('button', { name: 'Back to question', exact: true }).click();
+      await h.page.locator('main.composer-page').waitFor();
+      h.state.gates.oauth.release();
+      await h.page.waitForFunction(() => window.__lateOAuthResponseDelivered === true);
+      await h.page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      assert.equal(h.page.url(), before, 'Late provider response cannot redirect after Back');
+      assert.equal(await h.page.locator('main.submission-page').count(), 0);
+      assert.equal(await h.page.evaluate(() => sessionStorage.getItem('reveal:submission')), null);
+      assert.equal(h.state.drafts, 0); assert.equal(h.state.jobs, 0);
+      h.result.checks.push('Abort-insensitive late provider response cannot navigate or resume discarded intent after Back');
+      await h.page.getByRole('button', { name: 'Let’s close this gap', exact: true }).click();
+      await h.page.getByRole('dialog', { name: 'Continue your exploration' }).waitFor();
+      await rapidClick(h.page.getByRole('button', { name: buttonName, exact: true }));
+    } else {
+      h.state.gates.csrf.release();
+      await h.page.waitForFunction(() => window.__lateOAuthResponseDelivered === true);
+      await rapidClick(error.getByRole('button', { name: 'Try again', exact: true }));
+    }
+    await success(h);
+    assert.equal(h.state.csrf, 2);
+    assert.equal(h.state.oauth, phase === 'oauth' ? 2 : 1);
+    assert.equal(h.state.anonymous, 0); assert.equal(h.state.drafts, 1); assert.equal(h.state.jobs, 1);
+    const handoffs = h.state.requests.filter(request => request.path === `/api/auth/signin/${provider}`);
+    for (const handoff of handoffs) {
+      const body = new URLSearchParams(handoff.body);
+      assert.equal(body.get('csrfToken'), 'intercepted-browser-test-token');
+      assert.equal(body.get('callbackUrl'), `${origin}/`); assert.equal(body.get('json'), 'true');
+    }
+    h.result.deadlineClockAdvances = 1;
+    h.result.checks.push('Stalled OAuth request exits loading within one deadline and a deliberate retry creates one fixture job');
+  } finally { await h.close(); }
+}
 async function delayedUrlRestore() {
   const h = await harness('late-url-restore-cannot-overwrite-accepted-job', { signed: true });
   try {
@@ -373,6 +449,127 @@ async function delayedUrlRestore() {
     assert.equal(await h.page.locator('.selected-question').innerText(), gap.object.text);
     await screenshot(h, 'late-url-restore-retains-job');
     h.result.checks.push('A URL restore begun before submission can finish after acceptance without replacing the confirmed job/draft');
+  } finally { await h.close(); }
+}
+async function replayComposerBootEffect(page) {
+  return page.evaluate(() => {
+    const main = document.querySelector('main');
+    let fiber = main[Object.keys(main).find(key => key.startsWith('__reactFiber$'))];
+    while (fiber && fiber.type?.name !== 'Composer') fiber = fiber.return;
+    if (!fiber) throw new Error('Composer fiber unavailable for controlled effect replay');
+    let hook = fiber.memoizedState; let count = 0;
+    while (hook) {
+      const effect = hook.memoizedState;
+      if (typeof effect?.create === 'function' && effect.create.toString().includes('restoreSubmission')) {
+        effect.create(); count++;
+      }
+      hook = hook.next;
+    }
+    return { replayedBootEffects: count, mode: 'Direct replay of the actual mounted boot effect, preserving refs/state' };
+  });
+}
+async function effectReplayRemainsRecoverable() {
+  const h = await harness('boot-effect-replay-retains-recoverable-error', { fail: 'job' });
+  try {
+    Object.values(h.state.gates).forEach(value => value.release());
+    await choose(h);
+    await h.page.getByRole('button', { name: 'Continue anonymously', exact: true }).click();
+    const error = h.page.locator('main.submission-page[data-submission-state="error"]');
+    await error.waitFor();
+    const before = h.state.requests.filter(request => request.path === '/api/backend/v1/jobs' && request.method === 'POST');
+    const replay = await replayComposerBootEffect(h.page);
+    assert.equal(replay.replayedBootEffects, 1);
+    await h.page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await error.waitFor({ timeout: 1500 });
+    assert.equal(h.state.jobs, 1, 'Effect replay does not silently relaunch a failed request');
+    assert.equal(await error.getByRole('button', { name: 'Retry', exact: true }).count(), 1);
+    await screenshot(h, 'effect-replay-retains-retry');
+    await rapidClick(error.getByRole('button', { name: 'Retry', exact: true }));
+    await success(h);
+    const after = h.state.requests.filter(request => request.path === '/api/backend/v1/jobs' && request.method === 'POST');
+    assert.equal(after.length, 2); assert.equal(after[1].key, before[0].key);
+    assert.deepEqual(after[1].body, before[0].body);
+    h.result.checks.push('Replaying the mounted startup effect preserves error/Retry and same-key recovery');
+  } finally { await h.close(); }
+}
+async function stalledRequestDeadline(phase) {
+  const h = await harness(`${phase}-deadline-safe-retry`);
+  try {
+    const held = phase === 'job-body' ? null : phase;
+    for (const [key, value] of Object.entries(h.state.gates)) if (key !== held) value.release();
+    if (phase === 'job-body') {
+      await h.page.addInitScript(() => {
+        const original = window.fetch.bind(window); let stalled = false;
+        window.fetch = async (...args) => {
+          const response = await original(...args);
+          const request = args[0];
+          const url = typeof request === 'string' ? request : request.url;
+          if (!stalled && new URL(url, location.href).pathname === '/api/backend/v1/jobs') {
+            stalled = true;
+            response.json = () => {
+              window.__submissionBodyStalled = true;
+              return new Promise(() => {});
+            };
+          }
+          return response;
+        };
+      });
+    }
+    await choose(h);
+    await h.page.clock.install();
+    await h.page.getByRole('button', { name: 'Continue anonymously', exact: true }).click();
+    const count = () => phase === 'anonymous' ? h.state.anonymous : phase === 'status' ? h.state.authenticatedStatus
+      : phase === 'me' ? h.state.me : phase === 'draft' ? h.state.drafts : h.state.jobs;
+    await until(() => count() >= 1, `${phase} request pending`);
+    if (phase === 'job-body') await h.page.waitForFunction(() => window.__submissionBodyStalled === true);
+    await progress(h, ['anonymous', 'status', 'me'].includes(phase) ? 'signing-in' : phase === 'draft' ? 'saving' : 'submitting');
+    const error = h.page.locator('main.submission-page[data-submission-state="error"]');
+    await h.page.clock.fastForward(30_050);
+    await error.waitFor({ timeout: 2000 });
+    assert.match(await error.getByRole('alert').innerText(), /retry|try again|confirm/i);
+    assert.equal(await h.page.locator('main.composer-page').count(), 0);
+    await screenshot(h, `${phase}-deadline`);
+    const postsBefore = h.state.requests.filter(request => request.method === 'POST' &&
+      ['/api/session/anonymous', '/api/backend/v1/drafts', '/api/backend/v1/jobs'].includes(request.path));
+    const stalledPath = phase === 'anonymous' ? '/api/session/anonymous' : phase === 'draft'
+      ? '/api/backend/v1/drafts' : phase.startsWith('job') ? '/api/backend/v1/jobs' : null;
+    if (held) h.state.gates[held].release();
+    await rapidClick(error.getByRole('button', { name: 'Retry', exact: true }));
+    await success(h);
+    if (stalledPath) {
+      const attempts = h.state.requests.filter(request => request.method === 'POST' && request.path === stalledPath);
+      assert.equal(attempts.length, 2);
+      const original = postsBefore.find(request => request.path === stalledPath);
+      assert.ok(original.key); assert.equal(attempts[1].key, original.key);
+      assert.deepEqual(attempts[1].body, original.body);
+    }
+    assert.equal(h.state.jobs, phase.startsWith('job') ? 2 : 1);
+    h.result.deadlineClockAdvances = 1;
+    h.result.checks.push('Stalled request exits loading within its bounded deadline; rapid Retry safely recovers');
+    if (phase === 'job-body') h.result.checks.push('Deadline includes JSON decoding after response headers arrive');
+  } finally { await h.close(); }
+}
+async function explicitJobBeatsStaleIntent() {
+  const h = await harness('explicit-job-url-beats-stale-pending-intent', { fail: 'job' });
+  try {
+    Object.values(h.state.gates).forEach(value => value.release());
+    await choose(h);
+    await h.page.getByRole('button', { name: 'Continue anonymously', exact: true }).click();
+    await h.page.locator('main.submission-page[data-submission-state="error"]').waitFor();
+    await h.page.evaluate(() => {
+      const pending = JSON.parse(sessionStorage.getItem('reveal:submission'));
+      pending.question = 'A stale unrelated pending question';
+      pending.composer.source_gap.id = 'dapper:KnowledgeGap.stale-pending-browser-test';
+      pending.gap.object.text = pending.question;
+      sessionStorage.setItem('reveal:submission', JSON.stringify(pending));
+    });
+    await h.page.goto(`${origin}/?draft=${draftId}&job=${jobId}`);
+    await success(h);
+    assert.equal(h.state.jobs, 1, 'Opening an explicit job never retries stale pending intent');
+    assert.equal(h.state.drafts, 1); assert.equal(h.state.anonymous, 1);
+    assert.equal(await h.page.locator('.selected-question').innerText(), gap.object.text);
+    await screenshot(h, 'explicit-job-beats-stale-intent');
+    h.result.checks.push('Explicit job/draft URL opens saved activity despite unrelated pending submission storage');
   } finally { await h.close(); }
 }
 async function lostResponseReload(composerState) {
@@ -416,14 +613,26 @@ async function lostResponseReload(composerState) {
     h.result.checks.push(`Pending gap/composer snapshot wins over ${composerState} general composer storage`);
   } finally { await h.close(); }
 }
+const scenarios = [
+  ['anonymous-delayed-stages', stagedAnonymous],
+  ...['anonymous', 'draft', 'job'].map(phase => [`${phase}-failure-retry`, () => retryFailure(phase)]),
+  ['uncertain-response-back-reload-resubmit', backToQuestion],
+  ...['google', 'orcid'].map(provider => [`${provider}-oauth-pending-return`, () => oauthReturn(provider)]),
+  ...['google', 'orcid'].flatMap(provider => ['csrf', 'oauth'].map(phase =>
+    [`${provider}-${phase}-deadline-recovery`, () => oauthDeadline(provider, phase)])),
+  ...['missing', 'stale'].map(mode => [`lost-job-response-reload-${mode}-composer`, () => lostResponseReload(mode)]),
+  ['late-url-restore-cannot-overwrite-accepted-job', delayedUrlRestore],
+  ['boot-effect-replay-retains-recoverable-error', effectReplayRemainsRecoverable],
+  ...['anonymous', 'status', 'me', 'draft', 'job', 'job-body'].map(phase =>
+    [`${phase}-deadline-safe-retry`, () => stalledRequestDeadline(phase)]),
+  ['explicit-job-url-beats-stale-pending-intent', explicitJobBeatsStaleIntent],
+];
 try {
-  await stagedAnonymous();
-  for (const phase of ['anonymous', 'draft', 'job']) await retryFailure(phase);
-  await backToQuestion();
-  for (const provider of ['google', 'orcid']) await oauthReturn(provider);
-  await lostResponseReload('missing');
-  await lostResponseReload('stale');
-  await delayedUrlRestore();
+  const filter = process.env.SUBMISSION_SCENARIO_FILTER ? new RegExp(process.env.SUBMISSION_SCENARIO_FILTER) : null;
+  const selected = scenarios.filter(([name]) => !filter || filter.test(name));
+  assert.ok(selected.length, 'Scenario filter must select at least one test');
+  report.scenarioFilter = process.env.SUBMISSION_SCENARIO_FILTER || null;
+  for (const [, run] of selected) await run();
   report.status = 'passed';
 } catch (error) {
   report.status = 'failed'; report.failure = error.stack || error.message;

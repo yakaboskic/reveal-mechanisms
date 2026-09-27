@@ -1,5 +1,6 @@
 import createClient from "openapi-fetch";
 import type { paths, components } from "./api.generated";
+import { withRequestDeadline } from "./request-deadline";
 export type Schema<K extends keyof components["schemas"]> = components["schemas"][K];
 export class ApiError extends Error {
   constructor(public status: number, public code: string, message: string) { super(message); }
@@ -14,21 +15,21 @@ export function unwrap<T>(result: { data?: T; error?: unknown; response: Respons
 }
 export const keyHeaders = (key = crypto.randomUUID()) => ({ "Idempotency-Key": key });
 export const api = {
-  me: async () => unwrap(await client.GET("/v1/me")),
+  me: () => withRequestDeadline(async signal => unwrap(await client.GET("/v1/me", { signal }))),
   gaps: async (cursor?: string) => unwrap(await client.GET("/v1/knowledge-gaps", { params: { query: { limit: 10, cursor } } })),
   searchGaps: async (q: string, signal?: AbortSignal) => unwrap(await client.GET("/v1/knowledge-gaps/search", { params: { query: { q, mode: "fuzzy", limit: 20 } }, signal })),
-  gap: async (gap_id: string) => unwrap(await client.GET("/v1/knowledge-gaps/{gap_id}", { params: { path: { gap_id } } })),
+  gap: (gap_id: string) => withRequestDeadline(async signal => unwrap(await client.GET("/v1/knowledge-gaps/{gap_id}", { params: { path: { gap_id } }, signal }))),
   mechanisms: async (q: string, signal?: AbortSignal, mode: "lexical" | "hybrid" = "hybrid") => unwrap(await client.GET("/v1/mechanisms/search", { params: { query: { q, source: "eaggl", model: "cfde-inc-v2", limit: 20, mode } }, signal })),
   mechanism: async (source_id: string, source_revision: string) => unwrap(await client.GET("/v1/mechanisms/{source_id}", { params: { path: { source_id }, query: { source_revision } } })),
   suggest: async (body: Schema<"SuggestInput">, signal?: AbortSignal) => unwrap(await client.POST("/v1/mechanisms/suggest", { body, signal })),
   drafts: async () => unwrap(await client.GET("/v1/drafts")),
-  draft: async (draft_id: string) => unwrap(await client.GET("/v1/drafts/{draft_id}", { params: { path: { draft_id } } })),
-  createDraft: async (composer: Schema<"Composer">, key: string) => unwrap(await client.POST("/v1/drafts", { body: { composer }, params: { header: keyHeaders(key) } })),
-  saveDraft: async (draft: Schema<"Draft">, composer: Schema<"Composer">, key: string) => unwrap(await client.PATCH("/v1/drafts/{draft_id}", { params: { path: { draft_id: draft.id }, header: keyHeaders(key) }, body: { expected_version: draft.version, composer }, headers: keyHeaders(key) })),
-  job: async (job_id: string) => unwrap(await client.GET("/v1/jobs/{job_id}", { params: { path: { job_id } } })),
+  draft: (draft_id: string) => withRequestDeadline(async signal => unwrap(await client.GET("/v1/drafts/{draft_id}", { params: { path: { draft_id } }, signal }))),
+  createDraft: (composer: Schema<"Composer">, key: string) => withRequestDeadline(async signal => unwrap(await client.POST("/v1/drafts", { body: { composer }, params: { header: keyHeaders(key) }, signal }))),
+  saveDraft: (draft: Schema<"Draft">, composer: Schema<"Composer">, key: string) => withRequestDeadline(async signal => unwrap(await client.PATCH("/v1/drafts/{draft_id}", { params: { path: { draft_id: draft.id }, header: keyHeaders(key) }, body: { expected_version: draft.version, composer }, headers: keyHeaders(key), signal }))),
+  job: (job_id: string) => withRequestDeadline(async signal => unwrap(await client.GET("/v1/jobs/{job_id}", { params: { path: { job_id } }, signal }))),
   requests: async () => unwrap(await client.GET("/v1/research-requests")),
   jobs: async () => unwrap(await client.GET("/v1/jobs")),
-  submit: async (body: Schema<"JobCreate">, key: string) => unwrap(await client.POST("/v1/jobs", { body, params: { header: keyHeaders(key) } })),
+  submit: (body: Schema<"JobCreate">, key: string) => withRequestDeadline(async signal => unwrap(await client.POST("/v1/jobs", { body, params: { header: keyHeaders(key) }, signal })), "We haven’t received confirmation yet. Retry to check this submission; it won’t create a second job."),
   cancel: async (job_id: string) => unwrap(await client.POST("/v1/jobs/{job_id}/cancel", { params: { path: { job_id } } })),
   account: async (dapper_id: string) => unwrap(await client.GET("/v1/accounts/{dapper_id}", { params: { path: { dapper_id } } })),
   claim: async (dapper_id: string) => unwrap(await client.GET("/v1/claims/{dapper_id}", { params: { path: { dapper_id } } })),

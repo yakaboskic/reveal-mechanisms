@@ -324,8 +324,11 @@ def get_request(request_id:str,request:Request):
 @app.post('/v1/jobs',status_code=202)
 async def create_job(request:Request):
     body=await request.json(); validate(body,'JobCreate')
+    return await asyncio.to_thread(create_job_transaction,body,request.headers.get('authorization'),request.headers.get('idempotency-key'))
+
+def create_job_transaction(body,authorization,idempotency_key):
     with repo.transaction() as tx:
-        identity=principal(tx,request.headers.get('authorization')); user=identity['user_id']
+        identity=principal(tx,authorization); user=identity['user_id']
         def create():
             active=[r for r in tx.list('job',user) if r['data']['status'] not in jobs.TERMINAL]
             maximum=int(os.getenv('REVEAL_MAX_ACTIVE_JOBS','2'))
@@ -353,7 +356,7 @@ async def create_job(request:Request):
                 'anchors':[saved['selections'][s['reference']['source_id']]['binding'] for s in composer['eaggl_anchors']],
                 'retrieval':{s['reference']['source_id']:saved['selections'][s['reference']['source_id']].get('retrieval') for s in composer['eaggl_anchors']}})
             return jobs.enqueue(tx,user,'analysis',request_id=frozen['id'],inputs=body)
-        return idempotent(tx,user,'job',request.headers.get('idempotency-key'),body,create)
+        return idempotent(tx,user,'job',idempotency_key,body,create)
 
 @app.get('/v1/jobs')
 def list_jobs(request:Request,limit:int=20,cursor:str|None=None,kind:str|None=None,status:str|None=None,research_request_id:str|None=None):
