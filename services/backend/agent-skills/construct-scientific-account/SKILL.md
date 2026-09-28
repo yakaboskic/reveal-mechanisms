@@ -52,10 +52,22 @@ Every attempted call, including empty/error results, must be captured by the wor
 3. For every EvidenceItem, set one `target_proposition` matching its owning Claim, reference authorized source Files through `was_derived_from`, retain exact locators in `context`, and explain how the observation bears on this Proposition. Preserve verbatim snippets where available. Reuse sources across separate evidence uses when targets differ.
 4. Prefer one biological Claim with artifact-based evidence in simple cases. Separate source-result Claims are optional when independent citation, assessment or typed scores add value. Do not create a duplicate Claim merely to restate the loading. No graph-path EvidenceItem extension is permitted.
 5. Account findings must have CFDE ancestry. Auxiliary KG source Claims can support them without their own CFDE ancestry, but are not automatically account components. Do not generate biological findings from selection similarity or unavailable observations.
-6. Write `closing_remarks` explaining how the assessed propositions jointly address, partially answer or motivate an explanation for the selected gap. State scope differences, competing interpretations and the specific unresolved question. Do not claim the gap is closed just because associations were found.
+6. Write `closing_remarks` in **at most two sentences**, giving only the account's synthesis or recommendation for the selected gap. Preserve the decisive uncertainty; do not claim the gap is closed just because associations were found. Follow the closing-remarks guidance below.
 7. Represent a new substantive scientific conclusion in the closing as its own assessed component Claim. A one-Claim account omits `conclusion_claims`; otherwise they are an optional ordered subset, with at least one component outside that subset under the current profile.
 
 There is no fixed required number of Claims and no requirement to use all four templates. If the package cannot support a useful account, return the explicit insufficient-evidence outcome with the missing observations instead of manufacturing claims.
+
+### Keep closing remarks brief
+
+Use one or two short sentences: the supported takeaway and, when useful, the unresolved question or proposed next step. This field is not the full account summary. Do not compress an evidence inventory into long clauses to satisfy the sentence limit.
+
+Do not include citations (author-date, numeric markers, PMID or DOI), native source or DAPPER IDs, factor values or other numerical evidence, JSON pointers, source snippets, capture-ledger details or tool logs. Keep exact values, citations, locators and provenance in the structured Claims, EvidenceItems, Files and their links; keep detailed coverage qualifications in the account context and assessments. Ordinary biological names may appear when essential to the takeaway. Brief closing prose still has to be supported by those records; brevity never licenses a stronger conclusion.
+
+For an account whose assessments support association but cannot distinguish causal direction, a suitable closing is: “The observed associations identify candidates for follow-up, while the causal question remains unresolved. Prioritize measurements that distinguish the competing explanations.” Use this only when candidate prioritization and the proposed tests follow from the actual assessments.
+
+When no extra recommendation is justified, one sentence can suffice: “The available evidence leaves the selected question unresolved.” Explain the specific evidential limitations in the structured account, rather than appending a source-by-source recap here.
+
+The later **Research Statement**, generated with `write-cited-paragraph`, provides the fuller cited explanation from the accepted account. Do not write that statement into `closing_remarks`.
 
 ### Check every scientific field against its source
 
@@ -81,4 +93,4 @@ Use the worker-supplied output envelope and pinned DAPPER fields. Supply propose
 
 The backend provides real attribution/runtime provenance, hydrates dependencies, validates shapes/references/scientific grounding and computes/verifies new IDs. Do not alter existing gaps, GeneSets, source checksums, identities, mint dates or citation revisions. Do not write to the database, publish, fabricate runtime provenance, or claim validation succeeded without its actual result.
 
-The research statement/Paragraph is a later generation step after account validation. The output here is the account and its assessed propositions, not an invented cited paragraph.
+The Research Statement/Paragraph is a later generation step after account validation. Return the structured account with its brief closing remarks; the paragraph skill supplies the fuller cited explanation.

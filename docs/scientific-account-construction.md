@@ -87,16 +87,13 @@ Write each Claim's statement as a summary of the assessment across its EvidenceI
 
 ### Step 5 — synthesize the account around the original gap
 
-Write a final synthesis that explains:
+Write `closing_remarks` in **at most two short sentences**, giving the supported synthesis or recommendation for the selected gap and retaining the decisive uncertainty. This is the takeaway, not the full account summary or an inventory of every Claim. Do not evade the limit with long chains of clauses.
 
-- **Contribution:** what the assessed propositions establish or suggest about the specific unknown.
-- **Combination:** which claims reinforce, qualify, depend on or conflict with one another, and why.
-- **Scope:** where those assessments apply and which scope differences prevent combining them directly.
-- **Remaining uncertainty:** what the account has not answered and, when justified, what would discriminate between the remaining explanations.
+Exclude citations (author-date, numeric markers, PMID or DOI), native source or DAPPER IDs, factor values or other numerical evidence, pointers, source snippets, capture-ledger details and tool logs. Keep exact evidence and provenance in the structured Claims, EvidenceItems, Files and their links, and detailed scope/coverage qualifications in the account context and assessments. Brief prose still must be supported by those records; it cannot introduce an unassessed scientific conclusion.
 
-The synthesis should be intelligible as a closing paragraph, with the relevant claims accessible for inspection. It should not be just a list of scores or a repetition of the question.
+For an association-only account, a suitable closing might be: “The observed associations identify candidates for follow-up, while the causal question remains unresolved. Prioritize measurements that distinguish the competing explanations.” This is an illustrative form, not a finding to copy when its recommendation is unsupported. If no further recommendation is justified, one sentence stating that the gap remains unresolved can suffice.
 
-For a factor-centered account, make the final explanation concrete: which genes are involved, which amplify or inhibit the mechanism when that direction is supported, which processes connect them, and which gene sets describe those processes or provide readouts. Every such relationship must be traceable to an assessed Proposition. When the evidence establishes involvement but leaves direction unresolved, retain that distinction in the synthesis.
+The separate paragraph-generation skill writes the fuller cited **Research Statement** from the accepted account's assessments and evidence. That paragraph can explain how Claims reinforce or conflict, the relevant biological scope, and what evidence remains missing; it is not subject to the closing remarks' two-sentence limit.
 
 ## 4. Evidence can inform multiple propositions
 
@@ -157,9 +154,9 @@ A factor loading can motivate investigating C6–C8. The loading alone does not 
 
 When C1–C8 are supported in compatible scopes, the account's closing can say:
 
-> Gene A amplifies mechanism M through process X, while genes B and C inhibit M through process Y. Gene set S1 describes the program associated with X, and gene set S2 provides a readout of Y. Together, these assessed relationships propose [the specific explanation] for [the unknown in Q], within [the shared biological scope]. [The identified unresolved aspect] remains to be tested.
+> The assessed opposing effects offer a partial explanation of the mechanism's regulation within the studied setting. Their combined behavior remains to be tested.
 
-The first sentence is grounded in C6–C8, and the gene-set roles in C4/C5. The last sentences explain their relevance to Q and the remaining uncertainty. If the account proposes an additional scientific conclusion about how M explains the gap, represent that conclusion as another assessed Proposition/Claim. An editorial connection among existing assessments does not require a new overarching Proposition.
+This two-sentence closing assumes the assessed regulatory effects are relevant to the selected gap and that combined behavior is unmeasured. The detailed gene, process and gene-set assessments remain in the component Claims and fuller cited Research Statement. If the account proposes an additional scientific conclusion about how the mechanism explains the gap, represent that conclusion as another assessed Proposition/Claim. An editorial connection among existing assessments does not require a new overarching Proposition.
 
 This synthesis does not assert that A, B and C act simultaneously, synergistically or in a physical complex unless those are also assessed claims. Preserve differing directions, scopes and confidence rather than forcing every gene into one common role. If a role is proposed but uncertain, the closing should say so. If only involvement is supported, the account can still synthesize the participating genes and process annotations while leaving regulatory direction unresolved.
 
@@ -189,11 +186,9 @@ scientific_accounts:
       - urn:example:c7-gene-b-inhibition
       - urn:example:c8-gene-c-inhibition
     closing_remarks: >-
-      Gene A amplifies mechanism M through X, while B and C inhibit M
-      through Y. S1 describes the program associated with X, and S2
-      provides a readout of Y. Explain how these assessed relationships
-      address the unknown in the selected gap within their shared scope,
-      and state the specific remaining uncertainty.
+      The assessed opposing effects offer a partial explanation of the
+      mechanism's regulation within the studied setting. Their combined
+      behavior remains to be tested.
     was_generated_by: urn:example:account-assembly-activity
     was_attributed_to: [urn:example:responsible-agent]
 ```
@@ -215,7 +210,7 @@ Review must establish that:
 - Each Claim statement summarizes its evidence-based assessment; shared Propositions across methods have matching entities, meaning and biological scope.
 - Evidence targets match the owning Claim's Proposition; shared evidence retains its source identity and is not counted as independent corroboration.
 - Every interpreted scientific assessment has its own evidential explanation. Claim ordering alone is not an argument.
-- The synthesis explains the relationship among the claims, their scope, their contribution to the gap and the remaining uncertainty.
+- Closing remarks contain at most two short synthesis/recommendation sentences, retain decisive uncertainty and leave detailed evidence/provenance in structured account records.
 - No new unsupported scientific content appears only in the synthesis. Conclusion Claims satisfy the existing membership constraints.
 - Inhibition/amplification, routes through named processes and gene-set readout roles each resolve to appropriately scoped assessed Propositions; they are not inferred from loading signs or signature labels alone.
 - Related gaps remain contextual inquiries; selected KG assertions retain their qualifiers and source provenance.

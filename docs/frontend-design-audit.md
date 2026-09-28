@@ -189,3 +189,88 @@ identifier tooltips, early lexical results, loading feedback, clearing a pending
 suggestion, and authenticated autosave after suggestions. It used a real catalog
 record with intercepted suggestion/authentication/write responses; it did not
 launch research jobs or mutate user drafts.
+
+
+## Research Statement activity — 28 September 2026
+
+The account's **Research Statement** tab now follows its existing paragraph
+`job_id`. It shows elapsed time and the shared bounded activity stream, with
+paragraph-specific preparation, setup, writing, claim/citation checking and
+saving labels. Public agent updates and compact tool invocations remain
+inspectable while generation runs. Completion loads the saved paragraph and its
+citation rendering automatically. Scientific checks still precede acceptance.
+
+Stopping remains visible until the job reaches a terminal state. An explicit
+retry follows the returned replacement job immediately, preserving its request
+key after an uncertain submission response. A late response from an older job
+cannot replace the current attempt. Opening an already saved statement does not
+fetch its completed job/history until **View statement activity** is clicked.
+
+The [paragraph-activity browser regression](../services/frontend/scripts/check-paragraph-activity.mjs)
+passed six mocked scenarios: desktop/mobile live completion with 33 synthetic
+events each and bounded history; mobile cancellation/retry; failed submission
+retry with the same key and a delayed old-job response; deferred saved-statement
+telemetry; and expired-cursor recovery when the immediate job lookup also fails.
+The recovery case used a browser clock for reconnect backoff, then verified a
+successful job read and automatic paragraph rendering. All scenarios had no page
+or console errors, unexpected API requests, or horizontal overflow. Desktop and
+mobile live-activity screenshots were visually inspected. Evidence is under
+`.runtime/paragraph-activity-audit/browser/`, with separate `deferred/` and
+`recovery/` reports. Every browser account/job/event/render response and
+submission/cancellation request was mocked; no real jobs or writes were made.
+
+A separate read-only investigation of the latest saved paragraph,
+`28efa60a-d9dd-4480-bb4b-7a0d8ac059e1`, found **165.082 seconds** from creation to
+acceptance on September 28. Its recorded timeline was:
+
+| Interval | Seconds |
+|---|---:|
+| Job created to worker started | 19.345 |
+| Worker started to remote authoring started | 46.713 |
+| Remote authoring | 46.315 |
+| Remote completion to validation-stage event | 31.559 |
+| Validation-stage event to faithfulness check completed | 11.380 |
+| Faithfulness check to accepted paragraph | 9.770 |
+
+This is one observed run, using durable event, provider and review timestamps;
+it is not a controlled performance benchmark. About 119 seconds occurred outside
+remote authoring. The frozen paragraph input was 8,504 bytes. Setup, result
+capture, validation and persistence therefore explain material portions of the
+visible wait; the new telemetry exposes their recorded stages rather than
+promising faster generation. The sanitized read-only audit is
+`.runtime/paragraph-activity-audit/real-paragraph-timing.json`; it contains stage
+metadata for 78 public events and no credentials or source prose.
+
+
+## Shared public loading surfaces — 28 September 2026
+
+Workspace lists, scientific claims and generic records, featured questions,
+knowledge-gap search, manual mechanism search and automatic anchors now use
+consistent loading surfaces in the existing account-loading visual language.
+The shared component provides contextual messages, restrained skeletons and a
+three-dot pulse. Skeletons are hidden from assistive technology; status messages
+are announced politely, errors use alerts, and reduced-motion preferences disable
+animation. There are no invented percentages or completion estimates. The
+existing submission progress screen remains intact.
+
+Workspace distinguishes an unresolved response from a genuinely empty list and
+uses a smaller status panel when refreshing existing results. Claim and record
+failures replace skeletons with a readable error and Retry. Generic record
+responses are bound to their requested identity so a late response cannot display
+under a different record URL. Composer provides separate feedback for restoring
+saved state, retrieving featured questions, searching and retrieving anchors.
+The same surface is used by the account preview and paragraph-loading branches.
+
+The [loading-surface browser regression](../services/frontend/scripts/check-loading-surfaces.mjs)
+passed eight scenarios at 1280 × 900 and 390 × 844: workspace pending/empty/tab
+change/content, claim error/retry, generic record error/retry, and Composer
+featured/search/automatic-anchor loading. The checks verified no premature empty
+state, no horizontal overflow, no page or console errors, visible retries,
+decorative skeleton accessibility and disabled animation under reduced motion.
+Desktop workspace and mobile search/record screenshots were visually inspected.
+All API calls were replaced by fixtures in the browser, and unexpected API or
+external requests were blocked; no saved research or real jobs were accessed.
+Results and screenshots are in `.runtime/loading-surfaces-audit/`, including
+`checks.json`. Frontend type checking and all 27 unit tests passed before this
+browser gate. Route fallback components are included; the browser scenarios
+exercise the corresponding complete routes and client loading/error states.

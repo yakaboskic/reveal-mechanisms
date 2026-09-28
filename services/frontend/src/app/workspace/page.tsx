@@ -4,12 +4,13 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { api, messageOf, type Schema } from "@/lib/client";
 import { useIdentity, ProviderButtons } from "@/components/Session";
+import { LoadingSurface } from "@/components/LoadingSurface";
 import "@/components/workspace-activity.css";
 
 type WorkspaceTab = "gaps" | "accounts";
 const tabLabels = { gaps: "Knowledge gaps", accounts: "Scientific accounts" };
 const shortDate = (value: string) => new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric" });
-export default function WorkspacePage() { return <Suspense fallback={<main id="main" className="reading-page workspace-dashboard"><p role="status">Loading workspace…</p></main>}><Workspace /></Suspense>; }
+export default function WorkspacePage() { return <Suspense fallback={<main id="main" className="reading-page workspace-dashboard"><LoadingSurface title="Opening your workspace" description="Retrieving your saved knowledge gaps and scientific accounts." /></main>}><Workspace /></Suspense>; }
 function Workspace() {
   const searchParams = useSearchParams();
   const [localGaps, setLocalGaps] = useState<Schema<"GapRecord">[]>([]);
@@ -17,6 +18,7 @@ function Workspace() {
   const [gaps, setGaps] = useState<Schema<"Exploration">[]>([]); const [accounts, setAccounts] = useState<Schema<"AccountSummary">[]>([]); const [drafts, setDrafts] = useState<Schema<"Draft">[]>([]); const [jobs, setJobs] = useState<Schema<"Job">[]>([]);
   const [requests, setRequests] = useState<Schema<"ResearchRequest">[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
+  const [loadedFor, setLoadedFor] = useState("");
   const [counts, setCounts] = useState<Partial<Record<WorkspaceTab, string>>>({});
   const loadSequence = useRef(0); const dialog = useRef<HTMLDialogElement>(null);
   useEffect(() => { setTab(searchParams.get("tab") === "accounts" ? "accounts" : "gaps"); }, [searchParams]);
@@ -35,11 +37,13 @@ function Workspace() {
         const items = append ? [...accounts, ...list.items] : list.items;
         setAccounts(items); setCursor(list.page.next_cursor); setCounts(current => ({ ...current, accounts: `${items.length}${list.page.has_more ? "+" : ""}` }));
       }
+      setLoadedFor(`${me.user_id}:${tab}`);
     } catch (failure) { if (sequence === loadSequence.current) setError(messageOf(failure)); } finally { if (sequence === loadSequence.current) setLoading(false); }
   };
   useEffect(() => { setCursor(null); void load(); return () => { loadSequence.current++; }; }, [tab, me?.user_id]);
   const chooseTab = (value: WorkspaceTab) => { setTab(value); window.history.replaceState(null, "", `?tab=${value}`); };
   const count = (value: WorkspaceTab) => me ? counts[value] : ready ? String(value === "gaps" ? localGaps.length : 0) : undefined;
+  const initialLoading = !ready || (!!me && loadedFor !== `${me.user_id}:${tab}` && !error);
   const signedIn = me?.principal_kind === "registered";
   const isEmpty = tab === "gaps" ? (me ? gaps.length : localGaps.length) === 0 : accounts.length === 0;
   const jobLink = (job: Schema<"Job">, fallback: string | null) => {
@@ -56,8 +60,8 @@ function Workspace() {
       const next: WorkspaceTab = event.key === "Home" ? "gaps" : event.key === "End" ? "accounts" : index === 0 ? "accounts" : "gaps";
       chooseTab(next); document.getElementById(`workspace-tab-${next}`)?.focus();
     }}>{tabLabels[value]}{count(value) !== undefined && <span title={count(value)!.endsWith("+") ? "More records are available. Load more to see the remaining history." : undefined}>{count(value)}</span>}</button>)}</div>
-    <div id="workspace-results" role="tabpanel" aria-labelledby={`workspace-tab-${tab}`} aria-busy={!ready || loading}>
-      {!ready ? <p className="workspace-loading" role="status">Loading your workspace…</p> : <>
+    <div id="workspace-results" role="tabpanel" aria-labelledby={`workspace-tab-${tab}`} aria-busy={initialLoading || loading}>
+      {initialLoading ? <LoadingSurface key={`${me?.user_id || "session"}:${tab}`} title={!ready ? "Opening your workspace" : `Loading your ${tabLabels[tab].toLowerCase()}`} description={!ready ? "Checking this browser’s access to your saved work." : "Your saved explorations will appear here when the request completes."} /> : <>
         {tab === "gaps" ? me ? gaps.map(item => <article className="workspace-gap-row" key={item.source_gap.source_id}>
           <Link className="workspace-item-title" href={item.draft_id ? `/?draft=${item.draft_id}` : `/?gap=${encodeURIComponent(item.source_gap.id)}`}>{item.knowledge_gap.text}</Link>
           <div className="workspace-item-meta">{item.knowledge_gap.scope && <span>{item.knowledge_gap.scope}</span>}<time dateTime={item.last_explored_at}>Explored {shortDate(item.last_explored_at)}</time>{item.scientific_accounts.count > 0 && <Link href="/workspace?tab=accounts">{item.scientific_accounts.count} scientific {item.scientific_accounts.count === 1 ? "account" : "accounts"}</Link>}{drafts.filter(draft => draft.composer.source_gap?.id === item.source_gap.id).map(draft => <Link key={draft.id} href={`/?draft=${draft.id}`}>{draft.composer.eaggl_anchors.length} anchors · Resume draft</Link>)}{jobs.filter(job => job.kind === "analysis" && requests.some(request => request.id === job.research_request_id && request.composer.source_gap?.id === item.source_gap.id)).slice(0, 1).map(job => <Link key={job.id} href={jobLink(job, item.draft_id)}>Research {job.status.replaceAll("_", " ")}</Link>)}</div>
@@ -68,7 +72,7 @@ function Workspace() {
           <Link className="workspace-account-question" href={`/?gap=${encodeURIComponent(item.knowledge_gap.id)}`}>{item.knowledge_gap.text}</Link>
           <div className="workspace-item-meta"><span>{item.claim_count} associated {item.claim_count === 1 ? "claim" : "claims"}</span><span>Research statement {item.research_statement.status.replaceAll("_", " ")}</span><Link href={`/?gap=${encodeURIComponent(item.knowledge_gap.id)}`}>View knowledge gap</Link></div>
         </article>)}
-        {loading && <p className="workspace-loading" role="status">Loading your {tabLabels[tab].toLowerCase()}…</p>}
+        {loading && <LoadingSurface compact skeleton="none" title={`Loading more ${tabLabels[tab].toLowerCase()}`} description="The records already shown remain available." />}
         {isEmpty && !loading && !error && <div className="workspace-empty"><h2>{tab === "gaps" ? "Your next question starts here." : "Room for your findings."}</h2><p>{tab === "gaps" ? "Knowledge gaps you explore will appear here." : "Scientific accounts will appear here as your analyses finish."}</p><Link href="/">Explore knowledge gaps</Link></div>}
         {me && cursor && <button className="text-button workspace-load-more" disabled={loading} onClick={() => void load(true)}>Load more</button>}
       </>}

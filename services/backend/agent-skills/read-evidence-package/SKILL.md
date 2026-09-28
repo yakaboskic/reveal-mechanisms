@@ -24,6 +24,8 @@ For any observation used in an account, retain the exact mechanism/trait/entity 
 
 Keep three locations distinct: the package record's `pointer`, the original artifact's `source_ref.pointer`, and a derived file's display line numbers. Cite the original artifact ID/File and source locator; a derived filename or line number does not replace them. JSON Pointer splits on `/`; escaped `~1` denotes `/` inside a key and `~0` denotes `~`. Preserve exact pointers and case-sensitive keys, including full multi-colon IDs. An array index is zero-based. Do not silently repair a broken locator or substitute a similarly named row.
 
+Retain these exact identities, values and locators in the structured account's evidence and provenance fields. They do not belong in `closing_remarks`, which is a synthesis or recommendation of at most two sentences. The later cited Research Statement explains the accepted evidence and its interpretation.
+
 Use the package's declared prefix and identity policy. Native source aliases are not necessarily CURIEs or biological equivalences. Preserve existing DAPPER IDs, source bytes, checksums, mint dates and citation revisions. The account-writing tool hydrates referenced trusted objects; there is no need to copy all source nodes into context.
 
 Keep `factor_value`, trait `combined`/`log_bf`/`prior`, set `beta`/`beta_uncorrected`, interactive normalized ranking and semantic cosine distinct. Preserve source precision; no shared confidence scale is established. Repeated endpoints/projections or overlapping `result_key` values are not independent corroboration. Labels and co-loadings do not establish membership, function or causal direction.

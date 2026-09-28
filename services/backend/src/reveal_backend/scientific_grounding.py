@@ -40,6 +40,12 @@ a failed query provides no scientific result. Context can suggest a hypothesis
 but cannot silently resolve the selected knowledge gap.
 
 Check the ScientificAccount closing statement against the EXACT selected gap.
+Closing remarks are a brief synthesis or recommendation, at most two sentences,
+with the decisive uncertainty retained. They need no inline citations, metrics,
+source IDs or provenance recap: check their support through the structured
+Claims, EvidenceItems and captured observations. Do not demand a full account
+summary in this field. Your review's source_refs must still identify the actual
+supporting evidence you inspected.
 A bounded partial answer which clearly explains remaining uncertainty is valid;
 it must not claim the gap is resolved when relevant evidence is absent. Check
 that source-backed observations and suggested experiments are distinguished.

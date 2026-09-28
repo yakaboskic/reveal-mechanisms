@@ -40,6 +40,8 @@ function ActivityEntry({ row, active, onInspect }: { row: ActivityRow; active: b
   </div>;
 }
 export function Activity({ initial, onJob }: { initial: Schema<"Job">; onJob: (job: Schema<"Job">) => void }) {
+  const paragraph = initial.kind === "paragraph";
+  const labels = paragraph ? { ...stageLabels, preparation: "Statement preparation", research: "Writing statement", validation: "Checking claims and citations", saving: "Saving statement" } : stageLabels;
   const [job, setJob] = useState(initial);
   const [events, setEvents] = useState<Schema<"JobEvent">[]>([]);
   const [connection, setConnection] = useState("Connecting to activity…");
@@ -69,15 +71,20 @@ export function Activity({ initial, onJob }: { initial: Schema<"Job">; onJob: (j
           await readEvents(response, event => {
             if (event.job_id !== initial.id || BigInt(event.id) <= BigInt(cursor.current)) return;
             cursor.current = event.id; setEvents(existing => [...existing, event]); setConnection("Live activity"); failures = 0;
-            if (terminal(event.status)) void refresh();
+            if (terminal(event.status)) void refresh().catch(() => setConnection("Refreshing job status…"));
           });
           const current = await refresh(); if (terminal(current.status)) { setConnection(""); break; }
         } catch (failure) {
           if (controller.signal.aborted) break;
           if (failure instanceof ApiError && failure.code === "EVENT_CURSOR_EXPIRED") {
-            const current = await refresh(); cursor.current = current.last_event_id;
-            setError("Earlier activity has expired. The saved job and scientific results remain available.");
-            if (terminal(current.status)) break;
+            try {
+              const current = await refresh(); cursor.current = current.last_event_id;
+              setError("Earlier activity has expired. The saved job and scientific results remain available.");
+              if (terminal(current.status)) break;
+            } catch {
+              failures++; setConnection("Connection interrupted. Reconnecting…");
+              if (failures >= 6) { setError("Activity could not reconnect. The job continues on the server."); break; }
+            }
           } else {
             failures++; setConnection("Connection interrupted. Reconnecting…");
             try { const current = await refresh(); if (terminal(current.status)) break; } catch { /* preserve events while offline */ }
@@ -87,7 +94,7 @@ export function Activity({ initial, onJob }: { initial: Schema<"Job">; onJob: (j
         await new Promise<void>(resolve => { const timer = setTimeout(resolve, Math.min(1000 * 2 ** failures, 15000)); controller.signal.addEventListener("abort", () => { clearTimeout(timer); resolve(); }, { once: true }); });
       }
     };
-    void run(); return () => controller.abort();
+    void run().catch(failure => { if (!controller.signal.aborted) setError(messageOf(failure)); }); return () => controller.abort();
   }, [initial.id, retry]);
   const progress = activityProgress(job, events);
   const complete = progress.status === "succeeded";
@@ -122,10 +129,10 @@ export function Activity({ initial, onJob }: { initial: Schema<"Job">; onJob: (j
     return () => { observer.disconnect(); window.removeEventListener("resize", resize); };
   }, [expanded, complete]);
   const cancel = async () => { try { update(await api.cancel(job.id)); } catch (failure) { setError(messageOf(failure)); } };
-  return <section className={`activity reveal-activity ${active ? "is-running" : "is-terminal"} ${complete ? "is-complete" : ""}`} aria-label="Research activity">
-    {complete && <button className="complete-disclosure" aria-expanded={expanded} aria-controls={historyId} onClick={() => setExpanded(!expanded)}><span className="completion-check" aria-hidden="true">✓</span>Gap analysis complete <span className="completion-caret" aria-hidden="true">›</span></button>}
+  return <section className={`activity reveal-activity ${active ? "is-running" : "is-terminal"} ${complete ? "is-complete" : ""}`} aria-label={paragraph ? "Statement activity" : "Research activity"}>
+    {complete && <button className="complete-disclosure" aria-expanded={expanded} aria-controls={historyId} onClick={() => setExpanded(!expanded)}><span className="completion-check" aria-hidden="true">✓</span>{paragraph ? "Research statement ready" : "Gap analysis complete"} <span className="completion-caret" aria-hidden="true">›</span></button>}
     {(!complete || expanded) && <>
-      {!complete && <div className="activity-header"><div><h2>{active ? "Agent activity" : progress.status === "cancelled" ? "Research stopped" : progress.status === "insufficient_evidence" ? "Insufficient evidence" : "Research could not complete"}</h2>{active && <p className="connection" role="status">{connection}</p>}</div>
+      {!complete && <div className="activity-header"><div><h2>{active ? paragraph ? "Statement activity" : "Agent activity" : progress.status === "cancelled" ? paragraph ? "Statement stopped" : "Research stopped" : progress.status === "insufficient_evidence" ? "Insufficient evidence" : paragraph ? "Statement could not complete" : "Research could not complete"}</h2>{active && <p className="connection" role="status">{connection}</p>}</div>
         {active && <button className="stop" onClick={cancel} disabled={progress.status === "cancel_requested"}><span className="stop-square" aria-hidden="true" />{progress.status === "cancel_requested" ? "Stopping…" : "Stop"}</button>}
       </div>}
       <div id={historyId} className="activity-history" ref={feed} onScroll={() => {
@@ -140,8 +147,8 @@ export function Activity({ initial, onJob }: { initial: Schema<"Job">; onJob: (j
             const state = working ? "working" : current && progress.status === "failed" ? "failed" : current && ["cancelled", "insufficient_evidence"].includes(progress.status) ? "stopped" : "completed";
             const label = working ? progress.status === "cancel_requested" ? "Stopping" : section.stage === "preparation" && progress.stage === "queued" ? "Queued" : "Working" : state === "failed" ? "Could not complete" : state === "stopped" ? "Stopped" : "Complete";
             return <details className="activity-stage" data-stage={section.stage} data-state={state} key={section.id} open={current || section.stage === "research" || section.stage === "validation"}>
-              <summary>{working ? <Pulse /> : <span className="stage-mark" aria-hidden="true">{state === "completed" ? "✓" : state === "failed" ? "!" : "·"}</span>}<span className="stage-name">{stageLabels[section.stage]}</span><span className="stage-state">{label}</span></summary>
-              <div className="stage-log" role="log" aria-live="off" aria-label={`${stageLabels[section.stage]} log`}>
+              <summary>{working ? <Pulse /> : <span className="stage-mark" aria-hidden="true">{state === "completed" ? "✓" : state === "failed" ? "!" : "·"}</span>}<span className="stage-name">{labels[section.stage]}</span><span className="stage-state">{label}</span></summary>
+              <div className="stage-log" role="log" aria-live="off" aria-label={`${labels[section.stage]} log`}>
                 {!section.events.length && <p className="activity-waiting">{progress.stage === "queued" ? "Waiting for a research worker…" : active ? "Waiting for activity…" : "No further activity recorded."}</p>}
                 {activityRows(section.events.filter(event => event.event_type !== "warning")).map(row => <ActivityEntry key={row.event.id} row={row} active={working} onInspect={pauseFollowing} />)}
               </div>
