@@ -66,3 +66,16 @@ export function activityProgress(job: Schema<"Job">, events: Event[]) {
   return latest && BigInt(latest.id) >= BigInt(job.last_event_id)
     ? { status: latest.status, stage: latest.stage } : { status: job.status, stage: job.stage };
 }
+
+export function groupedWarnings(warnings: string[], events: Event[] = []) {
+  const counts = new Map<string, number>();
+  for (const message of warnings) counts.set(message, (counts.get(message) || 0) + 1);
+  const streamed = new Map<string, number>();
+  for (const event of events) {
+    if (event.event_type === "warning") streamed.set(event.message, (streamed.get(event.message) || 0) + 1);
+  }
+  // The job snapshot and SSE history describe the same warnings. Keep the
+  // larger observed count as either source catches up, without counting twice.
+  for (const [message, count] of streamed) counts.set(message, Math.max(counts.get(message) || 0, count));
+  return [...counts].map(([message, count]) => ({ message, count }));
+}

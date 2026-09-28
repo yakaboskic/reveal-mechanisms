@@ -20,6 +20,7 @@ ARGUMENTS = {
     'Write': ('file_path', 'path'),
     'Edit': ('file_path', 'path', 'replace_all'),
     'get_schema': ('graph',),
+    'describe_kg': ('graph',),
     'query_graph': ('graph', 'subject', 'predicate', 'object', 'contains', 'limit'),
     'lint_account': ('filename',),
     'write_account_draft': ('filename',),

@@ -23,11 +23,16 @@ without waiting for the connection to close. Reduced-motion preferences disable
 the animation.
 
 Public assistant messages are labeled **Agent update**. Tool calls and their
-explicit results are paired by call ID, displaying the tool name, arguments,
-recorded result state and duration where available. A concise preview is separate
-from the **Result excerpt** disclosure, which shows the full recorded excerpt.
-Tool success does not imply that scientific validation or account acceptance has
-succeeded. Original event IDs and replay data remain unchanged.
+explicit results are paired by call ID in collapsed invocation disclosures.
+Summaries use readable names such as `QueryGraph`, bound the visible arguments,
+and shorten long filenames while retaining their recognizable beginning and end.
+The recorded result state and duration remain visible where available. Expanding
+an invocation reveals the full recorded arguments, raw tool name, call ID and
+**Result excerpt**; JSON formatting does not add output that was never recorded.
+Opening a tool pauses auto-follow for inspection; **Jump to latest** resumes it.
+Repeated identical saved warnings share one card with an occurrence count.
+Tool success does not imply scientific validation or account acceptance. Original
+event IDs and replay data remain unchanged.
 
 The durable [activity browser regression](../services/frontend/scripts/check-activity.mjs)
 passed at 1280×900 and 390×844 with 194 synthetic events per scenario. It checked
@@ -37,6 +42,19 @@ resizing, delayed question layout, stage transitions, reduced motion, and termin
 validation failure without a success claim. Both scenarios had no page errors or
 horizontal overflow. The visible log adjusted from 504 to 401 pixels on desktop
 and from 390 to 186 pixels on mobile after the delayed question grew.
+
+The compact-invocation refinement passed two further scenarios at the same
+desktop/mobile sizes, with eight synthetic events each. They verified shortened
+`Read` filenames, bounded summary arguments, friendly `QueryGraph` and
+`GetGraphSchema` names, initially hidden results, full recorded arguments/result
+and raw identities after expansion, and pause/resume while inspecting details.
+Recorded large-integer and high-precision-decimal digits remained unchanged.
+Three identical saved warnings rendered one card labeled **3 occurrences**.
+There were no page errors, console errors, duplicate-key warnings, unmocked
+requests or horizontal overflow. Screenshots and reports are under
+`.runtime/activity-audit/compact-tools/`. Both 194-event long-log scenarios were
+rerun with the new disclosure behavior and passed; their current evidence is in
+`.runtime/activity-audit/compact-long-logs/`.
 
 A separate replay regression passed after correcting same-job snapshot updates:
 an older cached job is replaced by the fetched validation-stage snapshot at

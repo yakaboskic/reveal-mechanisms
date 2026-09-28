@@ -70,8 +70,13 @@ async function harness(name, viewport) {
   const context = await browser.newContext({ viewport, serviceWorkers: 'block' });
   const page = await context.newPage(); page.setDefaultTimeout(10000);
   const state = { job: structuredClone(initialJob), gap: structuredClone(gap), gapGate: gate(),
-    events: [], requests: [], unexpected: [], errors: [] };
+    events: [], requests: [], unexpected: [], errors: [], consoleErrors: [], duplicateKeyWarnings: [] };
   page.on('pageerror', error => state.errors.push(error.message));
+  page.on('console', message => {
+    const text = message.text();
+    if (message.type() === 'error') state.consoleErrors.push(text);
+    if (/same key|unique ["']?key["']? prop|duplicate.{0,30}key|two children with/i.test(text)) state.duplicateKeyWarnings.push(text);
+  });
   await context.addInitScript(snapshot => {
     sessionStorage.setItem('reveal:composer', JSON.stringify(snapshot));
     const original = window.fetch.bind(window); const encoder = new TextEncoder();
@@ -143,6 +148,7 @@ async function harness(name, viewport) {
     async close() {
       state.gapGate.release();
       result.eventCount = state.events.length; result.pageErrors = state.errors; result.blockedUnexpectedRequests = state.unexpected;
+      result.consoleErrors = state.consoleErrors; result.duplicateKeyWarnings = state.duplicateKeyWarnings;
       result.apiMethods = [...new Set(state.requests.map(request => request.method))];
       await context.close();
     },
@@ -223,18 +229,20 @@ async function activityScenario(name, viewport) {
       h.event('Grep completed', 'authoring_account', { detail: detail({ kind: 'tool_result', state: 'completed', tool_name: 'Grep', call_id: 'inspect-detail', duration_ms: 234, output_excerpt: fullOutput }) }),
     ]); await atTail(h);
     const tool = h.page.locator('.activity-tool').filter({ hasText: 'Grep' }).last(); await tool.waitFor();
-    const disclosure = tool.locator('.activity-tool-details');
-    assert.equal(await disclosure.getAttribute('open'), null, 'Verbose output starts collapsed');
-    assert.equal(await disclosure.locator('pre').isVisible(), false);
-    await disclosure.getByText('Result excerpt', { exact: true }).click();
-    await until(() => disclosure.locator('pre').isVisible(), 'tool result disclosure');
-    assert.ok((await disclosure.locator('pre').innerText()).includes('FINAL_DETAIL_MARKER'));
+    assert.equal(await tool.getAttribute('open'), null, 'Tool invocation starts collapsed');
+    const body = tool.locator('.tool-details-body');
+    assert.equal(await body.isVisible(), false);
+    await tool.locator(':scope > summary').click();
+    await until(() => body.isVisible(), 'tool invocation disclosure');
+    assert.ok((await body.innerText()).includes('FINAL_DETAIL_MARKER'));
     assert.equal(await h.page.locator('.activity-tool').filter({ hasText: 'Grep' }).count(), 1, 'Call and result are shown as one paired tool card');
     assert.ok((await metrics(h)).pageWidth <= viewport.width + 1, 'Expanded tool detail wraps on narrow screens');
-    await atTail(h);
+    await jump.waitFor();
+    h.result.checks.push('Expanding a tool pauses auto-follow for inspection');
+    await jump.click(); await atTail(h);
     await h.emit([h.event('Tail marker E: follows after expanding a long tool result.')]); await atTail(h);
     await screenshot(h, 'tool-details');
-    h.result.checks.push('Paired tool card keeps verbose result collapsed until requested and preserves the full excerpt');
+    h.result.checks.push('Paired tool invocation keeps arguments and result collapsed until requested and preserves the full recorded excerpt');
     await h.emit([h.event('Fixture: checking the draft against captured evidence.', 'validating', { detail: detail({ kind: 'validation', source: 'validator' }) })]);
     await stage(h, 'validation');
     await h.page.emulateMedia({ reducedMotion: 'reduce' });
@@ -279,12 +287,95 @@ async function replayAheadScenario() {
     assert.ok(h.state.requests.every(request => request.method === 'GET'));
   } finally { await h.close(); }
 }
+async function compactToolsScenario(name, viewport) {
+  const h = await harness(name, viewport);
+  const warning = 'Fixture warning: the selected graph returned no matching rows.';
+  const recordName = `039ee${'0123456789abcdef'.repeat(3)}01234569189.json`;
+  const fullPath = `input/evidence-records/${recordName}`;
+  const rawArguments = JSON.stringify({ file_path: fullPath, offset: 1, limit: 140, note: 'FULL_ARGUMENT_MARKER' });
+  const readOutput = JSON.stringify({ format: 'reveal.evidence-record/1', pointer: '/pigean/candidates/gene:fixture',
+    value: { note: 'FULL_RECORDED_RESULT_MARKER', identifier: 'fixture_'.repeat(80), observation: 0.123456789 } }).slice(0, -1)
+    + ',"recorded_integer":9007199254740993,"recorded_decimal":0.123456789012345678901}';
+  const queryArguments = JSON.stringify({ graph: 'prokn', query: 'MATCH (n) WHERE n.id = $id RETURN n LIMIT 10',
+    parameters: { id: 'fixture:EXACT_IDENTIFIER' } });
+  const queryOutput = JSON.stringify({ row_count: 0, rows: [], status: 'empty', note: 'EMPTY_RESULT_IS_NOT_BIOLOGICAL_ABSENCE' });
+  h.state.job.warnings = [warning, warning, warning];
+  h.state.gapGate.release();
+  try {
+    await h.open();
+    await h.page.getByText(warning, { exact: false }).first().waitFor();
+    const pair = (tool_name, call_id, args, output) => [
+      h.event(`Fixture calling ${tool_name}`, 'authoring_account', { detail: detail({ kind: 'tool_call', tool_name, call_id, display_arguments: args }) }),
+      h.event(`Fixture ${tool_name} returned`, 'authoring_account', { detail: detail({ kind: 'tool_result', state: 'completed', tool_name, call_id, duration_ms: 234, output_excerpt: output }) }),
+    ];
+    await h.emit([
+      ...pair('Read', 'fixture-call-read-exact', rawArguments, readOutput),
+      ...pair('mcp__reveal__query_graph', 'fixture-call-query-exact', queryArguments, queryOutput),
+      ...pair('mcp__reveal__get_schema', 'fixture-call-schema-exact', '{"graph":"prokn"}', '{"types":["FixtureNode"]}'),
+    ]);
+    await stage(h, 'research'); await atTail(h);
+    const tools = h.page.locator('.activity-tool'); await until(async () => await tools.count() === 3, 'three paired tool invocations');
+    const read = tools.nth(0); const query = tools.nth(1); const schema = tools.nth(2);
+    for (const tool of [read, query, schema]) {
+      assert.equal(await tool.evaluate(el => el.tagName), 'DETAILS');
+      assert.equal(await tool.getAttribute('open'), null, 'Each invocation starts collapsed');
+      assert.equal(await tool.locator('.tool-details-body').isVisible(), false);
+    }
+    const readSummary = await read.locator('.tool-invocation').innerText();
+    assert.match(readSummary, /^Read\(/); assert.match(readSummary, /filename\s*=/);
+    assert.ok(readSummary.includes('input/') && readSummary.includes('039ee') && readSummary.includes('9189.json'));
+    assert.ok(readSummary.includes('…'), 'Long path is shortened in summary');
+    assert.ok(!readSummary.includes(fullPath) && !readSummary.includes(recordName));
+    assert.ok(!readSummary.includes('FULL_ARGUMENT_MARKER'), 'Summary bounds the number of visible arguments');
+    assert.match(await query.locator('.tool-invocation').innerText(), /^QueryGraph\(/);
+    assert.match(await schema.locator('.tool-invocation').innerText(), /^GetGraphSchema\(/);
+    assert.equal(await query.locator(':scope > summary').getByText('mcp__reveal__query_graph', { exact: false }).count(), 0);
+    const collapsedText = await history(h).innerText();
+    assert.ok(!collapsedText.includes('FULL_RECORDED_RESULT_MARKER') && !collapsedText.includes('EMPTY_RESULT_IS_NOT_BIOLOGICAL_ABSENCE'));
+    assert.ok((await metrics(h)).pageWidth <= viewport.width + 1, 'Compact tools fit the viewport');
+    h.result.checks.push('Read has a compact shortened filename and bounded argument summary; MCP calls have friendly names; full results start hidden');
+    await screenshot(h, 'collapsed');
+    await read.locator(':scope > summary').click();
+    const readBody = read.locator('.tool-details-body'); await readBody.waitFor();
+    const expandedText = await readBody.innerText();
+    for (const exact of [fullPath, 'FULL_ARGUMENT_MARKER', 'FULL_RECORDED_RESULT_MARKER', 'fixture-call-read-exact', 'Recorded arguments', 'Result excerpt', '9007199254740993', '0.123456789012345678901'])
+      assert.ok(expandedText.includes(exact), `Expanded invocation preserves ${exact}`);
+    assert.equal(JSON.parse(await readBody.locator('pre').last().innerText()).value.observation, 0.123456789);
+    const jump = h.page.getByRole('button', { name: 'Jump to latest', exact: true }); await jump.waitFor();
+    const paused = await metrics(h);
+    await h.emit([h.event('Fixture append during tool inspection: retain the reading position.')]);
+    await h.page.getByText('Fixture append during tool inspection: retain the reading position.', { exact: true }).waitFor({ state: 'attached' });
+    assert.ok(Math.abs((await metrics(h)).top - paused.top) < 3, 'Tool inspection pauses tail following');
+    assert.ok((await metrics(h)).pageWidth <= viewport.width + 1, 'Full recorded arguments and result wrap without horizontal overflow');
+    await screenshot(h, 'expanded-read');
+    await read.locator(':scope > summary').click();
+    await query.locator(':scope > summary').click();
+    const queryBody = query.locator('.tool-details-body'); await queryBody.waitFor();
+    const queryText = await queryBody.innerText();
+    for (const exact of ['mcp__reveal__query_graph', 'fixture-call-query-exact', 'fixture:EXACT_IDENTIFIER', 'MATCH (n) WHERE n.id = $id RETURN n LIMIT 10'])
+      assert.ok(queryText.includes(exact), `Expanded MCP invocation preserves ${exact}`);
+    assert.deepEqual(JSON.parse(await queryBody.locator('pre').last().innerText()), JSON.parse(queryOutput));
+    await screenshot(h, 'expanded-query');
+    await jump.click(); await atTail(h);
+    await h.emit([h.event('Fixture append after Jump to latest: following resumes.')]); await atTail(h);
+    h.result.checks.push('Expanded tools preserve full recorded arguments, result data, raw tool name and call ID; inspection pauses following and Jump to latest resumes');
+    const visibleWarnings = h.page.locator('.activity-content .notice').filter({ hasText: warning });
+    assert.equal(await visibleWarnings.count(), 1, 'Repeated identical warnings share one card');
+    assert.match(await visibleWarnings.innerText(), /3/, 'Grouped warning includes its occurrence count');
+    assert.deepEqual(h.state.duplicateKeyWarnings, []); assert.deepEqual(h.state.consoleErrors, []);
+    assert.deepEqual(h.state.errors, []); assert.deepEqual(h.state.unexpected, []);
+    assert.ok(h.state.requests.every(request => request.method === 'GET'));
+    h.result.checks.push('Three identical saved warnings render one counted card without duplicate-key console warnings');
+  } finally { await h.close(); }
+}
 try {
   const filter = process.env.ACTIVITY_SCENARIO_FILTER ? new RegExp(process.env.ACTIVITY_SCENARIO_FILTER) : null;
   const scenarios = [
     ['desktop', () => activityScenario('desktop', { width: 1280, height: 900 })],
     ['mobile', () => activityScenario('mobile', { width: 390, height: 844 })],
     ['replay-ahead', replayAheadScenario],
+    ['compact-tools-desktop', () => compactToolsScenario('compact-tools-desktop', { width: 1280, height: 900 })],
+    ['compact-tools-mobile', () => compactToolsScenario('compact-tools-mobile', { width: 390, height: 844 })],
   ].filter(([name]) => !filter || filter.test(name));
   assert.ok(scenarios.length, 'Scenario filter must select a test');
   for (const [, run] of scenarios) await run();

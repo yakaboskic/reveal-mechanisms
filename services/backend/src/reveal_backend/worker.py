@@ -46,6 +46,7 @@ def public_activity(job,kind,payload):
         detail=activity('agent_message','started','harness',
             **({'message_delta':True} if payload.get('delta') is True else {}))
     elif kind=='warning':
+        if message in job['warnings']: return None
         detail=None; job['warnings'].append(message)
     else: return None
     return ('warning' if kind=='warning' else 'activity',message,detail)

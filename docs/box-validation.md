@@ -332,3 +332,13 @@ argument summary was 176 bytes; result previews respected the 4,096-byte bound,
 with 11 explicitly truncated results. All 98 original ledger files remained
 unchanged. `.runtime/activity-projection-20f0db79/report.json` records this check.
 This is saved-artifact replay, not a new live execution or database backfill.
+
+The four unsupported-event notices in job
+`3a6758d3-7dc1-4765-8a3d-089fe72f43a1` were normal `tool_progress` heartbeats.
+A read-only inspection counted event types and keys without exposing private
+payloads. The parser now keeps known CLI bookkeeping notifications private;
+genuinely unknown types produce bounded warnings, with no public raw payload.
+The worker deduplicates warning text while acknowledging every remote event
+sequence, so replay cannot flood the UI. Five additional regressions cover
+notification handling, unknown-type bounds, durable warning deduplication and
+the `describe_kg` argument projection (62 related tests pass).

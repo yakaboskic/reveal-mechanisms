@@ -1,28 +1,37 @@
 "use client";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { activityProgress, activityRows, activitySections, activityStage, stageLabels, type ActivityRow } from "@/lib/activity";
+import { activityProgress, activityRows, activitySections, activityStage, groupedWarnings, stageLabels, type ActivityRow } from "@/lib/activity";
+import { prettyRecordedValue, toolInvocation } from "@/lib/tool-display";
 import { api, ApiError, messageOf, readEvents, terminal, type Schema } from "@/lib/client";
 import "./workspace-activity.css";
 export function Pulse() { return <span className="pulse" aria-hidden="true"><i /><i /><i /></span>; }
 
-function ToolActivity({ row, active }: { row: ActivityRow; active: boolean }) {
+function ToolActivity({ row, active, onInspect }: { row: ActivityRow; active: boolean; onInspect: () => void }) {
   const detail = row.event.detail!;
   const result = row.result?.detail || (detail.kind === "tool_result" ? detail : undefined);
   const state = result?.state || (active ? "started" : "unavailable");
   const output = result?.output_excerpt;
-  const preview = output?.replace(/\s+/g, " ").slice(0, 220);
-  return <div className="activity-tool" data-state={state}>
-    <div className="tool-heading"><span className="tool-symbol" aria-hidden="true">⌘</span><strong>{detail.tool_name || result?.tool_name || "Tool"}</strong><span className="tool-state">{state === "failed" ? "Tool failed" : state === "completed" ? "Returned" : state === "started" ? "Calling" : "No result recorded"}</span>{result?.duration_ms != null && <span className="tool-duration">{(result.duration_ms / 1000).toFixed(1)}s</span>}</div>
-    {(detail.display_arguments || result?.display_arguments) && <code className="tool-arguments">{detail.display_arguments || result?.display_arguments}</code>}
-    {result && <div className="tool-output"><span className="tool-output-label">Result</span>{preview ? <p>{preview}{output!.replace(/\s+/g, " ").length > 220 ? "…" : ""}</p> : <p>{state === "failed" ? row.result?.message || row.event.message : "Tool completed. No result preview was recorded."}</p>}
-      {output && <details className="activity-tool-details"><summary>Result excerpt</summary><pre>{output}</pre></details>}
-    </div>}
-  </div>;
+  const name = detail.tool_name || result?.tool_name || "Tool";
+  const args = detail.display_arguments || result?.display_arguments;
+  return <details className="activity-tool activity-tool-details" data-state={state}>
+    <summary className="tool-heading" onClick={onInspect}>
+      <code className="tool-invocation">{toolInvocation(name, args)}</code>
+      <span className="tool-status"><span className="tool-state">{state === "failed" ? "Failed" : state === "completed" ? "Returned" : state === "started" ? "Calling" : "No result recorded"}</span>{result?.duration_ms != null && <span className="tool-duration">{(result.duration_ms / 1000).toFixed(1)}s</span>}</span>
+      <span className="tool-caret" aria-hidden="true">›</span><span className="sr-only">Show tool details</span>
+    </summary>
+    <div className="tool-details-body">
+      <dl className="tool-metadata"><div><dt>Tool</dt><dd>{name}</dd></div>{detail.call_id && <div><dt>Call ID</dt><dd>{detail.call_id}</dd></div>}</dl>
+      <div className="tool-arguments"><span className="tool-detail-label">Recorded arguments</span><pre>{args ? toolInvocation(name, args, false) : "Arguments were not recorded."}</pre></div>
+      {result && <div className="tool-output"><span className="tool-detail-label">Result excerpt</span>{output ? <pre>{prettyRecordedValue(output)}</pre> : <p>{state === "failed" ? row.result?.message || row.event.message : "Tool completed. No result preview was recorded."}</p>}
+        {result.artifact_sha256 && <small className="tool-artifact">Result SHA-256: {result.artifact_sha256}</small>}
+      </div>}
+    </div>
+  </details>;
 }
 
-function ActivityEntry({ row, active }: { row: ActivityRow; active: boolean }) {
+function ActivityEntry({ row, active, onInspect }: { row: ActivityRow; active: boolean; onInspect: () => void }) {
   const event = row.event;
-  if (event.detail?.kind === "tool_call" || event.detail?.kind === "tool_result") return <ToolActivity row={row} active={active} />;
+  if (event.detail?.kind === "tool_call" || event.detail?.kind === "tool_result") return <ToolActivity row={row} active={active} onInspect={onInspect} />;
   const narrative = event.detail?.kind === "agent_message";
   return <div className={`activity-entry ${narrative ? "agent-update" : "system-update"} ${event.detail?.state || ""}`}>
     {narrative && <span className="entry-label">Agent update</span>}
@@ -91,6 +100,7 @@ export function Activity({ initial, onJob }: { initial: Schema<"Job">; onJob: (j
     follow.current = true; setFollowing(true);
     if (feed.current) feed.current.scrollTop = feed.current.scrollHeight;
   };
+  const pauseFollowing = () => { follow.current = false; setFollowing(false); };
   useLayoutEffect(() => {
     if (follow.current && feed.current) feed.current.scrollTop = feed.current.scrollHeight;
   }, [events, expanded]);
@@ -133,11 +143,11 @@ export function Activity({ initial, onJob }: { initial: Schema<"Job">; onJob: (j
               <summary>{working ? <Pulse /> : <span className="stage-mark" aria-hidden="true">{state === "completed" ? "✓" : state === "failed" ? "!" : "·"}</span>}<span className="stage-name">{stageLabels[section.stage]}</span><span className="stage-state">{label}</span></summary>
               <div className="stage-log" role="log" aria-live="off" aria-label={`${stageLabels[section.stage]} log`}>
                 {!section.events.length && <p className="activity-waiting">{progress.stage === "queued" ? "Waiting for a research worker…" : active ? "Waiting for activity…" : "No further activity recorded."}</p>}
-                {activityRows(section.events).map(row => <ActivityEntry key={row.event.id} row={row} active={working} />)}
+                {activityRows(section.events.filter(event => event.event_type !== "warning")).map(row => <ActivityEntry key={row.event.id} row={row} active={working} onInspect={pauseFollowing} />)}
               </div>
             </details>;
           })}
-          {job.warnings.map(warning => <p key={warning} className="notice">{warning}</p>)}
+          {groupedWarnings(job.warnings, events).map(({ message, count }) => <p key={message} className="notice">{message}{count > 1 && <small>{count} occurrences</small>}</p>)}
         </div>
       </div>
       <div className="activity-follow">{following ? <span>{active ? "Following live activity" : "End of activity"}</span> : <><span>Auto-follow paused</span><button onClick={jumpToLatest}>Jump to latest <span aria-hidden="true">↓</span></button></>}</div>

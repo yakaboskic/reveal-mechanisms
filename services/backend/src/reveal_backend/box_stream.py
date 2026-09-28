@@ -1,9 +1,16 @@
 """Incremental Claude Code stream-json decoder; never publishes thinking blocks."""
 import codecs
+import hashlib
 import json
 import time
 
 from .public_tool_activity import bounded, redact_text, tool_call_payload, tool_result_payload
+
+MAX_UNKNOWN_EVENT_TYPES = 8
+# Claude CLI/Agent SDK bookkeeping, not assistant messages or new tool calls.
+# Tool progress is a repeated heartbeat; summaries duplicate captured results.
+# Authentication output can contain sensitive diagnostics and stays private.
+PRIVATE_NOTIFICATION_TYPES = frozenset(('rate_limit_event', 'tool_progress', 'tool_use_summary', 'auth_status'))
 
 
 class StreamProtocolError(ValueError):
@@ -40,6 +47,8 @@ class ClaudeStream:
         self.clock = clock or time.monotonic
         self.public_filter = SecretFilter(self.secrets)
         self.public_decoder = codecs.getincrementaldecoder('utf-8')('strict')
+        self.unknown_event_types = set()
+        self.unknown_event_overflow = False
 
     def public_text(self, text='', final=False):
         raw = self.public_filter.feed(text.encode(), final=final)
@@ -124,9 +133,21 @@ class ClaudeStream:
             if event.get('subtype') == 'init':
                 self.runtime = {key: event[key] for key in ('model', 'claude_code_version', 'session_id', 'permissionMode') if key in event}
             return []
-        if kind == 'rate_limit_event':
+        if kind in PRIVATE_NOTIFICATION_TYPES:
             return []
-        # Unknown upstream events must not become unfiltered public messages.
+        # Keep unknown payloads (including their names) out of public messages.
+        # Fingerprints bound retained memory; repeated notifications cannot flood
+        # the public stream even if a future CLI emits many new event types.
+        fingerprint = hashlib.sha256(kind.encode()).digest()
+        if fingerprint in self.unknown_event_types:
+            return []
+        if len(self.unknown_event_types) >= MAX_UNKNOWN_EVENT_TYPES:
+            if self.unknown_event_overflow:
+                return []
+            self.unknown_event_overflow = True
+            return [('warning', {'code': 'unknown_agent_event_limit',
+                                 'message': 'Additional unsupported agent event types were retained privately.'})]
+        self.unknown_event_types.add(fingerprint)
         return [('warning', {'code': 'unknown_agent_event', 'message': 'An unsupported agent event was retained privately.'})]
 
     def finish(self):
