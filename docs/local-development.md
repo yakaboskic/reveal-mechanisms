@@ -55,6 +55,18 @@ Persistent DisMech context vectors have a separate [explicit preparation and bac
 
 Open [the application](http://localhost:3000). API health is available at [the readiness endpoint](http://127.0.0.1:8000/health/ready). Startup checks required configuration, the Docker daemon, frontend dependencies, available ports and the trusted runtime. It waits for API database readiness and the frontend health route, then prints URLs and log locations. Configuration errors identify variable names without printing values.
 
+Each startup phase prints immediately and reports elapsed time every five seconds
+while waiting. During Compose startup the status includes API/worker lifecycle
+and health states; readiness waits report HTTP status or connection delays.
+Compose can wait for API health before starting the worker, so this dependency is
+shown explicitly. These messages do not change startup, reuse or restart behavior.
+
+Captured Compose output is saved to `.runtime/logs/compose-startup.log`. Failures
+and timeouts retain redacted output in `.runtime/logs/startup-error.log`, including
+partial output on timeout; startup cleanup also saves container diagnostics.
+Log files are restricted to the local user. Successful and failed phases show
+their duration, and telemetry stops when the operation finishes.
+
 For an explicitly simulated development run:
 
 ```bash

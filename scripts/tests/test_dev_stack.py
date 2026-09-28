@@ -1,9 +1,13 @@
 """Exercise startup rollback and process ownership without touching real services."""
 import importlib.util
+from contextlib import redirect_stdout
+import io
 import json
 from pathlib import Path
 import subprocess
 import tempfile
+import threading
+import time
 import unittest
 from unittest.mock import patch
 
@@ -43,6 +47,58 @@ class StackLifecycleTests(unittest.TestCase):
         self.assertEqual(env['PASSWORD'], 'literal $HOME $(echo bad) # value')
         self.assertEqual(env['EMPTY'], '')
         self.assertEqual(env['PORT'], '4')
+
+    def test_long_operation_reports_elapsed_and_stops_after_completion(self):
+        output = io.StringIO(); reported = threading.Event()
+        def status():
+            reported.set()
+            return 'api: running, starting; worker: created'
+        with redirect_stdout(output):
+            with m.Progress('Starting containers', status=status, interval=.01):
+                self.assertTrue(reported.wait(1))
+                time.sleep(.02)
+            finished = output.getvalue()
+            time.sleep(.03)
+        self.assertIn('elapsed — api: running, starting; worker: created', finished)
+        self.assertIn('Starting containers: done (', finished)
+        self.assertEqual(output.getvalue(), finished)
+
+    def test_status_outputs_only_allowed_container_fields(self):
+        rows = [{'Service': 'api', 'State': 'running', 'Health': 'starting', 'Command': 'secret-command'},
+                {'Service': 'worker', 'State': 'created', 'Health': ''},
+                {'Service': 'unrelated', 'State': 'secret-value'}]
+        for stdout in (json.dumps(rows), '\n'.join(json.dumps(row) for row in rows)):
+            result = subprocess.CompletedProcess([], 0, stdout=stdout, stderr='secret-stderr')
+            with patch.object(m.subprocess, 'run', return_value=result):
+                self.assertEqual(m.container_progress({}), 'api: running, starting; worker: created')
+
+    def test_timeout_retains_redacted_partial_output_with_private_permissions(self):
+        failure = subprocess.TimeoutExpired(['docker'], 20, output=b'partial secret-value', stderr=b'waiting secret-value')
+        with patch.object(m.subprocess, 'run', side_effect=failure):
+            with self.assertRaisesRegex(m.StartupError, 'exceeded 20s; partial output saved'):
+                m.run(['docker'], {'SERVICE_API_KEY': 'secret-value'}, timeout=20)
+        log = m.LOGS / 'startup-error.log'
+        self.assertEqual(log.read_text(), 'partial [REDACTED]\nwaiting [REDACTED]')
+        self.assertEqual(log.stat().st_mode & 0o777, 0o600)
+
+    def test_readiness_reports_failures_without_marking_phase_complete(self):
+        output = io.StringIO()
+        with redirect_stdout(output), patch.object(m, 'health_status', return_value=(False, 'HTTP 503; waiting for readiness')), patch.object(m.time, 'sleep'):
+            with self.assertRaisesRegex(m.StartupError, 'HTTP 503'):
+                m.wait_ready('http://localhost/health', .002, 'API and Aurora')
+        self.assertIn('Waiting for API and Aurora: failed', output.getvalue())
+        self.assertNotIn(': done', output.getvalue())
+
+    def test_unwritable_diagnostics_preserve_command_failure(self):
+        failure = subprocess.TimeoutExpired(['docker'], 20, output=b'private output')
+        with patch.object(m.subprocess, 'run', side_effect=failure), patch.object(m, 'diagnostic_log', side_effect=PermissionError('no access')):
+            with self.assertRaisesRegex(m.StartupError, 'docker exceeded 20s; partial output could not be saved'):
+                m.run(['docker'], {}, timeout=20)
+
+    def test_status_probe_failure_cannot_replace_main_command_diagnostics(self):
+        with patch.object(m.subprocess, 'run', side_effect=subprocess.TimeoutExpired(['docker'], 3)), patch.object(m, 'diagnostic_log') as log:
+            with self.assertRaises(subprocess.TimeoutExpired): m.container_progress({})
+            log.assert_not_called()
 
     def test_foreign_process_state_is_rejected(self):
         m.STATE.write_text(json.dumps({'project': 'foreign', 'root': str(self.root)}))
