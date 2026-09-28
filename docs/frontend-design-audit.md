@@ -73,6 +73,48 @@ regression against a local frontend with:
 node services/frontend/scripts/check-activity.mjs
 ```
 
+## Account loading — 28 September 2026
+
+The account route now shows the reading-page navigation, an **Opening scientific
+account** status panel, and a decorative skeleton shaped like the account's
+question, mechanisms, tabs, conclusions and claims. Placeholder shapes are hidden
+from assistive technology and do not invent scientific content. After eight
+seconds the status becomes **Still loading your account**. Reduced motion disables
+the progress and skeleton animation.
+
+A failed account read replaces the skeleton and pulse with **Couldn’t open this
+account**, the actual error and **Retry**. The account request has a 30-second
+deadline; Retry reads the same account again. A late response after the deadline
+cannot overwrite the error. Successful loading replaces the shell with the saved
+account and its existing conclusions/statement controls.
+
+The [account-loading browser regression](../services/frontend/scripts/check-account-loading.mjs)
+passed five mocked scenarios: delayed loading at 1280×900, delayed loading with
+reduced motion at 390×844, an explicit service error followed by successful Retry,
+a mobile timeout followed by a late response and successful Retry, and a failed
+background status refresh on an already loaded account. Browser
+clock advancement tested the eight- and thirty-second boundaries without those
+real waits. It verified immediate loading/navigation, exact contract-fixture
+account rendering, one new read per Retry, hidden decorative placeholders,
+unchanged account path and no horizontal overflow, page errors, console errors
+or unmatched API requests. Desktop opening, mobile slow-loading and mobile timeout
+screenshots were visually inspected.
+
+An account with a running research-statement job remained readable while its next
+status poll stalled and hit the deadline. The refresh error offered **Retry**;
+the existing conclusions stayed visible during that retry, and a successful final
+status cleared the error and stopped polling. The case had no page/console errors
+or unmatched requests. Its separate report and screenshots are under
+`.runtime/account-loading-audit/polling/`.
+
+These checks intercepted every account/API response and created no jobs or
+database writes; they do not measure live backend latency. Reports and screenshots
+are under `.runtime/account-loading-audit/`. Run with:
+
+```sh
+node services/frontend/scripts/check-account-loading.mjs
+```
+
 ## Historical prototype comparison — 26 September 2026
 
 The initial implementation was a partial port of the approved HTML design. The

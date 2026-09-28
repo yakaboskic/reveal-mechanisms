@@ -31,7 +31,7 @@ export const api = {
   jobs: async () => unwrap(await client.GET("/v1/jobs")),
   submit: (body: Schema<"JobCreate">, key: string) => withRequestDeadline(async signal => unwrap(await client.POST("/v1/jobs", { body, params: { header: keyHeaders(key) }, signal })), "We haven’t received confirmation yet. Retry to check this submission; it won’t create a second job."),
   cancel: async (job_id: string) => unwrap(await client.POST("/v1/jobs/{job_id}/cancel", { params: { path: { job_id } } })),
-  account: async (dapper_id: string) => unwrap(await client.GET("/v1/accounts/{dapper_id}", { params: { path: { dapper_id } } })),
+  account: (dapper_id: string) => withRequestDeadline(async signal => unwrap(await client.GET("/v1/accounts/{dapper_id}", { params: { path: { dapper_id } }, signal })), "The account is taking longer than expected to load. Please retry."),
   claim: async (dapper_id: string) => unwrap(await client.GET("/v1/claims/{dapper_id}", { params: { path: { dapper_id } } })),
   paragraph: async (dapper_id: string) => unwrap(await client.GET("/v1/paragraphs/{dapper_id}", { params: { path: { dapper_id } } })),
   object: async (dapper_id: string) => unwrap(await client.GET("/v1/objects/{dapper_id}", { params: { path: { dapper_id } } })),
