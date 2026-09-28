@@ -27,10 +27,38 @@ def connect(*, host=DEFAULT_HOST, port=3306, user='cyaka', database='cyaka_revea
             row = cursor.fetchone()
             if not row or not row[1]:
                 raise ValueError('Verified TLS is required')
+        connection.reveal_verified_tls = True
         return connection
     except BaseException:
         connection.close()
         raise
+
+
+def initialize_application_session(connection):
+    """Canonical settings for Repository-only leases; one server round trip."""
+    with connection.cursor() as cursor:
+        cursor.execute("SET SESSION autocommit=0, transaction_isolation='REPEATABLE-READ', "
+            "time_zone='+00:00', character_set_client='utf8mb4', character_set_connection='utf8mb4', "
+            "character_set_results='utf8mb4', collation_connection='utf8mb4_unicode_ci'")
+    connection.reveal_session_defaults = True
+
+
+def reset_application_session(connection, database):
+    """Clear server state without reauthentication; failures discard the socket.
+
+    MySQL's documented COM_RESET_CONNECTION (0x1f) rolls back, releases locks,
+    drops temporary tables and clears session/user variables. PyMySQL 1.1.2
+    exposes no public reset method; use its command/OK-packet primitives, also
+    used by ping(). No reconnect or SQL replay is allowed here.
+    https://dev.mysql.com/doc/c-api/8.0/en/mysql-reset-connection.html
+    """
+    validate_database(database)
+    connection._execute_command(0x1F, b'')
+    connection._read_ok_packet()
+    # RESET does not promise to restore the selected schema. Never inherit a
+    # borrower-selected database, even if future Repository code selects one.
+    connection.select_db(database)
+    initialize_application_session(connection)
 
 
 def insert_batch(cursor, table, columns, batch):
@@ -39,5 +67,4 @@ def insert_batch(cursor, table, columns, batch):
     cursor.execute('SHOW WARNINGS')
     if cursor.fetchall():
         raise ValueError(f'MySQL conversion warning inserting {table}; transaction rolled back')
-
 

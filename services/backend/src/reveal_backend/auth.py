@@ -39,14 +39,18 @@ def principal(tx, authorization):
         raise Problem(401, 'SESSION_EXPIRED', 'Refresh the workspace session.')
     return me
 
-def owned(tx, kind, identity, user):
+def require_owned(tx, kind, identity, user, row):
+    """Authorize one exact row from this transaction, including batched reads."""
     from .repository import digest
-    key = digest([user,identity]) if kind in ('object','account','paragraph') else identity
-    row = tx.get(kind, key)
     shared = False
-    if row and kind in ('object','account','paragraph','citation'):
+    if row and row['owner'] != user and kind in ('object','account','paragraph','citation'):
         target = identity.rsplit(':',1)[0] if kind=='citation' else identity
         grant = tx.get('grant',digest([user,target])); shared = bool(grant and grant['owner']==user)
     if row is None or (row['owner'] != user and not shared):
         raise Problem(404, 'NOT_FOUND', 'The requested resource is unavailable.')
     return row
+
+def owned(tx, kind, identity, user):
+    from .repository import digest
+    key = digest([user,identity]) if kind in ('object','account','paragraph') else identity
+    return require_owned(tx, kind, identity, user, tx.get(kind, key))

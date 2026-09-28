@@ -12,7 +12,7 @@ import re
 from fastapi import FastAPI, Request, Depends
 from fastapi.responses import JSONResponse, StreamingResponse, Response
 from jsonschema import Draft202012Validator
-from .auth import Problem, decode_assertion, owned, principal, service_authority
+from .auth import Problem, decode_assertion, owned, require_owned, principal, service_authority
 from .catalog import Catalog
 from .repository import Repository, now, uid, digest
 from .runtime_config import ROOT, artifacts_root
@@ -505,14 +505,20 @@ async def update_publication(dapper_id:str,request:Request):
 
 def scientific(identity,request,kind='object'):
     with repo.read_transaction() as tx:
-        user=optional_identity(tx,request); public=None
+        user=optional_identity(tx,request); public=None; reference=None; publication_record=None
         if kind not in ('account','object','paragraph'):
-            user=principal(tx,request.headers.get('authorization'))['user_id']
+            if user is None: raise Problem(401,'SESSION_EXPIRED','Continue with a registered or anonymous session.')
             row=owned(tx,kind,identity,user)['data']
         else:
             try:
                 if not user: raise Problem(404,'NOT_FOUND','Scientific resource unavailable.')
-                row=owned(tx,kind,identity,user)['data']
+                key=digest([user,identity])
+                keys=[(kind,key),('object_document',key)]
+                if kind=='account': keys.append(('publication',key))
+                records=tx.get_records(keys)
+                row=require_owned(tx,kind,identity,user,records.get((kind,key)))['data']
+                reference=records.get(('object_document',key))
+                publication_record=records.get(('publication',key))
             except Problem as error:
                 if error.status!=404: raise
                 public,snapshot=publication.find(tx,identity,kind)
@@ -526,7 +532,9 @@ def scientific(identity,request,kind='object'):
             raise Problem(404,'PAYLOAD_NOT_FOUND','The exact requested payload observation is unavailable.')
         from .acceptance import object_envelope
         document=result['document']; metadata=result['citation_metadata']; artifacts={a['file']['id']:a for a in result['artifacts']}
-        reference=tx.get('object_document',digest([user,identity])) if public is None else None
+        if public is None and kind not in ('account','object','paragraph'):
+            reference=tx.get('object_document',digest([user,identity]))
+        if reference and reference['owner'] != user: reference=None
         document_sha=reference['data']['sha256'] if reference else None
         if public is None and document_sha is None:
             # Rows accepted before the direct document index retain their exact
@@ -560,7 +568,8 @@ def scientific(identity,request,kind='object'):
             return encoded+'.'+hmac.new(secret,encoded.encode(),hashlib.sha256).hexdigest()
         clipped=object_envelope(document,identity,metadata,artifacts,max_depth=depth,max_nodes=maximum,offset=offset,continuation=continuation)
         if 'research_statement' in result: clipped['research_statement']=result['research_statement']
-        if kind=='account': clipped['publication']=publication.state(tx,public['owner'] if public else user,identity,can_manage=public is None)
+        if kind=='account': clipped['publication']=publication.state(tx,public['owner'] if public else user,identity,
+            can_manage=public is None,record=public if public else publication_record,account_result=result)
         return clipped
 
 @app.get('/v1/accounts/{dapper_id}')

@@ -85,6 +85,62 @@ def restore_dispatch_input(root,snapshot):
     raw=path.read_bytes(); require(sha256(raw)==snapshot['sha256'],'Frozen dispatch input checksum changed')
     return path,decode(raw)
 
+def read_preparation_inputs(repository,job):
+    """Read immutable inputs from one snapshot without the application write lock."""
+    with repository.read_transaction() as tx:
+        if job['kind']=='analysis':
+            identity=job['research_request_id']
+            records=tx.get_records((('request',identity),('request_binding',identity)))
+            return records[('request',identity)]['data'],records[('request_binding',identity)]['data']
+        owner=tx.get('job',job['id'])['owner']
+        return owned(tx,'account',job['input_account_id'],owner)['data']
+
+def persist_dispatch_input(repository,job_id,token,snapshot,package=None):
+    """Commit collected evidence and its exact dispatch checkpoint together."""
+    with repository.transaction() as tx:
+        pair=jobs.fenced(tx,job_id,token)
+        if not pair: return False
+        current,queue=pair; owner=current['owner_user_id']
+        if package is not None:
+            tx.put('evidence',job_id,owner,{'job_id':job_id,'package_sha256':snapshot['sha256'],'package':package})
+        queue['dispatch_input']=snapshot
+        tx.update_existing('queue',job_id,owner,queue)
+        return True
+
+def prepare_source_artifacts(package_path,job_id):
+    """Verify immutable source files before entering the acceptance write fence."""
+    package=decode(package_path.read_bytes()); records=[]; access={}
+    files={file['id']:file for file in package['dapper_context'].get('files',[])}
+    base=setting('NEXTAUTH_URL','http://localhost:3000').rstrip('/')+'/api/backend/v1/artifacts/'
+    for source in package['source_artifacts'].values():
+        file=files.get(source['dapper_file_id'])
+        if not file: continue
+        path=assert_artifact(package_path.parent/source['path'],package_path.parent)
+        data=path.read_bytes(); require(sha256(data)==source['sha256'],'Source artifact changed before persistence')
+        records.append({'sha256':source['sha256'],'file':file,'path':str(path),'job_id':job_id})
+        access[file['id']]={'file':file,'download_url':base+source['sha256'],'expires_at':None,
+                            'availability':'available','verification':'checksum_verified'}
+    return records,access
+
+def persist_source_artifacts(tx,owner,artifacts):
+    """Batch new rows while preserving each prior put's duplicate/version semantics."""
+    records=[(digest([owner,record['sha256']]),record) for record in artifacts]
+    identities=list(dict.fromkeys(identity for identity,_ in records)); known=set()
+    for offset in range(0,len(identities),100):
+        known.update(tx.get_many('artifact',identities[offset:offset+100]))
+    pending=[]
+    def flush():
+        if pending: tx.insert_many(pending); pending.clear()
+    for identity,record in records:
+        if identity in known:
+            # A duplicate can refer to an unflushed new row. Flush before updating
+            # so every occurrence increments its version and the last value wins.
+            flush(); tx.update_existing('artifact',identity,owner,record)
+        else:
+            pending.append(('artifact',identity,owner,record)); known.add(identity)
+            if len(pending)==100: flush()
+    flush()
+
 def validate_execution_ledger(result,request,expected_model=None):
     require(result.runtime_manifest_path is not None and result.ledger_manifest_path is not None,'Execution lacks trusted runtime or tool ledger')
     runtime_path=assert_artifact(result.runtime_manifest_path,request.output_dir)
@@ -180,7 +236,7 @@ class Worker:
         root=artifacts_root()/job['id']; directory=root/('attempt-'+str(queue['attempt'])); directory.mkdir(parents=True,exist_ok=True)
         lost=False
         def cancellation_requested():
-            with self.repository.transaction() as tx:
+            with self.repository.read_transaction() as tx:
                 pair=jobs.fenced(tx,job['id'],token)
                 return pair is None or pair[0]['status']=='cancel_requested'
         async def cancelled():
@@ -226,12 +282,10 @@ class Worker:
             if await cancelled() and not queue.get('remote_handle'):
                 jobs.finish(self.repository,job['id'],token,'cancelled'); return
             if mode=='deterministic': await emit('warning',{'message':'DEVELOPMENT SIMULATION — not a live scientific result.'})
-            with self.repository.transaction() as tx:
-                if job['kind']=='analysis':
-                    frozen=tx.get('request',job['research_request_id'])['data']; binding=tx.get('request_binding',job['research_request_id'])['data']
-                else:
-                    owner=tx.get('job',job['id'])['owner']
-                    stored=owned(tx,'account',job['input_account_id'],owner)['data']; document=stored['result']['document']
+            inputs=await asyncio.to_thread(read_preparation_inputs,self.repository,job)
+            if job['kind']=='analysis': frozen,binding=inputs
+            else: stored=inputs; document=stored['result']['document']
+            prepared_package=None
             snapshot=queue.get('dispatch_input')
             if queue.get('remote_handle') and not snapshot:
                 # Backward-compatible recovery of already launched attempts:
@@ -257,16 +311,10 @@ class Worker:
                 input_path,package=await asyncio.to_thread(collect,job,frozen,binding,queue['inputs'].get('budgets',{}),root/'evidence')
                 input_path,package,measurement=await asyncio.to_thread(fit_input_budget,input_path,mode,queue['inputs'].get('budgets',{}).get('evidence_tokens',24000))
                 (directory/'token-budget.json').write_bytes(canonical_json(measurement))
-                with self.repository.transaction() as tx:
-                    pair=jobs.fenced(tx,job['id'],token)
-                    if not pair: return
-                    tx.put('evidence',job['id'],pair[0]['owner_user_id'],{'job_id':job['id'],'package_sha256':sha256(input_path.read_bytes()),'package':package})
+                prepared_package=package
                 selected=tuple(frozen['composer']['selected_kgs'])
             else:
-                from .citations import register
-                with self.repository.transaction() as tx:
-                    owner=tx.get('job',job['id'])['owner']
-                    metadata=stored['result']['citation_metadata']
+                metadata=stored['result']['citation_metadata']
                 allowed=[{'target_id':m['target_id'],'citation_metadata_revision':m['metadata_revision']} for m in metadata]
                 # Claims first makes deterministic paragraph cite an assessed target.
                 allowed.sort(key=lambda x:0 if x['target_id'].startswith('dapper:Claim.') else 1)
@@ -275,10 +323,7 @@ class Worker:
             if snapshot is None:
                 snapshot={'path':str(input_path.resolve().relative_to(root.resolve())),'sha256':sha256(input_path.read_bytes()),
                     'mode':mode,'model':setting('REVEAL_CLAUDE_MODEL','claude-sonnet-4-6'),'kind':job['kind']}
-            with self.repository.transaction() as tx:
-                pair=jobs.fenced(tx,job['id'],token)
-                if not pair: return
-                current,q=pair; q['dispatch_input']=snapshot; tx.put('queue',job['id'],current['owner_user_id'],q)
+            if not await asyncio.to_thread(persist_dispatch_input,self.repository,job['id'],token,snapshot,prepared_package): return
             if await cancelled() and not queue.get('remote_handle'):
                 jobs.finish(self.repository,job['id'],token,'cancelled'); return
             phase='agent_execution'
@@ -381,20 +426,12 @@ class Worker:
 
     async def accept_accounts(self,job,token,accepted,frozen,package_path,result,directory,mode):
         from .citations import register
+        source_artifacts,artifact_access=await asyncio.to_thread(prepare_source_artifacts,package_path,job['id'])
         with self.repository.transaction() as tx:
             pair=jobs.fenced(tx,job['id'],token)
             if not pair or pair[0]['status']=='cancel_requested': return
             current,_=pair; owner=current['owner_user_id']; accounts=[]; paragraphs=[]; manifest_accounts=[]
-            package=decode(package_path.read_bytes()); artifact_access={}
-            files={f['id']:f for f in package['dapper_context'].get('files',[])}
-            for source in package['source_artifacts'].values():
-                file=files.get(source['dapper_file_id'])
-                if not file: continue
-                path=assert_artifact(package_path.parent/source['path'],package_path.parent)
-                data=path.read_bytes(); require(sha256(data)==source['sha256'],'Source artifact changed before persistence')
-                tx.put('artifact',digest([owner,source['sha256']]),owner,{'sha256':source['sha256'],'file':file,'path':str(path),'job_id':job['id']})
-                url=setting('NEXTAUTH_URL','http://localhost:3000').rstrip('/')+'/api/backend/v1/artifacts/'+source['sha256']
-                artifact_access[file['id']]={'file':file,'download_url':url,'expires_at':None,'availability':'available','verification':'checksum_verified'}
+            persist_source_artifacts(tx,owner,source_artifacts)
             for doc,report,path in accepted:
                 if mode=='box':
                     from .acceptance import ledger_sources

@@ -3,12 +3,15 @@ from copy import deepcopy
 from .auth import Problem, owned
 from .repository import digest, now, uid
 
+_UNREAD = object()
 
-def state(tx, owner, account_id, *, can_manage=False):
-    row = tx.get('publication', digest([owner, account_id]))
+def state(tx, owner, account_id, *, can_manage=False, record=_UNREAD, account_result=None):
+    row = tx.get('publication', digest([owner, account_id])) if record is _UNREAD else record
     data = row['data'] if row and row['owner'] == owner else {}
-    account = tx.get('account', digest([owner, account_id])) if can_manage else None
-    statement = account['data']['result'].get('research_statement', {}) if account else {}
+    if can_manage and data.get('visibility') == 'public' and account_result is None:
+        account = tx.get('account', digest([owner, account_id]))
+        account_result = account['data']['result'] if account and account['owner'] == owner else None
+    statement = (account_result or {}).get('research_statement', {}) if can_manage else {}
     changed = (data.get('visibility') == 'public' and statement.get('status') == 'succeeded'
         and statement.get('paragraph_id') != data.get('paragraph_id'))
     return {'visibility': data.get('visibility', 'private'), 'version': data.get('version', 0),
