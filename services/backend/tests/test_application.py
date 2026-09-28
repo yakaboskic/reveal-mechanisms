@@ -204,7 +204,8 @@ class ApplicationTests(unittest.TestCase):
         class Source:
             mechanisms={}; embedding_run='embedding'; mapping_run='mapping'
             def selected(self,reference): return gap
-            def suggest_factors(self,*args): return []
+            def suggest_factors(self,*args,**kwargs): return []
+            def context_embedding_provenance(self,*args): return {'dismech_embedding_run_id':'context-run'}
             def provenance(self,*args): return {'query':'','mode':'semantic','corpus_snapshot':'mapping','embedding_model':'model','embedding_revision':'embedding','template_version':'test','score_aggregation':'maximum_per_context'}
         with patch.object(api,'catalog',Source()):
             response=self.client.post('/v1/mechanisms/suggest',json=body)

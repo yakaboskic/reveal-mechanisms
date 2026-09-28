@@ -97,8 +97,14 @@ def schemas(b):
     S['JobEvent']['properties']['detail']=null(ref('ActivityDetail'));S['JobEvent']['required'].append('detail')
     b.add('ParagraphState',obj({'status':enum('queued','running','succeeded','failed','cancelled','not_requested'),'job_id':null(uuid),'paragraph_id':null(did('Paragraph'))}))
     S['AccountResult']['properties']['research_statement']=ref('ParagraphState');S['AccountResult']['required'].append('research_statement')
+    b.add('PublicationState',obj({'visibility':enum('private','public'),'version':{'type':'integer','minimum':0},
+        'published_at':null(time),'updated_at':null(time),'can_manage':{'type':'boolean'},'has_unpublished_changes':{'type':'boolean'}},
+        description='Mutable application publication control, separate from immutable DAPPER content and citation revisions. A public snapshot contains only the accepted graph and cited statement present when explicitly published. Later accepted statements require Update publication. can_manage is true only for this account owner, including an anonymous workspace. No job telemetry is public.'))
+    b.add('PublicationInput',obj({'visibility':enum('private','public'),'expected_version':{'type':'integer','minimum':0}},
+        description='Explicit owner publication choice. public creates or updates a frozen public snapshot; private revokes this owner publication. Optimistic version and Idempotency-Key prevent stale or duplicate choices. Existing accounts start private/version0.'))
+    S['AccountResult']['properties']['publication']=ref('PublicationState')
     b.add('AccountSummary',obj({'account':ref('DapperScientificAccount'),'knowledge_gap':ref('DapperKnowledgeGap'),
-        'claim_count':{'type':'integer','minimum':1},'created_at':time,'job_id':uuid,'research_statement':ref('ParagraphState')}))
+        'claim_count':{'type':'integer','minimum':1},'created_at':time,'job_id':null(uuid),'research_statement':ref('ParagraphState')}))
     S['AccountSummary']['properties']['attribution']=null(ref('AttributionSnapshot'))
     S['AccountSummary']['description']='One accessible accepted scientific account, deduplicated by its DAPPER identity. Optional attribution is the immutable original request actor, not the current workspace owner; null denotes unavailable historical attribution. Title and brief synthesis are account.name and account.closing_remarks.'
     b.add('AccountList',obj({'items':array(ref('AccountSummary')),'page':ref('Page')}))
@@ -183,9 +189,11 @@ def endpoints(b,f,e):
             if p['name']=='q':p['example']='CAD genetic risk'
             if p['name']=='disease_id':p['example']='MONDO:0021661'
     op('/v1/knowledge-gaps/search')['description']='Fuzzy lookup of imported DisMech gaps by default. Query text is not an authored inquiry or permission to launch research. Other explicit modes require their configured index and return 503 if unavailable. Rankings are retrieval signals. Example uses the exact CAD gap from the HTML study.'
-    op('/v1/knowledge-gaps')['description']='Browse imported DisMech gaps ordered by distinct accessible accepted scientific-account count descending, then native source ID and gap digest. Counts are all-time exact DAPPER gap identity matches, not text matches, attempts, paragraph jobs or an implicit source-revision rollup. With a signed session only that workspace is visible; without a session counts are zero because no account publication model exists. Private work from other owners is never counted. Invalid supplied credentials are rejected. Filters apply before pagination; count changes invalidate continuation cursors.'
+    op('/v1/knowledge-gaps')['description']='Browse imported DisMech gaps ordered by distinct scientific-account count descending. Public scope (default) counts only explicitly published snapshots across users; workspace scope requires a session and counts owned saved accounts. Equal-count gaps shuffle on each new browse; a server seed in the signed continuation cursor preserves tie order across pages. Exact gap digests only: no text matching, attempts, paragraph jobs or implicit source-revision rollup. Invalid supplied credentials are rejected even for public reads. Filters apply before pagination; count or corpus changes expire cursors.'
     op('/v1/knowledge-gaps/search')['description']+=' Account counts use the same optional-session visibility rules as gap browsing; relevance order remains unchanged.'
     op('/v1/knowledge-gaps/{gap_id}')['description']+=' Account counts use the same optional-session visibility rules as gap browsing.'
+    for path in ['/v1/knowledge-gaps','/v1/knowledge-gaps/search','/v1/knowledge-gaps/{gap_id}']:
+        op(path)['parameters'].append(b.parameter('scope','query',enum('public','workspace',default='public'),'public'))
     op('/v1/drafts','post')['description']='Create editable selection state. Empty body creates a null source gap, empty anchors/dismissals, cfde-inc-v2 and both initial KGs. A selected gap is resolved from exact source identity/revision. No client question or linked DisMech list is accepted. Saving does not collect evidence or run an agent.'
     for parameter in op('/v1/mechanisms/search')['parameters']:
         if parameter['name']=='q': parameter['example']='Endothelial dysfunction'
@@ -211,9 +219,20 @@ def endpoints(b,f,e):
         'Owner-scoped, newest first then account ID; deduplicate repeated deliveries by digest. Filter by exact gap_id. No private records from other users with the same gap. Closing remarks provide the summary; paragraph status is independent.',
         'AccountList',{'owned':{'items':[account],'page':e['page']}},parameters=[b.parameter('gap_id','query',did('KnowledgeGap'),f['gap']['id'])]+b.page_parameters(),errors=('400','401','429'))
     b.operation('/v1/knowledge-gaps/{gap_id}/accounts','get','listKnowledgeGapAccounts','Knowledge gaps','List visible scientific accounts for a knowledge gap',
-        'Accepted accounts for the exact DAPPER KnowledgeGap identity, newest first then account ID, deduplicated by scientific-account digest. Optional signed session selects only its authorized workspace memberships; no session returns an empty list because accounts are not publicly published. Counts and lists never reveal another private owner. Historical source observations with the same exact gap digest remain the same scientific question; changed gap digests never merge. Optional source_revision checks the selected catalog observation. Attribution is the immutable original request actor, not current ownership. Uses the same account read authorization as /v1/accounts; each account ID links to its existing account endpoint.',
+        'Accepted accounts for the exact DAPPER KnowledgeGap identity, newest first then account ID, deduplicated by scientific-account digest. Public scope (default) lists explicitly published snapshots across owners and omits private job IDs. Workspace scope requires a valid session and lists only its saved accounts. Invalid supplied sessions are rejected for either scope. Source-revision checks validate the selected observation; changed gap digests never merge. Attribution remains the original request actor. Each account ID links to its existing scientific endpoint, whose public reads are restricted to its published snapshot.',
         'AccountList',{'owned':{'items':[dict(account,attribution=e['research_request']['attribution'])],'page':e['page']},'no_visible_accounts':{'items':[],'page':e['page']}},
-        parameters=[b.parameter('gap_id','path',did('KnowledgeGap'),f['gap']['id'],True),b.parameter('source_revision','query',string(pattern='^[a-f0-9]{64}$'),e['composer']['source_gap']['source_revision'])]+b.page_parameters(),public=True,errors=('400','401','404','409','429'))
+        parameters=[b.parameter('gap_id','path',did('KnowledgeGap'),f['gap']['id'],True),b.parameter('source_revision','query',string(pattern='^[a-f0-9]{64}$'),e['composer']['source_gap']['source_revision']),b.parameter('scope','query',enum('public','workspace',default='public'),'public')]+b.page_parameters(),public=True,errors=('400','401','404','409','429'))
+    private_publication={'visibility':'private','version':0,'published_at':None,'updated_at':None,'can_manage':True,'has_unpublished_changes':False}
+    public_publication={'visibility':'public','version':1,'published_at':b.NOW,'updated_at':b.NOW,'can_manage':True,'has_unpublished_changes':False}
+    b.operation('/v1/accounts/{dapper_id}/publication','get','getAccountPublication','Scientific content','Inspect account publication',
+        'Owner receives mutable publication controls even while private. Other readers receive only an active public publication with can_manage=false. Publishing is separate from scientific identity and frozen citation metadata; old citation access labels describe that exact historical metadata revision.',
+        'PublicationState',{'private_owner':private_publication,'public_reader':dict(public_publication,can_manage=False)},
+        parameters=[b.parameter('dapper_id','path',did('ScientificAccount'),f['account']['id'],True)],public=True,errors=('401','404','429'))
+    b.operation('/v1/accounts/{dapper_id}/publication','post','updateAccountPublication','Scientific content','Publish, update or unpublish an account',
+        'Explicit owner-only choice, also available to anonymous workspace owners. Publishing freezes the complete accepted account provenance and current accepted paragraph, exact citation revisions and only reachable source artifacts. Future paragraphs remain private until an explicit update. Unpublishing revokes this snapshot immediately; identical content independently published elsewhere stays public. No job logs, draft, queue, request or unrelated owner artifacts are published. Immutable scientific IDs, citations and original authorship do not change.',
+        'PublicationState',{'published':public_publication,'unpublished':dict(private_publication,version=2,updated_at=b.NOW)},
+        parameters=[b.parameter('dapper_id','path',did('ScientificAccount'),f['account']['id'],True)],request_schema='PublicationInput',
+        request_examples={'publish':{'visibility':'public','expected_version':0},'unpublish':{'visibility':'private','expected_version':1}},idempotent=True,errors=('400','401','404','409','422','429'))
     exploration={'source_gap':e['composer']['source_gap'],'knowledge_gap':f['gap'],'last_explored_at':b.NOW,'draft_id':b.DRAFT_ID,
         'scientific_accounts':{'count':1,'scope':'owner_exact_gap','as_of':b.NOW,'ranking':'curated','window_days':None}}
     b.operation('/v1/me/explorations','get','listExplorations','Research history','List your explored knowledge gaps',
@@ -264,6 +283,12 @@ def endpoints(b,f,e):
     stream['responses']['200']['content']['application/json']['examples']['completed_events']['value']['items']=[e['queued_event'],preparation,activity,e['event']]
     stream['responses']['200']['content']['application/json']['examples']['completed_events']['value']['next_after']='4'
     stream['responses']['200']['content']['text/event-stream']['examples']['result_event']['value']='id: 4\nevent: result\ndata: '+b.canonical(e['event'])+'\n\n'
+    for path,method in [('/v1/accounts/{dapper_id}','get'),('/v1/claims/{dapper_id}','get'),('/v1/objects/{dapper_id}','get'),('/v1/gene-sets/{dapper_id}','get'),('/v1/paragraphs/{dapper_id}','get'),('/v1/paragraphs/{dapper_id}/export','get'),('/v1/citations/{dapper_id}','get'),('/v1/citations/render','post'),('/v1/artifacts/{sha256}','get')]:
+        if path not in P: continue
+        operation=op(path,method); operation['security']=[{}, {'GatewayAssertion': []}]
+        operation['description']+=' A valid owner retains private access. Without owner access, only an active explicit publication snapshot authorizes this scientific resource, exact cited revisions and reachable source artifacts. Invalid supplied credentials fail even on public reads. Unpublication revokes snapshot access; job/draft/request routes remain private.'
+    for example in op('/v1/accounts/{dapper_id}')['responses']['200']['content']['application/json']['examples'].values():
+        example['value']['publication']=private_publication
     # Synchronize exchange request values and curl snippets after amendments.
     from urllib.parse import quote, urlencode
     import shlex

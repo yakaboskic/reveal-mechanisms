@@ -537,7 +537,7 @@
     "method": "GET",
     "path_template": "/v1/knowledge-gaps/search",
     "request": {
-      "url": "https://api.reveal.example.org/v1/knowledge-gaps/search?q=CAD+genetic+risk&mode=fuzzy&kind=KNOWLEDGE_GAP&status=OPEN&source=dismech&disease_id=MONDO%3A0021661&limit=20",
+      "url": "https://api.reveal.example.org/v1/knowledge-gaps/search?q=CAD+genetic+risk&mode=fuzzy&kind=KNOWLEDGE_GAP&status=OPEN&source=dismech&disease_id=MONDO%3A0021661&limit=20&scope=public",
       "path": {},
       "query": {
         "q": "CAD genetic risk",
@@ -546,7 +546,8 @@
         "status": "OPEN",
         "source": "dismech",
         "disease_id": "MONDO:0021661",
-        "limit": 20
+        "limit": 20,
+        "scope": "public"
       },
       "headers": {
         "Accept": "application/json"
@@ -696,7 +697,7 @@
         }
       }
     },
-    "curl": "curl -X GET 'https://api.reveal.example.org/v1/knowledge-gaps/search?q=CAD+genetic+risk&mode=fuzzy&kind=KNOWLEDGE_GAP&status=OPEN&source=dismech&disease_id=MONDO%3A0021661&limit=20' -H 'Accept: application/json'"
+    "curl": "curl -X GET 'https://api.reveal.example.org/v1/knowledge-gaps/search?q=CAD+genetic+risk&mode=fuzzy&kind=KNOWLEDGE_GAP&status=OPEN&source=dismech&disease_id=MONDO%3A0021661&limit=20&scope=public' -H 'Accept: application/json'"
   },
   {
     "operation_id": "listKnowledgeGaps",
@@ -704,14 +705,15 @@
     "method": "GET",
     "path_template": "/v1/knowledge-gaps",
     "request": {
-      "url": "https://api.reveal.example.org/v1/knowledge-gaps?kind=KNOWLEDGE_GAP&status=OPEN&source=dismech&disease_id=MONDO%3A0021661&limit=20",
+      "url": "https://api.reveal.example.org/v1/knowledge-gaps?kind=KNOWLEDGE_GAP&status=OPEN&source=dismech&disease_id=MONDO%3A0021661&limit=20&scope=public",
       "path": {},
       "query": {
         "kind": "KNOWLEDGE_GAP",
         "status": "OPEN",
         "source": "dismech",
         "disease_id": "MONDO:0021661",
-        "limit": 20
+        "limit": 20,
+        "scope": "public"
       },
       "headers": {
         "Accept": "application/json"
@@ -828,7 +830,7 @@
         }
       }
     },
-    "curl": "curl -X GET 'https://api.reveal.example.org/v1/knowledge-gaps?kind=KNOWLEDGE_GAP&status=OPEN&source=dismech&disease_id=MONDO%3A0021661&limit=20' -H 'Accept: application/json'"
+    "curl": "curl -X GET 'https://api.reveal.example.org/v1/knowledge-gaps?kind=KNOWLEDGE_GAP&status=OPEN&source=dismech&disease_id=MONDO%3A0021661&limit=20&scope=public' -H 'Accept: application/json'"
   },
   {
     "operation_id": "getKnowledgeGap",
@@ -836,12 +838,13 @@
     "method": "GET",
     "path_template": "/v1/knowledge-gaps/{gap_id}",
     "request": {
-      "url": "https://api.reveal.example.org/v1/knowledge-gaps/dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk?source_revision=8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd",
+      "url": "https://api.reveal.example.org/v1/knowledge-gaps/dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk?source_revision=8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd&scope=public",
       "path": {
         "gap_id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk"
       },
       "query": {
-        "source_revision": "8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd"
+        "source_revision": "8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd",
+        "scope": "public"
       },
       "headers": {
         "Accept": "application/json"
@@ -949,7 +952,7 @@
         }
       }
     },
-    "curl": "curl -X GET 'https://api.reveal.example.org/v1/knowledge-gaps/dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk?source_revision=8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd' -H 'Accept: application/json'"
+    "curl": "curl -X GET 'https://api.reveal.example.org/v1/knowledge-gaps/dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk?source_revision=8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd&scope=public' -H 'Accept: application/json'"
   },
   {
     "operation_id": "searchMechanisms",
@@ -3436,6 +3439,14 @@
               "status": "succeeded",
               "job_id": "55555555-5555-4555-8555-555555555555",
               "paragraph_id": "dapper:Paragraph.uSYa1LdXNPuwlSgsCz3oZ7IfrVoztroD"
+            },
+            "publication": {
+              "visibility": "private",
+              "version": 0,
+              "published_at": null,
+              "updated_at": null,
+              "can_manage": true,
+              "has_unpublished_changes": false
             }
           }
         }
@@ -7492,12 +7503,13 @@
     "method": "GET",
     "path_template": "/v1/knowledge-gaps/{gap_id}/accounts",
     "request": {
-      "url": "https://api.reveal.example.org/v1/knowledge-gaps/dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk/accounts?source_revision=8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd&limit=20",
+      "url": "https://api.reveal.example.org/v1/knowledge-gaps/dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk/accounts?source_revision=8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd&scope=public&limit=20",
       "path": {
         "gap_id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk"
       },
       "query": {
         "source_revision": "8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd",
+        "scope": "public",
         "limit": 20
       },
       "headers": {
@@ -7590,7 +7602,142 @@
         }
       }
     },
-    "curl": "curl -X GET 'https://api.reveal.example.org/v1/knowledge-gaps/dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk/accounts?source_revision=8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd&limit=20' -H 'Accept: application/json'"
+    "curl": "curl -X GET 'https://api.reveal.example.org/v1/knowledge-gaps/dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk/accounts?source_revision=8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd&scope=public&limit=20' -H 'Accept: application/json'"
+  },
+  {
+    "operation_id": "getAccountPublication",
+    "case": "request",
+    "method": "GET",
+    "path_template": "/v1/accounts/{dapper_id}/publication",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/publication",
+      "path": {
+        "dapper_id": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd"
+      },
+      "query": {},
+      "headers": {
+        "Accept": "application/json"
+      },
+      "body": null
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/json",
+        "examples": {
+          "private_owner": {
+            "visibility": "private",
+            "version": 0,
+            "published_at": null,
+            "updated_at": null,
+            "can_manage": true,
+            "has_unpublished_changes": false
+          },
+          "public_reader": {
+            "visibility": "public",
+            "version": 1,
+            "published_at": "2026-09-24T16:00:00Z",
+            "updated_at": "2026-09-24T16:00:00Z",
+            "can_manage": false,
+            "has_unpublished_changes": false
+          }
+        }
+      }
+    },
+    "curl": "curl -X GET https://api.reveal.example.org/v1/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/publication -H 'Accept: application/json'"
+  },
+  {
+    "operation_id": "updateAccountPublication",
+    "case": "publish",
+    "method": "POST",
+    "path_template": "/v1/accounts/{dapper_id}/publication",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/publication",
+      "path": {
+        "dapper_id": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd"
+      },
+      "query": {},
+      "headers": {
+        "Idempotency-Key": "66666666-6666-4666-8666-666666666666",
+        "Authorization": "Bearer <trusted-gateway-assertion>",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      },
+      "body": {
+        "visibility": "public",
+        "expected_version": 0
+      }
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/json",
+        "examples": {
+          "published": {
+            "visibility": "public",
+            "version": 1,
+            "published_at": "2026-09-24T16:00:00Z",
+            "updated_at": "2026-09-24T16:00:00Z",
+            "can_manage": true,
+            "has_unpublished_changes": false
+          },
+          "unpublished": {
+            "visibility": "private",
+            "version": 2,
+            "published_at": null,
+            "updated_at": "2026-09-24T16:00:00Z",
+            "can_manage": true,
+            "has_unpublished_changes": false
+          }
+        }
+      }
+    },
+    "curl": "curl -X POST https://api.reveal.example.org/v1/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/publication -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"expected_version\":0,\"visibility\":\"public\"}'"
+  },
+  {
+    "operation_id": "updateAccountPublication",
+    "case": "unpublish",
+    "method": "POST",
+    "path_template": "/v1/accounts/{dapper_id}/publication",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/publication",
+      "path": {
+        "dapper_id": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd"
+      },
+      "query": {},
+      "headers": {
+        "Idempotency-Key": "66666666-6666-4666-8666-666666666666",
+        "Authorization": "Bearer <trusted-gateway-assertion>",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      },
+      "body": {
+        "visibility": "private",
+        "expected_version": 1
+      }
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/json",
+        "examples": {
+          "published": {
+            "visibility": "public",
+            "version": 1,
+            "published_at": "2026-09-24T16:00:00Z",
+            "updated_at": "2026-09-24T16:00:00Z",
+            "can_manage": true,
+            "has_unpublished_changes": false
+          },
+          "unpublished": {
+            "visibility": "private",
+            "version": 2,
+            "published_at": null,
+            "updated_at": "2026-09-24T16:00:00Z",
+            "can_manage": true,
+            "has_unpublished_changes": false
+          }
+        }
+      }
+    },
+    "curl": "curl -X POST https://api.reveal.example.org/v1/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/publication -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"expected_version\":1,\"visibility\":\"private\"}'"
   },
   {
     "operation_id": "listExplorations",

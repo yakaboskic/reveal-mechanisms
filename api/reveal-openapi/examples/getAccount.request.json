@@ -1642,6 +1642,14 @@
             "status": "succeeded",
             "job_id": "55555555-5555-4555-8555-555555555555",
             "paragraph_id": "dapper:Paragraph.uSYa1LdXNPuwlSgsCz3oZ7IfrVoztroD"
+          },
+          "publication": {
+            "visibility": "private",
+            "version": 0,
+            "published_at": null,
+            "updated_at": null,
+            "can_manage": true,
+            "has_unpublished_changes": false
           }
         }
       }

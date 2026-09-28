@@ -4,7 +4,7 @@
   "method": "GET",
   "path_template": "/v1/knowledge-gaps/search",
   "request": {
-    "url": "https://api.reveal.example.org/v1/knowledge-gaps/search?q=CAD+genetic+risk&mode=fuzzy&kind=KNOWLEDGE_GAP&status=OPEN&source=dismech&disease_id=MONDO%3A0021661&limit=20",
+    "url": "https://api.reveal.example.org/v1/knowledge-gaps/search?q=CAD+genetic+risk&mode=fuzzy&kind=KNOWLEDGE_GAP&status=OPEN&source=dismech&disease_id=MONDO%3A0021661&limit=20&scope=public",
     "path": {},
     "query": {
       "q": "CAD genetic risk",
@@ -13,7 +13,8 @@
       "status": "OPEN",
       "source": "dismech",
       "disease_id": "MONDO:0021661",
-      "limit": 20
+      "limit": 20,
+      "scope": "public"
     },
     "headers": {
       "Accept": "application/json"
@@ -163,5 +164,5 @@
       }
     }
   },
-  "curl": "curl -X GET 'https://api.reveal.example.org/v1/knowledge-gaps/search?q=CAD+genetic+risk&mode=fuzzy&kind=KNOWLEDGE_GAP&status=OPEN&source=dismech&disease_id=MONDO%3A0021661&limit=20' -H 'Accept: application/json'"
+  "curl": "curl -X GET 'https://api.reveal.example.org/v1/knowledge-gaps/search?q=CAD+genetic+risk&mode=fuzzy&kind=KNOWLEDGE_GAP&status=OPEN&source=dismech&disease_id=MONDO%3A0021661&limit=20&scope=public' -H 'Accept: application/json'"
 }

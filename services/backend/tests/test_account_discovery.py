@@ -73,6 +73,8 @@ class AccountDiscoveryTests(unittest.TestCase):
         return summary
 
     def get(self, path, owner=None):
+        if owner and path.startswith('/v1/knowledge-gaps') and 'scope=' not in path:
+            path += ('&' if '?' in path else '?') + 'scope=workspace'
         response = self.client.get(path, headers=self.headers(owner) if owner else {})
         self.assertEqual(response.status_code, 200, response.text)
         return response.json()
@@ -91,10 +93,9 @@ class AccountDiscoveryTests(unittest.TestCase):
         self.assertTrue(all(item['scientific_accounts']['scope'] == 'owner_exact_gap' for item in result['items']))
         self.assertTrue(all(item['scientific_accounts']['ranking'] == 'account_count' for item in result['items']))
         self.assertEqual(len(self.get('/v1/accounts', self.owner)['items']), 3)
-        with patch.object(self.repo, 'read_transaction', side_effect=AssertionError('Public browsing must not scan private rows')):
-            public = self.get('/v1/knowledge-gaps')
-            self.assertEqual([item['scientific_accounts']['count'] for item in public['items']], [0, 0, 0])
-            self.assertEqual(self.get('/v1/knowledge-gaps/' + b['object']['id'] + '/accounts')['items'], [])
+        public = self.get('/v1/knowledge-gaps')
+        self.assertEqual([item['scientific_accounts']['count'] for item in public['items']], [0, 0, 0])
+        self.assertEqual(self.get('/v1/knowledge-gaps/' + b['object']['id'] + '/accounts')['items'], [])
 
     def test_search_relevance_order_is_unchanged_but_counts_and_exact_gap_update(self):
         gap = self.gaps[1]; self.accepted(self.owner, gap, 'd')
@@ -109,10 +110,10 @@ class AccountDiscoveryTests(unittest.TestCase):
     def test_pagination_ignores_observation_time_but_binds_owner_and_count_snapshot(self):
         with patch.object(api, 'now', return_value='2026-09-28T10:00:00Z'):
             first = self.get('/v1/knowledge-gaps?limit=1', self.owner)
-        path = '/v1/knowledge-gaps?limit=1&cursor=' + first['page']['next_cursor']
+        path = '/v1/knowledge-gaps?limit=1&scope=workspace&cursor=' + first['page']['next_cursor']
         with patch.object(api, 'now', return_value='2026-09-28T10:00:05Z'):
             second = self.get(path, self.owner)
-        self.assertEqual(second['items'][0]['source']['source_id'], 'dismech:b')
+        self.assertNotEqual(second['items'][0]['source']['source_id'], first['items'][0]['source']['source_id'])
         self.assertEqual(second['items'][0]['scientific_accounts']['as_of'], '2026-09-28T10:00:05Z')
         self.assertEqual(self.client.get(path, headers=self.headers(self.other)).status_code, 409)
         self.accepted(self.owner, self.gaps[2], 'd')

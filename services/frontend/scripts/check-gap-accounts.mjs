@@ -42,7 +42,7 @@ async function until(check, description) { const start = performance.now(); whil
 const { chromium } = await playwright();
 const browser = await chromium.launch({ headless: true, executablePath: await executable() });
 const report = { scope: 'Mocked browser fixtures; no real backend requests, authentication, database writes or jobs. Counts/IDs/scientific prose in scenarios are invented.', contractSha256: fixture.contractSha256, status: 'running', scenarios: [] };
-async function harness(name, { mobile = false, visitor = false, clock = false, reducedMotion = false, canClaim = false } = {}) {
+async function harness(name, { mobile = false, visitor = false, clock = false, reducedMotion = false, canClaim = false, paging = false, disableObserver = false } = {}) {
   const viewport = mobile ? { width: 390, height: 844 } : { width: 1280, height: 1000 };
   const context = await browser.newContext({ viewport, serviceWorkers: 'block', reducedMotion: reducedMotion ? 'reduce' : 'no-preference' });
   const page = await context.newPage(); page.setDefaultTimeout(12000);
@@ -50,14 +50,17 @@ async function harness(name, { mobile = false, visitor = false, clock = false, r
   const state = { principal: visitor ? null : userId, requests: [], unexpected: [], pageErrors: [], consoleErrors: [], canClaim };
   page.on('pageerror', error => state.pageErrors.push(error.message));
   page.on('console', message => { if (message.type() === 'error') state.consoleErrors.push(message.text()); });
-  await context.addInitScript(() => {
+  await context.addInitScript(disableObserver => {
+    if (disableObserver) Object.defineProperty(window, "IntersectionObserver", { value: undefined, configurable: true });
+    window.__gapResponseOverrides = [];
     const original = window.fetch.bind(window); const mock = { calls: [] }; window.__gapAccountsFixture = mock;
     window.fetch = (input, init) => {
       const url = new URL(typeof input === 'string' ? input : input.url, location.href);
+      if (url.pathname === '/api/backend/v1/knowledge-gaps' && window.__gapResponseOverrides.length) { const next = window.__gapResponseOverrides.shift(); return Promise.resolve(new Response(JSON.stringify(next.body), { status: next.status, headers: { 'content-type': 'application/json' } })); }
       if (!/^\/api\/backend\/v1\/knowledge-gaps\/[^/]+\/accounts$/.test(url.pathname)) return original(input, init);
       const signal = init?.signal || input?.signal;
       return new Promise(resolve => {
-        const call = { path: decodeURIComponent(url.pathname), sourceRevision: url.searchParams.get('source_revision'), cursor: url.searchParams.get('cursor'), resolve, settled: false, aborted: !!signal?.aborted };
+        const call = { path: decodeURIComponent(url.pathname), sourceRevision: url.searchParams.get('source_revision'), scope: url.searchParams.get('scope'), cursor: url.searchParams.get('cursor'), resolve, settled: false, aborted: !!signal?.aborted };
         // Strict Mode immediately cleans up and repeats the same mount GET.
         // Keep that replacement in the same fixture slot, without conflating retries.
         const previous = mock.calls.at(-1);
@@ -66,7 +69,7 @@ async function harness(name, { mobile = false, visitor = false, clock = false, r
         signal?.addEventListener('abort', () => { call.aborted = true; }, { once: true });
       });
     };
-  });
+  }, disableObserver);
   await context.route('**/*', async route => {
     const request = route.request(), url = new URL(request.url()), path = decodeURIComponent(url.pathname), method = request.method();
     if (url.origin !== origin) { state.unexpected.push(`${method} ${url.origin}${path}`); return route.abort('blockedbyclient'); }
@@ -76,7 +79,17 @@ async function harness(name, { mobile = false, visitor = false, clock = false, r
     if (path === '/api/session/status') return respond({ principal: state.principal ? { user_id: state.principal } : null, canClaim: state.canClaim, providers: { google: false, orcid: false } });
     if (path === '/api/backend/v1/me') return respond({ user_id: state.principal, display_name: 'Current workspace owner', email: null, email_verified: null, orcid: null, orcid_authenticated: false, person: null, principal_kind: 'registered', workspace_expires_at: null });
     if (path === '/api/session/claim') { state.principal = '33333333-3333-4333-8333-333333333333'; state.canClaim = false; return respond({ claimed: true }); }
-    if (method === 'GET' && path === '/api/backend/v1/knowledge-gaps') return respond({ items: gaps.map(gap => ({ ...gap, scientific_accounts: { ...gap.scientific_accounts, count: state.principal ? gap.scientific_accounts.count : 0, scope: state.principal ? 'owner_exact_gap' : 'public_exact_gap' } })), page: pageInfo() });
+    if (method === 'GET' && path === '/api/backend/v1/knowledge-gaps') {
+      const scope = url.searchParams.get('scope'); assert.ok(['public', 'workspace'].includes(scope));
+      const cursor = url.searchParams.get('cursor');
+      const records = paging ? Array.from({ length: 20 }, (_, i) => {
+        const offset = cursor ? 20 : 0; const gap = structuredClone(gaps[i % gaps.length]);
+        gap.object.id += `_page_${offset + i}`; gap.object.text = `Mocked paginated question ${offset + i + 1}: a sufficiently long question to fill its scientific discovery row?`; gap.source.source_id += `-${offset + i}`;
+        return gap;
+      }) : gaps;
+      if (cursor) assert.equal(cursor, 'fixture-next', 'Opaque seeded cursor passed unchanged');
+      return respond({ items: records.map(gap => ({ ...gap, scientific_accounts: { ...gap.scientific_accounts, scope: scope === 'workspace' ? 'owner_exact_gap' : 'public_exact_gap' } })), page: pageInfo(paging && !cursor) });
+    }
     if (method === 'GET' && path === '/api/backend/v1/knowledge-gaps/search') return respond({ items: [], page: pageInfo() });
     if (method === 'POST' && path === '/api/backend/v1/mechanisms/suggest') return respond({ ...fixture.suggestions, automatic_anchors: [], limitations: ['Mocked suggestions; no model executed.'] });
     if (method === 'POST' && path === '/api/backend/v1/me/explorations') return respond({});
@@ -90,7 +103,7 @@ async function harness(name, { mobile = false, visitor = false, clock = false, r
     async select(index = 0) { const count = await h.count(); await page.locator('.trend').nth(index).click(); await until(async () => await h.count() > count, 'selected-gap account request'); },
     async close() { result.requests = state.requests; result.accountRequests = await page.evaluate(() => window.__gapAccountsFixture.calls.map(({ path, sourceRevision, cursor, settled, aborted }) => ({ path, sourceRevision, cursor, settled, aborted }))); result.pageErrors = state.pageErrors; result.consoleErrors = state.consoleErrors; result.unexpected = state.unexpected; await context.close(); },
   };
-  await page.goto(origin); await until(async () => await page.locator('.trend').count() === 3, 'ranked top-three questions'); return h;
+  await page.goto(origin); await until(async () => await page.locator('.trend').count() === (paging ? 20 : 4), 'ranked first page'); return h;
 }
 const list = h => h.page.locator('.gap-accounts');
 async function noOverflow(h) { const dimensions = await h.page.evaluate(() => ({ page: document.documentElement.scrollWidth, viewport: innerWidth })); assert.ok(dimensions.page <= dimensions.viewport + 1); return dimensions; }
@@ -98,8 +111,8 @@ async function shot(h, suffix) { await h.page.screenshot({ path: resolve(output,
 async function rankedPagination() {
   const h = await harness('ranking-and-pagination');
   try {
-    assert.deepEqual(await h.page.locator('.trend-question').evaluateAll(nodes => nodes.map(node => node.firstChild.textContent)), gaps.slice(0, 3).map(gap => gap.object.text));
-    assert.match(await h.page.locator('.trend').first().innerText(), /9 scientific accounts in your workspace/);
+    assert.deepEqual(await h.page.locator('.trend-question').evaluateAll(nodes => nodes.map(node => node.firstChild.textContent)), gaps.map(gap => gap.object.text));
+    assert.match(await h.page.locator('.trend').first().innerText(), /9 published scientific accounts/);
     assert.equal(h.state.requests.filter(request => request.path.endsWith('/knowledge-gaps/search')).length, 0, 'No editorial topic searches override ranking');
     await h.select(); await list(h).getByText('Loading scientific accounts', { exact: true }).waitFor();
     await h.respond(0, { items: [account(gaps[0], 1), account(gaps[0], 2)], page: pageInfo(true) });
@@ -123,7 +136,7 @@ async function rankedPagination() {
     const calls = await h.page.evaluate(() => window.__gapAccountsFixture.calls.map(call => ({ sourceRevision: call.sourceRevision, cursor: call.cursor })));
     assert.deepEqual(calls.map(call => call.cursor), [null, 'fixture-next', 'fixture-next']);
     assert.ok(calls.every(call => call.sourceRevision === gaps[0].source.source_revision));
-    h.result.checks.push('Server ranking unchanged; no editorial searches', 'Original author, title, synthesis, claims, date and exact link', 'Pagination retry retains cards and cursor; duplicate boundary record suppressed', await noOverflow(h)); await shot(h, 'loaded');
+    h.result.checks.push('Public default ranking unchanged across full first page; no editorial searches', 'Original author, title, synthesis, claims, date and exact link', 'Pagination retry retains cards and cursor; duplicate boundary record suppressed', await noOverflow(h)); await shot(h, 'loaded');
   } finally { await h.close(); }
 }
 async function mobileSlow() {
@@ -154,13 +167,64 @@ async function deadlineRecovery() {
   } finally { await h.close(); }
 }
 async function visitorPrivacy() {
-  const h = await harness('visitor-empty', { visitor: true });
+  const h = await harness('visitor-public');
   try {
-    assert.ok((await h.page.locator('.trend small').allTextContents()).every(text => text.startsWith('0 scientific accounts')));
-    await h.select(); await h.respond(0, { items: [], page: pageInfo() }); await list(h).getByText(/No scientific accounts are available in this view/).waitFor();
-    assert.equal(await list(h).locator('.gap-account-card').count(), 0); assert.equal(await list(h).locator('.gap-accounts-count').innerText(), '0');
-    h.result.checks.push('Visitor sees zero scoped counts and no private account/author records');
+    assert.equal(await h.page.locator('#gap-list-scope').inputValue(), 'public');
+    await h.page.locator('#gap-list-scope').selectOption('workspace');
+    await until(() => h.state.requests.some(request => request.path.endsWith('/knowledge-gaps') && request.query.includes('scope=workspace')), 'workspace-scoped ranking');
+    await h.select(); await h.respond(0, { items: [account(gaps[0])], page: pageInfo() }); await list(h).locator('.gap-account-card').waitFor();
+    await list(h).getByText('Proposed answers in your workspace for this question.').waitFor();
+    await h.page.locator('#gap-list-scope').selectOption('public'); await until(async () => await h.count() === 2, 'scope change reload');
+    assert.equal(await list(h).locator('.gap-account-card').count(), 0);
+    await h.respond(1, { items: [], page: pageInfo() }); await list(h).getByText(/No scientific accounts have been published/).waitFor();
+    const calls = await h.page.evaluate(() => window.__gapAccountsFixture.calls.map(call => call.scope)); assert.deepEqual(calls, ['workspace', 'public']);
+    h.result.checks.push('Exact public/workspace selector labels; list follows scope and clears previous cards');
   } finally { await h.close(); }
+  const visitor = await harness('visitor-published-reading', { visitor: true });
+  try {
+    assert.equal(await visitor.page.locator('#gap-list-scope option[value=workspace]').isDisabled(), true);
+    assert.match(await visitor.page.locator('.trend').first().innerText(), /9 published scientific accounts/);
+    await visitor.select(); await visitor.respond(0, { items: [account(gaps[0])], page: pageInfo() }); await list(visitor).locator('.gap-account-card').waitFor();
+    await list(visitor).getByText('Published scientific accounts from all researchers for this question.').waitFor();
+    visitor.result.checks.push('Visitor can read published summaries/authorship without login; workspace option unavailable');
+  } finally { await visitor.close(); }
+}
+async function infiniteScrolling() {
+  for (const mobile of [false, true]) {
+    const h = await harness(mobile ? 'infinite-mobile' : 'infinite-desktop', { mobile, paging: true });
+    try {
+      const input = await h.page.locator('.question-shell').boundingBox(), selector = await h.page.locator('.gap-scope-selector').boundingBox();
+      const panel = h.page.locator('.gap-browser-list');
+      const dimensions = await panel.evaluate(node => ({ height: node.clientHeight, scroll: node.scrollHeight })); assert.ok(dimensions.scroll > dimensions.height);
+      await panel.evaluate(node => { node.scrollTop = node.scrollHeight; });
+      await until(async () => await h.page.locator('.trend').count() === 40, 'observer-triggered second page');
+      const afterInput = await h.page.locator('.question-shell').boundingBox(), afterSelector = await h.page.locator('.gap-scope-selector').boundingBox();
+      assert.ok(Math.abs(input.y - afterInput.y) < 1 && Math.abs(selector.y - afterSelector.y) < 1);
+      assert.equal(await h.page.evaluate(() => window.scrollY), 0); assert.equal(await h.page.locator('.trend').last().locator('.trend-question').evaluate(node => node.firstChild.textContent), 'Mocked paginated question 40: a sufficiently long question to fill its scientific discovery row?');
+      h.result.checks.push('Only bounded list scrolls; question and selector remain stationary', 'IntersectionObserver follows unchanged opaque cursor; all pages preserve server order', await noOverflow(h)); await shot(h, 'scrolled');
+    } finally { await h.close(); }
+  }
+}
+async function cursorExpiry() {
+  const h = await harness('cursor-expiry-fallback', { paging: true, disableObserver: true });
+  try {
+    const firstCalls = h.state.requests.filter(request => request.path === '/api/backend/v1/knowledge-gaps').length;
+    await h.page.evaluate(() => window.__gapResponseOverrides.push({ status: 409, body: { code: 'CURSOR_EXPIRED', detail: 'Reload the first page to start a new browse session.' } }));
+    await h.page.getByRole('button', { name: 'Load more questions', exact: true }).click(); await h.page.getByText('Reload the first page to start a new browse session.').waitFor();
+    assert.equal(await h.page.locator('.trend').count(), 0);
+    await h.page.locator('.gap-browser').getByRole('button', { name: 'Retry', exact: true }).click(); await until(async () => await h.page.locator('.trend').count() === 20, 'fresh first page after expired gap cursor');
+    const calls = h.state.requests.filter(request => request.path === '/api/backend/v1/knowledge-gaps'); assert.equal(calls.length, firstCalls + 1); assert.ok(!calls.at(-1).query.includes('cursor='));
+    h.result.checks.push('Accessible load-more works without IntersectionObserver', 'Expired gap cursor clears snapshot and retries first page without expired cursor');
+  } finally { await h.close(); }
+  const a = await harness('account-cursor-expiry');
+  try {
+    await a.select(); await a.respond(0, { items: [account(gaps[0])], page: pageInfo(true) });
+    await list(a).getByRole('button', { name: 'Show more accounts' }).click(); await until(async () => await a.count() === 2, 'account next page');
+    await a.respond(1, { code: 'CURSOR_EXPIRED', detail: 'Account collection changed; reload its first page.' }, 409); await list(a).getByText(/Account collection changed/).waitFor(); assert.equal(await list(a).locator('.gap-account-card').count(), 0);
+    await list(a).getByRole('button', { name: 'Retry' }).click(); await until(async () => await a.count() === 3, 'account first-page retry');
+    assert.equal(await a.page.evaluate(() => window.__gapAccountsFixture.calls[2].cursor), null);
+    await a.respond(2, { items: [account(gaps[0], 2)], page: pageInfo() }); await list(a).locator('.gap-account-card').waitFor(); a.result.checks.push('Expired account cursor resets to a fresh first-page snapshot');
+  } finally { await a.close(); }
 }
 async function staleSelection() {
   const h = await harness('stale-selection');
@@ -179,7 +243,7 @@ async function identityPrivacy() {
     await h.page.getByRole('button', { name: 'Move my anonymous work' }).click(); await until(async () => await h.count() === 2, 'new principal list request');
     assert.equal(await list(h).locator('.gap-account-card').count(), 0, 'Previous principal cards cleared before new response');
     assert.equal(await list(h).locator('.gap-accounts-count').count(), 0, 'Previous principal count cleared before new response');
-    await h.respond(1, { items: [], page: pageInfo() }); await list(h).getByText(/No scientific accounts have been proposed/).waitFor();
+    await h.respond(1, { items: [], page: pageInfo() }); await list(h).getByText(/No scientific accounts have been published/).waitFor();
     h.result.checks.push('Changed identity clears previous private cards/count and reloads scope');
   } finally { await h.close(); }
 }
@@ -193,7 +257,7 @@ async function mismatchedResponse() {
   } finally { await h.close(); }
 }
 try {
-  const scenarios = { rankedPagination, mobileSlow, deadlineRecovery, visitorPrivacy, staleSelection, identityPrivacy, mismatchedResponse };
+  const scenarios = { rankedPagination, mobileSlow, deadlineRecovery, visitorPrivacy, infiniteScrolling, cursorExpiry, staleSelection, identityPrivacy, mismatchedResponse };
   for (const [name, run] of Object.entries(scenarios)) if (!process.env.GAP_ACCOUNTS_SCENARIO_FILTER || name.includes(process.env.GAP_ACCOUNTS_SCENARIO_FILTER)) await run();
   for (const scenario of report.scenarios) { assert.deepEqual(scenario.pageErrors, []); assert.deepEqual(scenario.consoleErrors, []); assert.deepEqual(scenario.unexpected, []); assert.ok(!scenario.requests.some(request => request.path.includes('/jobs'))); }
   report.status = 'passed'; console.log(JSON.stringify({ status: report.status, scenarios: report.scenarios.length, output }));

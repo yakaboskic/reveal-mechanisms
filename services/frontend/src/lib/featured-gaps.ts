@@ -8,7 +8,6 @@ export function loadFeaturedGaps(ranked: readonly Schema<"GapRecord">[]): Schema
     if (identities.has(gap.object.id)) continue;
     identities.add(gap.object.id);
     selected.push(gap);
-    if (selected.length === 3) break;
   }
   return selected;
 }

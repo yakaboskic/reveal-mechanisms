@@ -1,7 +1,7 @@
 """Read-only discovery of accepted accounts already accessible to a workspace.
 
-There is no account publication model today. Source browsing is public, but
-membership rows never authorize another owner's private account or even its count.
+Workspace membership rows never authorize another owner's private account or
+its count. Explicit public snapshots are projected separately by publication.py.
 """
 from collections import Counter
 from copy import deepcopy

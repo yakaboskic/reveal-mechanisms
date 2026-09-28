@@ -15,8 +15,9 @@
       ],
       "rules": [
         "Search text is not a new inquiry. Trending entries disappear while typing.",
-        "Trending ranks by all-time distinct accepted account count for the exact gap digest within the caller workspace; visitors have no private account visibility.",
-        "The selected gap lists authorized scientific accounts with pagination; original author attribution does not change when ownership transfers."
+        "Trending defaults to explicitly published account counts across users. Workspace scope counts the authenticated owner accounts. Count ties shuffle per new browse with a signed cursor seed preserving that order across pages.",
+        "The selected gap lists authorized scientific accounts with pagination; original author attribution does not change when ownership transfers.",
+        "Question input and scope selector remain fixed while the paginated gap list scrolls; source order is preserved without editorial selection."
       ]
     },
     {
@@ -106,12 +107,16 @@
         "getClaim.request",
         "getGeneSet.request",
         "resolveDapperObject.request",
-        "downloadArtifact.request"
+        "downloadArtifact.request",
+        "getAccountPublication.request",
+        "updateAccountPublication.publish",
+        "updateAccountPublication.unpublish"
       ],
       "rules": [
         "Conclusions and Research statement are divider tabs.",
         "Claims open inline; no auto-opened first claim. Dedicated claim page has Assessment, Proposition, Evidence and Provenance tabs.",
-        "Partial provenance and unavailable downloads remain explicit."
+        "Partial provenance and unavailable downloads remain explicit.",
+        "Accounts remain private until the owner publishes a frozen snapshot with an optimistic version and idempotency key. Later accepted statements require an explicit publication update; unpublishing revokes public access. Public readers cannot access job telemetry or research writes."
       ]
     },
     {

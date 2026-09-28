@@ -54,8 +54,9 @@ Type to search; select an exact source question on the same page.
 - `GET /v1/knowledge-gaps/{gap_id}/accounts` — [request request/response](examples/listKnowledgeGapAccounts.request.json)
 
 - Search text is not a new inquiry. Trending entries disappear while typing.
-- Trending ranks by all-time distinct accepted account count for the exact gap digest within the caller workspace; visitors have no private account visibility.
+- Trending defaults to explicitly published account counts across users. Workspace scope counts the authenticated owner accounts. Count ties shuffle per new browse with a signed cursor seed preserving that order across pages.
 - The selected gap lists authorized scientific accounts with pagination; original author attribution does not change when ownership transfers.
+- Question input and scope selector remain fixed while the paginated gap list scrolls; source order is preserved without editorial selection.
 
 ### 2. Choose mechanism anchors
 
@@ -138,10 +139,14 @@ Read closing remarks; open associated claims on demand.
 - `GET /v1/gene-sets/{dapper_id}` — [request request/response](examples/getGeneSet.request.json)
 - `GET /v1/objects/{dapper_id}` — [request request/response](examples/resolveDapperObject.request.json)
 - `GET /v1/artifacts/{sha256}` — [request request/response](examples/downloadArtifact.request.json)
+- `GET /v1/accounts/{dapper_id}/publication` — [request request/response](examples/getAccountPublication.request.json)
+- `POST /v1/accounts/{dapper_id}/publication` — [publish request/response](examples/updateAccountPublication.publish.json)
+- `POST /v1/accounts/{dapper_id}/publication` — [unpublish request/response](examples/updateAccountPublication.unpublish.json)
 
 - Conclusions and Research statement are divider tabs.
 - Claims open inline; no auto-opened first claim. Dedicated claim page has Assessment, Proposition, Evidence and Provenance tabs.
 - Partial provenance and unavailable downloads remain explicit.
+- Accounts remain private until the owner publishes a frozen snapshot with an optimistic version and idempotency key. Later accepted statements require an explicit publication update; unpublishing revokes public access. Public readers cannot access job telemetry or research writes.
 
 ### 7. Generate the cited statement automatically
 
@@ -260,4 +265,4 @@ Request cancellation or recover from stale save/event cursor.
 
 Requests/responses are taken from the existing validated OpenAPI exchange library. The CADinT2D analysis/paragraph sequence is internally linked. The CAD source-selected gap now frames the request and account. The evidence package is a separate captured input; the authored account is not its validated agent output. Semantic scores and agent outputs remain illustrative fixtures.
 
-The mapping covers 32 operations and all 43 exchanges. OpenAPI SHA-256: `3cb0b5b4ed2fc522fce830db1884f455c2f9ed95784ee04e5d0ab8d285407f5e`. No endpoints or payloads were changed to build this diagram.
+The mapping covers 34 operations and all 46 exchanges. OpenAPI SHA-256: `820ee2599014d379a40f2084a51d4afbbffcaaa79da8ef412de5e3c4e8fe6702`. No endpoints or payloads were changed to build this diagram.

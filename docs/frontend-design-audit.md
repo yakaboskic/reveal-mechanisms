@@ -345,3 +345,48 @@ The isolated release frontend passed 28 unit tests and its production build;
 unrelated local admin changes were excluded from that build. Runtime verification
 checks exact deployed file hashes; live read-only discovery confirmed one saved
 account for the user's T2D gap and no private counts in public browsing.
+
+## Public publication and infinite gap browsing — 28 September 2026
+
+This section supersedes the earlier same-day owner-only account-count scope and
+first-three trending behavior. The default selector is now **Trending knowledge
+gaps**, ranked by explicitly published accounts across researchers. **Top
+questions in your workspace** selects authenticated saved-account counts. The
+selected question's account list follows the same scope and preserves original
+authorship. Existing accounts stay private until an owner chooses to publish.
+
+The question box and scope selector remain stationary while the remaining-height
+gap list scrolls. Pages load through an IntersectionObserver rooted in that list,
+with a visible Load more questions fallback. The UI preserves the backend order
+and opaque cursor, including stable randomized tie ordering within one browse.
+Expired gap/account cursors reset to the first page. Scope and identity changes
+clear previous records; account scientific reads also bind loaded state to the
+principal, preventing owner controls or private statements from surviving a
+workspace change.
+
+Scientific accounts now have explicit owner publication controls. Their disclosure
+names the account, claims, original author attribution, evidence/provenance and
+currently accepted statement/citations as publicly viewable and downloadable.
+Publication freezes that snapshot. Later statements remain private until an
+explicit update; private job activity and research write controls require
+`can_manage=true`. Unknown publication responses retry with the same version,
+body and key; conflicts refresh metadata before a new choice. Further behavior
+and exact API operations are documented in [account-publication.md](account-publication.md).
+
+The expanded gap browser harness passed 10 scenarios, plus two focused
+cursor-expiry/fallback cases; the publication harness passed four initial
+scenarios plus a focused update/version-conflict case. Evidence is in
+`.runtime/gap-accounts-audit/` (including `expiry/`) and
+`.runtime/publication-audit/` (including `update/`). A separate public-reader
+subset additionally follows a statement export and exact claim Evidence and
+Provenance routes without login; its report is in `publication-audit/reader/`.
+Desktop and 390px screenshots were inspected. All requests and session changes
+were intercepted; no live publishing, backend writes or research/model jobs were
+performed. Assertions found no unexpected requests, page errors, console errors
+or horizontal overflow. The expanded tests supersede the earlier seven-case
+ranking report.
+
+Frontend type checking and 35 unit tests passed. The regenerated contract/client,
+fixtures and API viewer validate 34 operations, 193 response examples and 46
+exchanges. These UI gates do not substitute for the backend's separate
+publication authorization and immutable-snapshot tests.

@@ -4,12 +4,13 @@
   "method": "GET",
   "path_template": "/v1/knowledge-gaps/{gap_id}",
   "request": {
-    "url": "https://api.reveal.example.org/v1/knowledge-gaps/dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk?source_revision=8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd",
+    "url": "https://api.reveal.example.org/v1/knowledge-gaps/dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk?source_revision=8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd&scope=public",
     "path": {
       "gap_id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk"
     },
     "query": {
-      "source_revision": "8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd"
+      "source_revision": "8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd",
+      "scope": "public"
     },
     "headers": {
       "Accept": "application/json"
@@ -117,5 +118,5 @@
       }
     }
   },
-  "curl": "curl -X GET 'https://api.reveal.example.org/v1/knowledge-gaps/dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk?source_revision=8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd' -H 'Accept: application/json'"
+  "curl": "curl -X GET 'https://api.reveal.example.org/v1/knowledge-gaps/dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk?source_revision=8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd&scope=public' -H 'Accept: application/json'"
 }

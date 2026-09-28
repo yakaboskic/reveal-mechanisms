@@ -4,14 +4,15 @@
   "method": "GET",
   "path_template": "/v1/knowledge-gaps",
   "request": {
-    "url": "https://api.reveal.example.org/v1/knowledge-gaps?kind=KNOWLEDGE_GAP&status=OPEN&source=dismech&disease_id=MONDO%3A0021661&limit=20",
+    "url": "https://api.reveal.example.org/v1/knowledge-gaps?kind=KNOWLEDGE_GAP&status=OPEN&source=dismech&disease_id=MONDO%3A0021661&limit=20&scope=public",
     "path": {},
     "query": {
       "kind": "KNOWLEDGE_GAP",
       "status": "OPEN",
       "source": "dismech",
       "disease_id": "MONDO:0021661",
-      "limit": 20
+      "limit": 20,
+      "scope": "public"
     },
     "headers": {
       "Accept": "application/json"
@@ -128,5 +129,5 @@
       }
     }
   },
-  "curl": "curl -X GET 'https://api.reveal.example.org/v1/knowledge-gaps?kind=KNOWLEDGE_GAP&status=OPEN&source=dismech&disease_id=MONDO%3A0021661&limit=20' -H 'Accept: application/json'"
+  "curl": "curl -X GET 'https://api.reveal.example.org/v1/knowledge-gaps?kind=KNOWLEDGE_GAP&status=OPEN&source=dismech&disease_id=MONDO%3A0021661&limit=20&scope=public' -H 'Accept: application/json'"
 }

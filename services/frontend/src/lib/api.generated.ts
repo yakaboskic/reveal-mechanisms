@@ -141,7 +141,7 @@ export interface paths {
         };
         /**
          * Browse knowledge gaps
-         * @description Browse imported DisMech gaps ordered by distinct accessible accepted scientific-account count descending, then native source ID and gap digest. Counts are all-time exact DAPPER gap identity matches, not text matches, attempts, paragraph jobs or an implicit source-revision rollup. With a signed session only that workspace is visible; without a session counts are zero because no account publication model exists. Private work from other owners is never counted. Invalid supplied credentials are rejected. Filters apply before pagination; count changes invalidate continuation cursors.
+         * @description Browse imported DisMech gaps ordered by distinct scientific-account count descending. Public scope (default) counts only explicitly published snapshots across users; workspace scope requires a session and counts owned saved accounts. Equal-count gaps shuffle on each new browse; a server seed in the signed continuation cursor preserves tie order across pages. Exact gap digests only: no text matching, attempts, paragraph jobs or implicit source-revision rollup. Invalid supplied credentials are rejected even for public reads. Filters apply before pagination; count or corpus changes expire cursors.
          */
         get: operations["listKnowledgeGaps"];
         put?: never;
@@ -325,7 +325,7 @@ export interface paths {
         };
         /**
          * Inspect a scientific account
-         * @description Returns exact DAPPER records, schema pin, payload checksums and provenance document. Scientific IDs never redirect to a newer revision. Select payload_sha256 to recover an exact historical observation; otherwise the server returns its designated current observation and checksum. Unhashable locator changes can share a scientific ID. Access is enforced independently of citation metadata. Upstream closure follows scientific references and provenance inputs only, max_depth 0..5 and max_nodes 1..250 (default 5/250). An opaque cursor continues the same owner/filter/payload observation; missing or bounded references are reported explicitly. Unauthorized references are omitted without revealing private identifiers.
+         * @description Returns exact DAPPER records, schema pin, payload checksums and provenance document. Scientific IDs never redirect to a newer revision. Select payload_sha256 to recover an exact historical observation; otherwise the server returns its designated current observation and checksum. Unhashable locator changes can share a scientific ID. Access is enforced independently of citation metadata. Upstream closure follows scientific references and provenance inputs only, max_depth 0..5 and max_nodes 1..250 (default 5/250). An opaque cursor continues the same owner/filter/payload observation; missing or bounded references are reported explicitly. Unauthorized references are omitted without revealing private identifiers. A valid owner retains private access. Without owner access, only an active explicit publication snapshot authorizes this scientific resource, exact cited revisions and reachable source artifacts. Invalid supplied credentials fail even on public reads. Unpublication revokes snapshot access; job/draft/request routes remain private.
          */
         get: operations["getAccount"];
         put?: never;
@@ -345,7 +345,7 @@ export interface paths {
         };
         /**
          * Inspect a claim and its evidence
-         * @description Returns exact DAPPER records, schema pin, payload checksums and provenance document. Scientific IDs never redirect to a newer revision. Select payload_sha256 to recover an exact historical observation; otherwise the server returns its designated current observation and checksum. Unhashable locator changes can share a scientific ID. Access is enforced independently of citation metadata. Upstream closure follows scientific references and provenance inputs only, max_depth 0..5 and max_nodes 1..250 (default 5/250). An opaque cursor continues the same owner/filter/payload observation; missing or bounded references are reported explicitly. Unauthorized references are omitted without revealing private identifiers.
+         * @description Returns exact DAPPER records, schema pin, payload checksums and provenance document. Scientific IDs never redirect to a newer revision. Select payload_sha256 to recover an exact historical observation; otherwise the server returns its designated current observation and checksum. Unhashable locator changes can share a scientific ID. Access is enforced independently of citation metadata. Upstream closure follows scientific references and provenance inputs only, max_depth 0..5 and max_nodes 1..250 (default 5/250). An opaque cursor continues the same owner/filter/payload observation; missing or bounded references are reported explicitly. Unauthorized references are omitted without revealing private identifiers. A valid owner retains private access. Without owner access, only an active explicit publication snapshot authorizes this scientific resource, exact cited revisions and reachable source artifacts. Invalid supplied credentials fail even on public reads. Unpublication revokes snapshot access; job/draft/request routes remain private.
          */
         get: operations["getClaim"];
         put?: never;
@@ -365,7 +365,7 @@ export interface paths {
         };
         /**
          * Inspect a DAPPER GeneSet
-         * @description Returns exact DAPPER records, schema pin, payload checksums and provenance document. Scientific IDs never redirect to a newer revision. Select payload_sha256 to recover an exact historical observation; otherwise the server returns its designated current observation and checksum. Unhashable locator changes can share a scientific ID. Access is enforced independently of citation metadata.
+         * @description Returns exact DAPPER records, schema pin, payload checksums and provenance document. Scientific IDs never redirect to a newer revision. Select payload_sha256 to recover an exact historical observation; otherwise the server returns its designated current observation and checksum. Unhashable locator changes can share a scientific ID. Access is enforced independently of citation metadata. A valid owner retains private access. Without owner access, only an active explicit publication snapshot authorizes this scientific resource, exact cited revisions and reachable source artifacts. Invalid supplied credentials fail even on public reads. Unpublication revokes snapshot access; job/draft/request routes remain private.
          */
         get: operations["getGeneSet"];
         put?: never;
@@ -385,7 +385,7 @@ export interface paths {
         };
         /**
          * Get a cited paragraph
-         * @description Returns exact DAPPER records, schema pin, payload checksums and provenance document. Scientific IDs never redirect to a newer revision. Select payload_sha256 to recover an exact historical observation; otherwise the server returns its designated current observation and checksum. Unhashable locator changes can share a scientific ID. Access is enforced independently of citation metadata.
+         * @description Returns exact DAPPER records, schema pin, payload checksums and provenance document. Scientific IDs never redirect to a newer revision. Select payload_sha256 to recover an exact historical observation; otherwise the server returns its designated current observation and checksum. Unhashable locator changes can share a scientific ID. Access is enforced independently of citation metadata. A valid owner retains private access. Without owner access, only an active explicit publication snapshot authorizes this scientific resource, exact cited revisions and reachable source artifacts. Invalid supplied credentials fail even on public reads. Unpublication revokes snapshot access; job/draft/request routes remain private.
          */
         get: operations["getParagraph"];
         put?: never;
@@ -405,7 +405,7 @@ export interface paths {
         };
         /**
          * Resolve any supported DAPPER object
-         * @description Generic durable resolver for Questions, KnowledgeGaps, evidence, files and other schema-supported records. This supplies citation object_payload_ref resolution. DAPPER identity does not imply public access. Returns no other user's private provenance. Upstream closure follows scientific references and provenance inputs only, max_depth 0..5 and max_nodes 1..250 (default 5/250). An opaque cursor continues the same owner/filter/payload observation; missing or bounded references are reported explicitly. Unauthorized references are omitted without revealing private identifiers.
+         * @description Generic durable resolver for Questions, KnowledgeGaps, evidence, files and other schema-supported records. This supplies citation object_payload_ref resolution. DAPPER identity does not imply public access. Returns no other user's private provenance. Upstream closure follows scientific references and provenance inputs only, max_depth 0..5 and max_nodes 1..250 (default 5/250). An opaque cursor continues the same owner/filter/payload observation; missing or bounded references are reported explicitly. Unauthorized references are omitted without revealing private identifiers. A valid owner retains private access. Without owner access, only an active explicit publication snapshot authorizes this scientific resource, exact cited revisions and reachable source artifacts. Invalid supplied credentials fail even on public reads. Unpublication revokes snapshot access; job/draft/request routes remain private.
          */
         get: operations["resolveDapperObject"];
         put?: never;
@@ -425,7 +425,7 @@ export interface paths {
         };
         /**
          * Get citation metadata or an export
-         * @description format controls the representation: native (default) application/json; csl-json application/vnd.citationstyles.csl+json; bibtex application/x-bibtex; biblatex application/x-biblatex; apa/mla text/plain. Incompatible Accept returns 406. revision pins exact metadata; omission selects latest accessible metadata for this exact scientific ID. Paragraph consumers MUST supply the pinned revision. Claims, Questions and KnowledgeGaps only. Unknown authors/dates stay unknown; no DOI is emitted without registration. APA/MLA examples illustrate the interface, not a tested renderer.
+         * @description format controls the representation: native (default) application/json; csl-json application/vnd.citationstyles.csl+json; bibtex application/x-bibtex; biblatex application/x-biblatex; apa/mla text/plain. Incompatible Accept returns 406. revision pins exact metadata; omission selects latest accessible metadata for this exact scientific ID. Paragraph consumers MUST supply the pinned revision. Claims, Questions and KnowledgeGaps only. Unknown authors/dates stay unknown; no DOI is emitted without registration. APA/MLA examples illustrate the interface, not a tested renderer. A valid owner retains private access. Without owner access, only an active explicit publication snapshot authorizes this scientific resource, exact cited revisions and reachable source artifacts. Invalid supplied credentials fail even on public reads. Unpublication revokes snapshot access; job/draft/request routes remain private.
          */
         get: operations["getCitation"];
         put?: never;
@@ -447,7 +447,7 @@ export interface paths {
         put?: never;
         /**
          * Render a paragraph’s complete citation set
-         * @description Format the saved paragraph's occurrences together for consistent numbering and author/year disambiguation. Exact metadata revisions and current permissions are required. Rendering is deterministic for pinned inputs/configuration and may be cached; it does not modify scientific IDs or launch an agent. Style/processor selection is deployment configuration, captured in the rendering manifest.
+         * @description Format the saved paragraph's occurrences together for consistent numbering and author/year disambiguation. Exact metadata revisions and current permissions are required. Rendering is deterministic for pinned inputs/configuration and may be cached; it does not modify scientific IDs or launch an agent. Style/processor selection is deployment configuration, captured in the rendering manifest. A valid owner retains private access. Without owner access, only an active explicit publication snapshot authorizes this scientific resource, exact cited revisions and reachable source artifacts. Invalid supplied credentials fail even on public reads. Unpublication revokes snapshot access; job/draft/request routes remain private.
          */
         post: operations["renderCitations"];
         delete?: never;
@@ -485,11 +485,35 @@ export interface paths {
         };
         /**
          * List visible scientific accounts for a knowledge gap
-         * @description Accepted accounts for the exact DAPPER KnowledgeGap identity, newest first then account ID, deduplicated by scientific-account digest. Optional signed session selects only its authorized workspace memberships; no session returns an empty list because accounts are not publicly published. Counts and lists never reveal another private owner. Historical source observations with the same exact gap digest remain the same scientific question; changed gap digests never merge. Optional source_revision checks the selected catalog observation. Attribution is the immutable original request actor, not current ownership. Uses the same account read authorization as /v1/accounts; each account ID links to its existing account endpoint.
+         * @description Accepted accounts for the exact DAPPER KnowledgeGap identity, newest first then account ID, deduplicated by scientific-account digest. Public scope (default) lists explicitly published snapshots across owners and omits private job IDs. Workspace scope requires a valid session and lists only its saved accounts. Invalid supplied sessions are rejected for either scope. Source-revision checks validate the selected observation; changed gap digests never merge. Attribution remains the original request actor. Each account ID links to its existing scientific endpoint, whose public reads are restricted to its published snapshot.
          */
         get: operations["listKnowledgeGapAccounts"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/accounts/{dapper_id}/publication": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Inspect account publication
+         * @description Owner receives mutable publication controls even while private. Other readers receive only an active public publication with can_manage=false. Publishing is separate from scientific identity and frozen citation metadata; old citation access labels describe that exact historical metadata revision.
+         */
+        get: operations["getAccountPublication"];
+        put?: never;
+        /**
+         * Publish, update or unpublish an account
+         * @description Explicit owner-only choice, also available to anonymous workspace owners. Publishing freezes the complete accepted account provenance and current accepted paragraph, exact citation revisions and only reachable source artifacts. Future paragraphs remain private until an explicit update. Unpublishing revokes this snapshot immediately; identical content independently published elsewhere stays public. No job logs, draft, queue, request or unrelated owner artifacts are published. Immutable scientific IDs, citations and original authorship do not change.
+         */
+        post: operations["updateAccountPublication"];
         delete?: never;
         options?: never;
         head?: never;
@@ -549,7 +573,7 @@ export interface paths {
         };
         /**
          * Download an authorized captured source
-         * @description Download exact captured bytes after owner authorization and SHA-256 verification. A digest is not an access grant. The File metadata describes the media type; the response uses attachment disposition, private no-store caching and nosniff. Missing captures remain explicitly unavailable; this route never fetches mutable source URLs.
+         * @description Download exact captured bytes after owner authorization and SHA-256 verification. A digest is not an access grant. The File metadata describes the media type; the response uses attachment disposition, private no-store caching and nosniff. Missing captures remain explicitly unavailable; this route never fetches mutable source URLs. A valid owner retains private access. Without owner access, only an active explicit publication snapshot authorizes this scientific resource, exact cited revisions and reachable source artifacts. Invalid supplied credentials fail even on public reads. Unpublication revokes snapshot access; job/draft/request routes remain private.
          */
         get: operations["downloadArtifact"];
         put?: never;
@@ -569,7 +593,7 @@ export interface paths {
         };
         /**
          * Export a cited research statement
-         * @description Return content and download metadata in JSON. Markdown includes linked references; rich-text returns sanitized clipboard HTML plus plain text; LaTeX uses cite commands and references.bib. BibTeX contains every distinct exact target/revision cited by the paragraph. These numbered-reference exports do not claim APA/MLA styling. Fixture links are local-preview URLs; runtime must render authorized canonical resolver URLs.
+         * @description Return content and download metadata in JSON. Markdown includes linked references; rich-text returns sanitized clipboard HTML plus plain text; LaTeX uses cite commands and references.bib. BibTeX contains every distinct exact target/revision cited by the paragraph. These numbered-reference exports do not claim APA/MLA styling. Fixture links are local-preview URLs; runtime must render authorized canonical resolver URLs. A valid owner retains private access. Without owner access, only an active explicit publication snapshot authorizes this scientific resource, exact cited revisions and reachable source artifacts. Invalid supplied credentials fail even on public reads. Unpublication revokes snapshot access; job/draft/request routes remain private.
          */
         get: operations["exportParagraph"];
         put?: never;
@@ -3152,6 +3176,7 @@ export interface components {
             citation_metadata: components["schemas"]["CitationMetadata"][];
             artifacts: components["schemas"]["ArtifactAccess"][];
             research_statement: components["schemas"]["ParagraphState"];
+            publication?: components["schemas"]["PublicationState"];
             coverage: components["schemas"]["TraversalCoverage"];
         };
         ClaimResult: {
@@ -3351,6 +3376,22 @@ export interface components {
             job_id: string | null;
             paragraph_id: string | null;
         };
+        /** @description Mutable application publication control, separate from immutable DAPPER content and citation revisions. A public snapshot contains only the accepted graph and cited statement present when explicitly published. Later accepted statements require Update publication. can_manage is true only for this account owner, including an anonymous workspace. No job telemetry is public. */
+        PublicationState: {
+            /** @enum {string} */
+            visibility: "private" | "public";
+            version: number;
+            published_at: string | null;
+            updated_at: string | null;
+            can_manage: boolean;
+            has_unpublished_changes: boolean;
+        };
+        /** @description Explicit owner publication choice. public creates or updates a frozen public snapshot; private revokes this owner publication. Optimistic version and Idempotency-Key prevent stale or duplicate choices. Existing accounts start private/version0. */
+        PublicationInput: {
+            /** @enum {string} */
+            visibility: "private" | "public";
+            expected_version: number;
+        };
         /** @description One accessible accepted scientific account, deduplicated by its DAPPER identity. Optional attribution is the immutable original request actor, not the current workspace owner; null denotes unavailable historical attribution. Title and brief synthesis are account.name and account.closing_remarks. */
         AccountSummary: {
             account: components["schemas"]["DapperScientificAccount"];
@@ -3358,8 +3399,7 @@ export interface components {
             claim_count: number;
             /** Format: date-time */
             created_at: string;
-            /** Format: uuid */
-            job_id: string;
+            job_id: string | null;
             research_statement: components["schemas"]["ParagraphState"];
             attribution?: components["schemas"]["AttributionSnapshot"] | null;
         };
@@ -6803,6 +6843,8 @@ export interface operations {
                  * @example opaque-next-page
                  */
                 cursor?: string;
+                /** @example public */
+                scope?: "public" | "workspace";
             };
             header?: never;
             path?: never;
@@ -6885,6 +6927,8 @@ export interface operations {
                  * @example opaque-next-page
                  */
                 cursor?: string;
+                /** @example public */
+                scope?: "public" | "workspace";
             };
             header?: never;
             path?: never;
@@ -6939,6 +6983,8 @@ export interface operations {
             query?: {
                 /** @example 8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd */
                 source_revision?: string;
+                /** @example public */
+                scope?: "public" | "workspace";
             };
             header?: never;
             path: {
@@ -8170,6 +8216,8 @@ export interface operations {
             query?: {
                 /** @example 8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd */
                 source_revision?: string;
+                /** @example public */
+                scope?: "public" | "workspace";
                 /** @example 20 */
                 limit?: number;
                 /**
@@ -8230,6 +8278,157 @@ export interface operations {
             };
             /** @description Version Conflict */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate Limited */
+            429: {
+                headers: {
+                    /** @example 30 */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getAccountPublication: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values.
+                 * @example dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd
+                 */
+                dapper_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationState"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate Limited */
+            429: {
+                headers: {
+                    /** @example 30 */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    updateAccountPublication: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description Unique per caller and operation for at least 7 days. Same key and same canonical body replay the original accepted response; changed body returns 409 IDEMPOTENCY_CONFLICT. Compare idempotency before draft-version checks on retries.
+                 * @example 66666666-6666-4666-8666-666666666666
+                 */
+                "Idempotency-Key": string;
+            };
+            path: {
+                /**
+                 * @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values.
+                 * @example dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd
+                 */
+                dapper_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublicationInput"];
+            };
+        };
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationState"];
+                };
+            };
+            /** @description Invalid Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Version Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid Input */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -68,11 +68,11 @@ class Transaction:
     def remove(self, kind, identity):
         self.execute('DELETE FROM reveal_records WHERE kind=%s AND id=%s', (kind, identity))
     def transfer(self, source, target):
-        for kind in ('object','account','paragraph','grant','account_membership','exploration','outbox','artifact','object_document','scientific_document','object_observation'):
+        for kind in ('object','account','paragraph','grant','account_membership','publication','exploration','outbox','artifact','object_document','scientific_document','object_observation'):
             for row in self.list(kind,source):
                 data=row['data']
                 identity=(data.get('result',data).get('root_id') if kind in ('object','account','paragraph') else
-                    data['target_id'] if kind=='grant' else data['sha256'] if kind in ('artifact','scientific_document') else data['object_id'] if kind in ('object_document','object_observation') else data['account_id'] if kind in ('account_membership','outbox') else data['knowledge_gap']['id'])
+                    data['target_id'] if kind=='grant' else data['sha256'] if kind in ('artifact','scientific_document') else data['object_id'] if kind in ('object_document','object_observation') else data['account_id'] if kind in ('account_membership','outbox','publication') else data['knowledge_gap']['id'])
                 destination=digest([target,identity,'default-paragraph']) if kind=='outbox' else digest([target,identity])
                 if kind=='object_observation':
                     from .evidence_package import canonical_json,sha256
