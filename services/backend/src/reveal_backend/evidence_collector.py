@@ -327,7 +327,8 @@ def collect_package(*, gap_id, factor_ids, output, dapper, project_root, dismech
         context['prefixes'] = prefixes
         instructions = []
         paths = ['services/backend/agent-skills/construct-scientific-account/SKILL.md', 'docs/evidence-package.md',
-                 'docs/scientific-account-construction.md', 'docs/pigean-claim-model.md', 'docs/dapper-integration.md', 'docs/agent-evidence-integration.md']
+                 'docs/scientific-account-construction.md', 'docs/pigean-claim-model.md', 'docs/dapper-integration.md', 'docs/agent-evidence-integration.md',
+                 'services/backend/agent-skills/read-evidence-package/SKILL.md']
         for i, path in enumerate(paths):
             data = (project_root / path).read_bytes(); key = 'instruction-' + str(i)
             store.add(key, data, 'text', filename=Path(path).name, origin=path)

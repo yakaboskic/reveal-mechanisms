@@ -85,7 +85,7 @@ def validate_execution_ledger(result,request,expected_model=None):
     require(runtime.get('input_sha256')==sha256(request.input_path.read_bytes()),'Execution used different input bytes')
     lock=decode(LOCK.read_bytes())
     require(runtime.get('dapper',{}).get('commit')==lock['commit'],'Execution used a different DAPPER release')
-    require(runtime.get('model')==(expected_model or setting('REVEAL_CLAUDE_MODEL','claude-sonnet-4-6')),'Execution model differs from measured input model')
+    require(runtime.get('model')==(expected_model or setting('REVEAL_CLAUDE_MODEL','claude-sonnet-4-6')),'Execution model differs from frozen input model')
     ledger_path=assert_artifact(result.ledger_manifest_path,request.output_dir); ledger=decode(ledger_path.read_bytes())
     require(ledger.get('format')=='reveal.tool-ledger/1' and ledger.get('job_id')==request.job_id and ledger.get('attempt')==request.attempt and ledger.get('complete') is True,'Tool ledger is incomplete or belongs to another execution')
     sequences=set()
@@ -135,22 +135,22 @@ def collect(job,frozen,binding,budgets,directory):
             package_path=directory/'package/evidence-package.json'
         runtime=DapperRuntime(ROOT/'data/dapper/2026-09-24-v8')
         requested_limit=budgets.get('candidates_per_type',100)
-        effective_limit=min(requested_limit,max(1,budgets.get('evidence_tokens',24000)//3000))
         runs={a.get('embedding_run_id') for a in binding['anchors'] if a.get('embedding_run_id')}
         retrieval=binding.get('retrieval',{})
         metadata={'origins':{a['reference']['source_id']:a['origin'] for a in frozen['composer']['eaggl_anchors']},
             'dismissed_eaggl_ids':frozen['composer']['dismissed_source_ids'],
             'semantic_retrieval':{'status':'computed' if any(r and r.get('mode') in ('semantic','hybrid') for r in retrieval.values()) else 'not_computed',
                 'embedding_run_id':next(iter(runs)) if len(runs)==1 else None},'frozen_binding':binding,
-            'collection_budget':{'requested_max_candidates_per_type':requested_limit,'effective_candidates_per_type':effective_limit,
-                'evidence_token_budget':budgets.get('evidence_tokens',24000),'policy':'Initial candidate cap uses floor(token_budget/3000); measured package reduction enforces the exact model budget.'}}
+            'collection_budget':{'requested_max_candidates_per_type':requested_limit,'effective_candidates_per_type':requested_limit,
+                'max_nodes':budgets.get('max_nodes',250),'max_edges':budgets.get('max_edges',1000),
+                'policy':'Configured source retrieval and graph bounds; complete captured evidence is supplied as files for bounded on-demand reads.'}}
         if len(runs)!=1: metadata['semantic_retrieval']['status']='not_computed'
         built=collect_package(gap_id=frozen['composer']['source_gap']['source_id'],factor_ids=[a['cfde_node_id'] for a in binding['anchors']],
             output=directory,dapper=runtime,project_root=ROOT,dismech_source=Path(setting('REVEAL_DISMECH_SOURCE',str(ROOT.parent/'dismech'))),
             dismech_index=ROOT/'data/dismech-gaps/2026-09-24',geneset_import=ROOT/'data/cfde-genesets/2026-09-24',
             geneset_resolver=geneset_resolver(binding['anchors'][0]['gene_set_import_id']),
             selected_graphs=frozen['composer']['selected_kgs'],max_accounts=budgets.get('max_accounts',3),selection_metadata=metadata,
-            limit=effective_limit,max_nodes=budgets.get('max_nodes',250),max_edges=budgets.get('max_edges',1000))
+            limit=requested_limit,max_nodes=budgets.get('max_nodes',250),max_edges=budgets.get('max_edges',1000))
         package=built.package
     validate_package_shape(package,load_generated_schema(ROOT/'schema/evidence-package.schema.json'))
     gap=next(g for g in package['dapper_context']['knowledge_gaps'] if g['id']==frozen['question_id'])
@@ -159,17 +159,6 @@ def collect(job,frozen,binding,budgets,directory):
     require(set(package['selection']['eaggl_mechanism_ids'])=={a['cfde_node_id'] for a in binding['anchors']},'Collector changed native selected anchors')
     require(package['external_evidence']['selected_graphs']==frozen['composer']['selected_kgs'],'Collector changed selected graphs')
     return package_path,package
-
-def count_input_tokens(package_path,mode,budget):
-    if mode=='deterministic':
-        return {'method':'development-byte-upper-bound','count':len(package_path.read_bytes()),'budget':budget,'enforced':False}
-    import httpx
-    key=setting('ANTHROPIC_API_KEY'); require(bool(key),'ANTHROPIC_API_KEY is required for measured input budget')
-    response=httpx.post('https://api.anthropic.com/v1/messages/count_tokens',headers={'x-api-key':key,'anthropic-version':'2023-06-01'},
-        json={'model':setting('REVEAL_CLAUDE_MODEL','claude-sonnet-4-6'),'messages':[{'role':'user','content':package_path.read_text()}]},timeout=60)
-    require(response.status_code==200,'Anthropic input token measurement failed')
-    count=response.json()['input_tokens']; require(count<=budget,f'Evidence token budget exceeded ({count} > {budget})')
-    return {'method':'anthropic-count-tokens','count':count,'budget':budget,'enforced':True}
 
 class Worker:
     def __init__(self,repository=None,adapter=None):

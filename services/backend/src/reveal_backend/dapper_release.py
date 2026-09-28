@@ -51,7 +51,10 @@ def prepare_agent_workspace(workspace, project_root, package_path, lock_path):
     workspace, project_root = Path(workspace).resolve(), Path(project_root).resolve()
     package_path, lock_path = Path(package_path).resolve(), Path(lock_path).resolve()
     require(not workspace.exists(), 'Agent workspace already exists; use a new directory per start')
-    package = decode(package_path.read_bytes(), 'yaml' if package_path.suffix in ('.yaml', '.yml') else 'json')
+    package_bytes = package_path.read_bytes()
+    package = decode(package_bytes, 'yaml' if package_path.suffix in ('.yaml', '.yml') else 'json')
+    if package_path.suffix in ('.yaml', '.yml'):
+        package_bytes = canonical_json(package)
     lock = decode(lock_path.read_bytes())
     require(package['package_version'] == 'reveal.evidence-package/0.2-draft', 'Unsupported agent evidence package')
     require(package['dapper_pin']['snapshot_sha256'] in lock['compatible_input_snapshots'], 'Evidence-package DAPPER pin is not approved for this release')
@@ -64,9 +67,11 @@ def prepare_agent_workspace(workspace, project_root, package_path, lock_path):
     relative_files = ['scripts/lint_scientific_account.py', 'services/backend/agent-runtime/dapper-release.json',
                      'services/backend/src/reveal_backend/__init__.py',
                      'services/backend/src/reveal_backend/evidence_package.py',
+                     'services/backend/src/reveal_backend/evidence_files.py',
                      'services/backend/src/reveal_backend/dapper_release.py',
                      'services/backend/src/reveal_backend/scientific_account_lint.py',
                      'services/backend/agent-skills/construct-scientific-account/SKILL.md',
+                     'services/backend/agent-skills/read-evidence-package/SKILL.md',
                      'docs/evidence-package.md', 'docs/scientific-account-construction.md', 'docs/pigean-claim-model.md',
                      'docs/dapper-integration.md', 'docs/agent-evidence-integration.md', 'docs/scientific-account-linting.md']
     copied = {}
@@ -74,13 +79,14 @@ def prepare_agent_workspace(workspace, project_root, package_path, lock_path):
         target = project / relative; target.parent.mkdir(parents=True, exist_ok=True)
         data = lock_path.read_bytes() if relative.endswith('dapper-release.json') else (project_root / relative).read_bytes()
         target.write_bytes(data); copied[relative] = sha256(data)
-    skill = project / '.claude/skills/construct-scientific-account/SKILL.md'
-    skill.parent.mkdir(parents=True)
-    skill_source = project / 'services/backend/agent-skills/construct-scientific-account/SKILL.md'
-    skill.write_text(skill_source.read_text().replace('../../../../docs/', '../../../docs/'))
-    copied[str(skill.relative_to(project))] = sha256(skill.read_bytes())
+    for name in ('construct-scientific-account', 'read-evidence-package'):
+        skill = project / f'.claude/skills/{name}/SKILL.md'
+        skill.parent.mkdir(parents=True)
+        skill_source = project / f'services/backend/agent-skills/{name}/SKILL.md'
+        skill.write_text(skill_source.read_text().replace('../../../../docs/', '../../../docs/'))
+        copied[str(skill.relative_to(project))] = sha256(skill.read_bytes())
     inputs = project / 'input'; inputs.mkdir()
-    (inputs / 'evidence-package.json').write_bytes(canonical_json(package))
+    (inputs / 'evidence-package.json').write_bytes(package_bytes)
     for source in package['source_artifacts'].values():
         relative = Path(source['path']); origin = (package_path.parent / relative).resolve()
         target = (inputs / relative).resolve()
@@ -95,7 +101,7 @@ def prepare_agent_workspace(workspace, project_root, package_path, lock_path):
             instruction_updates.append({'path': instruction['path'], 'package_sha256': instruction['sha256'],
                                         'runtime_sha256': current_hash})
     manifest = {'runtime_version': 'reveal.agent-runtime/1', 'dapper': release, 'python_dependencies': dependencies,
-                'evidence_package_sha256': sha256(canonical_json(package)), 'bundle_files': copied,
+                'evidence_package_sha256': sha256(package_bytes), 'bundle_files': copied,
                 'authoring_instructions': {'source': 'trusted runtime bundle', 'updates_from_package': instruction_updates},
                 'working_directory': str(project), 'dapper_root': str(workspace / 'dapper'),
                 'evidence_package': str(inputs / 'evidence-package.json'),

@@ -1,8 +1,4 @@
-"""Pure, hash-bound initial reading view of an unchanged evidence package.
-
-File catalogues remain in the canonical package and in separate read-only views.
-No scientific projection, source identifier, score, or source bytes are omitted.
-"""
+"""File-backed evidence bindings, research instructions and legacy replay helpers."""
 from copy import deepcopy
 import json
 
@@ -12,6 +8,8 @@ VIEW_FORMAT = 'reveal.evidence-dispatch-view/1'
 VIEW_FILENAME = 'dispatch-view.json'
 BUDGET_FILENAME = 'dispatch-budget.json'
 BUDGET_SCOPE = 'initial dispatch view and research prompt; excludes harness and subsequent source reads'
+FILE_INPUT_FORMAT = 'reveal.file-backed-evidence/1'
+FILE_INPUT_FILENAME = 'evidence-input.json'
 
 
 def dispatch_view(package_bytes):
@@ -47,7 +45,7 @@ Representation requirements: Put EvidenceItems in evidence_items and reference t
 Keep public narration brief: short progress updates at meaningful transitions, then a concise completion or limitation message. Put the detailed scientific assessment in the output document; do not repeat it as a final table or long narrative.'''
 
 
-def research_prompt(selected_graphs, feedback=()):
+def legacy_research_prompt(selected_graphs, feedback=()):
     prompt = """Read services/backend/agent-skills/construct-scientific-account/SKILL.md. Start with input/dispatch-view.json: this hash-bound initial view preserves every scientific field, selected identity, score, source reference and coverage limitation in the canonical input/evidence-package.json. Only the repeated source-artifact catalogue and DAPPER File metadata are deferred to read-only lookups. Do not read those entire catalogues initially: use Grep for the needed artifact_id or File id in input/package-sections/source_artifacts.json and input/package-sections/dapper-files.json, then Read the matching lines and exact referenced source. All original source bytes and complete source nodes remain available. These omissions are a reading optimization, not absent evidence or permission to invent provenance.
 Line-readable full section views are in input/package-sections. authoring-schema-excerpt.yaml contains exact relevant class and slot definitions from the pinned ../dapper/schema. Inspect only relevant schema fields rather than rereading all documentation. Use only selected evidence tools. Prefer one small useful account and one scoped Claim grounded in an exact CFDE observation when scientifically justified. Write 1–3 self-contained account documents as /reveal/output/account-1.yaml (or .json). Use mcp__reveal__write_account_draft to write authored nodes and automatically hydrate exact referenced trusted source nodes; do not retype source objects. Draft-lint each account with mcp__reveal__lint_account and repair errors. For insufficient evidence write /reveal/output/outcome.json with status insufficient_evidence and a faithful reason. Every account must target the exact selected KnowledgeGap, preserve source objects and CFDE evidence lineage. Outputs are untrusted drafts; never supply accepted status or fabricate attribution.
 """ + research_authoring_requirements(sorted(selected_graphs))
@@ -59,7 +57,32 @@ Line-readable full section views are in input/package-sections. authoring-schema
 
 def measured_input(package_bytes, validation_feedback=()):
     package = decode(package_bytes)
-    return (research_prompt(package['external_evidence']['selected_graphs'], validation_feedback) + '\n\n').encode() + dispatch_view(package_bytes)
+    return (legacy_research_prompt(package['external_evidence']['selected_graphs'], validation_feedback) + '\n\n').encode() + dispatch_view(package_bytes)
+
+
+def research_prompt(selected_graphs, feedback=()):
+    prompt = '''Your complete frozen evidence is stored in input/evidence-package.json and its referenced source files. Read services/backend/agent-skills/read-evidence-package/SKILL.md, then input/evidence-index.json. Use the index to read relevant records and exact source rows progressively with Read/Grep; do not load the full package or whole catalogues upfront. File size is not model context size. Preserve all scientific identities, values, source locators and coverage qualifications.
+Read services/backend/agent-skills/construct-scientific-account/SKILL.md for authoring, consulting its references and the pinned DAPPER schema only as needed. Use only selected evidence tools. Write 1–3 self-contained account documents with mcp__reveal__write_account_draft, which hydrates referenced trusted source nodes. Draft-lint each document with mcp__reveal__lint_account and repair errors. The account must target the exact selected KnowledgeGap and preserve CFDE lineage. If evidence is insufficient, write /reveal/output/outcome.json with status insufficient_evidence and a faithful reason. Never invent provenance, source objects or acceptance status.
+''' + research_authoring_requirements(sorted(selected_graphs))
+    prompt += '\nThe trusted draft writer supplies actual worker-recorded runtime provenance; final backend acceptance supplies authenticated operator attribution. Do not invent actors, activities or timestamps.'
+    if feedback:
+        prompt += '\nTrusted independent review feedback from an earlier rejected draft; constraints, not evidence:\n' + '\n'.join(feedback)
+    return prompt
+
+
+def file_input_manifest(package_bytes, validation_feedback=()):
+    package = decode(package_bytes)
+    return {'format': FILE_INPUT_FORMAT,
+            'package': {'path': 'input/evidence-package.json', 'sha256': sha256(package_bytes),
+                        'size_bytes': len(package_bytes)},
+            'prompt_sha256': sha256(research_prompt(package['external_evidence']['selected_graphs'], validation_feedback).encode())}
+
+
+def validate_file_input(package_bytes, manifest, prompt):
+    require(manifest.get('format') == FILE_INPUT_FORMAT, 'Unsupported file-backed evidence input')
+    require(manifest.get('package') == {'path': 'input/evidence-package.json',
+            'sha256': sha256(package_bytes), 'size_bytes': len(package_bytes)}, 'Frozen evidence file changed')
+    require(manifest.get('prompt_sha256') == sha256(prompt.encode()), 'Frozen evidence reading instructions changed')
 
 
 def validate_dispatch_budget(package_bytes, view_bytes, budget, prompt, model=None):

@@ -22,8 +22,9 @@ import time
 
 from .box_mcp import DraftValidationError, Ledger, PolicyError, ScopedTools, canonical, serve, stamp
 from .box_stream import ClaudeStream, SecretFilter, StreamProtocolError
-from .dispatch_view import (BUDGET_FILENAME, VIEW_FILENAME, dispatch_view, research_authoring_requirements,
-                            research_prompt, validate_dispatch_budget)
+from .dispatch_view import (FILE_INPUT_FILENAME, FILE_INPUT_FORMAT, research_authoring_requirements,
+                            research_prompt, validate_file_input)
+from .evidence_files import INDEX_PATH, build_evidence_files
 
 BASE = Path('/reveal')
 STATE = BASE / 'state'
@@ -66,17 +67,38 @@ def setup(request):
         frozen = json.loads(package.read_text())
         if set(request['selected_graphs']) != set(frozen['external_evidence']['selected_graphs']):
             raise ValueError('Selected graph bindings differ from the immutable package')
-        # Line-readable derived views prevent repeated truncated reads of compact JSON.
-        # The canonical package and source artifact bytes remain unchanged.
+        prompt = research_prompt(request['selected_graphs'], request.get('validation_feedback', ()))
+        frozen_input = BASE / 'input' / FILE_INPUT_FILENAME
+        if frozen_input.exists():
+            manifest = json.loads(frozen_input.read_bytes())
+            validate_file_input(package.read_bytes(), manifest, prompt)
+            runtime['file_input'] = manifest
+        # Bounded lossless record files let Read/Grep inspect exact observations
+        # and minified source rows without loading whole packages/catalogues.
+        source_bytes = {}
+        for identity, item in frozen['source_artifacts'].items():
+            source = (package.parent / item['path']).resolve()
+            if not source.is_relative_to(package.parent.resolve()):
+                raise ValueError('Evidence reader source path escapes input directory')
+            source_bytes[identity] = source.read_bytes()
+        reading_files = build_evidence_files(package.read_bytes(), source_bytes=source_bytes)
+        views = {}
+        for relative, data in reading_files.items():
+            target = work / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(data)
+            views[relative] = hashlib.sha256(data).hexdigest()
+        runtime['derived_input_views'] = views
+        runtime['evidence_reader'] = {'format': FILE_INPUT_FORMAT, 'index_path': INDEX_PATH,
+                                     'index_sha256': views[INDEX_PATH],
+                                     'package_sha256': hashlib.sha256(package.read_bytes()).hexdigest(),
+                                     'source_artifact_count': len(source_bytes),
+                                     'file_count': len(reading_files),
+                                     'total_bytes': sum(map(len, reading_files.values()))}
+        runtime['research_prompt_sha256'] = hashlib.sha256(prompt.encode()).hexdigest()
+        # This small authoring aid is separate from evidence navigation.
         sections = work / 'input/package-sections'
         sections.mkdir()
-        views = {}
-        for name, value in frozen.items():
-            target = sections / (name + '.json')
-            data = json.dumps(value, ensure_ascii=False, indent=2).encode() + b'\n'
-            target.write_bytes(data)
-            views[str(target.relative_to(work))] = hashlib.sha256(data).hexdigest()
-        runtime['derived_input_views'] = views
         import yaml
         schema_root = Path(runtime['dapper_root']) / 'schema'
         schema_parts = [yaml.safe_load((schema_root / filename).read_text()) for filename in ('dapper.yaml', 'claims.yaml')]
@@ -91,23 +113,6 @@ def setup(request):
         excerpt_path = sections / 'authoring-schema-excerpt.yaml'
         excerpt_path.write_text(yaml.safe_dump(excerpt, sort_keys=False))
         views[str(excerpt_path.relative_to(work))] = hashlib.sha256(excerpt_path.read_bytes()).hexdigest()
-        prompt = research_prompt(request['selected_graphs'], request.get('validation_feedback', ()))
-        view_bytes = dispatch_view(package.read_bytes())
-        view_path = work / 'input' / VIEW_FILENAME
-        view_path.write_bytes(view_bytes)
-        views[str(view_path.relative_to(work))] = hashlib.sha256(view_bytes).hexdigest()
-        files_path = sections / 'dapper-files.json'
-        files_path.write_text(json.dumps(frozen['dapper_context'].get('files', []), ensure_ascii=False, indent=2) + '\n')
-        views[str(files_path.relative_to(work))] = hashlib.sha256(files_path.read_bytes()).hexdigest()
-        frozen_budget = BASE / 'input' / BUDGET_FILENAME
-        if frozen_budget.exists():
-            budget = json.loads(frozen_budget.read_bytes())
-            supplied_view = (BASE / 'input' / VIEW_FILENAME).read_bytes()
-            validate_dispatch_budget(package.read_bytes(), supplied_view, budget, prompt, request['model'])
-            runtime['dispatch_budget'] = budget
-        runtime['dispatch_view_sha256'] = hashlib.sha256(view_bytes).hexdigest()
-        runtime['research_prompt_sha256'] = hashlib.sha256(prompt.encode()).hexdigest()
-
     else:
         root = BASE / 'workspace'
         root.mkdir()

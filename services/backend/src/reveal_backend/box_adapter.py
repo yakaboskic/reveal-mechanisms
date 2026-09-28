@@ -132,10 +132,11 @@ def make_bundle(project_root: Path, request: ExecutionRequest):
     source = project_root / 'services/backend/src/reveal_backend'
     files = {}
     for name in ('__init__.py', 'evidence_package.py', 'dapper_release.py', 'scientific_account_lint.py',
-                 'box_remote.py', 'box_stream.py', 'box_mcp.py', 'dispatch_view.py'):
+                 'box_remote.py', 'box_stream.py', 'box_mcp.py', 'dispatch_view.py', 'evidence_files.py'):
         files['bundle/services/backend/src/reveal_backend/' + name] = (source / name).read_bytes()
     relative = ['scripts/lint_scientific_account.py', 'services/backend/agent-runtime/dapper-release.json',
                 'services/backend/agent-skills/construct-scientific-account/SKILL.md',
+                'services/backend/agent-skills/read-evidence-package/SKILL.md',
                 'services/backend/agent-skills/write-cited-paragraph/SKILL.md',
                 'docs/evidence-package.md', 'docs/scientific-account-construction.md', 'docs/pigean-claim-model.md',
                 'docs/dapper-integration.md', 'docs/agent-evidence-integration.md', 'docs/scientific-account-linting.md']
@@ -155,7 +156,8 @@ def make_bundle(project_root: Path, request: ExecutionRequest):
         if set(value['external_evidence']['selected_graphs']) != set(request.selected_graphs):
             raise BoxConfigurationError('Selected graphs do not match the frozen evidence package')
         files['input/evidence-package.json'] = data
-        from .dispatch_view import BUDGET_FILENAME, VIEW_FILENAME, research_prompt, validate_dispatch_budget
+        from .dispatch_view import (BUDGET_FILENAME, VIEW_FILENAME, legacy_research_prompt, research_prompt,
+                                    validate_dispatch_budget, validate_file_input)
         budget_path = request.input_path.parent / BUDGET_FILENAME
         view_path = request.input_path.parent / VIEW_FILENAME
         frozen_view = None
@@ -169,6 +171,21 @@ def make_bundle(project_root: Path, request: ExecutionRequest):
             if (parent / frozen_input['path']).resolve() == request.input_path.resolve():
                 if frozen_input['sha256'] != hashlib.sha256(data).hexdigest():
                     raise BoxConfigurationError('Frozen dispatch package changed')
+                if frozen_input.get('format') not in ('reveal.dispatch-input/1', 'reveal.dispatch-input/2'):
+                    raise BoxConfigurationError('Unknown frozen dispatch format')
+                if frozen_input.get('format') == 'reveal.dispatch-input/2':
+                    binding = frozen_input.get('file_input')
+                    if not binding:
+                        raise BoxConfigurationError('Frozen file input manifest is missing')
+                    input_manifest = (parent / binding['path']).resolve()
+                    if not input_manifest.is_relative_to(parent) or not input_manifest.is_file():
+                        raise BoxConfigurationError('Frozen file input manifest escapes source capture or is missing')
+                    manifest_data = input_manifest.read_bytes()
+                    if hashlib.sha256(manifest_data).hexdigest() != binding['sha256']:
+                        raise BoxConfigurationError('Frozen file input manifest changed')
+                    validate_file_input(data, json.loads(manifest_data),
+                                        research_prompt(request.selected_graphs, request.validation_feedback))
+                    files['input/evidence-input.json'] = manifest_data
                 frozen_view = frozen_input.get('dispatch_view')
                 if frozen_view:
                     view_path = (parent / frozen_view['path']).resolve()
@@ -186,9 +203,10 @@ def make_bundle(project_root: Path, request: ExecutionRequest):
                                 hashlib.sha256(budget_data).hexdigest() != frozen_view['budget_sha256']):
                 raise BoxConfigurationError('Frozen dispatch view or measurement changed')
             validate_dispatch_budget(data, view_data, json.loads(budget_data),
-                                     research_prompt(request.selected_graphs, request.validation_feedback))
-            files['input/' + BUDGET_FILENAME] = budget_data
-            files['input/' + VIEW_FILENAME] = view_data
+                                     legacy_research_prompt(request.selected_graphs, request.validation_feedback))
+            # Legacy counts bind their historical prompt/view only. Keep those
+            # local integrity checks without presenting them as verification
+            # of the new file-reading prompt in the remote runtime.
         input_bytes = len(data)
         for item in value['source_artifacts'].values():
             path = PurePosixPath(item['path'])
