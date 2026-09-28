@@ -64,6 +64,9 @@
 .prototype-composer .linked-mechanism small{font-size:11px}
 .prototype-composer .linked-mechanism>span:first-child{min-width:0;overflow-wrap:anywhere}
 .prototype-composer .submit-row{margin-top:22px;display:flex;justify-content:flex-end;border:0;padding:0}
+.prototype-composer .research-result-options{max-width:66ch;margin:20px 0 0;color:#697c98;font-size:12px;line-height:1.7}
+.prototype-composer .research-result-options strong{font-weight:550;color:#526783}
+.prototype-composer .research-result-options+.submit-row{margin-top:12px}
 .prototype-composer .gap-submit{display:inline-flex;align-items:center;gap:10px;min-height:44px;padding:0 0 0 10px;border-radius:24px;font-size:13px;color:#496488}
 .prototype-composer .gap-submit .send{width:36px;height:36px}
 .prototype-composer .gap-submit:hover:not(:disabled){color:#2563eb}

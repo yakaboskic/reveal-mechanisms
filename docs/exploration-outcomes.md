@@ -6,6 +6,13 @@ scientific account. It is not an accepted DAPPER ScientificAccount, a biological
 null finding, or a failed execution. Scientific validation failures and timeouts
 continue to be failures and cannot be relabeled as explorations.
 
+Before submission, the composer explains both possible completed results:
+scientific accounts supported by the evidence, or a saved exploration explaining
+why an account could not be supported. Completion labels name the result and link
+to its saved record. The agent's account-construction skill already requires the
+explicit insufficient-evidence outcome when the retained evidence cannot support
+a useful account; it must not manufacture claims to force an account.
+
 ## Reading and sharing
 
 The completed job links to `/analyses/{outcome_id}`. The record includes the exact

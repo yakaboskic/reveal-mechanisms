@@ -398,7 +398,8 @@ export function Composer({ initialJobId }: { initialJobId?: string } = {}) {
               <details><summary>Additional knowledge graphs</summary><div className="checks">{(["biomarkerkg", "prokn"] as const).map(kg => <label key={kg}><input type="checkbox" checked={composer.selected_kgs.includes(kg)} onChange={e => setComposer(c => ({ ...c, selected_kgs: e.target.checked ? [...c.selected_kgs, kg] : c.selected_kgs.filter(k => k !== kg) }))} />{kg === "prokn" ? "ProKN" : "BiomarkerKG"}</label>)}</div></details>
             </div>
             <span className="sr-only" role="status">{me ? saveState : "Selections kept in this browser"}</span>
-            <div className="submit-row"><button className="gap-submit" aria-label="Let’s close this gap" disabled={!composer.eaggl_anchors.length || suggesting || conflict || !ready} onClick={() => me ? void launch() : dialog.current?.showModal()}><span>Let’s close this gap</span><span className="send" aria-hidden="true"><span>↑</span></span></button></div>
+            <p id="research-result-options" className="research-result-options">A completed analysis returns <strong>scientific accounts</strong> supported by the evidence, or a <strong>saved exploration</strong> explaining why an account could not be supported.</p>
+            <div className="submit-row"><button className="gap-submit" aria-label="Let’s close this gap" aria-describedby="research-result-options" disabled={!composer.eaggl_anchors.length || suggesting || conflict || !ready} onClick={() => me ? void launch() : dialog.current?.showModal()}><span>Let’s close this gap</span><span className="send" aria-hidden="true"><span>↑</span></span></button></div>
           </>}
         </div>
       </>}
