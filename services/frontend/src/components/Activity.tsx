@@ -1,22 +1,24 @@
 "use client";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { activityProgress, activityRows, activitySections, activityStage, groupedWarnings, stageLabels, type ActivityRow } from "@/lib/activity";
+import { activityProgress, activityRows, groupedWarnings, stageLabels, type ActivityRow } from "@/lib/activity";
+import { elapsedLabel, operationalStep, timedActivitySections, toolElapsed, type StepState } from "@/lib/activity-timing";
 import { prettyRecordedValue, toolInvocation } from "@/lib/tool-display";
 import { api, ApiError, messageOf, readEvents, terminal, type Schema } from "@/lib/client";
 import "./workspace-activity.css";
 export function Pulse() { return <span className="pulse" aria-hidden="true"><i /><i /><i /></span>; }
 
-function ToolActivity({ row, active, onInspect }: { row: ActivityRow; active: boolean; onInspect: () => void }) {
+function ToolActivity({ row, active, now, onInspect }: { row: ActivityRow; active: boolean; now: number; onInspect: () => void }) {
   const detail = row.event.detail!;
   const result = row.result?.detail || (detail.kind === "tool_result" ? detail : undefined);
   const state = result?.state || (active ? "started" : "unavailable");
   const output = result?.output_excerpt;
   const name = detail.tool_name || result?.tool_name || "Tool";
   const args = detail.display_arguments || result?.display_arguments;
+  const elapsed = toolElapsed(row, active, now);
   return <details className="activity-tool activity-tool-details" data-state={state}>
     <summary className="tool-heading" onClick={onInspect}>
       <code className="tool-invocation">{toolInvocation(name, args)}</code>
-      <span className="tool-status"><span className="tool-state">{state === "failed" ? "Failed" : state === "completed" ? "Returned" : state === "started" ? "Calling" : "No result recorded"}</span>{result?.duration_ms != null && <span className="tool-duration">{(result.duration_ms / 1000).toFixed(1)}s</span>}</span>
+      <span className="tool-status"><span className={`work-dot is-${state === "started" ? "working" : state}`} aria-hidden="true" /><span className="tool-state">{state === "failed" ? "Failed" : state === "completed" ? "Returned" : state === "started" ? "Calling" : "No result recorded"}</span>{elapsed != null && <span className="tool-duration" aria-live="off">{elapsed < 1_000 ? `${(elapsed / 1_000).toFixed(1)}s` : elapsedLabel(elapsed)}</span>}</span>
       <span className="tool-caret" aria-hidden="true">›</span><span className="sr-only">Show tool details</span>
     </summary>
     <div className="tool-details-body">
@@ -29,13 +31,15 @@ function ToolActivity({ row, active, onInspect }: { row: ActivityRow; active: bo
   </details>;
 }
 
-function ActivityEntry({ row, active, onInspect }: { row: ActivityRow; active: boolean; onInspect: () => void }) {
+function ActivityEntry({ row, active, now, step, onInspect }: { row: ActivityRow; active: boolean; now: number; step: { state: StepState; durationMs: number | null }; onInspect: () => void }) {
   const event = row.event;
-  if (event.detail?.kind === "tool_call" || event.detail?.kind === "tool_result") return <ToolActivity row={row} active={active} onInspect={onInspect} />;
+  if (event.detail?.kind === "tool_call" || event.detail?.kind === "tool_result") return <ToolActivity row={row} active={active} now={now} onInspect={onInspect} />;
   const narrative = event.detail?.kind === "agent_message";
-  return <div className={`activity-entry ${narrative ? "agent-update" : "system-update"} ${event.detail?.state || ""}`}>
+  return <div className={`activity-entry ${narrative ? "agent-update" : "system-update"} ${event.detail?.state || ""}`} data-step-state={narrative ? undefined : step.state}>
     {narrative && <span className="entry-label">Agent update</span>}
+    {!narrative && <span className={`work-dot is-${step.state}`} aria-label={step.state === "working" ? "Working" : step.state === "completed" ? "Complete" : step.state === "failed" ? "Failed" : "Stopped or unavailable"} role="img" />}
     <p>{event.message}</p>
+    {!narrative && step.durationMs != null && <span className="step-duration" aria-live="off" title={step.state === "working" ? "Elapsed in this step" : "Time in this step"}>{elapsedLabel(step.durationMs)}</span>}
     {event.detail?.counts && <small>{event.detail.counts.nodes} nodes, {event.detail.counts.edges} edges ({event.detail.counts.scope})</small>}
   </div>;
 }
@@ -49,6 +53,7 @@ export function Activity({ initial, onJob }: { initial: Schema<"Job">; onJob: (j
   const [expanded, setExpanded] = useState(false);
   const [retry, setRetry] = useState(0);
   const [following, setFollowing] = useState(true);
+  const [now, setNow] = useState(Date.now);
   const historyId = useId();
   const cursor = useRef("0"); const jobRef = useRef(initial); const callback = useRef(onJob); callback.current = onJob;
   const feed = useRef<HTMLDivElement>(null); const content = useRef<HTMLDivElement>(null); const follow = useRef(true);
@@ -66,7 +71,7 @@ export function Activity({ initial, onJob }: { initial: Schema<"Job">; onJob: (j
     const run = async () => {
       while (!controller.signal.aborted) {
         try {
-          setConnection(failures ? "Reconnecting to activity…" : "Live activity");
+          setConnection(failures ? "Reconnecting to activity…" : "Retrieving job status and activity…");
           const response = await fetch(`/api/backend/v1/jobs/${encodeURIComponent(initial.id)}/events?after=${cursor.current}`, { headers: { Accept: "text/event-stream", "Last-Event-ID": cursor.current }, signal: controller.signal });
           await readEvents(response, event => {
             if (event.job_id !== initial.id || BigInt(event.id) <= BigInt(cursor.current)) return;
@@ -99,10 +104,8 @@ export function Activity({ initial, onJob }: { initial: Schema<"Job">; onJob: (j
   const progress = activityProgress(job, events);
   const complete = progress.status === "succeeded";
   const active = !terminal(progress.status);
-  const sections = activitySections(events);
-  const currentStage = activityStage(progress.stage);
-  // During replay, the fetched job can be ahead of the history received so far.
-  if (sections.at(-1)?.stage !== currentStage) sections.push({ id: "pending", stage: currentStage, events: [] });
+  const sections = timedActivitySections(events, job, now);
+  useEffect(() => { if (!active) return; const timer = setInterval(() => setNow(Date.now()), 1_000); return () => clearInterval(timer); }, [active]);
   const jumpToLatest = () => {
     follow.current = true; setFollowing(true);
     if (feed.current) feed.current.scrollTop = feed.current.scrollHeight;
@@ -141,16 +144,17 @@ export function Activity({ initial, onJob }: { initial: Schema<"Job">; onJob: (j
         follow.current = atTail; setFollowing(atTail);
       }} tabIndex={0} role="region" aria-label="Activity history">
         <div className="activity-content" ref={content}>
-          {sections.map((section, index) => {
-            const current = index === sections.length - 1;
+          {sections.map(section => {
+            const current = section.current;
             const working = active && current;
-            const state = working ? "working" : current && progress.status === "failed" ? "failed" : current && ["cancelled", "insufficient_evidence"].includes(progress.status) ? "stopped" : "completed";
+            const state = section.state;
+            const rows = activityRows(section.events.filter(event => event.event_type !== "warning"));
             const label = working ? progress.status === "cancel_requested" ? "Stopping" : section.stage === "preparation" && progress.stage === "queued" ? "Queued" : "Working" : state === "failed" ? "Could not complete" : state === "stopped" ? "Stopped" : "Complete";
             return <details className="activity-stage" data-stage={section.stage} data-state={state} key={section.id} open={current || section.stage === "research" || section.stage === "validation"}>
-              <summary>{working ? <Pulse /> : <span className="stage-mark" aria-hidden="true">{state === "completed" ? "✓" : state === "failed" ? "!" : "·"}</span>}<span className="stage-name">{labels[section.stage]}</span><span className="stage-state">{label}</span></summary>
+              <summary>{working ? <Pulse /> : <span className="stage-mark" aria-hidden="true">{state === "completed" ? "✓" : state === "failed" ? "!" : "·"}</span>}<span className="stage-name">{labels[section.stage]}</span><span className="stage-state">{label}</span><span className="stage-duration" aria-live="off" title={section.durationMs == null ? "Waiting for the recorded stage boundaries" : working ? "Elapsed in this stage" : "Total time in this stage"}>{section.durationMs == null ? "—" : elapsedLabel(section.durationMs)}</span></summary>
               <div className="stage-log" role="log" aria-live="off" aria-label={`${labels[section.stage]} log`}>
-                {!section.events.length && <p className="activity-waiting">{progress.stage === "queued" ? "Waiting for a research worker…" : active ? "Waiting for activity…" : "No further activity recorded."}</p>}
-                {activityRows(section.events.filter(event => event.event_type !== "warning")).map(row => <ActivityEntry key={row.event.id} row={row} active={working} onInspect={pauseFollowing} />)}
+                {!section.events.length && <p className="activity-waiting">{active && !events.length ? "Retrieving the agent’s latest status and recorded activity…" : progress.stage === "queued" ? "Waiting for a research worker…" : active ? "Retrieving this stage’s activity…" : "No further activity recorded."}</p>}
+                {rows.map((row, index) => <ActivityEntry key={row.event.id} row={row} active={working} now={now} step={operationalStep(row, rows.slice(index + 1), section, now)} onInspect={pauseFollowing} />)}
               </div>
             </details>;
           })}

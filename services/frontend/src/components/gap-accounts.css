@@ -1,0 +1,16 @@
+.gap-accounts{width:100%;max-width:752px;margin:34px auto 0;text-align:left;color:var(--ink,#233044)}
+.gap-accounts-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin:0 0 17px}
+.gap-accounts-heading h2{margin:0;font-size:17px;font-weight:600;letter-spacing:-.02em}
+.gap-accounts-heading p{margin:6px 0 0;color:var(--muted,#718091);font-size:13px;line-height:1.55}
+.gap-accounts-count{min-width:30px;flex:none;border:1px solid #dde5ec;border-radius:20px;padding:4px 9px;text-align:center;font-size:12px;color:#5a6e82;background:#f5f8fb;font-variant-numeric:tabular-nums}
+.gap-account-card{padding:22px 0;border-top:1px solid #e4e9ef;overflow-wrap:anywhere}
+.gap-account-meta,.gap-account-footer{display:flex;align-items:baseline;justify-content:space-between;gap:14px;font-size:12px;line-height:1.6;color:#7a8795}
+.gap-account-meta strong{font-weight:500;color:#50647a}.gap-account-meta time{flex:none}
+.gap-account-card h3{margin:10px 0 8px;font-family:var(--font-literata),Georgia,serif;font-size:21px;font-weight:400;line-height:1.4;letter-spacing:-.02em}
+.gap-account-card h3 a{color:inherit;text-decoration:none}.gap-account-card h3 a:hover{color:#426fa0}
+.gap-account-synthesis{display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;margin:0 0 15px;font-size:14px;line-height:1.75;color:#5f6e7d}
+.gap-account-footer a{font-size:12px;color:#47769c;text-decoration:none}.gap-account-footer a:hover{text-decoration:underline}
+.gap-accounts-more{display:block;margin:6px auto 0;background:transparent;border:1px solid #dce5ed;border-radius:7px;padding:9px 14px;color:#526d88;font-size:12px;cursor:pointer}
+.gap-accounts-more:hover{background:#f4f7fa}.gap-accounts-empty{margin:0;padding:20px 0;border-top:1px solid #e4e9ef;color:#718091;font-size:14px;line-height:1.7}
+.gap-accounts .loading-surface{margin:12px 0}
+@media(max-width:600px){.gap-accounts{margin-top:28px}.gap-accounts-heading{gap:12px}.gap-account-meta{align-items:flex-start;gap:6px;flex-direction:column}.gap-account-card{padding:18px 0}.gap-account-card h3{font-size:20px}.gap-account-synthesis{-webkit-line-clamp:5}.gap-account-footer{gap:10px;flex-wrap:wrap}}

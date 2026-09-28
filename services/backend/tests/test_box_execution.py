@@ -105,7 +105,7 @@ class GraphPolicyTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             ledger = Ledger(Path(temp), 'job', 1)
             tools = ScopedTools(('prokn',), ledger, client=Client())
-            tools.call('query_graph', {'graph': 'prokn', 'contains': 'gene'})
+            tools.call('query_graph', {'graph': 'prokn', 'predicate': 'http://www.w3.org/2000/01/rdf-schema#label', 'contains': 'gene'})
             tools.call('get_schema', {'graph': 'prokn'})
             tools.call('query_graph', {'graph': 'unselected', 'contains': 'gene'})
             ledger.start('Read', {'path': 'some-output'}, None)
@@ -137,7 +137,7 @@ class GraphPolicyTests(unittest.TestCase):
             def call(self, *args): return {'content': [{'type':'text','text':'{"rows":[],"row_count":0}'}], 'isError':False}
         with tempfile.TemporaryDirectory() as temp:
             ledger = Ledger(Path(temp), 'job', 1)
-            ScopedTools(('prokn',), ledger, client=Client()).call('query_graph', {'graph':'prokn','contains':'gene'})
+            ScopedTools(('prokn',), ledger, client=Client()).call('query_graph', {'graph':'prokn','predicate':'http://www.w3.org/2000/01/rdf-schema#label','contains':'gene'})
             self.assertEqual(ledger.entries[0]['status'], 'empty')
             self.assertEqual(len(ledger.entries[0]['locators']), 1)
 
@@ -147,7 +147,7 @@ class GraphPolicyTests(unittest.TestCase):
             def call(self, *args): return upstream
         with tempfile.TemporaryDirectory() as temp:
             ledger = Ledger(Path(temp), 'job', 1)
-            result = ScopedTools(('prokn',), ledger, client=Client()).call('query_graph', {'graph':'prokn','contains':'gene'})
+            result = ScopedTools(('prokn',), ledger, client=Client()).call('query_graph', {'graph':'prokn','predicate':'http://www.w3.org/2000/01/rdf-schema#label','contains':'gene'})
             capture = json.loads(result['content'][-1]['text'])
             original = (Path(temp) / ledger.entries[0]['response']['path']).read_bytes()
             self.assertEqual(json.loads(original), upstream)

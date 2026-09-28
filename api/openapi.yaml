@@ -747,7 +747,7 @@ paths:
                           about_entities:
                           - http://purl.obolibrary.org/obo/MONDO_0021661
                           id: dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk
-                      attribution:
+                      attribution: &id039
                         user_id: 11111111-1111-4111-8111-111111111111
                         person_id: dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he
                         display_name: Example Researcher
@@ -907,7 +907,9 @@ paths:
       description: Fuzzy lookup of imported DisMech gaps by default. Query text is
         not an authored inquiry or permission to launch research. Other explicit modes
         require their configured index and return 503 if unavailable. Rankings are
-        retrieval signals. Example uses the exact CAD gap from the HTML study.
+        retrieval signals. Example uses the exact CAD gap from the HTML study. Account
+        counts use the same optional-session visibility rules as gap browsing; relevance
+        order remains unchanged.
       parameters:
       - name: q
         in: query
@@ -1194,10 +1196,14 @@ paths:
       tags:
       - Knowledge gaps
       summary: Browse knowledge gaps
-      description: Browse imported DisMech gaps. Initial homepage is curated, with
-        exact public-account counts as of the returned timestamp. Counts never include
-        private work. Default source=dismech, include both gap kinds and all original
-        statuses; filters may narrow. No manufactured popularity ranking.
+      description: Browse imported DisMech gaps ordered by distinct accessible accepted
+        scientific-account count descending, then native source ID and gap digest.
+        Counts are all-time exact DAPPER gap identity matches, not text matches, attempts,
+        paragraph jobs or an implicit source-revision rollup. With a signed session
+        only that workspace is visible; without a session counts are zero because
+        no account publication model exists. Private work from other owners is never
+        counted. Invalid supplied credentials are rejected. Filters apply before pagination;
+        count changes invalidate continuation cursors.
       parameters:
       - name: kind
         in: query
@@ -1331,7 +1337,8 @@ paths:
       description: Exact DAPPER KnowledgeGap plus one pinned source observation and
         attachment resolutions. source_revision selects a historical mapping; omission
         selects the latest accessible observation of this same digest. It never redirects
-        to a different digest.
+        to a different digest. Account counts use the same optional-session visibility
+        rules as gap browsing.
       parameters:
       - name: gap_id
         in: path
@@ -6565,6 +6572,156 @@ paths:
         label: request
         source: 'curl -X GET ''https://api.reveal.example.org/v1/accounts?gap_id=dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk&limit=20''
           -H ''Authorization: Bearer <trusted-gateway-assertion>'' -H ''Accept: application/json'''
+  /v1/knowledge-gaps/{gap_id}/accounts:
+    get:
+      operationId: listKnowledgeGapAccounts
+      tags:
+      - Knowledge gaps
+      summary: List visible scientific accounts for a knowledge gap
+      description: Accepted accounts for the exact DAPPER KnowledgeGap identity, newest
+        first then account ID, deduplicated by scientific-account digest. Optional
+        signed session selects only its authorized workspace memberships; no session
+        returns an empty list because accounts are not publicly published. Counts
+        and lists never reveal another private owner. Historical source observations
+        with the same exact gap digest remain the same scientific question; changed
+        gap digests never merge. Optional source_revision checks the selected catalog
+        observation. Attribution is the immutable original request actor, not current
+        ownership. Uses the same account read authorization as /v1/accounts; each
+        account ID links to its existing account endpoint.
+      parameters:
+      - name: gap_id
+        in: path
+        required: true
+        schema:
+          type: string
+          description: Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode
+            path values.
+          pattern: ^dapper:KnowledgeGap\.[A-Za-z0-9_-]{32}$
+        example: dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk
+        description: Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode
+          path values.
+      - name: source_revision
+        in: query
+        required: false
+        schema:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+        example: 8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd
+        description: ''
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+        example: 20
+        description: ''
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+          minLength: 1
+        example: opaque-next-page
+        description: Omit for the first page. A returned next_cursor is opaque; the
+          example is illustrative and cannot be used against a live service.
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountList'
+              examples:
+                owned:
+                  summary: Owned
+                  value:
+                    items:
+                    - account: *id037
+                      knowledge_gap: *id011
+                      claim_count: 12
+                      created_at: '2026-09-24T16:00:00Z'
+                      job_id: 44444444-4444-4444-8444-444444444444
+                      research_statement: *id038
+                      attribution: *id039
+                    page: *id009
+                no_visible_accounts:
+                  summary: No visible accounts
+                  value:
+                    items: []
+                    page: *id009
+          headers:
+            X-Request-ID:
+              description: Correlation ID for this HTTP request.
+              schema:
+                type: string
+                format: uuid
+        '400':
+          description: Invalid Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                invalid_request:
+                  summary: Invalid request
+                  value: *id004
+        '401':
+          description: Authentication Required
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                authentication_required:
+                  summary: Authentication required
+                  value: *id001
+        '404':
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                not_found:
+                  summary: Not found
+                  value: *id005
+        '409':
+          description: Version Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                version_conflict:
+                  summary: Version conflict
+                  value: *id006
+        '429':
+          description: Rate Limited
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                rate_limited:
+                  summary: Rate limited
+                  value: *id002
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+                minimum: 1
+              example: 30
+      security:
+      - {}
+      - GatewayAssertion: []
+      x-codeSamples:
+      - lang: Shell
+        label: request
+        source: 'curl -X GET ''https://api.reveal.example.org/v1/knowledge-gaps/dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk/accounts?source_revision=8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd&limit=20''
+          -H ''Accept: application/json'''
   /v1/me/explorations:
     get:
       operationId: listExplorations
@@ -6606,7 +6763,7 @@ paths:
                   summary: History
                   value:
                     items:
-                    - &id039
+                    - &id040
                       source_gap: *id016
                       knowledge_gap: *id011
                       last_explored_at: '2026-09-24T16:00:00Z'
@@ -6699,7 +6856,7 @@ paths:
               examples:
                 saved:
                   summary: Saved
-                  value: *id039
+                  value: *id040
           headers:
             X-Request-ID:
               description: Correlation ID for this HTTP request.
@@ -16738,7 +16895,7 @@ components:
         source_id:
           type: string
           minLength: 1
-        source_revision: &id040
+        source_revision: &id041
           type: string
           pattern: ^[a-f0-9]{64}$
         dapper_id:
@@ -16767,7 +16924,7 @@ components:
           - gap_attachment
         suggestion_id:
           anyOf:
-          - &id041
+          - &id042
             type: string
             format: uuid
           - type: 'null'
@@ -16803,7 +16960,7 @@ components:
           type: string
         source_id:
           type: string
-        source_revision: *id040
+        source_revision: *id041
         object_class:
           const: Mechanism
           type: string
@@ -16827,7 +16984,7 @@ components:
           type: string
         source_id:
           type: string
-        source_revision: *id040
+        source_revision: *id041
         object_class:
           type: string
           const: Mechanism
@@ -16935,17 +17092,17 @@ components:
     Draft:
       type: object
       properties:
-        id: *id041
-        owner_user_id: *id041
+        id: *id042
+        owner_user_id: *id042
         version:
           type: integer
           minimum: 1
         composer:
           $ref: '#/components/schemas/Composer'
-        created_at: &id042
+        created_at: &id043
           type: string
           format: date-time
-        updated_at: *id042
+        updated_at: *id043
       required:
       - id
       - owner_user_id
@@ -16976,7 +17133,7 @@ components:
     Me:
       type: object
       properties:
-        user_id: *id041
+        user_id: *id042
         display_name:
           anyOf:
           - type: string
@@ -17008,7 +17165,7 @@ components:
           - registered
         workspace_expires_at:
           anyOf:
-          - &id046
+          - &id047
             type: string
             format: date-time
           - type: 'null'
@@ -17028,7 +17185,7 @@ components:
     AttributionSnapshot:
       type: object
       properties:
-        user_id: *id041
+        user_id: *id042
         person_id:
           anyOf:
           - type: string
@@ -17047,7 +17204,7 @@ components:
           - type: 'null'
         orcid_authenticated:
           type: boolean
-        observed_at: *id042
+        observed_at: *id043
         principal_kind:
           type: string
           enum:
@@ -17065,9 +17222,9 @@ components:
     ResearchRequest:
       type: object
       properties:
-        id: *id041
-        owner_user_id: *id041
-        source_draft_id: *id041
+        id: *id042
+        owner_user_id: *id042
+        source_draft_id: *id042
         source_draft_version:
           type: integer
           minimum: 1
@@ -17082,7 +17239,7 @@ components:
           $ref: '#/components/schemas/DapperDocument'
         attribution:
           $ref: '#/components/schemas/AttributionSnapshot'
-        submitted_at: *id042
+        submitted_at: *id043
         linked_dismech_context:
           type: array
           items:
@@ -17111,7 +17268,7 @@ components:
           - dismech
         source_id:
           type: string
-        source_revision: *id040
+        source_revision: *id041
         status:
           anyOf:
           - type: string
@@ -17362,7 +17519,7 @@ components:
     Suggestions:
       type: object
       properties:
-        suggestion_id: *id041
+        suggestion_id: *id042
         automatic_anchors:
           type: array
           items:
@@ -17429,7 +17586,7 @@ components:
         kind:
           const: analysis
           type: string
-        draft_id: *id041
+        draft_id: *id042
         draft_version:
           type: integer
           minimum: 1
@@ -17548,7 +17705,7 @@ components:
         kind:
           const: analysis
           type: string
-        request_id: *id041
+        request_id: *id042
         account_ids:
           type: array
           items:
@@ -17564,11 +17721,11 @@ components:
             $ref: '#/components/schemas/Enrichment'
         paragraph_job_ids:
           type: array
-          items: &id047
+          items: &id048
             type: string
             format: uuid
           maxItems: 3
-        evidence_package_sha256: &id045
+        evidence_package_sha256: &id046
           type: string
           pattern: ^[a-f0-9]{64}$
       required:
@@ -17617,14 +17774,14 @@ components:
     Job:
       type: object
       properties:
-        id: *id041
+        id: *id042
         kind:
           type: string
           enum:
           - analysis
           - paragraph
-        owner_user_id: *id041
-        status: &id043
+        owner_user_id: *id042
+        status: &id044
           type: string
           enum:
           - queued
@@ -17634,7 +17791,7 @@ components:
           - succeeded
           - insufficient_evidence
           - failed
-        stage: &id044
+        stage: &id045
           type: string
           enum:
           - queued
@@ -17650,7 +17807,7 @@ components:
           - starting_agent
         research_request_id:
           anyOf:
-          - *id041
+          - *id042
           - type: 'null'
         input_account_id:
           anyOf:
@@ -17659,11 +17816,11 @@ components:
               path values.
             pattern: ^dapper:ScientificAccount\.[A-Za-z0-9_-]{32}$
           - type: 'null'
-        created_at: *id042
-        updated_at: *id042
+        created_at: *id043
+        updated_at: *id043
         completed_at:
           anyOf:
-          - *id042
+          - *id043
           - type: 'null'
         result:
           anyOf:
@@ -17726,7 +17883,7 @@ components:
               const: analysis
         then:
           properties:
-            research_request_id: *id041
+            research_request_id: *id042
             input_account_id:
               type: 'null'
             result:
@@ -17788,7 +17945,7 @@ components:
               - cancelled
         then:
           properties:
-            completed_at: *id042
+            completed_at: *id043
         else:
           properties:
             completed_at:
@@ -17807,8 +17964,8 @@ components:
         id:
           type: string
           pattern: ^[0-9]+$
-        job_id: *id041
-        occurred_at: *id042
+        job_id: *id042
+        occurred_at: *id043
         event_type:
           type: string
           enum:
@@ -17818,8 +17975,8 @@ components:
           - result
           - failure
           - activity
-        status: *id043
-        stage: *id044
+        status: *id044
+        stage: *id045
         message:
           type: string
         result:
@@ -17863,8 +18020,8 @@ components:
     SchemaPin:
       type: object
       properties:
-        schema_sha256: *id040
-        dependency_snapshot_sha256: *id040
+        schema_sha256: *id041
+        dependency_snapshot_sha256: *id041
         identity_profile:
           const: DAPPER-ID-1
           type: string
@@ -17881,7 +18038,7 @@ components:
           description: Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode
             path values.
           pattern: ^dapper:[A-Za-z][A-Za-z0-9]*\.[A-Za-z0-9_-]{32}$
-        payload_sha256: *id040
+        payload_sha256: *id041
       required:
       - object_id
       - payload_sha256
@@ -17898,7 +18055,7 @@ components:
           - type: 'null'
         expires_at:
           anyOf:
-          - *id042
+          - *id043
           - type: 'null'
         availability:
           type: string
@@ -18089,7 +18246,7 @@ components:
               node_id:
                 type: string
                 pattern: '^gene_set:'
-              import_id: *id040
+              import_id: *id041
             required:
             - model
             - node_id
@@ -18185,7 +18342,7 @@ components:
           type: string
         detail:
           type: string
-        request_id: *id041
+        request_id: *id042
         retryable:
           type: boolean
         current_version:
@@ -18294,14 +18451,14 @@ components:
               type: string
             processor_version:
               type: string
-            style_sha256: *id040
-            locale_sha256: *id040
+            style_sha256: *id041
+            locale_sha256: *id041
             citation_profile:
               const: reveal-citation-v1
               type: string
             metadata_checksums:
               type: array
-              items: *id040
+              items: *id041
           required:
           - processor
           - processor_version
@@ -18445,7 +18602,7 @@ components:
         source_id:
           type: string
           pattern: '^dismech:'
-        source_revision: *id045
+        source_revision: *id046
       required:
       - id
       - source_id
@@ -18460,7 +18617,7 @@ components:
           type: string
         source_pointer:
           type: string
-        payload_sha256: *id045
+        payload_sha256: *id046
         raw:
           type: object
           additionalProperties: true
@@ -18484,12 +18641,13 @@ components:
           enum:
           - public_exact_gap
           - owner_exact_gap
-        as_of: *id046
+        as_of: *id047
         ranking:
           type: string
           enum:
           - curated
           - recent_account_count
+          - account_count
         window_days:
           anyOf:
           - type: integer
@@ -18557,7 +18715,7 @@ components:
           - type: 'null'
         artifact_sha256:
           anyOf:
-          - *id045
+          - *id046
           - type: 'null'
         duration_ms:
           anyOf:
@@ -18581,7 +18739,7 @@ components:
                 minimum: 0
               truncated:
                 type: boolean
-              snapshot_sha256: *id045
+              snapshot_sha256: *id046
             required:
             - scope
             - nodes
@@ -18625,7 +18783,7 @@ components:
           - not_requested
         job_id:
           anyOf:
-          - *id047
+          - *id048
           - type: 'null'
         paragraph_id:
           anyOf:
@@ -18649,10 +18807,14 @@ components:
         claim_count:
           type: integer
           minimum: 1
-        created_at: *id046
-        job_id: *id047
+        created_at: *id047
+        job_id: *id048
         research_statement:
           $ref: '#/components/schemas/ParagraphState'
+        attribution:
+          anyOf:
+          - $ref: '#/components/schemas/AttributionSnapshot'
+          - type: 'null'
       required:
       - account
       - knowledge_gap
@@ -18661,6 +18823,10 @@ components:
       - job_id
       - research_statement
       additionalProperties: false
+      description: One accessible accepted scientific account, deduplicated by its
+        DAPPER identity. Optional attribution is the immutable original request actor,
+        not the current workspace owner; null denotes unavailable historical attribution.
+        Title and brief synthesis are account.name and account.closing_remarks.
     AccountList:
       type: object
       properties:
@@ -18681,7 +18847,7 @@ components:
           $ref: '#/components/schemas/SelectedGap'
         draft_id:
           anyOf:
-          - *id047
+          - *id048
           - type: 'null'
       required:
       - source_gap
@@ -18696,10 +18862,10 @@ components:
           $ref: '#/components/schemas/SelectedGap'
         knowledge_gap:
           $ref: '#/components/schemas/DapperKnowledgeGap'
-        last_explored_at: *id046
+        last_explored_at: *id047
         draft_id:
           anyOf:
-          - *id047
+          - *id048
           - type: 'null'
         scientific_accounts:
           $ref: '#/components/schemas/AccountCount'
@@ -26062,8 +26228,8 @@ components:
     EvidencePackageResult:
       type: object
       properties:
-        job_id: *id047
-        package_sha256: *id045
+        job_id: *id048
+        package_sha256: *id046
         package:
           $ref: '#/components/schemas/EvidencePackage'
       required:

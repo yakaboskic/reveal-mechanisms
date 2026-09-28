@@ -342,3 +342,44 @@ The worker deduplicates warning text while acknowledging every remote event
 sequence, so replay cannot flood the UI. Five additional regressions cover
 notification handling, unknown-type bounds, durable warning deduplication and
 the `describe_kg` argument projection (62 related tests pass).
+
+The failed attempt `10443b3d-8ff8-4a1b-9e02-31471a471751` reached its configured
+900-second limit. Setup completed in seconds; local reads generally took
+0.01–0.17 seconds and draft lint took 4.3 seconds. There is no captured evidence
+of memory pressure supporting a Box resource upgrade. The broad ProKN text
+scan returned an upstream HTTP 429/operation-timeout error after about 61
+seconds; its JSON error was incorrectly classified as completed. A global
+proxy lock delayed the parallel BiomarkerKG read until that call finished.
+
+The proxy now bounds each upstream read to 35 seconds, allows at most two
+independent MCP sessions concurrently, and rejects excess pending reads without
+queuing them behind a slow graph. Late responses cannot change a frozen ledger.
+Embedded upstream errors are failures, even when their response also says zero
+rows; exact upstream bytes are retained alongside the normalized envelope.
+Whole-graph text scans receive correctable feedback. Exact predicate/literal
+lookups and subject/predicate-scoped text searches remain available, confined to
+the selected graph. Empty and failed queries never establish biological absence.
+
+Two authorized public read-only probes, without model execution, returned empty
+results in 2.222 seconds (ProKN exact gene-symbol predicate/literal) and 1.066
+seconds (BiomarkerKG exact disease object). Their diagnostic report and complete
+captures are in `.runtime/prokn-timeout-diagnosis-10443b3d/`. These observations
+show those selective requests completed; they do not prove absence of the
+entities or guarantee future endpoint availability.
+
+Offline replay of the same saved draft found a hydration defect: a source ID
+mentioned inside prose caused an unreachable Mechanism to be copied. Hydration
+now follows exact scalar references and their dependencies. The replay removed
+only that spurious node; all five legitimate missing-EvidenceItem/CFDE-lineage
+errors remain, and every original capture file is unchanged. Authoring guidance
+requires genuine CFDE support before drafting, bounds repair rounds, and allows
+an explicit insufficient-evidence outcome instead of fabricated lineage.
+
+Deadline failures now retain the configured limit and last observable tool in
+their safe reason, and persist terminal timing, return code, child CPU/peak RSS,
+and whether provider usage was actually received. Unreported cost remains null,
+not zero. The 900-second/$3 execution caps are unchanged. Eleven new regressions
+cover concurrency, strict wall time, capacity, late/frozen responses, nested
+errors, exact and scoped RDF queries, hydration, and failed runtime metadata.
+Together with the 62 prior transport/activity/batch tests, all 73 pass; the
+construction skill validator also passes. No paid research rerun was launched.

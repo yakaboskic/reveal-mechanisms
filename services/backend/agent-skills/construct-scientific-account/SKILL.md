@@ -45,7 +45,11 @@ Before authoring biological interpretations, investigate each selected graph: in
 
 Every attempted call, including empty/error results, must be captured by the worker's evidence ledger with exact request/result artifacts and source locators. Do not alter the initial package. If complete capture or graph enforcement is unavailable, stop external retrieval and return that enrichment limitation. No additional CFDE expansion is authorized by this skill.
 
+For a source label or gene symbol without a verified entity IRI, use the schema's appropriate predicate with `literal` for an exact, case-sensitive lookup. Use `contains` only with a bound predicate or subject; whole-graph text scans are unavailable because a result limit does not bound the search work. An exact lookup returning no rows may reflect spelling, language or identifier differences. Do not repeatedly retry a timed-out query or treat the timeout as an empty result.
+
 ## Author the smallest useful account
+
+Before drafting, trace at least one useful proposed component Claim through an explicit EvidenceItem to a captured CFDE File that actually bears on the selected gap. DisMech reports and KG assertions can provide context or auxiliary support, but cannot replace this CFDE ancestry. If that link cannot be established from the retained observations, return `insufficient_evidence` with the missing link; do not draft a DisMech-only account or attach an unrelated CFDE row merely to satisfy the profile.
 
 1. Choose scoped biological Propositions that help address the unknown. A gene loading can motivate a candidate involvement hypothesis scoped to the selected factor/trait model and retained observations. It does not establish biological function or pathway membership. The observed loading belongs in evidence; the Proposition expresses the limited interpretation using `BIOLOGICAL_INTERPRETATION`.
 2. Give each Claim one Proposition. Its statement summarizes its assessment, the evidence basis, uncertainty and conflicting lines. Use the direction supported by the interpretation; a regulatory inhibition claim can have evidence direction `SUPPORTS`.
@@ -88,6 +92,8 @@ Call `mcp__reveal__write_account_draft` with `filename` (`account-1.json`, `acco
 Then call `mcp__reveal__lint_account` with that same `filename`. Draft lint is required for every account. Read `findings`, correct authored fields with the draft-writing tool, and lint again after changes. Preserve every trusted object and source identity. Draft mode permits temporary IDs on new objects; it does not permit an altered selected gap, missing synthesis or unsupported evidence links. Do not invent source records or scientific evidence merely to silence an error. If a repair needs unavailable information, report that limitation with the failed lint result. If the tools are unavailable, report that draft lint could not run; do not claim validation succeeded.
 
 Return the document and its actual lint result. A passing draft lint establishes structural checks, not biological correctness or acceptance. The backend assigns and verifies final DAPPER IDs, reruns final validation independently and performs its remaining acceptance checks.
+
+Spend the execution budget on the smallest useful account. After at most two repair rounds, stop if lint still fails: return `insufficient_evidence` when required scientific support is missing, or `failed` when a representation problem remains, with the actual reason. Auxiliary source-result Claims need not be account components; every included component must meet the EvidenceItem and CFDE-lineage requirements. Mentioning an object ID in prose does not create a structural reference or establish provenance.
 
 Use the worker-supplied output envelope and pinned DAPPER fields. Supply proposed Propositions, Claims, EvidenceItems and ScientificAccount(s), retaining exact supplied IDs for trusted objects and temporary references for new authored nodes. Report source locators and enrichment/coverage limitations. Each final validation document contains exactly one account; the package's account limit applies across those documents.
 

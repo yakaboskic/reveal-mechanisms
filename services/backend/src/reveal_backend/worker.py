@@ -319,7 +319,8 @@ class Worker:
                         (directory/f'grounding-{index+1}.json').write_bytes(canonical_json(grounding))
                         require(grounding['accepted'],'Independent source-grounding review rejected unsupported or overstated scientific content')
                     accepted.append((doc,report,final_path))
-                await self.accept_accounts(job,token,accepted,frozen,input_path,result,directory,mode)
+                if await self.begin_persistence(job,token,'Saving validated scientific accounts and their source provenance.'):
+                    await self.accept_accounts(job,token,accepted,frozen,input_path,result,directory,mode)
             else:
                 require(result.paragraph_path is not None,'Paragraph execution returned no segments')
                 raw=assert_artifact(result.paragraph_path,request.output_dir)
@@ -366,6 +367,17 @@ class Worker:
             lease.cancel()
             try: await lease
             except asyncio.CancelledError: pass
+
+    async def begin_persistence(self,job,token,message):
+        """Publish the saving boundary before persistence can block event reads."""
+        def transition():
+            with self.repository.transaction() as tx:
+                pair=jobs.fenced(tx,job['id'],token)
+                if not pair or pair[0]['status']=='cancel_requested': return False
+                current,_=pair; current['stage']='persisting'
+                jobs.event(tx,current,'activity',message,activity('preparation'))
+                return True
+        return await asyncio.to_thread(transition)
 
     async def accept_accounts(self,job,token,accepted,frozen,package_path,result,directory,mode):
         from .citations import register
@@ -455,6 +467,7 @@ class Worker:
         after={n['id']:n for rows in document.values() if isinstance(rows,list) for n in rows if isinstance(n,dict) and 'id' in n}
         require(all(after.get(identity)==node for identity,node in before.items()),'Paragraph assembly changed accepted scientific content')
         paragraph=document['paragraphs'][-1]
+        if not await self.begin_persistence(job,token,'Saving the validated research statement and its exact citations.'): return
         with self.repository.transaction() as tx:
             pair=jobs.fenced(tx,job['id'],token)
             if not pair or pair[0]['status']=='cancel_requested': return

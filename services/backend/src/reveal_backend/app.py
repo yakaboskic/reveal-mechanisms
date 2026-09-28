@@ -17,6 +17,7 @@ from .catalog import Catalog
 from .repository import Repository, now, uid, digest
 from .runtime_config import ROOT, artifacts_root
 from . import jobs
+from .account_discovery import visible_accounts, counts_by_gap, counted_gap, count_snapshot
 
 CONTRACT = json.loads((ROOT/'api/openapi.json').read_text())
 GATEWAY = json.loads((ROOT/'schema/gateway.schema.json').read_text())
@@ -58,8 +59,8 @@ async def internal_error(request, exc):
     logging.getLogger('reveal').error('Unhandled request failure (%s)', type(exc).__name__)
     return await problem_handler(request, Problem(503, 'SERVICE_UNAVAILABLE', 'The service is temporarily unavailable; retry shortly.'))
 
-def page(items, owner='', limit=50, cursor=None, scope=''):
-    limit=max(1,min(limit,100)); snapshot=digest([owner,scope,items]); offset=0
+def page(items, owner='', limit=50, cursor=None, scope='', *, snapshot_items=None):
+    limit=max(1,min(limit,100)); snapshot=digest([owner,scope,items if snapshot_items is None else snapshot_items]); offset=0
     secret=os.getenv('REVEAL_GATEWAY_SECRET','').encode()
     if cursor:
         try:
@@ -197,23 +198,44 @@ def filter_gaps(items,kind,status,disease_id):
         (not disease_id or disease_id in x['object'].get('about_entities',[]))]
 
 @app.get('/v1/knowledge-gaps/search')
-def search_gaps(q: str='', limit: int=20, mode: str='fuzzy',kind:str|None=None,status:str|None=None,cursor:str|None=None,source:str='dismech',disease_id:str|None=None):
+def search_gaps(request:Request,q: str='', limit: int=20, mode: str='fuzzy',kind:str|None=None,status:str|None=None,cursor:str|None=None,source:str='dismech',disease_id:str|None=None):
     if mode not in ('lexical','fuzzy'): raise Problem(503,'SEARCH_MODE_UNAVAILABLE','Knowledge-gap discovery currently supports lexical and fuzzy modes; no semantic gap index is configured.')
     catalog.load(); items=catalog.search_gaps(q,len(catalog.gaps),mode)
     allowed={g['object']['id'] for g in filter_gaps([x['gap'] for x in items],kind,status,disease_id)}
     items=[x for x in items if x['gap']['object']['id'] in allowed]
-    return {**page(items,limit=limit,cursor=cursor,scope=digest([q,mode,kind,status,disease_id])),'search':catalog.provenance(q,mode)}
+    owner,accounts=discovery(request); counts=counts_by_gap(accounts); observed=now()
+    items=[{**item,'gap':counted_gap(item['gap'],counts,owner,observed)} for item in items]
+    return {**page(items,owner,limit,cursor,digest([q,mode,kind,status,disease_id]),snapshot_items=count_snapshot(items)),'search':catalog.provenance(q,mode)}
+
+def discovery(request, *, attribution=False):
+    authorization=request.headers.get('authorization')
+    if not authorization: return '',[]
+    with repo.read_transaction() as tx:
+        owner=principal(tx,authorization)['user_id']
+        return owner,visible_accounts(tx,owner,attribution=attribution)
 
 @app.get('/v1/knowledge-gaps')
-def list_gaps(limit: int=20,cursor:str|None=None,kind:str|None=None,status:str|None=None,source:str='dismech',disease_id:str|None=None):
+def list_gaps(request:Request,limit: int=20,cursor:str|None=None,kind:str|None=None,status:str|None=None,source:str='dismech',disease_id:str|None=None):
     catalog.load(); items=filter_gaps([x['gap'] for x in catalog.search_gaps('',len(catalog.gaps))],kind,status,disease_id)
-    return page(items,limit=limit,cursor=cursor,scope=digest(['gaps',kind,status,disease_id]))
+    owner,accounts=discovery(request); counts=counts_by_gap(accounts); observed=now()
+    items=[counted_gap(gap,counts,owner,observed) for gap in items]
+    items.sort(key=lambda gap:(-gap['scientific_accounts']['count'],gap['source']['source_id'],gap['object']['id']))
+    return page(items,owner,limit,cursor,digest(['gaps',kind,status,disease_id]),snapshot_items=count_snapshot(items))
 
-@app.get('/v1/knowledge-gaps/{gap_id:path}')
-def get_gap(gap_id: str,source_revision:str|None=None):
+@app.get('/v1/knowledge-gaps/{gap_id}/accounts')
+def gap_accounts(gap_id:str,request:Request,limit:int=20,cursor:str|None=None,source_revision:str|None=None):
     gap=catalog.gap(gap_id)
     if source_revision and source_revision!=gap['source']['source_revision']: raise Problem(409,'SOURCE_REVISION_CHANGED','The exact requested source revision is unavailable.')
-    return gap
+    owner,accounts=discovery(request,attribution=True)
+    items=[item for item in accounts if item['account']['question']==gap['object']['id']]
+    return page(items,owner,limit,cursor,digest(['gap-accounts',gap['object']['id'],source_revision]))
+
+@app.get('/v1/knowledge-gaps/{gap_id:path}')
+def get_gap(gap_id: str,request:Request,source_revision:str|None=None):
+    gap=catalog.gap(gap_id)
+    if source_revision and source_revision!=gap['source']['source_revision']: raise Problem(409,'SOURCE_REVISION_CHANGED','The exact requested source revision is unavailable.')
+    owner,accounts=discovery(request)
+    return counted_gap(gap,counts_by_gap(accounts),owner,now())
 
 @app.get('/v1/mechanisms/search')
 def search_mechanisms(q: str='', mode: str='hybrid', limit: int=20,source:str='all',model:str='cfde-inc-v2',cursor:str|None=None):
@@ -425,10 +447,9 @@ async def record_exploration(request:Request):
 
 @app.get('/v1/accounts')
 def accounts(request:Request,limit:int=20,cursor:str|None=None,gap_id:str|None=None):
-    with repo.transaction() as tx:
+    with repo.read_transaction() as tx:
         user=principal(tx,request.headers.get('authorization'))['user_id']
-        items=[r['data']['summary'] for r in tx.list('account_membership',user) if not gap_id or r['data']['summary']['knowledge_gap']['id']==gap_id]
-        items.sort(key=lambda x:x['account']['id']); items.sort(key=lambda x:x['created_at'],reverse=True)
+        items=[item for item in visible_accounts(tx,user,attribution=True) if not gap_id or item['account']['question']==gap_id]
         return page(items,user,limit,cursor,digest(['accounts',gap_id]))
 
 def scientific(identity,request,kind='object'):

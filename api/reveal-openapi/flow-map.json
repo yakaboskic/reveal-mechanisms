@@ -1,5 +1,5 @@
 {
-  "openapi_sha256": "0eb62f9ff95e3de2100d9d57b253221c2a19850ebaac5bb889c8e55390928d7e",
+  "openapi_sha256": "3cb0b5b4ed2fc522fce830db1884f455c2f9ed95784ee04e5d0ab8d285407f5e",
   "steps": [
     {
       "id": "gap",
@@ -7,15 +7,17 @@
       "route": "GET /v1/knowledge-gaps/search",
       "action": "Type to search; select an exact source question on the same page.",
       "incoming": "q, fuzzy mode by default, source=dismech and filters.",
-      "outgoing": "GapSearchResults / GapRecord with DAPPER gap, exact source detail and public-account count.",
+      "outgoing": "GapSearchResults / GapRecord with exact source detail and scoped account count; AccountList with original author attribution.",
       "cases": [
         "searchKnowledgeGaps.request",
         "listKnowledgeGaps.request",
-        "getKnowledgeGap.request"
+        "getKnowledgeGap.request",
+        "listKnowledgeGapAccounts.request"
       ],
       "rules": [
         "Search text is not a new inquiry. Trending entries disappear while typing.",
-        "Initial homepage is curated; counts include only public saved accounts for the exact gap digest."
+        "Trending ranks by all-time distinct accepted account count for the exact gap digest within the caller workspace; visitors have no private account visibility.",
+        "The selected gap lists authorized scientific accounts with pagination; original author attribution does not change when ownership transfers."
       ]
     },
     {
@@ -242,6 +244,6 @@
       ]
     }
   ],
-  "operation_count": 31,
-  "exchange_count": 42
+  "operation_count": 32,
+  "exchange_count": 43
 }

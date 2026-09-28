@@ -274,3 +274,74 @@ Results and screenshots are in `.runtime/loading-surfaces-audit/`, including
 `checks.json`. Frontend type checking and all 27 unit tests passed before this
 browser gate. Route fallback components are included; the browser scenarios
 exercise the corresponding complete routes and client loading/error states.
+
+## Ranked knowledge gaps and proposed accounts — 28 September 2026
+
+Trending now preserves the API's account-count ranking and displays the first
+three distinct exact gap identities. The former editorial topic searches no
+longer reorder this list. Ranking and count labels reflect the signed-in
+workspace: saved accounts have no public publication model, so a visitor sees
+zero private-account counts. Changing identity refreshes ranking and clears the
+previous principal's results before new responses arrive.
+
+Selecting a gap shows its authorized proposed scientific accounts beneath the
+question. Each card uses the saved account title and closing remarks, claim
+count, creation date and original ResearchRequest attribution; transferring
+workspace ownership does not substitute the current owner as author. Missing
+attribution is explicit. Account links open their exact saved identity. The list
+is paginated, deduplicates page boundaries and retains existing cards during a
+page retry. Its count shows loaded records with `+` while more pages remain;
+it does not reuse potentially stale account counts from a browser-stored gap.
+The exact selected gap and source revision are sent to the list endpoint.
+Mismatched gap records and late responses from an old selection are not rendered.
+
+The [gap-account browser regression](../services/frontend/scripts/check-gap-accounts.mjs)
+passed seven mocked scenarios: ranked top three without editorial requests;
+author/title/synthesis/count/date/link rendering; pagination with a failed page
+and safe retry; 390px layout, slow feedback and reduced motion; visitor privacy;
+late old-gap responses; changed identity; mismatched exact-gap response rejection;
+and a 30-second deadline followed by a late response and successful retry. Some
+scenarios cover several related assertions. Existing API request deadlines are
+also applied to the trending read. All API responses, session transitions and
+autosaves in these checks were intercepted. No real backend reads, writes,
+research jobs or model calls were made. The six primary scenarios are recorded in
+`.runtime/gap-accounts-audit/checks.json`; the additional deadline case is in
+`.runtime/gap-accounts-audit/deadline/checks.json`. Desktop and mobile screenshots
+were inspected with no horizontal overflow; all scenarios had zero unexpected
+requests, page errors and console errors.
+
+Frontend type checking and 35 unit tests passed, including server-order and
+source-object preservation. Regenerated OpenAPI, flow viewer, TypeScript client
+and contract fixtures include the new optional-auth gap-account endpoint and
+optional original attribution. Contract validation passed 32 operations,
+180 response examples and 43 exchanges. These browser checks establish UI
+behavior with controlled fixtures; backend authorization/count/pagination tests
+provide the separate data-access gate.
+
+## Timed activity and immediate job recovery — 28 September 2026
+
+Every recorded analysis/statement stage shows elapsed time while active and a
+frozen duration once it finishes. Sequential worker messages use amber heartbeat
+dots during work and static green dots at the next recorded step; failed and
+stopped outcomes remain distinct. Tool calls use their own paired result timing.
+Partial replay without a recorded boundary shows an em dash rather than inventing
+a duration. The vertical bar loader is restored across activity and loading
+surfaces, with motion disabled for reduced-motion preferences.
+
+Job links render a retrieval surface on the server, before identity resolution.
+Job status and saved selection load independently, so a slow source read cannot
+hold back activity. Cached selections must match explicit job/draft/gap links.
+Late restoration cannot clear the requested job or overwrite a newer user action.
+The worker records a durable saving-stage boundary only after scientific checks,
+while retaining cancellation and lease fencing.
+
+Five timing unit tests and seven intercepted activity browser scenarios passed,
+covering advancing/frozen timers, failures, partial replay, parallel tool calls,
+amber/green states, desktop/mobile layout, reduced motion, tail following and
+job-before-gap restoration. The final delayed-gap scenario also tests a cold
+`?job&gap` link without a draft. Existing loading and eight selected submission
+scenarios passed after adding mocks for the new independent account-list read.
+The isolated release frontend passed 28 unit tests and its production build;
+unrelated local admin changes were excluded from that build. Runtime verification
+checks exact deployed file hashes; live read-only discovery confirmed one saved
+account for the user's T2D gap and no private counts in public browsing.

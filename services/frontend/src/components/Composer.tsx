@@ -6,6 +6,7 @@ import { ProviderButtons, useIdentity } from "./Session";
 import { Activity } from "./Activity";
 import { AccountPreview, Record } from "./Scientific";
 import { loadFeaturedGaps } from "@/lib/featured-gaps";
+import { GapAccounts } from "./GapAccounts";
 import { rememberSubmission, restoreSubmission, type SubmissionAttempt, type SubmissionMethod, type SubmissionStage } from "@/lib/submission";
 import { SubmissionProgress } from "./SubmissionProgress";
 import { LoadingSurface, LoadingStatus } from "./LoadingSurface";
@@ -14,14 +15,19 @@ import { providerRedirect } from "@/lib/provider-redirect";
 
 const storageKey = "reveal:composer";
 type LocalDraft = { composer: Schema<"Composer">; gap: Schema<"GapRecord"> | null; factors: Record<string, Schema<"EagglFactor">>; draft: Schema<"Draft"> | null; owner: string | null; job?: Schema<"Job"> | null; submitKey?: { binding: string; key: string } | null };
-export function Composer() {
+export function Composer({ initialJobId }: { initialJobId?: string } = {}) {
   const { me, ready, refresh } = useIdentity();
   const [composer, setComposer] = useState(emptyComposer);
   const [gap, setGap] = useState<Schema<"GapRecord"> | null>(null);
   const [factors, setFactors] = useState<Record<string, Schema<"EagglFactor">>>({});
   const [draft, setDraft] = useState<Schema<"Draft"> | null>(null);
   const [restoring, setRestoring] = useState("");
+  const [retrievingJob, setRetrievingJob] = useState(!!initialJobId);
+  const [jobRestoreError, setJobRestoreError] = useState("");
+  const [restoreAttempt, setRestoreAttempt] = useState(0);
   const [featuredPending, setFeaturedPending] = useState(true);
+  const [featuredOwner, setFeaturedOwner] = useState<string | null>(null);
+  const [featuredReload, setFeaturedReload] = useState(0);
   const [query, setQuery] = useState(""); const [searching, setSearching] = useState(false);
   const [results, setResults] = useState<Schema<"GapRecord">[]>([]); const [trending, setTrending] = useState<Schema<"GapRecord">[]>([]);
   const [matches, setMatches] = useState<Schema<"EagglFactor">[]>([]); const [adding, setAdding] = useState(false);
@@ -62,7 +68,11 @@ export function Composer() {
     hydrated.current = true;
     try {
       const local = JSON.parse(sessionStorage.getItem(storageKey) || "null") as LocalDraft | null;
-      if (local) { setComposer(local.composer); setGap(local.gap); setFactors(local.factors); setDraft(local.draft); draftRef.current = local.draft; loadedOwner.current = local.owner; submitKey.current = local.submitKey || null; if (local.job) setJob(local.job); }
+      const params = new URLSearchParams(window.location.search);
+      const matchesLink = local && (!params.get("job") || params.get("job") === local.job?.id) &&
+        (!params.get("draft") || params.get("draft") === local.draft?.id) &&
+        (!params.get("gap") || params.get("gap") === local.gap?.object.id);
+      if (local && matchesLink) { setComposer(local.composer); setGap(local.gap); setFactors(local.factors); setDraft(local.draft); draftRef.current = local.draft; loadedOwner.current = local.owner; submitKey.current = local.submitKey || null; if (local.job) setJob(local.job); }
     } catch { sessionStorage.removeItem(storageKey); }
     // An explicit job link always opens that job, even if another submission
     // left a pending browser snapshot after a lost response.
@@ -76,9 +86,18 @@ export function Composer() {
       setJob(null); setSubmission({ stage: "signing-in" });
     }
     setBooted(true);
-    if (!pending) void api.gaps().then(value => loadFeaturedGaps(api, value.items)).then(setTrending).catch(e => setError(messageOf(e))).finally(() => setFeaturedPending(false));
-    else setFeaturedPending(false);
+
   }, []);
+  useEffect(() => {
+    if (!ready || !booted || pendingSubmission.current) return;
+    let active = true;
+    const owner = me?.user_id || "visitor";
+    setFeaturedPending(true); setTrending([]); setFeaturedOwner(null);
+    void api.gaps().then(value => {
+      if (active) { setTrending(loadFeaturedGaps(value.items)); setFeaturedOwner(owner); }
+    }).catch(e => { if (active) setError(messageOf(e)); }).finally(() => { if (active) setFeaturedPending(false); });
+    return () => { active = false; };
+  }, [ready, booted, me?.user_id, featuredReload]);
   useEffect(() => {
     if (!booted) return;
     sessionStorage.setItem(storageKey, JSON.stringify({ composer, gap, factors, draft, owner: me?.user_id || loadedOwner.current, job, submitKey: submitKey.current } satisfies LocalDraft));
@@ -95,11 +114,17 @@ export function Composer() {
     let active = true; const epoch = restoreEpoch.current;
     const canRestore = () => active && !pendingSubmission.current && epoch === restoreEpoch.current;
     const restore = async () => {
-      if (((jobId || draftId) && me) || gapId) setRestoring(jobId ? "Opening your research activity" : draftId ? "Restoring your saved question" : "Opening knowledge gap");
+      if (jobId && !me) { setRetrievingJob(false); setJob(null); setJobRestoreError("Sign in with the account that started this job to retrieve its status."); return; }
+      if (jobId) { setRetrievingJob(true); setJobRestoreError(""); }
+      if ((draftId && me) || gapId) setRestoring(draftId ? "Restoring your saved question" : "Opening knowledge gap");
+      const restoreJob = async () => {
+        if (!jobId || !me) return;
+        try { const value = await api.job(jobId); if (canRestore()) setJob(value); }
+        catch (failure) { if (canRestore()) setJobRestoreError(messageOf(failure)); }
+        finally { if (canRestore()) setRetrievingJob(false); }
+      };
+      const restoreSelection = async () => {
       try {
-        // Show an existing job without waiting for its editable draft or source
-        // description. Those independent reads can be slow on remote storage.
-        if (jobId && me) { const value = await api.job(jobId); if (canRestore()) setJob(value); }
         if (draftId && me) {
           const value = await api.draft(draftId);
           const source = value.composer.source_gap ? await api.gap(value.composer.source_gap.id) : null;
@@ -108,13 +133,18 @@ export function Composer() {
         } else if (gapId) {
           const source = await api.gap(gapId); if (!canRestore()) return;
           if (currentRef.current.source_gap?.id === source.object.id && currentRef.current.source_gap.source_revision === source.source.source_revision) setGap(source);
-          else await selectGap(source);
+          else if (jobId) { setGap(source); setComposer({ ...emptyComposer(), source_gap: selectedGap(source) }); }
+          else await selectGap(source, true);
         }
       } catch (failure) { if (canRestore()) setError(messageOf(failure)); }
-      finally { if (active) setRestoring(""); }
+      finally { if (canRestore()) setRestoring(""); }
+      };
+      // Status and selection are independent: neither slow source lookup nor
+      // draft storage should hold up the live activity stream.
+      await Promise.allSettled([restoreJob(), restoreSelection()]);
     };
     void restore(); return () => { active = false; setRestoring(""); };
-  }, [booted, ready, me?.user_id]);
+  }, [booted, ready, me?.user_id, restoreAttempt]);
   useEffect(() => {
     if (query.trim()) {
       const controller = new AbortController(); setSearching(true); setResults([]);
@@ -192,10 +222,10 @@ export function Composer() {
     }); saveQueue.current = queued; return queued;
   };
   useEffect(() => {
-    if (!booted || !me || !composer.source_gap || job || conflict || suggesting || submission) return;
+    if (!booted || !me || !composer.source_gap || job || retrievingJob || restoring || jobRestoreError || conflict || suggesting || submission) return;
     const timer = setTimeout(() => { void save(composer).catch(e => setError(messageOf(e))); }, 1000);
     return () => clearTimeout(timer);
-  }, [composer, me?.user_id, booted, job, conflict, suggesting, submission]);
+  }, [composer, me?.user_id, booted, job, retrievingJob, restoring, jobRestoreError, conflict, suggesting, submission]);
   useEffect(() => {
     if (!booted || !ready || !pendingSubmission.current || submissionResumed.current) return;
     submissionResumed.current = true;
@@ -225,7 +255,8 @@ export function Composer() {
     } catch (failure) { if (!controller.signal.aborted) setError(messageOf(failure)); }
     finally { if (suggestionRequest.current === controller) { suggestionRequest.current = null; setSuggesting(false); } }
   };
-  async function selectGap(value: Schema<"GapRecord">) {
+  async function selectGap(value: Schema<"GapRecord">, restoringSelection = false) {
+    if (!restoringSelection) { restoreEpoch.current++; setRestoring(""); setRetrievingJob(false); setJobRestoreError(""); }
     saveEpoch.current++;
     setGap(value); setQuery(""); setJob(null); setError(""); setConflict(false); submitKey.current = null;
     const next = { ...emptyComposer(), source_gap: selectedGap(value) };
@@ -336,9 +367,10 @@ export function Composer() {
     const url = new URL(window.location.href); url.searchParams.delete("error"); window.history.replaceState(null, "", url);
     requestAnimationFrame(() => document.querySelector<HTMLButtonElement>(".gap-submit")?.focus());
   };
-  const reset = () => { setJob(null); submitKey.current = null; const url = new URL(window.location.href); url.searchParams.delete("job"); window.history.replaceState(null, "", url); };
+  const reset = () => { restoreEpoch.current++; setRestoring(""); setRetrievingJob(false); setJobRestoreError(""); setJob(null); submitKey.current = null; const url = new URL(window.location.href); url.searchParams.delete("job"); window.history.replaceState(null, "", url); };
   const accountIds = job?.result?.kind === "analysis" ? job.result.account_ids : [];
   const clearGap = () => {
+    restoreEpoch.current++; setRestoring(""); setRetrievingJob(false); setJobRestoreError("");
     suggestionRequest.current?.abort(); suggestionRequest.current = null; setSuggesting(false); setLimitations([]);
     saveEpoch.current++; setGap(null); setComposer(emptyComposer()); setDraft(null); draftRef.current = null; setError(""); setAdding(false); setQuery("");
     const url = new URL(window.location.href); ["draft", "gap", "job"].forEach(key => url.searchParams.delete(key)); window.history.replaceState(null, "", url);
@@ -352,10 +384,13 @@ export function Composer() {
   };
   const anchorName = (id: string) => selectedFactor(id)?.cfde_anchor.label || selectedFactor(id)?.object.name || selectedFactor(id)?.cfde_anchor.subtitle || id;
   if (submission) return <SubmissionProgress stage={submission.stage} provider={pendingSubmission.current?.method} question={pendingSubmission.current?.question} error={submission.error} onRetry={retrySubmission} onBack={backToQuestion} retryLabel={pendingSubmission.current?.method === "google" || pendingSubmission.current?.method === "orcid" ? "Try again" : "Retry"} />;
+  const jobStatusSurface = <LoadingSurface compact={!!job} skeleton={job ? "none" : "rows"} title={jobRestoreError ? "Unable to retrieve job status" : "Retrieving job status"} description="Checking the current stage and reconnecting to recorded activity." error={jobRestoreError} onRetry={() => { setJobRestoreError(""); setRetrievingJob(true); setRestoreAttempt(value => value + 1); }} />;
+  if (!job && (retrievingJob || jobRestoreError)) return <main id="main" className="composer-page prototype-composer has-job">{jobStatusSurface}{jobRestoreError && <a className="text-button" href="/">Return to knowledge gaps</a>}</main>;
   return <main id="main" className={`composer-page prototype-composer ${gap ? "has-gap" : ""} ${job ? "has-job" : ""} ${job && terminal(job.status) ? "job-complete" : ""}`}>
-    {restoring && <LoadingSurface compact={!!gap || !!job} skeleton={gap || job ? "none" : "rows"} title={restoring} description="Retrieving the saved selection and current research status." />}
-    {!gap && <p className="invitation">Help us close these <a href="https://dismech.monarchinitiative.org/app/discussions/index.html" target="_blank" rel="noopener noreferrer">knowledge gaps</a></p>}
-    <section className={`question-shell ${job ? "submitted" : ""}`} aria-label="Knowledge gap and mechanism anchors">
+    {(retrievingJob || jobRestoreError) && jobStatusSurface}
+    {restoring && !retrievingJob && <LoadingSurface compact={!!gap || !!job} skeleton={gap || job ? "none" : "rows"} title={restoring} description="Retrieving your saved question and mechanism anchors." />}
+    {!gap && !job && <p className="invitation">Help us close these <a href="https://dismech.monarchinitiative.org/app/discussions/index.html" target="_blank" rel="noopener noreferrer">knowledge gaps</a></p>}
+    {(!job || gap) && <section className={`question-shell ${job ? "submitted" : ""}`} aria-label="Knowledge gap and mechanism anchors">
       {!gap ? <div className="gap-input-wrap"><label className="sr-only" htmlFor="gap-search">Search DisMech knowledge gaps</label><input id="gap-search" type="search" role="combobox" aria-autocomplete="list" aria-expanded={!!query.trim() && showResults && !!results.length} value={query} autoComplete="off" onChange={e => { setQuery(e.target.value); setResults([]); setSearching(!!e.target.value.trim()); pendingResultFocus.current = false; setError(""); setShowResults(true); }} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)} onKeyDown={e => { if ((e.key === "ArrowDown" || e.key === "Enter") && query.trim()) { e.preventDefault(); focusResult(); } if (e.key === "Escape") { setShowResults(false); pendingResultFocus.current = false; } }} placeholder={focused ? "Search DisMech knowledge gaps" : ""} aria-controls="gap-results-list" />{!query && !focused && <span className="idle-question" aria-hidden="true">{example}</span>}<button className="send search-arrow" disabled={!query.trim()} aria-label="Show matching knowledge gaps" title="Show matching knowledge gaps" onClick={focusResult}><span aria-hidden="true">↑</span></button></div> : <>
         <div className="selected-question-row"><h1 id="submitted-question" tabIndex={job ? -1 : undefined} className="selected-question">{gap.object.text}</h1>{!job && <button className="clear-question" aria-label="Search for a different knowledge gap" onClick={clearGap}>×</button>}</div>
         <div className="inline-context">
@@ -373,10 +408,11 @@ export function Composer() {
           </>}
         </div>
       </>}
-    </section>
-    {!gap && !!query.trim() && showResults && <section className="search-results" aria-label="Knowledge gap search results">{searching ? <LoadingSurface key={query.trim()} compact rows={2} title="Searching knowledge gaps" description="Looking for matching questions in DisMech." /> : <p className="result-heading" role="status">{error ? "Search unavailable" : `${results.length} related knowledge gaps`}</p>}<div id="gap-results-list" role="listbox" aria-label="Matching knowledge gaps">{results.map((value, index) => <button className="gap-result" role="option" aria-selected="false" key={value.source.source_id} onClick={() => void selectGap(value)} onKeyDown={e => { if (e.key === "Escape") { setShowResults(false); document.getElementById("gap-search")?.focus(); } if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); if (e.key === "ArrowUp" && index === 0) document.getElementById("gap-search")?.focus(); else { const buttons = e.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>("button"); buttons?.[(index + (e.key === "ArrowDown" ? 1 : -1)) % results.length]?.focus(); } } }}><span>{value.object.text}</span><small>{value.source.disease_label} · {value.source.status || "Status not specified"}</small></button>)}</div>{!searching && !error && !results.length && <p className="empty">No matching knowledge gaps. Try a disease, gene or mechanism.</p>}</section>}
-    {!gap && !query.length && <section className="trending" aria-label="Trending knowledge gaps"><div className="trending-heading"><h2><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m3 17 6-6 4 4 8-10" /><path d="M15 5h6v6" /></svg>Trending knowledge gaps</h2><span>Curated from DisMech</span></div>{trending.map(value => <button className="trend" key={value.source.source_id} onClick={() => void selectGap(value)}><span className="trend-question">{value.object.text}<small>{value.scientific_accounts.count} scientific account{value.scientific_accounts.count === 1 ? "" : "s"} {value.scientific_accounts.scope === "owner_exact_gap" ? "in your workspace" : "publicly available"}</small></span><span className="trend-arrow" aria-hidden="true">↗</span></button>)}{featuredPending && !error && <LoadingSurface compact title="Loading knowledge gaps" description="Retrieving curated questions to explore." rows={3} />}{!featuredPending && !trending.length && !error && <p className="muted">No featured questions are available. Search by disease, gene or mechanism above.</p>}</section>}
-    {error && <div className="error" role="alert">{error}{!gap && <button onClick={() => { setError(""); setFeaturedPending(true); void api.gaps().then(value => loadFeaturedGaps(api, value.items)).then(setTrending).catch(e => setError(messageOf(e))).finally(() => setFeaturedPending(false)); }}>Retry</button>}</div>}
+    </section>}
+    {gap && !job && <GapAccounts gap={gap} />}
+    {!gap && !job && !!query.trim() && showResults && <section className="search-results" aria-label="Knowledge gap search results">{searching ? <LoadingSurface key={query.trim()} compact rows={2} title="Searching knowledge gaps" description="Looking for matching questions in DisMech." /> : <p className="result-heading" role="status">{error ? "Search unavailable" : `${results.length} related knowledge gaps`}</p>}<div id="gap-results-list" role="listbox" aria-label="Matching knowledge gaps">{results.map((value, index) => <button className="gap-result" role="option" aria-selected="false" key={value.source.source_id} onClick={() => void selectGap(value)} onKeyDown={e => { if (e.key === "Escape") { setShowResults(false); document.getElementById("gap-search")?.focus(); } if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); if (e.key === "ArrowUp" && index === 0) document.getElementById("gap-search")?.focus(); else { const buttons = e.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>("button"); buttons?.[(index + (e.key === "ArrowDown" ? 1 : -1)) % results.length]?.focus(); } } }}><span>{value.object.text}</span><small>{value.source.disease_label} · {value.source.status || "Status not specified"}</small></button>)}</div>{!searching && !error && !results.length && <p className="empty">No matching knowledge gaps. Try a disease, gene or mechanism.</p>}</section>}
+    {!gap && !job && !query.length && <section className="trending" aria-label="Trending knowledge gaps"><div className="trending-heading"><h2><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m3 17 6-6 4 4 8-10" /><path d="M15 5h6v6" /></svg>Trending knowledge gaps</h2><span>{me ? "Most scientific accounts in your workspace" : "Ranked by available scientific accounts"}</span></div>{(featuredOwner === (me?.user_id || "visitor") ? trending : []).map(value => <button className="trend" key={value.source.source_id} onClick={() => void selectGap(value)}><span className="trend-question">{value.object.text}<small>{value.scientific_accounts.count} scientific account{value.scientific_accounts.count === 1 ? "" : "s"} {value.scientific_accounts.scope === "owner_exact_gap" ? "in your workspace" : "available in this view"}</small></span><span className="trend-arrow" aria-hidden="true">↗</span></button>)}{featuredPending && !error && <LoadingSurface compact title="Loading knowledge gaps" description="Retrieving ranked questions to explore." rows={3} />}{!featuredPending && !trending.length && !error && <p className="muted">No knowledge gaps are available. Search by disease, gene or mechanism above.</p>}</section>}
+    {error && <div className="error" role="alert">{error}{!gap && !job && <button onClick={() => { setError(""); setFeaturedReload(value => value + 1); }}>Retry</button>}</div>}
     {conflict && <div className="conflict"><p>This draft changed in another session. Your edits are retained here.</p><button onClick={async () => { if (!draftRef.current) return; const latest = await api.draft(draftRef.current.id); draftRef.current = latest; setDraft(latest); setComposer(latest.composer); setConflict(false); setError(""); }}>Load saved version</button><button onClick={() => { draftRef.current = null; setDraft(null); setConflict(false); setError(""); void save().catch(e => setError(messageOf(e))); }}>Save my edits as a new draft</button></div>}
     {job && <><Activity key={job.id} initial={job} onJob={setJob} />{accountIds.map(id => <AccountPreview key={id} id={id} />)}{terminal(job.status) && <button className="text-button return-to-question" onClick={reset}>Return to question</button>}</>}
     <dialog ref={inspectionDialog} className="inspection-dialog" aria-labelledby="inspection-title" onClose={() => setInspection(null)}><div className="inspection-heading"><h2 id="inspection-title">{inspection?.title}</h2><button aria-label="Close record" onClick={() => inspectionDialog.current?.close()}>×</button></div><div className="inspection-body">{inspection?.title === "About this knowledge gap" && <p>{gap?.object.text}</p>}{inspection?.description && <><h3>{inspection.title === "About this knowledge gap" ? "What remains unknown" : "Context"}</h3><p>{inspection.description}</p></>}<details open={!inspection?.description}><summary>Source evidence and record</summary><Record value={inspection?.value} /></details></div></dialog>

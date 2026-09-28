@@ -38,6 +38,8 @@ class WorkerReviewFailureTests(unittest.TestCase):
                 result = tx.get('job', job['id'])['data']
                 self.assertEqual(tx.list('account', owner), [])
                 self.assertIsNotNone(tx.get('request', request_id))
+                self.assertFalse(any(row['data']['stage']=='persisting' for row in tx.list('event',owner)),
+                    'An unavailable or rejecting review must not announce saving')
             directory = root / job['id'] / 'attempt-1'
             self.assertTrue((directory / 'validation-1.json').exists(), 'Successful deterministic lint must survive an unavailable reviewer')
             return result, json.loads((directory / 'failure.json').read_text())

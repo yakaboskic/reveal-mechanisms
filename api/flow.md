@@ -46,14 +46,16 @@ Type to search; select an exact source question on the same page.
 
 **Request:** q, fuzzy mode by default, source=dismech and filters.
 
-**Response:** GapSearchResults / GapRecord with DAPPER gap, exact source detail and public-account count.
+**Response:** GapSearchResults / GapRecord with exact source detail and scoped account count; AccountList with original author attribution.
 
 - `GET /v1/knowledge-gaps/search` — [request request/response](examples/searchKnowledgeGaps.request.json)
 - `GET /v1/knowledge-gaps` — [request request/response](examples/listKnowledgeGaps.request.json)
 - `GET /v1/knowledge-gaps/{gap_id}` — [request request/response](examples/getKnowledgeGap.request.json)
+- `GET /v1/knowledge-gaps/{gap_id}/accounts` — [request request/response](examples/listKnowledgeGapAccounts.request.json)
 
 - Search text is not a new inquiry. Trending entries disappear while typing.
-- Initial homepage is curated; counts include only public saved accounts for the exact gap digest.
+- Trending ranks by all-time distinct accepted account count for the exact gap digest within the caller workspace; visitors have no private account visibility.
+- The selected gap lists authorized scientific accounts with pagination; original author attribution does not change when ownership transfers.
 
 ### 2. Choose mechanism anchors
 
@@ -258,4 +260,4 @@ Request cancellation or recover from stale save/event cursor.
 
 Requests/responses are taken from the existing validated OpenAPI exchange library. The CADinT2D analysis/paragraph sequence is internally linked. The CAD source-selected gap now frames the request and account. The evidence package is a separate captured input; the authored account is not its validated agent output. Semantic scores and agent outputs remain illustrative fixtures.
 
-The mapping covers 31 operations and all 42 exchanges. OpenAPI SHA-256: `0eb62f9ff95e3de2100d9d57b253221c2a19850ebaac5bb889c8e55390928d7e`. No endpoints or payloads were changed to build this diagram.
+The mapping covers 32 operations and all 43 exchanges. OpenAPI SHA-256: `3cb0b5b4ed2fc522fce830db1884f455c2f9ed95784ee04e5d0ab8d285407f5e`. No endpoints or payloads were changed to build this diagram.

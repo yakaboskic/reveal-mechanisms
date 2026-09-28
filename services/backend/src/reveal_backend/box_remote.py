@@ -183,7 +183,37 @@ def lint_tool(filename):
     report = lint_scientific_account(frozen, dapper_root=runtime['dapper_root'],
                                      release_lock=BASE / 'bundle/services/backend/agent-runtime/dapper-release.json',
                                      evidence_package=runtime['evidence_package'], mode='draft')
+    checks = {finding.get('check') for finding in report.get('findings', []) if finding.get('severity') == 'error'}
+    if checks & {'cfde-ancestry', 'claim-evidence'}:
+        report['repair_guidance'] = 'Each component Claim needs an explicit EvidenceItem and genuine lineage to a captured CFDE File. DisMech-only source-result Claims may be auxiliary sources but cannot substitute for CFDE-backed account components. Do not attach an unrelated CFDE row to satisfy lint. If the captured observations cannot support a useful CFDE-backed interpretation of the selected gap, write outcome.json with status insufficient_evidence and the specific missing link instead of repeatedly rewriting the same unsupported account.'
     return {'content': [{'type': 'text', 'text': json.dumps(report)}], 'isError': not report.get('valid')}
+
+
+def deadline_reason(request, last_activity=None):
+    stage = 'authoring the account' if request['kind'] == 'research' else 'writing the research statement'
+    last_tool = (last_activity or {}).get('tool_name')
+    suffix = '; last observed tool: ' + last_tool if last_tool else ''
+    return f"Agent reached its {request['timeout_seconds']}-second execution limit while {stage}{suffix}. No output was accepted."
+
+
+def runtime_completion(request, started, status, reason, process=None, parser=None, last_activity=None):
+    """Safe terminal metrics, including deadline exits without provider usage."""
+    result = parser.result if parser else None
+    summary = {'completed_at': stamp(), 'elapsed_seconds': round(time.monotonic() - started, 3),
+               'time_limit_seconds': request['timeout_seconds'],
+               'status': status, 'reason': reason, 'process_returncode': process.returncode if process else None,
+               'provider_terminal_received': result is not None,
+               'usage_status': 'reported' if result and result.get('total_cost_usd') is not None else 'unavailable',
+               'cost_usd': result.get('total_cost_usd') if result else None,
+               'last_observable_activity': last_activity}
+    try:
+        import resource
+        usage = resource.getrusage(resource.RUSAGE_CHILDREN)
+        summary['child_cpu_seconds'] = round(usage.ru_utime + usage.ru_stime, 3)
+        summary['child_peak_rss_bytes'] = int(usage.ru_maxrss * (1 if sys.platform == 'darwin' else 1024))
+    except (ImportError, OSError):
+        pass
+    return summary
 
 
 def write_draft_tool(filename, document):
@@ -200,10 +230,19 @@ def write_draft_tool(filename, document):
             for node in rows:
                 if isinstance(node, dict) and node.get('id') in trusted and node != trusted[node['id']][1]:
                     raise PolicyError('A trusted source object was changed')
+    def exact_references(value):
+        if isinstance(value, dict):
+            for child in value.values():
+                yield from exact_references(child)
+        elif isinstance(value, list):
+            for child in value:
+                yield from exact_references(child)
+        elif isinstance(value, str):
+            yield value
     for _ in range(len(trusted) + 1):
         present = {n['id'] for rows in document.values() if isinstance(rows, list) for n in rows if isinstance(n, dict) and 'id' in n}
-        serialized = json.dumps(document)
-        missing = [identity for identity in trusted if identity not in present and identity in serialized]
+        references = set(exact_references(document))
+        missing = [identity for identity in trusted if identity not in present and identity in references]
         if not missing:
             break
         for identity in missing:
@@ -239,12 +278,15 @@ def main():
     try:
         fcntl.flock(lockfile, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
+        lockfile.close()
         return 0
     if (STATE / 'status.json').exists():
+        lockfile.close()
         return 0
     request = json.loads((BASE / 'request.json').read_text())
     ledger = Ledger(STATE / 'ledger', request['job_id'], request['attempt'])
-    process = server = None
+    process = server = parser = runtime = None
+    last_activity = None
     builtin_calls = {}
     status, reason = 'failed', None
     started = time.monotonic()
@@ -303,7 +345,7 @@ def main():
                     status, reason = 'cancelled', 'Cancelled by the owning job'
                     terminate(process); break
                 if time.monotonic() - started > request['timeout_seconds']:
-                    reason = 'Agent execution timed out'; terminate(process); break
+                    reason = deadline_reason(request, last_activity); terminate(process); break
                 for key, _ in selector.select(timeout=0.25):
                     chunk = os.read(key.fileobj.fileno(), 65536)
                     if not chunk:
@@ -314,6 +356,8 @@ def main():
                     if key.data == 'stdout':
                         trace.write(trace_filter.feed(chunk)); trace.flush()
                         for kind, payload in parser.feed(chunk):
+                            if kind in ('tool_call', 'tool_result'):
+                                last_activity = {'kind': kind, 'tool_name': payload.get('tool_name')}
                             if kind == 'tool_call':
                                 call = parser.tools[payload['call_id']]
                                 entry = ledger.start(call['name'], call['input'], None)
@@ -332,8 +376,11 @@ def main():
             if process.poll() is None:
                 process.wait(timeout=10)
         if not reason:
-            if process.returncode in (124, 137):
-                raise TimeoutError('The independent agent deadline expired')
+            if process.returncode == 124 or (process.returncode == 137 and time.monotonic() - started >= request['timeout_seconds'] - 1):
+                reason = deadline_reason(request, last_activity)
+            elif process.returncode == 137:
+                reason = 'Agent process was killed before its execution deadline (exit 137). No output was accepted.'
+        if not reason:
             for kind, payload in parser.finish():
                 emit(kind, payload)
             if process.returncode != 0 or parser.result.get('is_error'):
@@ -347,10 +394,6 @@ def main():
                 expected = list(OUTPUT.glob('account-*.*')) if request['kind'] == 'research' else list(OUTPUT.glob('paragraph.json'))
                 if status == 'succeeded' and not expected:
                     status, reason = 'failed', 'Claude completed without the required output documents'
-        runtime['completed_at'] = stamp()
-        runtime['cost_usd'] = parser.result.get('total_cost_usd') if parser.result else None
-        runtime['observed_claude_runtime'] = parser.runtime
-        write_json(STATE / 'runtime.json', runtime)
     except Exception as exc:
         # Values from provider exceptions can contain credentials. Keep diagnostics typed.
         status = 'failed'
@@ -363,7 +406,14 @@ def main():
         if server:
             server.shutdown()
         ledger.freeze()
+        if runtime is not None:
+            completion = runtime_completion(request, started, status, reason, process, parser, last_activity)
+            runtime['completed_at'], runtime['cost_usd'] = completion['completed_at'], completion['cost_usd']
+            runtime['completion'] = completion
+            runtime['observed_claude_runtime'] = parser.runtime if parser else {}
+            write_json(STATE / 'runtime.json', runtime)
         write_json(STATE / 'status.json', {'status': status, 'reason': reason, 'completed_at': stamp()})
+        lockfile.close()
     return 0
 
 

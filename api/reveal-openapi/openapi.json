@@ -1597,7 +1597,7 @@
           "Knowledge gaps"
         ],
         "summary": "Search knowledge gaps with free text",
-        "description": "Fuzzy lookup of imported DisMech gaps by default. Query text is not an authored inquiry or permission to launch research. Other explicit modes require their configured index and return 503 if unavailable. Rankings are retrieval signals. Example uses the exact CAD gap from the HTML study.",
+        "description": "Fuzzy lookup of imported DisMech gaps by default. Query text is not an authored inquiry or permission to launch research. Other explicit modes require their configured index and return 503 if unavailable. Rankings are retrieval signals. Example uses the exact CAD gap from the HTML study. Account counts use the same optional-session visibility rules as gap browsing; relevance order remains unchanged.",
         "parameters": [
           {
             "name": "q",
@@ -1998,7 +1998,7 @@
           "Knowledge gaps"
         ],
         "summary": "Browse knowledge gaps",
-        "description": "Browse imported DisMech gaps. Initial homepage is curated, with exact public-account counts as of the returned timestamp. Counts never include private work. Default source=dismech, include both gap kinds and all original statuses; filters may narrow. No manufactured popularity ranking.",
+        "description": "Browse imported DisMech gaps ordered by distinct accessible accepted scientific-account count descending, then native source ID and gap digest. Counts are all-time exact DAPPER gap identity matches, not text matches, attempts, paragraph jobs or an implicit source-revision rollup. With a signed session only that workspace is visible; without a session counts are zero because no account publication model exists. Private work from other owners is never counted. Invalid supplied credentials are rejected. Filters apply before pagination; count changes invalidate continuation cursors.",
         "parameters": [
           {
             "name": "kind",
@@ -2310,7 +2310,7 @@
           "Knowledge gaps"
         ],
         "summary": "Inspect a knowledge gap",
-        "description": "Exact DAPPER KnowledgeGap plus one pinned source observation and attachment resolutions. source_revision selects a historical mapping; omission selects the latest accessible observation of this same digest. It never redirects to a different digest.",
+        "description": "Exact DAPPER KnowledgeGap plus one pinned source observation and attachment resolutions. source_revision selects a historical mapping; omission selects the latest accessible observation of this same digest. It never redirects to a different digest. Account counts use the same optional-session visibility rules as gap browsing.",
         "parameters": [
           {
             "name": "gap_id",
@@ -12050,6 +12050,315 @@
             "lang": "Shell",
             "label": "request",
             "source": "curl -X GET 'https://api.reveal.example.org/v1/accounts?gap_id=dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk&limit=20' -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Accept: application/json'"
+          }
+        ]
+      }
+    },
+    "/v1/knowledge-gaps/{gap_id}/accounts": {
+      "get": {
+        "operationId": "listKnowledgeGapAccounts",
+        "tags": [
+          "Knowledge gaps"
+        ],
+        "summary": "List visible scientific accounts for a knowledge gap",
+        "description": "Accepted accounts for the exact DAPPER KnowledgeGap identity, newest first then account ID, deduplicated by scientific-account digest. Optional signed session selects only its authorized workspace memberships; no session returns an empty list because accounts are not publicly published. Counts and lists never reveal another private owner. Historical source observations with the same exact gap digest remain the same scientific question; changed gap digests never merge. Optional source_revision checks the selected catalog observation. Attribution is the immutable original request actor, not current ownership. Uses the same account read authorization as /v1/accounts; each account ID links to its existing account endpoint.",
+        "parameters": [
+          {
+            "name": "gap_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values.",
+              "pattern": "^dapper:KnowledgeGap\\.[A-Za-z0-9_-]{32}$"
+            },
+            "example": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+            "description": "Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values."
+          },
+          {
+            "name": "source_revision",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "example": "8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd",
+            "description": ""
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            },
+            "example": 20,
+            "description": ""
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "example": "opaque-next-page",
+            "description": "Omit for the first page. A returned next_cursor is opaque; the example is illustrative and cannot be used against a live service."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountList"
+                },
+                "examples": {
+                  "owned": {
+                    "summary": "Owned",
+                    "value": {
+                      "items": [
+                        {
+                          "account": {
+                            "id": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
+                            "name": "Genes and gene programs in a shared CAD-in-T2D mechanism",
+                            "question": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+                            "context": "A CAD-in-T2D evidence slice used to investigate the selected broader CAD gap. This authored design packet combines captured CFDE observations with explicitly illustrative KG membership assertions. No live agent ran.",
+                            "component_claims": [
+                              "dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km",
+                              "dapper:Claim.Uv7_cT46DdsqZMvk5nh8G48qOIKvhRgc",
+                              "dapper:Claim.I2mf6PJ0DPF5_nnbiBjAhgjlUCOiUZZ9",
+                              "dapper:Claim.Kd3psmdr4G9AlD0UU1E1Vu6AjpKaQYWE",
+                              "dapper:Claim.NBafdtdEE2Uabs-8pZqurv7SoWpg7Yhi",
+                              "dapper:Claim.Oe2UZeV7oMY4NsMHyB8h4HJO1FH4nSGF",
+                              "dapper:Claim.2idJniYU4zCtCN6puy8XZ2mzo9Mq6c5p",
+                              "dapper:Claim.H5icBYm5JLM3_T-b1mMfH65Nc0zMhZzH",
+                              "dapper:Claim.xzV_35EYnLl-zy03YbmhfBk_ynNbl7H9",
+                              "dapper:Claim.SYqCJXxCVXDpwflRSdZnkVLzGLO_vi_r",
+                              "dapper:Claim.x7aCVQ1uTkYKLJo32ZyAGMGZaAGCSvWV",
+                              "dapper:Claim.uzqyfwuhf59hSTdravdcr4cTxuitWGx-"
+                            ],
+                            "conclusion_claims": [
+                              "dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km",
+                              "dapper:Claim.Uv7_cT46DdsqZMvk5nh8G48qOIKvhRgc",
+                              "dapper:Claim.I2mf6PJ0DPF5_nnbiBjAhgjlUCOiUZZ9",
+                              "dapper:Claim.Kd3psmdr4G9AlD0UU1E1Vu6AjpKaQYWE",
+                              "dapper:Claim.NBafdtdEE2Uabs-8pZqurv7SoWpg7Yhi"
+                            ],
+                            "closing_remarks": "SHH, GLI3 and TCF7L2, together with the AMP AD / GTEx and PsychENCODE geneM16 programs, are implicated in the same CAD-in-T2D mechanism by their captured EAGGL loadings. Their PIGEAN trait-level results connect these assessments to CAD in people with type 2 diabetes. The illustrative membership assertions show how genes could be connected to the programs, but those links remain unverified. Together, the assessed relationships prioritize a mechanism for investigating the selected gap. They do not distinguish exposure-driven amplification of genetic risk from downstream readouts or reverse causation; that requires temporal or intervention evidence not present here.",
+                            "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+                            "was_attributed_to": [
+                              "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+                            ]
+                          },
+                          "knowledge_gap": {
+                            "text": "Are the CAD PGS×context interactions driven by adverse exposures causally amplifying genetic risk, or are some \"contexts\" actually downstream readouts of incipient disease (reverse causation)?",
+                            "gap_description": "Population PGS×context analyses (Nagpal & Gibson 2026, PMID:42443528) are largely unable to establish the causality of specific contexts. dismech separates true environmental exposures (smoking, high-fat diet, sedentary lifestyle) from biochemical readouts (LDL, HDL, C-reactive protein); the biochemical \"contexts\" are prime reverse-causation suspects, since they may be partly downstream of the atherosclerotic process rather than upstream drivers, and behavioural contexts such as reduced physical activity may be rapid responses to incipient angina rather than causes. Distinguishing genuine amplification of genetic effects from reverse causation determines whether the modelled interventions (e.g. lowering cholesterol in high-PGS smokers) would actually reduce risk.",
+                            "gap_kind": "KNOWLEDGE_GAP",
+                            "scope": "Coronary Artery Disease",
+                            "about_entities": [
+                              "http://purl.obolibrary.org/obo/MONDO_0021661"
+                            ],
+                            "id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk"
+                          },
+                          "claim_count": 12,
+                          "created_at": "2026-09-24T16:00:00Z",
+                          "job_id": "44444444-4444-4444-8444-444444444444",
+                          "research_statement": {
+                            "status": "succeeded",
+                            "job_id": "55555555-5555-4555-8555-555555555555",
+                            "paragraph_id": "dapper:Paragraph.uSYa1LdXNPuwlSgsCz3oZ7IfrVoztroD"
+                          },
+                          "attribution": {
+                            "user_id": "11111111-1111-4111-8111-111111111111",
+                            "person_id": "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he",
+                            "display_name": "Example Researcher",
+                            "orcid": null,
+                            "orcid_authenticated": false,
+                            "observed_at": "2026-09-24T16:00:00Z",
+                            "principal_kind": "registered"
+                          }
+                        }
+                      ],
+                      "page": {
+                        "next_cursor": null,
+                        "has_more": false,
+                        "snapshot_id": "illustrative-contract-snapshot"
+                      }
+                    }
+                  },
+                  "no_visible_accounts": {
+                    "summary": "No visible accounts",
+                    "value": {
+                      "items": [],
+                      "page": {
+                        "next_cursor": null,
+                        "has_more": false,
+                        "snapshot_id": "illustrative-contract-snapshot"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "description": "Correlation ID for this HTTP request.",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "invalid_request": {
+                    "summary": "Invalid request",
+                    "value": {
+                      "type": "urn:reveal:problem:invalid-request",
+                      "title": "Invalid Request",
+                      "status": 400,
+                      "code": "INVALID_REQUEST",
+                      "detail": "A parameter or cursor does not match the requested operation.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication Required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "authentication_required": {
+                    "summary": "Authentication required",
+                    "value": {
+                      "type": "urn:reveal:problem:authentication-required",
+                      "title": "Authentication Required",
+                      "status": 401,
+                      "code": "AUTHENTICATION_REQUIRED",
+                      "detail": "A valid trusted-gateway API assertion is required.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "not_found": {
+                    "summary": "Not found",
+                    "value": {
+                      "type": "urn:reveal:problem:not-found",
+                      "title": "Not Found",
+                      "status": 404,
+                      "code": "NOT_FOUND",
+                      "detail": "No accessible record exists for the supplied identifier or exact revision.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Version Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "version_conflict": {
+                    "summary": "Version conflict",
+                    "value": {
+                      "type": "urn:reveal:problem:version-conflict",
+                      "title": "Version Conflict",
+                      "status": 409,
+                      "code": "VERSION_CONFLICT",
+                      "detail": "The saved draft has changed. Reload and reconcile before retrying.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false,
+                      "current_version": 3
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate Limited",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "rate_limited": {
+                    "summary": "Rate limited",
+                    "value": {
+                      "type": "urn:reveal:problem:rate-limited",
+                      "title": "Rate Limited",
+                      "status": 429,
+                      "code": "RATE_LIMITED",
+                      "detail": "Retry after the interval in Retry-After.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": true
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "example": 30
+              }
+            }
+          }
+        },
+        "security": [
+          {},
+          {
+            "GatewayAssertion": []
+          }
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "label": "request",
+            "source": "curl -X GET 'https://api.reveal.example.org/v1/knowledge-gaps/dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk/accounts?source_revision=8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd&limit=20' -H 'Accept: application/json'"
           }
         ]
       }
@@ -27330,7 +27639,8 @@
             "type": "string",
             "enum": [
               "curated",
-              "recent_account_count"
+              "recent_account_count",
+              "account_count"
             ]
           },
           "window_days": {
@@ -27596,6 +27906,16 @@
           },
           "research_statement": {
             "$ref": "#/components/schemas/ParagraphState"
+          },
+          "attribution": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AttributionSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -27606,7 +27926,8 @@
           "job_id",
           "research_statement"
         ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "description": "One accessible accepted scientific account, deduplicated by its DAPPER identity. Optional attribution is the immutable original request actor, not the current workspace owner; null denotes unavailable historical attribution. Title and brief synthesis are account.name and account.closing_remarks."
       },
       "AccountList": {
         "type": "object",

@@ -16,9 +16,10 @@ export function unwrap<T>(result: { data?: T; error?: unknown; response: Respons
 export const keyHeaders = (key = crypto.randomUUID()) => ({ "Idempotency-Key": key });
 export const api = {
   me: () => withRequestDeadline(async signal => unwrap(await client.GET("/v1/me", { signal }))),
-  gaps: async (cursor?: string) => unwrap(await client.GET("/v1/knowledge-gaps", { params: { query: { limit: 10, cursor } } })),
+  gaps: (cursor?: string) => withRequestDeadline(async signal => unwrap(await client.GET("/v1/knowledge-gaps", { params: { query: { limit: 10, cursor } }, signal })), "The knowledge gaps are taking longer than expected to load. Please retry."),
   searchGaps: async (q: string, signal?: AbortSignal) => unwrap(await client.GET("/v1/knowledge-gaps/search", { params: { query: { q, mode: "fuzzy", limit: 20 } }, signal })),
   gap: (gap_id: string) => withRequestDeadline(async signal => unwrap(await client.GET("/v1/knowledge-gaps/{gap_id}", { params: { path: { gap_id } }, signal }))),
+  gapAccounts: (gap_id: string, source_revision: string, cursor?: string, callerSignal?: AbortSignal) => withRequestDeadline(async signal => unwrap(await client.GET("/v1/knowledge-gaps/{gap_id}/accounts", { params: { path: { gap_id }, query: { source_revision, limit: 20, cursor } }, signal: callerSignal ? AbortSignal.any([signal, callerSignal]) : signal })), "The scientific accounts are taking longer than expected to load. Please retry."),
   mechanisms: async (q: string, signal?: AbortSignal, mode: "lexical" | "hybrid" = "hybrid") => unwrap(await client.GET("/v1/mechanisms/search", { params: { query: { q, source: "eaggl", model: "cfde-inc-v2", limit: 20, mode } }, signal })),
   mechanism: async (source_id: string, source_revision: string) => unwrap(await client.GET("/v1/mechanisms/{source_id}", { params: { path: { source_id }, query: { source_revision } } })),
   suggest: async (body: Schema<"SuggestInput">, signal?: AbortSignal) => unwrap(await client.POST("/v1/mechanisms/suggest", { body, signal })),

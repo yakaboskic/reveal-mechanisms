@@ -72,7 +72,7 @@ def schemas(b):
     b.add('GapSourceDetail',obj({'source_file':string(),'source_pointer':string(),'payload_sha256':digest,'raw':{'type':'object','additionalProperties':True}},
         description='Lossless versioned DisMech discussion sidecar, including evidence/experiments when present. Not hashable KnowledgeGap fields. Hash covers raw canonical JSON.'))
     b.add('AccountCount',obj({'count':{'type':'integer','minimum':0},'scope':enum('public_exact_gap','owner_exact_gap'),
-        'as_of':time,'ranking':enum('curated','recent_account_count'),'window_days':null({'type':'integer','minimum':1})},
+        'as_of':time,'ranking':enum('curated','recent_account_count','account_count'),'window_days':null({'type':'integer','minimum':1})},
         description='Distinct accessible saved account digests linked to this exact gap digest; no implicit cross-revision rollup or private-count leakage.'))
     S['GapRecord']['properties'].update(source_detail=ref('GapSourceDetail'),scientific_accounts=ref('AccountCount'))
     S['GapRecord']['required']+=['source_detail','scientific_accounts']
@@ -99,6 +99,8 @@ def schemas(b):
     S['AccountResult']['properties']['research_statement']=ref('ParagraphState');S['AccountResult']['required'].append('research_statement')
     b.add('AccountSummary',obj({'account':ref('DapperScientificAccount'),'knowledge_gap':ref('DapperKnowledgeGap'),
         'claim_count':{'type':'integer','minimum':1},'created_at':time,'job_id':uuid,'research_statement':ref('ParagraphState')}))
+    S['AccountSummary']['properties']['attribution']=null(ref('AttributionSnapshot'))
+    S['AccountSummary']['description']='One accessible accepted scientific account, deduplicated by its DAPPER identity. Optional attribution is the immutable original request actor, not the current workspace owner; null denotes unavailable historical attribution. Title and brief synthesis are account.name and account.closing_remarks.'
     b.add('AccountList',obj({'items':array(ref('AccountSummary')),'page':ref('Page')}))
     b.add('ExplorationInput',obj({'source_gap':ref('SelectedGap'),'draft_id':null(uuid)},['source_gap'],
         description='Records a visit under the authenticated principal. Exact source revision is required; optional draft must belong to that principal and selected gap.'))
@@ -181,7 +183,9 @@ def endpoints(b,f,e):
             if p['name']=='q':p['example']='CAD genetic risk'
             if p['name']=='disease_id':p['example']='MONDO:0021661'
     op('/v1/knowledge-gaps/search')['description']='Fuzzy lookup of imported DisMech gaps by default. Query text is not an authored inquiry or permission to launch research. Other explicit modes require their configured index and return 503 if unavailable. Rankings are retrieval signals. Example uses the exact CAD gap from the HTML study.'
-    op('/v1/knowledge-gaps')['description']='Browse imported DisMech gaps. Initial homepage is curated, with exact public-account counts as of the returned timestamp. Counts never include private work. Default source=dismech, include both gap kinds and all original statuses; filters may narrow. No manufactured popularity ranking.'
+    op('/v1/knowledge-gaps')['description']='Browse imported DisMech gaps ordered by distinct accessible accepted scientific-account count descending, then native source ID and gap digest. Counts are all-time exact DAPPER gap identity matches, not text matches, attempts, paragraph jobs or an implicit source-revision rollup. With a signed session only that workspace is visible; without a session counts are zero because no account publication model exists. Private work from other owners is never counted. Invalid supplied credentials are rejected. Filters apply before pagination; count changes invalidate continuation cursors.'
+    op('/v1/knowledge-gaps/search')['description']+=' Account counts use the same optional-session visibility rules as gap browsing; relevance order remains unchanged.'
+    op('/v1/knowledge-gaps/{gap_id}')['description']+=' Account counts use the same optional-session visibility rules as gap browsing.'
     op('/v1/drafts','post')['description']='Create editable selection state. Empty body creates a null source gap, empty anchors/dismissals, cfde-inc-v2 and both initial KGs. A selected gap is resolved from exact source identity/revision. No client question or linked DisMech list is accepted. Saving does not collect evidence or run an agent.'
     for parameter in op('/v1/mechanisms/search')['parameters']:
         if parameter['name']=='q': parameter['example']='Endothelial dysfunction'
@@ -206,6 +210,10 @@ def endpoints(b,f,e):
     b.operation('/v1/accounts','get','listAccounts','Scientific content','List your scientific accounts',
         'Owner-scoped, newest first then account ID; deduplicate repeated deliveries by digest. Filter by exact gap_id. No private records from other users with the same gap. Closing remarks provide the summary; paragraph status is independent.',
         'AccountList',{'owned':{'items':[account],'page':e['page']}},parameters=[b.parameter('gap_id','query',did('KnowledgeGap'),f['gap']['id'])]+b.page_parameters(),errors=('400','401','429'))
+    b.operation('/v1/knowledge-gaps/{gap_id}/accounts','get','listKnowledgeGapAccounts','Knowledge gaps','List visible scientific accounts for a knowledge gap',
+        'Accepted accounts for the exact DAPPER KnowledgeGap identity, newest first then account ID, deduplicated by scientific-account digest. Optional signed session selects only its authorized workspace memberships; no session returns an empty list because accounts are not publicly published. Counts and lists never reveal another private owner. Historical source observations with the same exact gap digest remain the same scientific question; changed gap digests never merge. Optional source_revision checks the selected catalog observation. Attribution is the immutable original request actor, not current ownership. Uses the same account read authorization as /v1/accounts; each account ID links to its existing account endpoint.',
+        'AccountList',{'owned':{'items':[dict(account,attribution=e['research_request']['attribution'])],'page':e['page']},'no_visible_accounts':{'items':[],'page':e['page']}},
+        parameters=[b.parameter('gap_id','path',did('KnowledgeGap'),f['gap']['id'],True),b.parameter('source_revision','query',string(pattern='^[a-f0-9]{64}$'),e['composer']['source_gap']['source_revision'])]+b.page_parameters(),public=True,errors=('400','401','404','409','429'))
     exploration={'source_gap':e['composer']['source_gap'],'knowledge_gap':f['gap'],'last_explored_at':b.NOW,'draft_id':b.DRAFT_ID,
         'scientific_accounts':{'count':1,'scope':'owner_exact_gap','as_of':b.NOW,'ranking':'curated','window_days':None}}
     b.operation('/v1/me/explorations','get','listExplorations','Research history','List your explored knowledge gaps',

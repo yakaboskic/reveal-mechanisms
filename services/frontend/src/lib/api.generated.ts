@@ -121,7 +121,7 @@ export interface paths {
         };
         /**
          * Search knowledge gaps with free text
-         * @description Fuzzy lookup of imported DisMech gaps by default. Query text is not an authored inquiry or permission to launch research. Other explicit modes require their configured index and return 503 if unavailable. Rankings are retrieval signals. Example uses the exact CAD gap from the HTML study.
+         * @description Fuzzy lookup of imported DisMech gaps by default. Query text is not an authored inquiry or permission to launch research. Other explicit modes require their configured index and return 503 if unavailable. Rankings are retrieval signals. Example uses the exact CAD gap from the HTML study. Account counts use the same optional-session visibility rules as gap browsing; relevance order remains unchanged.
          */
         get: operations["searchKnowledgeGaps"];
         put?: never;
@@ -141,7 +141,7 @@ export interface paths {
         };
         /**
          * Browse knowledge gaps
-         * @description Browse imported DisMech gaps. Initial homepage is curated, with exact public-account counts as of the returned timestamp. Counts never include private work. Default source=dismech, include both gap kinds and all original statuses; filters may narrow. No manufactured popularity ranking.
+         * @description Browse imported DisMech gaps ordered by distinct accessible accepted scientific-account count descending, then native source ID and gap digest. Counts are all-time exact DAPPER gap identity matches, not text matches, attempts, paragraph jobs or an implicit source-revision rollup. With a signed session only that workspace is visible; without a session counts are zero because no account publication model exists. Private work from other owners is never counted. Invalid supplied credentials are rejected. Filters apply before pagination; count changes invalidate continuation cursors.
          */
         get: operations["listKnowledgeGaps"];
         put?: never;
@@ -161,7 +161,7 @@ export interface paths {
         };
         /**
          * Inspect a knowledge gap
-         * @description Exact DAPPER KnowledgeGap plus one pinned source observation and attachment resolutions. source_revision selects a historical mapping; omission selects the latest accessible observation of this same digest. It never redirects to a different digest.
+         * @description Exact DAPPER KnowledgeGap plus one pinned source observation and attachment resolutions. source_revision selects a historical mapping; omission selects the latest accessible observation of this same digest. It never redirects to a different digest. Account counts use the same optional-session visibility rules as gap browsing.
          */
         get: operations["getKnowledgeGap"];
         put?: never;
@@ -468,6 +468,26 @@ export interface paths {
          * @description Owner-scoped, newest first then account ID; deduplicate repeated deliveries by digest. Filter by exact gap_id. No private records from other users with the same gap. Closing remarks provide the summary; paragraph status is independent.
          */
         get: operations["listAccounts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/knowledge-gaps/{gap_id}/accounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List visible scientific accounts for a knowledge gap
+         * @description Accepted accounts for the exact DAPPER KnowledgeGap identity, newest first then account ID, deduplicated by scientific-account digest. Optional signed session selects only its authorized workspace memberships; no session returns an empty list because accounts are not publicly published. Counts and lists never reveal another private owner. Historical source observations with the same exact gap digest remain the same scientific question; changed gap digests never merge. Optional source_revision checks the selected catalog observation. Attribution is the immutable original request actor, not current ownership. Uses the same account read authorization as /v1/accounts; each account ID links to its existing account endpoint.
+         */
+        get: operations["listKnowledgeGapAccounts"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3296,7 +3316,7 @@ export interface components {
             /** Format: date-time */
             as_of: string;
             /** @enum {string} */
-            ranking: "curated" | "recent_account_count";
+            ranking: "curated" | "recent_account_count" | "account_count";
             window_days: number | null;
         };
         /** @description Observable activity only; never private reasoning or secrets. Missing metrics stay null. Explicit call states drive UI completion; narrative arrival is not tool completion. Large outputs use artifact references. */
@@ -3331,6 +3351,7 @@ export interface components {
             job_id: string | null;
             paragraph_id: string | null;
         };
+        /** @description One accessible accepted scientific account, deduplicated by its DAPPER identity. Optional attribution is the immutable original request actor, not the current workspace owner; null denotes unavailable historical attribution. Title and brief synthesis are account.name and account.closing_remarks. */
         AccountSummary: {
             account: components["schemas"]["DapperScientificAccount"];
             knowledge_gap: components["schemas"]["DapperKnowledgeGap"];
@@ -3340,6 +3361,7 @@ export interface components {
             /** Format: uuid */
             job_id: string;
             research_statement: components["schemas"]["ParagraphState"];
+            attribution?: components["schemas"]["AttributionSnapshot"] | null;
         };
         AccountList: {
             items: components["schemas"]["AccountSummary"][];
@@ -8123,6 +8145,91 @@ export interface operations {
             };
             /** @description Authentication Required */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate Limited */
+            429: {
+                headers: {
+                    /** @example 30 */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listKnowledgeGapAccounts: {
+        parameters: {
+            query?: {
+                /** @example 8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd */
+                source_revision?: string;
+                /** @example 20 */
+                limit?: number;
+                /**
+                 * @description Omit for the first page. A returned next_cursor is opaque; the example is illustrative and cannot be used against a live service.
+                 * @example opaque-next-page
+                 */
+                cursor?: string;
+            };
+            header?: never;
+            path: {
+                /**
+                 * @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values.
+                 * @example dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk
+                 */
+                gap_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountList"];
+                };
+            };
+            /** @description Invalid Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Version Conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
