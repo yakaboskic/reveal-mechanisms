@@ -250,6 +250,8 @@ def main():
     started = time.monotonic()
     write_json(STATE / 'status.json', {'status': 'preparing', 'started_at': stamp(), 'pid': os.getpid()})
     try:
+        emit('stage', {'stage': 'starting_agent', 'state': 'started', 'source': 'harness',
+                       'message': 'Verifying the research runtime and preparing evidence files.'})
         work, runtime, prompt = setup(request)
         actual_version = subprocess.run(['/reveal/claude/node_modules/.bin/claude', '--version'], capture_output=True, text=True, check=True, timeout=15).stdout.strip()
         if actual_version.split()[0] != request['claude_version']:
@@ -285,8 +287,9 @@ def main():
                                    cwd=work, env=env, start_new_session=True)
         process.stdin.write(prompt.encode()); process.stdin.close()
         write_json(STATE / 'status.json', {'status': 'running', 'started_at': stamp(), 'pid': os.getpid(), 'agent_pid': process.pid})
-        emit('agent_started', {'message': 'Claude is reading the frozen evidence and authoring a result.', 'model': request['model']})
-        parser = ClaudeStream()
+        emit('agent_started', {'message': 'Claude is reading the frozen evidence and authoring a result.', 'model': request['model'],
+                               'stage': 'authoring_account' if request['kind'] == 'research' else 'authoring_paragraph'})
+        parser = ClaudeStream(secrets=SECRETS)
         trace_filter, error_filter = SecretFilter(SECRETS), SecretFilter(SECRETS)
         selector = selectors.DefaultSelector()
         selector.register(process.stdout, selectors.EVENT_READ, 'stdout')
@@ -320,6 +323,7 @@ def main():
                                 call_id = payload['call_id']
                                 result = parser.tools[call_id]['result']
                                 ledger.finish(builtin_calls[call_id], result, 'failed' if result.get('is_error') else 'completed')
+                                payload['artifact_sha256'] = builtin_calls[call_id]['response']['sha256']
                             emit(kind, payload)
                     else:
                         errors.write(error_filter.feed(chunk)); errors.flush()

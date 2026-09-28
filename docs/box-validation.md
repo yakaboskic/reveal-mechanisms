@@ -306,3 +306,29 @@ same-Box recovery from the last committed chunk after callback failure. All 39
 standalone transport, prompt, ledger and paragraph tests pass locally. These are
 mocked transport regressions, distinct from the real captures above. The next
 worker image must include the updated runtime, skill and batch transport.
+
+Public activity now distinguishes runtime preparation, Claude lifecycle events,
+observable assistant prose, tool calls and tool results. Calls and results share
+the original Claude call ID and tool name. Allowlisted arguments are limited to
+2,048 UTF-8 bytes; result previews to 4,096 bytes, with explicit truncation.
+Write/Edit and account-draft calls show paths and content sizes or node counts
+instead of whole authored documents. Results include the trusted captured
+response checksum and an observed call duration. Internal MCP capture entries
+remain evidence records and do not create duplicate public calls.
+
+The public projection removes private thinking/reasoning fields, redacts known
+credentials before clipping, filters credential keys and Bearer values, and
+suppresses previews of sensitive file paths. Exact configured secrets remain
+redacted across assistant text delta boundaries, including Unicode splits.
+The private evidence ledger is not rewritten by this display projection.
+Eight new projection/security regressions and 49 existing transport/batch tests
+pass together (57 tests). Legacy events without arguments or previews retain a
+safe fallback; setup messages no longer masquerade as Claude narrative.
+
+Offline replay of the saved ledger for
+`20f0db79-e269-4d66-bbad-9b6b1ba89752` projected its 38 Claude calls into 76 paired
+public events and excluded eight internal MCP capture duplicates. The largest
+argument summary was 176 bytes; result previews respected the 4,096-byte bound,
+with 11 explicitly truncated results. All 98 original ledger files remained
+unchanged. `.runtime/activity-projection-20f0db79/report.json` records this check.
+This is saved-artifact replay, not a new live execution or database backfill.

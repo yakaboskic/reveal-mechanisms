@@ -1,6 +1,9 @@
 """Incremental Claude Code stream-json decoder; never publishes thinking blocks."""
 import codecs
 import json
+import time
+
+from .public_tool_activity import bounded, redact_text, tool_call_payload, tool_result_payload
 
 
 class StreamProtocolError(ValueError):
@@ -24,7 +27,7 @@ class SecretFilter:
 
 
 class ClaudeStream:
-    def __init__(self, max_line_bytes=2_000_000):
+    def __init__(self, max_line_bytes=2_000_000, secrets=(), clock=None):
         self.decoder = codecs.getincrementaldecoder('utf-8')('strict')
         self.buffer = ''
         self.max_line_bytes = max_line_bytes
@@ -33,6 +36,17 @@ class ClaudeStream:
         self.saw_deltas = False
         self.events = 0
         self.runtime = {}
+        self.secrets = tuple(secret for secret in secrets if secret)
+        self.clock = clock or time.monotonic
+        self.public_filter = SecretFilter(self.secrets)
+        self.public_decoder = codecs.getincrementaldecoder('utf-8')('strict')
+
+    def public_text(self, text='', final=False):
+        raw = self.public_filter.feed(text.encode(), final=final)
+        value = self.public_decoder.decode(raw, final=final)
+        if final:
+            self.public_decoder.reset()
+        return [('agent_message', {'text': bounded(redact_text(value, self.secrets), 16000), 'delta': True})] if value else []
 
     def feed(self, chunk: bytes, final=False):
         try:
@@ -70,24 +84,25 @@ class ClaudeStream:
             delta = event.get('event', {}).get('delta', {})
             if delta.get('type') == 'text_delta' and isinstance(delta.get('text'), str):
                 self.saw_deltas = True
-                return [('agent_message', {'text': delta['text'][:16000], 'delta': True})]
+                return self.public_text(delta['text'])
             return []  # thinking_delta and signature_delta stay private
         if kind in ('assistant', 'user'):
-            out = []
+            out = self.public_text(final=True)
             content = event.get('message', {}).get('content', [])
             if not isinstance(content, list):
                 return out
             for block in content:
                 if not isinstance(block, dict):
                     continue
-                if block.get('type') == 'text' and kind == 'assistant' and not self.saw_deltas:
-                    out.append(('agent_message', {'text': str(block.get('text', ''))[:16000]}))
+                if block.get('type') == 'text' and kind == 'assistant' and not self.saw_deltas and isinstance(block.get('text'), str):
+                    out.append(('agent_message', {'text': bounded(redact_text(block['text'], self.secrets), 16000)}))
                 elif block.get('type') == 'tool_use':
                     call_id = block.get('id')
-                    if not isinstance(call_id, str) or call_id in self.tools:
+                    if not isinstance(call_id, str) or len(call_id) > 256 or call_id in self.tools:
                         raise StreamProtocolError('Invalid or duplicate tool call ID')
-                    self.tools[call_id] = {'name': block.get('name'), 'input': block.get('input'), 'result': None}
-                    out.append(('tool_call', {'call_id': call_id, 'tool': block.get('name'), 'message': 'Using an authorized tool'}))
+                    self.tools[call_id] = {'name': block.get('name'), 'input': block.get('input'), 'result': None,
+                                           'started_monotonic': self.clock()}
+                    out.append(('tool_call', tool_call_payload(call_id, block.get('name'), block.get('input'), self.secrets)))
                 elif block.get('type') == 'tool_result':
                     call_id = block.get('tool_use_id')
                     if call_id not in self.tools:
@@ -95,12 +110,15 @@ class ClaudeStream:
                     if self.tools[call_id]['result'] is not None:
                         raise StreamProtocolError('Duplicate tool result would overwrite captured evidence')
                     self.tools[call_id]['result'] = block
-                    out.append(('tool_result', {'call_id': call_id, 'tool': self.tools[call_id]['name'],
-                                               'status': 'error' if block.get('is_error') else 'completed'}))
+                    call = self.tools[call_id]
+                    payload = tool_result_payload(call_id, call['name'], call['input'], block, self.secrets)
+                    payload['duration_ms'] = max(0, round((self.clock() - call['started_monotonic']) * 1000))
+                    out.append(('tool_result', payload))
             return out
         if kind == 'result':
             self.result = event
-            return [('agent_completed', {'status': 'failed' if event.get('is_error') else 'succeeded',
+            return self.public_text(final=True) + [('agent_completed', {'status': 'failed' if event.get('is_error') else 'succeeded',
+                                         'message': 'Claude finished its work.' if not event.get('is_error') else 'Claude stopped with an error.',
                                          'cost_usd': event.get('total_cost_usd')})]
         if kind == 'system':
             if event.get('subtype') == 'init':

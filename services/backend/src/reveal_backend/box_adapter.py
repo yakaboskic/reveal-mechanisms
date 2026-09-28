@@ -132,7 +132,7 @@ def make_bundle(project_root: Path, request: ExecutionRequest):
     source = project_root / 'services/backend/src/reveal_backend'
     files = {}
     for name in ('__init__.py', 'evidence_package.py', 'dapper_release.py', 'scientific_account_lint.py',
-                 'box_remote.py', 'box_stream.py', 'box_mcp.py', 'dispatch_view.py', 'evidence_files.py'):
+                 'box_remote.py', 'box_stream.py', 'box_mcp.py', 'dispatch_view.py', 'evidence_files.py', 'public_tool_activity.py'):
         files['bundle/services/backend/src/reveal_backend/' + name] = (source / name).read_bytes()
     relative = ['scripts/lint_scientific_account.py', 'services/backend/agent-runtime/dapper-release.json',
                 'services/backend/agent-skills/construct-scientific-account/SKILL.md',
@@ -349,7 +349,8 @@ sudo /reveal/claude/node_modules/.bin/claude --version
                           'phase': 'created', 'created_at': time.time()}
                 await checkpoint(handle.copy())  # Persist before any paid model execution.
                 checkpointed = True
-                await emit('agent_started', {'message': 'Preparing an isolated agent runtime.'})
+                await emit('stage', {'stage': 'starting_agent', 'state': 'started', 'source': 'harness',
+                                     'message': 'Preparing an isolated agent runtime.'})
                 try:
                     await self.prepare(box, request, bundle)
                 except Exception as exc:

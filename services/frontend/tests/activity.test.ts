@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { coalesceMessageDeltas } from "../src/lib/activity";
+import { activityProgress, activityRows, activitySections, coalesceMessageDeltas } from "../src/lib/activity";
 import type { Schema } from "../src/lib/client";
 
 function event(id: string, message: string, delta?: boolean): Schema<"JobEvent"> {
@@ -25,4 +25,30 @@ test("full and legacy messages, tool activity, stages and jobs remain separate",
   const input = [event("1", "Starting."), event("2", "Complete sentence.", false), event("3", "I", true),
     tool, event("5", "Next", true), stage, other];
   assert.deepEqual(coalesceMessageDeltas(input), input);
+});
+
+test("parallel tools pair only by call ID; narrative and unmatched legacy results stay distinct", () => {
+  const call = (id: string, callId: string) => ({...event(id, "Using a tool"), detail: {...event(id, "").detail!, kind: "tool_call" as const, call_id: callId, tool_name: "Read"}});
+  const result = (id: string, callId: string | null) => ({...event(id, "Tool result"), detail: {...event(id, "").detail!, kind: "tool_result" as const, call_id: callId, state: "completed" as const}});
+  const a = call("1", "a"), b = call("2", "b");
+  const resultB = result("4", "b"), resultA = result("5", "a"), legacy = result("6", null);
+  const events = [a, b, event("3", "Checking the next source."), resultB, resultA, legacy];
+  const original = JSON.stringify(events);
+  assert.deepEqual(activityRows(events), [{event:a, result:resultA}, {event:b, result:resultB}, {event:events[2]}, {event:legacy}]);
+  assert.equal(JSON.stringify(events), original);
+  assert.equal(activityRows([a, event("3", "Done reading")])[0].result, undefined);
+});
+
+test("setup and validation remain distinct and repeated authoring stages preserve chronology", () => {
+  const stages = ["preparing_evidence", "starting_agent", "authoring_account", "validating", "authoring_account", "validating", "persisting"] as const;
+  const events = stages.map((stage, i) => ({...event(String(i + 1), stage), stage}));
+  assert.deepEqual(activitySections(events).map(section => section.stage), ["preparation", "setup", "research", "validation", "research", "validation", "saving"]);
+});
+
+test("live SSE advances stage and terminal status before refresh; stale replay cannot regress fetched job", () => {
+  const job = {status:"running", stage:"authoring_account", last_event_id:"10"} as Schema<"Job">;
+  const validation = {...event("11", "Validating"), stage:"validating" as const};
+  assert.deepEqual(activityProgress(job, [validation]), {status:"running", stage:"validating"});
+  assert.deepEqual(activityProgress(job, [{...validation, status:"failed"}]), {status:"failed", stage:"validating"});
+  assert.deepEqual(activityProgress({...job, status:"succeeded", stage:"complete", last_event_id:"12"}, [validation]), {status:"succeeded", stage:"complete"});
 });

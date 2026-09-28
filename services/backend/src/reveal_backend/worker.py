@@ -29,13 +29,21 @@ def activity(kind,state='started',source='worker',**values):
 def public_activity(job,kind,payload):
     """Map observable transport data; the public event contract is unchanged."""
     message=str(payload.get('message') or payload.get('text') or kind.replace('_',' '))[:16000]
-    if kind=='stage': job['stage']=payload['stage']; detail=activity('preparation',payload.get('state','started'))
+    if kind=='stage':
+        job['stage']=payload['stage']
+        detail=activity('preparation',payload.get('state','started'),'harness' if payload.get('source')=='harness' else 'worker')
     elif kind in ('tool_call','tool_result'):
         detail=activity(kind,payload.get('state') or ('failed' if kind=='tool_result' and payload.get('status') in ('error','failed') else 'completed' if kind=='tool_result' else 'started'),'harness',
             call_id=payload.get('call_id'),tool_name=payload.get('tool_name') or payload.get('tool'),selected_kg=payload.get('selected_graph'),
-            display_arguments=str(payload.get('display_arguments',''))[:8000] or None,output_excerpt=str(payload.get('output_excerpt',''))[:16000] or None)
-    elif kind in ('agent_started','agent_message','message','agent_completed'):
-        detail=activity('agent_message','completed' if kind=='agent_completed' else 'started','harness',
+            display_arguments=payload['display_arguments'][:8000] if isinstance(payload.get('display_arguments'),str) else None,
+            output_excerpt=payload['output_excerpt'][:16000] if isinstance(payload.get('output_excerpt'),str) else None,
+            artifact_sha256=payload.get('artifact_sha256'),
+            duration_ms=payload['duration_ms'] if type(payload.get('duration_ms')) in (int,float) and payload['duration_ms']>=0 else None)
+    elif kind in ('agent_started','agent_completed'):
+        if kind=='agent_started': job['stage']=payload.get('stage') or ('authoring_paragraph' if job.get('kind')=='paragraph' else 'authoring_account')
+        detail=activity('preparation','failed' if payload.get('status')=='failed' else 'completed','harness')
+    elif kind in ('agent_message','message'):
+        detail=activity('agent_message','started','harness',
             **({'message_delta':True} if payload.get('delta') is True else {}))
     elif kind=='warning':
         detail=None; job['warnings'].append(message)
@@ -301,6 +309,7 @@ class Worker:
                     raw=assert_artifact(path,request.output_dir); final_path=directory/f'accepted-{index+1}.json'
                     doc,report=await asyncio.to_thread(assemble_account,raw,input_path,final_path,frozen['attribution'],job,queue['attempt'],mode,
                         result.ledger_manifest_path if mode=='box' else None)
+                    (directory/f'validation-{index+1}.json').write_bytes(canonical_json(report))
                     if mode=='box':
                         from .scientific_grounding import review_account
                         grounding=await asyncio.to_thread(review_account,doc,package,result.ledger_manifest_path,
@@ -308,7 +317,7 @@ class Worker:
                             max_budget_usd=float(setting('REVEAL_GROUNDING_MAX_BUDGET_USD','0.30')))
                         (directory/f'grounding-{index+1}.json').write_bytes(canonical_json(grounding))
                         require(grounding['accepted'],'Independent source-grounding review rejected unsupported or overstated scientific content')
-                    (directory/f'validation-{index+1}.json').write_bytes(canonical_json(report)); accepted.append((doc,report,final_path))
+                    accepted.append((doc,report,final_path))
                 await self.accept_accounts(job,token,accepted,frozen,input_path,result,directory,mode)
             else:
                 require(result.paragraph_path is not None,'Paragraph execution returned no segments')
@@ -337,10 +346,14 @@ class Worker:
                         return
             # Scientific exceptions are retained as bounded local diagnostics;
             # API errors do not echo third-party headers/URLs/credentials.
+            from .scientific_grounding import ScientificReviewUnavailable
             diagnostic={'phase':phase,'error_type':type(exc).__name__,'message':str(exc)[:3000] if not isinstance(exc,OSError) else 'Operating system error'}
+            if isinstance(exc,ScientificReviewUnavailable): diagnostic['review_audit']=exc.audit
             (directory/'failure.json').write_bytes(canonical_json(diagnostic))
             if phase=='evidence_preparation':
                 code,message='EVIDENCE_PREPARATION_FAILED','The source evidence could not be prepared.'
+            elif isinstance(exc,ScientificReviewUnavailable):
+                code,message='REVIEW_UNAVAILABLE','The independent scientific review could not complete; no scientific verdict was reached.'
             elif phase=='scientific_validation' and isinstance(exc,ValueError):
                 code,message='VALIDATION_FAILED','The attempt failed scientific validation.'
             else:

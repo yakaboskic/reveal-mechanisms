@@ -7,7 +7,7 @@ from unittest.mock import Mock
 
 from reveal_backend.box_mcp import Ledger
 from reveal_backend.evidence_package import EvidenceBuildError
-from reveal_backend.scientific_grounding import MODEL, review_account, review_evidence, validate_review, review_paragraph
+from reveal_backend.scientific_grounding import MODEL, ScientificReviewUnavailable, review_account, review_evidence, validate_review, review_paragraph
 
 
 class GroundingTests(unittest.TestCase):
@@ -55,26 +55,26 @@ class GroundingTests(unittest.TestCase):
             artifact.write_text('{"row_count": 1}')
             with self.assertRaises(EvidenceBuildError): review_evidence(self.package, path)
 
-    def test_bounded_api_and_no_paid_call_on_oversize_or_unknown_model(self):
+    def test_bounded_reader_and_no_token_count_or_unknown_model_call(self):
         with tempfile.TemporaryDirectory() as temp:
             ledger = Ledger(Path(temp), "job", 1); ledger.freeze()
             path = Path(temp) / "manifest.json"
             client = Mock()
-            count = Mock(status_code=200); count.json.return_value = {"input_tokens": 1000}
-            answer = Mock(status_code=200)
-            answer.json.return_value = {"stop_reason": "end_turn", "content": [{"type": "text", "text": json.dumps(self.review)}], "usage": {"input_tokens": 1000}}
-            client.post.side_effect = [count, answer]
+            def response(content):
+                result = Mock(status_code=200)
+                result.json.return_value = {"stop_reason": "tool_use", "content": content,
+                                             "usage": {"input_tokens": 1000, "output_tokens": 100}}
+                return result
+            read = response([{"type": "tool_use", "id": "r1", "name": "read_evidence", "input": {"pointer": "/package/pigean/factor"}}])
+            final = response([{"type": "tool_use", "id": "f1", "name": "submit_review", "input": self.review}])
+            client.post.side_effect = [read, final]
             report = review_account(self.document, self.package, path, model=MODEL, api_key="test-only", client=client)
             self.assertTrue(report["accepted"])
             self.assertNotIn("test-only", json.dumps(report))
             self.assertEqual(client.post.call_count, 2)
-            client.reset_mock(); client.post.side_effect = [count]
-            count.json.return_value = {"input_tokens": 100000}
-            with self.assertRaises(EvidenceBuildError):
-                review_account(self.document, self.package, path, model=MODEL, api_key="test-only", client=client)
-            self.assertEqual(client.post.call_count, 1)
+            self.assertTrue(all(call.args[0].endswith('/v1/messages') for call in client.post.call_args_list))
             client.reset_mock()
-            with self.assertRaises(EvidenceBuildError):
+            with self.assertRaises(ScientificReviewUnavailable):
                 review_account(self.document, self.package, path, model="unpriced-model", api_key="test-only", client=client)
             self.assertEqual(client.post.call_count, 0)
 
@@ -90,12 +90,12 @@ class GroundingTests(unittest.TestCase):
         client = Mock()
         for verdict in ({"segments": [{"segment_index": 0, "faithful": False, "finding": "Contradicts uncertainty in cited Claim."}]},
                         {"segments": []}):
-            client.post.side_effect = [count, answer]
-            answer.json.return_value = {"stop_reason": "end_turn", "content": [{"type": "text", "text": json.dumps(verdict)}]}
+            client.post.side_effect = [answer]
+            answer.json.return_value = {"stop_reason": "end_turn", "content": [{"type": "text", "text": json.dumps(verdict)}], "usage": {"input_tokens": 500, "output_tokens": 100}}
             if verdict["segments"]:
                 self.assertFalse(review_paragraph(output, inputs, model=MODEL, api_key="test-only", client=client)["accepted"])
             else:
-                with self.assertRaises(EvidenceBuildError):
+                with self.assertRaises(ScientificReviewUnavailable):
                     review_paragraph(output, inputs, model=MODEL, api_key="test-only", client=client)
 
 
