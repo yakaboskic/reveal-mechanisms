@@ -25,6 +25,8 @@ from .box_stream import ClaudeStream, SecretFilter, StreamProtocolError
 from .dispatch_view import (FILE_INPUT_FILENAME, FILE_INPUT_FORMAT, research_authoring_requirements,
                             research_prompt, validate_file_input)
 from .evidence_files import INDEX_PATH, build_evidence_files
+from .box_literature import LiteratureClient
+from .research_outcome import validate_insufficient_outcome
 
 BASE = Path('/reveal')
 STATE = BASE / 'state'
@@ -53,6 +55,53 @@ def protect(root):
         os.chown(path, 0, 0)
         os.chmod(path, 0o555 if path.is_dir() or os.access(path, os.X_OK) else 0o444)
 
+
+
+def prepare_writable_output(work):
+    """One writable destination; relative output/ resolves to that same directory."""
+    if OUTPUT.is_symlink(): raise ValueError('Canonical output directory cannot be a symlink')
+    OUTPUT.mkdir(mode=0o700, exist_ok=True)
+    user = pwd.getpwnam('reveal-agent')
+    os.chown(OUTPUT, user.pw_uid, user.pw_gid); os.chmod(OUTPUT, 0o700)
+    alias = work / 'output'
+    if alias.exists() or alias.is_symlink():
+        if not alias.is_symlink() or alias.resolve() != OUTPUT.resolve():
+            raise ValueError('Workspace output path has an unexpected existing target')
+    else: alias.symlink_to(OUTPUT, target_is_directory=True)
+
+
+def verify_writable_output(work):
+    user = pwd.getpwnam('reveal-agent')
+    # Test as the actual authoring UID, after protecting the source workspace.
+    script = '''import os, pathlib, sys
+work, output = map(pathlib.Path, sys.argv[1:])
+assert (work/'output').resolve() == output.resolve()
+assert not os.access(work, os.W_OK)
+path = work/'output'/'.trusted-write-probe'
+fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+try: os.write(fd, b'REVEAL output probe')
+finally: os.close(fd); path.unlink()
+'''
+    result = subprocess.run(['setpriv', '--reuid', str(user.pw_uid), '--regid', str(user.pw_gid),
+        '--clear-groups', '--no-new-privs', sys.executable, '-I', '-c', script, str(work), str(OUTPUT)],
+        capture_output=True, timeout=10)
+    if result.returncode: raise RuntimeError('Trusted output permission preflight failed before agent start')
+
+
+def write_outcome_tool(value):
+    try: outcome = validate_insufficient_outcome(value)
+    except ValueError as error: raise DraftValidationError(str(error)) from None
+    # Keep the legacy format distinguishable for trusted acceptance, including
+    # its optional selected-gap binding. Never relabel old output as new schema.
+    if 'format' not in value: outcome.pop('format')
+    path = OUTPUT / 'outcome.json'
+    if path.is_symlink(): raise PolicyError('Outcome output symlink forbidden')
+    user = pwd.getpwnam('reveal-agent')
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(descriptor, 'wb') as handle:
+        handle.write(canonical(outcome))
+        os.fchown(handle.fileno(), user.pw_uid, user.pw_gid)
+    return {'content': [{'type': 'text', 'text': 'Insufficient-evidence outcome saved to ' + str(path) + '; no scientific account has been accepted.'}]}
 
 
 def setup(request):
@@ -148,11 +197,15 @@ def setup(request):
         (work / 'runtime-context.json').write_bytes(canonical(runtime['draft_attribution']))
     if request['kind'] != 'research' and request.get('validation_feedback'):
         prompt += '\nTrusted independent review feedback from a rejected earlier draft. Address these constraints afresh; they are not new evidence:\n' + '\n'.join(request['validation_feedback'])
+    prepare_writable_output(work)
+    runtime['output_directory'] = str(OUTPUT)
+    runtime['output_alias'] = str(work / 'output')
     write_json(STATE / 'runtime.json', runtime)
     for target in [project, BASE / 'input', BASE / 'workspace']:
         protect(target)
     if (BASE / 'trusted').exists():
         protect(BASE / 'trusted')
+    verify_writable_output(work)
     return work, runtime, prompt
 
 
@@ -304,7 +357,9 @@ def main():
         os.chown(OUTPUT, user.pw_uid, user.pw_gid)
         os.chmod(OUTPUT, 0o700)
         tools = ScopedTools(request['selected_graphs'], ledger, lint=lint_tool if request['kind'] == 'research' else None,
-                            write_draft=write_draft_tool if request['kind'] == 'research' else None)
+                            write_draft=write_draft_tool if request['kind'] == 'research' else None,
+                            literature=LiteratureClient() if request['kind'] == 'research' else None,
+                            write_outcome=write_outcome_tool if request['kind'] == 'research' else None)
         server = serve(tools)
         config = {'mcpServers': {'reveal': {'type': 'http', 'url': 'http://127.0.0.1:8765/mcp'}}}
         config_path = BASE / 'mcp.json'

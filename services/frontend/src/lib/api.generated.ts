@@ -520,6 +520,90 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/analysis-outcomes/{outcome_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read an explored analysis outcome
+         * @description A durable scoped insufficient-evidence exploration, separate from ScientificAccounts and excluded from their popularity counts. Captured author reasons are not independently validated scientific findings. Private by default; explicit publication shares only this frozen scope, original attribution and captured source evidence. Job logs, requests, runtime/ledger contents and the complete private package remain private. Invalid supplied credentials never downgrade to public.
+         */
+        get: operations["getAnalysisOutcome"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/jobs/{job_id}/outcome": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Find the saved scoped outcome for an owned job
+         * @description Owner-only lookup of the durable outcome already saved by this analysis job. Returns404 if no record exists; GET never runs research or performs a historical import.
+         */
+        get: operations["getJobAnalysisOutcome"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/knowledge-gaps/{gap_id}/outcomes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List explored analysis outcomes for an exact gap
+         * @description Newest-first compact summaries for this exact gap. Public scope defaults to explicitly published outcome snapshots; workspace scope requires a session. Scientific-account counts and ranking remain unchanged. Detail/provenance is fetched only when an outcome is opened.
+         */
+        get: operations["listKnowledgeGapOutcomes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/analysis-outcomes/{outcome_id}/publication": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Inspect exploration outcome publication
+         * @description A durable scoped insufficient-evidence exploration, separate from ScientificAccounts and excluded from their popularity counts. Captured author reasons are not independently validated scientific findings. Private by default; explicit publication shares only this frozen scope, original attribution and captured source evidence. Job logs, requests, runtime/ledger contents and the complete private package remain private. Invalid supplied credentials never downgrade to public.
+         */
+        get: operations["getOutcomePublication"];
+        put?: never;
+        /**
+         * Publish or unpublish a scoped exploration
+         * @description Explicit owner-only publication, including anonymous workspace owners. Freeze this exploration and its captured source artifacts, never job logs or unrelated workspace artifacts. Unpublish revokes this snapshot; independently published evidence can remain available. Immutable records and original attribution do not change.
+         */
+        post: operations["updateOutcomePublication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/me/explorations": {
         parameters: {
             query?: never;
@@ -3099,7 +3183,7 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
             completed_at: string | null;
-            result: (components["schemas"]["AnalysisResult"] | components["schemas"]["ParagraphResult"]) | null;
+            result: (components["schemas"]["AnalysisResult"] | components["schemas"]["ParagraphResult"] | components["schemas"]["AnalysisOutcomeResult"]) | null;
             failure: components["schemas"]["JobFailure"] | null;
             warnings: string[];
             last_event_id: string;
@@ -3111,7 +3195,7 @@ export interface components {
                 /** Format: uri-reference */
                 cancel: string;
             };
-        } & (unknown & unknown & unknown & unknown & unknown & unknown);
+        } & (unknown & unknown & unknown & unknown & unknown & unknown & unknown);
         JobEvent: {
             id: string;
             /** Format: uuid */
@@ -3125,7 +3209,7 @@ export interface components {
             /** @enum {string} */
             stage: "queued" | "freezing_inputs" | "retrieving_cfde" | "authoring_account" | "enriching_okn" | "authoring_paragraph" | "validating" | "persisting" | "complete" | "preparing_evidence" | "starting_agent";
             message: string;
-            result: (components["schemas"]["AnalysisResult"] | components["schemas"]["ParagraphResult"]) | null;
+            result: (components["schemas"]["AnalysisResult"] | components["schemas"]["ParagraphResult"] | components["schemas"]["AnalysisOutcomeResult"]) | null;
             detail: components["schemas"]["ActivityDetail"] | null;
         };
         JobEvents: {
@@ -3391,6 +3475,100 @@ export interface components {
             /** @enum {string} */
             visibility: "private" | "public";
             expected_version: number;
+        };
+        AnalysisOutcomeResult: {
+            /** @constant */
+            kind: "analysis_outcome";
+            /** Format: uuid */
+            outcome_id: string;
+            evidence_package_sha256: string;
+        };
+        OutcomeAnchor: {
+            source_id: string;
+            /** @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values. */
+            mechanism_id: string;
+            name: string;
+            trait: string | null;
+            origin: string;
+        };
+        OutcomeEvidenceRef: {
+            /** @enum {string} */
+            source: "package" | "tool_response";
+            pointer: string;
+            ledger_sequence: number | null;
+            artifact_sha256: string;
+            download_url: string | null;
+        };
+        OutcomeProvenance: {
+            evidence_package_sha256: string;
+            outcome_sha256: string;
+            runtime_sha256: string | null;
+            ledger_sha256: string | null;
+            /** @enum {string} */
+            execution_mode: "box" | "deterministic";
+            source_bindings: {
+                source_id: string;
+                source_revision: string;
+                embedding_run_id: string | null;
+                mapping_run_id: string | null;
+            }[];
+            coverage: {
+                [key: string]: unknown;
+            };
+            evidence_refs: components["schemas"]["OutcomeEvidenceRef"][];
+            source_artifacts: components["schemas"]["ArtifactAccess"][];
+            graph_queries: {
+                sequence: number;
+                /** @enum {string} */
+                graph: "biomarkerkg" | "prokn";
+                /** @enum {string} */
+                status: "completed" | "empty" | "failed" | "denied" | "interrupted";
+                request_sha256: string;
+                response_sha256: string;
+            }[];
+        };
+        /** @description Immutable application record of one scoped insufficient-evidence investigation, not a ScientificAccount, independently validated scientific claim, or globally established null result. Reasons are captured author reports; coverage and hashes retain their exact scope. Private by default and excluded from scientific-account counts. Public snapshots omit private job identifiers. */
+        AnalysisOutcome: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            outcome: "insufficient_evidence";
+            summary: string;
+            reason: string;
+            explored_topics: string[];
+            missing_evidence: string[];
+            limitations: string[];
+            next_steps: string[];
+            knowledge_gap: components["schemas"]["DapperKnowledgeGap"];
+            source_gap: components["schemas"]["SelectedGap"];
+            anchors: components["schemas"]["OutcomeAnchor"][];
+            selected_kgs: ("biomarkerkg" | "prokn")[];
+            /** Format: date-time */
+            created_at: string;
+            attribution: components["schemas"]["AttributionSnapshot"] | null;
+            scope_note: string;
+            /** @enum {string} */
+            record_format: "structured" | "legacy";
+            provenance: components["schemas"]["OutcomeProvenance"];
+            job_id: string | null;
+            publication: components["schemas"]["PublicationState"];
+        };
+        AnalysisOutcomeSummary: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            outcome: "insufficient_evidence";
+            summary: string;
+            knowledge_gap: components["schemas"]["DapperKnowledgeGap"];
+            anchors: components["schemas"]["OutcomeAnchor"][];
+            /** Format: date-time */
+            created_at: string;
+            attribution: components["schemas"]["AttributionSnapshot"] | null;
+            publication: components["schemas"]["PublicationState"];
+        };
+        AnalysisOutcomeList: {
+            items: components["schemas"]["AnalysisOutcomeSummary"][];
+            page: components["schemas"]["Page"];
         };
         /** @description One accessible accepted scientific account, deduplicated by its DAPPER identity. Optional attribution is the immutable original request actor, not the current workspace owner; null denotes unavailable historical attribution. Title and brief synthesis are account.name and account.closing_remarks. */
         AccountSummary: {
@@ -8371,6 +8549,337 @@ export interface operations {
                  * @example dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd
                  */
                 dapper_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublicationInput"];
+            };
+        };
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationState"];
+                };
+            };
+            /** @description Invalid Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Version Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid Input */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate Limited */
+            429: {
+                headers: {
+                    /** @example 30 */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getAnalysisOutcome: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @example 66666666-6666-4666-8666-666666666666 */
+                outcome_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalysisOutcome"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate Limited */
+            429: {
+                headers: {
+                    /** @example 30 */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getJobAnalysisOutcome: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @example 44444444-4444-4444-8444-444444444444 */
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalysisOutcome"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate Limited */
+            429: {
+                headers: {
+                    /** @example 30 */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listKnowledgeGapOutcomes: {
+        parameters: {
+            query?: {
+                /** @example public */
+                scope?: "public" | "workspace";
+                /** @example 8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd */
+                source_revision?: string;
+                /** @example 20 */
+                limit?: number;
+                /**
+                 * @description Omit for the first page. A returned next_cursor is opaque; the example is illustrative and cannot be used against a live service.
+                 * @example opaque-next-page
+                 */
+                cursor?: string;
+            };
+            header?: never;
+            path: {
+                /**
+                 * @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values.
+                 * @example dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk
+                 */
+                gap_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalysisOutcomeList"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Version Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate Limited */
+            429: {
+                headers: {
+                    /** @example 30 */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getOutcomePublication: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @example 66666666-6666-4666-8666-666666666666 */
+                outcome_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationState"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate Limited */
+            429: {
+                headers: {
+                    /** @example 30 */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    updateOutcomePublication: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description Unique per caller and operation for at least 7 days. Same key and same canonical body replay the original accepted response; changed body returns 409 IDEMPOTENCY_CONFLICT. Compare idempotency before draft-version checks on retries.
+                 * @example 66666666-6666-4666-8666-666666666666
+                 */
+                "Idempotency-Key": string;
+            };
+            path: {
+                /** @example 66666666-6666-4666-8666-666666666666 */
+                outcome_id: string;
             };
             cookie?: never;
         };

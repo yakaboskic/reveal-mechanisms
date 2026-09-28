@@ -91,7 +91,7 @@ def captured_result(request, handle, marker):
     return ExecutionResult(marker['state']['status'], request.output_dir, account_paths=accounts,
                            paragraph_path=found('output/paragraph.json'), runtime_manifest_path=found('runtime.json'),
                            ledger_manifest_path=found('ledger/manifest.json'), reason=marker['state'].get('reason'),
-                           remote_handle=handle)
+                           remote_handle=handle, outcome_path=found('output/outcome.json'))
 
 
 def verified_box_not_found(exc):
@@ -132,7 +132,8 @@ def make_bundle(project_root: Path, request: ExecutionRequest):
     source = project_root / 'services/backend/src/reveal_backend'
     files = {}
     for name in ('__init__.py', 'evidence_package.py', 'dapper_release.py', 'scientific_account_lint.py',
-                 'box_remote.py', 'box_stream.py', 'box_mcp.py', 'dispatch_view.py', 'evidence_files.py', 'public_tool_activity.py'):
+                 'box_remote.py', 'box_stream.py', 'box_mcp.py', 'box_literature.py', 'research_outcome.py',
+                 'dispatch_view.py', 'evidence_files.py', 'public_tool_activity.py'):
         files['bundle/services/backend/src/reveal_backend/' + name] = (source / name).read_bytes()
     relative = ['scripts/lint_scientific_account.py', 'services/backend/agent-runtime/dapper-release.json',
                 'services/backend/agent-skills/construct-scientific-account/SKILL.md',

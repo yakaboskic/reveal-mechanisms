@@ -1,11 +1,11 @@
 {
-  "openapi_sha256": "820ee2599014d379a40f2084a51d4afbbffcaaa79da8ef412de5e3c4e8fe6702",
+  "openapi_sha256": "75dab1029b990324ec347e16567adb0b433ccd85d50558e9922e668bd6eb1802",
   "schema_sha256": "219769c9874a3c0a7d6972360d5847a8b344e412a8b9f4e2648f059682440345",
   "dapper_snapshot_sha256": "801fb347c54c036c15345d132d302171fc6cd74c1f75a03a5c59c937f5ed7d11",
-  "paths": 29,
-  "operations": 34,
-  "component_schemas": 339,
-  "request_exchanges": 46,
+  "paths": 33,
+  "operations": 39,
+  "component_schemas": 346,
+  "request_exchanges": 52,
   "version": "0.2.0-draft",
   "examples_are_contract_fixtures": true
 }

@@ -213,7 +213,9 @@ class ResearchPromptTests(unittest.TestCase):
                 manifest = file_input_manifest(package.read_bytes(), feedback)
                 if tamper_input: manifest['package']['sha256'] = '0' * 64
                 (root / 'input/evidence-input.json').write_text(json.dumps(manifest))
-            with patch.multiple(box_remote, BASE=root, STATE=state), patch.object(box_remote, 'protect'), \
+            with patch.multiple(box_remote, BASE=root, STATE=state, OUTPUT=root / 'output'), patch.object(box_remote, 'protect'), \
+                    patch.object(box_remote, 'verify_writable_output'), \
+                    patch.object(box_remote.pwd, 'getpwnam', return_value=SimpleNamespace(pw_uid=os.getuid(), pw_gid=os.getgid())), \
                     patch('reveal_backend.dapper_release.prepare_agent_workspace', return_value=runtime):
                 _, manifest, prompt = box_remote.setup(request)
             from reveal_backend.dispatch_view import research_prompt

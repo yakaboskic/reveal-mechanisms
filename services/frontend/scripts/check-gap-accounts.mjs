@@ -91,6 +91,7 @@ async function harness(name, { mobile = false, visitor = false, clock = false, r
       return respond({ items: records.map(gap => ({ ...gap, scientific_accounts: { ...gap.scientific_accounts, scope: scope === 'workspace' ? 'owner_exact_gap' : 'public_exact_gap' } })), page: pageInfo(paging && !cursor) });
     }
     if (method === 'GET' && path === '/api/backend/v1/knowledge-gaps/search') return respond({ items: [], page: pageInfo() });
+    if (method === 'GET' && /^\/api\/backend\/v1\/knowledge-gaps\/[^/]+\/outcomes$/.test(path)) return respond({ items: [], page: pageInfo() });
     if (method === 'POST' && path === '/api/backend/v1/mechanisms/suggest') return respond({ ...fixture.suggestions, automatic_anchors: [], limitations: ['Mocked suggestions; no model executed.'] });
     if (method === 'POST' && path === '/api/backend/v1/me/explorations') return respond({});
     if ((method === 'POST' && path === '/api/backend/v1/drafts') || (method === 'PATCH' && path.startsWith('/api/backend/v1/drafts/'))) return respond({ id: '44444444-4444-4444-8444-444444444444', version: 1, composer: request.postDataJSON().composer, created_at: '2026-09-28T10:00:00Z', updated_at: '2026-09-28T10:00:00Z' });
@@ -105,7 +106,7 @@ async function harness(name, { mobile = false, visitor = false, clock = false, r
   };
   await page.goto(origin); await until(async () => await page.locator('.trend').count() === (paging ? 20 : 4), 'ranked first page'); return h;
 }
-const list = h => h.page.locator('.gap-accounts');
+const list = h => h.page.locator('.gap-accounts:not(.gap-outcomes)');
 async function noOverflow(h) { const dimensions = await h.page.evaluate(() => ({ page: document.documentElement.scrollWidth, viewport: innerWidth })); assert.ok(dimensions.page <= dimensions.viewport + 1); return dimensions; }
 async function shot(h, suffix) { await h.page.screenshot({ path: resolve(output, `${h.result.name}-${suffix}.png`), fullPage: true }); }
 async function rankedPagination() {

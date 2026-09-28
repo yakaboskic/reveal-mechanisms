@@ -158,7 +158,7 @@ def validate_execution_ledger(result,request,expected_model=None):
         require(call['sequence'] not in sequences,'Duplicate ledger sequence'); sequences.add(call['sequence'])
         require(call.get('selected_graph') is None or call['selected_graph'] in request.selected_graphs,'Execution queried an unselected graph')
         require(call.get('status') in ('completed','empty','failed','denied','interrupted'),'Tool call has no final result')
-        for field in ('request','response','upstream_request'):
+        for field in ('request','response','upstream_request','upstream_response'):
             artifact=call.get(field)
             if field in ('request','response'): require(artifact is not None,'Tool call is missing complete request/result capture')
             if artifact:
@@ -342,6 +342,14 @@ class Worker:
             result=await adapter.execute(request,emit,cancelled,checkpoint)
             if await cancelled():
                 jobs.finish(self.repository,job['id'],token,'cancelled'); return
+            if result.status=='insufficient_evidence' and job['kind']=='analysis':
+                phase='scientific_validation'
+                from .analysis_outcomes import prepare
+                prepared=await asyncio.to_thread(prepare,job,frozen,binding,input_path,result,
+                    attempt=queue['attempt'],mode=mode,expected_model=snapshot['model'])
+                if await self.begin_persistence(job,token,'Saving the scoped exploration and captured reasons; no scientific account was accepted.'):
+                    await asyncio.to_thread(self.accept_outcome,job,token,prepared)
+                return
             if result.status!='succeeded':
                 failure={'code':'AGENT_EXECUTION_FAILED','message':result.reason or 'The execution did not complete.','retryable':True} if result.status=='failed' else None
                 jobs.finish(self.repository,job['id'],token,result.status,failure=failure); return
@@ -423,6 +431,18 @@ class Worker:
                 jobs.event(tx,current,'activity',message,activity('preparation'))
                 return True
         return await asyncio.to_thread(transition)
+
+    def accept_outcome(self,job,token,prepared):
+        from . import analysis_outcomes
+        with self.repository.transaction() as tx:
+            pair=jobs.fenced(tx,job['id'],token)
+            if not pair or pair[0]['status']=='cancel_requested': return False
+            current,_=pair
+            identity=analysis_outcomes.save(tx,current,prepared)
+            current.update(status='insufficient_evidence',stage='complete',completed_at=now(),
+                result=analysis_outcomes.result(identity,prepared),failure=None)
+            jobs.event(tx,current,'result','Exploration saved with its scoped limitations; no scientific account was accepted.')
+            return True
 
     async def accept_accounts(self,job,token,accepted,frozen,package_path,result,directory,mode):
         from .citations import register

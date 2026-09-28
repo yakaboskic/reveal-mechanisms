@@ -24,6 +24,9 @@ ARGUMENTS = {
     'query_graph': ('graph', 'subject', 'predicate', 'object', 'literal', 'contains', 'limit'),
     'lint_account': ('filename',),
     'write_account_draft': ('filename',),
+    'search_papers': ('query', 'limit'),
+    'read_paper': ('source', 'id', 'section', 'offset', 'limit'),
+    'write_outcome': (),
 }
 
 

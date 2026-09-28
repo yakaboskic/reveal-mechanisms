@@ -6,6 +6,7 @@ import { api, ApiError, messageOf, type Schema } from "@/lib/client";
 import { useIdentity } from "./Session";
 import { LoadingSurface } from "./LoadingSurface";
 import type { GapScope } from "./GapBrowser";
+import { GapOutcomes } from "./GapOutcomes";
 import "./gap-accounts.css";
 
 type Listing = { binding: string; items: Schema<"AccountSummary">[]; page: Schema<"Page"> };
@@ -63,7 +64,7 @@ export function GapAccounts({ gap, scope }: { gap: Schema<"GapRecord">; scope: G
     return () => { sequence.current++; request.current?.abort(); };
   }, [binding, ready]);
 
-  return <section className="gap-accounts" aria-labelledby="gap-accounts-heading">
+  return <><section className="gap-accounts" aria-labelledby="gap-accounts-heading">
     <div className="gap-accounts-heading"><div><h2 id="gap-accounts-heading">Scientific accounts</h2><p>{scope === "workspace" ? "Proposed answers in your workspace for this question." : "Published scientific accounts from all researchers for this question."}</p></div>
       {visible && <span className="gap-accounts-count" aria-label={`${visible.items.length}${visible.page.has_more ? " or more" : ""} scientific accounts`}>{visible.items.length}{visible.page.has_more ? "+" : ""}</span>}
     </div>
@@ -82,5 +83,5 @@ export function GapAccounts({ gap, scope }: { gap: Schema<"GapRecord">; scope: G
     {error && <LoadingSurface compact title="Scientific accounts are unavailable" error={error} onRetry={() => void load(!!visible)} skeleton="none" />}
     {visible && busy && <LoadingSurface compact title="Loading more scientific accounts" skeleton="none" />}
     {visible?.page.has_more && !busy && !error && <button className="gap-accounts-more" onClick={() => void load(true)}>Show more accounts <span aria-hidden="true">↓</span></button>}
-  </section>;
+  </section><GapOutcomes gap={gap} scope={scope} /></>;
 }

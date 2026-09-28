@@ -125,6 +125,18 @@ p.write_text(json.dumps(doc))
         result = self.lint(document)
         self.assertIn('cfde-ancestry', {f['check'] for f in result['findings']})
 
+    def test_paper_only_lineage_does_not_replace_captured_cfde_evidence(self):
+        document = deepcopy(self.draft)
+        paper_id = 'urn:test:captured-paper-response'
+        document['files'].append({'id': paper_id, 'filename': 'paper-response.json',
+                                 'mime_type': 'application/json', 'sha256': 'a' * 64, 'size_in_bytes': 120})
+        document['evidence_items'][0]['was_derived_from'] = [paper_id]
+        document['evidence_items'][0]['context'] = 'Captured paper abstract at /structuredContent/data/text.'
+        path = self.root / 'paper-only.json'; path.write_bytes(canonical_json(document)); self.mint(path)
+        result = self.lint(decode(path.read_bytes()))
+        self.assertIn('cfde-ancestry', {f['check'] for f in result['findings']})
+        self.assertFalse(result['valid'])
+
     def test_missing_or_mistargeted_evidence_is_rejected(self):
         document = deepcopy(self.valid); document['claims'][0]['has_evidence'] = []
         result = self.lint(document)

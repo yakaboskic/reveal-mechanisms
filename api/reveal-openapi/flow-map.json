@@ -1,5 +1,5 @@
 {
-  "openapi_sha256": "820ee2599014d379a40f2084a51d4afbbffcaaa79da8ef412de5e3c4e8fe6702",
+  "openapi_sha256": "75dab1029b990324ec347e16567adb0b433ccd85d50558e9922e668bd6eb1802",
   "steps": [
     {
       "id": "gap",
@@ -194,6 +194,27 @@
         "LaTeX includes cite commands; remind users to download references.bib.",
         "Exports share exact Paragraph and registry pins. Rendering does not launch an agent."
       ]
+    },
+    {
+      "id": "outcomes",
+      "title": "Read and share an explored analysis",
+      "route": "GET /v1/analysis-outcomes/{outcome_id}",
+      "action": "Preserve a scoped insufficient-evidence investigation and explicitly publish its record when useful.",
+      "incoming": "An owned job outcome, or an authorized private/public outcome ID.",
+      "outgoing": "AnalysisOutcome and compact exact-gap outcome summaries; explicit publication state.",
+      "cases": [
+        "getAnalysisOutcome.request",
+        "getJobAnalysisOutcome.request",
+        "listKnowledgeGapOutcomes.request",
+        "getOutcomePublication.request",
+        "updateOutcomePublication.publish",
+        "updateOutcomePublication.unpublish"
+      ],
+      "rules": [
+        "A scoped exploration is not a ScientificAccount and never increases scientific-account popularity counts.",
+        "Captured reasons remain attributed to the original investigation; unavailable sources do not establish global absence.",
+        "Publication is explicit and revocable. Job logs, private requests and the complete private evidence package remain private."
+      ]
     }
   ],
   "support": [
@@ -249,6 +270,6 @@
       ]
     }
   ],
-  "operation_count": 34,
-  "exchange_count": 46
+  "operation_count": 39,
+  "exchange_count": 52
 }

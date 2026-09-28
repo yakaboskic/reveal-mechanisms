@@ -19,6 +19,7 @@ from .runtime_config import ROOT, artifacts_root
 from . import jobs
 from .account_discovery import visible_accounts, counts_by_gap, counted_gap, count_snapshot
 from . import publication
+from . import analysis_outcomes
 
 CONTRACT = json.loads((ROOT/'api/openapi.json').read_text())
 GATEWAY = json.loads((ROOT/'schema/gateway.schema.json').read_text())
@@ -47,7 +48,7 @@ app.openapi = lambda: CONTRACT
 async def publication_cache_policy(request: Request, call_next):
     response = await call_next(request)
     if request.url.path.startswith(('/v1/accounts', '/v1/claims', '/v1/objects', '/v1/gene-sets',
-            '/v1/paragraphs', '/v1/citations', '/v1/artifacts', '/v1/knowledge-gaps')):
+            '/v1/paragraphs', '/v1/citations', '/v1/artifacts', '/v1/knowledge-gaps', '/v1/analysis-outcomes')):
         # Visibility is revocable and workspace responses vary by principal.
         response.headers['Cache-Control'] = 'private, no-store'
         vary = [part.strip() for part in response.headers.get('Vary', '').split(',') if part.strip()]
@@ -261,6 +262,17 @@ def gap_accounts(gap_id:str,request:Request,limit:int=20,cursor:str|None=None,so
     items=[item for item in accounts if item['account']['question']==gap['object']['id']]
     return page(items,owner,limit,cursor,digest(['gap-accounts',gap['object']['id'],source_revision,scope]))
 
+@app.get('/v1/knowledge-gaps/{gap_id}/outcomes')
+def gap_outcomes(gap_id:str,request:Request,limit:int=20,cursor:str|None=None,source_revision:str|None=None,scope:str='public'):
+    if scope not in ('public','workspace'): raise Problem(422,'INVALID_QUERY','Choose public or workspace discovery.')
+    gap=catalog.gap(gap_id)
+    if source_revision and source_revision!=gap['source']['source_revision']: raise Problem(409,'SOURCE_REVISION_CHANGED','The exact requested source revision is unavailable.')
+    with repo.read_transaction() as tx:
+        user=optional_identity(tx,request)
+        if scope=='workspace' and user is None: raise Problem(401,'SESSION_EXPIRED','A workspace session is required.')
+        items=analysis_outcomes.listing(tx,gap['object']['id'],user,scope)
+    return page(items,user if scope=='workspace' else '',limit,cursor,digest(['gap-outcomes',gap['object']['id'],source_revision,scope]))
+
 @app.get('/v1/knowledge-gaps/{gap_id:path}')
 def get_gap(gap_id: str,request:Request,source_revision:str|None=None,scope:str='public'):
     gap=catalog.gap(gap_id)
@@ -405,9 +417,11 @@ def create_job_transaction(body,authorization,idempotency_key):
                 'document':document,'attribution':{'user_id':user,'person_id':None,'display_name':identity['display_name'],'orcid':identity['orcid'],'orcid_authenticated':identity['orcid_authenticated'],'observed_at':now(),'principal_kind':identity['principal_kind']},
                 'submitted_at':now(),'linked_dismech_context':contexts}
             tx.put('request',frozen['id'],user,frozen)
-            tx.put('request_binding',frozen['id'],user,{'dismech_import_id':saved['dismech_import_id'],'source_gap':gap,
+            request_binding={'dismech_import_id':saved['dismech_import_id'],'source_gap':gap,
                 'anchors':[saved['selections'][s['reference']['source_id']]['binding'] for s in composer['eaggl_anchors']],
-                'retrieval':{s['reference']['source_id']:saved['selections'][s['reference']['source_id']].get('retrieval') for s in composer['eaggl_anchors']}})
+                'retrieval':{s['reference']['source_id']:saved['selections'][s['reference']['source_id']].get('retrieval') for s in composer['eaggl_anchors']}}
+            request_binding['anchor_display']=analysis_outcomes.anchor_display(composer,request_binding,saved)
+            tx.put('request_binding',frozen['id'],user,request_binding)
             return jobs.enqueue(tx,user,'analysis',request_id=frozen['id'],inputs=body)
         return idempotent(tx,user,'job',idempotency_key,body,create)
 
@@ -501,6 +515,34 @@ async def update_publication(dapper_id:str,request:Request):
             user=principal(tx,request.headers.get('authorization'))['user_id']
             return idempotent(tx,user,'publication:'+dapper_id,request.headers.get('idempotency-key'),body,
                 lambda:publication.change(tx,user,dapper_id,body['visibility'],body['expected_version']))
+    return await asyncio.to_thread(save)
+
+@app.get('/v1/jobs/{job_id}/outcome')
+def job_outcome(job_id:str,request:Request):
+    with repo.read_transaction() as tx:
+        user=principal(tx,request.headers.get('authorization'))['user_id']
+        owned(tx,'job',job_id,user)
+        reference=owned(tx,'analysis_outcome_by_job',job_id,user)
+        return analysis_outcomes.get(tx,reference['data']['id'],user)
+
+@app.get('/v1/analysis-outcomes/{outcome_id}')
+def analysis_outcome(outcome_id:str,request:Request):
+    with repo.read_transaction() as tx:
+        return analysis_outcomes.get(tx,outcome_id,optional_identity(tx,request))
+
+@app.get('/v1/analysis-outcomes/{outcome_id}/publication')
+def outcome_publication(outcome_id:str,request:Request):
+    with repo.read_transaction() as tx:
+        return analysis_outcomes.get(tx,outcome_id,optional_identity(tx,request))['publication']
+
+@app.post('/v1/analysis-outcomes/{outcome_id}/publication')
+async def update_outcome_publication(outcome_id:str,request:Request):
+    body=await request.json(); validate(body,'PublicationInput')
+    def save():
+        with repo.transaction() as tx:
+            user=principal(tx,request.headers.get('authorization'))['user_id']
+            return idempotent(tx,user,'outcome-publication:'+outcome_id,request.headers.get('idempotency-key'),body,
+                lambda:analysis_outcomes.change(tx,outcome_id,user,body['visibility'],body['expected_version']))
     return await asyncio.to_thread(save)
 
 def scientific(identity,request,kind='object'):
@@ -613,7 +655,11 @@ def artifact_bytes(sha256:str,request:Request):
             row=owned(tx,'artifact',digest([user,sha256]),user)['data']
         except Problem as error:
             if error.status!=404: raise
-            _,snapshot=publication.find(tx,sha256,'artifact'); row=snapshot['artifact_records'][sha256]
+            try:
+                _,snapshot=publication.find(tx,sha256,'artifact'); row=snapshot['artifact_records'][sha256]
+            except Problem as error:
+                if error.status!=404: raise
+                row=analysis_outcomes.published_artifact(tx,sha256)
     path=Path(row['path']).resolve()
     if not path.is_relative_to(artifacts_root()): raise Problem(404,'NOT_FOUND','The source artifact is unavailable.')
     try: data=path.read_bytes()

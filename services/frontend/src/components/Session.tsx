@@ -1,10 +1,11 @@
 "use client";
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { signIn, signOut } from "next-auth/react";
 import Link from "next/link";
 import { selectedGap } from "@/lib/composer";
 import { api, messageOf, type Schema } from "@/lib/client";
 import { withRequestDeadline } from "@/lib/request-deadline";
+import "./session-menu.css";
 
 type SessionStatus = { canClaim: boolean; providers: { google: boolean; orcid: boolean } };
 type SessionContextType = { me: Schema<"Me"> | null; ready: boolean; status: SessionStatus; refresh: () => Promise<Schema<"Me"> | null> };
@@ -58,12 +59,12 @@ export function Session({ children }: { children: ReactNode }) {
     <a className="skip" href="#main">Skip to content</a>
     <header className="site-nav workspace-chrome">
       <div className="avatar-area" ref={menuArea}><button className="avatar" aria-label="Your workspace" aria-expanded={menu} onClick={() => setMenu(!menu)}>{me?.display_name?.slice(0, 1).toUpperCase() || <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" aria-hidden="true"><circle cx="12" cy="8" r="3.2" /><path d="M5 20v-2a7 7 0 0 1 14 0v2" /></svg>}</button>
-        {menu && <div className="avatar-menu" onKeyDown={e => { if (e.key === "Escape") setMenu(false); }}>
-          <p>{me?.display_name || (me ? "Anonymous workspace" : "Your workspace")}</p>
+        {menu && <div className="avatar-menu workspace-menu" onKeyDown={e => { if (e.key === "Escape") setMenu(false); }}>
+          <p className="workspace-menu-title">{me?.display_name || (me ? "Anonymous workspace" : "Your workspace")}</p>
           <nav><Link onClick={() => setMenu(false)} href="/workspace?tab=gaps">Your knowledge gaps</Link><Link onClick={() => setMenu(false)} href="/workspace?tab=accounts">Your scientific accounts</Link></nav>
-          {me?.principal_kind === "anonymous" && <small>Anonymous access ends {me.workspace_expires_at ? new Date(me.workspace_expires_at).toLocaleDateString() : "with this session"}.</small>}
-          {me?.principal_kind !== "registered" && <><small>Sign in to keep your work across devices.</small><ProviderButtons disabled={!ready} /></>}
-          {me && <button className="text-button" onClick={logout}>Sign out</button>}
+          {me?.principal_kind === "anonymous" && <small className="workspace-session-note">Anonymous access ends {me.workspace_expires_at ? new Date(me.workspace_expires_at).toLocaleDateString() : "with this session"}.</small>}
+          {me?.principal_kind !== "registered" && <div className="workspace-signin"><small>Keep your work across devices.</small><ProviderButtons disabled={!ready} compact /></div>}
+          {me && <button className="text-button workspace-signout" onClick={logout}>Sign out</button>}
         </div>}
       </div>
     </header>
@@ -72,11 +73,13 @@ export function Session({ children }: { children: ReactNode }) {
     {children}
   </SessionContext.Provider>;
 }
-export function ProviderButtons({ disabled = false, onLogin }: { disabled?: boolean; onLogin?: (provider: "google" | "orcid") => void }) {
-  const { status } = useIdentity();
-  return <>{(["orcid", "google"] as const).map(provider => <div key={provider}>
-    <button className="provider" disabled={disabled || !status.providers[provider]} onClick={() => { if (onLogin) onLogin(provider); else void signIn(provider, { callbackUrl: window.location.origin + "/" }); }}>
-      <span aria-hidden="true">{provider === "orcid" ? "iD" : "G"}</span>Continue with {provider === "orcid" ? "ORCID" : "Google"}
-    </button>{!status.providers[provider] && <small>{provider === "orcid" ? "ORCID" : "Google"} sign-in is not configured.</small>}
-  </div>)}</>;
+export function ProviderButtons({ disabled = false, onLogin, compact = false }: { disabled?: boolean; onLogin?: (provider: "google" | "orcid") => void; compact?: boolean }) {
+  const { status, ready } = useIdentity(); const noteId = useId();
+  const unavailable = (["orcid", "google"] as const).filter(provider => !status.providers[provider]).map(provider => provider === "orcid" ? "ORCID" : "Google");
+  const note = !ready ? "Checking sign-in options…" : unavailable.length ? `${unavailable.join(" and ")} sign-in unavailable.` : null;
+  return <div className={`provider-options${compact ? " compact" : ""}`}>{(["orcid", "google"] as const).map(provider => <div key={provider}>
+    <button className="provider" aria-label={`Continue with ${provider === "orcid" ? "ORCID" : "Google"}`} aria-describedby={compact && note && (disabled || !status.providers[provider]) ? noteId : undefined} disabled={disabled || !status.providers[provider]} onClick={() => { if (onLogin) onLogin(provider); else void signIn(provider, { callbackUrl: window.location.origin + "/" }); }}>
+      <span aria-hidden="true">{provider === "orcid" ? "iD" : "G"}</span>{!compact && "Continue with "}{provider === "orcid" ? "ORCID" : "Google"}
+    </button>{!compact && !status.providers[provider] && <small>{provider === "orcid" ? "ORCID" : "Google"} sign-in is not configured.</small>}
+  </div>)}{compact && note && <small className="provider-note" id={noteId}>{note}</small>}</div>;
 }

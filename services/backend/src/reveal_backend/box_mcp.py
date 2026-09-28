@@ -15,6 +15,7 @@ import urllib.request
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from .box_literature import LiteratureInputError, request_spec
 
 GRAPHS = {'biomarkerkg': 'https://purl.org/okn/frink/kg/biomarkerkg',
           'prokn': 'https://purl.org/okn/frink/kg/prokn'}
@@ -120,8 +121,15 @@ class Ledger:
 
     def artifact(self, value):
         raw, redactions = self.sanitized_bytes(value)
+        return self.artifact_bytes(raw, redactions=redactions)
+
+    def artifact_bytes(self, raw, format='json', redactions=0):
+        if format not in ('json', 'xml'): raise ValueError('Unsupported capture format')
+        for secret in self.secrets:
+            redactions += raw.count(secret.encode())
+            raw = raw.replace(secret.encode(), b'[REDACTED_CREDENTIAL]')
         digest = hashlib.sha256(raw).hexdigest()
-        path = self.root / 'artifacts' / (digest + '.json')
+        path = self.root / 'artifacts' / (digest + '.' + format)
         path.parent.mkdir(exist_ok=True)
         path.write_bytes(raw)
         return {'path': str(path.relative_to(self.root)), 'sha256': digest, 'size_bytes': len(raw), 'credential_redactions': redactions}
@@ -225,7 +233,7 @@ def response_payloads(result):
 
 class ScopedTools:
     def __init__(self, selected_graphs, ledger, client=None, max_calls=30, lint=None, write_draft=None,
-                 read_timeout=35, max_parallel_reads=2):
+                 read_timeout=35, max_parallel_reads=2, literature=None, write_outcome=None):
         if set(selected_graphs) - set(GRAPHS):
             raise PolicyError('Unsupported selected graph')
         self.selected_graphs, self.ledger = tuple(selected_graphs), ledger
@@ -234,13 +242,15 @@ class ScopedTools:
         self.client = client
         self.max_calls, self.lint = max_calls, lint
         self.write_draft = write_draft
+        self.literature, self.write_outcome = literature, write_outcome
+        self.literature_calls = {'search_papers': 0, 'read_paper': 0}
         self.tool_calls = 0
         self.call_lock = threading.Lock()
         self.author_lock = threading.Lock()
         self.read_timeout = read_timeout
         self.read_slots = threading.BoundedSemaphore(max_parallel_reads)
 
-    def upstream_call(self, tool, arguments):
+    def upstream_call(self, tool, arguments, client=None):
         # Never queue a graph read behind an unrelated slow graph. Each actual
         # read owns its MCP session; the session IDs and RPC counters cannot race.
         if not self.read_slots.acquire(blocking=False):
@@ -248,8 +258,8 @@ class ScopedTools:
         outcome = queue.Queue(maxsize=1)
         def run():
             try:
-                client = self.client or MCPClient(timeout=self.read_timeout)
-                outcome.put((True, client.call(tool, arguments), getattr(client, 'server_info', None)))
+                upstream_client = client or self.client or MCPClient(timeout=self.read_timeout)
+                outcome.put((True, upstream_client.call(tool, arguments), getattr(upstream_client, 'server_info', None)))
             except Exception as exc:
                 outcome.put((False, exc, None))
             finally:
@@ -279,6 +289,15 @@ class ScopedTools:
             tools.append({'name': 'lint_account', 'description': 'Run pinned DAPPER draft lint on one output account file.', 'inputSchema': {'type': 'object', 'properties': {'filename': {'type': 'string', 'pattern': '^account-[1-3]\\.(json|yaml|yml)$'}}, 'required': ['filename'], 'additionalProperties': False}})
         if self.write_draft:
             tools.append({'name': 'write_account_draft', 'description': 'Write a DAPPER document with plural group arrays: {"scientific_accounts":[one account],"propositions":[...],"claims":[...],"evidence_items":[...]}. Automatically copies exact referenced trusted source nodes and dependencies. Do not supply a class instance as document root or a graph/nodes envelope. No acceptance or minting occurs.', 'inputSchema': {'type': 'object', 'properties': {'filename': {'type': 'string', 'enum': ['account-1.json', 'account-2.json', 'account-3.json']}, 'document': {'type': 'object', 'properties': {'scientific_accounts': {'type': 'array', 'minItems': 1, 'maxItems': 1, 'items': {'type': 'object'}}, 'propositions': {'type': 'array', 'items': {'type': 'object'}}, 'claims': {'type': 'array', 'items': {'type': 'object'}}, 'evidence_items': {'type': 'array', 'items': {'type': 'object'}}}, 'required': ['scientific_accounts']}}, 'required': ['filename', 'document'], 'additionalProperties': False}})
+        if self.write_outcome:
+            tools.append({'name': 'write_outcome', 'description': 'Save a structured insufficient-evidence outcome to the canonical writable output directory. Follow the skill format; this does not accept scientific claims.',
+                          'inputSchema': {'type': 'object', 'properties': {'outcome': {'type': 'object'}}, 'required': ['outcome'], 'additionalProperties': False}})
+        if self.literature:
+            tools.extend([
+                {'name': 'search_papers', 'description': 'Search Europe PMC scholarly literature (maximum three searches per attempt). Discovery metadata only; read the exact record before interpreting findings. No arbitrary web URLs.',
+                 'inputSchema': {'type': 'object', 'properties': {'query': {'type': 'string', 'minLength': 2, 'maxLength': 300}, 'limit': {'type': 'integer', 'minimum': 1, 'maximum': 5}}, 'required': ['query'], 'additionalProperties': False}},
+                {'name': 'read_paper', 'description': 'Read a bounded abstract or available open-access PMC full-text excerpt with exact captured provenance (maximum four reads). MED IDs are numeric PMIDs; PMC IDs start PMC. Literature is auxiliary and cannot replace CFDE lineage. Follow next_offset only when needed; abstracts do not imply full-paper review.',
+                 'inputSchema': {'type': 'object', 'properties': {'source': {'type': 'string', 'enum': ['MED', 'PMC']}, 'id': {'type': 'string'}, 'section': {'type': 'string', 'enum': ['abstract', 'full_text']}, 'offset': {'type': 'integer', 'minimum': 0}, 'limit': {'type': 'integer', 'minimum': 1, 'maximum': 12000}}, 'required': ['source', 'id'], 'additionalProperties': False}}])
         return tools
 
     def call(self, tool, arguments):
@@ -288,9 +307,12 @@ class ScopedTools:
             entry = self.ledger.start(tool, arguments, arguments.get('graph') if isinstance(arguments, dict) else None)
         status = 'failed'
         source_version = upstream_response = None
+        raw_response = None; raw_format = 'json'
         try:
             if not isinstance(arguments, dict):
                 raise PolicyError('Tool arguments must be an object')
+            if any(secret in json.dumps(arguments, ensure_ascii=False) for secret in self.ledger.secrets):
+                raise PolicyError('Credentials cannot be sent as tool arguments')
             if not within_budget:
                 raise PolicyError('Attempt tool-call budget exhausted')
             if tool == 'lint_account' and self.lint:
@@ -303,6 +325,21 @@ class ScopedTools:
                     raise PolicyError('Invalid draft output arguments')
                 with self.author_lock:
                     result = self.write_draft(arguments['filename'], arguments['document'])
+            elif tool == 'write_outcome' and self.write_outcome:
+                if set(arguments) != {'outcome'}: raise DraftValidationError('Expected one outcome object')
+                with self.author_lock: result = self.write_outcome(arguments['outcome'])
+            elif tool in ('search_papers', 'read_paper') and self.literature:
+                spec = request_spec(tool, arguments)
+                with self.call_lock:
+                    if self.literature_calls[tool] >= (3 if tool == 'search_papers' else 4):
+                        raise LiteratureInputError('Bounded literature read budget exhausted; report the remaining limitation')
+                    self.literature_calls[tool] += 1
+                with self.ledger.lock:
+                    if self.ledger.frozen: raise EvidenceReadTimeout('Execution ended before the literature read started')
+                    entry['upstream_request'] = self.ledger.artifact({'provider': 'Europe PMC', 'method': 'GET', **spec})
+                result, source_version = self.upstream_call(tool, arguments, client=self.literature)
+                result = dict(result)
+                raw_response = result.pop('_raw_response', None); raw_format = result.pop('_raw_format', 'json')
             elif tool in ('get_schema', 'describe_kg'):
                 if set(arguments) != {'graph'} or arguments['graph'] not in self.selected_graphs:
                     raise PolicyError('Graph was not selected for this request')
@@ -331,7 +368,7 @@ class ScopedTools:
         except Exception as exc:
             # Exceptions may contain sensitive request headers; retain a safe typed diagnostic.
             status = 'denied' if isinstance(exc, PolicyError) else 'failed'
-            result = {'isError': True, 'content': [{'type': 'text', 'text': str(exc) if isinstance(exc, (PolicyError, DraftValidationError, QueryValidationError, EvidenceReadTimeout)) else type(exc).__name__ + ': evidence service unavailable'}]}
+            result = {'isError': True, 'content': [{'type': 'text', 'text': str(exc) if isinstance(exc, (PolicyError, DraftValidationError, QueryValidationError, EvidenceReadTimeout, LiteratureInputError)) else type(exc).__name__ + ': evidence service unavailable'}]}
         with self.ledger.lock:
             if self.ledger.frozen or entry['status'] != 'pending':
                 result = json.loads((self.ledger.root / entry['response']['path']).read_bytes())
@@ -340,8 +377,10 @@ class ScopedTools:
                 entry['source_version'] = source_version
                 if upstream_response is not None:
                     entry['upstream_response'] = self.ledger.artifact(upstream_response)
+                if raw_response is not None:
+                    entry['upstream_response'] = self.ledger.artifact_bytes(raw_response, raw_format)
                 self.ledger.finish(entry, result, status)
-        if tool in ('query_graph', 'get_schema', 'describe_kg'):
+        if tool in ('query_graph', 'get_schema', 'describe_kg', 'search_papers', 'read_paper'):
             # The response capture is finalized before this descriptor is
             # added to the model-facing envelope, avoiding recursive hashes.
             # This supplies exact bytes/identity metadata, never evidence
@@ -354,7 +393,8 @@ class ScopedTools:
                                 'filename': artifact['sha256'] + '.json', 'mime_type': 'application/json',
                                 'sha256': artifact['sha256'], 'size_in_bytes': artifact['size_bytes']},
                        'source_locator': 'ledger_sequence=' + str(entry['sequence']) + ';pointer=/content',
-                       'usage': 'Only completed query_graph assertions can support biological claims. Schema metadata, errors and empty searches do not establish biological presence or absence.'}
+                       'usage': 'Only completed query_graph assertions or completed read_paper excerpts can support auxiliary biological claims. Search metadata, schemas, errors and empty searches do not establish biological presence or absence. Paper evidence retains its abstract/full-text scope and never replaces required CFDE lineage.'}
+            if tool == 'read_paper': capture['source_locator'] = 'ledger_sequence=' + str(entry['sequence']) + ';pointer=/structuredContent/data/text'
             result = {**result, 'content': [*result.get('content', []),
                       {'type': 'text', 'text': json.dumps(capture, ensure_ascii=False)}]}
         return result

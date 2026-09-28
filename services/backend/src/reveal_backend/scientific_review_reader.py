@@ -56,9 +56,30 @@ class EvidenceReader:
             anchors[identity] = {'pointer': base, 'fields': fields}
         index = [self.descriptor('/package/' + key) for key in package]
         index.extend(self.descriptor('/graph_calls/' + str(i)) for i in range(len(self.evidence['graph_calls'])))
+        papers = []
+        for i, call in enumerate(self.evidence.get('paper_calls', [])):
+            base = '/paper_calls/' + str(i)
+            index.append(self.descriptor(base))
+            # Always expose exact scope and excerpt boundaries, even when a
+            # reviewer reads only the text pointer. Metadata is not a text read.
+            header = {'pointer': base, 'status': call.get('status'), 'metadata': {}, 'excerpt': {}}
+            if 'status' in call: self.provided.add(base + '/status')
+            metadata = call.get('response', {}).get('structuredContent', {})
+            if isinstance(metadata, dict):
+                for key, value in metadata.items():
+                    path = child_path(base + '/response/structuredContent', key)
+                    if key == 'data' and isinstance(value, dict):
+                        for field, item in value.items():
+                            if field != 'text':
+                                header['excerpt'][field] = item
+                                self.provided.add(child_path(path, field))
+                    elif key != 'data':
+                        header['metadata'][key] = value
+                        self.provided.add(path)
+            papers.append(header)
         return {'format': 'reveal.review-evidence-index/1',
                 'evidence_sha256': sha256(canonical_json(self.evidence)), 'required_context': context,
-                'selected_anchor_headers': anchors, 'index': index,
+                'selected_anchor_headers': anchors, 'paper_headers': papers, 'index': index,
                 'instruction': 'All scientific evidence is available through read_evidence. Collection headers are not observations. Read the exact evidence needed for every Claim and synthesis, including competing observations and query outcomes. Unread evidence is not evidence of absence.'}
 
     def was_read(self, path):
@@ -66,7 +87,7 @@ class EvidenceReader:
 
     def read(self, path, offset=0):
         require(len(self.reads) < MAX_READS, 'Scientific review read limit exceeded')
-        require(isinstance(path, str) and path.startswith(('/package/', '/graph_calls/')),
+        require(isinstance(path, str) and path.startswith(('/package/', '/graph_calls/', '/paper_calls/')),
                 'Review reader accepts only captured evidence pointers')
         require(type(offset) is int and offset >= 0, 'Invalid review page offset')
         value = pointer(self.evidence, path)

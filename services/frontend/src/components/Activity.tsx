@@ -4,6 +4,7 @@ import { activityProgress, activityRows, groupedWarnings, stageLabels, type Acti
 import { elapsedLabel, operationalStep, timedActivitySections, toolElapsed, type StepState } from "@/lib/activity-timing";
 import { prettyRecordedValue, toolInvocation } from "@/lib/tool-display";
 import { api, ApiError, messageOf, readEvents, terminal, type Schema } from "@/lib/client";
+import { JobOutcome } from "./AnalysisOutcome";
 import "./workspace-activity.css";
 export function Pulse() { return <span className="pulse" aria-hidden="true"><i /><i /><i /></span>; }
 
@@ -102,7 +103,8 @@ export function Activity({ initial, onJob }: { initial: Schema<"Job">; onJob: (j
     void run().catch(failure => { if (!controller.signal.aborted) setError(messageOf(failure)); }); return () => controller.abort();
   }, [initial.id, retry]);
   const progress = activityProgress(job, events);
-  const complete = progress.status === "succeeded";
+  const insufficient = !paragraph && progress.status === "insufficient_evidence";
+  const complete = progress.status === "succeeded" || insufficient;
   const active = !terminal(progress.status);
   const sections = timedActivitySections(events, job, now);
   useEffect(() => { if (!active) return; const timer = setInterval(() => setNow(Date.now()), 1_000); return () => clearInterval(timer); }, [active]);
@@ -133,7 +135,7 @@ export function Activity({ initial, onJob }: { initial: Schema<"Job">; onJob: (j
   }, [expanded, complete]);
   const cancel = async () => { try { update(await api.cancel(job.id)); } catch (failure) { setError(messageOf(failure)); } };
   return <section className={`activity reveal-activity ${active ? "is-running" : "is-terminal"} ${complete ? "is-complete" : ""}`} aria-label={paragraph ? "Statement activity" : "Research activity"}>
-    {complete && <button className="complete-disclosure" aria-expanded={expanded} aria-controls={historyId} onClick={() => setExpanded(!expanded)}><span className="completion-check" aria-hidden="true">✓</span>{paragraph ? "Research statement ready" : "Gap analysis complete"} <span className="completion-caret" aria-hidden="true">›</span></button>}
+    {complete && <button className="complete-disclosure" aria-expanded={expanded} aria-controls={historyId} onClick={() => setExpanded(!expanded)}><span className="completion-check" aria-hidden="true">✓</span>{paragraph ? "Research statement ready" : insufficient ? "Exploration complete · Evidence insufficient" : "Gap analysis complete"} <span className="completion-caret" aria-hidden="true">›</span></button>}
     {(!complete || expanded) && <>
       {!complete && <div className="activity-header"><div><h2>{active ? paragraph ? "Statement activity" : "Agent activity" : progress.status === "cancelled" ? paragraph ? "Statement stopped" : "Research stopped" : progress.status === "insufficient_evidence" ? "Insufficient evidence" : paragraph ? "Statement could not complete" : "Research could not complete"}</h2>{active && <p className="connection" role="status">{connection}</p>}</div>
         {active && <button className="stop" onClick={cancel} disabled={progress.status === "cancel_requested"}><span className="stop-square" aria-hidden="true" />{progress.status === "cancel_requested" ? "Stopping…" : "Stop"}</button>}
@@ -164,7 +166,7 @@ export function Activity({ initial, onJob }: { initial: Schema<"Job">; onJob: (j
       <div className="activity-follow">{following ? <span>{active ? "Following live activity" : "End of activity"}</span> : <><span>Auto-follow paused</span><button onClick={jumpToLatest}>Jump to latest <span aria-hidden="true">↓</span></button></>}</div>
     </>}
     {job.failure && <p className="error" role="alert">{job.failure.message}</p>}
-    {progress.status === "insufficient_evidence" && <p className="notice">The available evidence did not support a scientific account. Your selected gap, anchors, and activity are retained.</p>}
+    {progress.status === "insufficient_evidence" && (paragraph ? <p className="notice">The saved account did not support a faithful research statement. The account and activity are retained.</p> : <JobOutcome key={job.id} jobId={job.id} />)}
     {error && <div className="error" role="alert">{error} <button onClick={() => { setError(""); setRetry(n => n + 1); }}>Reconnect</button></div>}
   </section>;
 }

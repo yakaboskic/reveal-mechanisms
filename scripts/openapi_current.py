@@ -103,6 +103,32 @@ def schemas(b):
     b.add('PublicationInput',obj({'visibility':enum('private','public'),'expected_version':{'type':'integer','minimum':0}},
         description='Explicit owner publication choice. public creates or updates a frozen public snapshot; private revokes this owner publication. Optimistic version and Idempotency-Key prevent stale or duplicate choices. Existing accounts start private/version0.'))
     S['AccountResult']['properties']['publication']=ref('PublicationState')
+    b.add('AnalysisOutcomeResult',obj({'kind':{'type':'string','const':'analysis_outcome'},'outcome_id':uuid,'evidence_package_sha256':digest}))
+    for name in ('Job','JobEvent'):
+        S[name]['properties']['result']['anyOf'][0]['oneOf'].append(ref('AnalysisOutcomeResult'))
+    S['Job']['allOf'][0]['then']['properties']['result']=null({'oneOf':[ref('AnalysisResult'),ref('AnalysisOutcomeResult')]})
+    S['Job']['allOf'][2]['else']={'if':{'properties':{'status':{'const':'insufficient_evidence'}}},
+        'then':{'properties':{'result':null(ref('AnalysisOutcomeResult'))}},'else':{'properties':{'result':{'type':'null'}}}}
+    S['Job']['allOf'].append({'if':{'properties':{'result':{'type':'object','properties':{'kind':{'const':'analysis_outcome'}},'required':['kind']}}},
+        'then':{'properties':{'status':{'const':'insufficient_evidence'}}}})
+    b.add('OutcomeAnchor',obj({'source_id':string(),'mechanism_id':did('Mechanism'),'name':string(),'trait':null(string()),'origin':string()}))
+    b.add('OutcomeEvidenceRef',obj({'source':enum('package','tool_response'),'pointer':string(),'ledger_sequence':null({'type':'integer','minimum':1}),
+        'artifact_sha256':digest,'download_url':null(string(format='uri'))}))
+    b.add('OutcomeProvenance',obj({'evidence_package_sha256':digest,'outcome_sha256':digest,'runtime_sha256':null(digest),'ledger_sha256':null(digest),
+        'execution_mode':enum('box','deterministic'),'source_bindings':array(obj({'source_id':string(),'source_revision':string(),
+            'embedding_run_id':null(string()),'mapping_run_id':null(string())})),
+        'coverage':{'type':'object','additionalProperties':True},'evidence_refs':array(ref('OutcomeEvidenceRef')),'source_artifacts':array(ref('ArtifactAccess')),
+        'graph_queries':array(obj({'sequence':{'type':'integer','minimum':1},'graph':enum('biomarkerkg','prokn'),'status':enum('completed','empty','failed','denied','interrupted'),
+            'request_sha256':digest,'response_sha256':digest}))}))
+    b.add('AnalysisOutcome',obj({'id':uuid,'outcome':enum('insufficient_evidence'),'summary':string(),'reason':string(),
+        'explored_topics':array(string()),'missing_evidence':array(string()),'limitations':array(string()),'next_steps':array(string()),
+        'knowledge_gap':ref('DapperKnowledgeGap'),'source_gap':ref('SelectedGap'),'anchors':array(ref('OutcomeAnchor')),'selected_kgs':array(enum('biomarkerkg','prokn')),
+        'created_at':time,'attribution':null(ref('AttributionSnapshot')),'scope_note':string(),'record_format':enum('structured','legacy'),
+        'provenance':ref('OutcomeProvenance'),'job_id':null(uuid),'publication':ref('PublicationState')},
+        description='Immutable application record of one scoped insufficient-evidence investigation, not a ScientificAccount, independently validated scientific claim, or globally established null result. Reasons are captured author reports; coverage and hashes retain their exact scope. Private by default and excluded from scientific-account counts. Public snapshots omit private job identifiers.'))
+    b.add('AnalysisOutcomeSummary',obj({key:deepcopy(S['AnalysisOutcome']['properties'][key]) for key in
+        ('id','outcome','summary','knowledge_gap','anchors','created_at','attribution','publication')}))
+    b.add('AnalysisOutcomeList',obj({'items':array(ref('AnalysisOutcomeSummary')),'page':ref('Page')}))
     b.add('AccountSummary',obj({'account':ref('DapperScientificAccount'),'knowledge_gap':ref('DapperKnowledgeGap'),
         'claim_count':{'type':'integer','minimum':1},'created_at':time,'job_id':null(uuid),'research_statement':ref('ParagraphState')}))
     S['AccountSummary']['properties']['attribution']=null(ref('AttributionSnapshot'))
@@ -170,6 +196,7 @@ def examples(b, f, e):
 
 def endpoints(b,f,e):
     P=b.PATHS;S=b.SCHEMAS;ref=b.ref;obj=b.obj;array=b.array;string=b.string;enum=b.enum;did=b.did;null=b.nullable
+    uuid=string(format='uuid')
     def op(path,method='get'):return P[path][method]
     def response_values(operation):
         for response in operation['responses'].values():
@@ -233,6 +260,41 @@ def endpoints(b,f,e):
         'PublicationState',{'published':public_publication,'unpublished':dict(private_publication,version=2,updated_at=b.NOW)},
         parameters=[b.parameter('dapper_id','path',did('ScientificAccount'),f['account']['id'],True)],request_schema='PublicationInput',
         request_examples={'publish':{'visibility':'public','expected_version':0},'unpublish':{'visibility':'private','expected_version':1}},idempotent=True,errors=('400','401','404','409','422','429'))
+    outcome_id='66666666-6666-4666-8666-666666666666'
+    outcome={'id':outcome_id,'outcome':'insufficient_evidence','summary':'The captured investigation did not support an accepted scientific account.',
+        'reason':'This illustrative scoped investigation lacked evidence connecting the selected mechanism to the selected question.',
+        'explored_topics':['The selected question and captured mechanism evidence.'],'missing_evidence':['Evidence connecting the mechanism to this question.'],
+        'limitations':['This scoped result does not establish that a relationship is globally absent.'],'next_steps':['Review additional directly relevant studies before repeating this investigation.'],
+        'knowledge_gap':f['gap'],'source_gap':e['composer']['source_gap'],
+        'anchors':[{'source_id':a['reference']['source_id'],'mechanism_id':a['reference']['dapper_id'],'name':a['reference']['source_id'],'trait':None,'origin':a['origin']} for a in e['composer']['eaggl_anchors']],
+        'selected_kgs':e['composer']['selected_kgs'],'created_at':b.NOW,'attribution':e['research_request']['attribution'],
+        'scope_note':'A scoped exploration report, not a ScientificAccount or globally established negative finding.','record_format':'structured','job_id':b.JOB_ID,'publication':private_publication,
+        'provenance':{'evidence_package_sha256':e['evidence_package']['package_sha256'],'outcome_sha256':'a'*64,'runtime_sha256':'b'*64,'ledger_sha256':'c'*64,
+            'execution_mode':'box','source_bindings':[{'source_id':a['reference']['source_id'],'source_revision':a['reference']['source_revision'],'embedding_run_id':None,'mapping_run_id':None} for a in e['composer']['eaggl_anchors']],
+            'coverage':{},'evidence_refs':[],'source_artifacts':[],'graph_queries':[]}}
+    public_outcome={**outcome,'job_id':None,'publication':dict(public_publication,can_manage=False)}
+    outcome_summary={key:public_outcome[key] for key in ('id','outcome','summary','knowledge_gap','anchors','created_at','attribution','publication')}
+    description='A durable scoped insufficient-evidence exploration, separate from ScientificAccounts and excluded from their popularity counts. Captured author reasons are not independently validated scientific findings. Private by default; explicit publication shares only this frozen scope, original attribution and captured source evidence. Job logs, requests, runtime/ledger contents and the complete private package remain private. Invalid supplied credentials never downgrade to public.'
+    b.operation('/v1/analysis-outcomes/{outcome_id}','get','getAnalysisOutcome','Scientific content','Read an explored analysis outcome',description,
+        'AnalysisOutcome',{'private_owner':outcome,'public_reader':public_outcome},parameters=[b.parameter('outcome_id','path',uuid,outcome_id,True)],public=True,errors=('401','404','429'))
+    b.operation('/v1/jobs/{job_id}/outcome','get','getJobAnalysisOutcome','Jobs','Find the saved scoped outcome for an owned job',
+        'Owner-only lookup of the durable outcome already saved by this analysis job. Returns404 if no record exists; GET never runs research or performs a historical import.',
+        'AnalysisOutcome',{'owner':outcome},parameters=[b.parameter('job_id','path',uuid,b.JOB_ID,True)],errors=('401','404','429'))
+    b.operation('/v1/knowledge-gaps/{gap_id}/outcomes','get','listKnowledgeGapOutcomes','Knowledge gaps','List explored analysis outcomes for an exact gap',
+        'Newest-first compact summaries for this exact gap. Public scope defaults to explicitly published outcome snapshots; workspace scope requires a session. Scientific-account counts and ranking remain unchanged. Detail/provenance is fetched only when an outcome is opened.',
+        'AnalysisOutcomeList',{'published':{'items':[outcome_summary],'page':e['page']},'empty':{'items':[],'page':e['page']}},
+        parameters=[b.parameter('gap_id','path',did('KnowledgeGap'),f['gap']['id'],True),b.parameter('scope','query',enum('public','workspace',default='public'),'public'),
+            b.parameter('source_revision','query',string(pattern='^[a-f0-9]{64}$'),e['composer']['source_gap']['source_revision'])]+b.page_parameters(),public=True,errors=('401','404','409','429'))
+    b.operation('/v1/analysis-outcomes/{outcome_id}/publication','get','getOutcomePublication','Scientific content','Inspect exploration outcome publication',
+        description,'PublicationState',{'private_owner':private_publication,'public_reader':dict(public_publication,can_manage=False)},
+        parameters=[b.parameter('outcome_id','path',uuid,outcome_id,True)],public=True,errors=('401','404','429'))
+    b.operation('/v1/analysis-outcomes/{outcome_id}/publication','post','updateOutcomePublication','Scientific content','Publish or unpublish a scoped exploration',
+        'Explicit owner-only publication, including anonymous workspace owners. Freeze this exploration and its captured source artifacts, never job logs or unrelated workspace artifacts. Unpublish revokes this snapshot; independently published evidence can remain available. Immutable records and original attribution do not change.',
+        'PublicationState',{'published':public_publication,'unpublished':dict(private_publication,version=2,updated_at=b.NOW)},
+        parameters=[b.parameter('outcome_id','path',uuid,outcome_id,True)],request_schema='PublicationInput',
+        request_examples={'publish':{'visibility':'public','expected_version':0},'unpublish':{'visibility':'private','expected_version':1}},idempotent=True,errors=('400','401','404','409','422','429'))
+    for path in ('/v1/analysis-outcomes/{outcome_id}','/v1/analysis-outcomes/{outcome_id}/publication','/v1/knowledge-gaps/{gap_id}/outcomes'):
+        op(path)['security']=[{}, {'GatewayAssertion': []}]
     exploration={'source_gap':e['composer']['source_gap'],'knowledge_gap':f['gap'],'last_explored_at':b.NOW,'draft_id':b.DRAFT_ID,
         'scientific_accounts':{'count':1,'scope':'owner_exact_gap','as_of':b.NOW,'ranking':'curated','window_days':None}}
     b.operation('/v1/me/explorations','get','listExplorations','Research history','List your explored knowledge gaps',

@@ -60,7 +60,8 @@ def ledger_sources(ledger_path):
     if ledger_path is None: return {}
     ledger_path=Path(ledger_path).resolve(); ledger=decode(ledger_path.read_bytes()); sources={}
     for call in ledger['calls']:
-        if call.get('tool')!='query_graph' or call.get('status') not in ('completed','empty') or not call.get('response'): continue
+        if call.get('tool') not in ('query_graph','read_paper') or call.get('status') not in ('completed','empty') or not call.get('response'): continue
+        if call.get('tool')=='read_paper' and call.get('status')!='completed': continue
         source=call['response']; path=(ledger_path.parent/source['path']).resolve()
         require(path.is_relative_to(ledger_path.parent),'Tool source artifact path escape')
         data=path.read_bytes()

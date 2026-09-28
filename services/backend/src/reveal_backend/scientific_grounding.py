@@ -39,6 +39,13 @@ into evidence of absence. An empty graph query is only that query's empty result
 a failed query provides no scientific result. Context can suggest a hypothesis
 but cannot silently resolve the selected knowledge gap.
 
+Captured paper reads are auxiliary evidence, with their original abstract or
+full_text scope and exact excerpt offsets retained. An abstract is not a full
+paper review; a partial full-text excerpt does not establish unread methods or
+results. Preserve correction/retraction notices and reported limitations. Search
+metadata, titles and discovery hits are not biological findings. Paper evidence
+does not replace the required source-backed CFDE claim or native factor lineage.
+
 Check the ScientificAccount closing statement against the EXACT selected gap.
 Closing remarks are a brief synthesis or recommendation, at most two sentences,
 with the decisive uncertainty retained. They need no inline citations, metrics,
@@ -53,7 +60,7 @@ that source-backed observations and suggested experiments are distinguished.
 Return only the requested JSON: one verdict per Claim and one for the account
 synthesis. Use supported, overstated, or unsupported. Provide short concrete
 findings suitable for an audit (not private reasoning) and JSON Pointer source
-references rooted in /package or /graph_calls. Supported verdicts need at least
+references rooted in /package, /graph_calls or /paper_calls. Supported verdicts need at least
 one real source reference. Never cite the proposed document as its own evidence.
 """
 
@@ -91,13 +98,14 @@ def review_evidence(package: dict, ledger_path: Path) -> dict:
     package_view = {key: package[key] for key in (
         "selection", "dismech", "pigean", "entities", "coverage", "external_evidence"
     ) if key in package}
-    calls = []
+    calls, papers = [], []
     for call in ledger["calls"]:
         # Read/Bash outputs are authoring activity, not external evidence.
-        if call.get("tool") != "query_graph":
+        if call.get("tool") not in ("query_graph", "read_paper"):
             continue
-        require(call.get("selected_graph") in package["external_evidence"]["selected_graphs"],
-                "Grounding review found an unselected graph")
+        if call['tool'] == 'query_graph':
+            require(call.get("selected_graph") in package["external_evidence"]["selected_graphs"],
+                    "Grounding review found an unselected graph")
         item = {key: call.get(key) for key in ("sequence", "tool", "selected_graph", "status", "source_version")}
         for field in ("request", "response"):
             descriptor = call.get(field)
@@ -108,8 +116,8 @@ def review_evidence(package: dict, ledger_path: Path) -> dict:
             require(sha256(data) == descriptor["sha256"] and len(data) == descriptor["size_bytes"],
                     "Grounding evidence checksum mismatch")
             item[field] = decode(data)
-        calls.append(item)
-    return {"package": package_view, "graph_calls": calls}
+        (calls if call['tool'] == 'query_graph' else papers).append(item)
+    return {"package": package_view, "graph_calls": calls, "paper_calls": papers}
 
 
 def validate_review(review: dict, document: dict, evidence: dict) -> bool:
@@ -125,7 +133,7 @@ def validate_review(review: dict, document: dict, evidence: dict) -> bool:
         if item["verdict"] == "supported":
             require(bool(item["source_refs"]), "A supported assessment has no source reference")
         for ref in item["source_refs"]:
-            require(ref.startswith(("/package/", "/graph_calls/")), "Grounding review cited a non-source")
+            require(ref.startswith(("/package/", "/graph_calls/", "/paper_calls/")), "Grounding review cited a non-source")
             pointer(evidence, ref)
     return all(item["verdict"] == "supported" for item in [*review["claims"], review["synthesis"]])
 
@@ -151,11 +159,13 @@ The initial index supplies the exact selected gap, ALL curated DisMech context,
 coverage, selected graph policy, and headers for EVERY selected EAGGL anchor.
 Study this required context before assessing the claims or synthesis. Collection
 headers expose status and count, not the observations themselves. Use parallel
-read_evidence calls to retrieve the needed exact observations and graph outcomes;
-large values return child pointers with pagination. Follow continuation when
+read_evidence calls to retrieve the needed exact observations, graph outcomes and
+paper excerpts; paper headers retain abstract/full-text scope, pagination and
+correction metadata but are not a read of the scientific excerpt itself.
+Large values return child pointers with pagination. Follow continuation when
 completeness matters. Consider competing observations, not only cited support.
 Do not infer absence or a completed search from unread records or failed calls.
-Cite only exact /package/... or /graph_calls/... values supplied in the initial
+Cite only exact /package/..., /graph_calls/... or /paper_calls/... values supplied in the initial
 context or actually returned in full by read_evidence. A collection inventory is
 not a read of its members. If evidence cannot be sufficiently inspected, call
 review_unavailable; never invent a verdict or claim missing evidence is negative.

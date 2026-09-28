@@ -54,6 +54,7 @@ class ExecutionResult:
     ledger_manifest_path: Path | None = None
     reason: str | None = None
     remote_handle: dict | None = None
+    outcome_path: Path | None = None
 
 
 class ExecutionAdapter(Protocol):

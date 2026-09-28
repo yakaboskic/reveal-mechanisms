@@ -216,6 +216,25 @@ Copy hyperlinked rich text for Word, or download Markdown, LaTeX and BibTeX.
 - LaTeX includes cite commands; remind users to download references.bib.
 - Exports share exact Paragraph and registry pins. Rendering does not launch an agent.
 
+### 11. Read and share an explored analysis
+
+Preserve a scoped insufficient-evidence investigation and explicitly publish its record when useful.
+
+**Request:** An owned job outcome, or an authorized private/public outcome ID.
+
+**Response:** AnalysisOutcome and compact exact-gap outcome summaries; explicit publication state.
+
+- `GET /v1/analysis-outcomes/{outcome_id}` — [request request/response](examples/getAnalysisOutcome.request.json)
+- `GET /v1/jobs/{job_id}/outcome` — [request request/response](examples/getJobAnalysisOutcome.request.json)
+- `GET /v1/knowledge-gaps/{gap_id}/outcomes` — [request request/response](examples/listKnowledgeGapOutcomes.request.json)
+- `GET /v1/analysis-outcomes/{outcome_id}/publication` — [request request/response](examples/getOutcomePublication.request.json)
+- `POST /v1/analysis-outcomes/{outcome_id}/publication` — [publish request/response](examples/updateOutcomePublication.publish.json)
+- `POST /v1/analysis-outcomes/{outcome_id}/publication` — [unpublish request/response](examples/updateOutcomePublication.unpublish.json)
+
+- A scoped exploration is not a ScientificAccount and never increases scientific-account popularity counts.
+- Captured reasons remain attributed to the original investigation; unavailable sources do not establish global absence.
+- Publication is explicit and revocable. Job logs, private requests and the complete private evidence package remain private.
+
 ### Registered or anonymous ownership
 
 Gateway establishes trusted session and resolves a stable application UUID.
@@ -265,4 +284,4 @@ Request cancellation or recover from stale save/event cursor.
 
 Requests/responses are taken from the existing validated OpenAPI exchange library. The CADinT2D analysis/paragraph sequence is internally linked. The CAD source-selected gap now frames the request and account. The evidence package is a separate captured input; the authored account is not its validated agent output. Semantic scores and agent outputs remain illustrative fixtures.
 
-The mapping covers 34 operations and all 46 exchanges. OpenAPI SHA-256: `820ee2599014d379a40f2084a51d4afbbffcaaa79da8ef412de5e3c4e8fe6702`. No endpoints or payloads were changed to build this diagram.
+The mapping covers 39 operations and all 52 exchanges. OpenAPI SHA-256: `75dab1029b990324ec347e16567adb0b433ccd85d50558e9922e668bd6eb1802`. No endpoints or payloads were changed to build this diagram.

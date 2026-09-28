@@ -383,3 +383,47 @@ cover concurrency, strict wall time, capacity, late/frozen responses, nested
 errors, exact and scoped RDF queries, hydration, and failed runtime metadata.
 Together with the 62 prior transport/activity/batch tests, all 73 pass; the
 construction skill validator also passes. No paid research rerun was launched.
+
+The research proxy now exposes `search_papers` and `read_paper`, using the
+[Europe PMC REST API](https://europepmc.org/RestfulWebService). This is scholarly
+search, abstract reading and available open-access XML text reading, not
+arbitrary website browsing. Attempts allow three searches with up to five hits
+and four paper reads; each text window is at most 12,000 characters. The fixed
+HTTPS origin accepts no arbitrary URLs or redirects. The existing 35-second
+read deadline and two concurrent-read slots still apply. Search metadata is
+discovery only. Only completed paper excerpts can become auxiliary evidence;
+required CFDE lineage and selected-graph restrictions remain unchanged.
+
+The trusted ledger records exact requests, original HTTP body bytes and
+normalized model-facing responses with independent checksums. Oversized bodies
+are rejected and their bounded diagnostic capture is explicitly marked
+incomplete. Abstract versus open-access text scope, source identity, excerpt
+offsets, available correction metadata and limitations remain visible. XML
+title/paragraph extraction is not a full review of tables, figures or
+supplementary material. Empty, failed and interrupted reads never become
+positive paper evidence. Configured credentials are blocked in outbound tool
+arguments and redacted before durable captures.
+
+A bounded live public HTTP smoke completed one Europe PMC metadata search and
+an exact abstract read for returned MED record `30000050` (HTTP 200, a
+1,200-character window with explicit continuation). Both raw source and tool
+response checksums are recorded in
+`.runtime/literature-smoke/live-public/report.json` and its complete ledger.
+The initial sandbox DNS failure remains a separate diagnostic. This smoke
+sent only a generic public literature query, used no credentials and made no
+model calls. Open-access XML behavior is covered with offline source fixtures;
+no new paid research was run.
+
+Before authoring, the runner creates `/reveal/output` and the working directory's
+`output/` symlink to it. It then protects the evidence workspace and probes a
+write through the alias as `reveal-agent`; a failed probe prevents Claude from
+starting. The trusted `write_outcome` tool validates and saves a bounded
+`reveal.insufficient-evidence/1` report in that canonical directory. Legacy
+reason-only output stays distinguishable. Outcomes do not mint accounts or
+relax scientific acceptance. The 15 new offline tests cover real scoped tool
+registration, failure/raw capture, citation-file promotion, request bounds,
+credential handling, writable-alias permissions and structured/legacy outcome
+validation. Together with existing transport and public-activity tests, all 75
+pass, and both changed skills pass their validators. The filesystem probe test
+runs its actual script as the unprivileged host UID against a read-only
+workspace; it does not claim a new live Box execution.
