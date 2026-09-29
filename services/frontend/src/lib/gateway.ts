@@ -3,6 +3,7 @@ import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { getServerSession } from "next-auth";
 import { authOptions } from "./auth";
+import { IdentityServiceError } from "./identity-recovery";
 
 export type Principal = { user_id: string; principal_kind: "anonymous" | "registered"; workspace_expires_at?: string };
 export type VerifiedIdentity = { issuer: string; subject: string; display_name: string | null; email: string | null; email_verified: boolean; orcid: string | null; orcid_authenticated: boolean };
@@ -27,7 +28,10 @@ export async function serviceRequest<T>(path: string, body: unknown, key = crypt
     method: "POST", headers: { "content-type": "application/json", Authorization: `Bearer ${process.env.REVEAL_GATEWAY_SERVICE_TOKEN}`, "Idempotency-Key": key, ...extraHeaders },
     body: JSON.stringify(body), cache: "no-store", signal: AbortSignal.timeout(20000),
   });
-  if (!response.ok) throw new Error(`Identity service returned ${response.status}`);
+  if (!response.ok) {
+    const problem = await response.json().catch(() => null);
+    throw new IdentityServiceError(response.status, typeof problem?.code === "string" ? problem.code : null);
+  }
   return response.json();
 }
 export async function readAnonymous(): Promise<Principal | null> {

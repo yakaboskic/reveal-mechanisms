@@ -55,7 +55,7 @@ def main():
     parser.add_argument('--feedback-file', type=Path, help='Trusted reviewer feedback as a JSON list; fresh bounded repair attempt only')
     parser.add_argument('--timeout', type=int, default=900)
     parser.add_argument('--budget', type=float, default=3)
-    parser.add_argument('--turns', type=int, default=40)
+    parser.add_argument('--turns', type=int, default=100)
     args = parser.parse_args()
     try: return asyncio.run(run(args))
     except KeyboardInterrupt:

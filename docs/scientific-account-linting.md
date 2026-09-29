@@ -75,9 +75,13 @@ REVEAL additionally checks:
 - `closing_remarks` is nonempty.
 - Every account component Claim has explicit evidence lineage to an unchanged captured CFDE File. A shared Activity's inputs are insufficient. Auxiliary source Claims may use other KGs.
 - Evidence uses have the owning proposition as their target, a recorded direction and nonempty interpretation/context.
+- Source artifacts are checksum-verified. New Files must match a completed trusted tool capture by checksum and size. The agent tool snapshots completed captures from the live ledger; command-line callers supplying external evidence pass `--ledger` with its trusted manifest.
+- JSON row locators resolve in the cited source, snippets quote that exact observation, and ClaimScore metrics, values, and mathematical kinds match the cited row. These checks run in both draft and final modes through `source_validation.py`. A sentence-ending period is tolerated after a pointer; an unresolved pointer is an error and never falls back to searching the whole response.
 - Final scientific nodes have DAPPER digest IDs; draft authored nodes may still use temporary IDs.
 
 The script does not assign IDs, rewrite input files, fabricate evidence, publish accounts or access the network. Newly authored objects must be minted during trusted assembly before final mode. Upstream warnings are preserved and do not fail by default; `--strict` fails on warnings too. This keeps the known imported catalog Activity warning visible.
+
+Trusted assembly hydrates missing frozen objects only through exact schema-declared relationships and edge endpoints. Mentioning an input ID in prose, a label, or another literal does not insert that object into the graph. Assembly derives these reference fields from the same pinned DAPPER schema as lint, then revalidates the assembled document; it does not suppress reachability errors for genuinely disconnected nodes.
 
 Exit codes: **0** passes the requested lint mode, **1** contains validation errors (or strict-mode warnings), **2** means a runtime/setup failure. The JSON report records the mode, exact document/package hashes, DAPPER release, findings, error/warning counts and remaining acceptance checks. `profile-only` is an explicit diagnostic mode for DAPPER examples and is never accepted by the backend validator.
 
@@ -96,4 +100,4 @@ report = validate_scientific_account(
 
 This reruns the same linter in **final** mode and raises `AccountValidationError` with `.report` on failure. The fresh interpreter avoids accidentally importing the collector's older DAPPER snapshot. The backend must run this against returned document bytes, never trust a report supplied by the agent, and persist/compare the report's hashes with the artifacts it accepts.
 
-Passing this validator is structural validity, **not scientific acceptance**. Trusted attribution/job ownership, exact locator and metric checks, external-tool ledger enforcement, and scientific support/synthesis review remain separate worker gates. In particular, a CFDE File in the evidence lineage does not by itself establish that the cited row supports the proposition.
+Passing this validator establishes structure and source fidelity, **not scientific acceptance**. Draft and final modes use the same checks; final mode additionally requires minted scientific identities after trusted assembly. Trusted attribution/job ownership, execution-ledger/tool-policy enforcement, and independent scientific support/synthesis review remain worker responsibilities. In particular, a correct source quotation does not by itself establish that the cited row supports the proposition. Failed worker lint reports are retained alongside the output so their findings remain inspectable.

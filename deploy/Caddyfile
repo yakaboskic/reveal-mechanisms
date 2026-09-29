@@ -1,0 +1,20 @@
+{
+	admin off
+	default_sni {$REVEAL_API_HOST}
+}
+
+https://{$REVEAL_API_HOST} {
+	# Explicit ACME issuer prevents IP hosts from receiving an internal CA cert.
+	tls {
+		issuer acme {
+			dir https://acme-v02.api.letsencrypt.org/directory
+			profile shortlived
+			disable_tlsalpn_challenge
+		}
+	}
+	@internal path /readyz /docs /docs/* /redoc /openapi.json
+	respond @internal 404
+	reverse_proxy api:8000 {
+		flush_interval -1
+	}
+}

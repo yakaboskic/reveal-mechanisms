@@ -341,6 +341,40 @@
     "curl": "curl -X PATCH https://api.reveal.example.org/v1/drafts/22222222-2222-4222-8222-222222222222 -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"composer\":{\"dismissed_source_ids\":[],\"eaggl_anchors\":[{\"origin\":\"manual\",\"reference\":{\"dapper_id\":\"dapper:Mechanism.MyhahXB55tDUS667sJzeJZ40BeeQBWOR\",\"source\":\"eaggl\",\"source_id\":\"factor:portal:CADinT2D:cfde-inc-v2:Factor1\",\"source_revision\":\"5797893b517def4fdc82f285c9bf835195f9f88eddfb6409cbf3b1e31dd63d83\"},\"suggestion_id\":null}],\"mechanism_subquery\":\"CADinT2D\",\"model\":\"cfde-inc-v2\",\"selected_kgs\":[\"biomarkerkg\",\"prokn\"],\"source_gap\":{\"id\":\"dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk\",\"source_id\":\"dismech:disorders/Coronary_Artery_Disease#discussion:cad_pgsxc_reverse_causation\",\"source_revision\":\"8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd\"}},\"expected_version\":1}'"
   },
   {
+    "operation_id": "deleteDraft",
+    "case": "delete_saved_draft",
+    "method": "DELETE",
+    "path_template": "/v1/drafts/{draft_id}",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/drafts/22222222-2222-4222-8222-222222222222",
+      "path": {
+        "draft_id": "22222222-2222-4222-8222-222222222222"
+      },
+      "query": {},
+      "headers": {
+        "Idempotency-Key": "66666666-6666-4666-8666-666666666666",
+        "Authorization": "Bearer <trusted-gateway-assertion>",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      },
+      "body": {
+        "expected_version": 2
+      }
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/json",
+        "examples": {
+          "deleted": {
+            "id": "22222222-2222-4222-8222-222222222222",
+            "deleted": true
+          }
+        }
+      }
+    },
+    "curl": "curl -X DELETE https://api.reveal.example.org/v1/drafts/22222222-2222-4222-8222-222222222222 -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"expected_version\":2}'"
+  },
+  {
     "operation_id": "listResearchRequests",
     "case": "request",
     "method": "GET",
@@ -537,7 +571,7 @@
     "method": "GET",
     "path_template": "/v1/knowledge-gaps/search",
     "request": {
-      "url": "https://api.reveal.example.org/v1/knowledge-gaps/search?q=CAD+genetic+risk&mode=fuzzy&kind=KNOWLEDGE_GAP&status=OPEN&source=dismech&disease_id=MONDO%3A0021661&limit=20",
+      "url": "https://api.reveal.example.org/v1/knowledge-gaps/search?q=CAD+genetic+risk&mode=fuzzy&kind=KNOWLEDGE_GAP&status=OPEN&source=dismech&disease_id=MONDO%3A0021661&limit=20&scope=public",
       "path": {},
       "query": {
         "q": "CAD genetic risk",
@@ -546,7 +580,8 @@
         "status": "OPEN",
         "source": "dismech",
         "disease_id": "MONDO:0021661",
-        "limit": 20
+        "limit": 20,
+        "scope": "public"
       },
       "headers": {
         "Accept": "application/json"
@@ -696,7 +731,7 @@
         }
       }
     },
-    "curl": "curl -X GET 'https://api.reveal.example.org/v1/knowledge-gaps/search?q=CAD+genetic+risk&mode=fuzzy&kind=KNOWLEDGE_GAP&status=OPEN&source=dismech&disease_id=MONDO%3A0021661&limit=20' -H 'Accept: application/json'"
+    "curl": "curl -X GET 'https://api.reveal.example.org/v1/knowledge-gaps/search?q=CAD+genetic+risk&mode=fuzzy&kind=KNOWLEDGE_GAP&status=OPEN&source=dismech&disease_id=MONDO%3A0021661&limit=20&scope=public' -H 'Accept: application/json'"
   },
   {
     "operation_id": "listKnowledgeGaps",
@@ -704,14 +739,15 @@
     "method": "GET",
     "path_template": "/v1/knowledge-gaps",
     "request": {
-      "url": "https://api.reveal.example.org/v1/knowledge-gaps?kind=KNOWLEDGE_GAP&status=OPEN&source=dismech&disease_id=MONDO%3A0021661&limit=20",
+      "url": "https://api.reveal.example.org/v1/knowledge-gaps?kind=KNOWLEDGE_GAP&status=OPEN&source=dismech&disease_id=MONDO%3A0021661&limit=20&scope=public",
       "path": {},
       "query": {
         "kind": "KNOWLEDGE_GAP",
         "status": "OPEN",
         "source": "dismech",
         "disease_id": "MONDO:0021661",
-        "limit": 20
+        "limit": 20,
+        "scope": "public"
       },
       "headers": {
         "Accept": "application/json"
@@ -828,7 +864,7 @@
         }
       }
     },
-    "curl": "curl -X GET 'https://api.reveal.example.org/v1/knowledge-gaps?kind=KNOWLEDGE_GAP&status=OPEN&source=dismech&disease_id=MONDO%3A0021661&limit=20' -H 'Accept: application/json'"
+    "curl": "curl -X GET 'https://api.reveal.example.org/v1/knowledge-gaps?kind=KNOWLEDGE_GAP&status=OPEN&source=dismech&disease_id=MONDO%3A0021661&limit=20&scope=public' -H 'Accept: application/json'"
   },
   {
     "operation_id": "getKnowledgeGap",
@@ -836,12 +872,13 @@
     "method": "GET",
     "path_template": "/v1/knowledge-gaps/{gap_id}",
     "request": {
-      "url": "https://api.reveal.example.org/v1/knowledge-gaps/dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk?source_revision=8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd",
+      "url": "https://api.reveal.example.org/v1/knowledge-gaps/dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk?source_revision=8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd&scope=public",
       "path": {
         "gap_id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk"
       },
       "query": {
-        "source_revision": "8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd"
+        "source_revision": "8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd",
+        "scope": "public"
       },
       "headers": {
         "Accept": "application/json"
@@ -949,7 +986,7 @@
         }
       }
     },
-    "curl": "curl -X GET 'https://api.reveal.example.org/v1/knowledge-gaps/dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk?source_revision=8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd' -H 'Accept: application/json'"
+    "curl": "curl -X GET 'https://api.reveal.example.org/v1/knowledge-gaps/dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk?source_revision=8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd&scope=public' -H 'Accept: application/json'"
   },
   {
     "operation_id": "searchMechanisms",
@@ -3436,6 +3473,14 @@
               "status": "succeeded",
               "job_id": "55555555-5555-4555-8555-555555555555",
               "paragraph_id": "dapper:Paragraph.uSYa1LdXNPuwlSgsCz3oZ7IfrVoztroD"
+            },
+            "publication": {
+              "visibility": "private",
+              "version": 0,
+              "published_at": null,
+              "updated_at": null,
+              "can_manage": true,
+              "has_unpublished_changes": false
             }
           }
         }
@@ -7399,6 +7444,57 @@
     "curl": "curl -X POST https://api.reveal.example.org/v1/citations/render -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"locale\":\"en-US\",\"paragraph_id\":\"dapper:Paragraph.uSYa1LdXNPuwlSgsCz3oZ7IfrVoztroD\",\"style\":\"apa\"}'"
   },
   {
+    "operation_id": "retryJobReview",
+    "case": "saved_output",
+    "method": "POST",
+    "path_template": "/v1/jobs/{job_id}/retry-review",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/jobs/44444444-4444-4444-8444-444444444444/retry-review",
+      "path": {
+        "job_id": "44444444-4444-4444-8444-444444444444"
+      },
+      "query": {},
+      "headers": {
+        "Idempotency-Key": "66666666-6666-4666-8666-666666666666",
+        "Authorization": "Bearer <trusted-gateway-assertion>",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      },
+      "body": {
+        "expected_last_event_id": "2"
+      }
+    },
+    "responses": {
+      "202": {
+        "content_type": "application/json",
+        "examples": {
+          "queued": {
+            "id": "44444444-4444-4444-8444-444444444444",
+            "kind": "analysis",
+            "owner_user_id": "11111111-1111-4111-8111-111111111111",
+            "status": "queued",
+            "stage": "validating",
+            "research_request_id": "33333333-3333-4333-8333-333333333333",
+            "input_account_id": null,
+            "created_at": "2026-09-24T16:01:00Z",
+            "updated_at": "2026-09-24T16:01:00Z",
+            "completed_at": null,
+            "result": null,
+            "failure": null,
+            "warnings": [],
+            "last_event_id": "2",
+            "links": {
+              "self": "/v1/jobs/44444444-4444-4444-8444-444444444444",
+              "events": "/v1/jobs/44444444-4444-4444-8444-444444444444/events",
+              "cancel": "/v1/jobs/44444444-4444-4444-8444-444444444444/cancel"
+            }
+          }
+        }
+      }
+    },
+    "curl": "curl -X POST https://api.reveal.example.org/v1/jobs/44444444-4444-4444-8444-444444444444/retry-review -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"expected_last_event_id\":\"2\"}'"
+  },
+  {
     "operation_id": "listAccounts",
     "case": "request",
     "method": "GET",
@@ -7485,6 +7581,865 @@
       }
     },
     "curl": "curl -X GET 'https://api.reveal.example.org/v1/accounts?gap_id=dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk&limit=20' -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Accept: application/json'"
+  },
+  {
+    "operation_id": "listKnowledgeGapAccounts",
+    "case": "request",
+    "method": "GET",
+    "path_template": "/v1/knowledge-gaps/{gap_id}/accounts",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/knowledge-gaps/dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk/accounts?source_revision=8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd&scope=public&limit=20",
+      "path": {
+        "gap_id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk"
+      },
+      "query": {
+        "source_revision": "8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd",
+        "scope": "public",
+        "limit": 20
+      },
+      "headers": {
+        "Accept": "application/json"
+      },
+      "body": null
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/json",
+        "examples": {
+          "owned": {
+            "items": [
+              {
+                "account": {
+                  "id": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
+                  "name": "Genes and gene programs in a shared CAD-in-T2D mechanism",
+                  "question": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+                  "context": "A CAD-in-T2D evidence slice used to investigate the selected broader CAD gap. This authored design packet combines captured CFDE observations with explicitly illustrative KG membership assertions. No live agent ran.",
+                  "component_claims": [
+                    "dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km",
+                    "dapper:Claim.Uv7_cT46DdsqZMvk5nh8G48qOIKvhRgc",
+                    "dapper:Claim.I2mf6PJ0DPF5_nnbiBjAhgjlUCOiUZZ9",
+                    "dapper:Claim.Kd3psmdr4G9AlD0UU1E1Vu6AjpKaQYWE",
+                    "dapper:Claim.NBafdtdEE2Uabs-8pZqurv7SoWpg7Yhi",
+                    "dapper:Claim.Oe2UZeV7oMY4NsMHyB8h4HJO1FH4nSGF",
+                    "dapper:Claim.2idJniYU4zCtCN6puy8XZ2mzo9Mq6c5p",
+                    "dapper:Claim.H5icBYm5JLM3_T-b1mMfH65Nc0zMhZzH",
+                    "dapper:Claim.xzV_35EYnLl-zy03YbmhfBk_ynNbl7H9",
+                    "dapper:Claim.SYqCJXxCVXDpwflRSdZnkVLzGLO_vi_r",
+                    "dapper:Claim.x7aCVQ1uTkYKLJo32ZyAGMGZaAGCSvWV",
+                    "dapper:Claim.uzqyfwuhf59hSTdravdcr4cTxuitWGx-"
+                  ],
+                  "conclusion_claims": [
+                    "dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km",
+                    "dapper:Claim.Uv7_cT46DdsqZMvk5nh8G48qOIKvhRgc",
+                    "dapper:Claim.I2mf6PJ0DPF5_nnbiBjAhgjlUCOiUZZ9",
+                    "dapper:Claim.Kd3psmdr4G9AlD0UU1E1Vu6AjpKaQYWE",
+                    "dapper:Claim.NBafdtdEE2Uabs-8pZqurv7SoWpg7Yhi"
+                  ],
+                  "closing_remarks": "SHH, GLI3 and TCF7L2, together with the AMP AD / GTEx and PsychENCODE geneM16 programs, are implicated in the same CAD-in-T2D mechanism by their captured EAGGL loadings. Their PIGEAN trait-level results connect these assessments to CAD in people with type 2 diabetes. The illustrative membership assertions show how genes could be connected to the programs, but those links remain unverified. Together, the assessed relationships prioritize a mechanism for investigating the selected gap. They do not distinguish exposure-driven amplification of genetic risk from downstream readouts or reverse causation; that requires temporal or intervention evidence not present here.",
+                  "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+                  "was_attributed_to": [
+                    "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+                  ]
+                },
+                "knowledge_gap": {
+                  "text": "Are the CAD PGS×context interactions driven by adverse exposures causally amplifying genetic risk, or are some \"contexts\" actually downstream readouts of incipient disease (reverse causation)?",
+                  "gap_description": "Population PGS×context analyses (Nagpal & Gibson 2026, PMID:42443528) are largely unable to establish the causality of specific contexts. dismech separates true environmental exposures (smoking, high-fat diet, sedentary lifestyle) from biochemical readouts (LDL, HDL, C-reactive protein); the biochemical \"contexts\" are prime reverse-causation suspects, since they may be partly downstream of the atherosclerotic process rather than upstream drivers, and behavioural contexts such as reduced physical activity may be rapid responses to incipient angina rather than causes. Distinguishing genuine amplification of genetic effects from reverse causation determines whether the modelled interventions (e.g. lowering cholesterol in high-PGS smokers) would actually reduce risk.",
+                  "gap_kind": "KNOWLEDGE_GAP",
+                  "scope": "Coronary Artery Disease",
+                  "about_entities": [
+                    "http://purl.obolibrary.org/obo/MONDO_0021661"
+                  ],
+                  "id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk"
+                },
+                "claim_count": 12,
+                "created_at": "2026-09-24T16:00:00Z",
+                "job_id": "44444444-4444-4444-8444-444444444444",
+                "research_statement": {
+                  "status": "succeeded",
+                  "job_id": "55555555-5555-4555-8555-555555555555",
+                  "paragraph_id": "dapper:Paragraph.uSYa1LdXNPuwlSgsCz3oZ7IfrVoztroD"
+                },
+                "attribution": {
+                  "user_id": "11111111-1111-4111-8111-111111111111",
+                  "person_id": "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he",
+                  "display_name": "Example Researcher",
+                  "orcid": null,
+                  "orcid_authenticated": false,
+                  "observed_at": "2026-09-24T16:00:00Z",
+                  "principal_kind": "registered"
+                }
+              }
+            ],
+            "page": {
+              "next_cursor": null,
+              "has_more": false,
+              "snapshot_id": "illustrative-contract-snapshot"
+            }
+          },
+          "no_visible_accounts": {
+            "items": [],
+            "page": {
+              "next_cursor": null,
+              "has_more": false,
+              "snapshot_id": "illustrative-contract-snapshot"
+            }
+          }
+        }
+      }
+    },
+    "curl": "curl -X GET 'https://api.reveal.example.org/v1/knowledge-gaps/dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk/accounts?source_revision=8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd&scope=public&limit=20' -H 'Accept: application/json'"
+  },
+  {
+    "operation_id": "getAccountPublication",
+    "case": "request",
+    "method": "GET",
+    "path_template": "/v1/accounts/{dapper_id}/publication",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/publication",
+      "path": {
+        "dapper_id": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd"
+      },
+      "query": {},
+      "headers": {
+        "Accept": "application/json"
+      },
+      "body": null
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/json",
+        "examples": {
+          "private_owner": {
+            "visibility": "private",
+            "version": 0,
+            "published_at": null,
+            "updated_at": null,
+            "can_manage": true,
+            "has_unpublished_changes": false
+          },
+          "public_reader": {
+            "visibility": "public",
+            "version": 1,
+            "published_at": "2026-09-24T16:00:00Z",
+            "updated_at": "2026-09-24T16:00:00Z",
+            "can_manage": false,
+            "has_unpublished_changes": false
+          }
+        }
+      }
+    },
+    "curl": "curl -X GET https://api.reveal.example.org/v1/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/publication -H 'Accept: application/json'"
+  },
+  {
+    "operation_id": "updateAccountPublication",
+    "case": "publish",
+    "method": "POST",
+    "path_template": "/v1/accounts/{dapper_id}/publication",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/publication",
+      "path": {
+        "dapper_id": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd"
+      },
+      "query": {},
+      "headers": {
+        "Idempotency-Key": "66666666-6666-4666-8666-666666666666",
+        "Authorization": "Bearer <trusted-gateway-assertion>",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      },
+      "body": {
+        "visibility": "public",
+        "expected_version": 0
+      }
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/json",
+        "examples": {
+          "published": {
+            "visibility": "public",
+            "version": 1,
+            "published_at": "2026-09-24T16:00:00Z",
+            "updated_at": "2026-09-24T16:00:00Z",
+            "can_manage": true,
+            "has_unpublished_changes": false
+          },
+          "unpublished": {
+            "visibility": "private",
+            "version": 2,
+            "published_at": null,
+            "updated_at": "2026-09-24T16:00:00Z",
+            "can_manage": true,
+            "has_unpublished_changes": false
+          }
+        }
+      }
+    },
+    "curl": "curl -X POST https://api.reveal.example.org/v1/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/publication -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"expected_version\":0,\"visibility\":\"public\"}'"
+  },
+  {
+    "operation_id": "updateAccountPublication",
+    "case": "unpublish",
+    "method": "POST",
+    "path_template": "/v1/accounts/{dapper_id}/publication",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/publication",
+      "path": {
+        "dapper_id": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd"
+      },
+      "query": {},
+      "headers": {
+        "Idempotency-Key": "66666666-6666-4666-8666-666666666666",
+        "Authorization": "Bearer <trusted-gateway-assertion>",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      },
+      "body": {
+        "visibility": "private",
+        "expected_version": 1
+      }
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/json",
+        "examples": {
+          "published": {
+            "visibility": "public",
+            "version": 1,
+            "published_at": "2026-09-24T16:00:00Z",
+            "updated_at": "2026-09-24T16:00:00Z",
+            "can_manage": true,
+            "has_unpublished_changes": false
+          },
+          "unpublished": {
+            "visibility": "private",
+            "version": 2,
+            "published_at": null,
+            "updated_at": "2026-09-24T16:00:00Z",
+            "can_manage": true,
+            "has_unpublished_changes": false
+          }
+        }
+      }
+    },
+    "curl": "curl -X POST https://api.reveal.example.org/v1/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/publication -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"expected_version\":1,\"visibility\":\"private\"}'"
+  },
+  {
+    "operation_id": "listAnalysisOutcomes",
+    "case": "request",
+    "method": "GET",
+    "path_template": "/v1/analysis-outcomes",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/analysis-outcomes?limit=20",
+      "path": {},
+      "query": {
+        "limit": 20
+      },
+      "headers": {
+        "Authorization": "Bearer <trusted-gateway-assertion>",
+        "Accept": "application/json"
+      },
+      "body": null
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/json",
+        "examples": {
+          "saved": {
+            "items": [
+              {
+                "id": "66666666-6666-4666-8666-666666666666",
+                "outcome": "insufficient_evidence",
+                "summary": "The captured investigation did not support an accepted scientific account.",
+                "knowledge_gap": {
+                  "text": "Are the CAD PGS×context interactions driven by adverse exposures causally amplifying genetic risk, or are some \"contexts\" actually downstream readouts of incipient disease (reverse causation)?",
+                  "gap_description": "Population PGS×context analyses (Nagpal & Gibson 2026, PMID:42443528) are largely unable to establish the causality of specific contexts. dismech separates true environmental exposures (smoking, high-fat diet, sedentary lifestyle) from biochemical readouts (LDL, HDL, C-reactive protein); the biochemical \"contexts\" are prime reverse-causation suspects, since they may be partly downstream of the atherosclerotic process rather than upstream drivers, and behavioural contexts such as reduced physical activity may be rapid responses to incipient angina rather than causes. Distinguishing genuine amplification of genetic effects from reverse causation determines whether the modelled interventions (e.g. lowering cholesterol in high-PGS smokers) would actually reduce risk.",
+                  "gap_kind": "KNOWLEDGE_GAP",
+                  "scope": "Coronary Artery Disease",
+                  "about_entities": [
+                    "http://purl.obolibrary.org/obo/MONDO_0021661"
+                  ],
+                  "id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk"
+                },
+                "anchors": [
+                  {
+                    "source_id": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                    "mechanism_id": "dapper:Mechanism.MyhahXB55tDUS667sJzeJZ40BeeQBWOR",
+                    "name": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                    "trait": null,
+                    "origin": "manual"
+                  }
+                ],
+                "created_at": "2026-09-24T16:00:00Z",
+                "attribution": {
+                  "user_id": "11111111-1111-4111-8111-111111111111",
+                  "person_id": "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he",
+                  "display_name": "Example Researcher",
+                  "orcid": null,
+                  "orcid_authenticated": false,
+                  "observed_at": "2026-09-24T16:00:00Z",
+                  "principal_kind": "registered"
+                },
+                "publication": {
+                  "visibility": "private",
+                  "version": 0,
+                  "published_at": null,
+                  "updated_at": null,
+                  "can_manage": true,
+                  "has_unpublished_changes": false
+                }
+              }
+            ],
+            "page": {
+              "next_cursor": null,
+              "has_more": false,
+              "snapshot_id": "illustrative-contract-snapshot"
+            }
+          },
+          "empty": {
+            "items": [],
+            "page": {
+              "next_cursor": null,
+              "has_more": false,
+              "snapshot_id": "illustrative-contract-snapshot"
+            }
+          }
+        }
+      }
+    },
+    "curl": "curl -X GET 'https://api.reveal.example.org/v1/analysis-outcomes?limit=20' -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Accept: application/json'"
+  },
+  {
+    "operation_id": "getAnalysisOutcome",
+    "case": "request",
+    "method": "GET",
+    "path_template": "/v1/analysis-outcomes/{outcome_id}",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/analysis-outcomes/66666666-6666-4666-8666-666666666666",
+      "path": {
+        "outcome_id": "66666666-6666-4666-8666-666666666666"
+      },
+      "query": {},
+      "headers": {
+        "Accept": "application/json"
+      },
+      "body": null
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/json",
+        "examples": {
+          "private_owner": {
+            "id": "66666666-6666-4666-8666-666666666666",
+            "outcome": "insufficient_evidence",
+            "summary": "The captured investigation did not support an accepted scientific account.",
+            "reason": "This illustrative scoped investigation lacked evidence connecting the selected mechanism to the selected question.",
+            "explored_topics": [
+              "The selected question and captured mechanism evidence."
+            ],
+            "missing_evidence": [
+              "Evidence connecting the mechanism to this question."
+            ],
+            "limitations": [
+              "This scoped result does not establish that a relationship is globally absent."
+            ],
+            "next_steps": [
+              "Review additional directly relevant studies before repeating this investigation."
+            ],
+            "knowledge_gap": {
+              "text": "Are the CAD PGS×context interactions driven by adverse exposures causally amplifying genetic risk, or are some \"contexts\" actually downstream readouts of incipient disease (reverse causation)?",
+              "gap_description": "Population PGS×context analyses (Nagpal & Gibson 2026, PMID:42443528) are largely unable to establish the causality of specific contexts. dismech separates true environmental exposures (smoking, high-fat diet, sedentary lifestyle) from biochemical readouts (LDL, HDL, C-reactive protein); the biochemical \"contexts\" are prime reverse-causation suspects, since they may be partly downstream of the atherosclerotic process rather than upstream drivers, and behavioural contexts such as reduced physical activity may be rapid responses to incipient angina rather than causes. Distinguishing genuine amplification of genetic effects from reverse causation determines whether the modelled interventions (e.g. lowering cholesterol in high-PGS smokers) would actually reduce risk.",
+              "gap_kind": "KNOWLEDGE_GAP",
+              "scope": "Coronary Artery Disease",
+              "about_entities": [
+                "http://purl.obolibrary.org/obo/MONDO_0021661"
+              ],
+              "id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk"
+            },
+            "source_gap": {
+              "id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+              "source_id": "dismech:disorders/Coronary_Artery_Disease#discussion:cad_pgsxc_reverse_causation",
+              "source_revision": "8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd"
+            },
+            "anchors": [
+              {
+                "source_id": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                "mechanism_id": "dapper:Mechanism.MyhahXB55tDUS667sJzeJZ40BeeQBWOR",
+                "name": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                "trait": null,
+                "origin": "manual"
+              }
+            ],
+            "selected_kgs": [
+              "biomarkerkg",
+              "prokn"
+            ],
+            "created_at": "2026-09-24T16:00:00Z",
+            "attribution": {
+              "user_id": "11111111-1111-4111-8111-111111111111",
+              "person_id": "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he",
+              "display_name": "Example Researcher",
+              "orcid": null,
+              "orcid_authenticated": false,
+              "observed_at": "2026-09-24T16:00:00Z",
+              "principal_kind": "registered"
+            },
+            "scope_note": "A scoped exploration report, not a ScientificAccount or globally established negative finding.",
+            "record_format": "structured",
+            "job_id": "44444444-4444-4444-8444-444444444444",
+            "publication": {
+              "visibility": "private",
+              "version": 0,
+              "published_at": null,
+              "updated_at": null,
+              "can_manage": true,
+              "has_unpublished_changes": false
+            },
+            "provenance": {
+              "evidence_package_sha256": "9a55d126679291a95fa3d35f544915610134075eaf110f62f77ec8ee870b6ae2",
+              "outcome_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "runtime_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "ledger_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "execution_mode": "box",
+              "source_bindings": [
+                {
+                  "source_id": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                  "source_revision": "5797893b517def4fdc82f285c9bf835195f9f88eddfb6409cbf3b1e31dd63d83",
+                  "embedding_run_id": null,
+                  "mapping_run_id": null
+                }
+              ],
+              "coverage": {},
+              "evidence_refs": [],
+              "source_artifacts": [],
+              "graph_queries": []
+            }
+          },
+          "public_reader": {
+            "id": "66666666-6666-4666-8666-666666666666",
+            "outcome": "insufficient_evidence",
+            "summary": "The captured investigation did not support an accepted scientific account.",
+            "reason": "This illustrative scoped investigation lacked evidence connecting the selected mechanism to the selected question.",
+            "explored_topics": [
+              "The selected question and captured mechanism evidence."
+            ],
+            "missing_evidence": [
+              "Evidence connecting the mechanism to this question."
+            ],
+            "limitations": [
+              "This scoped result does not establish that a relationship is globally absent."
+            ],
+            "next_steps": [
+              "Review additional directly relevant studies before repeating this investigation."
+            ],
+            "knowledge_gap": {
+              "text": "Are the CAD PGS×context interactions driven by adverse exposures causally amplifying genetic risk, or are some \"contexts\" actually downstream readouts of incipient disease (reverse causation)?",
+              "gap_description": "Population PGS×context analyses (Nagpal & Gibson 2026, PMID:42443528) are largely unable to establish the causality of specific contexts. dismech separates true environmental exposures (smoking, high-fat diet, sedentary lifestyle) from biochemical readouts (LDL, HDL, C-reactive protein); the biochemical \"contexts\" are prime reverse-causation suspects, since they may be partly downstream of the atherosclerotic process rather than upstream drivers, and behavioural contexts such as reduced physical activity may be rapid responses to incipient angina rather than causes. Distinguishing genuine amplification of genetic effects from reverse causation determines whether the modelled interventions (e.g. lowering cholesterol in high-PGS smokers) would actually reduce risk.",
+              "gap_kind": "KNOWLEDGE_GAP",
+              "scope": "Coronary Artery Disease",
+              "about_entities": [
+                "http://purl.obolibrary.org/obo/MONDO_0021661"
+              ],
+              "id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk"
+            },
+            "source_gap": {
+              "id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+              "source_id": "dismech:disorders/Coronary_Artery_Disease#discussion:cad_pgsxc_reverse_causation",
+              "source_revision": "8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd"
+            },
+            "anchors": [
+              {
+                "source_id": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                "mechanism_id": "dapper:Mechanism.MyhahXB55tDUS667sJzeJZ40BeeQBWOR",
+                "name": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                "trait": null,
+                "origin": "manual"
+              }
+            ],
+            "selected_kgs": [
+              "biomarkerkg",
+              "prokn"
+            ],
+            "created_at": "2026-09-24T16:00:00Z",
+            "attribution": {
+              "user_id": "11111111-1111-4111-8111-111111111111",
+              "person_id": "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he",
+              "display_name": "Example Researcher",
+              "orcid": null,
+              "orcid_authenticated": false,
+              "observed_at": "2026-09-24T16:00:00Z",
+              "principal_kind": "registered"
+            },
+            "scope_note": "A scoped exploration report, not a ScientificAccount or globally established negative finding.",
+            "record_format": "structured",
+            "job_id": null,
+            "publication": {
+              "visibility": "public",
+              "version": 1,
+              "published_at": "2026-09-24T16:00:00Z",
+              "updated_at": "2026-09-24T16:00:00Z",
+              "can_manage": false,
+              "has_unpublished_changes": false
+            },
+            "provenance": {
+              "evidence_package_sha256": "9a55d126679291a95fa3d35f544915610134075eaf110f62f77ec8ee870b6ae2",
+              "outcome_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "runtime_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "ledger_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "execution_mode": "box",
+              "source_bindings": [
+                {
+                  "source_id": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                  "source_revision": "5797893b517def4fdc82f285c9bf835195f9f88eddfb6409cbf3b1e31dd63d83",
+                  "embedding_run_id": null,
+                  "mapping_run_id": null
+                }
+              ],
+              "coverage": {},
+              "evidence_refs": [],
+              "source_artifacts": [],
+              "graph_queries": []
+            }
+          }
+        }
+      }
+    },
+    "curl": "curl -X GET https://api.reveal.example.org/v1/analysis-outcomes/66666666-6666-4666-8666-666666666666 -H 'Accept: application/json'"
+  },
+  {
+    "operation_id": "getJobAnalysisOutcome",
+    "case": "request",
+    "method": "GET",
+    "path_template": "/v1/jobs/{job_id}/outcome",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/jobs/44444444-4444-4444-8444-444444444444/outcome",
+      "path": {
+        "job_id": "44444444-4444-4444-8444-444444444444"
+      },
+      "query": {},
+      "headers": {
+        "Authorization": "Bearer <trusted-gateway-assertion>",
+        "Accept": "application/json"
+      },
+      "body": null
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/json",
+        "examples": {
+          "owner": {
+            "id": "66666666-6666-4666-8666-666666666666",
+            "outcome": "insufficient_evidence",
+            "summary": "The captured investigation did not support an accepted scientific account.",
+            "reason": "This illustrative scoped investigation lacked evidence connecting the selected mechanism to the selected question.",
+            "explored_topics": [
+              "The selected question and captured mechanism evidence."
+            ],
+            "missing_evidence": [
+              "Evidence connecting the mechanism to this question."
+            ],
+            "limitations": [
+              "This scoped result does not establish that a relationship is globally absent."
+            ],
+            "next_steps": [
+              "Review additional directly relevant studies before repeating this investigation."
+            ],
+            "knowledge_gap": {
+              "text": "Are the CAD PGS×context interactions driven by adverse exposures causally amplifying genetic risk, or are some \"contexts\" actually downstream readouts of incipient disease (reverse causation)?",
+              "gap_description": "Population PGS×context analyses (Nagpal & Gibson 2026, PMID:42443528) are largely unable to establish the causality of specific contexts. dismech separates true environmental exposures (smoking, high-fat diet, sedentary lifestyle) from biochemical readouts (LDL, HDL, C-reactive protein); the biochemical \"contexts\" are prime reverse-causation suspects, since they may be partly downstream of the atherosclerotic process rather than upstream drivers, and behavioural contexts such as reduced physical activity may be rapid responses to incipient angina rather than causes. Distinguishing genuine amplification of genetic effects from reverse causation determines whether the modelled interventions (e.g. lowering cholesterol in high-PGS smokers) would actually reduce risk.",
+              "gap_kind": "KNOWLEDGE_GAP",
+              "scope": "Coronary Artery Disease",
+              "about_entities": [
+                "http://purl.obolibrary.org/obo/MONDO_0021661"
+              ],
+              "id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk"
+            },
+            "source_gap": {
+              "id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+              "source_id": "dismech:disorders/Coronary_Artery_Disease#discussion:cad_pgsxc_reverse_causation",
+              "source_revision": "8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd"
+            },
+            "anchors": [
+              {
+                "source_id": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                "mechanism_id": "dapper:Mechanism.MyhahXB55tDUS667sJzeJZ40BeeQBWOR",
+                "name": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                "trait": null,
+                "origin": "manual"
+              }
+            ],
+            "selected_kgs": [
+              "biomarkerkg",
+              "prokn"
+            ],
+            "created_at": "2026-09-24T16:00:00Z",
+            "attribution": {
+              "user_id": "11111111-1111-4111-8111-111111111111",
+              "person_id": "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he",
+              "display_name": "Example Researcher",
+              "orcid": null,
+              "orcid_authenticated": false,
+              "observed_at": "2026-09-24T16:00:00Z",
+              "principal_kind": "registered"
+            },
+            "scope_note": "A scoped exploration report, not a ScientificAccount or globally established negative finding.",
+            "record_format": "structured",
+            "job_id": "44444444-4444-4444-8444-444444444444",
+            "publication": {
+              "visibility": "private",
+              "version": 0,
+              "published_at": null,
+              "updated_at": null,
+              "can_manage": true,
+              "has_unpublished_changes": false
+            },
+            "provenance": {
+              "evidence_package_sha256": "9a55d126679291a95fa3d35f544915610134075eaf110f62f77ec8ee870b6ae2",
+              "outcome_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "runtime_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "ledger_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "execution_mode": "box",
+              "source_bindings": [
+                {
+                  "source_id": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                  "source_revision": "5797893b517def4fdc82f285c9bf835195f9f88eddfb6409cbf3b1e31dd63d83",
+                  "embedding_run_id": null,
+                  "mapping_run_id": null
+                }
+              ],
+              "coverage": {},
+              "evidence_refs": [],
+              "source_artifacts": [],
+              "graph_queries": []
+            }
+          }
+        }
+      }
+    },
+    "curl": "curl -X GET https://api.reveal.example.org/v1/jobs/44444444-4444-4444-8444-444444444444/outcome -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Accept: application/json'"
+  },
+  {
+    "operation_id": "listKnowledgeGapOutcomes",
+    "case": "request",
+    "method": "GET",
+    "path_template": "/v1/knowledge-gaps/{gap_id}/outcomes",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/knowledge-gaps/dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk/outcomes?scope=public&source_revision=8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd&limit=20",
+      "path": {
+        "gap_id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk"
+      },
+      "query": {
+        "scope": "public",
+        "source_revision": "8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd",
+        "limit": 20
+      },
+      "headers": {
+        "Accept": "application/json"
+      },
+      "body": null
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/json",
+        "examples": {
+          "published": {
+            "items": [
+              {
+                "id": "66666666-6666-4666-8666-666666666666",
+                "outcome": "insufficient_evidence",
+                "summary": "The captured investigation did not support an accepted scientific account.",
+                "knowledge_gap": {
+                  "text": "Are the CAD PGS×context interactions driven by adverse exposures causally amplifying genetic risk, or are some \"contexts\" actually downstream readouts of incipient disease (reverse causation)?",
+                  "gap_description": "Population PGS×context analyses (Nagpal & Gibson 2026, PMID:42443528) are largely unable to establish the causality of specific contexts. dismech separates true environmental exposures (smoking, high-fat diet, sedentary lifestyle) from biochemical readouts (LDL, HDL, C-reactive protein); the biochemical \"contexts\" are prime reverse-causation suspects, since they may be partly downstream of the atherosclerotic process rather than upstream drivers, and behavioural contexts such as reduced physical activity may be rapid responses to incipient angina rather than causes. Distinguishing genuine amplification of genetic effects from reverse causation determines whether the modelled interventions (e.g. lowering cholesterol in high-PGS smokers) would actually reduce risk.",
+                  "gap_kind": "KNOWLEDGE_GAP",
+                  "scope": "Coronary Artery Disease",
+                  "about_entities": [
+                    "http://purl.obolibrary.org/obo/MONDO_0021661"
+                  ],
+                  "id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk"
+                },
+                "anchors": [
+                  {
+                    "source_id": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                    "mechanism_id": "dapper:Mechanism.MyhahXB55tDUS667sJzeJZ40BeeQBWOR",
+                    "name": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                    "trait": null,
+                    "origin": "manual"
+                  }
+                ],
+                "created_at": "2026-09-24T16:00:00Z",
+                "attribution": {
+                  "user_id": "11111111-1111-4111-8111-111111111111",
+                  "person_id": "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he",
+                  "display_name": "Example Researcher",
+                  "orcid": null,
+                  "orcid_authenticated": false,
+                  "observed_at": "2026-09-24T16:00:00Z",
+                  "principal_kind": "registered"
+                },
+                "publication": {
+                  "visibility": "public",
+                  "version": 1,
+                  "published_at": "2026-09-24T16:00:00Z",
+                  "updated_at": "2026-09-24T16:00:00Z",
+                  "can_manage": false,
+                  "has_unpublished_changes": false
+                }
+              }
+            ],
+            "page": {
+              "next_cursor": null,
+              "has_more": false,
+              "snapshot_id": "illustrative-contract-snapshot"
+            }
+          },
+          "empty": {
+            "items": [],
+            "page": {
+              "next_cursor": null,
+              "has_more": false,
+              "snapshot_id": "illustrative-contract-snapshot"
+            }
+          }
+        }
+      }
+    },
+    "curl": "curl -X GET 'https://api.reveal.example.org/v1/knowledge-gaps/dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk/outcomes?scope=public&source_revision=8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd&limit=20' -H 'Accept: application/json'"
+  },
+  {
+    "operation_id": "getOutcomePublication",
+    "case": "request",
+    "method": "GET",
+    "path_template": "/v1/analysis-outcomes/{outcome_id}/publication",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/analysis-outcomes/66666666-6666-4666-8666-666666666666/publication",
+      "path": {
+        "outcome_id": "66666666-6666-4666-8666-666666666666"
+      },
+      "query": {},
+      "headers": {
+        "Accept": "application/json"
+      },
+      "body": null
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/json",
+        "examples": {
+          "private_owner": {
+            "visibility": "private",
+            "version": 0,
+            "published_at": null,
+            "updated_at": null,
+            "can_manage": true,
+            "has_unpublished_changes": false
+          },
+          "public_reader": {
+            "visibility": "public",
+            "version": 1,
+            "published_at": "2026-09-24T16:00:00Z",
+            "updated_at": "2026-09-24T16:00:00Z",
+            "can_manage": false,
+            "has_unpublished_changes": false
+          }
+        }
+      }
+    },
+    "curl": "curl -X GET https://api.reveal.example.org/v1/analysis-outcomes/66666666-6666-4666-8666-666666666666/publication -H 'Accept: application/json'"
+  },
+  {
+    "operation_id": "updateOutcomePublication",
+    "case": "publish",
+    "method": "POST",
+    "path_template": "/v1/analysis-outcomes/{outcome_id}/publication",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/analysis-outcomes/66666666-6666-4666-8666-666666666666/publication",
+      "path": {
+        "outcome_id": "66666666-6666-4666-8666-666666666666"
+      },
+      "query": {},
+      "headers": {
+        "Idempotency-Key": "66666666-6666-4666-8666-666666666666",
+        "Authorization": "Bearer <trusted-gateway-assertion>",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      },
+      "body": {
+        "visibility": "public",
+        "expected_version": 0
+      }
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/json",
+        "examples": {
+          "published": {
+            "visibility": "public",
+            "version": 1,
+            "published_at": "2026-09-24T16:00:00Z",
+            "updated_at": "2026-09-24T16:00:00Z",
+            "can_manage": true,
+            "has_unpublished_changes": false
+          },
+          "unpublished": {
+            "visibility": "private",
+            "version": 2,
+            "published_at": null,
+            "updated_at": "2026-09-24T16:00:00Z",
+            "can_manage": true,
+            "has_unpublished_changes": false
+          }
+        }
+      }
+    },
+    "curl": "curl -X POST https://api.reveal.example.org/v1/analysis-outcomes/66666666-6666-4666-8666-666666666666/publication -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"expected_version\":0,\"visibility\":\"public\"}'"
+  },
+  {
+    "operation_id": "updateOutcomePublication",
+    "case": "unpublish",
+    "method": "POST",
+    "path_template": "/v1/analysis-outcomes/{outcome_id}/publication",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/analysis-outcomes/66666666-6666-4666-8666-666666666666/publication",
+      "path": {
+        "outcome_id": "66666666-6666-4666-8666-666666666666"
+      },
+      "query": {},
+      "headers": {
+        "Idempotency-Key": "66666666-6666-4666-8666-666666666666",
+        "Authorization": "Bearer <trusted-gateway-assertion>",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      },
+      "body": {
+        "visibility": "private",
+        "expected_version": 1
+      }
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/json",
+        "examples": {
+          "published": {
+            "visibility": "public",
+            "version": 1,
+            "published_at": "2026-09-24T16:00:00Z",
+            "updated_at": "2026-09-24T16:00:00Z",
+            "can_manage": true,
+            "has_unpublished_changes": false
+          },
+          "unpublished": {
+            "visibility": "private",
+            "version": 2,
+            "published_at": null,
+            "updated_at": "2026-09-24T16:00:00Z",
+            "can_manage": true,
+            "has_unpublished_changes": false
+          }
+        }
+      }
+    },
+    "curl": "curl -X POST https://api.reveal.example.org/v1/analysis-outcomes/66666666-6666-4666-8666-666666666666/publication -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"expected_version\":1,\"visibility\":\"private\"}'"
   },
   {
     "operation_id": "listExplorations",

@@ -280,11 +280,15 @@ def application_schemas():
         'dismissed_source_ids': array(string(), uniqueItems=True, maxItems=1000), 'mechanism_subquery': string(maxLength=2000),
         'model': {'const': MODEL, 'type': 'string'}, 'selected_kgs': array(enum('biomarkerkg', 'prokn'), uniqueItems=True, maxItems=2)},
         description='Editable state. Null inquiry represents an empty editor; drafts may have zero anchors. Submitting an analysis job requires a valid inquiry and at least one resolvable EAGGL anchor. Server validates source types and suggestion provenance.'))
-    add('DraftCreate', obj({'composer': ref('Composer')}, []))
-    add('DraftPatch', obj({'expected_version': {'type': 'integer', 'minimum': 1}, 'composer': ref('Composer')},
-        description='Replace the complete composer atomically using compare-and-swap; not JSON Merge Patch. Retry a lost acknowledgment with the same Idempotency-Key.'))
+    draft_name = string(minLength=1, maxLength=120, pattern=r'\S')
+    add('DraftCreate', obj({'composer': ref('Composer'), 'name': draft_name}, ['composer']))
+    add('DraftPatch', obj({'expected_version': {'type': 'integer', 'minimum': 1}, 'composer': ref('Composer'), 'name': draft_name}, ['expected_version'],
+        minProperties=2, description='Rename or replace the complete composer atomically using compare-and-swap. Omitted fields are preserved. Retry a lost acknowledgment with the same Idempotency-Key.'))
     add('Draft', obj({'id': uuid, 'owner_user_id': uuid, 'version': {'type': 'integer', 'minimum': 1}, 'composer': ref('Composer'),
                       'created_at': timestamp, 'updated_at': timestamp}))
+    SCHEMAS['Draft']['properties']['name'] = draft_name
+    add('DraftDelete', obj({'expected_version': {'type': 'integer', 'minimum': 1}}))
+    add('DraftDeletion', obj({'id': uuid, 'deleted': {'type': 'boolean', 'const': True}}))
     add('Page', obj({'next_cursor': nullable(string()), 'has_more': {'type': 'boolean'}, 'snapshot_id': string()},
         description='Opaque cursor pins sorting, filters and an authorized collection snapshot. A null cursor means no further page. Cursors cannot be reused with different filters or callers.'))
     add('Me', obj({'user_id': uuid, 'display_name': nullable(string()), 'email': nullable(string(format='email')), 'email_verified': nullable({'type': 'boolean'}),
@@ -434,6 +438,7 @@ def problem(status, code, detail, **extra):
 ERRORS = {
     '400': problem(400, 'INVALID_REQUEST', 'A parameter or cursor does not match the requested operation.'),
     '401': problem(401, 'AUTHENTICATION_REQUIRED', 'A valid trusted-gateway API assertion is required.'),
+    '403': problem(403, 'SIGN_IN_REQUIRED', 'Sign in to publish a scientific account or exploration.'),
     '404': problem(404, 'NOT_FOUND', 'No accessible record exists for the supplied identifier or exact revision.'),
     '409': problem(409, 'VERSION_CONFLICT', 'The saved draft has changed. Reload and reconcile before retrying.', current_version=3),
     '422': problem(422, 'INVALID_INPUT', 'The request does not satisfy the operation contract.', field_errors=[{'pointer': '/inquiry', 'message': 'A valid DAPPER inquiry is required.'}]),
@@ -589,15 +594,20 @@ def endpoints(f, e):
     operation('/v1/drafts', 'get', 'listDrafts', 'Drafts', 'List saved drafts', 'Only drafts owned by the caller, ordered by updated_at descending then ID.',
         'DraftList', {'saved_drafts': {'items': [e['saved']], 'page': e['page']}}, parameters=page_parameters(), errors=('400', '401', '429'))
     operation('/v1/drafts', 'post', 'createDraft', 'Drafts', 'Create a draft',
-        'Creates editable application state; does not mint an inquiry or start a job. With an empty object, the server creates an empty composer: null inquiry/source_gap, empty selections/dismissals, empty subquery, cfde-inc-v2, and both initial KGs.',
+        'Creates editable application state with an optional private display name. Does not mint an inquiry or start a job.',
         'Draft', {'created': e['draft']}, request_schema='DraftCreate', request_examples={'question_and_anchor': {'composer': e['composer']}},
         status=201, idempotent=True, errors=('401', '409', '422', '429'))
     operation('/v1/drafts/{draft_id}', 'get', 'getDraft', 'Drafts', 'Recover a saved draft', 'Returns only the server-confirmed version; local pending edits are not implied.',
         'Draft', {'saved': e['saved']}, parameters=[path_id('draft_id', DRAFT_ID)])
     operation('/v1/drafts/{draft_id}', 'patch', 'updateDraft', 'Drafts', 'Autosave a draft',
-        'Replace composer using expected_version. The server increments the version only on commit. Stale revisions return 409 with current_version. Server derives ownership; unknown owner/provenance fields are rejected.',
+        'Rename or replace composer using expected_version. Omitted fields are preserved. The server increments the version only on commit. Stale revisions return 409 with current_version. Server derives ownership; unknown owner/provenance fields are rejected.',
         'Draft', {'saved': e['saved']}, parameters=[path_id('draft_id', DRAFT_ID)], request_schema='DraftPatch',
         request_examples={'save_revision_two': {'expected_version': 1, 'composer': e['composer']}}, idempotent=True,
+        errors=('401', '404', '409', '422', '429'))
+    operation('/v1/drafts/{draft_id}', 'delete', 'deleteDraft', 'Drafts', 'Delete a saved draft',
+        'Delete an owned draft using expected_version. Active analysis jobs prevent deletion (409 DRAFT_IN_USE). Frozen research requests, jobs, accounts and explorations are preserved. Retry a lost acknowledgment with the same Idempotency-Key.',
+        'DraftDeletion', {'deleted': {'id': DRAFT_ID, 'deleted': True}}, parameters=[path_id('draft_id', DRAFT_ID)],
+        request_schema='DraftDelete', request_examples={'delete_saved_draft': {'expected_version': 2}}, idempotent=True,
         errors=('401', '404', '409', '422', '429'))
     operation('/v1/research-requests', 'get', 'listResearchRequests', 'Research history', 'List submitted questions',
         'Immutable request snapshots owned by the caller, ordered by submitted_at descending then ID. Questions are DAPPER content; request records preserve submission and selection context.',
@@ -755,7 +765,8 @@ def main():
         'info': {'title': 'REVEAL Mechanisms API', 'version': '0.2.0-draft',
             'summary': 'DAPPER scientific content, knowledge-gap search, and shared analysis/paragraph jobs.',
             'description': 'Local API implementation contract; production deployment is deferred. Scientific schemas are generated from the pinned DAPPER schema. Application envelopes handle ownership, drafts, search, jobs and pagination. All DAPPER IDs in scientific examples are computed, not placeholders. Research/job/user timestamps and semantic rankings are illustrative; no Claude Code or embedding run was performed. The account fixture is the approved 12-claim HTML example: captured CFDE observations plus explicitly invented KG/membership assertions, never a production grounding-pass example. The evidence package is a separately verified live capture, not a claim that this example account was generated from it. Examples using example.org are not live resources. Do not treat example output as published research.'},
-        'servers': [{'url': 'http://localhost:8000', 'description': 'Local Docker Compose backend'},
+        'servers': [{'url': 'http://127.0.0.1:18000', 'description': 'Local Docker deployment backend (private routes require a gateway assertion)'},
+                    {'url': 'http://localhost:3000/api/backend', 'description': 'Local Next.js gateway (browser session required for private routes)'},
                     {'url': BASE, 'description': 'Reserved example domain; replace for deployment'}],
         'tags': [{'name': n} for n in ['Identity', 'Knowledge gaps', 'Mechanisms', 'Drafts', 'Research history', 'Jobs', 'Scientific content', 'Citations']],
         'security': [{'GatewayAssertion': []}], 'paths': PATHS,

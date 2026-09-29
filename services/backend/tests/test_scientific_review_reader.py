@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from reveal_backend.box_mcp import Ledger
 from reveal_backend.evidence_package import canonical_json, sha256
@@ -114,6 +114,20 @@ class ReaderTests(unittest.TestCase):
             self.run_review([response([call(str(i), 'read_evidence', {'pointer': self.ref})]) for i in range(8)])
         self.assertIn('turn limit', str(failure.exception))
         self.assertEqual(len(failure.exception.audit['calls']), 8)
+
+    def test_final_allowed_call_can_decide_but_cannot_keep_reading(self):
+        with patch.dict('os.environ', {'REVEAL_GROUNDING_MAX_TURNS': '2'}):
+            result, client = self.run_review([
+                response([call('r', 'read_evidence', {'pointer': self.ref})]),
+                response([call('f', 'finish_review', {'review': self.review})])])
+        self.assertTrue(result['accepted'])
+        tools = client.post.call_args_list[-1].kwargs['json']['tools']
+        self.assertIn('finish_review', [tool['name'] for tool in tools])
+        self.assertEqual(client.post.call_args_list[-1].kwargs['json']['tool_choice'], {'type': 'tool', 'name': 'finish_review'})
+        with patch.dict('os.environ', {'REVEAL_GROUNDING_MAX_TURNS': '1'}), self.assertRaises(ScientificReviewUnavailable):
+            self.run_review([response([call('f', 'finish_review', {'review': self.review})])])
+        with patch.dict('os.environ', {'REVEAL_GROUNDING_MAX_TURNS': '1'}), self.assertRaises(ScientificReviewUnavailable):
+            self.run_review([response([call('f', 'finish_review', {'unavailable_reason': 'More evidence must be inspected.'})])])
 
     def test_measured_prefix_reuse_requires_exact_unchanged_configuration_and_messages(self):
         client = Mock(); client.post.return_value = response([], incoming=1000)

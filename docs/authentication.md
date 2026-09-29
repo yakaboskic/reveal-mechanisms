@@ -1,6 +1,6 @@
 # Login and researcher identity
 
-**Status:** proposed implementation contract, September 25, 2026. Anonymous mode is now an accepted product requirement. The [HTML study](../design/index.html) simulates the submit-time choice; no real session, OAuth client, backend principal, or login deployment is created by that simulation. The current v12 OpenAPI and separate gateway contract encode the boundaries summarized in section 9; service implementation is still pending.
+**Status, September 30, 2026:** anonymous sessions, Google/ORCID integrations, gateway assertions, durable principal mapping, workspace claims and publication sign-in are implemented. See [colleague startup](../README.local.md), [API walkthrough](api-quickstart.md) and [gateway contract](gateway-contract.md). Sections below retain design rationale and explicit future features such as provider linking; the HTML study is a historical simulation, not the running application. Live callback validity depends on the configured provider and origin.
 
 ## 1. Initial scope
 
@@ -67,6 +67,8 @@ Other frontends can call the same EC2 API after obtaining an equivalent assertio
 JWT logout clears the current browser session. Immediate cross-device invalidation requires additional server-side revocation state; it is not part of the initial database-free session design. Short-lived API assertions bound their remaining lifetime.
 
 ## 6. Configuration and acceptance
+
+Publishing a scientific account or exploration (including updating a public snapshot) requires a registered signed-in owner. The API rejects anonymous publication with `403 SIGN_IN_REQUIRED` before idempotency replay. Anonymous work remains usable privately; its owner can still unpublish an existing snapshot. The publication panels offer configured providers and return to the same record after login; sign-in never publishes automatically. Existing-account claims refresh record access without changing historical attribution. See [publication behavior](account-publication.md).
 
 Implementation needs registered Google and ORCID clients, exact local/production callback URLs, a high-entropy Auth.js secret, the Next.js deployment origin, and API signing/verification configuration. Proposed callback paths are `/api/auth/callback/google` and `/api/auth/callback/orcid`. Pin a compatible Next.js/NextAuth version and verify the custom ORCID integration; a configured provider is not a completed live login test.
 
@@ -144,7 +146,7 @@ Acceptance: three submit choices; dismissal launches nothing; zero anchors still
 
 The [v12 OpenAPI](../api/openapi.json) now includes registered/anonymous `principal_kind`, nullable identity fields and workspace expiry, owner-scoped exploration/account listings and the current source-selected composer. The same bearer/owner/idempotency rules govern both session kinds. No token is not anonymous write permission.
 
-[Gateway contract](gateway-contract.md) and [gateway schema](../schema/gateway.schema.json) specify browser bootstrap, service-only provisioning/identity resolution and upgrade/claim with both proofs. These are implementation contracts; no auth service exists yet. The anonymous scientific Person/citation fixture, OAuth/CSRF/session configuration, quotas and transfer transactions still require implementation and validation.
+[Gateway contract](gateway-contract.md) and [gateway schema](../schema/gateway.schema.json) specify browser bootstrap, service-only provisioning/identity resolution and upgrade/claim with both proofs. The gateway and backend implement these contracts with session/CSRF checks, quotas and owner transfer transactions. See the backend/frontend tests and the dated validation report for exercised behavior. Provider-to-provider account linking remains a separate feature.
 
 ## 10. Avatar and personal dashboard
 

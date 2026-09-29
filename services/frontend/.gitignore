@@ -2,3 +2,4 @@
 *.tsbuildinfo
 .env*
 !.env.example
+.vercel

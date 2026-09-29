@@ -1,6 +1,8 @@
 .git
 .env
 .env.*
+**/.env
+**/.env.*
 .venv
 .runtime
 **/node_modules
@@ -14,3 +16,7 @@ data/cfde-genesets/**/records.jsonl.gz
 schema/prisma/node_modules
 schema/prisma/generated
 services/frontend/.next
+**/*.gpg
+**/*.password.txt
+graphify-out
+.pytest_cache

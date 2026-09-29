@@ -106,7 +106,11 @@ class WorkerFileEvidenceTests(unittest.TestCase):
                 self.assertEqual(bundle.extractfile('input/' + artifact['path']).read(),
                                  (package_path.parent / artifact['path']).read_bytes())
         with repository.read_transaction() as tx:
-            self.assertEqual(tx.get('job', job['id'])['data']['status'], 'insufficient_evidence')
+            # This adapter deliberately stops after observing bundle bytes and
+            # supplies no trusted outcome artifact. A reason alone is not saved.
+            result=tx.get('job', job['id'])['data']
+            self.assertEqual(result['status'], 'failed')
+            self.assertEqual(result['failure']['code'], 'VALIDATION_FAILED')
             snapshot = tx.get('queue', job['id'])['data']['dispatch_input']
             self.assertEqual(snapshot['sha256'], sha256(original))
             self.assertEqual(tx.list('account', owner), [])

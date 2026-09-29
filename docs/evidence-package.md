@@ -208,6 +208,25 @@ associated_eaggl_mechanisms:
 
 When actually computed, use `status: computed`, the measured cosine value, embedding run/model revision, text-template/input hashes, source revisions and per-mechanism rank. Preserve all contributing matches. Select five unique EAGGL mechanisms **total** using the proposed maximum cosine across selected DisMech mechanisms, with deterministic ties, user dismissals and manual additions retained. Require at least one resolvable selected EAGGL mechanism at dispatch.
 
+The application freezes each selected factor's per-context cosine values in
+`selection-provenance.frozen_binding.retrieval[<factor>].hit.context_similarities`.
+These values are separate from the maximum-context selection score and from
+hybrid reciprocal-rank fusion. The collector projects a value into the matching
+DisMech association with `association_basis: semantic_retrieval` only when the
+context ID, source revision, description hash, embedding runs, source import and
+factor mapping agree with the frozen selection. The full provenance remains in
+the checksummed `selection-provenance` source artifact; deterministic assembly
+verifies computed associations against it.
+
+Older saved semantic suggestions can supply their aggregate cosine only when
+they contain exactly one verified mechanism context. Multiple-context maxima,
+hybrid ranking values, free-text subqueries and gap-prompt scores cannot be
+substituted for a mechanism pair's cosine. If no matching measurement is recorded,
+the pair remains `not_computed` with a null score; its basis is
+`automatic_selection` for automatic anchors and `user_supplied_anchor` for manual
+or direct caller selections. Frozen historical packages retain their original
+bytes; the corrected projection applies when collecting a new package.
+
 The example does **not** use a fictional `0.9`. Co-selection is not a measured semantic match, a biological association, or entity equivalence. Similarity helps select where to investigate; the agent must find scientific evidence for any Proposition relating these mechanisms.
 
 `related_knowledge_gaps` includes a bounded same-document subset with its selection method and source locators. These help identify nearby unknowns; they do not replace the selected gap or establish proposed answers.

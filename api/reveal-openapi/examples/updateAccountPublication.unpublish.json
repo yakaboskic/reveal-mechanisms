@@ -1,0 +1,47 @@
+{
+  "operation_id": "updateAccountPublication",
+  "case": "unpublish",
+  "method": "POST",
+  "path_template": "/v1/accounts/{dapper_id}/publication",
+  "request": {
+    "url": "https://api.reveal.example.org/v1/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/publication",
+    "path": {
+      "dapper_id": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd"
+    },
+    "query": {},
+    "headers": {
+      "Idempotency-Key": "66666666-6666-4666-8666-666666666666",
+      "Authorization": "Bearer <trusted-gateway-assertion>",
+      "Content-Type": "application/json",
+      "Accept": "application/json"
+    },
+    "body": {
+      "visibility": "private",
+      "expected_version": 1
+    }
+  },
+  "responses": {
+    "200": {
+      "content_type": "application/json",
+      "examples": {
+        "published": {
+          "visibility": "public",
+          "version": 1,
+          "published_at": "2026-09-24T16:00:00Z",
+          "updated_at": "2026-09-24T16:00:00Z",
+          "can_manage": true,
+          "has_unpublished_changes": false
+        },
+        "unpublished": {
+          "visibility": "private",
+          "version": 2,
+          "published_at": null,
+          "updated_at": "2026-09-24T16:00:00Z",
+          "can_manage": true,
+          "has_unpublished_changes": false
+        }
+      }
+    }
+  },
+  "curl": "curl -X POST https://api.reveal.example.org/v1/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/publication -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"expected_version\":1,\"visibility\":\"private\"}'"
+}

@@ -104,6 +104,51 @@ def ref(artifact, path=''):
     return {'artifact_id': artifact, 'pointer': path}
 
 
+def frozen_semantic_association(metadata, factor, context_id, source_revision, text):
+    """Project a measured pair only when its frozen run and exact source agree.
+
+    Older suggestions stored only a maximum score and approximately tied context
+    IDs. That score is an exact pair score only for a single input context.
+    """
+    metadata = metadata or {}
+    fallback = {'status': 'not_computed', 'semantic_similarity': None,
+                'association_basis': 'automatic_selection' if metadata.get('origins', {}).get(factor) == 'automatic'
+                                     else 'user_supplied_anchor'}
+    binding = metadata.get('frozen_binding', {})
+    retrieval = binding.get('retrieval', {}).get(factor)
+    if not retrieval or retrieval.get('mode') not in ('semantic', 'hybrid'):
+        return fallback
+    semantic = metadata.get('semantic_retrieval', {})
+    run = semantic.get('embedding_run_id')
+    if semantic.get('status') != 'computed':
+        return fallback
+    if not run or retrieval.get('embedding_run_id') != run or not retrieval.get('dismech_embedding_run_id'):
+        return fallback
+    if binding.get('dismech_import_id') != retrieval.get('dismech_import_id'):
+        return fallback
+    anchors = [a for a in binding.get('anchors', []) if a.get('cfde_node_id') == factor]
+    if len(anchors) != 1 or any(anchors[0].get(key) != retrieval.get(key) for key in ('embedding_run_id', 'mapping_run_id')):
+        return fallback
+    inputs = retrieval.get('context_embedding_inputs', [])
+    expected = {'source_id': context_id, 'source_kind': 'mechanism', 'source_revision': source_revision,
+                'template': 'dismech-description-v1', 'input_sha256': sha256(text.encode('utf-8'))}
+    if expected not in inputs:
+        return fallback
+    hit = retrieval.get('hit', {})
+    if 'context_similarities' in hit:
+        if context_id not in hit['context_similarities']:
+            return fallback
+        score = hit['context_similarities'][context_id]
+    else:
+        ranking = hit.get('ranking', {})
+        if (len(inputs) != 1 or retrieval['mode'] != 'semantic' or ranking.get('metric') != 'cosine_similarity'
+                or hit.get('matched_context_ids') != [context_id]):
+            return fallback
+        score = ranking.get('value')
+    require(-1 <= finite(score, 'frozen semantic similarity') <= 1, 'Frozen cosine outside [-1,1]')
+    return {'status': 'computed', 'semantic_similarity': score, 'association_basis': 'semantic_retrieval'}
+
+
 def unique(items, label):
     require(isinstance(items, list) and all(isinstance(x, str) for x in items), f'{label} must be a string list')
     require(len(items) == len(set(items)), f'Duplicate {label}')
@@ -334,6 +379,13 @@ def build_package(spec, blobs, dapper):
                 require(bool(selection['semantic_retrieval'].get('embedding_run_id')), 'Computed similarity needs an embedding run')
             else:
                 require(score is None, 'Uncomputed similarity must be null')
+            if match.get('association_basis') == 'semantic_retrieval':
+                metadata = payloads.get('selection-provenance', {})
+                require(metadata.get('semantic_retrieval') == selection['semantic_retrieval'] and
+                        metadata.get('origins') == selection['origins'], 'Semantic selection differs from frozen provenance')
+                expected = frozen_semantic_association(metadata, factor, key,
+                    spec['artifacts'][binding['source_ref']['artifact_id']]['sha256'], raw.get('description') or raw['name'])
+                require(expected['status'] == 'computed' and match == expected, 'Semantic association differs from frozen provenance')
         dismech['mechanisms'][key] = {**deepcopy(raw), **binding}
     for binding in sorted(spec['dismech'].get('other_context', []), key=lambda b: b['source_id']):
         dismech['other_context'].append({**binding, 'record': source(binding['source_ref'])})

@@ -4,7 +4,7 @@ Next.js 15.5.26, React 19.1.9, NextAuth 4.24.15. The approved HTML interaction i
 
 ## Local startup
 
-Use the repository's `./scripts/dev-up.sh` and `./scripts/dev-down.sh` for normal startup and teardown. One-time dependency setup is `npm --prefix services/frontend ci`; Node 22 or newer is required. The root scripts inject ignored root `.env` configuration into the host frontend and manage the API/worker containers.
+Use [README.local.md](../../README.local.md) for clone-and-run setup. Normal startup is `.venv/bin/python scripts/local_deployment.py up --build`; shutdown is `down`. Next.js runs as a production Docker container alongside the API, dispatcher, Redis and workers. No host Node installation is needed for that path. For source-level frontend work, install Node 22 and run `npm --prefix services/frontend ci`. The older `dev-up.sh` workflow is documented separately in [legacy development](../../docs/local-development.md); do not run both stacks together.
 
 For isolated frontend development, with the backend already listening:
 
@@ -13,7 +13,7 @@ cd services/frontend
 node --env-file=../../.env node_modules/next/dist/bin/next dev --hostname 127.0.0.1 --port 3000
 ```
 
-`/api/health` reports frontend readiness. The root supervisor separately checks backend Aurora readiness. The host gateway calls `REVEAL_API_URL=http://127.0.0.1:8000`, whose port is published by Compose. No database connection or database credentials are used by frontend code.
+`/api/health` reports frontend readiness. Docker Compose waits for backend `/readyz`. The container gateway uses `REVEAL_API_URL=http://api:8000`; direct host API access is on port 18000. The legacy host workflow uses port 8000. No database connection or database credentials are used by frontend code.
 
 Required server environment:
 
@@ -36,6 +36,20 @@ The gateway provisions anonymous principals via separate service authority, then
 
 ## Checks and generated data
 
+Workspace lists use a private, in-memory cache owned by the mounted session.
+Each tab retains its loaded pages across client navigation. Data is fresh for
+30 seconds; stale data stays visible during background refresh on return,
+window focus, reconnection, or the visible page's refresh timer. The Refresh
+button bypasses the freshness interval. Active work polls every 10 seconds;
+known frozen research requests are reused between job-status updates.
+
+Successful workspace mutations, completed jobs, and anonymous-work transfers
+invalidate the lists. Revalidation follows all previously loaded pages, so it
+does not reset pagination. Failed refreshes retain existing rows and offer a
+retry. Logout, identity changes, and authorization denial clear private cached
+data; late responses cannot restore it. Cached data is not persisted to browser
+storage or shared in the server's HTTP cache. A full reload starts a fresh cache.
+
 ```bash
 npm --prefix services/frontend run generate
 npm --prefix services/frontend run fixtures
@@ -51,3 +65,22 @@ npm --prefix services/frontend run build
 Scientific accounts foreground closing synthesis, leave claims collapsed, and provide dedicated assessment/proposition/evidence/provenance inspection. Paragraph status is independent of accepted account status. UI citations use Unicode code-point spans and target+metadata-revision pins. Numbered references follow first occurrence order across UI and exports. Rich-text copy requests both HTML and plain text for Word; exports use the backend's Markdown, LaTeX, and BibTeX content. Canonical `/id/{id}` links resolve to authorized records.
 
 Component validation does not certify OAuth login, Aurora persistence, a live Box result, or a full-stack browser journey. Those require the configured providers and the backend/integration acceptance gates.
+
+## Workspace drafts
+
+Each knowledge gap has a collapsed **Drafts (count)** panel. Expanding it reveals
+the draft selector showing one draft and its run at a time.
+Users can create a named draft (fresh or copying the selected settings), open it
+with **Open draft** in the autosaving editor, rename it, and delete it after confirmation.
+The editor displays the draft name and save status, with a link back to the
+workspace. Explicit draft links take priority over unfinished submission state
+and never resume or launch research merely by opening the draft.
+Unnamed older drafts receive a stable short-ID label. Draft names are private
+workspace metadata; they do not change the scientific question.
+
+Rename and delete use optimistic versions and idempotency keys. Running drafts
+link to their activity instead of the editor, and the API rejects deletion while
+an analysis is active. Deleting a draft keeps the gap, frozen requests, runs,
+scientific accounts, and exploration results. Completed runs can still restore
+their submitted selection after the editable draft is deleted. Changes invalidate
+the workspace cache automatically.

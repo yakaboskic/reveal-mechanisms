@@ -1,0 +1,41 @@
+{
+  "operation_id": "getAccountPublication",
+  "case": "request",
+  "method": "GET",
+  "path_template": "/v1/accounts/{dapper_id}/publication",
+  "request": {
+    "url": "https://api.reveal.example.org/v1/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/publication",
+    "path": {
+      "dapper_id": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd"
+    },
+    "query": {},
+    "headers": {
+      "Accept": "application/json"
+    },
+    "body": null
+  },
+  "responses": {
+    "200": {
+      "content_type": "application/json",
+      "examples": {
+        "private_owner": {
+          "visibility": "private",
+          "version": 0,
+          "published_at": null,
+          "updated_at": null,
+          "can_manage": true,
+          "has_unpublished_changes": false
+        },
+        "public_reader": {
+          "visibility": "public",
+          "version": 1,
+          "published_at": "2026-09-24T16:00:00Z",
+          "updated_at": "2026-09-24T16:00:00Z",
+          "can_manage": false,
+          "has_unpublished_changes": false
+        }
+      }
+    }
+  },
+  "curl": "curl -X GET https://api.reveal.example.org/v1/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/publication -H 'Accept: application/json'"
+}

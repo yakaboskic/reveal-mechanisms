@@ -117,10 +117,10 @@ async function harness(name, viewport) {
     state.requests.push({ method: request.method(), path });
     const respond = json => route.fulfill({ status: 200, json });
     if (request.method() !== 'GET') { state.unexpected.push(`${request.method()} ${path}`); return route.abort('blockedbyclient'); }
-    if (path === '/api/session/status') return respond({ principal: { user_id: userId }, canClaim: false, providers: { google: true, orcid: true } });
+    if (path === '/api/session/status') { if (state.sessionGate) await state.sessionGate.promise; return respond({ principal: { user_id: userId }, canClaim: false, providers: { google: true, orcid: true } }); }
     if (path === '/api/backend/v1/me') return respond({ user_id: userId, display_name: 'Activity browser fixture', email: null,
       email_verified: null, orcid: null, orcid_authenticated: false, person: null, principal_kind: 'anonymous', workspace_expires_at: null });
-    if (path === `/api/backend/v1/jobs/${jobId}`) return respond(state.job);
+    if (path === `/api/backend/v1/jobs/${jobId}`) { if (state.jobGate) await state.jobGate.promise; return respond(state.job); }
     if (path === `/api/backend/v1/drafts/${draftId}`) return respond(draft);
     if (path === '/api/backend/v1/knowledge-gaps') return respond(fixture.gaps);
     if (path === '/api/backend/v1/knowledge-gaps/search') return respond({ items: [], next_cursor: null });
@@ -146,7 +146,7 @@ async function harness(name, viewport) {
       await page.evaluate(events => window.__activityFixture.push(events), events);
     },
     async close() {
-      state.gapGate.release();
+      state.gapGate.release(); state.sessionGate?.release(); state.jobGate?.release();
       result.eventCount = state.events.length; result.pageErrors = state.errors; result.blockedUnexpectedRequests = state.unexpected;
       result.consoleErrors = state.consoleErrors; result.duplicateKeyWarnings = state.duplicateKeyWarnings;
       result.apiMethods = [...new Set(state.requests.map(request => request.method))];
@@ -368,9 +368,66 @@ async function compactToolsScenario(name, viewport) {
     h.result.checks.push('Three identical saved warnings render one counted card without duplicate-key console warnings');
   } finally { await h.close(); }
 }
+async function timingAndRefreshScenario(name, viewport, gapLink = false) {
+  const h = await harness(name, viewport);
+  try {
+    h.state.sessionGate = gate(); h.state.jobGate = gate();
+    await h.page.addInitScript(() => sessionStorage.removeItem('reveal:composer'));
+    await h.page.goto(gapLink ? `${origin}/?gap=${encodeURIComponent(gap.object.id)}&job=${jobId}` : `${origin}/?draft=${draftId}&job=${jobId}`);
+    await h.page.getByText('Retrieving job status', { exact: true }).waitFor();
+    assert.equal(await h.page.locator('#gap-search').count(), 0);
+    assert.equal(await h.page.getByText('Live activity', { exact: true }).count(), 0);
+    const bars = await h.page.locator('.loading-surface-pulse i').first().evaluate(el => ({width: el.offsetWidth, height: el.offsetHeight}));
+    assert.ok(bars.height > bars.width * 2, 'Status loader uses vertical bars');
+    await screenshot(h, 'retrieving');
+    h.state.sessionGate.release();
+    await until(() => h.state.requests.some(r => r.path === `/api/backend/v1/jobs/${jobId}`), 'job requested after session');
+    assert.ok(await h.page.getByText('Retrieving job status', { exact: true }).isVisible());
+    h.state.jobGate.release();
+    await h.page.getByRole('region', {name: 'Research activity', exact: true}).waitFor();
+    await h.page.getByText('Retrieving job status and activity…', {exact:true}).waitFor();
+    assert.equal(await h.page.locator('.trending').count(), 0);
+    assert.equal(await h.page.locator('.stage-duration').innerText(), '—');
+    h.result.checks.push('Immediate status before session/job response; live activity opens independently of delayed gap; unknown timing is not fabricated');
+    const started = Date.now() - 5000;
+    const time = offset => new Date(started + offset).toISOString();
+    await h.emit([h.event('Queued for evidence preparation.', 'preparing_evidence', {occurred_at:time(0), detail:detail({kind:'preparation',source:'worker'})})]);
+    const timer = h.page.locator('.activity-stage[data-state="working"] .stage-duration');
+    const before = await timer.innerText();
+    await until(async () => (await timer.innerText()) !== before, 'live stage timer ticks');
+    assert.equal(await h.page.locator('.system-update[data-step-state="working"] .work-dot.is-working').count(), 1);
+    await h.emit([h.event('Collecting selected source evidence.', 'preparing_evidence', {occurred_at:time(2000), detail:detail({kind:'preparation',source:'worker'})})]);
+    assert.equal(await h.page.locator('.system-update[data-step-state="completed"] .work-dot.is-completed').count(), 1);
+    assert.equal(await h.page.locator('.system-update[data-step-state="working"] .work-dot.is-working').count(), 1);
+    assert.equal(await h.page.locator('.system-update[data-step-state="completed"] .step-duration').innerText(), '2s');
+    const workDot = await h.page.locator('.work-dot.is-working').evaluate(el => ({animation:getComputedStyle(el).animationName,color:getComputedStyle(el).backgroundColor}));
+    const doneDot = await h.page.locator('.work-dot.is-completed').evaluate(el => ({animation:getComputedStyle(el).animationName,color:getComputedStyle(el).backgroundColor}));
+    assert.notEqual(workDot.animation, 'none'); assert.equal(doneDot.animation, 'none'); assert.notEqual(workDot.color, doneDot.color);
+    await screenshot(h, 'working');
+    await h.emit([h.event('Preparing the isolated runtime.', 'starting_agent', {occurred_at:time(4000), detail:detail({kind:'preparation',source:'worker'})})]);
+    assert.equal(await h.page.locator('.activity-stage[data-stage="preparation"] .stage-duration').innerText(), '4s');
+    await h.emit([h.event('Fixture timeout: this attempt could not complete.', 'starting_agent', {occurred_at:time(6000), status:'failed', detail:detail({kind:'preparation',source:'worker'})})]);
+    await stage(h, 'setup', 'failed');
+    const stopped = await h.page.locator('.stage-duration').allTextContents();
+    await new Promise(resolve => setTimeout(resolve, 1100));
+    assert.deepEqual(await h.page.locator('.stage-duration').allTextContents(), stopped);
+    assert.equal(await h.page.locator('.work-dot.is-working').count(), 0);
+    assert.ok((await metrics(h)).pageWidth <= viewport.width + 1);
+    await h.page.emulateMedia({reducedMotion:'reduce'});
+    assert.equal(await h.page.locator('.loading-surface-pulse i').first().evaluate(el => getComputedStyle(el).animationName), 'none');
+    h.state.gapGate.release();
+    await h.page.locator('.selected-question').waitFor();
+    assert.equal(await h.page.getByRole('region', {name: 'Research activity', exact: true}).count(), 1);
+    h.result.checks.push('Delayed gap restoration retains the explicit job and does not submit suggestions or draft writes');
+    h.result.checks.push('Amber heartbeat changes to static green, live timers tick, completed/failed timings freeze, mobile layout fits, reduced motion respected');
+    assert.deepEqual(h.state.errors, []); assert.deepEqual(h.state.unexpected, []); assert.deepEqual(h.state.duplicateKeyWarnings, []);
+  } finally { await h.close(); }
+}
 try {
   const filter = process.env.ACTIVITY_SCENARIO_FILTER ? new RegExp(process.env.ACTIVITY_SCENARIO_FILTER) : null;
   const scenarios = [
+    ['timing-refresh-desktop', () => timingAndRefreshScenario('timing-refresh-desktop', {width:1280,height:900})],
+    ['timing-refresh-mobile', () => timingAndRefreshScenario('timing-refresh-mobile', {width:390,height:844}, true)],
     ['desktop', () => activityScenario('desktop', { width: 1280, height: 900 })],
     ['mobile', () => activityScenario('mobile', { width: 390, height: 844 })],
     ['replay-ahead', replayAheadScenario],

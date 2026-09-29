@@ -1,5 +1,7 @@
 # Design package audit and document map
 
+**Historical audit:** observations below are dated September 25. Current documentation and runtime status are indexed in [docs/README.md](README.md); colleague startup is [README.local.md](../README.local.md).
+
 **September 25, 2026; mapping addendum v12.1.** Audit scope: all authored design versions and specialist docs, source/import reports and scripts, SQL/Prisma, OpenAPI generators/examples/viewers, evidence package/schema, agent skill/bootstrap/linter, and the approved HTML sources/fixtures. [The current plan](design-plan.md) is the single entry point. The original consolidation audit performed no data load, DDL, paid agent execution or app deployment. The later crosswalk load was a separate task; its saved verification is recorded below.
 
 ## 1. Conflicts resolved

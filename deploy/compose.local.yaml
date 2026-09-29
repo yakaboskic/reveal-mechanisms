@@ -1,0 +1,27 @@
+# Local frontend; backend services use the real AWS S3 bucket.
+services:
+  frontend:
+    image: ${REVEAL_FRONTEND_IMAGE:-reveal-deployment-frontend:local}
+    build:
+      context: ..
+      dockerfile: services/frontend/Dockerfile
+    env_file:
+      - path: ../.runtime/deployment/frontend.env
+        format: raw
+    ports: ["127.0.0.1:${REVEAL_DEPLOY_FRONTEND_PORT:-3000}:3000"]
+    mem_limit: 1g
+    init: true
+    read_only: true
+    tmpfs: ["/tmp:rw,nosuid,nodev,size=67108864", "/app/.next/cache:rw,nosuid,nodev,size=67108864,mode=1777"]
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: {max-size: 10m, max-file: "3"}
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      api: {condition: service_healthy}
+    networks: [backend]

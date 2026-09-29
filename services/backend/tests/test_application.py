@@ -64,6 +64,73 @@ class ApplicationTests(unittest.TestCase):
         response=self.client.post('/v1/jobs',json={'kind':'analysis','draft_id':draft['id'],'draft_version':1},headers=self.headers(user))
         self.assertEqual(response.status_code,422)
         with self.repo.transaction() as tx: self.assertEqual(tx.list('job'),[])
+
+    def test_named_draft_rename_preserves_composer_and_autosave_preserves_name(self):
+        user,other=self.provision(),self.provision()
+        created=self.client.post('/v1/drafts',json={'composer':COMPOSER,'name':'  Modifier hypothesis  '},headers=self.headers(user))
+        self.assertEqual(created.status_code,201,created.text); draft=created.json(); route='/v1/drafts/'+draft['id']
+        self.assertEqual(draft['name'],'Modifier hypothesis')
+        body={'expected_version':1,'name':'Revised hypothesis'}; headers=self.headers(user)
+        self.assertEqual(self.client.patch(route,json=body,headers=self.headers(other)).status_code,404)
+        with patch.object(api,'freeze_draft_bindings',side_effect=AssertionError('Rename must not re-resolve saved scientific sources')):
+            renamed=self.client.patch(route,json=body,headers=headers)
+            self.assertEqual(renamed.status_code,200,renamed.text)
+            self.assertEqual(self.client.patch(route,json=body,headers=headers).json(),renamed.json())
+        self.assertEqual(renamed.json()['composer'],COMPOSER)
+        self.assertEqual(renamed.json()['version'],2)
+        self.assertEqual(self.client.patch(route,json=body,headers=self.headers(user)).status_code,409)
+        saved=self.client.patch(route,json={'expected_version':2,'composer':dict(COMPOSER,mechanism_subquery='BMPR2')},headers=self.headers(user))
+        self.assertEqual(saved.status_code,200,saved.text); self.assertEqual(saved.json()['name'],'Revised hypothesis')
+        for invalid in ({'expected_version':3},{'expected_version':3,'name':'   '},{'expected_version':3,'name':'x'*121}):
+            self.assertEqual(self.client.patch(route,json=invalid,headers=self.headers(user)).status_code,422)
+        self.assertEqual(self.client.get('/v1/drafts',headers=self.headers(user)).json()['items'][0]['name'],'Revised hypothesis')
+
+    def test_draft_delete_checks_owner_version_and_replays_acknowledgment(self):
+        user,other=self.provision(),self.provision(); draft=self.draft(user); route='/v1/drafts/'+draft['id']
+        delete=lambda body,headers:self.client.request('DELETE',route,json=body,headers=headers)
+        self.assertEqual(delete({'expected_version':1},self.headers(other)).status_code,404)
+        self.assertEqual(delete({'expected_version':2},self.headers(user)).status_code,409)
+        self.assertEqual(delete({},self.headers(user)).status_code,422)
+        headers=self.headers(user); result=delete({'expected_version':1},headers)
+        self.assertEqual(result.status_code,200,result.text)
+        self.assertEqual(delete({'expected_version':1},headers).json(),result.json())
+        self.assertEqual(self.client.get(route,headers=self.headers(user)).status_code,404)
+        self.assertEqual(self.client.patch(route,json={'expected_version':1,'composer':COMPOSER},headers=self.headers(user)).status_code,404)
+        self.assertEqual(self.client.get('/v1/drafts',headers=self.headers(user)).json()['items'],[])
+        with self.repo.transaction() as tx: self.assertIsNone(tx.get('draft_binding',draft['id']))
+
+    def test_delete_blocks_active_run_and_preserves_frozen_research_and_results(self):
+        user=self.provision(); draft=self.draft(user); request_id=uid(); account_id=uid(); outcome_id=uid()
+        with self.repo.transaction() as tx:
+            tx.put('request',request_id,user,{'id':request_id,'source_draft_id':draft['id'],'composer':COMPOSER})
+            tx.put('request_binding',request_id,user,{'preserved':'evidence'})
+            tx.put('account',account_id,user,{'preserved':'account'})
+            tx.put('analysis_outcome',outcome_id,user,{'preserved':'exploration'})
+            job=jobs.enqueue(tx,user,'analysis',request_id=request_id)
+        for status in ('queued','running','cancel_requested'):
+            with self.repo.transaction() as tx:
+                job['status']=status; tx.put('job',job['id'],user,job)
+            result=self.client.request('DELETE','/v1/drafts/'+draft['id'],json={'expected_version':1},headers=self.headers(user))
+            self.assertEqual(result.status_code,409,result.text); self.assertEqual(result.json()['code'],'DRAFT_IN_USE')
+        with self.repo.transaction() as tx:
+            job['status']='succeeded'; tx.put('job',job['id'],user,job)
+        result=self.client.request('DELETE','/v1/drafts/'+draft['id'],json={'expected_version':1},headers=self.headers(user))
+        self.assertEqual(result.status_code,200,result.text)
+        with self.repo.transaction() as tx:
+            for kind,identity in [('request',request_id),('request_binding',request_id),('job',job['id']),('account',account_id),('analysis_outcome',outcome_id)]:
+                self.assertIsNotNone(tx.get(kind,identity),kind)
+
+    def test_deleted_draft_repoints_gap_then_clears_last_draft_without_removing_gap(self):
+        user=self.provision(); first,second=self.draft(user),self.draft(user); gap_id='dapper:KnowledgeGap.'+'g'*32
+        with self.repo.transaction() as tx:
+            for draft in (first,second):
+                draft['composer']['source_gap']={'id':gap_id}; tx.put('draft',draft['id'],user,draft)
+            tx.put('exploration','gap-visit',user,{'source_gap':{'id':gap_id},'draft_id':first['id'],'knowledge_gap':{'id':gap_id},'last_explored_at':now()})
+        for draft,expected in ((first,second['id']),(second,None)):
+            result=self.client.request('DELETE','/v1/drafts/'+draft['id'],json={'expected_version':1},headers=self.headers(user))
+            self.assertEqual(result.status_code,200,result.text)
+            visits=self.client.get('/v1/me/explorations',headers=self.headers(user)).json()['items']
+            self.assertEqual(len(visits),1); self.assertEqual(visits[0]['draft_id'],expected)
     def test_cancel_blocks_stale_result_and_cross_owner_cancel(self):
         user,other=self.provision(),self.provision()
         with self.repo.transaction() as tx: job=jobs.enqueue(tx,user,'analysis',request_id=uid())
@@ -204,7 +271,8 @@ class ApplicationTests(unittest.TestCase):
         class Source:
             mechanisms={}; embedding_run='embedding'; mapping_run='mapping'
             def selected(self,reference): return gap
-            def suggest_factors(self,*args): return []
+            def suggest_factors(self,*args,**kwargs): return []
+            def context_embedding_provenance(self,*args): return {'dismech_embedding_run_id':'context-run'}
             def provenance(self,*args): return {'query':'','mode':'semantic','corpus_snapshot':'mapping','embedding_model':'model','embedding_revision':'embedding','template_version':'test','score_aggregation':'maximum_per_context'}
         with patch.object(api,'catalog',Source()):
             response=self.client.post('/v1/mechanisms/suggest',json=body)
@@ -234,5 +302,37 @@ class ApplicationTests(unittest.TestCase):
                 binding=tx.get('request_binding',response.json()['research_request_id'])['data']
                 self.assertEqual(binding['anchors'][0]['mapping_run_id'],'original-mapping')
                 self.assertEqual(binding['anchors'][0]['embedding_run_id'],'original-embedding')
+
+    def test_pairwise_suggestion_scores_survive_draft_and_request_freezing(self):
+        root=Path(__file__).resolve().parents[3]
+        body=json.loads((root/'api/examples/suggestMechanisms.dismech_context.json').read_text())['request']['body']
+        composer=json.loads((root/'api/examples/createDraft.question_and_anchor.json').read_text())['request']['body']['composer']
+        gap=next(iter(json.loads((root/'api/examples/getKnowledgeGap.request.json').read_text())['responses']['200']['examples'].values()))
+        factor=next(iter(json.loads((root/'api/examples/getMechanism.request.json').read_text())['responses']['200']['examples'].values()))
+        pair_scores={'dismech:first':.6, 'dismech:second':-.2}
+        class Source:
+            mechanisms={}; dismech_import='dismech'; embedding_run='embedding'; mapping_run='mapping'
+            factors={factor['source_id']:factor}
+            bindings={factor['source_id']:{'cfde_node_id':factor['source_id'], 'embedding_run_id':'embedding', 'mapping_run_id':'mapping'}}
+            def selected(self,reference): return gap
+            def validate_composer(self,composer,submit=False): return gap
+            def suggest_factors(self,*args,**kwargs):
+                return [{'record':factor, 'ranking':{'value':.6,'rank':1,'metric':'cosine_similarity'},
+                         'contexts':['dismech:first'], 'context_similarities':pair_scores}]
+            def context_embedding_provenance(self,*args): return {'dismech_embedding_run_id':'context-run'}
+            def provenance(self,*args): return {}
+        user=self.provision()
+        with patch.object(api,'catalog',Source()):
+            response=self.client.post('/v1/mechanisms/suggest',json=body)
+            self.assertEqual(response.status_code,200,response.text)
+            composer['eaggl_anchors'][0].update(origin='automatic',suggestion_id=response.json()['suggestion_id'])
+            response=self.client.post('/v1/drafts',json={'composer':composer},headers=self.headers(user))
+            self.assertEqual(response.status_code,201,response.text)
+            draft=response.json()
+            response=self.client.post('/v1/jobs',json={'kind':'analysis','draft_id':draft['id'],'draft_version':draft['version']},headers=self.headers(user))
+            self.assertEqual(response.status_code,202,response.text)
+        with self.repo.transaction() as tx:
+            binding=tx.get('request_binding',response.json()['research_request_id'])['data']
+        self.assertEqual(binding['retrieval'][factor['source_id']]['hit']['context_similarities'],pair_scores)
 
 if __name__=='__main__': unittest.main()

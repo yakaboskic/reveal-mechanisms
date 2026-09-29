@@ -126,6 +126,8 @@ async function harness(name, options = {}) {
     if (path === '/api/backend/v1/knowledge-gaps/search') return fulfilled(route, {
       items: [{ gap, ranking: { rank: 1, value: 1, metric: 'lexical_rank' } }], next_cursor: null,
     });
+    if (request.method() === 'GET' && /^\/api\/backend\/v1\/knowledge-gaps\/[^/]+\/accounts$/.test(path))
+      return fulfilled(route, { items: [], page: { next_cursor: null, has_more: false } });
     if (path.startsWith('/api/backend/v1/knowledge-gaps/')) return fulfilled(route, gap);
     if (path === '/api/backend/v1/mechanisms/suggest') return fulfilled(route, suggestions);
     if (path.startsWith('/api/backend/v1/mechanisms/')) return fulfilled(route, factor);
@@ -207,10 +209,10 @@ async function progress(h, stage) {
   assert.equal(await h.page.locator('dialog[open]').count(), 0, 'Sign-in dialog is closed during submission');
   h.result.checks.push(`Immediate full-page ${stage}`);
 }
-async function success(h) {
+async function success(h, expectedDraftId = draftId) {
   await h.page.getByRole('region', { name: 'Research activity' }).waitFor();
   assert.equal(new URL(h.page.url()).searchParams.get('job'), jobId);
-  assert.equal(new URL(h.page.url()).searchParams.get('draft'), draftId);
+  assert.equal(new URL(h.page.url()).searchParams.get('draft'), expectedDraftId);
   assert.equal(await h.page.locator('main.submission-page').count(), 0);
   assert.deepEqual(h.state.errors, []);
   assert.deepEqual(h.state.unexpected, []);
@@ -428,24 +430,27 @@ async function delayedUrlRestore() {
       dismissed_source_ids: [], mechanism_subquery: '', model: 'cfde-inc-v2', selected_kgs: ['biomarkerkg', 'prokn'],
     };
     h.state.restoreComposer = composer;
+    const cachedDraft = { id: restoreDraftId, owner_user_id: userId, version: 1,
+      composer, created_at: now, updated_at: now };
     await h.page.addInitScript(snapshot => sessionStorage.setItem('reveal:composer', JSON.stringify(snapshot)), {
-      composer, gap, factors: { [factor.source_id]: factor }, draft: null, owner: userId, job: null,
+      composer, gap, factors: { [factor.source_id]: factor }, draft: cachedDraft, owner: userId, job: null,
     });
     await h.page.goto(`${origin}/?draft=${restoreDraftId}`);
     await until(() => h.state.restoreReads === 1, 'held URL draft restoration');
     const submit = h.page.getByRole('button', { name: 'Let’s close this gap', exact: true });
     await until(() => submit.isEnabled(), 'already authenticated composer ready');
     await rapidClick(submit);
-    await success(h);
-    assert.equal(h.state.anonymous, 0); assert.equal(h.state.drafts, 1); assert.equal(h.state.jobs, 1);
-    const finalRestoreFetch = h.page.waitForResponse(response => new URL(response.url()).pathname.startsWith('/api/backend/v1/knowledge-gaps/'));
+    await success(h, restoreDraftId);
+    assert.equal(h.state.anonymous, 0); assert.equal(h.state.drafts, 0); assert.equal(h.state.jobs, 1);
+    const finalRestoreFetch = h.page.waitForResponse(response => decodeURIComponent(new URL(response.url()).pathname) === `/api/backend/v1/knowledge-gaps/${gap.object.id}`);
     h.state.gates.restore.release();
     await (await finalRestoreFetch).finished();
     await h.page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-    await success(h);
+    await success(h, restoreDraftId);
     const stored = await h.page.evaluate(() => JSON.parse(sessionStorage.getItem('reveal:composer')));
     assert.equal(stored.job.id, jobId);
-    assert.equal(stored.draft.id, draftId);
+    assert.equal(stored.draft.id, restoreDraftId);
+    assert.equal(stored.draft.version, 1, 'Late restore cannot replace the submitted revision with version 9');
     assert.equal(await h.page.locator('.selected-question').innerText(), gap.object.text);
     await screenshot(h, 'late-url-restore-retains-job');
     h.result.checks.push('A URL restore begun before submission can finish after acceptance without replacing the confirmed job/draft');

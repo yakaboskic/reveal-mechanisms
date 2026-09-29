@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import test_evidence_package as fixtures
 from reveal_backend.dapper_release import clone_release, prepare_agent_workspace, verify_release
@@ -100,6 +101,109 @@ p.write_text(json.dumps(doc))
         self.assertFalse(final['valid'])
         self.assertIn('final-identity', {f['check'] for f in final['findings']})
 
+    def test_assembly_does_not_turn_prose_mentions_into_orphan_nodes(self):
+        from reveal_backend import acceptance
+        document=deepcopy(self.draft)
+        mechanism=document.pop('mechanisms')[0]
+        document['propositions'][0]['object_entity']='urn:cfde:trait:lymphocyte-count'
+        # Reproduce the failed job: a valid account names an input ID only in
+        # narrative context. Final assembly must not invent a graph dependency.
+        document['scientific_accounts'][0]['context']='Considered mechanism ('+mechanism['id']+').'
+        self.assertTrue(self.lint(document,mode='draft')['valid'])
+        raw=self.root/'prose-mention.json'; raw.write_bytes(canonical_json(document))
+        with patch.object(acceptance,'release_root',return_value=self.release), patch.object(acceptance,'LOCK',self.lock):
+            assembled,report=acceptance.assemble_account(raw,self.package_path,self.root/'prose-assembled.json',
+                {'user_id':'test-owner','principal_kind':'anonymous'}, {'id':'prose-hydration'},1,'box')
+        self.assertTrue(report['valid'],report)
+        self.assertNotIn('mechanisms',assembled)
+        self.assertEqual(assembled['scientific_accounts'][0]['context'],document['scientific_accounts'][0]['context'])
+
+    def test_hydration_follows_declared_links_and_transitive_inputs_only(self):
+        from reveal_backend import acceptance
+        document=deepcopy(self.draft)
+        trusted={node['id']:(group,node) for group,rows in self.package['dapper_context'].items()
+                 if isinstance(rows,list) for node in rows if isinstance(node,dict) and 'id' in node}
+        mechanism=document.pop('mechanisms')[0]
+        source=document.pop('files')[0]
+        # A literal equal to a known ID is still a literal, not an implicit link.
+        gap=document['knowledge_gaps'][0]
+        literal_only={'scientific_accounts':[{'id':'urn:test:account','context':gap['id']}]}
+        expected_literal=deepcopy(literal_only)
+        with patch.object(acceptance,'release_root',return_value=self.release), patch.object(acceptance,'LOCK',self.lock):
+            hydrated=acceptance.hydrate_inputs(document,trusted)
+            self.assertEqual(acceptance.hydrate_inputs(literal_only,trusted),expected_literal)
+        self.assertIn(mechanism,hydrated['mechanisms'])
+        self.assertIn(source,hydrated['files'])
+        self.assertTrue(all(node==trusted[node['id']][1] for group in ('mechanisms','files') for node in hydrated[group]))
+
+    def test_source_fidelity_findings_are_identical_in_draft_and_final(self):
+        source_id = self.draft['files'][0]['id']
+        artifact = next(value for value in self.package['source_artifacts'].values() if value['dapper_file_id'] == source_id)
+        row = decode((self.package_path.parent / artifact['path']).read_bytes())['data'][0]
+        for snippet, context, expected in (
+                ('result_key: "derived-field", normalized_score: 0.5795', 'Source /data/0.', 'evidence-snippet'),
+                (json.dumps(row), 'Source /data/999.', 'source-locator'),
+                (json.dumps(row), 'Source /data/0.', None)):
+            with self.subTest(expected=expected):
+                document = deepcopy(self.draft)
+                document['evidence_items'][0].update(snippet=snippet, context=context)
+                path = self.root / 'source-parity.json'; path.write_bytes(canonical_json(document)); self.mint(path)
+                document = decode(path.read_bytes())
+                draft = self.lint(document, mode='draft')
+                final = self.lint(document, mode='final')
+                self.assertEqual(draft['findings'], final['findings'])
+                self.assertEqual(draft['valid'], expected is None, draft)
+                if expected:
+                    self.assertIn(expected, {item['check'] for item in draft['findings']})
+
+    def test_agent_tool_and_worker_assembly_use_same_source_gate(self):
+        from reveal_backend import acceptance, box_remote
+        from reveal_backend.box_mcp import Ledger
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory); state = base / 'state'; output = base / 'output'
+            state.mkdir(); output.mkdir()
+            lock = base / 'bundle/services/backend/agent-runtime/dapper-release.json'
+            lock.parent.mkdir(parents=True); lock.write_bytes(self.lock.read_bytes())
+            (state / 'runtime.json').write_bytes(canonical_json({'dapper_root': str(self.release), 'evidence_package': str(self.package_path)}))
+            ledger = Ledger(state / 'ledger', 'parity-job', 1)
+            captured_call = ledger.start('query_graph', {'graph': 'prokn'}, 'prokn')
+            ledger.finish(captured_call, {'content': [{'type': 'text', 'text': 'Captured auxiliary observation'}]}, 'completed')
+            capture = captured_call['response']
+            document = deepcopy(self.draft)
+            document['files'].append({'id': 'urn:test:external', 'filename': 'capture.json', 'mime_type': 'application/json',
+                                      'sha256': capture['sha256'], 'size_in_bytes': capture['size_bytes']})
+            document['used_edges'].append({'subject': 'urn:test:activity', 'predicate': 'prov:used', 'object': 'urn:test:external'})
+            document['evidence_items'][0]['snippet'] = 'result_key: "derived-field", normalized_score: 0.5795'
+            raw = output / 'account-1.json'; raw.write_bytes(canonical_json(document))
+            with patch.object(box_remote, 'BASE', base), patch.object(box_remote, 'STATE', state), patch.object(box_remote, 'OUTPUT', output):
+                feedback = box_remote.lint_tool(raw.name, ledger)
+            self.assertTrue(feedback['isError'])
+            self.assertFalse(ledger.frozen)
+            draft_report = json.loads(feedback['content'][0]['text'])
+            ledger.freeze()
+            with patch.object(acceptance, 'release_root', return_value=self.release), patch.object(acceptance, 'LOCK', self.lock):
+                with self.assertRaises(AccountValidationError) as failure:
+                    acceptance.assemble_account(raw, self.package_path, base / 'assembled.json',
+                        {'user_id': 'parity-owner', 'principal_kind': 'anonymous'}, {'id': 'parity-job'}, 1, 'deterministic', state / 'ledger/manifest.json')
+            source_errors = lambda report: [(item['check'], item['message']) for item in report['findings'] if item['check'].startswith(('source-', 'evidence-snippet'))]
+            self.assertEqual(source_errors(draft_report), source_errors(failure.exception.report))
+            self.assertEqual(source_errors(draft_report)[0][0], 'evidence-snippet')
+            self.assertNotIn('source-file', {item['check'] for item in draft_report['findings']})
+            # A real source quotation must pass both paths with the same live
+            # external capture, rather than merely making both paths reject.
+            source_id = document['evidence_items'][0]['was_derived_from'][0]
+            artifact = next(value for value in self.package['source_artifacts'].values() if value['dapper_file_id'] == source_id)
+            row = decode((self.package_path.parent / artifact['path']).read_bytes())['data'][0]
+            document['evidence_items'][0]['snippet'] = json.dumps(row)
+            raw.write_bytes(canonical_json(document))
+            with patch.object(box_remote, 'BASE', base), patch.object(box_remote, 'STATE', state), patch.object(box_remote, 'OUTPUT', output):
+                feedback = box_remote.lint_tool(raw.name, ledger)
+            self.assertFalse(feedback['isError'], feedback)
+            with patch.object(acceptance, 'release_root', return_value=self.release), patch.object(acceptance, 'LOCK', self.lock):
+                _, report = acceptance.assemble_account(raw, self.package_path, base / 'repaired.json',
+                    {'user_id': 'parity-owner', 'principal_kind': 'anonymous'}, {'id': 'parity-job'}, 1, 'deterministic', state / 'ledger/manifest.json')
+            self.assertTrue(report['valid'], report)
+
     def test_upstream_rejects_unknown_fields_stale_ids_and_multiple_accounts(self):
         for case in ['field', 'digest', 'count']:
             document = deepcopy(self.valid)
@@ -124,6 +228,18 @@ p.write_text(json.dumps(doc))
         document = deepcopy(self.valid); document['evidence_items'][0]['was_derived_from'] = []
         result = self.lint(document)
         self.assertIn('cfde-ancestry', {f['check'] for f in result['findings']})
+
+    def test_paper_only_lineage_does_not_replace_captured_cfde_evidence(self):
+        document = deepcopy(self.draft)
+        paper_id = 'urn:test:captured-paper-response'
+        document['files'].append({'id': paper_id, 'filename': 'paper-response.json',
+                                 'mime_type': 'application/json', 'sha256': 'a' * 64, 'size_in_bytes': 120})
+        document['evidence_items'][0]['was_derived_from'] = [paper_id]
+        document['evidence_items'][0]['context'] = 'Captured paper abstract at /structuredContent/data/text.'
+        path = self.root / 'paper-only.json'; path.write_bytes(canonical_json(document)); self.mint(path)
+        result = self.lint(decode(path.read_bytes()))
+        self.assertIn('cfde-ancestry', {f['check'] for f in result['findings']})
+        self.assertFalse(result['valid'])
 
     def test_missing_or_mistargeted_evidence_is_rejected(self):
         document = deepcopy(self.valid); document['claims'][0]['has_evidence'] = []
@@ -155,6 +271,9 @@ p.write_text(json.dumps(doc))
                               '--evidence-package', runtime['evidence_package'], '--mode', 'final'], capture_output=True, text=True)
         self.assertEqual(run.returncode, 0, run.stderr + run.stdout)
         self.assertTrue(decode(run.stdout.encode())['valid'])
+        for module in ('scientific_account_lint.py', 'source_validation.py'):
+            relative = Path('services/backend/src/reveal_backend') / module
+            self.assertEqual((workspace / 'reveal' / relative).read_bytes(), (ROOT / relative).read_bytes())
         skill = (workspace / 'reveal/.claude/skills/construct-scientific-account/SKILL.md').read_text()
         self.assertIn('../../../docs/scientific-account-linting.md', skill)
         with self.assertRaisesRegex(EvidenceBuildError, 'workspace already exists'):

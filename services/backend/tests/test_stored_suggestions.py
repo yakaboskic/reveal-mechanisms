@@ -68,6 +68,27 @@ class StoredSuggestionTests(unittest.TestCase):
             key: value for key, value in self.catalog.dismech_embeddings['bindings']['source:gap'].items() if key != 'input_text'})
         self.assertEqual(provenance['context_embedding_inputs'][0]['template'], 'dismech-gap-text-v1')
 
+    def test_pairwise_cosines_survive_maximum_selection_and_hybrid_ranking(self):
+        contexts = [('source:alpha', 'alpha'), ('source:beta', 'beta')]
+        with patch.object(catalog_module, 'get_embeddings', side_effect=AssertionError('No model call expected')):
+            for mode in ('semantic', 'hybrid'):
+                with self.subTest(mode=mode):
+                    hits = {item['record']['source_id']: item for item in
+                            self.catalog.suggest_factors(contexts, mode, 5, (), precomputed=True)}
+                    self.assertEqual(hits['native:Z']['context_similarities'], {'source:alpha': 1., 'source:beta': 0.})
+                    # Deduplicated native aliases retain the best cosine for
+                    # each context, including zero and negative measurements.
+                    self.assertEqual(hits['native:Y']['context_similarities'], {'source:alpha': 0., 'source:beta': 1.})
+                    self.assertEqual(hits['native:X']['context_similarities'], {'source:alpha': 0., 'source:beta': -1.})
+                    if mode == 'hybrid':
+                        self.assertEqual(hits['native:Z']['ranking']['metric'], 'reciprocal_rank_fusion')
+                        self.assertNotEqual(hits['native:Z']['ranking']['value'], 1.)
+
+    def test_lexical_suggestions_do_not_acquire_semantic_scores(self):
+        hits = self.catalog.suggest_factors([('source:alpha', 'alpha')], 'lexical', 5, (), precomputed=True)
+        self.assertTrue(hits)
+        self.assertTrue(all('context_similarities' not in hit for hit in hits))
+
     def test_missing_stale_or_modified_bindings_fail_closed_without_runtime_fallback(self):
         original = deepcopy(self.catalog.dismech_embeddings)
         cases = [('source_revision', 'f' * 64), ('template', 'changed-template'), ('input_text', 'invented text'), ('input_sha256', '0' * 64)]

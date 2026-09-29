@@ -1,6 +1,6 @@
 # REVEAL API implementation contract
 
-**OpenAPI 3.1.1 · contract 0.2.0-draft · design v12.1 · September 25, 2026.** This contract is implemented by the local FastAPI service; see [startup instructions](../docs/local-development.md) and [runtime validation](../docs/validation-report.md). It aligns with the [consolidated plan](../docs/design-plan.md), approved HTML interaction and current evidence-package schema. It has **31 operations**, with schemas and paired input/output examples for every operation. The implementation adds an authorized captured-artifact download route without changing scientific identities.
+**OpenAPI 3.1.1 · contract 0.2.0-draft · updated September 30, 2026.** This contract is implemented by the local FastAPI service; see [colleague startup](../README.local.md) and [API walkthrough](../docs/api-quickstart.md) and [runtime validation](../docs/validation-report.md). It aligns with the [consolidated plan](../docs/design-plan.md), approved HTML interaction and current evidence-package schema. It has **42 operations**, with schemas and paired input/output examples for every operation. The implementation adds an authorized captured-artifact download route without changing scientific identities.
 
 ## Open and share
 
@@ -23,12 +23,12 @@ Open [the API viewer](http://127.0.0.1:8765/) or [interactive flow](http://127.0
 |---|---|---|
 | Gap discovery and source detail | `GET /v1/knowledge-gaps`, `/search`, `/{gap_id}` | `GapList`, `GapSearchResults`, `GapRecord`, `SelectedGap`, DAPPER KnowledgeGap |
 | Mechanism search/defaults | `GET /v1/mechanisms/search`, `/{source_id}`; `POST /v1/mechanisms/suggest` | `SuggestInput`, `Suggestions`, DAPPER Mechanism + catalog File + native CFDE anchor |
-| Identity and editable selections | `GET /v1/me`; `GET/POST /v1/drafts`; `GET/PATCH /v1/drafts/{id}` | `Me`, `Composer`, `DraftCreate`, `DraftPatch`, `Draft` |
+| Identity and editable selections | `GET /v1/me`; `GET/POST /v1/drafts`; `GET/PATCH/DELETE /v1/drafts/{id}` | `Me`, `Composer`, `DraftCreate`, `DraftPatch`, `Draft` |
 | Immutable research | `GET /v1/research-requests`, `/{id}` | `ResearchRequest` with resolved gap, source context and original actor |
 | Analysis / paragraph work | `GET/POST /v1/jobs`; `GET /v1/jobs/{id}`, `/events`; `POST /cancel` | `JobCreate`, `Job`, `AnalysisResult`, `ParagraphResult`, typed `JobEvent` |
 | Frozen agent input | `GET /v1/jobs/{id}/evidence-package` | `EvidencePackageResult`; actual generated LinkML `EvidencePackage` schema bundled as components |
 | Scientific inspection | `GET /v1/accounts/{id}`, `/claims/{id}`, `/gene-sets/{id}`, `/paragraphs/{id}`, `/objects/{id}` | Hydrated DAPPER documents, exact payload checksums, schema pins, coverage and authorized artifacts |
-| Captured source bytes | `GET /v1/artifacts/{sha256}` | Owner-authorized, checksum-verified attachment bytes; never a mutable upstream fetch |
+| Captured source bytes | `GET /v1/artifacts/{sha256}` | Owner-authorized redirect to a signed S3 URL for checksum-verified retained bytes; never a mutable upstream fetch |
 | Personal workspace | `GET /v1/accounts`; `GET/POST /v1/me/explorations` | `AccountList`, `ExplorationInput`, `ExplorationList` |
 | Render and export | `GET /v1/citations/{id}`; `POST /v1/citations/render`; `GET /v1/paragraphs/{id}/export` | Registry metadata/formats, `CitationRendering`, `ParagraphExport` |
 
@@ -63,16 +63,18 @@ Provenance resolution is bounded upstream traversal (depth≤5, nodes≤250), wi
 
 Each provenance page repeats its unchanged terminal root and adds upstream nodes. Use `max_nodes` of at least two for continuation; one returns only the root and explicit missing references. Signed cursors bind the owner, root payload, full immutable document and traversal limits.
 
-Citations pin immutable metadata revisions and code-point spans. Registry revisions never fall back silently to latest. DAPPER digest is not a registered DOI. `/export` returns JSON with content/filename/media type, complete citation targets and required companion files; rich text supplies HTML/plain text, LaTeX uses `\cite` and reminds users to fetch `references.bib`. Actual canonical URLs, CSL implementation/style/locale pins and access checks are service work. APA/MLA examples remain formatting-shape fixtures, not measured CSL-renderer output.
+Citations pin immutable metadata revisions and code-point spans. Registry revisions never fall back silently to latest. DAPPER digest is not a registered DOI. `/export` returns JSON with content/filename/media type, complete citation targets and required companion files; rich text supplies HTML/plain text, LaTeX uses `\cite` and reminds users to fetch `references.bib`. The runtime supplies canonical URLs, pinned CSL styles/locales and access checks; see the citation standard and backend tests. APA/MLA examples remain formatting-shape fixtures, not measured CSL-renderer output.
 
 ## Regenerate and verify
 
 Run from repository root with [OpenAPI dependencies](../scripts/requirements-openapi.txt):
 
 ```bash
-python scripts/build_openapi.py
-python scripts/validate_openapi.py
-python scripts/build_api_viewer.py
+.venv/bin/python scripts/build_openapi.py
+.venv/bin/python scripts/validate_openapi.py
+.venv/bin/python scripts/build_api_viewer.py
+npm --prefix services/frontend run generate
+npm --prefix services/frontend run fixtures
 ```
 
 Source: [base generator](../scripts/build_openapi.py), [current-contract amendments](../scripts/openapi_current.py), [flow stages](../scripts/api-flow-stages.json), [flow builder](../scripts/build_api_flow.py), [viewer builder](../scripts/build_api_viewer.py). Edit sources and regenerate; do not hand-edit exported JSON/YAML. Validation checks every local ref/example/exchange, DAPPER identity/profile/registry links, source checksums and malformed-input rejection. It also checks exact gap alignment and the bundled evidence-package shape. Runtime owner, source-revision, lineage, exact-observation and scientific checks remain backend responsibilities.

@@ -11,6 +11,10 @@
 .prototype-composer.composer-page{max-width:800px;margin:0 auto;padding:clamp(86px,17vh,164px) 24px 64px}
 .prototype-composer.composer-page.has-gap{max-width:800px;padding-top:clamp(36px,7vh,72px)}
 .prototype-composer.composer-page.has-job{padding-top:30px;padding-bottom:24px}
+.composer-draft-nav{display:flex;align-items:center;flex-wrap:wrap;gap:8px 18px;margin-bottom:18px;font-size:12px;color:#70829a}
+.composer-draft-nav a{display:inline-flex;align-items:center;min-height:36px;white-space:nowrap}
+.composer-draft-nav strong{font-weight:500;color:#526986;overflow-wrap:anywhere}
+.composer-draft-nav>span{margin-left:auto;font-size:11px}
 .prototype-composer .invitation{color:#737f91;font-size:12px;line-height:1.5;margin:0 8px 16px;text-align:center}
 .prototype-composer .invitation a{color:inherit;text-decoration:underline;text-decoration-color:#bdc6d3;text-underline-offset:3px}
 .prototype-composer .invitation a:hover{color:#2563eb}
@@ -64,6 +68,9 @@
 .prototype-composer .linked-mechanism small{font-size:11px}
 .prototype-composer .linked-mechanism>span:first-child{min-width:0;overflow-wrap:anywhere}
 .prototype-composer .submit-row{margin-top:22px;display:flex;justify-content:flex-end;border:0;padding:0}
+.prototype-composer .research-result-options{max-width:66ch;margin:20px 0 0;color:#697c98;font-size:12px;line-height:1.7}
+.prototype-composer .research-result-options strong{font-weight:550;color:#526783}
+.prototype-composer .research-result-options+.submit-row{margin-top:12px}
 .prototype-composer .gap-submit{display:inline-flex;align-items:center;gap:10px;min-height:44px;padding:0 0 0 10px;border-radius:24px;font-size:13px;color:#496488}
 .prototype-composer .gap-submit .send{width:36px;height:36px}
 .prototype-composer .gap-submit:hover:not(:disabled){color:#2563eb}

@@ -46,14 +46,17 @@ Type to search; select an exact source question on the same page.
 
 **Request:** q, fuzzy mode by default, source=dismech and filters.
 
-**Response:** GapSearchResults / GapRecord with DAPPER gap, exact source detail and public-account count.
+**Response:** GapSearchResults / GapRecord with exact source detail and scoped account count; AccountList with original author attribution.
 
 - `GET /v1/knowledge-gaps/search` — [request request/response](examples/searchKnowledgeGaps.request.json)
 - `GET /v1/knowledge-gaps` — [request request/response](examples/listKnowledgeGaps.request.json)
 - `GET /v1/knowledge-gaps/{gap_id}` — [request request/response](examples/getKnowledgeGap.request.json)
+- `GET /v1/knowledge-gaps/{gap_id}/accounts` — [request request/response](examples/listKnowledgeGapAccounts.request.json)
 
 - Search text is not a new inquiry. Trending entries disappear while typing.
-- Initial homepage is curated; counts include only public saved accounts for the exact gap digest.
+- Trending defaults to explicitly published account counts across users. Workspace scope counts the authenticated owner accounts. Count ties shuffle per new browse with a signed cursor seed preserving that order across pages.
+- The selected gap lists authorized scientific accounts with pagination; original author attribution does not change when ownership transfers.
+- Question input and scope selector remain fixed while the paginated gap list scrolls; source order is preserved without editorial selection.
 
 ### 2. Choose mechanism anchors
 
@@ -82,9 +85,11 @@ Choose ORCID, Google or anonymous at submit; preserve selection and autosave.
 - `POST /v1/drafts` — [question and anchor request/response](examples/createDraft.question_and_anchor.json)
 - `PATCH /v1/drafts/{draft_id}` — [save revision two request/response](examples/updateDraft.save_revision_two.json)
 - `GET /v1/drafts/{draft_id}` — [request request/response](examples/getDraft.request.json)
+- `DELETE /v1/drafts/{draft_id}` — [delete saved draft request/response](examples/deleteDraft.delete_saved_draft.json)
 
 - Local edits before session; no credentials stored in research data.
 - Composer accepts no free-text inquiry or editable linked DisMech list.
+- Workspace groups named drafts by knowledge gap. Rename and delete use optimistic versions; active research prevents deletion. Deleting editable state preserves frozen research and results.
 
 ### 4. Submit saved gap analysis
 
@@ -118,10 +123,12 @@ Evidence preparation followed by public agent/tool activity; Stop stays availabl
 - `GET /v1/jobs/{job_id}/events` — [request request/response](examples/getJobEvents.request.json)
 - `GET /v1/jobs/{job_id}/events` — [sse request/response](examples/getJobEvents.sse.json)
 - `GET /v1/jobs/{job_id}/evidence-package` — [request request/response](examples/getEvidencePackage.request.json)
+- `POST /v1/jobs/{job_id}/retry-review` — [saved output request/response](examples/retryJobReview.saved_output.json)
 
 - One active loading state; no private reasoning.
 - Package is the schema-current captured input; account fixture is separately authored, not its accepted agent output.
 - Completed activity compresses into Gap analysis complete.
+- Budget failures expose phase, cap and recorded spend. Incomplete independent review can be retried against verified saved output, without launching the research agent.
 
 ### 6. Read the scientific account
 
@@ -136,10 +143,14 @@ Read closing remarks; open associated claims on demand.
 - `GET /v1/gene-sets/{dapper_id}` — [request request/response](examples/getGeneSet.request.json)
 - `GET /v1/objects/{dapper_id}` — [request request/response](examples/resolveDapperObject.request.json)
 - `GET /v1/artifacts/{sha256}` — [request request/response](examples/downloadArtifact.request.json)
+- `GET /v1/accounts/{dapper_id}/publication` — [request request/response](examples/getAccountPublication.request.json)
+- `POST /v1/accounts/{dapper_id}/publication` — [publish request/response](examples/updateAccountPublication.publish.json)
+- `POST /v1/accounts/{dapper_id}/publication` — [unpublish request/response](examples/updateAccountPublication.unpublish.json)
 
 - Conclusions and Research statement are divider tabs.
 - Claims open inline; no auto-opened first claim. Dedicated claim page has Assessment, Proposition, Evidence and Provenance tabs.
 - Partial provenance and unavailable downloads remain explicit.
+- Accounts remain private until the owner publishes a frozen snapshot with an optimistic version and idempotency key. Later accepted statements require an explicit publication update; unpublishing revokes public access. Public readers cannot access job telemetry or research writes.
 
 ### 7. Generate the cited statement automatically
 
@@ -209,6 +220,25 @@ Copy hyperlinked rich text for Word, or download Markdown, LaTeX and BibTeX.
 - LaTeX includes cite commands; remind users to download references.bib.
 - Exports share exact Paragraph and registry pins. Rendering does not launch an agent.
 
+### 11. Read and share an explored analysis
+
+Preserve a scoped insufficient-evidence investigation and explicitly publish its record when useful.
+
+**Request:** An owned job outcome, or an authorized private/public outcome ID.
+
+**Response:** AnalysisOutcome and compact exact-gap outcome summaries; explicit publication state.
+
+- `GET /v1/analysis-outcomes/{outcome_id}` — [request request/response](examples/getAnalysisOutcome.request.json)
+- `GET /v1/jobs/{job_id}/outcome` — [request request/response](examples/getJobAnalysisOutcome.request.json)
+- `GET /v1/knowledge-gaps/{gap_id}/outcomes` — [request request/response](examples/listKnowledgeGapOutcomes.request.json)
+- `GET /v1/analysis-outcomes/{outcome_id}/publication` — [request request/response](examples/getOutcomePublication.request.json)
+- `POST /v1/analysis-outcomes/{outcome_id}/publication` — [publish request/response](examples/updateOutcomePublication.publish.json)
+- `POST /v1/analysis-outcomes/{outcome_id}/publication` — [unpublish request/response](examples/updateOutcomePublication.unpublish.json)
+
+- A scoped exploration is not a ScientificAccount and never increases scientific-account popularity counts.
+- Captured reasons remain attributed to the original investigation; unavailable sources do not establish global absence.
+- Publication is explicit and revocable. Job logs, private requests and the complete private evidence package remain private.
+
 ### Registered or anonymous ownership
 
 Gateway establishes trusted session and resolves a stable application UUID.
@@ -222,9 +252,9 @@ Gateway establishes trusted session and resolves a stable application UUID.
 - Browser OAuth/bootstrap and service provisioning are separately specified in docs/gateway-contract.md.
 - No bearer is not anonymous write permission.
 
-### Your gaps and scientific accounts
+### Your gaps, scientific accounts and explorations
 
-Avatar opens two-tab personal dashboard.
+Avatar opens a personal dashboard with knowledge gaps, scientific accounts and completed explorations.
 
 **Request:** Trusted owner session, exact gap filters and pagination.
 
@@ -233,6 +263,7 @@ Avatar opens two-tab personal dashboard.
 - `GET /v1/me/explorations` — [request request/response](examples/listExplorations.request.json)
 - `POST /v1/me/explorations` — [selected gap request/response](examples/recordExploration.selected_gap.json)
 - `GET /v1/accounts` — [request request/response](examples/listAccounts.request.json)
+- `GET /v1/analysis-outcomes` — [request request/response](examples/listAnalysisOutcomes.request.json)
 - `GET /v1/drafts` — [request request/response](examples/listDrafts.request.json)
 - `GET /v1/research-requests` — [request request/response](examples/listResearchRequests.request.json)
 - `GET /v1/research-requests/{request_id}` — [request request/response](examples/getResearchRequest.request.json)
@@ -258,4 +289,4 @@ Request cancellation or recover from stale save/event cursor.
 
 Requests/responses are taken from the existing validated OpenAPI exchange library. The CADinT2D analysis/paragraph sequence is internally linked. The CAD source-selected gap now frames the request and account. The evidence package is a separate captured input; the authored account is not its validated agent output. Semantic scores and agent outputs remain illustrative fixtures.
 
-The mapping covers 31 operations and all 42 exchanges. OpenAPI SHA-256: `0eb62f9ff95e3de2100d9d57b253221c2a19850ebaac5bb889c8e55390928d7e`. No endpoints or payloads were changed to build this diagram.
+The mapping covers 42 operations and all 55 exchanges. OpenAPI SHA-256: `cf66fbdfe47239be4c885b073960140242df98af5451cf399ce847d426d28240`. No endpoints or payloads were changed to build this diagram.

@@ -12,12 +12,97 @@ from unittest.mock import patch
 
 from reveal_backend.evidence_collector import CaptureStore, HttpCaptureClient, add_source_prefixes, collect_package, parse_factor
 from reveal_backend.evidence_package import (DapperRuntime, EvidenceBuildError, build_package, canonical_json,
-                                            decode, load_build_input, pointer, sha256)
+                                            decode, frozen_semantic_association, load_build_input, pointer, sha256)
 from reveal_backend.evidence_schema import load_generated_schema, validate_package_shape
 
 ROOT = Path(__file__).resolve().parents[3]
 FACTOR = 'factor:portal:CADinT2D:cfde-inc-v2:Factor1'
 GAP = 'cad_pgsxc_reverse_causation'
+
+
+def semantic_metadata(context_id='dismech:context', revision='source-revision', text='Exact mechanism description'):
+    return {'origins': {FACTOR: 'automatic'}, 'dismissed_eaggl_ids': [],
+        'semantic_retrieval': {'status': 'computed', 'embedding_run_id': 'frozen-embedding'},
+        'frozen_binding': {'dismech_import_id': 'dismech-import',
+            'anchors': [{'cfde_node_id': FACTOR, 'embedding_run_id': 'frozen-embedding', 'mapping_run_id': 'mapping'}],
+            'retrieval': {FACTOR: {'mode': 'semantic', 'embedding_run_id': 'frozen-embedding', 'mapping_run_id': 'mapping',
+                'dismech_import_id': 'dismech-import', 'dismech_embedding_run_id': 'dismech-run',
+                'context_embedding_inputs': [{'source_id': context_id, 'source_kind': 'mechanism',
+                    'source_revision': revision, 'template': 'dismech-description-v1', 'input_sha256': sha256(text.encode())}],
+                'hit': {'matched_context_ids': [context_id],
+                    'ranking': {'metric': 'cosine_similarity', 'value': .4372766973724816, 'rank': 5},
+                    'context_similarities': {context_id: .4372766973724816}}}}}}
+
+
+class FrozenSemanticAssociationTests(unittest.TestCase):
+    def project(self, metadata, context='dismech:context', revision='source-revision', text='Exact mechanism description'):
+        return frozen_semantic_association(metadata, FACTOR, context, revision, text)
+
+    def test_legacy_single_context_score_is_recoverable_but_multiple_contexts_are_not(self):
+        metadata = semantic_metadata()
+        retrieval = metadata['frozen_binding']['retrieval'][FACTOR]
+        del retrieval['hit']['context_similarities']
+        self.assertEqual(self.project(metadata)['semantic_similarity'], .4372766973724816)
+        retrieval['context_embedding_inputs'].append(dict(retrieval['context_embedding_inputs'][0], source_id='dismech:other'))
+        self.assertEqual(self.project(metadata)['status'], 'not_computed')
+
+    def test_distinct_pairs_and_hybrid_scores_are_not_replaced_by_the_ranking(self):
+        metadata = semantic_metadata()
+        retrieval = metadata['frozen_binding']['retrieval'][FACTOR]
+        retrieval['context_embedding_inputs'].append(dict(retrieval['context_embedding_inputs'][0], source_id='dismech:other'))
+        retrieval['hit']['context_similarities']['dismech:other'] = -.25
+        for mode in ('semantic', 'hybrid'):
+            retrieval['mode'] = mode
+            retrieval['hit']['ranking'] = {'metric': 'reciprocal_rank_fusion' if mode == 'hybrid' else 'cosine_similarity',
+                                         'value': .99, 'rank': 1}
+            with self.subTest(mode=mode):
+                self.assertEqual(self.project(metadata)['semantic_similarity'], .4372766973724816)
+                self.assertEqual(self.project(metadata, 'dismech:other')['semantic_similarity'], -.25)
+        del retrieval['hit']['context_similarities']
+        retrieval['context_embedding_inputs'] = retrieval['context_embedding_inputs'][:1]
+        self.assertEqual(self.project(metadata)['status'], 'not_computed')
+
+    def test_zero_is_computed_and_missing_pair_is_not(self):
+        metadata = semantic_metadata()
+        scores = metadata['frozen_binding']['retrieval'][FACTOR]['hit']['context_similarities']
+        scores['dismech:context'] = 0.
+        self.assertEqual(self.project(metadata)['status'], 'computed')
+        self.assertEqual(self.project(metadata)['semantic_similarity'], 0.)
+        scores.clear()
+        self.assertIsNone(self.project(metadata)['semantic_similarity'])
+
+    def test_wrong_context_source_template_text_or_run_never_becomes_a_pair(self):
+        cases = [('source_id', 'mechanism_subquery'), ('source_kind', 'knowledge_gap'),
+                 ('source_revision', 'changed'), ('template', 'changed'), ('input_sha256', 'changed')]
+        for key, value in cases:
+            metadata = semantic_metadata()
+            metadata['frozen_binding']['retrieval'][FACTOR]['context_embedding_inputs'][0][key] = value
+            with self.subTest(key=key):
+                self.assertEqual(self.project(metadata)['status'], 'not_computed')
+        for key in ('embedding_run_id', 'dismech_import_id', 'mapping_run_id', 'dismech_embedding_run_id'):
+            metadata = semantic_metadata()
+            metadata['frozen_binding']['retrieval'][FACTOR][key] = None
+            with self.subTest(key=key):
+                self.assertEqual(self.project(metadata)['status'], 'not_computed')
+
+    def test_selection_origin_is_preserved_without_inventing_measurements(self):
+        self.assertEqual(self.project(None)['association_basis'], 'user_supplied_anchor')
+        metadata = semantic_metadata()
+        metadata['frozen_binding']['retrieval'][FACTOR] = None
+        self.assertEqual(self.project(metadata), {'status': 'not_computed', 'semantic_similarity': None,
+                                               'association_basis': 'automatic_selection'})
+        metadata['origins'][FACTOR] = 'manual'
+        self.assertEqual(self.project(metadata)['association_basis'], 'user_supplied_anchor')
+        metadata = semantic_metadata()
+        metadata['frozen_binding']['retrieval'][FACTOR]['mode'] = 'lexical'
+        self.assertEqual(self.project(metadata)['status'], 'not_computed')
+
+    def test_invalid_captured_cosines_are_rejected(self):
+        for score in (None, True, float('nan'), float('inf'), 1.01, -1.01):
+            metadata = semantic_metadata()
+            metadata['frozen_binding']['retrieval'][FACTOR]['hit']['context_similarities']['dismech:context'] = score
+            with self.subTest(score=score), self.assertRaises(EvidenceBuildError):
+                self.project(metadata)
 
 
 class FixtureClient:
@@ -199,9 +284,10 @@ class EvidencePackageTests(unittest.TestCase):
 
     def test_frozen_browser_selection_provenance_survives_collection(self):
         dismissed=FACTOR.rsplit(':',1)[0]+':Factor2'
-        metadata={'origins':{FACTOR:'automatic'},'dismissed_eaggl_ids':[dismissed],
-            'semantic_retrieval':{'status':'computed','embedding_run_id':'frozen-embedding'},
-            'frozen_binding':{'mapping_run_id':'original-mapping','embedding_run_id':'frozen-embedding'}}
+        context_id, mechanism = next(iter(self.built.package['dismech']['mechanisms'].items()))
+        source_revision = self.built.package['dismech']['source_revision']['source_sha256']
+        metadata = semantic_metadata(context_id, source_revision, mechanism['description'])
+        metadata['dismissed_eaggl_ids'] = [dismissed]
         built=collect_package(gap_id=GAP,factor_ids=[FACTOR],output=self.root/'browser-selection',dapper=self.runtime,
             project_root=ROOT,dismech_source=self.source,dismech_index=ROOT/'data/dismech-gaps/2026-09-24',
             geneset_import=self.imported,limit=8,client_factory=FixtureClient,selection_metadata=metadata)
@@ -210,6 +296,15 @@ class EvidencePackageTests(unittest.TestCase):
         self.assertEqual(built.package['selection']['semantic_retrieval'],metadata['semantic_retrieval'])
         captured=built.package['source_artifacts']['selection-provenance']
         self.assertEqual(decode((self.root/'browser-selection/package'/captured['path']).read_bytes()),metadata)
+        self.assertEqual(built.package['dismech']['mechanisms'][context_id]['associated_eaggl_mechanisms'][FACTOR],
+            {'status':'computed','semantic_similarity':.4372766973724816,'association_basis':'semantic_retrieval'})
+        validate_package_shape(built.package,load_generated_schema(ROOT/'schema/evidence-package.schema.json'))
+        spec, blobs = load_build_input(self.root/'browser-selection/build-input.json', self.root/'browser-selection')
+        replay = build_package(spec, blobs, self.runtime)
+        self.assertEqual(replay.package, built.package)
+        spec['dismech']['mechanisms'][context_id]['associated_eaggl_mechanisms'][FACTOR]['semantic_similarity'] = .99
+        with self.assertRaisesRegex(EvidenceBuildError, 'differs from frozen provenance'):
+            build_package(spec, blobs, self.runtime)
 
     def test_database_unmapped_candidate_is_explicitly_omitted_without_disabling_anchor(self):
         with gzip.open(self.imported/'records.jsonl.gz','rt') as stream: rows=[json.loads(line) for line in stream]

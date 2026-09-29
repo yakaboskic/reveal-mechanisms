@@ -25,6 +25,8 @@ from .box_stream import ClaudeStream, SecretFilter, StreamProtocolError
 from .dispatch_view import (FILE_INPUT_FILENAME, FILE_INPUT_FORMAT, research_authoring_requirements,
                             research_prompt, validate_file_input)
 from .evidence_files import INDEX_PATH, build_evidence_files
+from .box_literature import LiteratureClient
+from .research_outcome import validate_insufficient_outcome
 
 BASE = Path('/reveal')
 STATE = BASE / 'state'
@@ -53,6 +55,53 @@ def protect(root):
         os.chown(path, 0, 0)
         os.chmod(path, 0o555 if path.is_dir() or os.access(path, os.X_OK) else 0o444)
 
+
+
+def prepare_writable_output(work):
+    """One writable destination; relative output/ resolves to that same directory."""
+    if OUTPUT.is_symlink(): raise ValueError('Canonical output directory cannot be a symlink')
+    OUTPUT.mkdir(mode=0o700, exist_ok=True)
+    user = pwd.getpwnam('reveal-agent')
+    os.chown(OUTPUT, user.pw_uid, user.pw_gid); os.chmod(OUTPUT, 0o700)
+    alias = work / 'output'
+    if alias.exists() or alias.is_symlink():
+        if not alias.is_symlink() or alias.resolve() != OUTPUT.resolve():
+            raise ValueError('Workspace output path has an unexpected existing target')
+    else: alias.symlink_to(OUTPUT, target_is_directory=True)
+
+
+def verify_writable_output(work):
+    user = pwd.getpwnam('reveal-agent')
+    # Test as the actual authoring UID, after protecting the source workspace.
+    script = '''import os, pathlib, sys
+work, output = map(pathlib.Path, sys.argv[1:])
+assert (work/'output').resolve() == output.resolve()
+assert not os.access(work, os.W_OK)
+path = work/'output'/'.trusted-write-probe'
+fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+try: os.write(fd, b'REVEAL output probe')
+finally: os.close(fd); path.unlink()
+'''
+    result = subprocess.run(['setpriv', '--reuid', str(user.pw_uid), '--regid', str(user.pw_gid),
+        '--clear-groups', '--no-new-privs', sys.executable, '-I', '-c', script, str(work), str(OUTPUT)],
+        capture_output=True, timeout=10)
+    if result.returncode: raise RuntimeError('Trusted output permission preflight failed before agent start')
+
+
+def write_outcome_tool(value):
+    try: outcome = validate_insufficient_outcome(value)
+    except ValueError as error: raise DraftValidationError(str(error)) from None
+    # Keep the legacy format distinguishable for trusted acceptance, including
+    # its optional selected-gap binding. Never relabel old output as new schema.
+    if 'format' not in value: outcome.pop('format')
+    path = OUTPUT / 'outcome.json'
+    if path.is_symlink(): raise PolicyError('Outcome output symlink forbidden')
+    user = pwd.getpwnam('reveal-agent')
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(descriptor, 'wb') as handle:
+        handle.write(canonical(outcome))
+        os.fchown(handle.fileno(), user.pw_uid, user.pw_gid)
+    return {'content': [{'type': 'text', 'text': 'Insufficient-evidence outcome saved to ' + str(path) + '; no scientific account has been accepted.'}]}
 
 
 def setup(request):
@@ -148,11 +197,15 @@ def setup(request):
         (work / 'runtime-context.json').write_bytes(canonical(runtime['draft_attribution']))
     if request['kind'] != 'research' and request.get('validation_feedback'):
         prompt += '\nTrusted independent review feedback from a rejected earlier draft. Address these constraints afresh; they are not new evidence:\n' + '\n'.join(request['validation_feedback'])
+    prepare_writable_output(work)
+    runtime['output_directory'] = str(OUTPUT)
+    runtime['output_alias'] = str(work / 'output')
     write_json(STATE / 'runtime.json', runtime)
     for target in [project, BASE / 'input', BASE / 'workspace']:
         protect(target)
     if (BASE / 'trusted').exists():
         protect(BASE / 'trusted')
+    verify_writable_output(work)
     return work, runtime, prompt
 
 
@@ -172,7 +225,7 @@ def terminate(process):
             process.wait(timeout=5)
 
 
-def lint_tool(filename):
+def lint_tool(filename, ledger):
     from .scientific_account_lint import lint_scientific_account
     path = OUTPUT / filename
     if path.is_symlink() or not path.is_file() or path.stat().st_size > 4_000_000:
@@ -180,10 +233,58 @@ def lint_tool(filename):
     frozen = STATE / ('lint-' + filename)
     frozen.write_bytes(path.read_bytes())
     runtime = json.loads((STATE / 'runtime.json').read_text())
+    # The final manifest is written only when execution ends. Snapshot completed
+    # captures under the ledger lock so draft lint sees the same trusted bytes
+    # without freezing or interrupting the agent's remaining tool calls.
+    ledger_path = ledger.root / 'lint-sources.json'
+    with ledger.lock:
+        write_json(ledger_path, json.loads(ledger.sanitized_bytes({'calls': ledger.entries})[0]))
     report = lint_scientific_account(frozen, dapper_root=runtime['dapper_root'],
                                      release_lock=BASE / 'bundle/services/backend/agent-runtime/dapper-release.json',
-                                     evidence_package=runtime['evidence_package'], mode='draft')
+                                     evidence_package=runtime['evidence_package'], ledger_path=ledger_path, mode='draft')
+    checks = {finding.get('check') for finding in report.get('findings', []) if finding.get('severity') == 'error'}
+    if checks & {'cfde-ancestry', 'claim-evidence'}:
+        report['repair_guidance'] = 'Each component Claim needs an explicit EvidenceItem and genuine lineage to a captured CFDE File. DisMech-only source-result Claims may be auxiliary sources but cannot substitute for CFDE-backed account components. Do not attach an unrelated CFDE row to satisfy lint. If the captured observations cannot support a useful CFDE-backed interpretation of the selected gap, write outcome.json with status insufficient_evidence and the specific missing link instead of repeatedly rewriting the same unsupported account.'
     return {'content': [{'type': 'text', 'text': json.dumps(report)}], 'isError': not report.get('valid')}
+
+
+def deadline_reason(request, last_activity=None):
+    stage = 'authoring the account' if request['kind'] == 'research' else 'writing the research statement'
+    last_tool = (last_activity or {}).get('tool_name')
+    suffix = '; last observed tool: ' + last_tool if last_tool else ''
+    return f"Agent reached its {request['timeout_seconds']}-second execution limit while {stage}{suffix}. No output was accepted."
+
+
+def provider_failure_reason(request, result):
+    if result.get('subtype') == 'error_max_turns':
+        return (f"The agent reached its {request['max_turns']}-turn execution limit before completing the result. "
+                'No scientific result was accepted. Retry the analysis to start a new attempt with the current execution limits.')
+    if result.get('subtype') == 'error_max_budget_usd':
+        return f"The agent reached its ${request['max_budget_usd']:g} execution budget. No scientific result was accepted."
+    return 'Claude execution failed: ' + str(result.get('subtype', 'nonzero exit'))
+
+
+def runtime_completion(request, started, status, reason, process=None, parser=None, last_activity=None):
+    """Safe terminal metrics, including deadline exits without provider usage."""
+    result = parser.result if parser else None
+    summary = {'completed_at': stamp(), 'elapsed_seconds': round(time.monotonic() - started, 3),
+               'time_limit_seconds': request['timeout_seconds'],
+               'max_budget_usd': request.get('max_budget_usd'),
+               'turn_limit': request['max_turns'], 'turns_used': result.get('num_turns') if result else None,
+               'provider_result_subtype': result.get('subtype') if result else None,
+               'status': status, 'reason': reason, 'process_returncode': process.returncode if process else None,
+               'provider_terminal_received': result is not None,
+               'usage_status': 'reported' if result and result.get('total_cost_usd') is not None else 'unavailable',
+               'cost_usd': result.get('total_cost_usd') if result else None,
+               'last_observable_activity': last_activity}
+    try:
+        import resource
+        usage = resource.getrusage(resource.RUSAGE_CHILDREN)
+        summary['child_cpu_seconds'] = round(usage.ru_utime + usage.ru_stime, 3)
+        summary['child_peak_rss_bytes'] = int(usage.ru_maxrss * (1 if sys.platform == 'darwin' else 1024))
+    except (ImportError, OSError):
+        pass
+    return summary
 
 
 def write_draft_tool(filename, document):
@@ -200,10 +301,19 @@ def write_draft_tool(filename, document):
             for node in rows:
                 if isinstance(node, dict) and node.get('id') in trusted and node != trusted[node['id']][1]:
                     raise PolicyError('A trusted source object was changed')
+    def exact_references(value):
+        if isinstance(value, dict):
+            for child in value.values():
+                yield from exact_references(child)
+        elif isinstance(value, list):
+            for child in value:
+                yield from exact_references(child)
+        elif isinstance(value, str):
+            yield value
     for _ in range(len(trusted) + 1):
         present = {n['id'] for rows in document.values() if isinstance(rows, list) for n in rows if isinstance(n, dict) and 'id' in n}
-        serialized = json.dumps(document)
-        missing = [identity for identity in trusted if identity not in present and identity in serialized]
+        references = set(exact_references(document))
+        missing = [identity for identity in trusted if identity not in present and identity in references]
         if not missing:
             break
         for identity in missing:
@@ -239,12 +349,15 @@ def main():
     try:
         fcntl.flock(lockfile, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
+        lockfile.close()
         return 0
     if (STATE / 'status.json').exists():
+        lockfile.close()
         return 0
     request = json.loads((BASE / 'request.json').read_text())
     ledger = Ledger(STATE / 'ledger', request['job_id'], request['attempt'])
-    process = server = None
+    process = server = parser = runtime = None
+    last_activity = None
     builtin_calls = {}
     status, reason = 'failed', None
     started = time.monotonic()
@@ -261,8 +374,10 @@ def main():
         OUTPUT.mkdir(exist_ok=True)
         os.chown(OUTPUT, user.pw_uid, user.pw_gid)
         os.chmod(OUTPUT, 0o700)
-        tools = ScopedTools(request['selected_graphs'], ledger, lint=lint_tool if request['kind'] == 'research' else None,
-                            write_draft=write_draft_tool if request['kind'] == 'research' else None)
+        tools = ScopedTools(request['selected_graphs'], ledger, lint=(lambda filename: lint_tool(filename, ledger)) if request['kind'] == 'research' else None,
+                            write_draft=write_draft_tool if request['kind'] == 'research' else None,
+                            literature=LiteratureClient() if request['kind'] == 'research' else None,
+                            write_outcome=write_outcome_tool if request['kind'] == 'research' else None)
         server = serve(tools)
         config = {'mcpServers': {'reveal': {'type': 'http', 'url': 'http://127.0.0.1:8765/mcp'}}}
         config_path = BASE / 'mcp.json'
@@ -303,7 +418,7 @@ def main():
                     status, reason = 'cancelled', 'Cancelled by the owning job'
                     terminate(process); break
                 if time.monotonic() - started > request['timeout_seconds']:
-                    reason = 'Agent execution timed out'; terminate(process); break
+                    reason = deadline_reason(request, last_activity); terminate(process); break
                 for key, _ in selector.select(timeout=0.25):
                     chunk = os.read(key.fileobj.fileno(), 65536)
                     if not chunk:
@@ -314,6 +429,8 @@ def main():
                     if key.data == 'stdout':
                         trace.write(trace_filter.feed(chunk)); trace.flush()
                         for kind, payload in parser.feed(chunk):
+                            if kind in ('tool_call', 'tool_result'):
+                                last_activity = {'kind': kind, 'tool_name': payload.get('tool_name')}
                             if kind == 'tool_call':
                                 call = parser.tools[payload['call_id']]
                                 entry = ledger.start(call['name'], call['input'], None)
@@ -332,12 +449,15 @@ def main():
             if process.poll() is None:
                 process.wait(timeout=10)
         if not reason:
-            if process.returncode in (124, 137):
-                raise TimeoutError('The independent agent deadline expired')
+            if process.returncode == 124 or (process.returncode == 137 and time.monotonic() - started >= request['timeout_seconds'] - 1):
+                reason = deadline_reason(request, last_activity)
+            elif process.returncode == 137:
+                reason = 'Agent process was killed before its execution deadline (exit 137). No output was accepted.'
+        if not reason:
             for kind, payload in parser.finish():
                 emit(kind, payload)
             if process.returncode != 0 or parser.result.get('is_error'):
-                reason = 'Claude execution failed: ' + str(parser.result.get('subtype', 'nonzero exit'))
+                reason = provider_failure_reason(request, parser.result)
             else:
                 status = 'succeeded'
                 if (OUTPUT / 'outcome.json').exists():
@@ -347,10 +467,6 @@ def main():
                 expected = list(OUTPUT.glob('account-*.*')) if request['kind'] == 'research' else list(OUTPUT.glob('paragraph.json'))
                 if status == 'succeeded' and not expected:
                     status, reason = 'failed', 'Claude completed without the required output documents'
-        runtime['completed_at'] = stamp()
-        runtime['cost_usd'] = parser.result.get('total_cost_usd') if parser.result else None
-        runtime['observed_claude_runtime'] = parser.runtime
-        write_json(STATE / 'runtime.json', runtime)
     except Exception as exc:
         # Values from provider exceptions can contain credentials. Keep diagnostics typed.
         status = 'failed'
@@ -363,7 +479,14 @@ def main():
         if server:
             server.shutdown()
         ledger.freeze()
+        if runtime is not None:
+            completion = runtime_completion(request, started, status, reason, process, parser, last_activity)
+            runtime['completed_at'], runtime['cost_usd'] = completion['completed_at'], completion['cost_usd']
+            runtime['completion'] = completion
+            runtime['observed_claude_runtime'] = parser.runtime if parser else {}
+            write_json(STATE / 'runtime.json', runtime)
         write_json(STATE / 'status.json', {'status': status, 'reason': reason, 'completed_at': stamp()})
+        lockfile.close()
     return 0
 
 

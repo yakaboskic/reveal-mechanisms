@@ -1,5 +1,5 @@
 {
-  "openapi_sha256": "0eb62f9ff95e3de2100d9d57b253221c2a19850ebaac5bb889c8e55390928d7e",
+  "openapi_sha256": "cf66fbdfe47239be4c885b073960140242df98af5451cf399ce847d426d28240",
   "steps": [
     {
       "id": "gap",
@@ -7,15 +7,18 @@
       "route": "GET /v1/knowledge-gaps/search",
       "action": "Type to search; select an exact source question on the same page.",
       "incoming": "q, fuzzy mode by default, source=dismech and filters.",
-      "outgoing": "GapSearchResults / GapRecord with DAPPER gap, exact source detail and public-account count.",
+      "outgoing": "GapSearchResults / GapRecord with exact source detail and scoped account count; AccountList with original author attribution.",
       "cases": [
         "searchKnowledgeGaps.request",
         "listKnowledgeGaps.request",
-        "getKnowledgeGap.request"
+        "getKnowledgeGap.request",
+        "listKnowledgeGapAccounts.request"
       ],
       "rules": [
         "Search text is not a new inquiry. Trending entries disappear while typing.",
-        "Initial homepage is curated; counts include only public saved accounts for the exact gap digest."
+        "Trending defaults to explicitly published account counts across users. Workspace scope counts the authenticated owner accounts. Count ties shuffle per new browse with a signed cursor seed preserving that order across pages.",
+        "The selected gap lists authorized scientific accounts with pagination; original author attribution does not change when ownership transfers.",
+        "Question input and scope selector remain fixed while the paginated gap list scrolls; source order is preserved without editorial selection."
       ]
     },
     {
@@ -39,18 +42,20 @@
     {
       "id": "draft",
       "title": "Continue and save",
-      "route": "POST /v1/drafts; PATCH /v1/drafts/{id}",
+      "route": "POST /v1/drafts; PATCH /v1/drafts/{id}; DELETE /v1/drafts/{id}",
       "action": "Choose ORCID, Google or anonymous at submit; preserve selection and autosave.",
       "incoming": "Trusted session, Composer, expected_version and Idempotency-Key.",
       "outgoing": "Owned Draft with confirmed revision.",
       "cases": [
         "createDraft.question_and_anchor",
         "updateDraft.save_revision_two",
-        "getDraft.request"
+        "getDraft.request",
+        "deleteDraft.delete_saved_draft"
       ],
       "rules": [
         "Local edits before session; no credentials stored in research data.",
-        "Composer accepts no free-text inquiry or editable linked DisMech list."
+        "Composer accepts no free-text inquiry or editable linked DisMech list.",
+        "Workspace groups named drafts by knowledge gap. Rename and delete use optimistic versions; active research prevents deletion. Deleting editable state preserves frozen research and results."
       ]
     },
     {
@@ -85,12 +90,14 @@
         "getJob.request",
         "getJobEvents.request",
         "getJobEvents.sse",
-        "getEvidencePackage.request"
+        "getEvidencePackage.request",
+        "retryJobReview.saved_output"
       ],
       "rules": [
         "One active loading state; no private reasoning.",
         "Package is the schema-current captured input; account fixture is separately authored, not its accepted agent output.",
-        "Completed activity compresses into Gap analysis complete."
+        "Completed activity compresses into Gap analysis complete.",
+        "Budget failures expose phase, cap and recorded spend. Incomplete independent review can be retried against verified saved output, without launching the research agent."
       ]
     },
     {
@@ -105,12 +112,16 @@
         "getClaim.request",
         "getGeneSet.request",
         "resolveDapperObject.request",
-        "downloadArtifact.request"
+        "downloadArtifact.request",
+        "getAccountPublication.request",
+        "updateAccountPublication.publish",
+        "updateAccountPublication.unpublish"
       ],
       "rules": [
         "Conclusions and Research statement are divider tabs.",
         "Claims open inline; no auto-opened first claim. Dedicated claim page has Assessment, Proposition, Evidence and Provenance tabs.",
-        "Partial provenance and unavailable downloads remain explicit."
+        "Partial provenance and unavailable downloads remain explicit.",
+        "Accounts remain private until the owner publishes a frozen snapshot with an optimistic version and idempotency key. Later accepted statements require an explicit publication update; unpublishing revokes public access. Public readers cannot access job telemetry or research writes."
       ]
     },
     {
@@ -187,6 +198,27 @@
         "LaTeX includes cite commands; remind users to download references.bib.",
         "Exports share exact Paragraph and registry pins. Rendering does not launch an agent."
       ]
+    },
+    {
+      "id": "outcomes",
+      "title": "Read and share an explored analysis",
+      "route": "GET /v1/analysis-outcomes/{outcome_id}",
+      "action": "Preserve a scoped insufficient-evidence investigation and explicitly publish its record when useful.",
+      "incoming": "An owned job outcome, or an authorized private/public outcome ID.",
+      "outgoing": "AnalysisOutcome and compact exact-gap outcome summaries; explicit publication state.",
+      "cases": [
+        "getAnalysisOutcome.request",
+        "getJobAnalysisOutcome.request",
+        "listKnowledgeGapOutcomes.request",
+        "getOutcomePublication.request",
+        "updateOutcomePublication.publish",
+        "updateOutcomePublication.unpublish"
+      ],
+      "rules": [
+        "A scoped exploration is not a ScientificAccount and never increases scientific-account popularity counts.",
+        "Captured reasons remain attributed to the original investigation; unavailable sources do not establish global absence.",
+        "Publication is explicit and revocable. Job logs, private requests and the complete private evidence package remain private."
+      ]
     }
   ],
   "support": [
@@ -207,15 +239,16 @@
     },
     {
       "id": "history",
-      "title": "Your gaps and scientific accounts",
-      "route": "GET /v1/me/explorations; GET /v1/accounts",
-      "action": "Avatar opens two-tab personal dashboard.",
+      "title": "Your gaps, scientific accounts and explorations",
+      "route": "GET /v1/me/explorations; GET /v1/accounts; GET /v1/analysis-outcomes",
+      "action": "Avatar opens a personal dashboard with knowledge gaps, scientific accounts and completed explorations.",
       "incoming": "Trusted owner session, exact gap filters and pagination.",
       "outgoing": "Exploration/account summaries; saved drafts and immutable request/job history.",
       "cases": [
         "listExplorations.request",
         "recordExploration.selected_gap",
         "listAccounts.request",
+        "listAnalysisOutcomes.request",
         "listDrafts.request",
         "listResearchRequests.request",
         "getResearchRequest.request",
@@ -242,6 +275,6 @@
       ]
     }
   ],
-  "operation_count": 31,
-  "exchange_count": 42
+  "operation_count": 42,
+  "exchange_count": 55
 }

@@ -45,15 +45,15 @@ biological absence. This is fallible model review, not experimental confirmation
 | Bound | Current value |
 |---|---|
 | Pinned reviewer model | `claude-sonnet-4-6` |
-| Serialized request | 96 KiB |
+| Serialized request | Default 96 KiB; `REVEAL_GROUNDING_MAX_REQUEST_BYTES` |
 | Each evidence response | 12 KiB |
 | Collection page | At most 20 child descriptors |
 | Successful evidence reads | At most 64 per account review |
-| Model turns | At most 8 |
+| Model turns | Default 8; `REVEAL_GROUNDING_MAX_TURNS` |
 | Tool calls in one response | At most 12 |
-| Actual input usage | At most 64,000 tokens per request |
+| Actual input usage | Default 64,000 tokens per request; `REVEAL_GROUNDING_MAX_INPUT_TOKENS` |
 | Output allowance | 3,072 tokens per request |
-| Account review budget | Default $0.30 cumulative; configured maximum $1 |
+| Account review budget | Default $0.30 cumulative; configurable positive finite USD cap |
 | HTTP timeout | 120 seconds per request; no automatic retry |
 
 `REVEAL_GROUNDING_MAX_BUDGET_USD` is separate from authoring costs. Before each
@@ -63,16 +63,38 @@ message prefix and request configuration match exactly; appended content is
 reserved by byte length plus overhead. Otherwise the full-byte reservation is
 used. Actual response usage is accumulated and checked. There is no separate
 token-count API call, prompt-cache configuration or automatic paid repair loop.
+The last allowed model call requires `finish_review`, which accepts either a
+complete review or an explicit unavailable reason, so evidence reading cannot
+use the final opportunity to return a verdict. A final
+submission still requires complete coverage and verified, actually read sources;
+insufficiently inspected evidence remains an unavailable review.
 
 These limits can prevent a review from completing, including when required
 initial context is too large. Nothing is silently truncated to force a verdict.
-Transport/protocol errors, insufficient budget or context, unread citations,
+Transport/protocol errors, insufficient context, unread citations,
 incomplete verdict coverage, and the reviewer's explicit `review_unavailable`
 response yield `REVIEW_UNAVAILABLE`. No scientific verdict was reached, and no
 account is published. A complete negative scientific verdict remains a validation
 failure. A complete passing verdict proceeds through the existing acceptance
 path. Paragraph faithfulness remains a separate check against the frozen accepted
 account; paragraph failure does not invalidate an already accepted account.
+
+An insufficient next-call reservation specifically yields `REVIEW_BUDGET_EXCEEDED`,
+with the configured cap, actual spend and next-call maximum in the public failure.
+It reports an incomplete review, never a scientific rejection. Set
+`REVEAL_GROUNDING_MAX_BUDGET_USD` in `.env`; for example, `10` gives a $10 demo cap
+per account/paragraph review. Authoring has its own `REVEAL_AGENT_MAX_BUDGET_USD`.
+
+The owner may explicitly POST `/v1/jobs/{job_id}/retry-review` with an idempotency
+key and the current `expected_last_event_id`. Only incomplete reviews qualify.
+The queue retains the frozen dispatch input and original successful capture;
+checksums, complete cleanup, ownership and latest job state are checked before
+queueing and capture checksums are checked again at execution. A new validation
+attempt reuses those exact authoring bytes without collecting new evidence or
+starting a Box/Claude Code agent. It repeats source/identity validation and model
+review, with fresh bounded review spend and separate diagnostic files. Existing
+attempts remain unchanged. A passing account follows normal acceptance and
+paragraph scheduling; a negative verdict stays a scientific rejection.
 
 Successful or negative completed account reviews record
 `reveal.scientific-grounding/2`: document/package/ledger and request/response

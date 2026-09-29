@@ -1,5 +1,23 @@
 # Full-stack validation report
 
+## September 30 colleague handoff verification
+
+The current startup entry point is [README.local.md](../README.local.md), with an encrypted environment-only package and a separately delivered password. The repository, virtual environment, research data and source checkouts are not included in that encrypted file.
+
+- Full backend suite: **538 passed, eight optional integration skips, 290 subtests passed**. The packaging/deployment subset subsequently passed **24 tests**, including actual GnuPG encrypt/decrypt, wrong-password/tamper rejection, configuration preservation and independent queue/drain behavior over shared tables.
+- Frontend: **58 tests passed** and the production build passed. Root script tests: **20 passed**.
+- Regenerated OpenAPI/viewer/ZIP and frontend types/fixtures: **35 paths, 42 operations, 350 schemas and 55 request exchanges**; contract/flow validation passed. Local documentation links and Git whitespace checks passed.
+- Fresh source-directory rehearsal: imported only the encrypted environment, created a new virtual environment, installed dependencies, fetched the exact DAPPER release and sparse DisMech revision, downloaded the RDS CA and prepared Docker configuration. No existing laptop source directories or AWS CLI profile were required.
+- Built both application images from that directory and started Redis, API, dispatcher, **two workers** and frontend against existing RDS/S3. All six containers became healthy. Separate test ports 13000/18001 preserved the existing application on port 3000.
+- API liveness/readiness, frontend health/page and public gap discovery through the gateway returned HTTP 200. The temporary namespace saw only its three runtime records and no active jobs. Acceptance-module hashes matched the source in the API and both workers. The temporary stack was drained and stopped afterward.
+- Known private environment values and credential patterns were checked against the Git candidates without printing their contents; no matches were found. Encrypted configuration/password files remain ignored outside the commit. Generated Graphify cache and machine-path files were removed from tracking while preserved locally.
+
+This rehearsal used shared development credentials and the existing `reveal_*` tables. It did not submit a paid job, change publications, migrate/import catalogs, deploy a cloud service, or validate a new colleague's network/OAuth access. Docker heartbeat/drain metadata is operational state, not new scientific output. Detailed machine-local logs and the smoke-test report are under ignored `.runtime/`.
+
+The prior failed scientific attempt was replayed from its exact saved candidate after the reference-hydration fix and passed structural/source checks; independent scientific review was not rerun and the failed job was not relabeled accepted.
+
+## Historical full-stack acceptance — September 25–26
+
 Local acceptance completed September 25–26, 2026 (Europe/Vienna; recorded run timestamps are UTC). This report distinguishes component checks, actual full-stack execution and scientific acceptance; a passing fixture or simulated job is not a live finding. The final stack is running in Box mode with no active jobs.
 
 ## Local checks

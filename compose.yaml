@@ -3,6 +3,7 @@ x-backend: &backend
   build:
     context: .
     dockerfile: services/backend/Dockerfile
+    target: runtime
   image: reveal-mechanisms-backend:local
   env_file: .env
   environment:

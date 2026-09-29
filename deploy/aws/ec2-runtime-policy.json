@@ -1,0 +1,51 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "CheckArtifactBucket",
+      "Effect": "Allow",
+      "Action": ["s3:ListBucket", "s3:GetBucketLocation", "s3:GetBucketVersioning"],
+      "Resource": "arn:aws:s3:::cyaka-reveal-data"
+    },
+    {
+      "Sid": "ReadCurrentAndPreservedArtifacts",
+      "Effect": "Allow",
+      "Action": ["s3:GetObject", "s3:GetObjectVersion"],
+      "Resource": [
+        "arn:aws:s3:::cyaka-reveal-data/local/artifacts/*",
+        "arn:aws:s3:::cyaka-reveal-data/prod/artifacts/*",
+        "arn:aws:s3:::cyaka-reveal-data/prod/releases/*"
+      ]
+    },
+    {
+      "Sid": "WriteDeployedArtifacts",
+      "Effect": "Allow",
+      "Action": "s3:PutObject",
+      "Resource": "arn:aws:s3:::cyaka-reveal-data/prod/artifacts/*"
+    },
+    {
+      "Sid": "ReadBackendConfiguration",
+      "Effect": "Allow",
+      "Action": "secretsmanager:GetSecretValue",
+      "Resource": "arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/backend-*"
+    },
+    {
+      "Sid": "AuthenticateContainerPull",
+      "Effect": "Allow",
+      "Action": "ecr:GetAuthorizationToken",
+      "Resource": "*"
+    },
+    {
+      "Sid": "PullBackendRelease",
+      "Effect": "Allow",
+      "Action": ["ecr:BatchCheckLayerAvailability", "ecr:GetDownloadUrlForLayer", "ecr:BatchGetImage"],
+      "Resource": "arn:aws:ecr:us-east-1:005901288866:repository/cyaka-reveal-backend"
+    },
+    {
+      "Sid": "WriteServiceLogs",
+      "Effect": "Allow",
+      "Action": ["logs:CreateLogStream", "logs:PutLogEvents"],
+      "Resource": "arn:aws:logs:us-east-1:005901288866:log-group:/cyaka/reveal/backend:log-stream:*"
+    }
+  ]
+}

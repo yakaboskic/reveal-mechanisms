@@ -9,9 +9,11 @@ from datetime import datetime, timezone
 import hashlib
 import json
 import os
+import re
 import sqlite3
+import time
 from uuid import uuid4
-from .runtime_config import ROOT, mysql_connection
+from .runtime_config import ROOT, mysql_connection, application_mysql_connection
 
 def now(): return datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
 def uid(): return str(uuid4())
@@ -20,12 +22,31 @@ def digest(value): return hashlib.sha256(canonical(value).encode()).hexdigest()
 
 class Conflict(Exception): pass
 
+def application_prefix(value=None):
+    value = value or os.getenv('REVEAL_APPLICATION_TABLE_PREFIX', 'reveal')
+    if not re.fullmatch(r'reveal(?:_[a-z][a-z0-9_]{0,30})?', value):
+        raise ValueError('Invalid application table prefix')
+    return value
+
+def application_sql(sql, prefix):
+    return re.sub(r'\breveal_(records|transaction_lock)\b', lambda match: prefix+'_'+match[1], sql)
+
 class Transaction:
-    def __init__(self, connection, sqlite=False):
-        self.connection, self.sqlite = connection, sqlite
+    def __init__(self, connection, sqlite=False, table_prefix='reveal'):
+        self.connection, self.sqlite, self.table_prefix = connection, sqlite, table_prefix
     def execute(self, sql, params=()):
         cursor = self.connection.cursor()
-        cursor.execute(sql.replace('%s', '?') if self.sqlite else sql, params)
+        started = time.perf_counter()
+        failed = False
+        try:
+            sql = application_sql(sql, self.table_prefix)
+            cursor.execute(sql.replace('%s', '?') if self.sqlite else sql, params)
+        except BaseException:
+            failed = True
+            raise
+        finally:
+            from .runtime_metrics import observe
+            observe('database', sql.split()[0].upper(), (time.perf_counter()-started)*1000, failed)
         return cursor
     def get(self, kind, identity):
         row = self.execute('SELECT owner_id,version,payload FROM reveal_records WHERE kind=%s AND id=%s', (kind, identity)).fetchone()
@@ -36,6 +57,15 @@ class Transaction:
         rows = self.execute('SELECT id,owner_id,version,payload FROM reveal_records WHERE kind=%s AND id IN ('+
             ','.join(['%s'] * len(identities))+')', (kind, *identities)).fetchall()
         return {row[0]: {'owner': row[1], 'version': row[2], 'data': json.loads(row[3])} for row in rows}
+    def get_records(self, keys):
+        """Fetch exact heterogeneous record keys without widening access or caching."""
+        keys = list(dict.fromkeys(keys)); result = {}
+        for offset in range(0, len(keys), 250):
+            batch = keys[offset:offset + 250]
+            rows = self.execute('SELECT kind,id,owner_id,version,payload FROM reveal_records WHERE (kind,id) IN (' +
+                ','.join(['(%s,%s)'] * len(batch)) + ')', tuple(value for key in batch for value in key)).fetchall()
+            result.update({(row[0], row[1]): {'owner': row[2], 'version': row[3], 'data': json.loads(row[4])} for row in rows})
+        return result
     def insert_many(self, records):
         """Insert new records in one SQL statement; conflicts roll back the batch."""
         if not records: return
@@ -68,11 +98,11 @@ class Transaction:
     def remove(self, kind, identity):
         self.execute('DELETE FROM reveal_records WHERE kind=%s AND id=%s', (kind, identity))
     def transfer(self, source, target):
-        for kind in ('object','account','paragraph','grant','account_membership','exploration','outbox','artifact','object_document','scientific_document','object_observation'):
+        for kind in ('object','account','paragraph','grant','account_membership','publication','exploration','outbox','artifact','object_document','scientific_document','object_observation'):
             for row in self.list(kind,source):
                 data=row['data']
                 identity=(data.get('result',data).get('root_id') if kind in ('object','account','paragraph') else
-                    data['target_id'] if kind=='grant' else data['sha256'] if kind in ('artifact','scientific_document') else data['object_id'] if kind in ('object_document','object_observation') else data['account_id'] if kind in ('account_membership','outbox') else data['knowledge_gap']['id'])
+                    data['target_id'] if kind=='grant' else data['sha256'] if kind in ('artifact','scientific_document') else data['object_id'] if kind in ('object_document','object_observation') else data['account_id'] if kind in ('account_membership','outbox','publication') else data['knowledge_gap']['id'])
                 destination=digest([target,identity,'default-paragraph']) if kind=='outbox' else digest([target,identity])
                 if kind=='object_observation':
                     from .evidence_package import canonical_json,sha256
@@ -82,57 +112,69 @@ class Transaction:
         self.execute('UPDATE reveal_records SET owner_id=%s WHERE owner_id=%s AND kind NOT IN (%s,%s)', (target, source, 'principal', 'identity'))
 
 class Repository:
-    def __init__(self, sqlite_path=None): self.sqlite_path = sqlite_path
+    def __init__(self, sqlite_path=None, table_prefix=None):
+        self.sqlite_path = sqlite_path
+        self.table_prefix = application_prefix(table_prefix)
     def connect(self):
         if self.sqlite_path:
             connection = sqlite3.connect(self.sqlite_path, timeout=30)
             return connection
-        return mysql_connection()
+        return application_mysql_connection()
     @contextmanager
-    def read_transaction(self):
+    def read_transaction(self, *, utc=False):
         """Consistent authorized reads without taking the application write mutex."""
         connection = self.connect()
         try:
-            tx = Transaction(connection, bool(self.sqlite_path))
+            tx = Transaction(connection, bool(self.sqlite_path), self.table_prefix)
             if self.sqlite_path:
                 connection.execute('PRAGMA query_only=ON')
                 connection.execute('BEGIN')
             else:
-                tx.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ')
+                # Admin readers serialize native TIMESTAMP columns as UTC;
+                # their display timezone is chosen by the browser.
+                if not getattr(connection, 'reveal_session_defaults', False):
+                    if utc: tx.execute("SET time_zone = '+00:00'")
+                    tx.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ')
                 tx.execute('START TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY')
             yield tx
             connection.commit()
         except BaseException:
-            connection.rollback(); raise
+            try: connection.rollback()
+            except Exception: pass  # Retain the original query/commit error.
+            raise
         finally: connection.close()
     @contextmanager
     def transaction(self):
         connection = self.connect()
         try:
-            tx = Transaction(connection, bool(self.sqlite_path))
+            tx = Transaction(connection, bool(self.sqlite_path), self.table_prefix)
             if self.sqlite_path: connection.execute('BEGIN IMMEDIATE')
             else: tx.execute('SELECT revision FROM reveal_transaction_lock WHERE id=1 FOR UPDATE').fetchone()
             yield tx
             connection.commit()
         except BaseException:
-            connection.rollback(); raise
+            try: connection.rollback()
+            except Exception: pass
+            raise
         finally: connection.close()
     def migrate(self):
-        connection = self.connect()
+        connection = self.connect() if self.sqlite_path else mysql_connection()
         try:
             if self.sqlite_path:
-                connection.execute('CREATE TABLE IF NOT EXISTS reveal_records(kind TEXT NOT NULL,id TEXT NOT NULL,owner_id TEXT NOT NULL,version INTEGER NOT NULL,payload TEXT NOT NULL,updated_at TEXT NOT NULL,PRIMARY KEY(kind,id))')
+                connection.execute(application_sql('CREATE TABLE IF NOT EXISTS reveal_records(kind TEXT NOT NULL,id TEXT NOT NULL,owner_id TEXT NOT NULL,version INTEGER NOT NULL,payload TEXT NOT NULL,updated_at TEXT NOT NULL,PRIMARY KEY(kind,id))', self.table_prefix))
             else:
                 sql = '\n'.join(line for line in (ROOT / 'schema/migrations/005_application.sql').read_text().splitlines() if not line.startswith('--'))
                 with connection.cursor() as cursor:
                     for statement in sql.split(';'):
-                        if statement.strip(): cursor.execute(statement)
+                        if statement.strip(): cursor.execute(application_sql(statement, self.table_prefix))
             connection.commit()
         finally: connection.close()
     def readiness(self):
         with self.read_transaction() as tx:
-            tx.execute('SELECT COUNT(*) FROM reveal_records').fetchone()
+            tx.execute('SELECT 1 FROM reveal_records LIMIT 1').fetchone()
             if self.sqlite_path: return {'database': 'sqlite-test', 'tls': False}
+            if getattr(tx.connection, 'reveal_verified_tls', False):
+                return {'database': 'aurora-mysql', 'tls': True}
             row = tx.execute("SHOW SESSION STATUS LIKE 'Ssl_cipher'").fetchone()
             return {'database': 'aurora-mysql', 'tls': bool(row and row[1])}
 

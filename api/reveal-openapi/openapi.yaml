@@ -16,8 +16,10 @@ info:
     that this example account was generated from it. Examples using example.org are
     not live resources. Do not treat example output as published research.'
 servers:
-- url: http://localhost:8000
-  description: Local Docker Compose backend
+- url: http://127.0.0.1:18000
+  description: Local Docker deployment backend (private routes require a gateway assertion)
+- url: http://localhost:3000/api/backend
+  description: Local Next.js gateway (browser session required for private routes)
 - url: https://api.reveal.example.org
   description: Reserved example domain; replace for deployment
 tags:
@@ -427,7 +429,7 @@ paths:
                     dismissed_source_ids: []
                     mechanism_subquery: CADinT2D
                     model: cfde-inc-v2
-                    selected_kgs:
+                    selected_kgs: &id044
                     - biomarkerkg
                     - prokn
       x-codeSamples:
@@ -537,9 +539,10 @@ paths:
       tags:
       - Drafts
       summary: Autosave a draft
-      description: Replace composer using expected_version. The server increments
-        the version only on commit. Stale revisions return 409 with current_version.
-        Server derives ownership; unknown owner/provenance fields are rejected.
+      description: Rename or replace composer using expected_version. Omitted fields
+        are preserved. The server increments the version only on commit. Stale revisions
+        return 409 with current_version. Server derives ownership; unknown owner/provenance
+        fields are rejected.
       parameters:
       - name: draft_id
         in: path
@@ -655,6 +658,131 @@ paths:
           -H ''Idempotency-Key: 66666666-6666-4666-8666-666666666666'' -H ''Authorization:
           Bearer <trusted-gateway-assertion>'' -H ''Content-Type: application/json''
           -H ''Accept: application/json'' --data-raw ''{"composer":{"dismissed_source_ids":[],"eaggl_anchors":[{"origin":"manual","reference":{"dapper_id":"dapper:Mechanism.MyhahXB55tDUS667sJzeJZ40BeeQBWOR","source":"eaggl","source_id":"factor:portal:CADinT2D:cfde-inc-v2:Factor1","source_revision":"5797893b517def4fdc82f285c9bf835195f9f88eddfb6409cbf3b1e31dd63d83"},"suggestion_id":null}],"mechanism_subquery":"CADinT2D","model":"cfde-inc-v2","selected_kgs":["biomarkerkg","prokn"],"source_gap":{"id":"dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk","source_id":"dismech:disorders/Coronary_Artery_Disease#discussion:cad_pgsxc_reverse_causation","source_revision":"8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd"}},"expected_version":1}'''
+    delete:
+      operationId: deleteDraft
+      tags:
+      - Drafts
+      summary: Delete a saved draft
+      description: Delete an owned draft using expected_version. Active analysis jobs
+        prevent deletion (409 DRAFT_IN_USE). Frozen research requests, jobs, accounts
+        and explorations are preserved. Retry a lost acknowledgment with the same
+        Idempotency-Key.
+      parameters:
+      - name: draft_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        example: 22222222-2222-4222-8222-222222222222
+        description: ''
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 128
+        example: 66666666-6666-4666-8666-666666666666
+        description: Unique per caller and operation for at least 7 days. Same key
+          and same canonical body replay the original accepted response; changed body
+          returns 409 IDEMPOTENCY_CONFLICT. Compare idempotency before draft-version
+          checks on retries.
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DraftDeletion'
+              examples:
+                deleted:
+                  summary: Deleted
+                  value:
+                    id: 22222222-2222-4222-8222-222222222222
+                    deleted: true
+          headers:
+            X-Request-ID:
+              description: Correlation ID for this HTTP request.
+              schema:
+                type: string
+                format: uuid
+        '401':
+          description: Authentication Required
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                authentication_required:
+                  summary: Authentication required
+                  value: *id001
+        '404':
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                not_found:
+                  summary: Not found
+                  value: *id005
+        '409':
+          description: Version Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                version_conflict:
+                  summary: Version conflict
+                  value: *id006
+        '422':
+          description: Invalid Input
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                invalid_input:
+                  summary: Invalid input
+                  value: *id007
+        '429':
+          description: Rate Limited
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                rate_limited:
+                  summary: Rate limited
+                  value: *id002
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+                minimum: 1
+              example: 30
+      security:
+      - GatewayAssertion: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DraftDelete'
+            examples:
+              delete_saved_draft:
+                summary: Delete saved draft
+                value:
+                  expected_version: 2
+      x-codeSamples:
+      - lang: Shell
+        label: delete_saved_draft
+        source: 'curl -X DELETE https://api.reveal.example.org/v1/drafts/22222222-2222-4222-8222-222222222222
+          -H ''Idempotency-Key: 66666666-6666-4666-8666-666666666666'' -H ''Authorization:
+          Bearer <trusted-gateway-assertion>'' -H ''Content-Type: application/json''
+          -H ''Accept: application/json'' --data-raw ''{"expected_version":2}'''
   /v1/research-requests:
     get:
       operationId: listResearchRequests
@@ -747,7 +875,7 @@ paths:
                           about_entities:
                           - http://purl.obolibrary.org/obo/MONDO_0021661
                           id: dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk
-                      attribution:
+                      attribution: &id041
                         user_id: 11111111-1111-4111-8111-111111111111
                         person_id: dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he
                         display_name: Example Researcher
@@ -907,7 +1035,9 @@ paths:
       description: Fuzzy lookup of imported DisMech gaps by default. Query text is
         not an authored inquiry or permission to launch research. Other explicit modes
         require their configured index and return 503 if unavailable. Rankings are
-        retrieval signals. Example uses the exact CAD gap from the HTML study.
+        retrieval signals. Example uses the exact CAD gap from the HTML study. Account
+        counts use the same optional-session visibility rules as gap browsing; relevance
+        order remains unchanged.
       parameters:
       - name: q
         in: query
@@ -990,6 +1120,17 @@ paths:
         example: opaque-next-page
         description: Omit for the first page. A returned next_cursor is opaque; the
           example is illustrative and cannot be used against a live service.
+      - name: scope
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - public
+          - workspace
+          default: public
+        example: public
+        description: ''
       responses:
         '200':
           description: Successful response.
@@ -1186,7 +1327,7 @@ paths:
       x-codeSamples:
       - lang: Shell
         label: request
-        source: 'curl -X GET ''https://api.reveal.example.org/v1/knowledge-gaps/search?q=CAD+genetic+risk&mode=fuzzy&kind=KNOWLEDGE_GAP&status=OPEN&source=dismech&disease_id=MONDO%3A0021661&limit=20''
+        source: 'curl -X GET ''https://api.reveal.example.org/v1/knowledge-gaps/search?q=CAD+genetic+risk&mode=fuzzy&kind=KNOWLEDGE_GAP&status=OPEN&source=dismech&disease_id=MONDO%3A0021661&limit=20&scope=public''
           -H ''Accept: application/json'''
   /v1/knowledge-gaps:
     get:
@@ -1194,10 +1335,14 @@ paths:
       tags:
       - Knowledge gaps
       summary: Browse knowledge gaps
-      description: Browse imported DisMech gaps. Initial homepage is curated, with
-        exact public-account counts as of the returned timestamp. Counts never include
-        private work. Default source=dismech, include both gap kinds and all original
-        statuses; filters may narrow. No manufactured popularity ranking.
+      description: 'Browse imported DisMech gaps ordered by distinct scientific-account
+        count descending. Public scope (default) counts only explicitly published
+        snapshots across users; workspace scope requires a session and counts owned
+        saved accounts. Equal-count gaps shuffle on each new browse; a server seed
+        in the signed continuation cursor preserves tie order across pages. Exact
+        gap digests only: no text matching, attempts, paragraph jobs or implicit source-revision
+        rollup. Invalid supplied credentials are rejected even for public reads. Filters
+        apply before pagination; count or corpus changes expire cursors.'
       parameters:
       - name: kind
         in: query
@@ -1258,6 +1403,17 @@ paths:
         example: opaque-next-page
         description: Omit for the first page. A returned next_cursor is opaque; the
           example is illustrative and cannot be used against a live service.
+      - name: scope
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - public
+          - workspace
+          default: public
+        example: public
+        description: ''
       responses:
         '200':
           description: Successful response.
@@ -1320,7 +1476,7 @@ paths:
       x-codeSamples:
       - lang: Shell
         label: request
-        source: 'curl -X GET ''https://api.reveal.example.org/v1/knowledge-gaps?kind=KNOWLEDGE_GAP&status=OPEN&source=dismech&disease_id=MONDO%3A0021661&limit=20''
+        source: 'curl -X GET ''https://api.reveal.example.org/v1/knowledge-gaps?kind=KNOWLEDGE_GAP&status=OPEN&source=dismech&disease_id=MONDO%3A0021661&limit=20&scope=public''
           -H ''Accept: application/json'''
   /v1/knowledge-gaps/{gap_id}:
     get:
@@ -1331,7 +1487,8 @@ paths:
       description: Exact DAPPER KnowledgeGap plus one pinned source observation and
         attachment resolutions. source_revision selects a historical mapping; omission
         selects the latest accessible observation of this same digest. It never redirects
-        to a different digest.
+        to a different digest. Account counts use the same optional-session visibility
+        rules as gap browsing.
       parameters:
       - name: gap_id
         in: path
@@ -1351,6 +1508,17 @@ paths:
           type: string
           pattern: ^[a-f0-9]{64}$
         example: 8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd
+        description: ''
+      - name: scope
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - public
+          - workspace
+          default: public
+        example: public
         description: ''
       responses:
         '200':
@@ -1421,7 +1589,7 @@ paths:
       x-codeSamples:
       - lang: Shell
         label: request
-        source: 'curl -X GET ''https://api.reveal.example.org/v1/knowledge-gaps/dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk?source_revision=8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd''
+        source: 'curl -X GET ''https://api.reveal.example.org/v1/knowledge-gaps/dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk?source_revision=8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd&scope=public''
           -H ''Accept: application/json'''
   /v1/mechanisms/search:
     get:
@@ -2085,9 +2253,9 @@ paths:
                         - 55555555-5555-4555-8555-555555555555
                         evidence_package_sha256: 9a55d126679291a95fa3d35f544915610134075eaf110f62f77ec8ee870b6ae2
                       failure: null
-                      warnings: []
+                      warnings: &id037 []
                       last_event_id: '4'
-                      links:
+                      links: &id038
                         self: /v1/jobs/44444444-4444-4444-8444-444444444444
                         events: /v1/jobs/44444444-4444-4444-8444-444444444444/events
                         cancel: /v1/jobs/44444444-4444-4444-8444-444444444444/cancel
@@ -2849,7 +3017,11 @@ paths:
         only, max_depth 0..5 and max_nodes 1..250 (default 5/250). An opaque cursor
         continues the same owner/filter/payload observation; missing or bounded references
         are reported explicitly. Unauthorized references are omitted without revealing
-        private identifiers.
+        private identifiers. A valid owner retains private access. Without owner access,
+        only an active explicit publication snapshot authorizes this scientific resource,
+        exact cited revisions and reachable source artifacts. Invalid supplied credentials
+        fail even on public reads. Unpublication revokes snapshot access; job/draft/request
+        routes remain private.
       parameters:
       - name: dapper_id
         in: path
@@ -3541,7 +3713,7 @@ paths:
                         was_attributed_to:
                         - dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he
                       scientific_accounts:
-                      - &id037
+                      - &id039
                         id: dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd
                         name: Genes and gene programs in a shared CAD-in-T2D mechanism
                         question: dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk
@@ -4232,10 +4404,17 @@ paths:
                       complete: true
                       missing_ids: []
                       next_cursor: null
-                    research_statement: &id038
+                    research_statement: &id040
                       status: succeeded
                       job_id: 55555555-5555-4555-8555-555555555555
                       paragraph_id: dapper:Paragraph.uSYa1LdXNPuwlSgsCz3oZ7IfrVoztroD
+                    publication: &id042
+                      visibility: private
+                      version: 0
+                      published_at: null
+                      updated_at: null
+                      can_manage: true
+                      has_unpublished_changes: false
           headers:
             X-Request-ID:
               description: Correlation ID for this HTTP request.
@@ -4311,7 +4490,11 @@ paths:
         only, max_depth 0..5 and max_nodes 1..250 (default 5/250). An opaque cursor
         continues the same owner/filter/payload observation; missing or bounded references
         are reported explicitly. Unauthorized references are omitted without revealing
-        private identifiers.
+        private identifiers. A valid owner retains private access. Without owner access,
+        only an active explicit publication snapshot authorizes this scientific resource,
+        exact cited revisions and reachable source artifacts. Invalid supplied credentials
+        fail even on public reads. Unpublication revokes snapshot access; job/draft/request
+        routes remain private.
       parameters:
       - name: dapper_id
         in: path
@@ -4578,7 +4761,11 @@ paths:
         payload_sha256 to recover an exact historical observation; otherwise the server
         returns its designated current observation and checksum. Unhashable locator
         changes can share a scientific ID. Access is enforced independently of citation
-        metadata.
+        metadata. A valid owner retains private access. Without owner access, only
+        an active explicit publication snapshot authorizes this scientific resource,
+        exact cited revisions and reachable source artifacts. Invalid supplied credentials
+        fail even on public reads. Unpublication revokes snapshot access; job/draft/request
+        routes remain private.
       parameters:
       - name: dapper_id
         in: path
@@ -4702,7 +4889,11 @@ paths:
         payload_sha256 to recover an exact historical observation; otherwise the server
         returns its designated current observation and checksum. Unhashable locator
         changes can share a scientific ID. Access is enforced independently of citation
-        metadata.
+        metadata. A valid owner retains private access. Without owner access, only
+        an active explicit publication snapshot authorizes this scientific resource,
+        exact cited revisions and reachable source artifacts. Invalid supplied credentials
+        fail even on public reads. Unpublication revokes snapshot access; job/draft/request
+        routes remain private.
       parameters:
       - name: dapper_id
         in: path
@@ -5832,7 +6023,11 @@ paths:
         and provenance inputs only, max_depth 0..5 and max_nodes 1..250 (default 5/250).
         An opaque cursor continues the same owner/filter/payload observation; missing
         or bounded references are reported explicitly. Unauthorized references are
-        omitted without revealing private identifiers.
+        omitted without revealing private identifiers. A valid owner retains private
+        access. Without owner access, only an active explicit publication snapshot
+        authorizes this scientific resource, exact cited revisions and reachable source
+        artifacts. Invalid supplied credentials fail even on public reads. Unpublication
+        revokes snapshot access; job/draft/request routes remain private.
       parameters:
       - name: dapper_id
         in: path
@@ -5980,7 +6175,11 @@ paths:
         for this exact scientific ID. Paragraph consumers MUST supply the pinned revision.
         Claims, Questions and KnowledgeGaps only. Unknown authors/dates stay unknown;
         no DOI is emitted without registration. APA/MLA examples illustrate the interface,
-        not a tested renderer.'
+        not a tested renderer. A valid owner retains private access. Without owner
+        access, only an active explicit publication snapshot authorizes this scientific
+        resource, exact cited revisions and reachable source artifacts. Invalid supplied
+        credentials fail even on public reads. Unpublication revokes snapshot access;
+        job/draft/request routes remain private.'
       parameters:
       - name: dapper_id
         in: path
@@ -6200,6 +6399,11 @@ paths:
         permissions are required. Rendering is deterministic for pinned inputs/configuration
         and may be cached; it does not modify scientific IDs or launch an agent. Style/processor
         selection is deployment configuration, captured in the rendering manifest.
+        A valid owner retains private access. Without owner access, only an active
+        explicit publication snapshot authorizes this scientific resource, exact cited
+        revisions and reachable source artifacts. Invalid supplied credentials fail
+        even on public reads. Unpublication revokes snapshot access; job/draft/request
+        routes remain private.
       parameters: []
       responses:
         '200':
@@ -6456,6 +6660,161 @@ paths:
         source: 'curl -X POST https://api.reveal.example.org/v1/citations/render -H
           ''Content-Type: application/json'' -H ''Accept: application/json'' --data-raw
           ''{"locale":"en-US","paragraph_id":"dapper:Paragraph.uSYa1LdXNPuwlSgsCz3oZ7IfrVoztroD","style":"apa"}'''
+  /v1/jobs/{job_id}/retry-review:
+    post:
+      operationId: retryJobReview
+      tags:
+      - Jobs
+      summary: Retry independent review on saved output
+      description: Owner-only, idempotent retry for REVIEW_UNAVAILABLE or REVIEW_BUDGET_EXCEEDED.
+        Require the latest job event ID and a checksum-verified completed authoring
+        capture. Requeue the same job with a new validation attempt; preserve original
+        evidence, authoring model, artifacts and activity. Never launch the research
+        agent. Scientific rejection, incomplete capture and active or successful jobs
+        cannot use this route. Current configured review budget applies to each explicit
+        retry. Normal account acceptance and paragraph generation follow a passing
+        review.
+      parameters:
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        example: 44444444-4444-4444-8444-444444444444
+        description: ''
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 128
+        example: 66666666-6666-4666-8666-666666666666
+        description: Unique per caller and operation for at least 7 days. Same key
+          and same canonical body replay the original accepted response; changed body
+          returns 409 IDEMPOTENCY_CONFLICT. Compare idempotency before draft-version
+          checks on retries.
+      responses:
+        '202':
+          description: Accepted job; poll Location or consume job events.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+              examples:
+                queued:
+                  summary: Queued
+                  value:
+                    id: 44444444-4444-4444-8444-444444444444
+                    kind: analysis
+                    owner_user_id: 11111111-1111-4111-8111-111111111111
+                    status: queued
+                    stage: validating
+                    research_request_id: 33333333-3333-4333-8333-333333333333
+                    input_account_id: null
+                    created_at: '2026-09-24T16:01:00Z'
+                    updated_at: '2026-09-24T16:01:00Z'
+                    completed_at: null
+                    result: null
+                    failure: null
+                    warnings: *id037
+                    last_event_id: '2'
+                    links: *id038
+          headers:
+            X-Request-ID:
+              description: Correlation ID for this HTTP request.
+              schema:
+                type: string
+                format: uuid
+            Location:
+              description: Relative URL of the created resource.
+              schema:
+                type: string
+                format: uri-reference
+              example: /v1/jobs/44444444-4444-4444-8444-444444444444
+            Retry-After:
+              description: Suggested polling delay in seconds.
+              schema:
+                type: integer
+                minimum: 1
+              example: 2
+        '401':
+          description: Authentication Required
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                authentication_required:
+                  summary: Authentication required
+                  value: *id001
+        '404':
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                not_found:
+                  summary: Not found
+                  value: *id005
+        '409':
+          description: Version Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                version_conflict:
+                  summary: Version conflict
+                  value: *id006
+        '422':
+          description: Invalid Input
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                invalid_input:
+                  summary: Invalid input
+                  value: *id007
+        '429':
+          description: Rate Limited
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                rate_limited:
+                  summary: Rate limited
+                  value: *id002
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+                minimum: 1
+              example: 30
+      security:
+      - GatewayAssertion: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewRetryInput'
+            examples:
+              saved_output:
+                summary: Saved output
+                value:
+                  expected_last_event_id: '2'
+      x-codeSamples:
+      - lang: Shell
+        label: saved_output
+        source: 'curl -X POST https://api.reveal.example.org/v1/jobs/44444444-4444-4444-8444-444444444444/retry-review
+          -H ''Idempotency-Key: 66666666-6666-4666-8666-666666666666'' -H ''Authorization:
+          Bearer <trusted-gateway-assertion>'' -H ''Content-Type: application/json''
+          -H ''Accept: application/json'' --data-raw ''{"expected_last_event_id":"2"}'''
   /v1/accounts:
     get:
       operationId: listAccounts
@@ -6509,12 +6868,12 @@ paths:
                   summary: Owned
                   value:
                     items:
-                    - account: *id037
+                    - account: *id039
                       knowledge_gap: *id011
                       claim_count: 12
                       created_at: '2026-09-24T16:00:00Z'
                       job_id: 44444444-4444-4444-8444-444444444444
-                      research_statement: *id038
+                      research_statement: *id040
                     page: *id009
           headers:
             X-Request-ID:
@@ -6565,6 +6924,1196 @@ paths:
         label: request
         source: 'curl -X GET ''https://api.reveal.example.org/v1/accounts?gap_id=dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk&limit=20''
           -H ''Authorization: Bearer <trusted-gateway-assertion>'' -H ''Accept: application/json'''
+  /v1/knowledge-gaps/{gap_id}/accounts:
+    get:
+      operationId: listKnowledgeGapAccounts
+      tags:
+      - Knowledge gaps
+      summary: List visible scientific accounts for a knowledge gap
+      description: Accepted accounts for the exact DAPPER KnowledgeGap identity, newest
+        first then account ID, deduplicated by scientific-account digest. Public scope
+        (default) lists explicitly published snapshots across owners and omits private
+        job IDs. Workspace scope requires a valid session and lists only its saved
+        accounts. Invalid supplied sessions are rejected for either scope. Source-revision
+        checks validate the selected observation; changed gap digests never merge.
+        Attribution remains the original request actor. Each account ID links to its
+        existing scientific endpoint, whose public reads are restricted to its published
+        snapshot.
+      parameters:
+      - name: gap_id
+        in: path
+        required: true
+        schema:
+          type: string
+          description: Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode
+            path values.
+          pattern: ^dapper:KnowledgeGap\.[A-Za-z0-9_-]{32}$
+        example: dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk
+        description: Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode
+          path values.
+      - name: source_revision
+        in: query
+        required: false
+        schema:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+        example: 8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd
+        description: ''
+      - name: scope
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - public
+          - workspace
+          default: public
+        example: public
+        description: ''
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+        example: 20
+        description: ''
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+          minLength: 1
+        example: opaque-next-page
+        description: Omit for the first page. A returned next_cursor is opaque; the
+          example is illustrative and cannot be used against a live service.
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountList'
+              examples:
+                owned:
+                  summary: Owned
+                  value:
+                    items:
+                    - account: *id039
+                      knowledge_gap: *id011
+                      claim_count: 12
+                      created_at: '2026-09-24T16:00:00Z'
+                      job_id: 44444444-4444-4444-8444-444444444444
+                      research_statement: *id040
+                      attribution: *id041
+                    page: *id009
+                no_visible_accounts:
+                  summary: No visible accounts
+                  value:
+                    items: []
+                    page: *id009
+          headers:
+            X-Request-ID:
+              description: Correlation ID for this HTTP request.
+              schema:
+                type: string
+                format: uuid
+        '400':
+          description: Invalid Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                invalid_request:
+                  summary: Invalid request
+                  value: *id004
+        '401':
+          description: Authentication Required
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                authentication_required:
+                  summary: Authentication required
+                  value: *id001
+        '404':
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                not_found:
+                  summary: Not found
+                  value: *id005
+        '409':
+          description: Version Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                version_conflict:
+                  summary: Version conflict
+                  value: *id006
+        '429':
+          description: Rate Limited
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                rate_limited:
+                  summary: Rate limited
+                  value: *id002
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+                minimum: 1
+              example: 30
+      security:
+      - {}
+      - GatewayAssertion: []
+      x-codeSamples:
+      - lang: Shell
+        label: request
+        source: 'curl -X GET ''https://api.reveal.example.org/v1/knowledge-gaps/dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk/accounts?source_revision=8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd&scope=public&limit=20''
+          -H ''Accept: application/json'''
+  /v1/accounts/{dapper_id}/publication:
+    get:
+      operationId: getAccountPublication
+      tags:
+      - Scientific content
+      summary: Inspect account publication
+      description: Owner receives mutable publication controls even while private.
+        Other readers receive only an active public publication with can_manage=false.
+        Publishing is separate from scientific identity and frozen citation metadata;
+        old citation access labels describe that exact historical metadata revision.
+      parameters:
+      - name: dapper_id
+        in: path
+        required: true
+        schema:
+          type: string
+          description: Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode
+            path values.
+          pattern: ^dapper:ScientificAccount\.[A-Za-z0-9_-]{32}$
+        example: dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd
+        description: Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode
+          path values.
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicationState'
+              examples:
+                private_owner:
+                  summary: Private owner
+                  value: *id042
+                public_reader:
+                  summary: Public reader
+                  value:
+                    visibility: public
+                    version: 1
+                    published_at: '2026-09-24T16:00:00Z'
+                    updated_at: '2026-09-24T16:00:00Z'
+                    can_manage: false
+                    has_unpublished_changes: false
+          headers:
+            X-Request-ID:
+              description: Correlation ID for this HTTP request.
+              schema:
+                type: string
+                format: uuid
+        '401':
+          description: Authentication Required
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                authentication_required:
+                  summary: Authentication required
+                  value: *id001
+        '404':
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                not_found:
+                  summary: Not found
+                  value: *id005
+        '429':
+          description: Rate Limited
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                rate_limited:
+                  summary: Rate limited
+                  value: *id002
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+                minimum: 1
+              example: 30
+      security:
+      - {}
+      - GatewayAssertion: []
+      x-codeSamples:
+      - lang: Shell
+        label: request
+        source: 'curl -X GET https://api.reveal.example.org/v1/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/publication
+          -H ''Accept: application/json'''
+    post:
+      operationId: updateAccountPublication
+      tags:
+      - Scientific content
+      summary: Publish, update or unpublish an account
+      description: Explicit owner-only choice. Publishing or updating a public snapshot
+        requires a registered signed-in session; anonymous owners receive 403 SIGN_IN_REQUIRED,
+        including on idempotent retries. Owners may unpublish an existing snapshot
+        with either session kind. Publishing freezes the complete accepted account
+        provenance and current accepted paragraph, exact citation revisions and only
+        reachable source artifacts. Future paragraphs remain private until an explicit
+        update. Unpublishing revokes this snapshot immediately; identical content
+        independently published elsewhere stays public. No job logs, draft, queue,
+        request or unrelated owner artifacts are published. Immutable scientific IDs,
+        citations and original authorship do not change.
+      parameters:
+      - name: dapper_id
+        in: path
+        required: true
+        schema:
+          type: string
+          description: Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode
+            path values.
+          pattern: ^dapper:ScientificAccount\.[A-Za-z0-9_-]{32}$
+        example: dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd
+        description: Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode
+          path values.
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 128
+        example: 66666666-6666-4666-8666-666666666666
+        description: Unique per caller and operation for at least 7 days. Same key
+          and same canonical body replay the original accepted response; changed body
+          returns 409 IDEMPOTENCY_CONFLICT. Compare idempotency before draft-version
+          checks on retries.
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicationState'
+              examples:
+                published:
+                  summary: Published
+                  value: &id052
+                    visibility: public
+                    version: 1
+                    published_at: '2026-09-24T16:00:00Z'
+                    updated_at: '2026-09-24T16:00:00Z'
+                    can_manage: true
+                    has_unpublished_changes: false
+                unpublished:
+                  summary: Unpublished
+                  value:
+                    visibility: private
+                    version: 2
+                    published_at: null
+                    updated_at: '2026-09-24T16:00:00Z'
+                    can_manage: true
+                    has_unpublished_changes: false
+          headers:
+            X-Request-ID:
+              description: Correlation ID for this HTTP request.
+              schema:
+                type: string
+                format: uuid
+        '400':
+          description: Invalid Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                invalid_request:
+                  summary: Invalid request
+                  value: *id004
+        '401':
+          description: Authentication Required
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                authentication_required:
+                  summary: Authentication required
+                  value: *id001
+        '403':
+          description: Sign In Required
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                sign_in_required:
+                  summary: Sign in required
+                  value: &id053
+                    type: urn:reveal:problem:sign-in-required
+                    title: Sign In Required
+                    status: 403
+                    code: SIGN_IN_REQUIRED
+                    detail: Sign in to publish a scientific account or exploration.
+                    request_id: aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa
+                    retryable: false
+        '404':
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                not_found:
+                  summary: Not found
+                  value: *id005
+        '409':
+          description: Version Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                version_conflict:
+                  summary: Version conflict
+                  value: *id006
+        '422':
+          description: Invalid Input
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                invalid_input:
+                  summary: Invalid input
+                  value: *id007
+        '429':
+          description: Rate Limited
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                rate_limited:
+                  summary: Rate limited
+                  value: *id002
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+                minimum: 1
+              example: 30
+      security:
+      - GatewayAssertion: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublicationInput'
+            examples:
+              publish:
+                summary: Publish
+                value:
+                  visibility: public
+                  expected_version: 0
+              unpublish:
+                summary: Unpublish
+                value:
+                  visibility: private
+                  expected_version: 1
+      x-codeSamples:
+      - lang: Shell
+        label: publish
+        source: 'curl -X POST https://api.reveal.example.org/v1/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/publication
+          -H ''Idempotency-Key: 66666666-6666-4666-8666-666666666666'' -H ''Authorization:
+          Bearer <trusted-gateway-assertion>'' -H ''Content-Type: application/json''
+          -H ''Accept: application/json'' --data-raw ''{"expected_version":0,"visibility":"public"}'''
+      - lang: Shell
+        label: unpublish
+        source: 'curl -X POST https://api.reveal.example.org/v1/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/publication
+          -H ''Idempotency-Key: 66666666-6666-4666-8666-666666666666'' -H ''Authorization:
+          Bearer <trusted-gateway-assertion>'' -H ''Content-Type: application/json''
+          -H ''Accept: application/json'' --data-raw ''{"expected_version":1,"visibility":"private"}'''
+  /v1/analysis-outcomes:
+    get:
+      operationId: listAnalysisOutcomes
+      tags:
+      - Personal workspace
+      summary: List saved workspace explorations
+      description: Session-required, newest-first summaries of all completed insufficient-evidence
+        explorations owned by this workspace, private or published, across every knowledge
+        gap. Includes previously saved records without a new run or publication. Operational
+        failures are not scientific exploration outcomes. Other owners are excluded,
+        even for published records. Detail and provenance are loaded only when opened.
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+        example: 20
+        description: ''
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+          minLength: 1
+        example: opaque-next-page
+        description: Omit for the first page. A returned next_cursor is opaque; the
+          example is illustrative and cannot be used against a live service.
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalysisOutcomeList'
+              examples:
+                saved:
+                  summary: Saved
+                  value:
+                    items:
+                    - id: 66666666-6666-4666-8666-666666666666
+                      outcome: insufficient_evidence
+                      summary: The captured investigation did not support an accepted
+                        scientific account.
+                      knowledge_gap: *id011
+                      anchors: &id043
+                      - source_id: factor:portal:CADinT2D:cfde-inc-v2:Factor1
+                        mechanism_id: dapper:Mechanism.MyhahXB55tDUS667sJzeJZ40BeeQBWOR
+                        name: factor:portal:CADinT2D:cfde-inc-v2:Factor1
+                        trait: null
+                        origin: manual
+                      created_at: '2026-09-24T16:00:00Z'
+                      attribution: *id041
+                      publication: *id042
+                    page: *id009
+                empty:
+                  summary: Empty
+                  value:
+                    items: []
+                    page: *id009
+          headers:
+            X-Request-ID:
+              description: Correlation ID for this HTTP request.
+              schema:
+                type: string
+                format: uuid
+        '401':
+          description: Authentication Required
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                authentication_required:
+                  summary: Authentication required
+                  value: *id001
+        '409':
+          description: Version Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                version_conflict:
+                  summary: Version conflict
+                  value: *id006
+        '429':
+          description: Rate Limited
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                rate_limited:
+                  summary: Rate limited
+                  value: *id002
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+                minimum: 1
+              example: 30
+      security:
+      - GatewayAssertion: []
+      x-codeSamples:
+      - lang: Shell
+        label: request
+        source: 'curl -X GET ''https://api.reveal.example.org/v1/analysis-outcomes?limit=20''
+          -H ''Authorization: Bearer <trusted-gateway-assertion>'' -H ''Accept: application/json'''
+  /v1/analysis-outcomes/{outcome_id}:
+    get:
+      operationId: getAnalysisOutcome
+      tags:
+      - Scientific content
+      summary: Read an explored analysis outcome
+      description: A durable scoped insufficient-evidence exploration, separate from
+        ScientificAccounts and excluded from their popularity counts. Captured author
+        reasons are not independently validated scientific findings. Private by default;
+        explicit publication shares only this frozen scope, original attribution and
+        captured source evidence. Job logs, requests, runtime/ledger contents and
+        the complete private package remain private. Invalid supplied credentials
+        never downgrade to public.
+      parameters:
+      - name: outcome_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        example: 66666666-6666-4666-8666-666666666666
+        description: ''
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalysisOutcome'
+              examples:
+                private_owner:
+                  summary: Private owner
+                  value: &id050
+                    id: 66666666-6666-4666-8666-666666666666
+                    outcome: insufficient_evidence
+                    summary: The captured investigation did not support an accepted
+                      scientific account.
+                    reason: This illustrative scoped investigation lacked evidence
+                      connecting the selected mechanism to the selected question.
+                    explored_topics: &id045
+                    - The selected question and captured mechanism evidence.
+                    missing_evidence: &id046
+                    - Evidence connecting the mechanism to this question.
+                    limitations: &id047
+                    - This scoped result does not establish that a relationship is
+                      globally absent.
+                    next_steps: &id048
+                    - Review additional directly relevant studies before repeating
+                      this investigation.
+                    knowledge_gap: *id011
+                    source_gap: *id016
+                    anchors: *id043
+                    selected_kgs: *id044
+                    created_at: '2026-09-24T16:00:00Z'
+                    attribution: *id041
+                    scope_note: A scoped exploration report, not a ScientificAccount
+                      or globally established negative finding.
+                    record_format: structured
+                    job_id: 44444444-4444-4444-8444-444444444444
+                    publication: *id042
+                    provenance: &id049
+                      evidence_package_sha256: 9a55d126679291a95fa3d35f544915610134075eaf110f62f77ec8ee870b6ae2
+                      outcome_sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+                      runtime_sha256: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+                      ledger_sha256: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+                      execution_mode: box
+                      source_bindings:
+                      - source_id: factor:portal:CADinT2D:cfde-inc-v2:Factor1
+                        source_revision: 5797893b517def4fdc82f285c9bf835195f9f88eddfb6409cbf3b1e31dd63d83
+                        embedding_run_id: null
+                        mapping_run_id: null
+                      coverage: {}
+                      evidence_refs: []
+                      source_artifacts: []
+                      graph_queries: []
+                public_reader:
+                  summary: Public reader
+                  value:
+                    id: 66666666-6666-4666-8666-666666666666
+                    outcome: insufficient_evidence
+                    summary: The captured investigation did not support an accepted
+                      scientific account.
+                    reason: This illustrative scoped investigation lacked evidence
+                      connecting the selected mechanism to the selected question.
+                    explored_topics: *id045
+                    missing_evidence: *id046
+                    limitations: *id047
+                    next_steps: *id048
+                    knowledge_gap: *id011
+                    source_gap: *id016
+                    anchors: *id043
+                    selected_kgs: *id044
+                    created_at: '2026-09-24T16:00:00Z'
+                    attribution: *id041
+                    scope_note: A scoped exploration report, not a ScientificAccount
+                      or globally established negative finding.
+                    record_format: structured
+                    job_id: null
+                    publication: &id051
+                      visibility: public
+                      version: 1
+                      published_at: '2026-09-24T16:00:00Z'
+                      updated_at: '2026-09-24T16:00:00Z'
+                      can_manage: false
+                      has_unpublished_changes: false
+                    provenance: *id049
+          headers:
+            X-Request-ID:
+              description: Correlation ID for this HTTP request.
+              schema:
+                type: string
+                format: uuid
+        '401':
+          description: Authentication Required
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                authentication_required:
+                  summary: Authentication required
+                  value: *id001
+        '404':
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                not_found:
+                  summary: Not found
+                  value: *id005
+        '429':
+          description: Rate Limited
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                rate_limited:
+                  summary: Rate limited
+                  value: *id002
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+                minimum: 1
+              example: 30
+      security:
+      - {}
+      - GatewayAssertion: []
+      x-codeSamples:
+      - lang: Shell
+        label: request
+        source: 'curl -X GET https://api.reveal.example.org/v1/analysis-outcomes/66666666-6666-4666-8666-666666666666
+          -H ''Accept: application/json'''
+  /v1/jobs/{job_id}/outcome:
+    get:
+      operationId: getJobAnalysisOutcome
+      tags:
+      - Jobs
+      summary: Find the saved scoped outcome for an owned job
+      description: Owner-only lookup of the durable outcome already saved by this
+        analysis job. Returns404 if no record exists; GET never runs research or performs
+        a historical import.
+      parameters:
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        example: 44444444-4444-4444-8444-444444444444
+        description: ''
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalysisOutcome'
+              examples:
+                owner:
+                  summary: Owner
+                  value: *id050
+          headers:
+            X-Request-ID:
+              description: Correlation ID for this HTTP request.
+              schema:
+                type: string
+                format: uuid
+        '401':
+          description: Authentication Required
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                authentication_required:
+                  summary: Authentication required
+                  value: *id001
+        '404':
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                not_found:
+                  summary: Not found
+                  value: *id005
+        '429':
+          description: Rate Limited
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                rate_limited:
+                  summary: Rate limited
+                  value: *id002
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+                minimum: 1
+              example: 30
+      security:
+      - GatewayAssertion: []
+      x-codeSamples:
+      - lang: Shell
+        label: request
+        source: 'curl -X GET https://api.reveal.example.org/v1/jobs/44444444-4444-4444-8444-444444444444/outcome
+          -H ''Authorization: Bearer <trusted-gateway-assertion>'' -H ''Accept: application/json'''
+  /v1/knowledge-gaps/{gap_id}/outcomes:
+    get:
+      operationId: listKnowledgeGapOutcomes
+      tags:
+      - Knowledge gaps
+      summary: List explored analysis outcomes for an exact gap
+      description: Newest-first compact summaries for this exact gap. Public scope
+        defaults to explicitly published outcome snapshots; workspace scope requires
+        a session. Scientific-account counts and ranking remain unchanged. Detail/provenance
+        is fetched only when an outcome is opened.
+      parameters:
+      - name: gap_id
+        in: path
+        required: true
+        schema:
+          type: string
+          description: Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode
+            path values.
+          pattern: ^dapper:KnowledgeGap\.[A-Za-z0-9_-]{32}$
+        example: dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk
+        description: Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode
+          path values.
+      - name: scope
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - public
+          - workspace
+          default: public
+        example: public
+        description: ''
+      - name: source_revision
+        in: query
+        required: false
+        schema:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+        example: 8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd
+        description: ''
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+        example: 20
+        description: ''
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+          minLength: 1
+        example: opaque-next-page
+        description: Omit for the first page. A returned next_cursor is opaque; the
+          example is illustrative and cannot be used against a live service.
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalysisOutcomeList'
+              examples:
+                published:
+                  summary: Published
+                  value:
+                    items:
+                    - id: 66666666-6666-4666-8666-666666666666
+                      outcome: insufficient_evidence
+                      summary: The captured investigation did not support an accepted
+                        scientific account.
+                      knowledge_gap: *id011
+                      anchors: *id043
+                      created_at: '2026-09-24T16:00:00Z'
+                      attribution: *id041
+                      publication: *id051
+                    page: *id009
+                empty:
+                  summary: Empty
+                  value:
+                    items: []
+                    page: *id009
+          headers:
+            X-Request-ID:
+              description: Correlation ID for this HTTP request.
+              schema:
+                type: string
+                format: uuid
+        '401':
+          description: Authentication Required
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                authentication_required:
+                  summary: Authentication required
+                  value: *id001
+        '404':
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                not_found:
+                  summary: Not found
+                  value: *id005
+        '409':
+          description: Version Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                version_conflict:
+                  summary: Version conflict
+                  value: *id006
+        '429':
+          description: Rate Limited
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                rate_limited:
+                  summary: Rate limited
+                  value: *id002
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+                minimum: 1
+              example: 30
+      security:
+      - {}
+      - GatewayAssertion: []
+      x-codeSamples:
+      - lang: Shell
+        label: request
+        source: 'curl -X GET ''https://api.reveal.example.org/v1/knowledge-gaps/dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk/outcomes?scope=public&source_revision=8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd&limit=20''
+          -H ''Accept: application/json'''
+  /v1/analysis-outcomes/{outcome_id}/publication:
+    get:
+      operationId: getOutcomePublication
+      tags:
+      - Scientific content
+      summary: Inspect exploration outcome publication
+      description: A durable scoped insufficient-evidence exploration, separate from
+        ScientificAccounts and excluded from their popularity counts. Captured author
+        reasons are not independently validated scientific findings. Private by default;
+        explicit publication shares only this frozen scope, original attribution and
+        captured source evidence. Job logs, requests, runtime/ledger contents and
+        the complete private package remain private. Invalid supplied credentials
+        never downgrade to public.
+      parameters:
+      - name: outcome_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        example: 66666666-6666-4666-8666-666666666666
+        description: ''
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicationState'
+              examples:
+                private_owner:
+                  summary: Private owner
+                  value: *id042
+                public_reader:
+                  summary: Public reader
+                  value:
+                    visibility: public
+                    version: 1
+                    published_at: '2026-09-24T16:00:00Z'
+                    updated_at: '2026-09-24T16:00:00Z'
+                    can_manage: false
+                    has_unpublished_changes: false
+          headers:
+            X-Request-ID:
+              description: Correlation ID for this HTTP request.
+              schema:
+                type: string
+                format: uuid
+        '401':
+          description: Authentication Required
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                authentication_required:
+                  summary: Authentication required
+                  value: *id001
+        '404':
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                not_found:
+                  summary: Not found
+                  value: *id005
+        '429':
+          description: Rate Limited
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                rate_limited:
+                  summary: Rate limited
+                  value: *id002
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+                minimum: 1
+              example: 30
+      security:
+      - {}
+      - GatewayAssertion: []
+      x-codeSamples:
+      - lang: Shell
+        label: request
+        source: 'curl -X GET https://api.reveal.example.org/v1/analysis-outcomes/66666666-6666-4666-8666-666666666666/publication
+          -H ''Accept: application/json'''
+    post:
+      operationId: updateOutcomePublication
+      tags:
+      - Scientific content
+      summary: Publish or unpublish a scoped exploration
+      description: Explicit owner-only publication. Publishing or updating a public
+        snapshot requires a registered signed-in session; anonymous owners receive
+        403 SIGN_IN_REQUIRED, including on idempotent retries. Owners may unpublish
+        with either session kind. Freeze this exploration and its captured source
+        artifacts, never job logs or unrelated workspace artifacts. Unpublish revokes
+        this snapshot; independently published evidence can remain available. Immutable
+        records and original attribution do not change.
+      parameters:
+      - name: outcome_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        example: 66666666-6666-4666-8666-666666666666
+        description: ''
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 128
+        example: 66666666-6666-4666-8666-666666666666
+        description: Unique per caller and operation for at least 7 days. Same key
+          and same canonical body replay the original accepted response; changed body
+          returns 409 IDEMPOTENCY_CONFLICT. Compare idempotency before draft-version
+          checks on retries.
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicationState'
+              examples:
+                published:
+                  summary: Published
+                  value: *id052
+                unpublished:
+                  summary: Unpublished
+                  value:
+                    visibility: private
+                    version: 2
+                    published_at: null
+                    updated_at: '2026-09-24T16:00:00Z'
+                    can_manage: true
+                    has_unpublished_changes: false
+          headers:
+            X-Request-ID:
+              description: Correlation ID for this HTTP request.
+              schema:
+                type: string
+                format: uuid
+        '400':
+          description: Invalid Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                invalid_request:
+                  summary: Invalid request
+                  value: *id004
+        '401':
+          description: Authentication Required
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                authentication_required:
+                  summary: Authentication required
+                  value: *id001
+        '403':
+          description: Sign In Required
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                sign_in_required:
+                  summary: Sign in required
+                  value: *id053
+        '404':
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                not_found:
+                  summary: Not found
+                  value: *id005
+        '409':
+          description: Version Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                version_conflict:
+                  summary: Version conflict
+                  value: *id006
+        '422':
+          description: Invalid Input
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                invalid_input:
+                  summary: Invalid input
+                  value: *id007
+        '429':
+          description: Rate Limited
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                rate_limited:
+                  summary: Rate limited
+                  value: *id002
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+                minimum: 1
+              example: 30
+      security:
+      - GatewayAssertion: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublicationInput'
+            examples:
+              publish:
+                summary: Publish
+                value:
+                  visibility: public
+                  expected_version: 0
+              unpublish:
+                summary: Unpublish
+                value:
+                  visibility: private
+                  expected_version: 1
+      x-codeSamples:
+      - lang: Shell
+        label: publish
+        source: 'curl -X POST https://api.reveal.example.org/v1/analysis-outcomes/66666666-6666-4666-8666-666666666666/publication
+          -H ''Idempotency-Key: 66666666-6666-4666-8666-666666666666'' -H ''Authorization:
+          Bearer <trusted-gateway-assertion>'' -H ''Content-Type: application/json''
+          -H ''Accept: application/json'' --data-raw ''{"expected_version":0,"visibility":"public"}'''
+      - lang: Shell
+        label: unpublish
+        source: 'curl -X POST https://api.reveal.example.org/v1/analysis-outcomes/66666666-6666-4666-8666-666666666666/publication
+          -H ''Idempotency-Key: 66666666-6666-4666-8666-666666666666'' -H ''Authorization:
+          Bearer <trusted-gateway-assertion>'' -H ''Content-Type: application/json''
+          -H ''Accept: application/json'' --data-raw ''{"expected_version":1,"visibility":"private"}'''
   /v1/me/explorations:
     get:
       operationId: listExplorations
@@ -6606,7 +8155,7 @@ paths:
                   summary: History
                   value:
                     items:
-                    - &id039
+                    - &id054
                       source_gap: *id016
                       knowledge_gap: *id011
                       last_explored_at: '2026-09-24T16:00:00Z'
@@ -6699,7 +8248,7 @@ paths:
               examples:
                 saved:
                   summary: Saved
-                  value: *id039
+                  value: *id054
           headers:
             X-Request-ID:
               description: Correlation ID for this HTTP request.
@@ -9740,7 +11289,11 @@ paths:
         verification. A digest is not an access grant. The File metadata describes
         the media type; the response uses attachment disposition, private no-store
         caching and nosniff. Missing captures remain explicitly unavailable; this
-        route never fetches mutable source URLs.
+        route never fetches mutable source URLs. A valid owner retains private access.
+        Without owner access, only an active explicit publication snapshot authorizes
+        this scientific resource, exact cited revisions and reachable source artifacts.
+        Invalid supplied credentials fail even on public reads. Unpublication revokes
+        snapshot access; job/draft/request routes remain private.
       parameters:
       - name: sha256
         in: path
@@ -9798,7 +11351,19 @@ paths:
                 dependency_unavailable:
                   summary: Dependency unavailable
                   value: *id014
+        '307':
+          description: After authorization, redirect to an exact, verified S3 object
+            version. The private URL expires after 60 seconds; previously issued URLs
+            can remain valid until expiry after unpublication.
+          headers:
+            Location:
+              description: Short-lived artifact download URL. Never cache or persist
+                as an identifier.
+              schema:
+                type: string
+                format: uri
       security:
+      - {}
       - GatewayAssertion: []
       x-codeSamples:
       - lang: Shell
@@ -9816,7 +11381,11 @@ paths:
         LaTeX uses cite commands and references.bib. BibTeX contains every distinct
         exact target/revision cited by the paragraph. These numbered-reference exports
         do not claim APA/MLA styling. Fixture links are local-preview URLs; runtime
-        must render authorized canonical resolver URLs.
+        must render authorized canonical resolver URLs. A valid owner retains private
+        access. Without owner access, only an active explicit publication snapshot
+        authorizes this scientific resource, exact cited revisions and reachable source
+        artifacts. Invalid supplied credentials fail even on public reads. Unpublication
+        revokes snapshot access; job/draft/request routes remain private.
       parameters:
       - name: dapper_id
         in: path
@@ -16738,7 +18307,7 @@ components:
         source_id:
           type: string
           minLength: 1
-        source_revision: &id040
+        source_revision: &id055
           type: string
           pattern: ^[a-f0-9]{64}$
         dapper_id:
@@ -16767,7 +18336,7 @@ components:
           - gap_attachment
         suggestion_id:
           anyOf:
-          - &id041
+          - &id057
             type: string
             format: uuid
           - type: 'null'
@@ -16803,7 +18372,7 @@ components:
           type: string
         source_id:
           type: string
-        source_revision: *id040
+        source_revision: *id055
         object_class:
           const: Mechanism
           type: string
@@ -16827,7 +18396,7 @@ components:
           type: string
         source_id:
           type: string
-        source_revision: *id040
+        source_revision: *id055
         object_class:
           type: string
           const: Mechanism
@@ -16916,7 +18485,13 @@ components:
       properties:
         composer:
           $ref: '#/components/schemas/Composer'
-      required: []
+        name: &id056
+          type: string
+          minLength: 1
+          maxLength: 120
+          pattern: \S
+      required:
+      - composer
       additionalProperties: false
     DraftPatch:
       type: object
@@ -16926,26 +18501,28 @@ components:
           minimum: 1
         composer:
           $ref: '#/components/schemas/Composer'
+        name: *id056
       required:
       - expected_version
-      - composer
       additionalProperties: false
-      description: Replace the complete composer atomically using compare-and-swap;
-        not JSON Merge Patch. Retry a lost acknowledgment with the same Idempotency-Key.
+      minProperties: 2
+      description: Rename or replace the complete composer atomically using compare-and-swap.
+        Omitted fields are preserved. Retry a lost acknowledgment with the same Idempotency-Key.
     Draft:
       type: object
       properties:
-        id: *id041
-        owner_user_id: *id041
+        id: *id057
+        owner_user_id: *id057
         version:
           type: integer
           minimum: 1
         composer:
           $ref: '#/components/schemas/Composer'
-        created_at: &id042
+        created_at: &id058
           type: string
           format: date-time
-        updated_at: *id042
+        updated_at: *id058
+        name: *id056
       required:
       - id
       - owner_user_id
@@ -16953,6 +18530,26 @@ components:
       - composer
       - created_at
       - updated_at
+      additionalProperties: false
+    DraftDelete:
+      type: object
+      properties:
+        expected_version:
+          type: integer
+          minimum: 1
+      required:
+      - expected_version
+      additionalProperties: false
+    DraftDeletion:
+      type: object
+      properties:
+        id: *id057
+        deleted:
+          type: boolean
+          const: true
+      required:
+      - id
+      - deleted
       additionalProperties: false
     Page:
       type: object
@@ -16976,7 +18573,7 @@ components:
     Me:
       type: object
       properties:
-        user_id: *id041
+        user_id: *id057
         display_name:
           anyOf:
           - type: string
@@ -17008,7 +18605,7 @@ components:
           - registered
         workspace_expires_at:
           anyOf:
-          - &id046
+          - &id062
             type: string
             format: date-time
           - type: 'null'
@@ -17028,7 +18625,7 @@ components:
     AttributionSnapshot:
       type: object
       properties:
-        user_id: *id041
+        user_id: *id057
         person_id:
           anyOf:
           - type: string
@@ -17047,7 +18644,7 @@ components:
           - type: 'null'
         orcid_authenticated:
           type: boolean
-        observed_at: *id042
+        observed_at: *id058
         principal_kind:
           type: string
           enum:
@@ -17065,9 +18662,9 @@ components:
     ResearchRequest:
       type: object
       properties:
-        id: *id041
-        owner_user_id: *id041
-        source_draft_id: *id041
+        id: *id057
+        owner_user_id: *id057
+        source_draft_id: *id057
         source_draft_version:
           type: integer
           minimum: 1
@@ -17082,7 +18679,7 @@ components:
           $ref: '#/components/schemas/DapperDocument'
         attribution:
           $ref: '#/components/schemas/AttributionSnapshot'
-        submitted_at: *id042
+        submitted_at: *id058
         linked_dismech_context:
           type: array
           items:
@@ -17111,7 +18708,7 @@ components:
           - dismech
         source_id:
           type: string
-        source_revision: *id040
+        source_revision: *id055
         status:
           anyOf:
           - type: string
@@ -17362,7 +18959,7 @@ components:
     Suggestions:
       type: object
       properties:
-        suggestion_id: *id041
+        suggestion_id: *id057
         automatic_anchors:
           type: array
           items:
@@ -17429,7 +19026,7 @@ components:
         kind:
           const: analysis
           type: string
-        draft_id: *id041
+        draft_id: *id057
         draft_version:
           type: integer
           minimum: 1
@@ -17548,7 +19145,7 @@ components:
         kind:
           const: analysis
           type: string
-        request_id: *id041
+        request_id: *id057
         account_ids:
           type: array
           items:
@@ -17564,11 +19161,11 @@ components:
             $ref: '#/components/schemas/Enrichment'
         paragraph_job_ids:
           type: array
-          items: &id047
+          items: &id063
             type: string
             format: uuid
           maxItems: 3
-        evidence_package_sha256: &id045
+        evidence_package_sha256: &id061
           type: string
           pattern: ^[a-f0-9]{64}$
       required:
@@ -17609,6 +19206,8 @@ components:
           type: string
         retryable:
           type: boolean
+        budget:
+          $ref: '#/components/schemas/JobBudgetFailure'
       required:
       - code
       - message
@@ -17617,14 +19216,14 @@ components:
     Job:
       type: object
       properties:
-        id: *id041
+        id: *id057
         kind:
           type: string
           enum:
           - analysis
           - paragraph
-        owner_user_id: *id041
-        status: &id043
+        owner_user_id: *id057
+        status: &id059
           type: string
           enum:
           - queued
@@ -17634,7 +19233,7 @@ components:
           - succeeded
           - insufficient_evidence
           - failed
-        stage: &id044
+        stage: &id060
           type: string
           enum:
           - queued
@@ -17650,7 +19249,7 @@ components:
           - starting_agent
         research_request_id:
           anyOf:
-          - *id041
+          - *id057
           - type: 'null'
         input_account_id:
           anyOf:
@@ -17659,17 +19258,18 @@ components:
               path values.
             pattern: ^dapper:ScientificAccount\.[A-Za-z0-9_-]{32}$
           - type: 'null'
-        created_at: *id042
-        updated_at: *id042
+        created_at: *id058
+        updated_at: *id058
         completed_at:
           anyOf:
-          - *id042
+          - *id058
           - type: 'null'
         result:
           anyOf:
           - oneOf:
             - $ref: '#/components/schemas/AnalysisResult'
             - $ref: '#/components/schemas/ParagraphResult'
+            - $ref: '#/components/schemas/AnalysisOutcomeResult'
           - type: 'null'
         failure:
           anyOf:
@@ -17726,12 +19326,14 @@ components:
               const: analysis
         then:
           properties:
-            research_request_id: *id041
+            research_request_id: *id057
             input_account_id:
               type: 'null'
             result:
               anyOf:
-              - $ref: '#/components/schemas/AnalysisResult'
+              - oneOf:
+                - $ref: '#/components/schemas/AnalysisResult'
+                - $ref: '#/components/schemas/AnalysisOutcomeResult'
               - type: 'null'
       - if:
           properties:
@@ -17763,9 +19365,20 @@ components:
             stage:
               const: complete
         else:
-          properties:
-            result:
-              type: 'null'
+          if:
+            properties:
+              status:
+                const: insufficient_evidence
+          then:
+            properties:
+              result:
+                anyOf:
+                - $ref: '#/components/schemas/AnalysisOutcomeResult'
+                - type: 'null'
+          else:
+            properties:
+              result:
+                type: 'null'
       - if:
           properties:
             status:
@@ -17788,7 +19401,7 @@ components:
               - cancelled
         then:
           properties:
-            completed_at: *id042
+            completed_at: *id058
         else:
           properties:
             completed_at:
@@ -17801,14 +19414,27 @@ components:
           properties:
             kind:
               const: analysis
+      - if:
+          properties:
+            result:
+              type: object
+              properties:
+                kind:
+                  const: analysis_outcome
+              required:
+              - kind
+        then:
+          properties:
+            status:
+              const: insufficient_evidence
     JobEvent:
       type: object
       properties:
         id:
           type: string
           pattern: ^[0-9]+$
-        job_id: *id041
-        occurred_at: *id042
+        job_id: *id057
+        occurred_at: *id058
         event_type:
           type: string
           enum:
@@ -17818,8 +19444,8 @@ components:
           - result
           - failure
           - activity
-        status: *id043
-        stage: *id044
+        status: *id059
+        stage: *id060
         message:
           type: string
         result:
@@ -17827,6 +19453,7 @@ components:
           - oneOf:
             - $ref: '#/components/schemas/AnalysisResult'
             - $ref: '#/components/schemas/ParagraphResult'
+            - $ref: '#/components/schemas/AnalysisOutcomeResult'
           - type: 'null'
         detail:
           anyOf:
@@ -17863,8 +19490,8 @@ components:
     SchemaPin:
       type: object
       properties:
-        schema_sha256: *id040
-        dependency_snapshot_sha256: *id040
+        schema_sha256: *id055
+        dependency_snapshot_sha256: *id055
         identity_profile:
           const: DAPPER-ID-1
           type: string
@@ -17881,7 +19508,7 @@ components:
           description: Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode
             path values.
           pattern: ^dapper:[A-Za-z][A-Za-z0-9]*\.[A-Za-z0-9_-]{32}$
-        payload_sha256: *id040
+        payload_sha256: *id055
       required:
       - object_id
       - payload_sha256
@@ -17898,7 +19525,7 @@ components:
           - type: 'null'
         expires_at:
           anyOf:
-          - *id042
+          - *id058
           - type: 'null'
         availability:
           type: string
@@ -17994,6 +19621,8 @@ components:
             $ref: '#/components/schemas/ArtifactAccess'
         research_statement:
           $ref: '#/components/schemas/ParagraphState'
+        publication:
+          $ref: '#/components/schemas/PublicationState'
         coverage:
           $ref: '#/components/schemas/TraversalCoverage'
       required:
@@ -18089,7 +19718,7 @@ components:
               node_id:
                 type: string
                 pattern: '^gene_set:'
-              import_id: *id040
+              import_id: *id055
             required:
             - model
             - node_id
@@ -18185,7 +19814,7 @@ components:
           type: string
         detail:
           type: string
-        request_id: *id041
+        request_id: *id057
         retryable:
           type: boolean
         current_version:
@@ -18294,14 +19923,14 @@ components:
               type: string
             processor_version:
               type: string
-            style_sha256: *id040
-            locale_sha256: *id040
+            style_sha256: *id055
+            locale_sha256: *id055
             citation_profile:
               const: reveal-citation-v1
               type: string
             metadata_checksums:
               type: array
-              items: *id040
+              items: *id055
           required:
           - processor
           - processor_version
@@ -18445,7 +20074,7 @@ components:
         source_id:
           type: string
           pattern: '^dismech:'
-        source_revision: *id045
+        source_revision: *id061
       required:
       - id
       - source_id
@@ -18460,7 +20089,7 @@ components:
           type: string
         source_pointer:
           type: string
-        payload_sha256: *id045
+        payload_sha256: *id061
         raw:
           type: object
           additionalProperties: true
@@ -18484,12 +20113,13 @@ components:
           enum:
           - public_exact_gap
           - owner_exact_gap
-        as_of: *id046
+        as_of: *id062
         ranking:
           type: string
           enum:
           - curated
           - recent_account_count
+          - account_count
         window_days:
           anyOf:
           - type: integer
@@ -18557,7 +20187,7 @@ components:
           - type: 'null'
         artifact_sha256:
           anyOf:
-          - *id045
+          - *id061
           - type: 'null'
         duration_ms:
           anyOf:
@@ -18581,7 +20211,7 @@ components:
                 minimum: 0
               truncated:
                 type: boolean
-              snapshot_sha256: *id045
+              snapshot_sha256: *id061
             required:
             - scope
             - nodes
@@ -18625,7 +20255,7 @@ components:
           - not_requested
         job_id:
           anyOf:
-          - *id047
+          - *id063
           - type: 'null'
         paragraph_id:
           anyOf:
@@ -18639,6 +20269,361 @@ components:
       - job_id
       - paragraph_id
       additionalProperties: false
+    PublicationState:
+      type: object
+      properties:
+        visibility:
+          type: string
+          enum:
+          - private
+          - public
+        version:
+          type: integer
+          minimum: 0
+        published_at:
+          anyOf:
+          - *id062
+          - type: 'null'
+        updated_at:
+          anyOf:
+          - *id062
+          - type: 'null'
+        can_manage:
+          type: boolean
+        has_unpublished_changes:
+          type: boolean
+      required:
+      - visibility
+      - version
+      - published_at
+      - updated_at
+      - can_manage
+      - has_unpublished_changes
+      additionalProperties: false
+      description: Mutable application publication control, separate from immutable
+        DAPPER content and citation revisions. A public snapshot contains only the
+        accepted graph and cited statement present when explicitly published. Later
+        accepted statements require Update publication. can_manage is true only for
+        this account owner, including an anonymous workspace. No job telemetry is
+        public.
+    PublicationInput:
+      type: object
+      properties:
+        visibility:
+          type: string
+          enum:
+          - private
+          - public
+        expected_version:
+          type: integer
+          minimum: 0
+      required:
+      - visibility
+      - expected_version
+      additionalProperties: false
+      description: Explicit owner publication choice. public creates or updates a
+        frozen public snapshot; private revokes this owner publication. Optimistic
+        version and Idempotency-Key prevent stale or duplicate choices. Existing accounts
+        start private/version0.
+    AnalysisOutcomeResult:
+      type: object
+      properties:
+        kind:
+          type: string
+          const: analysis_outcome
+        outcome_id: *id063
+        evidence_package_sha256: *id061
+      required:
+      - kind
+      - outcome_id
+      - evidence_package_sha256
+      additionalProperties: false
+    OutcomeAnchor:
+      type: object
+      properties:
+        source_id:
+          type: string
+        mechanism_id:
+          type: string
+          description: Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode
+            path values.
+          pattern: ^dapper:Mechanism\.[A-Za-z0-9_-]{32}$
+        name:
+          type: string
+        trait:
+          anyOf:
+          - type: string
+          - type: 'null'
+        origin:
+          type: string
+      required:
+      - source_id
+      - mechanism_id
+      - name
+      - trait
+      - origin
+      additionalProperties: false
+    OutcomeEvidenceRef:
+      type: object
+      properties:
+        source:
+          type: string
+          enum:
+          - package
+          - tool_response
+        pointer:
+          type: string
+        ledger_sequence:
+          anyOf:
+          - type: integer
+            minimum: 1
+          - type: 'null'
+        artifact_sha256: *id061
+        download_url:
+          anyOf:
+          - type: string
+            format: uri
+          - type: 'null'
+      required:
+      - source
+      - pointer
+      - ledger_sequence
+      - artifact_sha256
+      - download_url
+      additionalProperties: false
+    OutcomeProvenance:
+      type: object
+      properties:
+        evidence_package_sha256: *id061
+        outcome_sha256: *id061
+        runtime_sha256:
+          anyOf:
+          - *id061
+          - type: 'null'
+        ledger_sha256:
+          anyOf:
+          - *id061
+          - type: 'null'
+        execution_mode:
+          type: string
+          enum:
+          - box
+          - deterministic
+        source_bindings:
+          type: array
+          items:
+            type: object
+            properties:
+              source_id:
+                type: string
+              source_revision:
+                type: string
+              embedding_run_id:
+                anyOf:
+                - type: string
+                - type: 'null'
+              mapping_run_id:
+                anyOf:
+                - type: string
+                - type: 'null'
+            required:
+            - source_id
+            - source_revision
+            - embedding_run_id
+            - mapping_run_id
+            additionalProperties: false
+        coverage:
+          type: object
+          additionalProperties: true
+        evidence_refs:
+          type: array
+          items:
+            $ref: '#/components/schemas/OutcomeEvidenceRef'
+        source_artifacts:
+          type: array
+          items:
+            $ref: '#/components/schemas/ArtifactAccess'
+        graph_queries:
+          type: array
+          items:
+            type: object
+            properties:
+              sequence:
+                type: integer
+                minimum: 1
+              graph:
+                type: string
+                enum:
+                - biomarkerkg
+                - prokn
+              status:
+                type: string
+                enum:
+                - completed
+                - empty
+                - failed
+                - denied
+                - interrupted
+              request_sha256: *id061
+              response_sha256: *id061
+            required:
+            - sequence
+            - graph
+            - status
+            - request_sha256
+            - response_sha256
+            additionalProperties: false
+      required:
+      - evidence_package_sha256
+      - outcome_sha256
+      - runtime_sha256
+      - ledger_sha256
+      - execution_mode
+      - source_bindings
+      - coverage
+      - evidence_refs
+      - source_artifacts
+      - graph_queries
+      additionalProperties: false
+    AnalysisOutcome:
+      type: object
+      properties:
+        id: *id063
+        outcome:
+          type: string
+          enum:
+          - insufficient_evidence
+        summary:
+          type: string
+        reason:
+          type: string
+        explored_topics:
+          type: array
+          items:
+            type: string
+        missing_evidence:
+          type: array
+          items:
+            type: string
+        limitations:
+          type: array
+          items:
+            type: string
+        next_steps:
+          type: array
+          items:
+            type: string
+        knowledge_gap:
+          $ref: '#/components/schemas/DapperKnowledgeGap'
+        source_gap:
+          $ref: '#/components/schemas/SelectedGap'
+        anchors:
+          type: array
+          items:
+            $ref: '#/components/schemas/OutcomeAnchor'
+        selected_kgs:
+          type: array
+          items:
+            type: string
+            enum:
+            - biomarkerkg
+            - prokn
+        created_at: *id062
+        attribution:
+          anyOf:
+          - $ref: '#/components/schemas/AttributionSnapshot'
+          - type: 'null'
+        scope_note:
+          type: string
+        record_format:
+          type: string
+          enum:
+          - structured
+          - legacy
+        provenance:
+          $ref: '#/components/schemas/OutcomeProvenance'
+        job_id:
+          anyOf:
+          - *id063
+          - type: 'null'
+        publication:
+          $ref: '#/components/schemas/PublicationState'
+      required:
+      - id
+      - outcome
+      - summary
+      - reason
+      - explored_topics
+      - missing_evidence
+      - limitations
+      - next_steps
+      - knowledge_gap
+      - source_gap
+      - anchors
+      - selected_kgs
+      - created_at
+      - attribution
+      - scope_note
+      - record_format
+      - provenance
+      - job_id
+      - publication
+      additionalProperties: false
+      description: Immutable application record of one scoped insufficient-evidence
+        investigation, not a ScientificAccount, independently validated scientific
+        claim, or globally established null result. Reasons are captured author reports;
+        coverage and hashes retain their exact scope. Private by default and excluded
+        from scientific-account counts. Public snapshots omit private job identifiers.
+    AnalysisOutcomeSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        outcome:
+          type: string
+          enum:
+          - insufficient_evidence
+        summary:
+          type: string
+        knowledge_gap:
+          $ref: '#/components/schemas/DapperKnowledgeGap'
+        anchors:
+          type: array
+          items:
+            $ref: '#/components/schemas/OutcomeAnchor'
+        created_at:
+          type: string
+          format: date-time
+        attribution:
+          anyOf:
+          - $ref: '#/components/schemas/AttributionSnapshot'
+          - type: 'null'
+        publication:
+          $ref: '#/components/schemas/PublicationState'
+      required:
+      - id
+      - outcome
+      - summary
+      - knowledge_gap
+      - anchors
+      - created_at
+      - attribution
+      - publication
+      additionalProperties: false
+    AnalysisOutcomeList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnalysisOutcomeSummary'
+        page:
+          $ref: '#/components/schemas/Page'
+      required:
+      - items
+      - page
+      additionalProperties: false
     AccountSummary:
       type: object
       properties:
@@ -18649,10 +20634,17 @@ components:
         claim_count:
           type: integer
           minimum: 1
-        created_at: *id046
-        job_id: *id047
+        created_at: *id062
+        job_id:
+          anyOf:
+          - *id063
+          - type: 'null'
         research_statement:
           $ref: '#/components/schemas/ParagraphState'
+        attribution:
+          anyOf:
+          - $ref: '#/components/schemas/AttributionSnapshot'
+          - type: 'null'
       required:
       - account
       - knowledge_gap
@@ -18661,6 +20653,10 @@ components:
       - job_id
       - research_statement
       additionalProperties: false
+      description: One accessible accepted scientific account, deduplicated by its
+        DAPPER identity. Optional attribution is the immutable original request actor,
+        not the current workspace owner; null denotes unavailable historical attribution.
+        Title and brief synthesis are account.name and account.closing_remarks.
     AccountList:
       type: object
       properties:
@@ -18681,7 +20677,7 @@ components:
           $ref: '#/components/schemas/SelectedGap'
         draft_id:
           anyOf:
-          - *id047
+          - *id063
           - type: 'null'
       required:
       - source_gap
@@ -18696,10 +20692,10 @@ components:
           $ref: '#/components/schemas/SelectedGap'
         knowledge_gap:
           $ref: '#/components/schemas/DapperKnowledgeGap'
-        last_explored_at: *id046
+        last_explored_at: *id062
         draft_id:
           anyOf:
-          - *id047
+          - *id063
           - type: 'null'
         scientific_accounts:
           $ref: '#/components/schemas/AccountCount'
@@ -26062,8 +28058,8 @@ components:
     EvidencePackageResult:
       type: object
       properties:
-        job_id: *id047
-        package_sha256: *id045
+        job_id: *id063
+        package_sha256: *id061
         package:
           $ref: '#/components/schemas/EvidencePackage'
       required:
@@ -26126,6 +28122,42 @@ components:
         same immutable Paragraph and pinned citation registry. rich-text HTML is sanitized;
         canonical resolver links enforce authorization. latex includes cite commands
         and requires references.bib.
+    JobBudgetFailure:
+      type: object
+      properties:
+        scope:
+          type: string
+          enum:
+          - authoring
+          - review
+        limit_usd:
+          type: number
+          minimum: 0
+        spent_usd:
+          anyOf:
+          - type: number
+            minimum: 0
+          - type: 'null'
+        next_call_max_usd:
+          anyOf:
+          - type: number
+            minimum: 0
+          - type: 'null'
+      required:
+      - scope
+      - limit_usd
+      - spent_usd
+      - next_call_max_usd
+      additionalProperties: false
+    ReviewRetryInput:
+      type: object
+      properties:
+        expected_last_event_id:
+          type: string
+          pattern: ^[0-9]+$
+      required:
+      - expected_last_event_id
+      additionalProperties: false
 x-dapper-dependency:
   base_commit: ebfc471049240c23d6ce1d3d40cd2785b35e6443
   schema_sha256: 219769c9874a3c0a7d6972360d5847a8b344e412a8b9f4e2648f059682440345

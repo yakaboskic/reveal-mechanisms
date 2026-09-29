@@ -5,7 +5,10 @@ import { api, messageOf, type Schema } from "@/lib/client";
 import { AccountLoading, AccountNavigation } from "./AccountLoading";
 import { LoadingPulse, LoadingSurface } from "./LoadingSurface";
 import { ParagraphActivity } from "./ParagraphActivity";
+import { AccountPublication } from "./AccountPublication";
+import { useIdentity } from "./Session";
 import { paragraphStateFromJob } from "@/lib/paragraph-state";
+import { sourceDownloadPath } from "@/lib/source-download";
 import "./scientific.css";
 
 type Document = Schema<"DapperDocument">;
@@ -33,18 +36,21 @@ export function Tabs({ labels, value, onChange, pending }: { labels: string[]; v
   }}>{label}{pending === label && <><span className="statement-progress" aria-hidden="true"><LoadingPulse /></span><span id={`${id}-pending-${i}`} className="sr-only">Preparing cited research statement</span></>}</button>)}</div>;
 }
 function useAccount(id: string) {
-  const [loaded, setLoaded] = useState<{ id: string; value: Schema<"AccountResult"> } | null>(null);
-  const [failure, setFailure] = useState<{ id: string; message: string } | null>(null);
+  const { me, ready, status } = useIdentity();
+  const binding = `${id}:${me?.user_id || "visitor"}:${status.canClaim}`;
+  const [loaded, setLoaded] = useState<{ binding: string; value: Schema<"AccountResult"> } | null>(null);
+  const [failure, setFailure] = useState<{ binding: string; message: string } | null>(null);
   const [refresh, setRefresh] = useState(0);
   useEffect(() => {
+    if (!ready) return;
     let active = true; let timer: ReturnType<typeof setTimeout>;
     setFailure(null);
-    const load = async () => { try { const value = await api.account(id); if (!active) return; setLoaded({ id, value }); setFailure(null); if (["queued", "running", "cancel_requested"].includes(value.research_statement.status)) timer = setTimeout(load, 2500); } catch (error) { if (active) setFailure({ id, message: messageOf(error) }); } };
+    const load = async () => { try { const value = await api.account(id); if (!active) return; setLoaded({ binding, value }); setFailure(null); if (value.publication?.can_manage === true && ["queued", "running", "cancel_requested"].includes(value.research_statement.status)) timer = setTimeout(load, 2500); } catch (error) { if (active) setFailure({ binding, message: messageOf(error) }); } };
     void load(); return () => { active = false; clearTimeout(timer); };
-  }, [id, refresh]);
+  }, [id, binding, ready, refresh]);
   // Keep an already loaded account readable during a status refresh, while
   // never displaying a previous account's data or errors after navigation.
-  return { result: loaded?.id === id ? loaded.value : null, error: failure?.id === id ? failure.message : "",
+  return { result: ready && loaded?.binding === binding ? loaded.value : null, error: ready && failure?.binding === binding ? failure.message : "",
     reload: () => { setLoaded(null); setRefresh(n => n + 1); }, retry: () => setRefresh(n => n + 1) };
 }
 function AccountRefreshError({ error, onRetry }: { error: string; onRetry: () => void }) {
@@ -99,7 +105,8 @@ export function AccountView({ id, embedded = false }: { id: string; embedded?: b
   return <section className={`scientific account-study ${embedded ? "embedded" : ""}`} aria-label="Scientific account">
     {!embedded && <><AccountNavigation /><header className="account-gap"><p className="gap-source">{gap ? `${gap.id.startsWith("dapper:KnowledgeGap.") ? "Knowledge gap" : "Question"}${gap.scope ? ` · ${gap.scope}` : ""}` : "Scientific account"}</p><h1>{gap?.text || account.name || "Scientific account"}</h1>{!!mechanisms.length && <div className="account-mechanisms" aria-label="Mechanism records">{mechanisms.map(mechanism => <Link key={mechanism.id} className="account-mechanism" href={objectHref(mechanism.id)} title={mechanism.id}>{mechanism.name || "Mechanism record"}</Link>)}</div>}{model && <Link className="account-mechanism" href={objectHref(model.id)}>{model.name || "Mechanistic model"}</Link>}</header></>}
     <AccountRefreshError error={error} onRetry={retry} />
-    <section className="account-summary" aria-label="Account synthesis"><Tabs labels={["Conclusions", "Research Statement"]} pending={["queued", "running", "cancel_requested"].includes(result.research_statement.status) ? "Research Statement" : undefined} value={view.tab} onChange={tab => update({ tab })} /><h2>{account.name || "Scientific account"}</h2><div role="tabpanel" aria-label={view.tab}>{view.tab === "Conclusions" ? <><p className="account-conclusions">{account.closing_remarks || "This account has no separate closing synthesis. Inspect its component claims and scope below."}</p><details className="scope-disclosure"><summary>Approach and scope</summary><p>{account.context}</p>{account.assumptions?.map(assumption => <p key={assumption}>{assumption}</p>)}</details><Attribution document={result.document} ids={account.was_attributed_to} />{!result.coverage.complete && <p className="notice">This source view is bounded. Missing records are not evidence of absence.</p>}</> : <ParagraphView key={id} state={result.research_statement} accountId={id} onRefresh={retry} />}</div></section>
+    <AccountPublication key={id} id={id} publication={result.publication} onRefresh={retry} />
+    <section className="account-summary" aria-label="Account synthesis"><Tabs labels={["Conclusions", "Research Statement"]} pending={["queued", "running", "cancel_requested"].includes(result.research_statement.status) ? "Research Statement" : undefined} value={view.tab} onChange={tab => update({ tab })} /><h2>{account.name || "Scientific account"}</h2><div role="tabpanel" aria-label={view.tab}>{view.tab === "Conclusions" ? <><p className="account-conclusions">{account.closing_remarks || "This account has no separate closing synthesis. Inspect its component claims and scope below."}</p><details className="scope-disclosure"><summary>Approach and scope</summary><p>{account.context}</p>{account.assumptions?.map(assumption => <p key={assumption}>{assumption}</p>)}</details><Attribution document={result.document} ids={account.was_attributed_to} />{!result.coverage.complete && <p className="notice">This source view is bounded. Missing records are not evidence of absence.</p>}</> : <ParagraphView key={`${id}:${result.publication?.can_manage === true}`} state={result.research_statement} accountId={id} onRefresh={retry} canManage={result.publication?.can_manage === true} />}</div></section>
     <section className="account-claims-section"><button className="account-claims-toggle" aria-expanded={view.claimsOpen} aria-controls={claimsBody} onClick={() => update({ claimsOpen: !view.claimsOpen })}><span>Associated claims <small>{claims.length}</small></span><span className="claims-toggle-caret" aria-hidden="true">⌄</span></button>
       <div id={claimsBody} className="account-claims-body" hidden={!view.claimsOpen}><span className="sr-only" role="status">{visible.length} of {claims.length} matching claims</span><div className="claim-search-toolbar"><label className="claim-search"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 4 4" /></svg><input type="search" aria-label="Search associated claims" placeholder="Search claims…" value={view.search} onChange={event => update({ search: event.target.value })} /></label><button className={`claim-filter-toggle ${view.relationship !== "All" ? "has-filter" : ""}`} aria-expanded={view.filtersOpen} aria-controls={filtersId} aria-label={view.relationship === "All" ? "Filters" : `Filters, ${view.relationship} selected`} onClick={() => update({ filtersOpen: !view.filtersOpen })}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M3 7h4m4 0h10M3 17h10m4 0h4" /><circle cx="9" cy="7" r="2" /><circle cx="15" cy="17" r="2" /></svg>Filters{view.relationship !== "All" && <span className="claim-filter-count">1</span>}</button></div><div id={filtersId} className="claim-filters" role="group" aria-label="Filter by relationship" hidden={!view.filtersOpen}>{groups.map(group => <button key={group} aria-pressed={view.relationship === group} onClick={() => update({ relationship: group })}>{group}</button>)}</div>
         <div className="account-claim-results">{visible.map(claim => <article className={`account-claim-card ${view.expanded === claim.id ? "is-expanded" : ""}`} key={claim.id}><button id={`claim-toggle-${claim.id}`} className="account-claim-option" aria-expanded={view.expanded === claim.id} aria-controls={`claim-inline-${claim.id}`} onClick={() => update({ expanded: view.expanded === claim.id ? null : claim.id })}><span className="claim-ref">C{claims.indexOf(claim) + 1}</span><span><span className="claim-option-text">{proposition(claim)?.statement || claim.statement || claim.proposition}</span><span className="claim-option-meta"><span>{relationship(proposition(claim))}</span><span>{claim.has_evidence?.length || 0} evidence items</span></span></span><span className="claim-selection-caret" aria-hidden="true">⌄</span></button><div id={`claim-inline-${claim.id}`} className="claim-inline-body" hidden={view.expanded !== claim.id}><p className="claim-inline-assessment">{claim.statement || "No separate assessment text was supplied."}</p><div className="claim-inline-status"><span>{human(claim.direction)}</span><span>{claim.status ? human(claim.status) : "Review status not specified"}</span></div><div className="claim-inline-sources">{(claim.has_evidence || []).map(evidenceId => { const evidence = result.document.evidence_items?.find(item => item.id === evidenceId); return <p key={evidenceId}>{evidence?.name || evidence?.reference_title || "Evidence item"}<small>{evidence?.direction ? human(evidence.direction) : "Direction not specified"}</small></p>; })}</div><Link className="claim-page-link" href={claimHref(claim.id, id)}>Open claim page <span aria-hidden="true">↗</span></Link></div></article>)}</div>
@@ -111,11 +118,11 @@ export function AccountView({ id, embedded = false }: { id: string; embedded?: b
 function Attribution({ document, ids }: { document: Document; ids: string[] }) {
   return <p className="attribution">Attributed to {ids.map(id => { const person = document.persons?.find(item => item.id === id); const organization = document.organizations?.find(item => item.id === id); return person ? person.name || [person.given_name, person.family_name].filter(Boolean).join(" ") || id : organization?.name || id; }).join(", ")}</p>;
 }
-export function ParagraphView({ state: savedState, accountId, onRefresh }: { state: Schema<"ParagraphState">; accountId: string; onRefresh: () => void }) {
+export function ParagraphView({ state: savedState, accountId, onRefresh, canManage = false }: { state: Schema<"ParagraphState">; accountId: string; onRefresh: () => void; canManage?: boolean }) {
   const [submitted, setSubmitted] = useState<Schema<"Job"> | null>(null);
   const [observed, setObserved] = useState<Schema<"Job"> | null>(null);
   const submitKey = useRef<string | null>(null), submitting = useRef(false), refreshed = useRef("");
-  const jobId = submitted?.id || savedState.job_id;
+  const jobId = canManage ? submitted?.id || savedState.job_id : null;
   const snapshot = observed?.id === jobId ? observed : submitted;
   const observedState = snapshot && paragraphStateFromJob(snapshot, accountId);
   // An in-flight account refresh may still describe the previous attempt. Keep
@@ -142,7 +149,7 @@ export function ParagraphView({ state: savedState, accountId, onRefresh }: { sta
     return () => { active = false; };
   }, [state.paragraph_id, readAttempt]);
   const generate = async () => {
-    if (submitting.current) return;
+    if (!canManage || submitting.current) return;
     submitting.current = true; setPending(true); setError("");
     submitKey.current ||= crypto.randomUUID();
     try {
@@ -189,14 +196,14 @@ export function ParagraphView({ state: savedState, accountId, onRefresh }: { sta
     parts.push(points.slice(cursor).join("")); return parts;
   };
   return <div className="paragraph-view">
-    {!paragraph && (pending ? <LoadingSurface compact title="Starting your research statement" description="Saving your request and connecting to the writing agent." skeleton="none" /> : ["queued", "running", "cancel_requested"].includes(state.status) ? jobId ? <p className="statement-explanation">The agent is writing a cited explanation from this account’s accepted claims. Follow its progress below.</p> : <LoadingSurface compact title="Preparing your research statement" description="Your scientific account is saved. We’re waiting for the writing job to start." skeleton="none" /> : state.status === "succeeded" ? <LoadingSurface compact title={error ? "Research statement is unavailable" : "Opening your research statement"} description="Loading the cited text and its references." error={error} onRetry={() => setReadAttempt(value => value + 1)} rows={2} /> : <div className="empty"><p>{state.status === "failed" ? "Statement generation failed. Your scientific account is saved." : state.status === "cancelled" ? "Statement generation was stopped. Your scientific account is saved." : "A research statement has not been requested."}</p><button onClick={generate} disabled={pending}>{state.status === "not_requested" ? "Generate research statement" : "Retry paragraph generation"}</button></div>)}
+    {!paragraph && (!canManage && !state.paragraph_id ? <p className="statement-explanation">No research statement is included in this published snapshot.</p> : pending ? <LoadingSurface compact title="Starting your research statement" description="Saving your request and connecting to the writing agent." skeleton="none" /> : ["queued", "running", "cancel_requested"].includes(state.status) ? jobId ? <p className="statement-explanation">The agent is writing a cited explanation from this account’s accepted claims. Follow its progress below.</p> : <LoadingSurface compact title="Preparing your research statement" description="Your scientific account is saved. We’re waiting for the writing job to start." skeleton="none" /> : state.status === "succeeded" ? <LoadingSurface compact title={error ? "Research statement is unavailable" : "Opening your research statement"} description="Loading the cited text and its references." error={error} onRetry={() => setReadAttempt(value => value + 1)} rows={2} /> : <div className="empty"><p>{state.status === "failed" ? "Statement generation failed. Your scientific account is saved." : state.status === "cancelled" ? "Statement generation was stopped. Your scientific account is saved." : "A research statement has not been requested."}</p><button onClick={generate} disabled={pending}>{state.status === "not_requested" ? "Generate research statement" : "Retry paragraph generation"}</button></div>)}
     {paragraph && <><p className="research-prose">{renderText()}</p><div className="research-downloads" aria-label="Copy and download research statement"><button className="copy-button" disabled={exporting} onClick={() => void exportParagraph("rich-text")}>Copy for Word</button>{(["markdown", "latex", "bibtex"] as const).map(format => <button className="text-button" key={format} disabled={exporting} onClick={() => void exportParagraph(format)}>{({ markdown: "Markdown", latex: "LaTeX", bibtex: "BibTeX" })[format]}</button>)}</div><p role="status" className="muted">{notice}</p>{manualCopy && <div className="manual-paragraph-copy"><label htmlFor={`copy-${state.paragraph_id}`}>Paragraph and references · plain text</label><textarea id={`copy-${state.paragraph_id}`} ref={copyArea} readOnly value={manualCopy} rows={9} /><div><button className="text-button" onClick={() => { copyArea.current?.focus(); copyArea.current?.select(); }}>Select all text</button><button className="text-button" onClick={() => setManualCopy("")}>Close copy preview</button></div></div>}<p className="paragraph-export-note">For LaTeX, also download references.bib and save both files in the same folder.</p><section className="research-references references"><h3>References <span>{bibliography.length}</span></h3><ol>{bibliography.map((reference, index) => {
       const metadata = result?.citation_metadata.find(item => item.target_id === reference.target_id && item.metadata_revision === reference.citation_metadata_revision);
       const href = reference.target_id.startsWith("dapper:Claim.") ? claimHref(reference.target_id, accountId) : objectHref(reference.target_id);
       const byline = metadata?.byline.map(person => person.display_name || [person.given_name, person.family_name].filter(Boolean).join(" ")).filter(Boolean).join("; ");
       return <li key={`${reference.target_id}-${reference.citation_metadata_revision}`} id={`reference-${index + 1}`} tabIndex={-1}><p>{byline && <span>{byline}{metadata?.issued_date ? ` (${metadata.issued_date.slice(0, 4)})` : ""}. </span>}<Link className="reference-title" href={href} aria-label="Inspect cited record">{metadata?.title || reference.text}</Link></p><div className="reference-meta">{metadata ? `DAPPER ${metadata.target_class} · ${metadata.issued_date || "Date unavailable"} · ` : ""}Metadata revision {reference.citation_metadata_revision}</div><details className="formatted-reference"><summary>Formatted reference</summary><p>{reference.text}</p></details></li>;
     })}</ol></section><details className="paragraph-technical technical-disclosure"><summary>Paragraph record and citation metadata</summary><p className="idline">{paragraph.id}</p><Link href={objectHref(paragraph.id)}>Inspect paragraph record</Link><pre className="scientific-json">{JSON.stringify({ paragraph, citation_metadata: result?.citation_metadata, rendering_manifest: citations?.rendering_manifest, schema: result?.schema }, null, 2)}</pre></details></>}
-    {jobId && <ParagraphActivity key={jobId} jobId={jobId} accountId={accountId} initial={snapshot} onJob={updateJob} deferred={state.status === "succeeded"} />}
+    {canManage && jobId && <ParagraphActivity key={jobId} jobId={jobId} accountId={accountId} initial={snapshot} onJob={updateJob} deferred={state.status === "succeeded"} />}
     {error && (paragraph || state.status !== "succeeded") && <p role="alert" className="error">{error}</p>}
   </div>;
 }
@@ -206,7 +213,7 @@ function Technical({ label = "DAPPER record", value }: { label?: string; value: 
 }
 function safeDownload(value?: string | null) {
   if (!value || typeof window === "undefined") return null;
-  try { const url = new URL(value, window.location.origin); return url.origin === window.location.origin && /^\/api\/backend\/v1\/artifacts\/[a-f0-9]{64}$/.test(url.pathname) ? url.pathname : null; } catch { return null; }
+  return sourceDownloadPath(value, window.location.origin);
 }
 function SourceArtifact({ artifact }: { artifact: Schema<"ArtifactAccess"> }) {
   const href = safeDownload(artifact.download_url), file = artifact.file;
@@ -267,7 +274,7 @@ export function Record({ value }: { value: unknown }) {
   return <dl className="record">{Object.entries(value).map(([key, item]) => {
     let download: string | null = null;
     if (key === "download_url" && typeof item === "string" && typeof window !== "undefined") {
-      try { const url = new URL(item, window.location.origin); if (url.origin === window.location.origin && /^\/api\/backend\/v1\/artifacts\/[a-f0-9]{64}$/.test(url.pathname)) download = url.pathname; } catch { /* show invalid source values as text */ }
+      download = sourceDownloadPath(item, window.location.origin);
     }
     const file = (value as { file?: { filename?: string } }).file;
     return <div key={key}><dt>{key.replaceAll("_", " ")}</dt><dd>{download ? <ArtifactDownload href={download} filename={file?.filename || "source-artifact"} /> : typeof item === "object" && item !== null ? <Record value={item} /> : String(item ?? "Not recorded")}</dd></div>;

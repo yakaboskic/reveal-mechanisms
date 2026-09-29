@@ -9,14 +9,17 @@ import os
 import base64
 import hmac
 import re
-from fastapi import FastAPI, Request, Depends
-from fastapi.responses import JSONResponse, StreamingResponse, Response
+from fastapi import FastAPI, Request, Depends, Query
+from fastapi.responses import JSONResponse, StreamingResponse, Response, RedirectResponse
 from jsonschema import Draft202012Validator
-from .auth import Problem, decode_assertion, owned, principal, service_authority
+from .auth import Problem, decode_assertion, owned, require_owned, principal, publication_principal, service_authority
 from .catalog import Catalog
 from .repository import Repository, now, uid, digest
 from .runtime_config import ROOT, artifacts_root
 from . import jobs
+from .account_discovery import visible_accounts, counts_by_gap, counted_gap, count_snapshot
+from . import publication
+from . import analysis_outcomes
 
 CONTRACT = json.loads((ROOT/'api/openapi.json').read_text())
 GATEWAY = json.loads((ROOT/'schema/gateway.schema.json').read_text())
@@ -41,6 +44,32 @@ def validate_query(request:Request):
 app = FastAPI(title='REVEAL Mechanisms', version='0.2.0', docs_url='/docs',dependencies=[Depends(validate_query)])
 app.openapi = lambda: CONTRACT
 
+@app.middleware('http')
+async def publication_cache_policy(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith(('/v1/accounts', '/v1/claims', '/v1/objects', '/v1/gene-sets',
+            '/v1/paragraphs', '/v1/citations', '/v1/artifacts', '/v1/knowledge-gaps', '/v1/analysis-outcomes')):
+        # Visibility is revocable and workspace responses vary by principal.
+        response.headers['Cache-Control'] = 'private, no-store'
+        vary = [part.strip() for part in response.headers.get('Vary', '').split(',') if part.strip()]
+        if 'authorization' not in {part.lower() for part in vary}: vary.append('Authorization')
+        response.headers['Vary'] = ', '.join(vary)
+    return response
+
+@app.middleware('http')
+async def measure_request(request: Request, call_next):
+    import time
+    from .runtime_metrics import observe
+    started = time.perf_counter()
+    status = 500
+    try:
+        response = await call_next(request)
+        status = response.status_code
+        return response
+    finally:
+        route = getattr(request.scope.get('route'), 'path', 'unmatched')
+        observe('http', request.method+' '+route, (time.perf_counter()-started)*1000, status >= 500)
+
 def validate(value, name, gateway=False):
     schema = GATEWAY if gateway else CONTRACT
     ref = '#/$defs/'+name if gateway else '#/components/schemas/'+name
@@ -58,8 +87,8 @@ async def internal_error(request, exc):
     logging.getLogger('reveal').error('Unhandled request failure (%s)', type(exc).__name__)
     return await problem_handler(request, Problem(503, 'SERVICE_UNAVAILABLE', 'The service is temporarily unavailable; retry shortly.'))
 
-def page(items, owner='', limit=50, cursor=None, scope=''):
-    limit=max(1,min(limit,100)); snapshot=digest([owner,scope,items]); offset=0
+def page(items, owner='', limit=50, cursor=None, scope='', *, snapshot_items=None, seed=None):
+    limit=max(1,min(limit,100)); snapshot=digest([owner,scope,items if snapshot_items is None else snapshot_items]); offset=0
     secret=os.getenv('REVEAL_GATEWAY_SECRET','').encode()
     if cursor:
         try:
@@ -67,15 +96,28 @@ def page(items, owner='', limit=50, cursor=None, scope=''):
             if not hmac.compare_digest(hmac.new(secret,encoded.encode(),hashlib.sha256).hexdigest(),signature): raise ValueError()
             value=json.loads(base64.urlsafe_b64decode(encoded+'='*(-len(encoded)%4)))
             if value['owner']!=owner or value['scope']!=scope or value['snapshot']!=snapshot: raise ValueError()
+            if seed is not None and value.get('seed')!=seed: raise ValueError()
             offset=value['offset']
             if type(offset) is not int or offset<0: raise ValueError()
         except (ValueError,KeyError,TypeError): raise Problem(409,'CURSOR_EXPIRED','This collection changed or the cursor belongs to another query; reload its first page.')
     has_more=offset+limit<len(items); next_cursor=None
     if has_more:
         payload={'owner':owner,'scope':scope,'snapshot':snapshot,'offset':offset+limit}
+        if seed is not None: payload['seed']=seed
         encoded=base64.urlsafe_b64encode(json.dumps(payload,separators=(',',':')).encode()).decode().rstrip('=')
         next_cursor=encoded+'.'+hmac.new(secret,encoded.encode(),hashlib.sha256).hexdigest()
     return {'items':items[offset:offset+limit],'page':{'next_cursor':next_cursor,'has_more':has_more,'snapshot_id':snapshot}}
+
+def browse_seed(cursor):
+    if not cursor: return uid()
+    try:
+        encoded,signature=cursor.split('.')
+        secret=os.getenv('REVEAL_GATEWAY_SECRET','').encode()
+        if not hmac.compare_digest(hmac.new(secret,encoded.encode(),hashlib.sha256).hexdigest(),signature): raise ValueError()
+        seed=json.loads(base64.urlsafe_b64decode(encoded+'='*(-len(encoded)%4)))['seed']
+        if not isinstance(seed,str) or not re.fullmatch('[a-f0-9-]{36}',seed): raise ValueError()
+        return seed
+    except (ValueError,KeyError,TypeError): raise Problem(409,'CURSOR_EXPIRED','Reload the first page to start a new browse session.')
 
 def idempotent(tx, owner, route, key, body, action):
     if not key or len(key)>200: raise Problem(400, 'IDEMPOTENCY_KEY_REQUIRED', 'Supply an Idempotency-Key of at most 200 characters.')
@@ -119,10 +161,50 @@ def freeze_draft_bindings(tx,draft_id,owner,composer):
 @app.get('/healthz')
 def health(): return {'status':'ok'}
 
+@app.get('/internal/v1/admin/telemetry')
+def admin_telemetry(request: Request):
+    service_authority(request.headers.get('authorization'))
+    decode_assertion(request.headers.get('x-reveal-admin-assertion', ''), 'admin_telemetry')
+    from .telemetry import snapshot
+    from fastapi.encoders import jsonable_encoder
+    return JSONResponse(jsonable_encoder(snapshot(repo)), headers={'Cache-Control': 'private, no-store'})
+
+def admin_database_authority(request: Request):
+    service_authority(request.headers.get('authorization'))
+    decode_assertion(request.headers.get('x-reveal-admin-assertion', ''), 'admin_telemetry')
+
+@app.get('/internal/v1/admin/jobs/{job_id}', dependencies=[Depends(admin_database_authority)])
+def admin_job(job_id: str, before: str | None = Query(None, max_length=12), limit: int = Query(100, ge=1, le=100)):
+    from .admin_jobs import job_detail
+    return JSONResponse(job_detail(repo, job_id, before=before, limit=limit), headers={'Cache-Control': 'private, no-store'})
+
+@app.get('/internal/v1/admin/tables/{table}', dependencies=[Depends(admin_database_authority)])
+def admin_table(table: str, limit: int = Query(25, ge=1, le=50), cursor: str | None = Query(None, max_length=8192),
+                column: str | None = Query(None, max_length=128), operator: str = 'contains', q: str = Query('', max_length=256)):
+    from .admin_database import inspect_table
+    return JSONResponse(inspect_table(repo, table, limit=limit, cursor=cursor, column=column, operator=operator, q=q),
+                        headers={'Cache-Control': 'private, no-store'})
+
+@app.get('/internal/v1/admin/tables/{table}/row', dependencies=[Depends(admin_database_authority)])
+def admin_row(table: str, key: str = Query(..., max_length=4096)):
+    from .admin_database import inspect_row
+    return JSONResponse(inspect_row(repo, table, key), headers={'Cache-Control': 'private, no-store'})
+
+@app.get('/internal/v1/admin/tables/{table}/cell', dependencies=[Depends(admin_database_authority)])
+def admin_cell(table: str, key: str = Query(..., max_length=4096), column: str = Query(..., max_length=128),
+               offset: int = Query(0, ge=0, le=100_000_000), digest: str | None = Query(None, max_length=64)):
+    from .admin_database import inspect_cell
+    return JSONResponse(inspect_cell(repo, table, key, column, offset, digest), headers={'Cache-Control': 'private, no-store'})
+
 @app.get('/readyz')
 @app.get('/health/ready')
 def ready():
     database = repo.readiness(); catalog.load()
+    from .artifact_store import s3_enabled, store
+    if s3_enabled(): store().check()
+    if jobs.transport()=='redis':
+        from .job_transport import RedisTransport
+        RedisTransport().client.ping()
     return {'status': 'ready', **database, 'sources': {'dismech_import': catalog.dismech_import, 'gaps': len(catalog.gaps),
         'mapping_run': catalog.mapping_run, 'mapped_factors': len(catalog.factors), 'embedding_run': catalog.embedding_run}, 'execution_mode': os.getenv('REVEAL_EXECUTION_MODE','box')}
 
@@ -197,23 +279,60 @@ def filter_gaps(items,kind,status,disease_id):
         (not disease_id or disease_id in x['object'].get('about_entities',[]))]
 
 @app.get('/v1/knowledge-gaps/search')
-def search_gaps(q: str='', limit: int=20, mode: str='fuzzy',kind:str|None=None,status:str|None=None,cursor:str|None=None,source:str='dismech',disease_id:str|None=None):
+def search_gaps(request:Request,q: str='', limit: int=20, mode: str='fuzzy',kind:str|None=None,status:str|None=None,cursor:str|None=None,source:str='dismech',disease_id:str|None=None,scope:str='public'):
     if mode not in ('lexical','fuzzy'): raise Problem(503,'SEARCH_MODE_UNAVAILABLE','Knowledge-gap discovery currently supports lexical and fuzzy modes; no semantic gap index is configured.')
     catalog.load(); items=catalog.search_gaps(q,len(catalog.gaps),mode)
     allowed={g['object']['id'] for g in filter_gaps([x['gap'] for x in items],kind,status,disease_id)}
     items=[x for x in items if x['gap']['object']['id'] in allowed]
-    return {**page(items,limit=limit,cursor=cursor,scope=digest([q,mode,kind,status,disease_id])),'search':catalog.provenance(q,mode)}
+    owner,accounts=discovery(request,scope); counts=counts_by_gap(accounts); observed=now()
+    items=[{**item,'gap':counted_gap(item['gap'],counts,owner,observed)} for item in items]
+    return {**page(items,owner,limit,cursor,digest([q,mode,kind,status,disease_id,scope]),snapshot_items=count_snapshot(items)),'search':catalog.provenance(q,mode)}
+
+def optional_identity(tx,request):
+    authorization=request.headers.get('authorization')
+    return principal(tx,authorization)['user_id'] if authorization is not None else None
+
+def discovery(request,scope='public', *, attribution=False):
+    if scope not in ('public','workspace'): raise Problem(422,'INVALID_QUERY','Choose public or workspace discovery.')
+    with repo.read_transaction() as tx:
+        owner=optional_identity(tx,request)
+        if scope=='public': return '',publication.public_accounts(tx)
+        if owner is None: raise Problem(401,'SESSION_EXPIRED','Continue with a registered or anonymous session to browse your workspace.')
+        return owner,visible_accounts(tx,owner,attribution=attribution)
 
 @app.get('/v1/knowledge-gaps')
-def list_gaps(limit: int=20,cursor:str|None=None,kind:str|None=None,status:str|None=None,source:str='dismech',disease_id:str|None=None):
+def list_gaps(request:Request,limit: int=20,cursor:str|None=None,kind:str|None=None,status:str|None=None,source:str='dismech',disease_id:str|None=None,scope:str='public'):
     catalog.load(); items=filter_gaps([x['gap'] for x in catalog.search_gaps('',len(catalog.gaps))],kind,status,disease_id)
-    return page(items,limit=limit,cursor=cursor,scope=digest(['gaps',kind,status,disease_id]))
+    owner,accounts=discovery(request,scope); counts=counts_by_gap(accounts); observed=now(); seed=browse_seed(cursor)
+    items=[counted_gap(gap,counts,owner,observed) for gap in items]
+    items.sort(key=lambda gap:(-gap['scientific_accounts']['count'],digest([seed,gap['object']['id']]),gap['source']['source_id'],gap['object']['id']))
+    return page(items,owner,limit,cursor,digest(['gaps',kind,status,disease_id,scope]),snapshot_items=count_snapshot(items),seed=seed)
 
-@app.get('/v1/knowledge-gaps/{gap_id:path}')
-def get_gap(gap_id: str,source_revision:str|None=None):
+@app.get('/v1/knowledge-gaps/{gap_id}/accounts')
+def gap_accounts(gap_id:str,request:Request,limit:int=20,cursor:str|None=None,source_revision:str|None=None,scope:str='public'):
     gap=catalog.gap(gap_id)
     if source_revision and source_revision!=gap['source']['source_revision']: raise Problem(409,'SOURCE_REVISION_CHANGED','The exact requested source revision is unavailable.')
-    return gap
+    owner,accounts=discovery(request,scope,attribution=True)
+    items=[item for item in accounts if item['account']['question']==gap['object']['id']]
+    return page(items,owner,limit,cursor,digest(['gap-accounts',gap['object']['id'],source_revision,scope]))
+
+@app.get('/v1/knowledge-gaps/{gap_id}/outcomes')
+def gap_outcomes(gap_id:str,request:Request,limit:int=20,cursor:str|None=None,source_revision:str|None=None,scope:str='public'):
+    if scope not in ('public','workspace'): raise Problem(422,'INVALID_QUERY','Choose public or workspace discovery.')
+    gap=catalog.gap(gap_id)
+    if source_revision and source_revision!=gap['source']['source_revision']: raise Problem(409,'SOURCE_REVISION_CHANGED','The exact requested source revision is unavailable.')
+    with repo.read_transaction() as tx:
+        user=optional_identity(tx,request)
+        if scope=='workspace' and user is None: raise Problem(401,'SESSION_EXPIRED','A workspace session is required.')
+        items=analysis_outcomes.listing(tx,gap['object']['id'],user,scope)
+    return page(items,user if scope=='workspace' else '',limit,cursor,digest(['gap-outcomes',gap['object']['id'],source_revision,scope]))
+
+@app.get('/v1/knowledge-gaps/{gap_id:path}')
+def get_gap(gap_id: str,request:Request,source_revision:str|None=None,scope:str='public'):
+    gap=catalog.gap(gap_id)
+    if source_revision and source_revision!=gap['source']['source_revision']: raise Problem(409,'SOURCE_REVISION_CHANGED','The exact requested source revision is unavailable.')
+    owner,accounts=discovery(request,scope)
+    return counted_gap(gap,counts_by_gap(accounts),owner,now())
 
 @app.get('/v1/mechanisms/search')
 def search_mechanisms(q: str='', mode: str='hybrid', limit: int=20,source:str='all',model:str='cfde-inc-v2',cursor:str|None=None):
@@ -261,7 +380,8 @@ def build_suggestions(body):
     suggestion_id=uid()
     with repo.transaction() as tx:
         tx.insert_many([('suggestion',suggestion_id,'catalog',{'mode':body.get('mode','semantic'),'embedding_run_id':catalog.embedding_run,'mapping_run_id':catalog.mapping_run,
-            **context_provenance,'hits':{x['record']['source_id']:{'ranking':x['ranking'],'matched_context_ids':x['contexts']} for x in items}})])
+            **context_provenance,'hits':{x['record']['source_id']:{'ranking':x['ranking'],'matched_context_ids':x['contexts'],
+                **({'context_similarities':x['context_similarities']} if 'context_similarities' in x else {})} for x in items}})])
     return {'suggestion_id':suggestion_id,'automatic_anchors':[{'factor':x['record'],'ranking':x['ranking'],'matched_context_ids':x['contexts']} for x in items],
         'automatic_target_count':5,'search':catalog.provenance(query,body.get('mode','semantic'),True),'limitations':['Retrieval similarity is not evidence of biological support.']}
 
@@ -286,6 +406,7 @@ async def create_draft(request:Request):
         user=principal(tx,request.headers.get('authorization'))['user_id']
         def create():
             draft={'id':uid(),'owner_user_id':user,'version':1,'composer':body['composer'],'created_at':now(),'updated_at':now()}
+            if 'name' in body: draft['name']=body['name'].strip()
             freeze_draft_bindings(tx,draft['id'],user,body['composer'])
             tx.put('draft',draft['id'],user,draft); return draft
         return idempotent(tx,user,'draft',request.headers.get('idempotency-key'),body,create)
@@ -304,10 +425,37 @@ async def patch_draft(draft_id:str,request:Request):
         def update():
             row=owned(tx,'draft',draft_id,user); draft=row['data']
             if draft['version']!=body['expected_version']: raise Problem(409,'VERSION_CONFLICT','This draft changed in another tab.',current_version=draft['version'])
-            freeze_draft_bindings(tx,draft_id,user,body['composer'])
-            draft.update(composer=body['composer'],version=draft['version']+1,updated_at=now(),owner_user_id=user)
+            if 'composer' in body:
+                freeze_draft_bindings(tx,draft_id,user,body['composer'])
+                draft['composer']=body['composer']
+            if 'name' in body: draft['name']=body['name'].strip()
+            draft.update(version=draft['version']+1,updated_at=now(),owner_user_id=user)
             tx.put('draft',draft_id,user,draft,expected=row['version']); return draft
         return idempotent(tx,user,'draft:'+draft_id,request.headers.get('idempotency-key'),body,update)
+
+@app.delete('/v1/drafts/{draft_id}')
+async def delete_draft(draft_id:str,request:Request):
+    body=await request.json(); validate(body,'DraftDelete')
+    with repo.transaction() as tx:
+        user=principal(tx,request.headers.get('authorization'))['user_id']
+        def remove():
+            draft=owned(tx,'draft',draft_id,user)['data']
+            if draft['version']!=body['expected_version']: raise Problem(409,'VERSION_CONFLICT','This draft changed in another tab. Refresh before deleting it.',current_version=draft['version'])
+            requests={r['id'] for r in tx.list('request',user) if r['data']['source_draft_id']==draft_id}
+            if any(r['data']['kind']=='analysis' and r['data'].get('research_request_id') in requests and r['data']['status'] not in jobs.TERMINAL for r in tx.list('job',user)):
+                raise Problem(409,'DRAFT_IN_USE','This draft has active research. Wait for it to finish or stop the run before deleting the draft.')
+            tx.remove('draft',draft_id); tx.remove('draft_binding',draft_id)
+            # Editable state may be removed; submitted evidence and results remain immutable.
+            remaining=[r['data'] for r in tx.list('draft',user)]
+            remaining.sort(key=lambda d:(d['updated_at'],d['id']),reverse=True)
+            for row in tx.list('exploration',user):
+                exploration=row['data']
+                if exploration.get('draft_id')!=draft_id: continue
+                gap_id=exploration['source_gap']['id']
+                exploration['draft_id']=next((d['id'] for d in remaining if (d['composer'].get('source_gap') or {}).get('id')==gap_id),None)
+                tx.put('exploration',row['id'],user,exploration,expected=row['version'])
+            return {'id':draft_id,'deleted':True}
+        return idempotent(tx,user,'delete-draft:'+draft_id,request.headers.get('idempotency-key'),body,remove)
 
 @app.get('/v1/research-requests')
 def list_requests(request:Request,limit:int=50,cursor:str|None=None):
@@ -352,9 +500,11 @@ def create_job_transaction(body,authorization,idempotency_key):
                 'document':document,'attribution':{'user_id':user,'person_id':None,'display_name':identity['display_name'],'orcid':identity['orcid'],'orcid_authenticated':identity['orcid_authenticated'],'observed_at':now(),'principal_kind':identity['principal_kind']},
                 'submitted_at':now(),'linked_dismech_context':contexts}
             tx.put('request',frozen['id'],user,frozen)
-            tx.put('request_binding',frozen['id'],user,{'dismech_import_id':saved['dismech_import_id'],'source_gap':gap,
+            request_binding={'dismech_import_id':saved['dismech_import_id'],'source_gap':gap,
                 'anchors':[saved['selections'][s['reference']['source_id']]['binding'] for s in composer['eaggl_anchors']],
-                'retrieval':{s['reference']['source_id']:saved['selections'][s['reference']['source_id']].get('retrieval') for s in composer['eaggl_anchors']}})
+                'retrieval':{s['reference']['source_id']:saved['selections'][s['reference']['source_id']].get('retrieval') for s in composer['eaggl_anchors']}}
+            request_binding['anchor_display']=analysis_outcomes.anchor_display(composer,request_binding,saved)
+            tx.put('request_binding',frozen['id'],user,request_binding)
             return jobs.enqueue(tx,user,'analysis',request_id=frozen['id'],inputs=body)
         return idempotent(tx,user,'job',idempotency_key,body,create)
 
@@ -377,6 +527,23 @@ def cancel_job(job_id:str,request:Request):
         user=principal(tx,request.headers.get('authorization'))['user_id']; job=dict(owned(tx,'job',job_id,user)['data'],owner_user_id=user)
         return jobs.cancel(tx,job)
 
+@app.post('/v1/jobs/{job_id}/retry-review',status_code=202)
+async def retry_job_review(job_id:str,request:Request):
+    body=await request.json(); validate(body,'ReviewRetryInput')
+    return await asyncio.to_thread(retry_review_transaction,job_id,body,request.headers.get('authorization'),request.headers.get('idempotency-key'))
+
+def retry_review_transaction(job_id,body,authorization,idempotency_key):
+    from .review_retry import enqueue_review
+    with repo.transaction() as tx:
+        identity=principal(tx,authorization); user=identity['user_id']
+        job=dict(owned(tx,'job',job_id,user)['data'],owner_user_id=user)
+        def retry():
+            active=[r for r in tx.list('job',user) if r['data']['status'] not in jobs.TERMINAL]
+            if len(active)>=int(os.getenv('REVEAL_MAX_ACTIVE_JOBS','2')):
+                raise Problem(429,'JOB_QUOTA_EXCEEDED','Wait for an active job to finish or stop it.')
+            return enqueue_review(tx,job,body['expected_last_event_id'])
+        return idempotent(tx,user,'/v1/jobs/'+job_id+'/retry-review',idempotency_key,body,retry)
+
 def read_events(job_id,authorization,after,limit=100):
     with repo.read_transaction() as tx:
         user=principal(tx,authorization)['user_id']; job=owned(tx,'job',job_id,user)['data']
@@ -398,7 +565,10 @@ async def get_events(job_id:str,request:Request,after:str='0',limit:int=100):
     if 'text/event-stream' not in request.headers.get('accept',''): return initial
     async def stream():
         nonlocal cursor
+        import time
+        deadline=time.monotonic()+min(240,max(1,int(os.getenv('REVEAL_SSE_WINDOW_SECONDS','240'))))
         while True:
+            if time.monotonic()>=deadline: return
             try: data=await asyncio.to_thread(read_events,job_id,authorization,cursor,limit)
             except Problem: return
             for item in data['items']:
@@ -425,15 +595,88 @@ async def record_exploration(request:Request):
 
 @app.get('/v1/accounts')
 def accounts(request:Request,limit:int=20,cursor:str|None=None,gap_id:str|None=None):
-    with repo.transaction() as tx:
+    with repo.read_transaction() as tx:
         user=principal(tx,request.headers.get('authorization'))['user_id']
-        items=[r['data']['summary'] for r in tx.list('account_membership',user) if not gap_id or r['data']['summary']['knowledge_gap']['id']==gap_id]
-        items.sort(key=lambda x:x['account']['id']); items.sort(key=lambda x:x['created_at'],reverse=True)
+        items=[item for item in visible_accounts(tx,user,attribution=True) if not gap_id or item['account']['question']==gap_id]
         return page(items,user,limit,cursor,digest(['accounts',gap_id]))
 
+@app.get('/v1/accounts/{dapper_id}/publication')
+def account_publication(dapper_id:str,request:Request):
+    with repo.read_transaction() as tx:
+        user=optional_identity(tx,request)
+        if user and tx.get('account',digest([user,dapper_id])):
+            owned(tx,'account',dapper_id,user)
+            return publication.state(tx,user,dapper_id,can_manage=True)
+        row,_=publication.find(tx,dapper_id,'account')
+        return publication.state(tx,row['owner'],dapper_id)
+
+@app.post('/v1/accounts/{dapper_id}/publication')
+async def update_publication(dapper_id:str,request:Request):
+    body=await request.json(); validate(body,'PublicationInput')
+    def save():
+        with repo.transaction() as tx:
+            user=publication_principal(tx,request.headers.get('authorization'),body['visibility'])['user_id']
+            return idempotent(tx,user,'publication:'+dapper_id,request.headers.get('idempotency-key'),body,
+                lambda:publication.change(tx,user,dapper_id,body['visibility'],body['expected_version']))
+    return await asyncio.to_thread(save)
+
+@app.get('/v1/analysis-outcomes')
+def workspace_outcomes(request:Request,limit:int=20,cursor:str|None=None):
+    with repo.read_transaction() as tx:
+        user=principal(tx,request.headers.get('authorization'))['user_id']
+        items=analysis_outcomes.listing(tx,owner=user,scope='workspace')
+    return page(items,user,limit,cursor,'workspace-outcomes')
+
+@app.get('/v1/jobs/{job_id}/outcome')
+def job_outcome(job_id:str,request:Request):
+    with repo.read_transaction() as tx:
+        user=principal(tx,request.headers.get('authorization'))['user_id']
+        owned(tx,'job',job_id,user)
+        reference=owned(tx,'analysis_outcome_by_job',job_id,user)
+        return analysis_outcomes.get(tx,reference['data']['id'],user)
+
+@app.get('/v1/analysis-outcomes/{outcome_id}')
+def analysis_outcome(outcome_id:str,request:Request):
+    with repo.read_transaction() as tx:
+        return analysis_outcomes.get(tx,outcome_id,optional_identity(tx,request))
+
+@app.get('/v1/analysis-outcomes/{outcome_id}/publication')
+def outcome_publication(outcome_id:str,request:Request):
+    with repo.read_transaction() as tx:
+        return analysis_outcomes.get(tx,outcome_id,optional_identity(tx,request))['publication']
+
+@app.post('/v1/analysis-outcomes/{outcome_id}/publication')
+async def update_outcome_publication(outcome_id:str,request:Request):
+    body=await request.json(); validate(body,'PublicationInput')
+    def save():
+        with repo.transaction() as tx:
+            user=publication_principal(tx,request.headers.get('authorization'),body['visibility'])['user_id']
+            return idempotent(tx,user,'outcome-publication:'+outcome_id,request.headers.get('idempotency-key'),body,
+                lambda:analysis_outcomes.change(tx,outcome_id,user,body['visibility'],body['expected_version']))
+    return await asyncio.to_thread(save)
+
 def scientific(identity,request,kind='object'):
-    with repo.transaction() as tx:
-        user=principal(tx,request.headers.get('authorization'))['user_id']; row=owned(tx,kind,identity,user)['data']
+    with repo.read_transaction() as tx:
+        user=optional_identity(tx,request); public=None; reference=None; publication_record=None
+        if kind not in ('account','object','paragraph'):
+            if user is None: raise Problem(401,'SESSION_EXPIRED','Continue with a registered or anonymous session.')
+            row=owned(tx,kind,identity,user)['data']
+        else:
+            try:
+                if not user: raise Problem(404,'NOT_FOUND','Scientific resource unavailable.')
+                key=digest([user,identity])
+                keys=[(kind,key),('object_document',key)]
+                if kind=='account': keys.append(('publication',key))
+                records=tx.get_records(keys)
+                row=require_owned(tx,kind,identity,user,records.get((kind,key)))['data']
+                reference=records.get(('object_document',key))
+                publication_record=records.get(('publication',key))
+            except Problem as error:
+                if error.status!=404: raise
+                public,snapshot=publication.find(tx,identity,kind)
+                from .acceptance import object_envelope
+                row=object_envelope(snapshot['document'],identity,snapshot['citation_metadata'],snapshot['artifacts'])
+                if kind=='account': row['research_statement']=snapshot['summary']['research_statement']
         result=row.get('result',row)
         if 'document' not in result: return result
         checksum=request.query_params.get('payload_sha256')
@@ -441,8 +684,11 @@ def scientific(identity,request,kind='object'):
             raise Problem(404,'PAYLOAD_NOT_FOUND','The exact requested payload observation is unavailable.')
         from .acceptance import object_envelope
         document=result['document']; metadata=result['citation_metadata']; artifacts={a['file']['id']:a for a in result['artifacts']}
-        reference=tx.get('object_document',digest([user,identity])); document_sha=reference['data']['sha256'] if reference else None
-        if document_sha is None:
+        if public is None and kind not in ('account','object','paragraph'):
+            reference=tx.get('object_document',digest([user,identity]))
+        if reference and reference['owner'] != user: reference=None
+        document_sha=reference['data']['sha256'] if reference else None
+        if public is None and document_sha is None:
             # Rows accepted before the direct document index retain their exact
             # source observation and full immutable document under this owner.
             observations=[r['data'] for r in tx.list('object_observation',user) if r['data']['object_id']==identity]
@@ -451,8 +697,11 @@ def scientific(identity,request,kind='object'):
             stored=tx.get('scientific_document',digest([user,document_sha]))
             if stored and stored['owner']==user:
                 document=stored['data']['document']; metadata=stored['data'].get('citation_metadata',metadata); artifacts=stored['data'].get('artifact_access',artifacts)
+        if public is not None:
+            document=snapshot['document']; metadata=snapshot['citation_metadata']; artifacts=snapshot['artifacts']
         root_payload=next(p['payload_sha256'] for p in result['payloads'] if p['object_id']==identity)
-        binding={'owner':user,'kind':kind,'root':identity,'payload':root_payload,'document':digest(document)}
+        binding={'owner':user if public is None else 'publication:'+public['id']+':'+str(public['data']['version']),
+            'kind':kind,'root':identity,'payload':root_payload,'document':digest(document)}
         depth=int(request.query_params.get('max_depth','5')); maximum=int(request.query_params.get('max_nodes','250')); offset=0
         secret=os.getenv('REVEAL_GATEWAY_SECRET','').encode(); cursor=request.query_params.get('cursor')
         if cursor:
@@ -471,6 +720,8 @@ def scientific(identity,request,kind='object'):
             return encoded+'.'+hmac.new(secret,encoded.encode(),hashlib.sha256).hexdigest()
         clipped=object_envelope(document,identity,metadata,artifacts,max_depth=depth,max_nodes=maximum,offset=offset,continuation=continuation)
         if 'research_statement' in result: clipped['research_statement']=result['research_statement']
+        if kind=='account': clipped['publication']=publication.state(tx,public['owner'] if public else user,identity,
+            can_manage=public is None,record=public if public else publication_record,account_result=result)
         return clipped
 
 @app.get('/v1/accounts/{dapper_id}')
@@ -487,8 +738,16 @@ def paragraph_result(dapper_id:str,request:Request): return scientific(dapper_id
 @app.get('/v1/citations/{dapper_id}')
 def citation(dapper_id:str,request:Request,revision:int|None=None,format:str='native',locale:str='en-US'):
     from .citations import representation
-    with repo.transaction() as tx:
-        user=principal(tx,request.headers.get('authorization'))['user_id']; payload,media=representation(tx,user,dapper_id,format,revision,locale)
+    with repo.read_transaction() as tx:
+        user=optional_identity(tx,request)
+        try:
+            if not user: raise Problem(404,'NOT_FOUND','Citation unavailable.')
+            payload,media=representation(tx,user,dapper_id,format,revision,locale)
+        except Problem as error:
+            if error.status!=404: raise
+            _,snapshot=publication.find(tx,dapper_id,'citation',revision)
+            reader=publication.SnapshotReader(snapshot)
+            payload,media=representation(reader,reader.user,dapper_id,format,revision,locale)
         accept=request.headers.get('accept','*/*')
         if '*/*' not in accept and media not in accept and 'application/json' not in accept: raise Problem(406,'NOT_ACCEPTABLE','The requested citation format does not match Accept.')
         return JSONResponse(payload,media_type=media) if isinstance(payload,(dict,list)) else Response(payload,media_type=media)
@@ -499,8 +758,27 @@ def evidence(job_id:str,request:Request): return scientific(job_id,request,'evid
 @app.get('/v1/artifacts/{sha256}')
 def artifact_bytes(sha256:str,request:Request):
     if not re.fullmatch('[a-f0-9]{64}',sha256): raise Problem(404,'NOT_FOUND','The source artifact is unavailable.')
-    with repo.transaction() as tx:
-        user=principal(tx,request.headers.get('authorization'))['user_id']; row=owned(tx,'artifact',digest([user,sha256]),user)['data']
+    with repo.read_transaction() as tx:
+        user=optional_identity(tx,request)
+        try:
+            if not user: raise Problem(404,'NOT_FOUND','Artifact unavailable.')
+            row=owned(tx,'artifact',digest([user,sha256]),user)['data']
+        except Problem as error:
+            if error.status!=404: raise
+            try:
+                _,snapshot=publication.find(tx,sha256,'artifact'); row=snapshot['artifact_records'][sha256]
+            except Problem as error:
+                if error.status!=404: raise
+                row=analysis_outcomes.published_artifact(tx,sha256)
+    from .artifact_store import s3_enabled, store, StorageUnavailable
+    if row.get('storage'):
+        if row['storage'].get('sha256')!=sha256: raise Problem(503,'ARTIFACT_CHECKSUM_MISMATCH','Artifact identity differs.')
+        try:
+            url=store().download_url(row['storage'],row['file'].get('filename','source-artifact'),row['file'].get('mime_type','application/octet-stream'))
+        except StorageUnavailable:
+            raise Problem(503,'ARTIFACT_UNAVAILABLE','The retained source bytes are currently unavailable.')
+        return RedirectResponse(url,status_code=307,headers={'Cache-Control':'private, no-store','Referrer-Policy':'no-referrer'})
+    if s3_enabled(): raise Problem(404,'ARTIFACT_UNAVAILABLE','This legacy artifact has not been migrated to object storage.')
     path=Path(row['path']).resolve()
     if not path.is_relative_to(artifacts_root()): raise Problem(404,'NOT_FOUND','The source artifact is unavailable.')
     try: data=path.read_bytes()
@@ -512,12 +790,26 @@ def artifact_bytes(sha256:str,request:Request):
 @app.get('/v1/paragraphs/{dapper_id}/export')
 def export_paragraph(dapper_id:str,request:Request,format:str='markdown'):
     from .citations import export
-    with repo.transaction() as tx:
-        user=principal(tx,request.headers.get('authorization'))['user_id']; return export(tx,user,dapper_id,format)
+    with repo.read_transaction() as tx:
+        user=optional_identity(tx,request)
+        try:
+            if not user: raise Problem(404,'NOT_FOUND','Paragraph unavailable.')
+            return export(tx,user,dapper_id,format)
+        except Problem as error:
+            if error.status!=404: raise
+            _,snapshot=publication.find(tx,dapper_id,'paragraph'); reader=publication.SnapshotReader(snapshot)
+            return export(reader,reader.user,dapper_id,format)
 
 @app.post('/v1/citations/render')
 async def render_citations(request:Request):
     from .citations import render
     body=await request.json(); validate(body,'CitationRenderInput')
     with repo.transaction() as tx:
-        user=principal(tx,request.headers.get('authorization'))['user_id']; return render(tx,user,body['paragraph_id'],body.get('style','apa'),body.get('locale','en-US'))
+        user=optional_identity(tx,request)
+        try:
+            if not user: raise Problem(404,'NOT_FOUND','Paragraph unavailable.')
+            return render(tx,user,body['paragraph_id'],body.get('style','apa'),body.get('locale','en-US'))
+        except Problem as error:
+            if error.status!=404: raise
+            _,snapshot=publication.find(tx,body['paragraph_id'],'paragraph'); reader=publication.SnapshotReader(snapshot)
+            return render(reader,reader.user,body['paragraph_id'],body.get('style','apa'),body.get('locale','en-US'))

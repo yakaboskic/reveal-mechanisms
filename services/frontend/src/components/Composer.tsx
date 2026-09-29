@@ -1,29 +1,41 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { api, ApiError, messageOf, terminal, type Schema } from "@/lib/client";
 import { applySuggestions, emptyComposer, factorSelection, removeAnchor, selectedGap } from "@/lib/composer";
 import { ProviderButtons, useIdentity } from "./Session";
 import { Activity } from "./Activity";
 import { AccountPreview, Record } from "./Scientific";
-import { loadFeaturedGaps } from "@/lib/featured-gaps";
+import { GapBrowser, GapScopeSelector, type GapScope } from "./GapBrowser";
+import { GapAccounts } from "./GapAccounts";
 import { rememberSubmission, restoreSubmission, type SubmissionAttempt, type SubmissionMethod, type SubmissionStage } from "@/lib/submission";
 import { SubmissionProgress } from "./SubmissionProgress";
 import { LoadingSurface, LoadingStatus } from "./LoadingSurface";
 import { withRequestDeadline } from "@/lib/request-deadline";
 import { providerRedirect } from "@/lib/provider-redirect";
+import { MechanismLabel } from "./MechanismLabel";
+import { mechanismName } from "@/lib/mechanism-display";
 
 const storageKey = "reveal:composer";
 type LocalDraft = { composer: Schema<"Composer">; gap: Schema<"GapRecord"> | null; factors: Record<string, Schema<"EagglFactor">>; draft: Schema<"Draft"> | null; owner: string | null; job?: Schema<"Job"> | null; submitKey?: { binding: string; key: string } | null };
-export function Composer() {
+export function Composer({ initialJobId, initialDraftId }: { initialJobId?: string; initialDraftId?: string } = {}) {
   const { me, ready, refresh } = useIdentity();
   const [composer, setComposer] = useState(emptyComposer);
   const [gap, setGap] = useState<Schema<"GapRecord"> | null>(null);
   const [factors, setFactors] = useState<Record<string, Schema<"EagglFactor">>>({});
   const [draft, setDraft] = useState<Schema<"Draft"> | null>(null);
+  // Browsing also autosaves drafts; only opening/restoring one enters editor mode.
+  const [draftView, setDraftView] = useState(!!initialDraftId);
   const [restoring, setRestoring] = useState("");
-  const [featuredPending, setFeaturedPending] = useState(true);
+  const [retrievingJob, setRetrievingJob] = useState(!!initialJobId);
+  const [jobRestoreError, setJobRestoreError] = useState("");
+  const [restoreAttempt, setRestoreAttempt] = useState(0);
+  const [gapScope, setGapScope] = useState<GapScope>("public");
   const [query, setQuery] = useState(""); const [searching, setSearching] = useState(false);
   const [results, setResults] = useState<Schema<"GapRecord">[]>([]); const [trending, setTrending] = useState<Schema<"GapRecord">[]>([]);
+  const searchBinding = `${gapScope}:${me?.user_id || "visitor"}`;
+  const [resultsFor, setResultsFor] = useState("");
+  const visibleResults = resultsFor === searchBinding ? results : [];
   const [matches, setMatches] = useState<Schema<"EagglFactor">[]>([]); const [adding, setAdding] = useState(false);
   const [findingMatches, setFindingMatches] = useState(false);
   const [suggesting, setSuggesting] = useState(false); const [limitations, setLimitations] = useState<string[]>([]);
@@ -54,6 +66,7 @@ export function Composer() {
     return requestKeys.current.get(body)!;
   };
   currentRef.current = composer;
+  useEffect(() => { setDraftView(!!initialDraftId); }, [initialDraftId]);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; suggestionRequest.current?.abort(); }; }, []);
   useEffect(() => {
     // Fast Refresh replays effects while preserving refs and active promises.
@@ -62,11 +75,21 @@ export function Composer() {
     hydrated.current = true;
     try {
       const local = JSON.parse(sessionStorage.getItem(storageKey) || "null") as LocalDraft | null;
-      if (local) { setComposer(local.composer); setGap(local.gap); setFactors(local.factors); setDraft(local.draft); draftRef.current = local.draft; loadedOwner.current = local.owner; submitKey.current = local.submitKey || null; if (local.job) setJob(local.job); }
+      const params = new URLSearchParams(window.location.search);
+      // A submitted snapshot belongs to its explicit link, not the home page.
+      // Keep refresh recovery for an unsubmitted question and OAuth below.
+      const hasSelectionLink = ["job", "draft", "gap"].some(key => params.get(key));
+      const matchesLink = local && (!local.job || hasSelectionLink) &&
+        (!params.get("job") || params.get("job") === local.job?.id) &&
+        (!params.get("draft") || params.get("draft") === local.draft?.id) &&
+        (!params.get("gap") || params.get("gap") === local.gap?.object.id);
+      if (local && matchesLink) { setComposer(local.composer); setGap(local.gap); setFactors(local.factors); setDraft(local.draft); draftRef.current = local.draft; loadedOwner.current = local.owner; submitKey.current = local.submitKey || null; if (local.job && params.get("job") === local.job.id) setJob(local.job); }
+      if (local?.draft && matchesLink && !hasSelectionLink) setDraftView(true);
     } catch { sessionStorage.removeItem(storageKey); }
-    // An explicit job link always opens that job, even if another submission
-    // left a pending browser snapshot after a lost response.
-    const pending = new URLSearchParams(window.location.search).has("job") ? null : restoreSubmission();
+    // Explicit workspace links open the requested record. A pending submission
+    // may resume only at the unqualified home/OAuth return URL.
+    const params = new URLSearchParams(window.location.search);
+    const pending = ["job", "draft", "gap"].some(key => params.get(key)) ? null : restoreSubmission();
     if (pending) {
       pendingSubmission.current = pending;
       setComposer(pending.composer); currentRef.current = pending.composer;
@@ -76,9 +99,9 @@ export function Composer() {
       setJob(null); setSubmission({ stage: "signing-in" });
     }
     setBooted(true);
-    if (!pending) void api.gaps().then(value => loadFeaturedGaps(api, value.items)).then(setTrending).catch(e => setError(messageOf(e))).finally(() => setFeaturedPending(false));
-    else setFeaturedPending(false);
+
   }, []);
+  useEffect(() => { if (ready && !me && gapScope === "workspace") setGapScope("public"); }, [ready, me?.user_id, gapScope]);
   useEffect(() => {
     if (!booted) return;
     sessionStorage.setItem(storageKey, JSON.stringify({ composer, gap, factors, draft, owner: me?.user_id || loadedOwner.current, job, submitKey: submitKey.current } satisfies LocalDraft));
@@ -95,34 +118,62 @@ export function Composer() {
     let active = true; const epoch = restoreEpoch.current;
     const canRestore = () => active && !pendingSubmission.current && epoch === restoreEpoch.current;
     const restore = async () => {
-      if (((jobId || draftId) && me) || gapId) setRestoring(jobId ? "Opening your research activity" : draftId ? "Restoring your saved question" : "Opening knowledge gap");
+      if (jobId && !me) { setRetrievingJob(false); setJob(null); setJobRestoreError("Sign in with the account that started this job to retrieve its status."); return; }
+      if (jobId) { setRetrievingJob(true); setJobRestoreError(""); }
+      if ((draftId && me) || gapId) setRestoring(draftId ? "Restoring your saved question" : "Opening knowledge gap");
+      const savedJob = jobId && me ? api.job(jobId) : null;
+      const restoreJob = async () => {
+        if (!savedJob) return;
+        try { const value = await savedJob; if (canRestore()) setJob(value); }
+        catch (failure) { if (canRestore()) setJobRestoreError(messageOf(failure)); }
+        finally { if (canRestore()) setRetrievingJob(false); }
+      };
+      const restoreSelection = async () => {
+      const restoreSubmitted = async () => {
+        const value = await savedJob;
+        if (!value?.research_request_id) return;
+        const frozen = await api.request(value.research_request_id);
+        const source = frozen.composer.source_gap ? await api.gap(frozen.composer.source_gap.id) : null;
+        if (!canRestore()) return;
+        saveEpoch.current++; draftRef.current = null; setDraft(null);
+        setComposer(frozen.composer); setGap(source);
+      };
       try {
-        // Show an existing job without waiting for its editable draft or source
-        // description. Those independent reads can be slow on remote storage.
-        if (jobId && me) { const value = await api.job(jobId); if (canRestore()) setJob(value); }
         if (draftId && me) {
-          const value = await api.draft(draftId);
+          let value: Schema<"Draft">;
+          try { value = await api.draft(draftId); }
+          catch (failure) {
+            if (savedJob && failure instanceof ApiError && failure.status === 404) { await restoreSubmitted(); return; }
+            throw failure;
+          }
           const source = value.composer.source_gap ? await api.gap(value.composer.source_gap.id) : null;
           if (!canRestore()) return;
           saveEpoch.current++; draftRef.current = value; setDraft(value); setSaveState("Saved"); setComposer(value.composer); setGap(source); if (!jobId) setJob(null);
+        } else if (savedJob) {
+          await restoreSubmitted();
         } else if (gapId) {
           const source = await api.gap(gapId); if (!canRestore()) return;
           if (currentRef.current.source_gap?.id === source.object.id && currentRef.current.source_gap.source_revision === source.source.source_revision) setGap(source);
-          else await selectGap(source);
+          else if (jobId) { setGap(source); setComposer({ ...emptyComposer(), source_gap: selectedGap(source) }); }
+          else await selectGap(source, true);
         }
       } catch (failure) { if (canRestore()) setError(messageOf(failure)); }
-      finally { if (active) setRestoring(""); }
+      finally { if (canRestore()) setRestoring(""); }
+      };
+      // Status and selection are independent: neither slow source lookup nor
+      // draft storage should hold up the live activity stream.
+      await Promise.allSettled([restoreJob(), restoreSelection()]);
     };
     void restore(); return () => { active = false; setRestoring(""); };
-  }, [booted, ready, me?.user_id]);
+  }, [booted, ready, me?.user_id, restoreAttempt, initialDraftId, initialJobId]);
   useEffect(() => {
     if (query.trim()) {
       const controller = new AbortController(); setSearching(true); setResults([]);
-      const timer = setTimeout(() => { void api.searchGaps(query.trim(), controller.signal).then(value => { if (!controller.signal.aborted) { setResults(value.items.map(hit => hit.gap)); setSearching(false); } }).catch(e => { if (!controller.signal.aborted) { setError(messageOf(e)); setSearching(false); } }); }, 250);
+      const timer = setTimeout(() => { void api.searchGaps(query.trim(), controller.signal, gapScope).then(value => { if (!controller.signal.aborted) { setResults(value.items.map(hit => hit.gap)); setResultsFor(searchBinding); setSearching(false); } }).catch(e => { if (!controller.signal.aborted) { setError(messageOf(e)); setSearching(false); } }); }, 250);
       return () => { clearTimeout(timer); controller.abort(); };
     }
     setResults([]); setSearching(false);
-  }, [query]);
+  }, [query, gapScope, me?.user_id]);
   useEffect(() => {
     if (pendingResultFocus.current && !searching && results.length) {
       pendingResultFocus.current = false;
@@ -192,10 +243,10 @@ export function Composer() {
     }); saveQueue.current = queued; return queued;
   };
   useEffect(() => {
-    if (!booted || !me || !composer.source_gap || job || conflict || suggesting || submission) return;
+    if (!booted || !me || !composer.source_gap || job || retrievingJob || restoring || jobRestoreError || conflict || suggesting || submission) return;
     const timer = setTimeout(() => { void save(composer).catch(e => setError(messageOf(e))); }, 1000);
     return () => clearTimeout(timer);
-  }, [composer, me?.user_id, booted, job, conflict, suggesting, submission]);
+  }, [composer, me?.user_id, booted, job, retrievingJob, restoring, jobRestoreError, conflict, suggesting, submission]);
   useEffect(() => {
     if (!booted || !ready || !pendingSubmission.current || submissionResumed.current) return;
     submissionResumed.current = true;
@@ -225,7 +276,8 @@ export function Composer() {
     } catch (failure) { if (!controller.signal.aborted) setError(messageOf(failure)); }
     finally { if (suggestionRequest.current === controller) { suggestionRequest.current = null; setSuggesting(false); } }
   };
-  async function selectGap(value: Schema<"GapRecord">) {
+  async function selectGap(value: Schema<"GapRecord">, restoringSelection = false) {
+    if (!restoringSelection) { restoreEpoch.current++; setRestoring(""); setRetrievingJob(false); setJobRestoreError(""); }
     saveEpoch.current++;
     setGap(value); setQuery(""); setJob(null); setError(""); setConflict(false); submitKey.current = null;
     const next = { ...emptyComposer(), source_gap: selectedGap(value) };
@@ -336,9 +388,11 @@ export function Composer() {
     const url = new URL(window.location.href); url.searchParams.delete("error"); window.history.replaceState(null, "", url);
     requestAnimationFrame(() => document.querySelector<HTMLButtonElement>(".gap-submit")?.focus());
   };
-  const reset = () => { setJob(null); submitKey.current = null; const url = new URL(window.location.href); url.searchParams.delete("job"); window.history.replaceState(null, "", url); };
+  const reset = () => { restoreEpoch.current++; setRestoring(""); setRetrievingJob(false); setJobRestoreError(""); setJob(null); submitKey.current = null; const url = new URL(window.location.href); url.searchParams.delete("job"); window.history.replaceState(null, "", url); };
   const accountIds = job?.result?.kind === "analysis" ? job.result.account_ids : [];
   const clearGap = () => {
+    setDraftView(false);
+    restoreEpoch.current++; setRestoring(""); setRetrievingJob(false); setJobRestoreError("");
     suggestionRequest.current?.abort(); suggestionRequest.current = null; setSuggesting(false); setLimitations([]);
     saveEpoch.current++; setGap(null); setComposer(emptyComposer()); setDraft(null); draftRef.current = null; setError(""); setAdding(false); setQuery("");
     const url = new URL(window.location.href); ["draft", "gap", "job"].forEach(key => url.searchParams.delete(key)); window.history.replaceState(null, "", url);
@@ -350,33 +404,48 @@ export function Composer() {
     const anchor = composer.eaggl_anchors.find(item => item.reference.source_id === id); const factor = factors[id];
     return anchor && factor?.source_revision === anchor.reference.source_revision && factor.object.id === anchor.reference.dapper_id ? factor : undefined;
   };
-  const anchorName = (id: string) => selectedFactor(id)?.cfde_anchor.label || selectedFactor(id)?.object.name || selectedFactor(id)?.cfde_anchor.subtitle || id;
+  const anchorName = (id: string) => mechanismName(selectedFactor(id));
+  const discoveryVisible = !draftView && !job;
   if (submission) return <SubmissionProgress stage={submission.stage} provider={pendingSubmission.current?.method} question={pendingSubmission.current?.question} error={submission.error} onRetry={retrySubmission} onBack={backToQuestion} retryLabel={pendingSubmission.current?.method === "google" || pendingSubmission.current?.method === "orcid" ? "Try again" : "Retry"} />;
-  return <main id="main" className={`composer-page prototype-composer ${gap ? "has-gap" : ""} ${job ? "has-job" : ""} ${job && terminal(job.status) ? "job-complete" : ""}`}>
-    {restoring && <LoadingSurface compact={!!gap || !!job} skeleton={gap || job ? "none" : "rows"} title={restoring} description="Retrieving the saved selection and current research status." />}
-    {!gap && <p className="invitation">Help us close these <a href="https://dismech.monarchinitiative.org/app/discussions/index.html" target="_blank" rel="noopener noreferrer">knowledge gaps</a></p>}
-    <section className={`question-shell ${job ? "submitted" : ""}`} aria-label="Knowledge gap and mechanism anchors">
-      {!gap ? <div className="gap-input-wrap"><label className="sr-only" htmlFor="gap-search">Search DisMech knowledge gaps</label><input id="gap-search" type="search" role="combobox" aria-autocomplete="list" aria-expanded={!!query.trim() && showResults && !!results.length} value={query} autoComplete="off" onChange={e => { setQuery(e.target.value); setResults([]); setSearching(!!e.target.value.trim()); pendingResultFocus.current = false; setError(""); setShowResults(true); }} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)} onKeyDown={e => { if ((e.key === "ArrowDown" || e.key === "Enter") && query.trim()) { e.preventDefault(); focusResult(); } if (e.key === "Escape") { setShowResults(false); pendingResultFocus.current = false; } }} placeholder={focused ? "Search DisMech knowledge gaps" : ""} aria-controls="gap-results-list" />{!query && !focused && <span className="idle-question" aria-hidden="true">{example}</span>}<button className="send search-arrow" disabled={!query.trim()} aria-label="Show matching knowledge gaps" title="Show matching knowledge gaps" onClick={focusResult}><span aria-hidden="true">↑</span></button></div> : <>
+  const jobStatusSurface = <LoadingSurface compact={!!job} skeleton={job ? "none" : "rows"} title={jobRestoreError ? "Unable to retrieve job status" : "Retrieving job status"} description="Checking the current stage and reconnecting to recorded activity." error={jobRestoreError} onRetry={() => { setJobRestoreError(""); setRetrievingJob(true); setRestoreAttempt(value => value + 1); }} />;
+  if (!job && (retrievingJob || jobRestoreError)) return <main id="main" className="composer-page prototype-composer has-job">{jobStatusSurface}{jobRestoreError && <a className="text-button" href="/">Return to knowledge gaps</a>}</main>;
+  if (draftView && !gap && !job) {
+    const draftError = error || (ready && !me ? "Sign in to open your saved draft." : draft ? "This draft has no selected knowledge gap." : undefined);
+    return <main id="main" className="composer-page prototype-composer">
+      <LoadingSurface title={draftError ? "Unable to open this draft" : "Opening your saved draft"} description="Retrieving your saved question and mechanism anchors." error={draftError} onRetry={error ? () => { setError(""); setRestoreAttempt(value => value + 1); } : undefined} />
+      <a className="text-button" href="/">Return to knowledge gaps</a>
+    </main>;
+  }
+  return <main id="main" className={`composer-page prototype-composer ${!gap && discoveryVisible ? "is-gap-browsing" : ""} ${gap ? "has-gap" : ""} ${job ? "has-job" : ""} ${job && terminal(job.status) ? "job-complete" : ""}`}>
+    {draft && !job && <nav className="composer-draft-nav" aria-label="Draft navigation"><Link href="/workspace?tab=gaps">← Your drafts</Link><strong>{draft.name || `Draft ${draft.id.slice(0, 8)}`}</strong><span role="status">{saveState}</span></nav>}
+    {(retrievingJob || jobRestoreError) && jobStatusSurface}
+    {restoring && !retrievingJob && <LoadingSurface compact={!!gap || !!job} skeleton={gap || job ? "none" : "rows"} title={restoring} description="Retrieving your saved question and mechanism anchors." />}
+    {!gap && discoveryVisible && <p className="invitation">Help us close these <a href="https://dismech.monarchinitiative.org/app/discussions/index.html" target="_blank" rel="noopener noreferrer">knowledge gaps</a></p>}
+    {(!job || gap) && <section className={`question-shell ${job ? "submitted" : ""}`} aria-label="Knowledge gap and mechanism anchors">
+      {!gap ? <div className="gap-input-wrap"><label className="sr-only" htmlFor="gap-search">Search DisMech knowledge gaps</label><input id="gap-search" type="search" role="combobox" aria-autocomplete="list" aria-expanded={!!query.trim() && showResults && !!visibleResults.length} value={query} autoComplete="off" onChange={e => { setQuery(e.target.value); setResults([]); setSearching(!!e.target.value.trim()); pendingResultFocus.current = false; setError(""); setShowResults(true); }} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)} onKeyDown={e => { if ((e.key === "ArrowDown" || e.key === "Enter") && query.trim()) { e.preventDefault(); focusResult(); } if (e.key === "Escape") { setShowResults(false); pendingResultFocus.current = false; } }} placeholder={focused ? "Search DisMech knowledge gaps" : ""} aria-controls="gap-results-list" />{!query && !focused && <span className="idle-question" aria-hidden="true">{example}</span>}<button className="send search-arrow" disabled={!query.trim()} aria-label="Show matching knowledge gaps" title="Show matching knowledge gaps" onClick={focusResult}><span aria-hidden="true">↑</span></button></div> : <>
         <div className="selected-question-row"><h1 id="submitted-question" tabIndex={job ? -1 : undefined} className="selected-question">{gap.object.text}</h1>{!job && <button className="clear-question" aria-label="Search for a different knowledge gap" onClick={clearGap}>×</button>}</div>
         <div className="inline-context">
           {!job && <><div className="question-meta"><button className="subtle" onClick={() => setInspection({ title: "About this knowledge gap", description: gap.object.gap_description, value: gap })}>About this knowledge gap ↗</button><span>DisMech</span></div><p className="anchor-guidance">Anchor on possible genetic mechanisms to explore evidence for answering this gap.</p><div className="chip-group-label">Mechanism anchors <span>{composer.eaggl_anchors.length}</span>{suggesting && <LoadingStatus>Finding anchors…</LoadingStatus>}{!!limitations.length && <button className="matching-note" onClick={() => setInspection({ title: "About mechanism matching", description: limitations.join(" "), value: { model: composer.model, automatic_anchors: composer.eaggl_anchors.filter(anchor => anchor.origin === "automatic").length } })}>About matching</button>}</div></>}
-          <div className="anchor-chips" aria-label="Selected mechanism anchors">{composer.eaggl_anchors.map(anchor => <span className="chip" key={anchor.reference.source_id}><button className="label" title={[anchorName(anchor.reference.source_id), selectedFactor(anchor.reference.source_id)?.cfde_anchor.subtitle].filter(Boolean).join(" · ")} onClick={() => setInspection({ title: selectedFactor(anchor.reference.source_id)?.cfde_anchor.label || "Mechanism anchor", description: selectedFactor(anchor.reference.source_id)?.object.description, value: selectedFactor(anchor.reference.source_id) || anchor })}>{anchorName(anchor.reference.source_id)}</button>{!job && <button className="remove" aria-label={`Remove ${anchorName(anchor.reference.source_id)}`} onClick={() => setComposer(current => removeAnchor(current, anchor.reference.source_id))}>×</button>}</span>)}{!job && <button className="chip-add" aria-expanded={adding} aria-controls="factor-picker" aria-label="Add a mechanism anchor" onClick={() => { setAdding(!adding); if (!adding) requestAnimationFrame(() => document.getElementById("mechanism-search")?.focus()); }}>+</button>}</div>
+          <div className="anchor-chips" aria-label="Selected mechanism anchors">{composer.eaggl_anchors.map(anchor => <span className="chip" key={anchor.reference.source_id}><button className="label" title={[anchorName(anchor.reference.source_id), selectedFactor(anchor.reference.source_id)?.cfde_anchor.subtitle].filter(Boolean).join(" · ")} onClick={() => setInspection({ title: selectedFactor(anchor.reference.source_id)?.cfde_anchor.label || "Mechanism anchor", description: selectedFactor(anchor.reference.source_id)?.object.description, value: selectedFactor(anchor.reference.source_id) || anchor })}><MechanismLabel factor={selectedFactor(anchor.reference.source_id)} sourceId={anchor.reference.source_id} /></button>{!job && <button className="remove" aria-label={`Remove ${anchorName(anchor.reference.source_id)}`} onClick={() => setComposer(current => removeAnchor(current, anchor.reference.source_id))}>×</button>}</span>)}{!job && <button className="chip-add" aria-expanded={adding} aria-controls="factor-picker" aria-label="Add a mechanism anchor" onClick={() => { setAdding(!adding); if (!adding) requestAnimationFrame(() => document.getElementById("mechanism-search")?.focus()); }}>+</button>}</div>
           {!job && <>
             {!composer.eaggl_anchors.length && !suggesting && <p className="anchor-required" role="status">Add at least one mechanism anchor to continue.</p>}
             <div className="context-disclosures">
-              <details id="factor-picker" open={adding} onToggle={e => setAdding(e.currentTarget.open)}><summary>Find more mechanisms</summary><label className="sr-only" htmlFor="mechanism-search">Search possible genetic mechanisms</label><input id="mechanism-search" type="search" className="field" value={composer.mechanism_subquery} onChange={e => setComposer(c => ({ ...c, mechanism_subquery: e.target.value }))} placeholder="Search possible genetic mechanisms" />{matches.map(factor => <button className="mechanism-match" key={factor.source_id} title={factor.cfde_anchor.subtitle || factor.source_id} disabled={composer.eaggl_anchors.length >= 10 || composer.eaggl_anchors.some(a => a.reference.source_id === factor.source_id)} onClick={() => { rememberFactors([factor]); setComposer(c => ({ ...c, eaggl_anchors: [...c.eaggl_anchors, factorSelection(factor, "manual")], dismissed_source_ids: c.dismissed_source_ids.filter(id => id !== factor.source_id) })); }}><span>{factor.cfde_anchor.label || factor.object.name || factor.cfde_anchor.subtitle}</span><span aria-hidden="true">+</span></button>)}{findingMatches && <LoadingSurface compact skeleton={matches.length ? "none" : "rows"} rows={2} title={matches.length ? "Finding related mechanisms" : "Finding mechanisms"} description="Matching your search to available genetic mechanism anchors." />}{!!composer.mechanism_subquery.trim() && !findingMatches && !matches.length && <p className="muted">No mapped anchors found.</p>}<button className="text-button" disabled={suggesting} onClick={() => { const next = { ...composer, dismissed_source_ids: [], eaggl_anchors: composer.eaggl_anchors.filter(a => a.origin === "manual") }; setComposer(next); void suggest(next); }}>Reset suggestions</button><small>Up to five automatic anchors. Removed anchors stay dismissed until reset.</small></details>
+              <details id="factor-picker" open={adding} onToggle={e => setAdding(e.currentTarget.open)}><summary>Find more mechanisms</summary><label className="sr-only" htmlFor="mechanism-search">Search possible genetic mechanisms</label><input id="mechanism-search" type="search" className="field" value={composer.mechanism_subquery} onChange={e => setComposer(c => ({ ...c, mechanism_subquery: e.target.value }))} placeholder="Search possible genetic mechanisms" />{matches.map(factor => <button className="mechanism-match" key={factor.source_id} title={factor.cfde_anchor.subtitle || factor.source_id} disabled={composer.eaggl_anchors.length >= 10 || composer.eaggl_anchors.some(a => a.reference.source_id === factor.source_id)} onClick={() => { rememberFactors([factor]); setComposer(c => ({ ...c, eaggl_anchors: [...c.eaggl_anchors, factorSelection(factor, "manual")], dismissed_source_ids: c.dismissed_source_ids.filter(id => id !== factor.source_id) })); }}><MechanismLabel factor={factor} /><span aria-hidden="true">+</span></button>)}{findingMatches && <LoadingSurface compact skeleton={matches.length ? "none" : "rows"} rows={2} title={matches.length ? "Finding related mechanisms" : "Finding mechanisms"} description="Matching your search to available genetic mechanism anchors." />}{!!composer.mechanism_subquery.trim() && !findingMatches && !matches.length && <p className="muted">No mapped anchors found.</p>}<button className="text-button" disabled={suggesting} onClick={() => { const next = { ...composer, dismissed_source_ids: [], eaggl_anchors: composer.eaggl_anchors.filter(a => a.origin === "manual") }; setComposer(next); void suggest(next); }}>Reset suggestions</button><small>Up to five automatic anchors. Removed anchors stay dismissed until reset.</small></details>
               <details><summary>Linked DisMech mechanisms <span className="disclosure-count">{linkedMechanisms.length} linked</span></summary><p className="muted">Mechanisms linked to this curated knowledge gap. Source context is read-only.</p>{linkedMechanisms.map((item, i) => <button className="linked-mechanism" key={i} onClick={() => setInspection({ title: item.label || "DisMech source context", value: item })}><span>{item.label || item.source_reference}<small>{item.target_kind} · {item.resolution.replaceAll("_", " ")}</small></span><span aria-hidden="true">↗</span></button>)}{!linkedMechanisms.length && <p className="muted">No linked mechanisms in this source observation.</p>}</details>
               <details><summary>Additional knowledge graphs</summary><div className="checks">{(["biomarkerkg", "prokn"] as const).map(kg => <label key={kg}><input type="checkbox" checked={composer.selected_kgs.includes(kg)} onChange={e => setComposer(c => ({ ...c, selected_kgs: e.target.checked ? [...c.selected_kgs, kg] : c.selected_kgs.filter(k => k !== kg) }))} />{kg === "prokn" ? "ProKN" : "BiomarkerKG"}</label>)}</div></details>
             </div>
-            <span className="sr-only" role="status">{me ? saveState : "Selections kept in this browser"}</span>
-            <div className="submit-row"><button className="gap-submit" aria-label="Let’s close this gap" disabled={!composer.eaggl_anchors.length || suggesting || conflict || !ready} onClick={() => me ? void launch() : dialog.current?.showModal()}><span>Let’s close this gap</span><span className="send" aria-hidden="true"><span>↑</span></span></button></div>
+            {!draft && <span className="sr-only" role="status">{me ? saveState : "Selections kept in this browser"}</span>}
+            <p id="research-result-options" className="research-result-options">A completed analysis returns <strong>scientific accounts</strong> supported by the evidence, or a <strong>saved exploration</strong> explaining why an account could not be supported.</p>
+            <div className="submit-row"><button className="gap-submit" aria-label="Let’s close this gap" aria-describedby="research-result-options" disabled={!composer.eaggl_anchors.length || suggesting || conflict || !ready} onClick={() => me ? void launch() : dialog.current?.showModal()}><span>Let’s close this gap</span><span className="send" aria-hidden="true"><span>↑</span></span></button></div>
           </>}
         </div>
       </>}
-    </section>
-    {!gap && !!query.trim() && showResults && <section className="search-results" aria-label="Knowledge gap search results">{searching ? <LoadingSurface key={query.trim()} compact rows={2} title="Searching knowledge gaps" description="Looking for matching questions in DisMech." /> : <p className="result-heading" role="status">{error ? "Search unavailable" : `${results.length} related knowledge gaps`}</p>}<div id="gap-results-list" role="listbox" aria-label="Matching knowledge gaps">{results.map((value, index) => <button className="gap-result" role="option" aria-selected="false" key={value.source.source_id} onClick={() => void selectGap(value)} onKeyDown={e => { if (e.key === "Escape") { setShowResults(false); document.getElementById("gap-search")?.focus(); } if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); if (e.key === "ArrowUp" && index === 0) document.getElementById("gap-search")?.focus(); else { const buttons = e.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>("button"); buttons?.[(index + (e.key === "ArrowDown" ? 1 : -1)) % results.length]?.focus(); } } }}><span>{value.object.text}</span><small>{value.source.disease_label} · {value.source.status || "Status not specified"}</small></button>)}</div>{!searching && !error && !results.length && <p className="empty">No matching knowledge gaps. Try a disease, gene or mechanism.</p>}</section>}
-    {!gap && !query.length && <section className="trending" aria-label="Trending knowledge gaps"><div className="trending-heading"><h2><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m3 17 6-6 4 4 8-10" /><path d="M15 5h6v6" /></svg>Trending knowledge gaps</h2><span>Curated from DisMech</span></div>{trending.map(value => <button className="trend" key={value.source.source_id} onClick={() => void selectGap(value)}><span className="trend-question">{value.object.text}<small>{value.scientific_accounts.count} scientific account{value.scientific_accounts.count === 1 ? "" : "s"} {value.scientific_accounts.scope === "owner_exact_gap" ? "in your workspace" : "publicly available"}</small></span><span className="trend-arrow" aria-hidden="true">↗</span></button>)}{featuredPending && !error && <LoadingSurface compact title="Loading knowledge gaps" description="Retrieving curated questions to explore." rows={3} />}{!featuredPending && !trending.length && !error && <p className="muted">No featured questions are available. Search by disease, gene or mechanism above.</p>}</section>}
-    {error && <div className="error" role="alert">{error}{!gap && <button onClick={() => { setError(""); setFeaturedPending(true); void api.gaps().then(value => loadFeaturedGaps(api, value.items)).then(setTrending).catch(e => setError(messageOf(e))).finally(() => setFeaturedPending(false)); }}>Retry</button>}</div>}
+    </section>}
+    {discoveryVisible && <GapScopeSelector scope={gapScope} onChange={scope => { setGapScope(scope); setError(""); }} />}
+    {gap && discoveryVisible && <GapAccounts gap={gap} scope={gapScope} />}
+    {!gap && discoveryVisible && !!query.trim() && showResults && <section className="search-results" aria-label="Knowledge gap search results">{searching ? <LoadingSurface key={query.trim()} compact rows={2} title="Searching knowledge gaps" description="Looking for matching questions in DisMech." /> : <p className="result-heading" role="status">{error ? "Search unavailable" : `${visibleResults.length} related knowledge gaps`}</p>}<div id="gap-results-list" role="listbox" aria-label="Matching knowledge gaps">{visibleResults.map((value, index) => <button className="gap-result" role="option" aria-selected="false" key={value.source.source_id} onClick={() => void selectGap(value)} onKeyDown={e => { if (e.key === "Escape") { setShowResults(false); document.getElementById("gap-search")?.focus(); } if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); if (e.key === "ArrowUp" && index === 0) document.getElementById("gap-search")?.focus(); else { const buttons = e.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>("button"); buttons?.[(index + (e.key === "ArrowDown" ? 1 : -1)) % visibleResults.length]?.focus(); } } }}><span>{value.object.text}</span><small>{value.source.disease_label} · {value.source.status || "Status not specified"}</small></button>)}</div>{!searching && !error && !visibleResults.length && <p className="empty">No matching knowledge gaps. Try a disease, gene or mechanism.</p>}</section>}
+    {!gap && discoveryVisible && !query.length && <GapBrowser scope={gapScope} onSelect={value => void selectGap(value)} onRanked={setTrending} />}
+    {error && <div className="error" role="alert">{error}</div>}
     {conflict && <div className="conflict"><p>This draft changed in another session. Your edits are retained here.</p><button onClick={async () => { if (!draftRef.current) return; const latest = await api.draft(draftRef.current.id); draftRef.current = latest; setDraft(latest); setComposer(latest.composer); setConflict(false); setError(""); }}>Load saved version</button><button onClick={() => { draftRef.current = null; setDraft(null); setConflict(false); setError(""); void save().catch(e => setError(messageOf(e))); }}>Save my edits as a new draft</button></div>}
     {job && <><Activity key={job.id} initial={job} onJob={setJob} />{accountIds.map(id => <AccountPreview key={id} id={id} />)}{terminal(job.status) && <button className="text-button return-to-question" onClick={reset}>Return to question</button>}</>}
     <dialog ref={inspectionDialog} className="inspection-dialog" aria-labelledby="inspection-title" onClose={() => setInspection(null)}><div className="inspection-heading"><h2 id="inspection-title">{inspection?.title}</h2><button aria-label="Close record" onClick={() => inspectionDialog.current?.close()}>×</button></div><div className="inspection-body">{inspection?.title === "About this knowledge gap" && <p>{gap?.object.text}</p>}{inspection?.description && <><h3>{inspection.title === "About this knowledge gap" ? "What remains unknown" : "Context"}</h3><p>{inspection.description}</p></>}<details open={!inspection?.description}><summary>Source evidence and record</summary><Record value={inspection?.value} /></details></div></dialog>

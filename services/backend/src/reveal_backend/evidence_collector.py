@@ -16,7 +16,7 @@ from urllib.request import Request, urlopen
 import certifi
 
 from .evidence_package import (BUILD_VERSION, EvidenceBuildError, INPUT_VERSION, TARGETS, build_package, canonical_json,
-                               decode, finite, pointer, ref, require, sha256, unique)
+                               decode, finite, frozen_semantic_association, pointer, ref, require, sha256, unique)
 
 INTERACTIVE_BASE = 'https://dev.cfdeknowledge.org'
 BIOINDEX_BASE = 'https://cfde-dev.hugeampkpnbi.org'
@@ -132,12 +132,16 @@ def gz_records(path):
 def collect_package(*, gap_id, factor_ids, output, dapper, project_root, dismech_source, dismech_index,
                     geneset_import, model='cfde-inc-v2', limit=100, max_nodes=250, max_edges=1000,
                     client_factory=HttpCaptureClient, geneset_resolver=None,
-                    selected_graphs=('biomarkerkg', 'prokn'), max_accounts=3,selection_metadata=None):
+                    selected_graphs=('biomarkerkg', 'prokn'), max_accounts=3,selection_metadata=None,
+                    max_parallel_requests=4):
     """Resolve input IDs, retrieve bounded evidence, freeze sources, then build.
 
     The local DisMech index and GeneSet export are configurable source adapters;
     they can later be replaced by DB lookups returning the same frozen records.
     """
+    started = time.monotonic()
+    require(type(max_parallel_requests) is int and 1 <= max_parallel_requests <= 4,
+            'max_parallel_requests must be between 1 and 4')
     project_root, dismech_source = Path(project_root).resolve(), Path(dismech_source).resolve()
     dismech_index, geneset_import = Path(dismech_index), Path(geneset_import)
     factor_ids = unique(factor_ids, 'factor IDs')
@@ -160,6 +164,26 @@ def collect_package(*, gap_id, factor_ids, output, dapper, project_root, dismech
         require(set(selection_metadata['origins'])==set(factor_ids),'Selection provenance differs from selected anchors')
         store.add('selection-provenance',canonical_json(selection_metadata),'json',filename='selection-provenance.json')
     client = client_factory(store)
+    timings = {'format': 'reveal.evidence-collection-timings/1', 'max_parallel_requests': max_parallel_requests,
+               'status': 'failed', 'stages': []}
+
+    def parallel(stage, operations):
+        """Bound I/O fanout and consume results in deterministic source order.
+
+        The transport keeps its existing per-request deadlines/retries and exact
+        attempt captures. Only independent reads run here; DAPPER assembly and
+        graph/alias decisions remain on the calling thread.
+        """
+        began = time.monotonic(); status = 'failed'
+        try:
+            with ThreadPoolExecutor(max_workers=max_parallel_requests, thread_name_prefix='evidence-read') as executor:
+                pending = [executor.submit(function, *arguments) for function, arguments in operations]
+                results = [future.result() for future in pending]
+            status = 'completed'
+            return results
+        finally:
+            timings['stages'].append({'stage': stage, 'seconds': round(time.monotonic() - began, 6),
+                                      'request_count': len(operations), 'status': status})
 
     def document(relative):
         key = 'dismech-' + sha256(relative.encode())[:16]
@@ -207,8 +231,9 @@ def collect_package(*, gap_id, factor_ids, output, dapper, project_root, dismech
                     node['id'] = dapper.compute_id(node, 'Mechanism', dapper.schema)
                     if node['id'] not in {m['id'] for m in context['mechanisms']}: context['mechanisms'].append(node)
                     dismech['mechanisms'][attachment['target_id']] = {'dapper_id': node['id'], 'source_ref': location,
-                        'associated_eaggl_mechanisms': {factor: {'status': 'not_computed', 'semantic_similarity': None,
-                                                               'association_basis': 'user_supplied_anchor'} for factor in factor_ids}}
+                        'associated_eaggl_mechanisms': {factor: frozen_semantic_association(selection_metadata, factor,
+                            attachment['target_id'], hashes[attachment['target_source_file']], raw.get('description') or raw['name'])
+                            for factor in factor_ids}}
                 else:
                     dismech['other_context'].append({'source_id': attachment['target_id'], 'kind': attachment['target_kind'], 'source_ref': location})
             dismech['knowledge_gap']['attachments'].append(item)
@@ -230,14 +255,25 @@ def collect_package(*, gap_id, factor_ids, output, dapper, project_root, dismech
             require(body_id in store.blobs, 'HTTP capture is missing its exact response body')
             return body_id, wrapper['response']
 
+        # Catalogs for different traits, and the interactive/BioIndex views of
+        # each trait, are independent reads. Shared-trait anchors still reuse
+        # one captured catalog of each kind, exactly as before.
+        traits = sorted({(fit['trait_group'], fit['phenotype']) for fit in fits.values()})
+        catalog_operations = []
+        for group, phenotype in traits:
+            tag = sha256(canonical_json((group, phenotype)))[:12]
+            catalog_operations.extend([
+                (client.request, ('catalog-' + tag, INTERACTIVE_BASE + '/api/interactive/catalog?' + urlencode(
+                    {'entity_type': 'factor', 'q': phenotype, 'limit': 100, 'model': model}))),
+                (query, ('factor-catalog-' + tag, 'pigean-factor', [phenotype, model]))])
+        catalog_results = parallel('factor_catalogs', catalog_operations)
+        for index, key in enumerate(traits):
+            _, cat = catalog_results[2 * index]
+            catalog_by_trait[key] = {n['node_id']: n for n in cat['response']['items']}
+            factor_by_trait[key] = catalog_results[2 * index + 1]
         mechanisms, anchor_items = {}, []
         for identity, fit in sorted(fits.items()):
-            key = (fit['trait_group'], fit['phenotype']); tag = sha256(canonical_json(key))[:12]
-            if key not in catalog_by_trait:
-                _, cat = client.request('catalog-' + tag, INTERACTIVE_BASE + '/api/interactive/catalog?' + urlencode(
-                    {'entity_type': 'factor', 'q': fit['phenotype'], 'limit': 100, 'model': model}))
-                catalog_by_trait[key] = {n['node_id']: n for n in cat['response']['items']}
-                factor_by_trait[key] = query('factor-catalog-' + tag, 'pigean-factor', [fit['phenotype'], model])
+            key = (fit['trait_group'], fit['phenotype'])
             body_id, rows = factor_by_trait[key]
             found = [(i, row) for i, row in enumerate(rows['data']) if row['factor'] == fit['factor'] and row['phenotype'] == fit['phenotype']
                      and row['gene_set_size'] == model and row['trait_group'] == fit['trait_group']]
@@ -254,10 +290,9 @@ def collect_package(*, gap_id, factor_ids, output, dapper, project_root, dismech
             mechanisms[identity] = {'dapper_id': node['id'], 'fit': fit, 'source_label': row['label'], 'source_ref': ref(body_id, f'/data/{i}')}
         request = {'anchor_items': anchor_items, 'exclude_node_ids': factor_ids, 'model': model,
                    'reducer': 'mean', 'connection_scope': 'direct', 'context': '', 'limit': limit}
-        with ThreadPoolExecutor(max_workers=4) as executor:
-            futures = {target: executor.submit(client.request, 'connections-' + target,
-                        INTERACTIVE_BASE + '/api/interactive/connections', {**request, 'target_type': target}) for target in TARGETS}
-            responses = {target: f.result() for target, f in futures.items()}
+        responses = dict(zip(TARGETS, parallel('connections', [
+            (client.request, ('connections-' + target, INTERACTIVE_BASE + '/api/interactive/connections',
+                              {**request, 'target_type': target})) for target in TARGETS])))
         candidates = {}
         for target, (_, response) in responses.items():
             for candidate in response['response']['candidates']:
@@ -268,7 +303,10 @@ def collect_package(*, gap_id, factor_ids, output, dapper, project_root, dismech
         unresolved_sets = set()
         if geneset_resolver:
             candidate_sets = {identity for identity in candidates if identity.startswith('gene_set:')}
+            began = time.monotonic()
             database_resolution = geneset_resolver(candidate_sets, model)
+            timings['stages'].append({'stage': 'geneset_aliases', 'seconds': round(time.monotonic() - began, 6),
+                                      'candidate_count': len(candidate_sets), 'status': 'completed'})
             resolved_sets = {row['node_id'] for row in database_resolution[2]}
             unresolved_sets = candidate_sets - resolved_sets
             store.add('geneset-alias-resolution', canonical_json({'gene_set_import_id': decode(database_resolution[0])['import_id'],
@@ -277,20 +315,25 @@ def collect_package(*, gap_id, factor_ids, output, dapper, project_root, dismech
                 'policy': 'Keep mapped factor anchors; omit only unresolved GeneSet candidates from retained graph. Raw query results remain captured.'}), 'json')
         ranking = sorted((identity for identity in candidates if identity not in unresolved_sets), key=lambda k: (-finite(candidates[k]['aggregate_score'], 'candidate score'), k))
         retained = sorted(set(factor_ids) | set(ranking[:max_nodes - len(factor_ids)]))
-        contextual_id, _ = client.request('contextual', INTERACTIVE_BASE + '/api/interactive/contextual-edges',
-                                          {'node_ids': retained, 'model': model})
-        bioindex = []
+        # These reads do not depend on one another. Keep each native factor and
+        # trait observation separate, even when their returned values coincide.
+        observations = []
         for identity, fit in sorted(fits.items()):
             tag = sha256(identity.encode())[:12]
             for kind in ('gene', 'gene_set'):
-                body_id, _ = query(f'{kind}-factor-{tag}', 'pigean-' + kind.replace('_', '-') + '-factor',
-                                   [fit['phenotype'], model, fit['factor']])
-                bioindex.append({'scope': 'factor', 'kind': kind, 'mechanism_id': identity, 'artifact_id': body_id})
+                observations.append(({'scope': 'factor', 'kind': kind, 'mechanism_id': identity},
+                    (query, (f'{kind}-factor-{tag}', 'pigean-' + kind.replace('_', '-') + '-factor',
+                             [fit['phenotype'], model, fit['factor']]))))
         for group, phenotype in sorted(factor_by_trait):
             tag = sha256(canonical_json([group, phenotype]))[:12]
             for kind in ('gene', 'gene_set'):
-                body_id, _ = query(f'{kind}-trait-{tag}', 'pigean-' + kind.replace('_', '-') + '-phenotype', [phenotype, model])
-                bioindex.append({'scope': 'trait', 'kind': kind, 'trait_id': f'trait:{group}:{phenotype}', 'artifact_id': body_id})
+                observations.append(({'scope': 'trait', 'kind': kind, 'trait_id': f'trait:{group}:{phenotype}'},
+                    (query, (f'{kind}-trait-{tag}', 'pigean-' + kind.replace('_', '-') + '-phenotype', [phenotype, model]))))
+        observed = parallel('source_observations', [
+            (client.request, ('contextual', INTERACTIVE_BASE + '/api/interactive/contextual-edges',
+                              {'node_ids': retained, 'model': model})), *[operation for _, operation in observations]])
+        contextual_id, _ = observed[0]
+        bioindex = [{**metadata, 'artifact_id': result[0]} for (metadata, _), result in zip(observations, observed[1:])]
         # Resolve the retained set aliases against the completed import, preserving its DAPPER objects.
         wanted = {k for k in retained if k.startswith('gene_set:')}
         set_bindings = {}
@@ -355,12 +398,24 @@ def collect_package(*, gap_id, factor_ids, output, dapper, project_root, dismech
                               'assembly_builder': {'version': BUILD_VERSION, 'source_sha256': sha256(builder_bytes)}},
                 'external_evidence': {'status': 'not_queried', 'selected_graphs': list(selected_graphs), 'ledger': [], 'assertions': []}}
         (store.directory / 'build-input.json').write_bytes(canonical_json(spec))
+        began = time.monotonic()
         built = build_package(spec, store.blobs, dapper)
         built.write(store.directory / 'package')
+        timings['stages'].append({'stage': 'validated_assembly', 'seconds': round(time.monotonic() - began, 6),
+                                  'status': 'completed'})
+        timings['status'] = 'completed'
         return built
     except Exception as exc:
         (store.directory / 'collection-error.json').write_bytes(canonical_json({'error': str(exc), 'artifacts': store.artifacts}))
         raise
+    finally:
+        timings['elapsed_seconds'] = round(time.monotonic() - started, 6)
+        # Operational telemetry is outside both the scientific package and its
+        # replay input: durations cannot change evidence identity or hashing.
+        try:
+            (store.directory / 'collection-timings.json').write_bytes(canonical_json(timings))
+        except OSError:
+            pass  # Optional telemetry cannot mask a source failure or a valid package.
 
 
 def deepcopy_record(value):

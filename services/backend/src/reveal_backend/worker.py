@@ -6,6 +6,7 @@ import logging
 import os
 from pathlib import Path
 import signal
+import shutil
 import socket
 import time
 from .agent_execution import ExecutionRequest, MAX_EMIT_BATCH_EVENTS, MAX_EMIT_BATCH_BYTES, emit_batch_size
@@ -19,6 +20,7 @@ from .evidence_budget import fit_input_budget
 from .repository import Repository, now, uid, digest
 from .runtime_config import ROOT, setting, artifacts_root
 from . import jobs
+from .artifact_store import s3_enabled, store as artifact_store, retained_file, StorageUnavailable
 
 log=logging.getLogger('reveal.worker')
 
@@ -85,6 +87,63 @@ def restore_dispatch_input(root,snapshot):
     raw=path.read_bytes(); require(sha256(raw)==snapshot['sha256'],'Frozen dispatch input checksum changed')
     return path,decode(raw)
 
+def read_preparation_inputs(repository,job):
+    """Read immutable inputs from one snapshot without the application write lock."""
+    with repository.read_transaction() as tx:
+        if job['kind']=='analysis':
+            identity=job['research_request_id']
+            records=tx.get_records((('request',identity),('request_binding',identity)))
+            return records[('request',identity)]['data'],records[('request_binding',identity)]['data']
+        owner=tx.get('job',job['id'])['owner']
+        return owned(tx,'account',job['input_account_id'],owner)['data']
+
+def persist_dispatch_input(repository,job_id,token,snapshot,package=None):
+    """Commit collected evidence and its exact dispatch checkpoint together."""
+    with repository.transaction() as tx:
+        pair=jobs.fenced(tx,job_id,token)
+        if not pair: return False
+        current,queue=pair; owner=current['owner_user_id']
+        if package is not None:
+            tx.put('evidence',job_id,owner,{'job_id':job_id,'package_sha256':snapshot['sha256'],'package':package})
+        queue['dispatch_input']=snapshot
+        if snapshot.get('workspace'): queue['workspace']=snapshot['workspace']
+        tx.update_existing('queue',job_id,owner,queue)
+        return True
+
+def prepare_source_artifacts(package_path,job_id):
+    """Verify immutable source files before entering the acceptance write fence."""
+    package=decode(package_path.read_bytes()); records=[]; access={}
+    files={file['id']:file for file in package['dapper_context'].get('files',[])}
+    base=setting('NEXTAUTH_URL','http://localhost:3000').rstrip('/')+'/api/backend/v1/artifacts/'
+    for source in package['source_artifacts'].values():
+        file=files.get(source['dapper_file_id'])
+        if not file: continue
+        path=assert_artifact(package_path.parent/source['path'],package_path.parent)
+        data=path.read_bytes(); require(sha256(data)==source['sha256'],'Source artifact changed before persistence')
+        records.append({'sha256':source['sha256'],'file':file,**retained_file(path,source['sha256']),'job_id':job_id})
+        access[file['id']]={'file':file,'download_url':base+source['sha256'],'expires_at':None,
+                            'availability':'available','verification':'checksum_verified'}
+    return records,access
+
+def persist_source_artifacts(tx,owner,artifacts):
+    """Batch new rows while preserving each prior put's duplicate/version semantics."""
+    records=[(digest([owner,record['sha256']]),record) for record in artifacts]
+    identities=list(dict.fromkeys(identity for identity,_ in records)); known=set()
+    for offset in range(0,len(identities),100):
+        known.update(tx.get_many('artifact',identities[offset:offset+100]))
+    pending=[]
+    def flush():
+        if pending: tx.insert_many(pending); pending.clear()
+    for identity,record in records:
+        if identity in known:
+            # A duplicate can refer to an unflushed new row. Flush before updating
+            # so every occurrence increments its version and the last value wins.
+            flush(); tx.update_existing('artifact',identity,owner,record)
+        else:
+            pending.append(('artifact',identity,owner,record)); known.add(identity)
+            if len(pending)==100: flush()
+    flush()
+
 def validate_execution_ledger(result,request,expected_model=None):
     require(result.runtime_manifest_path is not None and result.ledger_manifest_path is not None,'Execution lacks trusted runtime or tool ledger')
     runtime_path=assert_artifact(result.runtime_manifest_path,request.output_dir)
@@ -102,7 +161,7 @@ def validate_execution_ledger(result,request,expected_model=None):
         require(call['sequence'] not in sequences,'Duplicate ledger sequence'); sequences.add(call['sequence'])
         require(call.get('selected_graph') is None or call['selected_graph'] in request.selected_graphs,'Execution queried an unselected graph')
         require(call.get('status') in ('completed','empty','failed','denied','interrupted'),'Tool call has no final result')
-        for field in ('request','response','upstream_request'):
+        for field in ('request','response','upstream_request','upstream_response'):
             artifact=call.get(field)
             if field in ('request','response'): require(artifact is not None,'Tool call is missing complete request/result capture')
             if artifact:
@@ -173,14 +232,45 @@ class Worker:
     def __init__(self,repository=None,adapter=None):
         self.repository=repository or Repository(); self.adapter=adapter; self.stopping=False
         self.worker_id=socket.gethostname()+':'+uid()
+        self.draining=False; self.current_job=None
     async def process(self,job,queue):
+        try:
+            if job['kind']=='deployment_probe':
+                from .deployment import run_probe
+                return await run_probe(self,job,queue)
+            await self._process(job,queue)
+        finally:
+            if s3_enabled():
+                root=artifacts_root()/job['id']
+                if root.resolve().is_relative_to(artifacts_root()): shutil.rmtree(root,ignore_errors=True)
+
+    def save_workspace(self,job,token,root):
+        if not s3_enabled(): return
+        reference=artifact_store().snapshot(root)
+        review_capture=None
+        from .box_adapter import CAPTURE_MARKER
+        for path in sorted(root.glob('attempt-*/output/'+CAPTURE_MARKER)):
+            marker=decode(path.read_bytes())
+            if marker.get('cleanup_complete') and marker.get('state',{}).get('status')=='succeeded':
+                binding=marker['binding']
+                if binding['job_id']==job['id'] and (review_capture is None or binding['attempt']>review_capture['attempt']):
+                    review_capture={'attempt':binding['attempt'],'box_id':binding['box_id'],'capture_sha256':sha256(path.read_bytes())}
+        with self.repository.transaction() as tx:
+            pair=jobs.fenced(tx,job['id'],token)
+            if not pair: raise StorageUnavailable('Checkpoint lease was lost')
+            current,queue=pair
+            queue['workspace']=reference
+            if review_capture: queue['review_capture']=review_capture
+            tx.put('queue',job['id'],current['owner_user_id'],queue)
+
+    async def _process(self,job,queue):
         token=queue['token']; mode=queue.get('dispatch_input',{}).get('mode') or ('box' if queue.get('remote_handle') else setting('REVEAL_EXECUTION_MODE','box'))
         require(mode in ('box','deterministic'),'REVEAL_EXECUTION_MODE must be box or deterministic')
         require(mode!='deterministic' or setting('REVEAL_ENVIRONMENT','development') in ('development','test'),'Deterministic execution is restricted to development/test environments')
         root=artifacts_root()/job['id']; directory=root/('attempt-'+str(queue['attempt'])); directory.mkdir(parents=True,exist_ok=True)
         lost=False
         def cancellation_requested():
-            with self.repository.transaction() as tx:
+            with self.repository.read_transaction() as tx:
                 pair=jobs.fenced(tx,job['id'],token)
                 return pair is None or pair[0]['status']=='cancel_requested'
         async def cancelled():
@@ -193,9 +283,11 @@ class Worker:
         async def lease_loop():
             nonlocal lost
             while True:
-                await asyncio.sleep(20)
+                await asyncio.sleep(min(20,jobs.lease_duration()/3))
                 if not await asyncio.to_thread(jobs.heartbeat,self.repository,job['id'],token): lost=True; return
         def persist_checkpoint(handle):
+            if s3_enabled() and handle.get('phase') in ('captured','deleted'):
+                self.save_workspace(job,token,root)
             with self.repository.transaction() as tx:
                 pair=jobs.fenced(tx,job['id'],token)
                 if not pair: raise RuntimeError('Attempt lease lost')
@@ -223,16 +315,20 @@ class Worker:
         lease=asyncio.create_task(lease_loop())
         phase='evidence_preparation'
         try:
+            if s3_enabled() and queue.get('workspace'):
+                await asyncio.to_thread(artifact_store().restore,queue['workspace'],root)
+                directory.mkdir(parents=True,exist_ok=True)
             if await cancelled() and not queue.get('remote_handle'):
                 jobs.finish(self.repository,job['id'],token,'cancelled'); return
             if mode=='deterministic': await emit('warning',{'message':'DEVELOPMENT SIMULATION — not a live scientific result.'})
-            with self.repository.transaction() as tx:
-                if job['kind']=='analysis':
-                    frozen=tx.get('request',job['research_request_id'])['data']; binding=tx.get('request_binding',job['research_request_id'])['data']
-                else:
-                    owner=tx.get('job',job['id'])['owner']
-                    stored=owned(tx,'account',job['input_account_id'],owner)['data']; document=stored['result']['document']
+            inputs=await asyncio.to_thread(read_preparation_inputs,self.repository,job)
+            if job['kind']=='analysis': frozen,binding=inputs
+            else: stored=inputs; document=stored['result']['document']
+            prepared_package=None
             snapshot=queue.get('dispatch_input')
+            review_source=queue.get('review_source')
+            if review_source:
+                require(snapshot and mode=='box','Review retry requires the original frozen Box input')
             if queue.get('remote_handle') and not snapshot:
                 # Backward-compatible recovery of already launched attempts:
                 # locate a frozen manifest, never recollect or choose new bytes.
@@ -257,16 +353,10 @@ class Worker:
                 input_path,package=await asyncio.to_thread(collect,job,frozen,binding,queue['inputs'].get('budgets',{}),root/'evidence')
                 input_path,package,measurement=await asyncio.to_thread(fit_input_budget,input_path,mode,queue['inputs'].get('budgets',{}).get('evidence_tokens',24000))
                 (directory/'token-budget.json').write_bytes(canonical_json(measurement))
-                with self.repository.transaction() as tx:
-                    pair=jobs.fenced(tx,job['id'],token)
-                    if not pair: return
-                    tx.put('evidence',job['id'],pair[0]['owner_user_id'],{'job_id':job['id'],'package_sha256':sha256(input_path.read_bytes()),'package':package})
+                prepared_package=package
                 selected=tuple(frozen['composer']['selected_kgs'])
             else:
-                from .citations import register
-                with self.repository.transaction() as tx:
-                    owner=tx.get('job',job['id'])['owner']
-                    metadata=stored['result']['citation_metadata']
+                metadata=stored['result']['citation_metadata']
                 allowed=[{'target_id':m['target_id'],'citation_metadata_revision':m['metadata_revision']} for m in metadata]
                 # Claims first makes deterministic paragraph cite an assessed target.
                 allowed.sort(key=lambda x:0 if x['target_id'].startswith('dapper:Claim.') else 1)
@@ -275,30 +365,46 @@ class Worker:
             if snapshot is None:
                 snapshot={'path':str(input_path.resolve().relative_to(root.resolve())),'sha256':sha256(input_path.read_bytes()),
                     'mode':mode,'model':setting('REVEAL_CLAUDE_MODEL','claude-sonnet-4-6'),'kind':job['kind']}
-            with self.repository.transaction() as tx:
-                pair=jobs.fenced(tx,job['id'],token)
-                if not pair: return
-                current,q=pair; q['dispatch_input']=snapshot; tx.put('queue',job['id'],current['owner_user_id'],q)
+            if s3_enabled():
+                snapshot=dict(snapshot,workspace=await asyncio.to_thread(artifact_store().snapshot,root))
+            if not await asyncio.to_thread(persist_dispatch_input,self.repository,job['id'],token,snapshot,prepared_package): return
             if await cancelled() and not queue.get('remote_handle'):
                 jobs.finish(self.repository,job['id'],token,'cancelled'); return
-            phase='agent_execution'
-            await emit('stage',{'stage':'starting_agent' if job['kind']=='analysis' else 'authoring_paragraph','message':'Starting the configured execution adapter.'})
-            adapter=self.adapter
-            if adapter is None:
-                if mode=='deterministic':
-                    from .deterministic_adapter import DeterministicAdapter
-                    adapter=DeterministicAdapter()
-                else:
-                    from .box_adapter import BoxExecutionAdapter
-                    adapter=BoxExecutionAdapter(ROOT,environ={**os.environ,'REVEAL_CLAUDE_MODEL':snapshot['model']})
-            request=ExecutionRequest(job_id=job['id'],attempt=queue['attempt'],kind='research' if job['kind']=='analysis' else 'paragraph',input_path=input_path,
-                output_dir=directory/'output',selected_graphs=selected,timeout_seconds=int(setting('REVEAL_AGENT_TIMEOUT_SECONDS','900')),
-                max_budget_usd=float(setting('REVEAL_AGENT_MAX_BUDGET_USD','3')),max_turns=int(setting('REVEAL_AGENT_MAX_TURNS','40')),remote_handle=queue.get('remote_handle'))
-            result=await adapter.execute(request,emit,cancelled,checkpoint)
+            execution_attempt=review_source['attempt'] if review_source else queue['attempt']
+            request=ExecutionRequest(job_id=job['id'],attempt=execution_attempt,kind='research' if job['kind']=='analysis' else 'paragraph',input_path=input_path,
+                output_dir=root/f'attempt-{execution_attempt}'/'output',selected_graphs=selected,timeout_seconds=int(setting('REVEAL_AGENT_TIMEOUT_SECONDS','900')),
+                max_budget_usd=float(setting('REVEAL_AGENT_MAX_BUDGET_USD','3')),max_turns=int(setting('REVEAL_AGENT_MAX_TURNS','100')),remote_handle=queue.get('remote_handle'))
+            if review_source:
+                phase='scientific_validation'
+                from .review_retry import replay_capture
+                await emit('stage',{'stage':'validating','message':'Verifying saved research output before retrying independent review. No research agent is being launched.'})
+                result=await asyncio.to_thread(replay_capture,request,review_source)
+            else:
+                phase='agent_execution'
+                await emit('stage',{'stage':'starting_agent' if job['kind']=='analysis' else 'authoring_paragraph','message':'Starting the configured execution adapter.'})
+                adapter=self.adapter
+                if adapter is None:
+                    if mode=='deterministic':
+                        from .deterministic_adapter import DeterministicAdapter
+                        adapter=DeterministicAdapter()
+                    else:
+                        from .box_adapter import BoxExecutionAdapter
+                        adapter=BoxExecutionAdapter(ROOT,environ={**os.environ,'REVEAL_CLAUDE_MODEL':snapshot['model']})
+                result=await adapter.execute(request,emit,cancelled,checkpoint)
+            await asyncio.to_thread(self.save_workspace,job,token,root)
             if await cancelled():
                 jobs.finish(self.repository,job['id'],token,'cancelled'); return
+            if result.status=='insufficient_evidence' and job['kind']=='analysis':
+                phase='scientific_validation'
+                from .analysis_outcomes import prepare
+                prepared=await asyncio.to_thread(prepare,job,frozen,binding,input_path,result,
+                    attempt=queue['attempt'],mode=mode,expected_model=snapshot['model'])
+                if await self.begin_persistence(job,token,'Saving the scoped exploration and captured reasons; no scientific account was accepted.'):
+                    await asyncio.to_thread(self.accept_outcome,job,token,prepared)
+                return
             if result.status!='succeeded':
-                failure={'code':'AGENT_EXECUTION_FAILED','message':result.reason or 'The execution did not complete.','retryable':True} if result.status=='failed' else None
+                from .job_failures import authoring_failure
+                failure=authoring_failure(result,request) if result.status=='failed' else None
                 jobs.finish(self.repository,job['id'],token,result.status,failure=failure); return
             phase='scientific_validation'
             if mode=='box': validate_execution_ledger(result,request,snapshot['model'])
@@ -308,26 +414,32 @@ class Worker:
                 accepted=[]
                 for index,path in enumerate(result.account_paths):
                     raw=assert_artifact(path,request.output_dir); final_path=directory/f'accepted-{index+1}.json'
-                    doc,report=await asyncio.to_thread(assemble_account,raw,input_path,final_path,frozen['attribution'],job,queue['attempt'],mode,
-                        result.ledger_manifest_path if mode=='box' else None)
+                    from .scientific_account_lint import AccountValidationError
+                    try:
+                        doc,report=await asyncio.to_thread(assemble_account,raw,input_path,final_path,frozen['attribution'],job,execution_attempt,mode,
+                            result.ledger_manifest_path if mode=='box' else None)
+                    except AccountValidationError as exc:
+                        (directory/f'validation-{index+1}.json').write_bytes(canonical_json(exc.report))
+                        raise
                     (directory/f'validation-{index+1}.json').write_bytes(canonical_json(report))
                     if mode=='box':
-                        from .scientific_grounding import review_account
+                        from .scientific_grounding import MODEL as REVIEW_MODEL, review_account
                         grounding=await asyncio.to_thread(review_account,doc,package,result.ledger_manifest_path,
-                            model=snapshot['model'],api_key=setting('ANTHROPIC_API_KEY'),
+                            model=REVIEW_MODEL,api_key=setting('ANTHROPIC_API_KEY'),
                             max_budget_usd=float(setting('REVEAL_GROUNDING_MAX_BUDGET_USD','0.30')))
                         (directory/f'grounding-{index+1}.json').write_bytes(canonical_json(grounding))
                         require(grounding['accepted'],'Independent source-grounding review rejected unsupported or overstated scientific content')
                     accepted.append((doc,report,final_path))
-                await self.accept_accounts(job,token,accepted,frozen,input_path,result,directory,mode)
+                if await self.begin_persistence(job,token,'Saving validated scientific accounts and their source provenance.'):
+                    await self.accept_accounts(job,token,accepted,frozen,input_path,result,directory,mode)
             else:
                 require(result.paragraph_path is not None,'Paragraph execution returned no segments')
                 raw=assert_artifact(result.paragraph_path,request.output_dir)
                 segments=decode(raw.read_bytes())
                 if mode=='box':
-                    from .scientific_grounding import review_paragraph
+                    from .scientific_grounding import MODEL as REVIEW_MODEL, review_paragraph
                     grounding=await asyncio.to_thread(review_paragraph,segments,paragraph_input,
-                        model=snapshot['model'],api_key=setting('ANTHROPIC_API_KEY'),
+                        model=REVIEW_MODEL,api_key=setting('ANTHROPIC_API_KEY'),
                         max_budget_usd=float(setting('REVEAL_GROUNDING_MAX_BUDGET_USD','0.30')))
                     (directory/'paragraph-grounding.json').write_bytes(canonical_json(grounding))
                     require(grounding['accepted'],'Independent source-grounding review rejected unsupported or overstated paragraph content')
@@ -335,15 +447,16 @@ class Worker:
             if await cancelled(): jobs.finish(self.repository,job['id'],token,'cancelled')
         except Exception as exc:
             from .box_adapter import BoxTransportError
-            if isinstance(exc,BoxTransportError):
+            if isinstance(exc,(BoxTransportError,StorageUnavailable)):
                 with self.repository.transaction() as tx:
                     pair=jobs.fenced(tx,job['id'],token)
-                    if pair and pair[1].get('remote_handle'):
+                    if pair and (pair[1].get('remote_handle') or isinstance(exc,StorageUnavailable)):
                         current,q=pair; q['recoveries']=q.get('recoveries',0)+1
                         from datetime import datetime,timedelta,timezone
                         q['lease_until']=(datetime.now(timezone.utc)+timedelta(seconds=min(60,5*q['recoveries']))).isoformat().replace('+00:00','Z')
                         tx.put('queue',job['id'],current['owner_user_id'],q)
-                        jobs.event(tx,current,'warning','Reconnecting to the existing remote execution for result capture or cleanup; no new paid attempt was launched.')
+                        jobs.event(tx,current,'warning','Durable storage is unavailable; the attempt will resume from its last checkpoint.' if isinstance(exc,StorageUnavailable) else
+                            'Reconnecting to the existing remote execution for result capture or cleanup; no new paid attempt was launched.')
                         return
             # Scientific exceptions are retained as bounded local diagnostics;
             # API errors do not echo third-party headers/URLs/credentials.
@@ -351,10 +464,15 @@ class Worker:
             diagnostic={'phase':phase,'error_type':type(exc).__name__,'message':str(exc)[:3000] if not isinstance(exc,OSError) else 'Operating system error'}
             if isinstance(exc,ScientificReviewUnavailable): diagnostic['review_audit']=exc.audit
             (directory/'failure.json').write_bytes(canonical_json(diagnostic))
+            await asyncio.to_thread(self.save_workspace,job,token,root)
             if phase=='evidence_preparation':
                 code,message='EVIDENCE_PREPARATION_FAILED','The source evidence could not be prepared.'
             elif isinstance(exc,ScientificReviewUnavailable):
-                code,message='REVIEW_UNAVAILABLE','The independent scientific review could not complete; no scientific verdict was reached.'
+                from .job_failures import review_failure
+                failure=review_failure(exc)
+                failure['message']+=' The saved draft and existing accounts are preserved.'
+                jobs.finish(self.repository,job['id'],token,'failed',failure=failure)
+                return
             elif phase=='scientific_validation' and isinstance(exc,ValueError):
                 code,message='VALIDATION_FAILED','The attempt failed scientific validation.'
             else:
@@ -367,30 +485,51 @@ class Worker:
             try: await lease
             except asyncio.CancelledError: pass
 
+    async def begin_persistence(self,job,token,message):
+        """Publish the saving boundary before persistence can block event reads."""
+        def transition():
+            with self.repository.transaction() as tx:
+                pair=jobs.fenced(tx,job['id'],token)
+                if not pair or pair[0]['status']=='cancel_requested': return False
+                current,_=pair; current['stage']='persisting'
+                jobs.event(tx,current,'activity',message,activity('preparation'))
+                return True
+        return await asyncio.to_thread(transition)
+
+    def accept_outcome(self,job,token,prepared):
+        from . import analysis_outcomes
+        self.save_workspace(job,token,artifacts_root()/job['id'])
+        with self.repository.transaction() as tx:
+            pair=jobs.fenced(tx,job['id'],token)
+            if not pair or pair[0]['status']=='cancel_requested': return False
+            current,_=pair
+            identity=analysis_outcomes.save(tx,current,prepared)
+            current.update(status='insufficient_evidence',stage='complete',completed_at=now(),
+                result=analysis_outcomes.result(identity,prepared),failure=None)
+            jobs.event(tx,current,'result','Exploration saved with its scoped limitations; no scientific account was accepted.')
+            return True
+
     async def accept_accounts(self,job,token,accepted,frozen,package_path,result,directory,mode):
         from .citations import register
+        source_artifacts,artifact_access=await asyncio.to_thread(prepare_source_artifacts,package_path,job['id'])
+        captured={}
+        if mode=='box':
+            from .acceptance import ledger_sources
+            captured=await asyncio.to_thread(ledger_sources,result.ledger_manifest_path)
+            for checksum,source in captured.items():
+                source['retained']=await asyncio.to_thread(retained_file,source['path'],checksum)
+        await asyncio.to_thread(self.save_workspace,job,token,artifacts_root()/job['id'])
         with self.repository.transaction() as tx:
             pair=jobs.fenced(tx,job['id'],token)
             if not pair or pair[0]['status']=='cancel_requested': return
             current,_=pair; owner=current['owner_user_id']; accounts=[]; paragraphs=[]; manifest_accounts=[]
-            package=decode(package_path.read_bytes()); artifact_access={}
-            files={f['id']:f for f in package['dapper_context'].get('files',[])}
-            for source in package['source_artifacts'].values():
-                file=files.get(source['dapper_file_id'])
-                if not file: continue
-                path=assert_artifact(package_path.parent/source['path'],package_path.parent)
-                data=path.read_bytes(); require(sha256(data)==source['sha256'],'Source artifact changed before persistence')
-                tx.put('artifact',digest([owner,source['sha256']]),owner,{'sha256':source['sha256'],'file':file,'path':str(path),'job_id':job['id']})
-                url=setting('NEXTAUTH_URL','http://localhost:3000').rstrip('/')+'/api/backend/v1/artifacts/'+source['sha256']
-                artifact_access[file['id']]={'file':file,'download_url':url,'expires_at':None,'availability':'available','verification':'checksum_verified'}
+            persist_source_artifacts(tx,owner,source_artifacts)
             for doc,report,path in accepted:
                 if mode=='box':
-                    from .acceptance import ledger_sources
-                    captured=ledger_sources(result.ledger_manifest_path)
                     for file in doc.get('files',[]):
                         source=captured.get(file.get('sha256'))
                         if source:
-                            tx.put('artifact',digest([owner,file['sha256']]),owner,{'sha256':file['sha256'],'file':file,'path':str(source['path']),'job_id':job['id']})
+                            tx.put('artifact',digest([owner,file['sha256']]),owner,{'sha256':file['sha256'],'file':file,**source['retained'],'job_id':job['id']})
                             url=setting('NEXTAUTH_URL','http://localhost:3000').rstrip('/')+'/api/backend/v1/artifacts/'+file['sha256']
                             artifact_access[file['id']]={'file':file,'download_url':url,'expires_at':None,'availability':'available','verification':'checksum_verified'}
                 runtime=decode(Path(result.runtime_manifest_path).read_bytes()) if result.runtime_manifest_path else {'model_id':None,'harness_version':None}
@@ -434,7 +573,8 @@ class Worker:
             manifest={'format':'reveal.agent-output/1','job_id':job['id'],'attempt':pair[1]['attempt'],'status':'succeeded','input_package_sha256':public['evidence_package_sha256'],
                 'runtime_manifest_sha256':sha256(Path(result.runtime_manifest_path).read_bytes()) if result.runtime_manifest_path else digest({'mode':mode}),
                 'ledger_manifest_sha256':sha256(Path(result.ledger_manifest_path).read_bytes()) if result.ledger_manifest_path else None,'accounts':manifest_accounts,'reason':None}
-            (directory/'worker-output.json').write_bytes(canonical_json(manifest))
+            # S3 mode already has the exact output checkpoint and RDS result.
+            if not s3_enabled(): (directory/'worker-output.json').write_bytes(canonical_json(manifest))
 
     async def accept_paragraph(self,job,token,raw,inputs,directory):
         from .box_paragraph import assemble_paragraph
@@ -455,6 +595,8 @@ class Worker:
         after={n['id']:n for rows in document.values() if isinstance(rows,list) for n in rows if isinstance(n,dict) and 'id' in n}
         require(all(after.get(identity)==node for identity,node in before.items()),'Paragraph assembly changed accepted scientific content')
         paragraph=document['paragraphs'][-1]
+        await asyncio.to_thread(self.save_workspace,job,token,artifacts_root()/job['id'])
+        if not await self.begin_persistence(job,token,'Saving the validated research statement and its exact citations.'): return
         with self.repository.transaction() as tx:
             pair=jobs.fenced(tx,job['id'],token)
             if not pair or pair[0]['status']=='cancel_requested': return
@@ -478,13 +620,51 @@ class Worker:
             jobs.event(tx,current,'result','Cited research statement complete.')
 
     async def run(self):
-        while not self.stopping:
-            try:
-                claimed=await asyncio.to_thread(jobs.claim,self.repository,self.worker_id)
-                if claimed: await self.process(*claimed)
-                else: await asyncio.sleep(1)
-            except Exception as exc:
-                log.error('Worker loop unavailable (%s)',type(exc).__name__); await asyncio.sleep(3)
+        from .job_transport import RedisTransport
+        transport=RedisTransport() if jobs.transport()=='redis' else None
+        def status():
+            with self.repository.transaction() as tx:
+                control=tx.get('worker_control',jobs.namespace())
+                if control: self.draining=bool(control['data'].get('draining'))
+                tx.put('runtime',self.worker_id,'system',{'namespace':jobs.namespace(),'heartbeat_at':now(),
+                    'job_id':self.current_job,'draining':self.draining,'pid':os.getpid()})
+        async def monitor():
+            while not self.stopping:
+                try: await asyncio.to_thread(status)
+                except Exception as exc: log.error('Worker heartbeat unavailable (%s)',type(exc).__name__)
+                await asyncio.sleep(3)
+        monitor_task=asyncio.create_task(monitor())
+        try:
+            while not self.stopping:
+                message=None
+                try:
+                    if self.draining:
+                        await asyncio.sleep(1); continue
+                    if transport:
+                        message=await asyncio.to_thread(transport.receive,self.worker_id)
+                        if not message: continue
+                        identity,envelope=message
+                        if await asyncio.to_thread(transport.disposition,self.repository,envelope)=='discard':
+                            await asyncio.to_thread(transport.acknowledge,identity); continue
+                        claimed=await asyncio.to_thread(jobs.claim,self.repository,self.worker_id,
+                            job_id=envelope.get('job_id'),dispatch_id=envelope.get('dispatch_id'))
+                    else:
+                        claimed=await asyncio.to_thread(jobs.claim,self.repository,self.worker_id)
+                    if claimed:
+                        self.current_job=claimed[0]['id']
+                        await asyncio.to_thread(status)
+                        await self.process(*claimed)
+                        self.current_job=None
+                    else: await asyncio.sleep(1)
+                    if message and await asyncio.to_thread(transport.disposition,self.repository,envelope)=='discard':
+                        await asyncio.to_thread(transport.acknowledge,identity)
+                except Exception as exc:
+                    self.current_job=None
+                    log.error('Worker loop unavailable (%s)',type(exc).__name__); await asyncio.sleep(3)
+        finally:
+            monitor_task.cancel()
+            try: await monitor_task
+            except asyncio.CancelledError: pass
 
 def main():
     logging.basicConfig(level=logging.INFO)

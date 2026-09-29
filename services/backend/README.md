@@ -1,10 +1,12 @@
 # REVEAL backend components
 
-Implemented components include the embedding client supplied for this project, packaged in [embedding_client.py](src/reveal_backend/embedding_client.py), and the [EAGGL bundle importer and retrieval helpers](../../docs/eaggl-factor-import.md). The REST API/EC2 worker and Box runner are planned in [the design](../../docs/design-plan.md); they are not running yet.
+FastAPI, the Redis dispatcher, worker pool, Box runner, scientific validation and S3 storage are implemented. Start the complete Docker stack with [README.local.md](../../README.local.md); learn its routes and authorization through the [API walkthrough](../../docs/api-quickstart.md). API, dispatcher and workers share one image. The deployment is local; public hosting is pending platform access.
+
+The sections below document the embedding client in [embedding_client.py](src/reveal_backend/embedding_client.py) and [EAGGL import/retrieval helpers](../../docs/eaggl-factor-import.md). Importing existing RDS catalogs is not a startup step.
 
 The [evidence collector and deterministic builder](../../docs/evidence-package-builder.md) accept a DisMech gap ID and EAGGL factor IDs, call the CFDE interactive/BioIndex APIs, and produce a frozen DAPPER-aware evidence package. Install with `python -m pip install -e 'services/backend[evidence]'`, then use `scripts/build_evidence_package.py collect` or `replay` from the repository root. No database credentials or agent keys are required.
 
-The [agent startup and scientific-account linter](../../docs/scientific-account-linting.md) clone a locked DAPPER release per agent start, install the skill and lint script, and return structured findings. `validate_scientific_account` reuses this linter in final mode for backend acceptance checks. The local helpers are implemented; Box provisioning and worker deployment remain planned.
+The [agent startup and scientific-account linter](../../docs/scientific-account-linting.md) clone a locked DAPPER release per agent start, install the skill and lint script, and return structured findings. `validate_scientific_account` reuses this linter in final mode for backend acceptance checks. The Box runner and workers use these same validation modules; see [current status](../../docs/implementation-status.md).
 
 ## Install and configure
 
@@ -69,7 +71,8 @@ Adaptations from the supplied code:
 ## Offline tests
 
 ```bash
-.venv/bin/python -m unittest discover -s services/backend/tests -p 'test_*.py'
+.venv/bin/python -m pip install pytest
+.venv/bin/python -m pytest services/backend/tests -q
 ```
 
 Tests use mocked HTTP responses, including transient/auth failures, invalid matrices, and out-of-order parallel completion. They do not consume service quota or require a key.
@@ -84,7 +87,7 @@ Use `scripts/import_eaggl_factors.py` for `prepare`, `embed`, `load`, and `searc
 The Python `database_search_index` helper loads a reusable index directly from
 completed MySQL imports. The supplied legacy bundle has been loaded into Aurora,
 and [read-back plus database-backed semantic search passed](../../data/eaggl/2026-09-25/database-verification.json).
-The REST API remains undeployed.
+The REST API runs locally in Docker; public hosting is pending.
 
 The [CFDE routing crosswalk](../../docs/eaggl-cfde-links.md) links an imported EAGGL
 factor to a CFDE factor by exact trait and factor number, ignoring gene/label

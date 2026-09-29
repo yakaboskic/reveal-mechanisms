@@ -62,12 +62,16 @@ export interface paths {
         get: operations["getDraft"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete a saved draft
+         * @description Delete an owned draft using expected_version. Active analysis jobs prevent deletion (409 DRAFT_IN_USE). Frozen research requests, jobs, accounts and explorations are preserved. Retry a lost acknowledgment with the same Idempotency-Key.
+         */
+        delete: operations["deleteDraft"];
         options?: never;
         head?: never;
         /**
          * Autosave a draft
-         * @description Replace composer using expected_version. The server increments the version only on commit. Stale revisions return 409 with current_version. Server derives ownership; unknown owner/provenance fields are rejected.
+         * @description Rename or replace composer using expected_version. Omitted fields are preserved. The server increments the version only on commit. Stale revisions return 409 with current_version. Server derives ownership; unknown owner/provenance fields are rejected.
          */
         patch: operations["updateDraft"];
         trace?: never;
@@ -121,7 +125,7 @@ export interface paths {
         };
         /**
          * Search knowledge gaps with free text
-         * @description Fuzzy lookup of imported DisMech gaps by default. Query text is not an authored inquiry or permission to launch research. Other explicit modes require their configured index and return 503 if unavailable. Rankings are retrieval signals. Example uses the exact CAD gap from the HTML study.
+         * @description Fuzzy lookup of imported DisMech gaps by default. Query text is not an authored inquiry or permission to launch research. Other explicit modes require their configured index and return 503 if unavailable. Rankings are retrieval signals. Example uses the exact CAD gap from the HTML study. Account counts use the same optional-session visibility rules as gap browsing; relevance order remains unchanged.
          */
         get: operations["searchKnowledgeGaps"];
         put?: never;
@@ -141,7 +145,7 @@ export interface paths {
         };
         /**
          * Browse knowledge gaps
-         * @description Browse imported DisMech gaps. Initial homepage is curated, with exact public-account counts as of the returned timestamp. Counts never include private work. Default source=dismech, include both gap kinds and all original statuses; filters may narrow. No manufactured popularity ranking.
+         * @description Browse imported DisMech gaps ordered by distinct scientific-account count descending. Public scope (default) counts only explicitly published snapshots across users; workspace scope requires a session and counts owned saved accounts. Equal-count gaps shuffle on each new browse; a server seed in the signed continuation cursor preserves tie order across pages. Exact gap digests only: no text matching, attempts, paragraph jobs or implicit source-revision rollup. Invalid supplied credentials are rejected even for public reads. Filters apply before pagination; count or corpus changes expire cursors.
          */
         get: operations["listKnowledgeGaps"];
         put?: never;
@@ -161,7 +165,7 @@ export interface paths {
         };
         /**
          * Inspect a knowledge gap
-         * @description Exact DAPPER KnowledgeGap plus one pinned source observation and attachment resolutions. source_revision selects a historical mapping; omission selects the latest accessible observation of this same digest. It never redirects to a different digest.
+         * @description Exact DAPPER KnowledgeGap plus one pinned source observation and attachment resolutions. source_revision selects a historical mapping; omission selects the latest accessible observation of this same digest. It never redirects to a different digest. Account counts use the same optional-session visibility rules as gap browsing.
          */
         get: operations["getKnowledgeGap"];
         put?: never;
@@ -325,7 +329,7 @@ export interface paths {
         };
         /**
          * Inspect a scientific account
-         * @description Returns exact DAPPER records, schema pin, payload checksums and provenance document. Scientific IDs never redirect to a newer revision. Select payload_sha256 to recover an exact historical observation; otherwise the server returns its designated current observation and checksum. Unhashable locator changes can share a scientific ID. Access is enforced independently of citation metadata. Upstream closure follows scientific references and provenance inputs only, max_depth 0..5 and max_nodes 1..250 (default 5/250). An opaque cursor continues the same owner/filter/payload observation; missing or bounded references are reported explicitly. Unauthorized references are omitted without revealing private identifiers.
+         * @description Returns exact DAPPER records, schema pin, payload checksums and provenance document. Scientific IDs never redirect to a newer revision. Select payload_sha256 to recover an exact historical observation; otherwise the server returns its designated current observation and checksum. Unhashable locator changes can share a scientific ID. Access is enforced independently of citation metadata. Upstream closure follows scientific references and provenance inputs only, max_depth 0..5 and max_nodes 1..250 (default 5/250). An opaque cursor continues the same owner/filter/payload observation; missing or bounded references are reported explicitly. Unauthorized references are omitted without revealing private identifiers. A valid owner retains private access. Without owner access, only an active explicit publication snapshot authorizes this scientific resource, exact cited revisions and reachable source artifacts. Invalid supplied credentials fail even on public reads. Unpublication revokes snapshot access; job/draft/request routes remain private.
          */
         get: operations["getAccount"];
         put?: never;
@@ -345,7 +349,7 @@ export interface paths {
         };
         /**
          * Inspect a claim and its evidence
-         * @description Returns exact DAPPER records, schema pin, payload checksums and provenance document. Scientific IDs never redirect to a newer revision. Select payload_sha256 to recover an exact historical observation; otherwise the server returns its designated current observation and checksum. Unhashable locator changes can share a scientific ID. Access is enforced independently of citation metadata. Upstream closure follows scientific references and provenance inputs only, max_depth 0..5 and max_nodes 1..250 (default 5/250). An opaque cursor continues the same owner/filter/payload observation; missing or bounded references are reported explicitly. Unauthorized references are omitted without revealing private identifiers.
+         * @description Returns exact DAPPER records, schema pin, payload checksums and provenance document. Scientific IDs never redirect to a newer revision. Select payload_sha256 to recover an exact historical observation; otherwise the server returns its designated current observation and checksum. Unhashable locator changes can share a scientific ID. Access is enforced independently of citation metadata. Upstream closure follows scientific references and provenance inputs only, max_depth 0..5 and max_nodes 1..250 (default 5/250). An opaque cursor continues the same owner/filter/payload observation; missing or bounded references are reported explicitly. Unauthorized references are omitted without revealing private identifiers. A valid owner retains private access. Without owner access, only an active explicit publication snapshot authorizes this scientific resource, exact cited revisions and reachable source artifacts. Invalid supplied credentials fail even on public reads. Unpublication revokes snapshot access; job/draft/request routes remain private.
          */
         get: operations["getClaim"];
         put?: never;
@@ -365,7 +369,7 @@ export interface paths {
         };
         /**
          * Inspect a DAPPER GeneSet
-         * @description Returns exact DAPPER records, schema pin, payload checksums and provenance document. Scientific IDs never redirect to a newer revision. Select payload_sha256 to recover an exact historical observation; otherwise the server returns its designated current observation and checksum. Unhashable locator changes can share a scientific ID. Access is enforced independently of citation metadata.
+         * @description Returns exact DAPPER records, schema pin, payload checksums and provenance document. Scientific IDs never redirect to a newer revision. Select payload_sha256 to recover an exact historical observation; otherwise the server returns its designated current observation and checksum. Unhashable locator changes can share a scientific ID. Access is enforced independently of citation metadata. A valid owner retains private access. Without owner access, only an active explicit publication snapshot authorizes this scientific resource, exact cited revisions and reachable source artifacts. Invalid supplied credentials fail even on public reads. Unpublication revokes snapshot access; job/draft/request routes remain private.
          */
         get: operations["getGeneSet"];
         put?: never;
@@ -385,7 +389,7 @@ export interface paths {
         };
         /**
          * Get a cited paragraph
-         * @description Returns exact DAPPER records, schema pin, payload checksums and provenance document. Scientific IDs never redirect to a newer revision. Select payload_sha256 to recover an exact historical observation; otherwise the server returns its designated current observation and checksum. Unhashable locator changes can share a scientific ID. Access is enforced independently of citation metadata.
+         * @description Returns exact DAPPER records, schema pin, payload checksums and provenance document. Scientific IDs never redirect to a newer revision. Select payload_sha256 to recover an exact historical observation; otherwise the server returns its designated current observation and checksum. Unhashable locator changes can share a scientific ID. Access is enforced independently of citation metadata. A valid owner retains private access. Without owner access, only an active explicit publication snapshot authorizes this scientific resource, exact cited revisions and reachable source artifacts. Invalid supplied credentials fail even on public reads. Unpublication revokes snapshot access; job/draft/request routes remain private.
          */
         get: operations["getParagraph"];
         put?: never;
@@ -405,7 +409,7 @@ export interface paths {
         };
         /**
          * Resolve any supported DAPPER object
-         * @description Generic durable resolver for Questions, KnowledgeGaps, evidence, files and other schema-supported records. This supplies citation object_payload_ref resolution. DAPPER identity does not imply public access. Returns no other user's private provenance. Upstream closure follows scientific references and provenance inputs only, max_depth 0..5 and max_nodes 1..250 (default 5/250). An opaque cursor continues the same owner/filter/payload observation; missing or bounded references are reported explicitly. Unauthorized references are omitted without revealing private identifiers.
+         * @description Generic durable resolver for Questions, KnowledgeGaps, evidence, files and other schema-supported records. This supplies citation object_payload_ref resolution. DAPPER identity does not imply public access. Returns no other user's private provenance. Upstream closure follows scientific references and provenance inputs only, max_depth 0..5 and max_nodes 1..250 (default 5/250). An opaque cursor continues the same owner/filter/payload observation; missing or bounded references are reported explicitly. Unauthorized references are omitted without revealing private identifiers. A valid owner retains private access. Without owner access, only an active explicit publication snapshot authorizes this scientific resource, exact cited revisions and reachable source artifacts. Invalid supplied credentials fail even on public reads. Unpublication revokes snapshot access; job/draft/request routes remain private.
          */
         get: operations["resolveDapperObject"];
         put?: never;
@@ -425,7 +429,7 @@ export interface paths {
         };
         /**
          * Get citation metadata or an export
-         * @description format controls the representation: native (default) application/json; csl-json application/vnd.citationstyles.csl+json; bibtex application/x-bibtex; biblatex application/x-biblatex; apa/mla text/plain. Incompatible Accept returns 406. revision pins exact metadata; omission selects latest accessible metadata for this exact scientific ID. Paragraph consumers MUST supply the pinned revision. Claims, Questions and KnowledgeGaps only. Unknown authors/dates stay unknown; no DOI is emitted without registration. APA/MLA examples illustrate the interface, not a tested renderer.
+         * @description format controls the representation: native (default) application/json; csl-json application/vnd.citationstyles.csl+json; bibtex application/x-bibtex; biblatex application/x-biblatex; apa/mla text/plain. Incompatible Accept returns 406. revision pins exact metadata; omission selects latest accessible metadata for this exact scientific ID. Paragraph consumers MUST supply the pinned revision. Claims, Questions and KnowledgeGaps only. Unknown authors/dates stay unknown; no DOI is emitted without registration. APA/MLA examples illustrate the interface, not a tested renderer. A valid owner retains private access. Without owner access, only an active explicit publication snapshot authorizes this scientific resource, exact cited revisions and reachable source artifacts. Invalid supplied credentials fail even on public reads. Unpublication revokes snapshot access; job/draft/request routes remain private.
          */
         get: operations["getCitation"];
         put?: never;
@@ -447,9 +451,29 @@ export interface paths {
         put?: never;
         /**
          * Render a paragraph’s complete citation set
-         * @description Format the saved paragraph's occurrences together for consistent numbering and author/year disambiguation. Exact metadata revisions and current permissions are required. Rendering is deterministic for pinned inputs/configuration and may be cached; it does not modify scientific IDs or launch an agent. Style/processor selection is deployment configuration, captured in the rendering manifest.
+         * @description Format the saved paragraph's occurrences together for consistent numbering and author/year disambiguation. Exact metadata revisions and current permissions are required. Rendering is deterministic for pinned inputs/configuration and may be cached; it does not modify scientific IDs or launch an agent. Style/processor selection is deployment configuration, captured in the rendering manifest. A valid owner retains private access. Without owner access, only an active explicit publication snapshot authorizes this scientific resource, exact cited revisions and reachable source artifacts. Invalid supplied credentials fail even on public reads. Unpublication revokes snapshot access; job/draft/request routes remain private.
          */
         post: operations["renderCitations"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/jobs/{job_id}/retry-review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retry independent review on saved output
+         * @description Owner-only, idempotent retry for REVIEW_UNAVAILABLE or REVIEW_BUDGET_EXCEEDED. Require the latest job event ID and a checksum-verified completed authoring capture. Requeue the same job with a new validation attempt; preserve original evidence, authoring model, artifacts and activity. Never launch the research agent. Scientific rejection, incomplete capture and active or successful jobs cannot use this route. Current configured review budget applies to each explicit retry. Normal account acceptance and paragraph generation follow a passing review.
+         */
+        post: operations["retryJobReview"];
         delete?: never;
         options?: never;
         head?: never;
@@ -470,6 +494,154 @@ export interface paths {
         get: operations["listAccounts"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/knowledge-gaps/{gap_id}/accounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List visible scientific accounts for a knowledge gap
+         * @description Accepted accounts for the exact DAPPER KnowledgeGap identity, newest first then account ID, deduplicated by scientific-account digest. Public scope (default) lists explicitly published snapshots across owners and omits private job IDs. Workspace scope requires a valid session and lists only its saved accounts. Invalid supplied sessions are rejected for either scope. Source-revision checks validate the selected observation; changed gap digests never merge. Attribution remains the original request actor. Each account ID links to its existing scientific endpoint, whose public reads are restricted to its published snapshot.
+         */
+        get: operations["listKnowledgeGapAccounts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/accounts/{dapper_id}/publication": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Inspect account publication
+         * @description Owner receives mutable publication controls even while private. Other readers receive only an active public publication with can_manage=false. Publishing is separate from scientific identity and frozen citation metadata; old citation access labels describe that exact historical metadata revision.
+         */
+        get: operations["getAccountPublication"];
+        put?: never;
+        /**
+         * Publish, update or unpublish an account
+         * @description Explicit owner-only choice. Publishing or updating a public snapshot requires a registered signed-in session; anonymous owners receive 403 SIGN_IN_REQUIRED, including on idempotent retries. Owners may unpublish an existing snapshot with either session kind. Publishing freezes the complete accepted account provenance and current accepted paragraph, exact citation revisions and only reachable source artifacts. Future paragraphs remain private until an explicit update. Unpublishing revokes this snapshot immediately; identical content independently published elsewhere stays public. No job logs, draft, queue, request or unrelated owner artifacts are published. Immutable scientific IDs, citations and original authorship do not change.
+         */
+        post: operations["updateAccountPublication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/analysis-outcomes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List saved workspace explorations
+         * @description Session-required, newest-first summaries of all completed insufficient-evidence explorations owned by this workspace, private or published, across every knowledge gap. Includes previously saved records without a new run or publication. Operational failures are not scientific exploration outcomes. Other owners are excluded, even for published records. Detail and provenance are loaded only when opened.
+         */
+        get: operations["listAnalysisOutcomes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/analysis-outcomes/{outcome_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read an explored analysis outcome
+         * @description A durable scoped insufficient-evidence exploration, separate from ScientificAccounts and excluded from their popularity counts. Captured author reasons are not independently validated scientific findings. Private by default; explicit publication shares only this frozen scope, original attribution and captured source evidence. Job logs, requests, runtime/ledger contents and the complete private package remain private. Invalid supplied credentials never downgrade to public.
+         */
+        get: operations["getAnalysisOutcome"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/jobs/{job_id}/outcome": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Find the saved scoped outcome for an owned job
+         * @description Owner-only lookup of the durable outcome already saved by this analysis job. Returns404 if no record exists; GET never runs research or performs a historical import.
+         */
+        get: operations["getJobAnalysisOutcome"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/knowledge-gaps/{gap_id}/outcomes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List explored analysis outcomes for an exact gap
+         * @description Newest-first compact summaries for this exact gap. Public scope defaults to explicitly published outcome snapshots; workspace scope requires a session. Scientific-account counts and ranking remain unchanged. Detail/provenance is fetched only when an outcome is opened.
+         */
+        get: operations["listKnowledgeGapOutcomes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/analysis-outcomes/{outcome_id}/publication": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Inspect exploration outcome publication
+         * @description A durable scoped insufficient-evidence exploration, separate from ScientificAccounts and excluded from their popularity counts. Captured author reasons are not independently validated scientific findings. Private by default; explicit publication shares only this frozen scope, original attribution and captured source evidence. Job logs, requests, runtime/ledger contents and the complete private package remain private. Invalid supplied credentials never downgrade to public.
+         */
+        get: operations["getOutcomePublication"];
+        put?: never;
+        /**
+         * Publish or unpublish a scoped exploration
+         * @description Explicit owner-only publication. Publishing or updating a public snapshot requires a registered signed-in session; anonymous owners receive 403 SIGN_IN_REQUIRED, including on idempotent retries. Owners may unpublish with either session kind. Freeze this exploration and its captured source artifacts, never job logs or unrelated workspace artifacts. Unpublish revokes this snapshot; independently published evidence can remain available. Immutable records and original attribution do not change.
+         */
+        post: operations["updateOutcomePublication"];
         delete?: never;
         options?: never;
         head?: never;
@@ -529,7 +701,7 @@ export interface paths {
         };
         /**
          * Download an authorized captured source
-         * @description Download exact captured bytes after owner authorization and SHA-256 verification. A digest is not an access grant. The File metadata describes the media type; the response uses attachment disposition, private no-store caching and nosniff. Missing captures remain explicitly unavailable; this route never fetches mutable source URLs.
+         * @description Download exact captured bytes after owner authorization and SHA-256 verification. A digest is not an access grant. The File metadata describes the media type; the response uses attachment disposition, private no-store caching and nosniff. Missing captures remain explicitly unavailable; this route never fetches mutable source URLs. A valid owner retains private access. Without owner access, only an active explicit publication snapshot authorizes this scientific resource, exact cited revisions and reachable source artifacts. Invalid supplied credentials fail even on public reads. Unpublication revokes snapshot access; job/draft/request routes remain private.
          */
         get: operations["downloadArtifact"];
         put?: never;
@@ -549,7 +721,7 @@ export interface paths {
         };
         /**
          * Export a cited research statement
-         * @description Return content and download metadata in JSON. Markdown includes linked references; rich-text returns sanitized clipboard HTML plus plain text; LaTeX uses cite commands and references.bib. BibTeX contains every distinct exact target/revision cited by the paragraph. These numbered-reference exports do not claim APA/MLA styling. Fixture links are local-preview URLs; runtime must render authorized canonical resolver URLs.
+         * @description Return content and download metadata in JSON. Markdown includes linked references; rich-text returns sanitized clipboard HTML plus plain text; LaTeX uses cite commands and references.bib. BibTeX contains every distinct exact target/revision cited by the paragraph. These numbered-reference exports do not claim APA/MLA styling. Fixture links are local-preview URLs; runtime must render authorized canonical resolver URLs. A valid owner retains private access. Without owner access, only an active explicit publication snapshot authorizes this scientific resource, exact cited revisions and reachable source artifacts. Invalid supplied credentials fail even on public reads. Unpublication revokes snapshot access; job/draft/request routes remain private.
          */
         get: operations["exportParagraph"];
         put?: never;
@@ -2800,12 +2972,14 @@ export interface components {
             selected_kgs: ("biomarkerkg" | "prokn")[];
         };
         DraftCreate: {
-            composer?: components["schemas"]["Composer"];
+            composer: components["schemas"]["Composer"];
+            name?: string;
         };
-        /** @description Replace the complete composer atomically using compare-and-swap; not JSON Merge Patch. Retry a lost acknowledgment with the same Idempotency-Key. */
+        /** @description Rename or replace the complete composer atomically using compare-and-swap. Omitted fields are preserved. Retry a lost acknowledgment with the same Idempotency-Key. */
         DraftPatch: {
             expected_version: number;
-            composer: components["schemas"]["Composer"];
+            composer?: components["schemas"]["Composer"];
+            name?: string;
         };
         Draft: {
             /** Format: uuid */
@@ -2818,6 +2992,16 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+            name?: string;
+        };
+        DraftDelete: {
+            expected_version: number;
+        };
+        DraftDeletion: {
+            /** Format: uuid */
+            id: string;
+            /** @constant */
+            deleted: true;
         };
         /** @description Opaque cursor pins sorting, filters and an authorized collection snapshot. A null cursor means no further page. Cursors cannot be reused with different filters or callers. */
         Page: {
@@ -3035,6 +3219,7 @@ export interface components {
             code: string;
             message: string;
             retryable: boolean;
+            budget?: components["schemas"]["JobBudgetFailure"];
         };
         /** @description Operational record, not a DAPPER scientific object. The result IDs point to minted DAPPER objects. Terminal-state guards prevent stale attempts from overwriting accepted results. */
         Job: {
@@ -3055,7 +3240,7 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
             completed_at: string | null;
-            result: (components["schemas"]["AnalysisResult"] | components["schemas"]["ParagraphResult"]) | null;
+            result: (components["schemas"]["AnalysisResult"] | components["schemas"]["ParagraphResult"] | components["schemas"]["AnalysisOutcomeResult"]) | null;
             failure: components["schemas"]["JobFailure"] | null;
             warnings: string[];
             last_event_id: string;
@@ -3067,7 +3252,7 @@ export interface components {
                 /** Format: uri-reference */
                 cancel: string;
             };
-        } & (unknown & unknown & unknown & unknown & unknown & unknown);
+        } & (unknown & unknown & unknown & unknown & unknown & unknown & unknown);
         JobEvent: {
             id: string;
             /** Format: uuid */
@@ -3081,7 +3266,7 @@ export interface components {
             /** @enum {string} */
             stage: "queued" | "freezing_inputs" | "retrieving_cfde" | "authoring_account" | "enriching_okn" | "authoring_paragraph" | "validating" | "persisting" | "complete" | "preparing_evidence" | "starting_agent";
             message: string;
-            result: (components["schemas"]["AnalysisResult"] | components["schemas"]["ParagraphResult"]) | null;
+            result: (components["schemas"]["AnalysisResult"] | components["schemas"]["ParagraphResult"] | components["schemas"]["AnalysisOutcomeResult"]) | null;
             detail: components["schemas"]["ActivityDetail"] | null;
         };
         JobEvents: {
@@ -3132,6 +3317,7 @@ export interface components {
             citation_metadata: components["schemas"]["CitationMetadata"][];
             artifacts: components["schemas"]["ArtifactAccess"][];
             research_statement: components["schemas"]["ParagraphState"];
+            publication?: components["schemas"]["PublicationState"];
             coverage: components["schemas"]["TraversalCoverage"];
         };
         ClaimResult: {
@@ -3296,7 +3482,7 @@ export interface components {
             /** Format: date-time */
             as_of: string;
             /** @enum {string} */
-            ranking: "curated" | "recent_account_count";
+            ranking: "curated" | "recent_account_count" | "account_count";
             window_days: number | null;
         };
         /** @description Observable activity only; never private reasoning or secrets. Missing metrics stay null. Explicit call states drive UI completion; narrative arrival is not tool completion. Large outputs use artifact references. */
@@ -3331,15 +3517,126 @@ export interface components {
             job_id: string | null;
             paragraph_id: string | null;
         };
+        /** @description Mutable application publication control, separate from immutable DAPPER content and citation revisions. A public snapshot contains only the accepted graph and cited statement present when explicitly published. Later accepted statements require Update publication. can_manage is true only for this account owner, including an anonymous workspace. No job telemetry is public. */
+        PublicationState: {
+            /** @enum {string} */
+            visibility: "private" | "public";
+            version: number;
+            published_at: string | null;
+            updated_at: string | null;
+            can_manage: boolean;
+            has_unpublished_changes: boolean;
+        };
+        /** @description Explicit owner publication choice. public creates or updates a frozen public snapshot; private revokes this owner publication. Optimistic version and Idempotency-Key prevent stale or duplicate choices. Existing accounts start private/version0. */
+        PublicationInput: {
+            /** @enum {string} */
+            visibility: "private" | "public";
+            expected_version: number;
+        };
+        AnalysisOutcomeResult: {
+            /** @constant */
+            kind: "analysis_outcome";
+            /** Format: uuid */
+            outcome_id: string;
+            evidence_package_sha256: string;
+        };
+        OutcomeAnchor: {
+            source_id: string;
+            /** @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values. */
+            mechanism_id: string;
+            name: string;
+            trait: string | null;
+            origin: string;
+        };
+        OutcomeEvidenceRef: {
+            /** @enum {string} */
+            source: "package" | "tool_response";
+            pointer: string;
+            ledger_sequence: number | null;
+            artifact_sha256: string;
+            download_url: string | null;
+        };
+        OutcomeProvenance: {
+            evidence_package_sha256: string;
+            outcome_sha256: string;
+            runtime_sha256: string | null;
+            ledger_sha256: string | null;
+            /** @enum {string} */
+            execution_mode: "box" | "deterministic";
+            source_bindings: {
+                source_id: string;
+                source_revision: string;
+                embedding_run_id: string | null;
+                mapping_run_id: string | null;
+            }[];
+            coverage: {
+                [key: string]: unknown;
+            };
+            evidence_refs: components["schemas"]["OutcomeEvidenceRef"][];
+            source_artifacts: components["schemas"]["ArtifactAccess"][];
+            graph_queries: {
+                sequence: number;
+                /** @enum {string} */
+                graph: "biomarkerkg" | "prokn";
+                /** @enum {string} */
+                status: "completed" | "empty" | "failed" | "denied" | "interrupted";
+                request_sha256: string;
+                response_sha256: string;
+            }[];
+        };
+        /** @description Immutable application record of one scoped insufficient-evidence investigation, not a ScientificAccount, independently validated scientific claim, or globally established null result. Reasons are captured author reports; coverage and hashes retain their exact scope. Private by default and excluded from scientific-account counts. Public snapshots omit private job identifiers. */
+        AnalysisOutcome: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            outcome: "insufficient_evidence";
+            summary: string;
+            reason: string;
+            explored_topics: string[];
+            missing_evidence: string[];
+            limitations: string[];
+            next_steps: string[];
+            knowledge_gap: components["schemas"]["DapperKnowledgeGap"];
+            source_gap: components["schemas"]["SelectedGap"];
+            anchors: components["schemas"]["OutcomeAnchor"][];
+            selected_kgs: ("biomarkerkg" | "prokn")[];
+            /** Format: date-time */
+            created_at: string;
+            attribution: components["schemas"]["AttributionSnapshot"] | null;
+            scope_note: string;
+            /** @enum {string} */
+            record_format: "structured" | "legacy";
+            provenance: components["schemas"]["OutcomeProvenance"];
+            job_id: string | null;
+            publication: components["schemas"]["PublicationState"];
+        };
+        AnalysisOutcomeSummary: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            outcome: "insufficient_evidence";
+            summary: string;
+            knowledge_gap: components["schemas"]["DapperKnowledgeGap"];
+            anchors: components["schemas"]["OutcomeAnchor"][];
+            /** Format: date-time */
+            created_at: string;
+            attribution: components["schemas"]["AttributionSnapshot"] | null;
+            publication: components["schemas"]["PublicationState"];
+        };
+        AnalysisOutcomeList: {
+            items: components["schemas"]["AnalysisOutcomeSummary"][];
+            page: components["schemas"]["Page"];
+        };
+        /** @description One accessible accepted scientific account, deduplicated by its DAPPER identity. Optional attribution is the immutable original request actor, not the current workspace owner; null denotes unavailable historical attribution. Title and brief synthesis are account.name and account.closing_remarks. */
         AccountSummary: {
             account: components["schemas"]["DapperScientificAccount"];
             knowledge_gap: components["schemas"]["DapperKnowledgeGap"];
             claim_count: number;
             /** Format: date-time */
             created_at: string;
-            /** Format: uuid */
-            job_id: string;
+            job_id: string | null;
             research_statement: components["schemas"]["ParagraphState"];
+            attribution?: components["schemas"]["AttributionSnapshot"] | null;
         };
         AccountList: {
             items: components["schemas"]["AccountSummary"][];
@@ -6301,6 +6598,16 @@ export interface components {
             citation_targets: components["schemas"]["CitationTarget"][];
             warnings: string[];
         };
+        JobBudgetFailure: {
+            /** @enum {string} */
+            scope: "authoring" | "review";
+            limit_usd: number;
+            spent_usd: number | null;
+            next_call_max_usd: number | null;
+        };
+        ReviewRetryInput: {
+            expected_last_event_id: string;
+        };
     };
     responses: never;
     parameters: never;
@@ -6529,6 +6836,88 @@ export interface operations {
             };
             /** @description Not Found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate Limited */
+            429: {
+                headers: {
+                    /** @example 30 */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    deleteDraft: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description Unique per caller and operation for at least 7 days. Same key and same canonical body replay the original accepted response; changed body returns 409 IDEMPOTENCY_CONFLICT. Compare idempotency before draft-version checks on retries.
+                 * @example 66666666-6666-4666-8666-666666666666
+                 */
+                "Idempotency-Key": string;
+            };
+            path: {
+                /** @example 22222222-2222-4222-8222-222222222222 */
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DraftDelete"];
+            };
+        };
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftDeletion"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Version Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid Input */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6781,6 +7170,8 @@ export interface operations {
                  * @example opaque-next-page
                  */
                 cursor?: string;
+                /** @example public */
+                scope?: "public" | "workspace";
             };
             header?: never;
             path?: never;
@@ -6863,6 +7254,8 @@ export interface operations {
                  * @example opaque-next-page
                  */
                 cursor?: string;
+                /** @example public */
+                scope?: "public" | "workspace";
             };
             header?: never;
             path?: never;
@@ -6917,6 +7310,8 @@ export interface operations {
             query?: {
                 /** @example 8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd */
                 source_revision?: string;
+                /** @example public */
+                scope?: "public" | "workspace";
             };
             header?: never;
             path: {
@@ -8079,6 +8474,98 @@ export interface operations {
             };
         };
     };
+    retryJobReview: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description Unique per caller and operation for at least 7 days. Same key and same canonical body replay the original accepted response; changed body returns 409 IDEMPOTENCY_CONFLICT. Compare idempotency before draft-version checks on retries.
+                 * @example 66666666-6666-4666-8666-666666666666
+                 */
+                "Idempotency-Key": string;
+            };
+            path: {
+                /** @example 44444444-4444-4444-8444-444444444444 */
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewRetryInput"];
+            };
+        };
+        responses: {
+            /** @description Accepted job; poll Location or consume job events. */
+            202: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    /**
+                     * @description Relative URL of the created resource.
+                     * @example /v1/jobs/44444444-4444-4444-8444-444444444444
+                     */
+                    Location?: string;
+                    /**
+                     * @description Suggested polling delay in seconds.
+                     * @example 2
+                     */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Job"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Version Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid Input */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate Limited */
+            429: {
+                headers: {
+                    /** @example 30 */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     listAccounts: {
         parameters: {
             query?: {
@@ -8123,6 +8610,652 @@ export interface operations {
             };
             /** @description Authentication Required */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate Limited */
+            429: {
+                headers: {
+                    /** @example 30 */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listKnowledgeGapAccounts: {
+        parameters: {
+            query?: {
+                /** @example 8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd */
+                source_revision?: string;
+                /** @example public */
+                scope?: "public" | "workspace";
+                /** @example 20 */
+                limit?: number;
+                /**
+                 * @description Omit for the first page. A returned next_cursor is opaque; the example is illustrative and cannot be used against a live service.
+                 * @example opaque-next-page
+                 */
+                cursor?: string;
+            };
+            header?: never;
+            path: {
+                /**
+                 * @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values.
+                 * @example dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk
+                 */
+                gap_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountList"];
+                };
+            };
+            /** @description Invalid Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Version Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate Limited */
+            429: {
+                headers: {
+                    /** @example 30 */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getAccountPublication: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values.
+                 * @example dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd
+                 */
+                dapper_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationState"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate Limited */
+            429: {
+                headers: {
+                    /** @example 30 */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    updateAccountPublication: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description Unique per caller and operation for at least 7 days. Same key and same canonical body replay the original accepted response; changed body returns 409 IDEMPOTENCY_CONFLICT. Compare idempotency before draft-version checks on retries.
+                 * @example 66666666-6666-4666-8666-666666666666
+                 */
+                "Idempotency-Key": string;
+            };
+            path: {
+                /**
+                 * @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values.
+                 * @example dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd
+                 */
+                dapper_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublicationInput"];
+            };
+        };
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationState"];
+                };
+            };
+            /** @description Invalid Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sign In Required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Version Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid Input */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate Limited */
+            429: {
+                headers: {
+                    /** @example 30 */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listAnalysisOutcomes: {
+        parameters: {
+            query?: {
+                /** @example 20 */
+                limit?: number;
+                /**
+                 * @description Omit for the first page. A returned next_cursor is opaque; the example is illustrative and cannot be used against a live service.
+                 * @example opaque-next-page
+                 */
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalysisOutcomeList"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Version Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate Limited */
+            429: {
+                headers: {
+                    /** @example 30 */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getAnalysisOutcome: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @example 66666666-6666-4666-8666-666666666666 */
+                outcome_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalysisOutcome"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate Limited */
+            429: {
+                headers: {
+                    /** @example 30 */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getJobAnalysisOutcome: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @example 44444444-4444-4444-8444-444444444444 */
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalysisOutcome"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate Limited */
+            429: {
+                headers: {
+                    /** @example 30 */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listKnowledgeGapOutcomes: {
+        parameters: {
+            query?: {
+                /** @example public */
+                scope?: "public" | "workspace";
+                /** @example 8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd */
+                source_revision?: string;
+                /** @example 20 */
+                limit?: number;
+                /**
+                 * @description Omit for the first page. A returned next_cursor is opaque; the example is illustrative and cannot be used against a live service.
+                 * @example opaque-next-page
+                 */
+                cursor?: string;
+            };
+            header?: never;
+            path: {
+                /**
+                 * @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values.
+                 * @example dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk
+                 */
+                gap_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalysisOutcomeList"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Version Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate Limited */
+            429: {
+                headers: {
+                    /** @example 30 */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getOutcomePublication: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @example 66666666-6666-4666-8666-666666666666 */
+                outcome_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationState"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate Limited */
+            429: {
+                headers: {
+                    /** @example 30 */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    updateOutcomePublication: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description Unique per caller and operation for at least 7 days. Same key and same canonical body replay the original accepted response; changed body returns 409 IDEMPOTENCY_CONFLICT. Compare idempotency before draft-version checks on retries.
+                 * @example 66666666-6666-4666-8666-666666666666
+                 */
+                "Idempotency-Key": string;
+            };
+            path: {
+                /** @example 66666666-6666-4666-8666-666666666666 */
+                outcome_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublicationInput"];
+            };
+        };
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationState"];
+                };
+            };
+            /** @description Invalid Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sign In Required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Version Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid Input */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -8366,6 +9499,15 @@ export interface operations {
                 content: {
                     "*/*": string;
                 };
+            };
+            /** @description After authorization, redirect to an exact, verified S3 object version. The private URL expires after 60 seconds; previously issued URLs can remain valid until expiry after unpublication. */
+            307: {
+                headers: {
+                    /** @description Short-lived artifact download URL. Never cache or persist as an identifier. */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Authentication Required */
             401: {

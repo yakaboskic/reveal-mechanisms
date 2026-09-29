@@ -18,6 +18,7 @@ import signal
 import socket
 import subprocess
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -31,6 +32,56 @@ PROJECT = 'reveal-' + hashlib.sha256(str(ROOT).encode()).hexdigest()[:10]
 
 class StartupError(RuntimeError):
     pass
+
+
+class Progress:
+    """Small, flushed progress lines even while a captured subprocess blocks."""
+    def __init__(self, label, *, status=None, interval=5):
+        self.label, self.status, self.interval = label, status, interval
+        self.stopped = threading.Event()
+        self.started = time.monotonic()
+        self.thread = None
+
+    def __enter__(self):
+        print(f'{self.label}…', flush=True)
+        self.thread = threading.Thread(target=self.report, daemon=True)
+        self.thread.start()
+        return self
+
+    def report(self):
+        while not self.stopped.wait(self.interval):
+            detail = ''
+            if self.status:
+                try: detail = self.status()
+                except Exception: detail = 'Status check unavailable; operation is still running.'
+            if not self.stopped.is_set():
+                print(f'  {self.label}: {time.monotonic() - self.started:.0f}s elapsed'
+                      + (f' — {detail}' if detail else ''), flush=True)
+
+    def __exit__(self, kind, value, traceback):
+        self.stopped.set()
+        # Status probes have their own short deadline. Never hold completion up
+        # for telemetry; the stop check prevents stale lines after this phase.
+        if self.thread: self.thread.join(timeout=.1)
+        state = 'done' if kind is None else 'interrupted' if kind is KeyboardInterrupt else 'failed'
+        print(f'{self.label}: {state} ({time.monotonic() - self.started:.1f}s).', flush=True)
+
+
+def redact(output, env):
+    for key, value in env.items():
+        if value and (re.search(r'(?:_KEY|_TOKEN|_PASSWORD|_SECRET)$', key) or key == 'DATABASE_URL'):
+            output = output.replace(value, '[REDACTED]')
+    return output
+
+
+def diagnostic_log(name, output, env):
+    LOGS.mkdir(parents=True, exist_ok=True)
+    path = LOGS / name
+    # Restrict permissions before writing, including on a previous log file.
+    with os.fdopen(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), 'w') as handle:
+        os.fchmod(handle.fileno(), 0o600)
+        handle.write(redact(output, env))
+    return path
 
 
 def environment():
@@ -74,26 +125,55 @@ def environment():
 def run(args, env, *, check=True, timeout=30):
     try:
         p = subprocess.run(args, cwd=ROOT, env=env, capture_output=True, text=True, timeout=timeout)
-    except (OSError, subprocess.TimeoutExpired) as exc:
+    except subprocess.TimeoutExpired as exc:
+        def decoded(value): return value.decode('utf-8', errors='replace') if isinstance(value, bytes) else value or ''
+        try:
+            log = diagnostic_log('startup-error.log', decoded(exc.stdout) + '\n' + decoded(exc.stderr), env)
+            detail = f'partial output saved to {log}'
+        except OSError:
+            detail = 'partial output could not be saved; check the runtime log directory permissions'
+        raise StartupError(f'{Path(args[0]).name} exceeded {timeout}s; {detail}.') from None
+    except OSError as exc:
         raise StartupError(f'{Path(args[0]).name} failed ({type(exc).__name__}).') from None
     if check and p.returncode:
         # Docker build logs may contain env values; retain a restricted local log,
         # never print arbitrary command output into the terminal.
-        LOGS.mkdir(parents=True, exist_ok=True)
-        log = LOGS / 'startup-error.log'
-        output = p.stdout + '\n' + p.stderr
-        for key, value in env.items():
-            if value and (re.search(r'(?:_KEY|_TOKEN|_PASSWORD|_SECRET)$', key) or key == 'DATABASE_URL'):
-                output = output.replace(value, '[REDACTED]')
-        log.write_text(output)
-        log.chmod(0o600)
-        raise StartupError(f'{Path(args[0]).name} exited {p.returncode}; inspect {log}.')
+        try:
+            log = diagnostic_log('startup-error.log', p.stdout + '\n' + p.stderr, env)
+            detail = f'inspect {log}'
+        except OSError:
+            detail = 'diagnostic output could not be saved; check the runtime log directory permissions'
+        raise StartupError(f'{Path(args[0]).name} exited {p.returncode}; {detail}.')
     return p
 
 
+def compose_command(*args):
+    return ['docker', 'compose', '--project-name', PROJECT, '--project-directory', str(ROOT),
+            '-f', str(ROOT / 'compose.yaml'), *args]
+
+
 def compose(env, *args, check=True, timeout=30):
-    return run(['docker', 'compose', '--project-name', PROJECT, '--project-directory', str(ROOT),
-                '-f', str(ROOT / 'compose.yaml'), *args], env, check=check, timeout=timeout)
+    return run(compose_command(*args), env, check=check, timeout=timeout)
+
+
+def container_progress(env):
+    # A telemetry probe must never replace the main operation's diagnostic log.
+    result = subprocess.run(compose_command('ps', '--all', '--format', 'json'),
+                            cwd=ROOT, env=env, capture_output=True, text=True, timeout=3)
+    if result.returncode: return 'Docker status unavailable; waiting for Compose.'
+    try:
+        rows = json.loads(result.stdout) if result.stdout.lstrip().startswith('[') else [json.loads(line) for line in result.stdout.splitlines() if line.strip()]
+    except (ValueError, TypeError): return 'Waiting for Docker Compose.'
+    allowed = {'created', 'running', 'restarting', 'removing', 'paused', 'exited', 'dead'}
+    health_states = {'starting', 'healthy', 'unhealthy'}
+    states = {}
+    for row in rows:
+        service = row.get('Service')
+        if service not in ('api', 'worker'): continue
+        state = row.get('State') if row.get('State') in allowed else 'waiting'
+        if row.get('Health') in health_states: state += ', ' + row['Health']
+        states[service] = state
+    return '; '.join(f'{service}: {states.get(service, "not created yet")}' for service in ('api', 'worker'))
 
 
 def load_state():
@@ -149,12 +229,20 @@ def stop_frontend(state):
         os.killpg(pid, signal.SIGKILL)
 
 
-def health(url):
+def health_status(url):
     try:
         with urllib.request.urlopen(url, timeout=4) as response:
-            return response.status == 200
+            return response.status == 200, f'HTTP {response.status}'
+    except urllib.error.HTTPError as exc:
+        return False, f'HTTP {exc.code}; waiting for readiness'
+    except (TimeoutError, socket.timeout):
+        return False, 'Health request timed out; retrying'
     except (OSError, urllib.error.URLError):
-        return False
+        return False, 'Health endpoint not reachable yet; retrying'
+
+
+def health(url):
+    return health_status(url)[0]
 
 
 def port_available(port):
@@ -171,14 +259,16 @@ def port_available(port):
 
 def wait_ready(url, seconds, description, *, guard=None):
     deadline = time.monotonic() + seconds
-    while time.monotonic() < deadline:
-        if health(url):
-            return
-        if guard and not guard():
-            raise StartupError(f'{description} exited before readiness. Inspect {LOGS}.')
-        time.sleep(1)
-    raise StartupError(f'{description} was not ready at {url} after {seconds}s. '
-                       f'Check logs, Aurora network access/TLS and one-time setup.')
+    last = 'Checking health endpoint'
+    with Progress(f'Waiting for {description}', status=lambda: f'{last}; limit {seconds}s'):
+        while time.monotonic() < deadline:
+            ready, last = health_status(url)
+            if ready: return
+            if guard and not guard():
+                raise StartupError(f'{description} exited before readiness. Inspect {LOGS}.')
+            time.sleep(1)
+        raise StartupError(f'{description} was not ready at {url} after {seconds}s ({last}). '
+                           f'Check logs, Aurora network access/TLS and one-time setup.')
 
 
 def preflight(env):
@@ -219,15 +309,18 @@ def preflight(env):
                 raise ValueError()
         except ValueError:
             raise StartupError(f'{key} must be a valid TCP port.') from None
-    run(['docker', 'info', '--format', '{{.ServerVersion}}'], env)
-    compose(env, 'version')
+    with Progress('Checking Docker engine and Compose'):
+        run(['docker', 'info', '--format', '{{.ServerVersion}}'], env)
+        compose(env, 'version')
 
 
 def up(env, *, build=False):
-    preflight(env)
+    with Progress('Checking local configuration and dependencies'):
+        preflight(env)
     state = load_state()
     mode = env['REVEAL_EXECUTION_MODE']
-    existing = set(compose(env, 'ps', '--status', 'running', '--services').stdout.split())
+    with Progress('Inspecting existing services'):
+        existing = set(compose(env, 'ps', '--status', 'running', '--services').stdout.split())
     if (existing or frontend_alive(state)) and state.get('mode', mode) != mode:
         raise StartupError('Execution mode changed: run ./scripts/dev-down.sh before restarting.')
     front_port = int(env['REVEAL_FRONTEND_PORT'])
@@ -240,10 +333,18 @@ def up(env, *, build=False):
     old_state = dict(state)
     state['mode'] = mode
     try:
-        print('Starting API and worker containers; existing healthy services are reused.', flush=True)
-        compose(env, 'up', '-d', '--no-recreate', *(['--build'] if build else []), 'api', 'worker', timeout=900)
+        label = 'Building backend images and starting containers' if build else 'Starting API and worker containers'
+        print('Existing containers are reused. Compose waits for API readiness before starting the worker.', flush=True)
+        with Progress(label, status=lambda: container_progress(env)):
+            result = compose(env, 'up', '-d', '--no-recreate', *(['--build'] if build else []), 'api', 'worker', timeout=900)
+        try:
+            log = diagnostic_log('compose-startup.log', result.stdout + '\n' + result.stderr, env)
+            print(f'Compose output: {log}', flush=True)
+        except OSError:
+            print('Compose finished; its output could not be saved to the runtime log directory.', file=sys.stderr, flush=True)
         wait_ready(env['REVEAL_API_URL'] + '/health/ready', 120, 'API and Aurora')
         if not frontend_alive(state):
+            print(f'Starting Next.js on port {front_port}; output: {LOGS / "frontend.log"}', flush=True)
             LOGS.mkdir(parents=True, exist_ok=True)
             log_path = LOGS / 'frontend.log'
             with log_path.open('ab') as log:
@@ -256,8 +357,11 @@ def up(env, *, build=False):
             state['frontend_started'] = start_signature(child.pid)
             started_frontend = True
             save_state(state)
+        else:
+            print(f'Reusing managed Next.js on port {front_port}.', flush=True)
         wait_ready(f'http://127.0.0.1:{front_port}/api/health', 120, 'Next.js', guard=lambda: frontend_alive(state))
-        running = set(compose(env, 'ps', '--status', 'running', '--services').stdout.split())
+        with Progress('Verifying API and worker containers'):
+            running = set(compose(env, 'ps', '--status', 'running', '--services').stdout.split())
         if not {'api', 'worker'} <= running:
             raise StartupError('API/worker exited during startup; inspect Compose logs.')
         save_state(state)
@@ -274,13 +378,8 @@ def up(env, *, build=False):
         try:
             diagnostic = compose(env, 'logs', '--no-color', '--tail', '100', 'api', 'worker', check=False)
             output = diagnostic.stdout + diagnostic.stderr
-            for key, value in env.items():
-                if value and (re.search(r'(?:_KEY|_TOKEN|_PASSWORD|_SECRET)$', key) or key == 'DATABASE_URL'):
-                    output = output.replace(value, '[REDACTED]')
-            LOGS.mkdir(parents=True, exist_ok=True)
-            failure_log = LOGS / 'container-startup.log'
-            failure_log.write_text(output)
-            failure_log.chmod(0o600)
+            failure_log = diagnostic_log('container-startup.log', output, env)
+            print(f'Startup diagnostics: {failure_log}', file=sys.stderr, flush=True)
         except Exception:
             print('REVEAL: Startup diagnostics could not be saved; continuing cleanup.', file=sys.stderr)
         cleanup = []
@@ -292,7 +391,8 @@ def up(env, *, build=False):
         cleanup.append(('process state', lambda: save_state(old_state) if old_state else STATE.unlink(missing_ok=True)))
         for description, action in cleanup:
             try:
-                action()
+                with Progress(f'Cleaning up {description}'):
+                    action()
             except Exception:
                 print(f'REVEAL: Could not finish {description}; run ./scripts/dev-down.sh to retry cleanup.', file=sys.stderr)
         raise

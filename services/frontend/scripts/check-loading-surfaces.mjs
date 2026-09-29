@@ -53,6 +53,7 @@ async function harness(name, viewport, held, anonymous = true) {
       if (method === 'GET' && path === '/api/backend/v1/me') return answer(principal);
       if (method === 'GET' && path === '/api/backend/v1/knowledge-gaps') return answer(fixture.gaps);
       if (method === 'GET' && path === '/api/backend/v1/knowledge-gaps/search') return answer({ items: fixture.gaps.items.map(gap => ({ gap })), page: empty.page });
+      if (method === 'GET' && /^\/api\/backend\/v1\/knowledge-gaps\/[^/]+\/accounts$/.test(path)) return answer(empty);
       if (method === 'GET' && ['/api/backend/v1/drafts', '/api/backend/v1/jobs', '/api/backend/v1/research-requests'].includes(path)) return answer(empty);
       state.unexpected.push(`${method} ${path}`);
       return Promise.resolve(new Response(JSON.stringify({ detail: 'Unmocked API request blocked.' }), { status: 500, headers: { 'content-type': 'application/json' } }));

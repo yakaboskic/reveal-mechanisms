@@ -1,9 +1,35 @@
 """Transactional queue, ordered event log, leases, cancellation and acceptance."""
 from datetime import datetime, timezone, timedelta
+import os
 from .repository import now, uid
 from .auth import Problem, owned
 
 TERMINAL = {'succeeded', 'failed', 'cancelled', 'insufficient_evidence'}
+
+def transport():
+    value = os.getenv('REVEAL_JOB_TRANSPORT', 'database')
+    if value not in ('database', 'redis'): raise ValueError('Invalid job transport')
+    return value
+
+def namespace():
+    import re
+    value = os.getenv('REVEAL_JOB_NAMESPACE', 'reveal')
+    if not re.fullmatch(r'[a-z][a-z0-9_-]{0,39}', value): raise ValueError('Invalid job namespace')
+    return value
+
+def lease_duration():
+    value = int(os.getenv('REVEAL_JOB_LEASE_SECONDS', '90'))
+    if not 6 <= value <= 900: raise ValueError('Invalid lease duration')
+    return value
+
+def dispatch(tx, job, queue):
+    """The durable outbox shares the job's transaction; Redis is never called here."""
+    queue.update(transport=transport(), namespace=namespace(), dispatch_id=uid())
+    if queue['transport'] == 'redis':
+        tx.put('dispatch', job['id'], job['owner_user_id'], {
+            'job_id': job['id'], 'namespace': queue['namespace'], 'dispatch_id': queue['dispatch_id'],
+            'schema': 1, 'message_id': None, 'published_at': None})
+    tx.put('queue', job['id'], job['owner_user_id'], queue)
 
 def update_paragraph_state(tx,job):
     if job['kind']!='paragraph': return
@@ -37,7 +63,7 @@ def enqueue(tx, owner, kind, request_id=None, account_id=None, inputs=None):
         'research_request_id': request_id, 'input_account_id': account_id, 'created_at': timestamp, 'updated_at': timestamp,
         'completed_at': None, 'result': None, 'failure': None, 'warnings': [], 'last_event_id': '0',
         'links': {'self': '/v1/jobs/'+identity, 'events': '/v1/jobs/'+identity+'/events', 'cancel': '/v1/jobs/'+identity+'/cancel'}}
-    tx.put('queue', identity, owner, {'attempt': 0, 'lease_until': None, 'token': None, 'remote_handle': None, 'inputs': inputs or {}})
+    dispatch(tx, job, {'attempt': 0, 'lease_until': None, 'token': None, 'remote_handle': None, 'inputs': inputs or {}})
     update_paragraph_state(tx,job)
     event(tx, job, 'status', 'Queued for evidence preparation.' if kind == 'analysis' else 'Research statement queued.')
     return job
@@ -53,22 +79,45 @@ def cancel(tx, job):
     event(tx, job, 'status', 'Stopping the current execution.' if active else 'Stopped by the workspace owner.')
     return job
 
-def claim(repository, worker_id, lease_seconds=90):
+def claim(repository, worker_id, lease_seconds=None, *, job_id=None, dispatch_id=None):
+    lease_seconds = lease_seconds or lease_duration()
     with repository.transaction() as tx:
-        candidates = list(reversed(tx.list('job')))
+        control=tx.get('worker_control',namespace())
+        if control and control['data'].get('draining'): return None
+        if job_id:
+            row = tx.get('job', job_id)
+            candidates = [row] if row else []
+        else:
+            candidates = list(reversed(tx.list('job')))
+        maximum = int(os.getenv('REVEAL_MAX_RUNNING_JOBS', '2' if transport() == 'redis' else '0'))
+        if maximum < 0: raise ValueError('Invalid running job limit')
+        if maximum:
+            running = [row for row in tx.list('queue') if row['data'].get('lease_until')
+                       and row['data']['lease_until'] > now() and row['data'].get('namespace', 'reveal') == namespace()]
+            states = tx.get_many('job', [row['id'] for row in running])
+            if sum(states.get(row['id'], {}).get('data', {}).get('status') not in TERMINAL for row in running) >= maximum:
+                return None
         for row in candidates:
             job = row['data']; job['owner_user_id'] = row['owner']
             if job['status'] in TERMINAL: continue
             queue_row = tx.get('queue', job['id']); queue = queue_row['data']
+            if queue.get('transport', 'database') != transport() or queue.get('namespace', 'reveal') != namespace(): continue
+            if dispatch_id and queue.get('dispatch_id') != dispatch_id: continue
+            if queue.get('held'): continue
             if queue['lease_until'] and queue['lease_until'] > now(): continue
-            if not queue.get('remote_handle'): queue['attempt'] += 1
+            new_attempt = queue.pop('new_attempt', False)
+            if not queue.get('remote_handle') and (not queue.get('workspace') or new_attempt): queue['attempt'] += 1
             queue['token'] = uid(); queue['worker_id'] = worker_id
             queue['lease_until'] = (datetime.now(timezone.utc)+timedelta(seconds=lease_seconds)).isoformat().replace('+00:00','Z')
             tx.put('queue', job['id'], row['owner'], queue)
-            tx.put('attempt', f"{job['id']}:{queue['attempt']}", row['owner'], dict(queue, started_at=now()))
+            attempt_id = f"{job['id']}:{queue['attempt']}"
+            previous_attempt = tx.get('attempt', attempt_id)
+            started_at = previous_attempt['data'].get('started_at', now()) if previous_attempt else now()
+            tx.put('attempt', attempt_id, row['owner'], dict(queue, started_at=started_at))
             if job['status']!='cancel_requested': job['status'] = 'running'
             update_paragraph_state(tx,job)
-            event(tx, job, 'status', 'Worker resumed the persisted attempt.' if queue['remote_handle'] else 'Preparing the selected evidence.')
+            event(tx, job, 'status', 'Reviewing the saved output; research execution is already complete.' if queue.get('review_source') else
+                  'Worker resumed the persisted attempt.' if queue['remote_handle'] else 'Preparing the selected evidence.')
             return job, queue
     return None
 
@@ -79,12 +128,12 @@ def fenced(tx, job_id, token):
     job = row['data']; job['owner_user_id'] = row['owner']
     return job, queue['data']
 
-def heartbeat(repository, job_id, token, seconds=90):
+def heartbeat(repository, job_id, token, seconds=None):
     with repository.transaction() as tx:
         pair = fenced(tx, job_id, token)
         if not pair: return False
         job, queue = pair
-        queue['lease_until'] = (datetime.now(timezone.utc)+timedelta(seconds=seconds)).isoformat().replace('+00:00','Z')
+        queue['lease_until'] = (datetime.now(timezone.utc)+timedelta(seconds=seconds or lease_duration())).isoformat().replace('+00:00','Z')
         tx.put('queue', job_id, job['owner_user_id'], queue)
         return True
 

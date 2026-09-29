@@ -5,6 +5,7 @@ import base64
 import hashlib
 import io
 import json
+import math
 import os
 from pathlib import Path, PurePosixPath
 import re
@@ -91,7 +92,7 @@ def captured_result(request, handle, marker):
     return ExecutionResult(marker['state']['status'], request.output_dir, account_paths=accounts,
                            paragraph_path=found('output/paragraph.json'), runtime_manifest_path=found('runtime.json'),
                            ledger_manifest_path=found('ledger/manifest.json'), reason=marker['state'].get('reason'),
-                           remote_handle=handle)
+                           remote_handle=handle, outcome_path=found('output/outcome.json'))
 
 
 def verified_box_not_found(exc):
@@ -131,8 +132,9 @@ def make_bundle(project_root: Path, request: ExecutionRequest):
     """Explicit file allowlist: never upload project .env, caches or unrelated code."""
     source = project_root / 'services/backend/src/reveal_backend'
     files = {}
-    for name in ('__init__.py', 'evidence_package.py', 'dapper_release.py', 'scientific_account_lint.py',
-                 'box_remote.py', 'box_stream.py', 'box_mcp.py', 'dispatch_view.py', 'evidence_files.py', 'public_tool_activity.py'):
+    for name in ('__init__.py', 'evidence_package.py', 'dapper_release.py', 'scientific_account_lint.py', 'source_validation.py',
+                 'box_remote.py', 'box_stream.py', 'box_mcp.py', 'box_literature.py', 'research_outcome.py',
+                 'dispatch_view.py', 'evidence_files.py', 'public_tool_activity.py'):
         files['bundle/services/backend/src/reveal_backend/' + name] = (source / name).read_bytes()
     relative = ['scripts/lint_scientific_account.py', 'services/backend/agent-runtime/dapper-release.json',
                 'services/backend/agent-skills/construct-scientific-account/SKILL.md',
@@ -302,7 +304,7 @@ sudo /reveal/claude/node_modules/.bin/claude --version
             raise BoxConfigurationError('Missing required environment: ' + ', '.join(missing))
         if set(request.selected_graphs) - set(GRAPHS) or not 1 <= request.attempt or not 10 <= request.timeout_seconds <= 3600:
             raise BoxConfigurationError('Invalid execution graph, attempt or time limit')
-        if not 0 < request.max_budget_usd <= 25 or not 1 <= request.max_turns <= 100:
+        if not math.isfinite(request.max_budget_usd) or request.max_budget_usd <= 0 or not 1 <= request.max_turns <= 100:
             raise BoxConfigurationError('Invalid execution budget')
         if len(request.validation_feedback) > 10 or any(not isinstance(x, str) or len(x) > 4000 for x in request.validation_feedback):
             raise BoxConfigurationError('Validation feedback exceeds limits')
@@ -316,13 +318,17 @@ sudo /reveal/claude/node_modules/.bin/claude --version
         box, handle, terminal = None, dict(request.remote_handle or {}), False
         marker = None
         checkpointed = bool(request.remote_handle)
+        preserve_capture = False
         try:
             if handle:
                 if handle.get('job_id') != request.job_id or handle.get('attempt') != request.attempt:
                     raise BoxConfigurationError('Remote handle belongs to a different attempt')
                 marker = read_capture_marker(request, handle)
+                if marker:
+                    handle.setdefault('timings', {}).update(marker.get('timings', {}))
                 if marker and (marker['cleanup_complete'] or handle.get('phase') == 'deleted'):
                     handle['phase'] = 'deleted'
+                    handle.setdefault('timings', {}).setdefault('deleted_at', time.time())
                     try: await checkpoint(handle.copy())
                     except Exception as exc:
                         raise BoxTransportError('Completed local capture awaits its cleanup checkpoint') from exc
@@ -334,6 +340,7 @@ sudo /reveal/claude/node_modules/.bin/claude --version
                         marker['cleanup_complete'] = True
                         atomic_capture_marker(request.output_dir / CAPTURE_MARKER, marker)
                         handle['phase'] = 'deleted'
+                        handle.setdefault('timings', {}).setdefault('deleted_at', time.time())
                         try: await checkpoint(handle.copy())
                         except Exception as checkpoint_error:
                             raise BoxTransportError('Verified deleted Box awaits its cleanup checkpoint') from checkpoint_error
@@ -355,6 +362,7 @@ sudo /reveal/claude/node_modules/.bin/claude --version
                     await self.prepare(box, request, bundle)
                 except Exception as exc:
                     raise BoxTransportError('Box preparation interrupted; recover using its saved handle') from exc
+                handle.setdefault('timings', {})['prepared_at'] = time.time()
                 handle['phase'] = 'prepared'; await checkpoint(handle.copy())
             # A resumed running attempt must reach cancel/poll/collect so its
             # durable tool ledger is finalized before the Box is deleted.
@@ -369,6 +377,7 @@ sudo /reveal/claude/node_modules/.bin/claude --version
                 # Idempotent remote flock/status guard makes uncertain launch recovery safe.
                 launch = 'sudo -n env PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/reveal/bundle/services/backend/src nohup /reveal/venv/bin/python -B -m reveal_backend.box_remote run > /tmp/reveal-runner.log 2>&1 < /dev/null &'
                 await self.command(box, launch)
+                handle.setdefault('timings', {}).setdefault('running_at', time.time())
                 handle['phase'] = 'running'; await checkpoint(handle.copy())
             errors = 0
             while True:
@@ -403,6 +412,7 @@ sudo /reveal/claude/node_modules/.bin/claude --version
                 state = batch['state']
                 remote_terminal = state['status'] in TERMINAL_STATUSES
                 if remote_terminal and not batch['has_more']:
+                    handle.setdefault('timings', {}).setdefault('terminal_at', time.time())
                     break
                 # A terminal runner already froze its ledger. Slow callback
                 # delivery must not cancel or abandon its remaining event pages.
@@ -432,19 +442,31 @@ sudo /reveal/claude/node_modules/.bin/claude --version
                 except OSError as exc:
                     raise BoxTransportError('Local artifact capture interrupted; retain the remote handle') from exc
                 captured_files[name] = {'sha256': hashlib.sha256(content).hexdigest(), 'size_bytes': len(content)}
+            handle.setdefault('timings', {}).setdefault('captured_at', time.time())
             marker = {'format': 'reveal.box-capture/1', 'binding': capture_binding(request, handle),
-                      'state': state, 'files': captured_files, 'cleanup_complete': False}
+                      'state': state, 'files': captured_files, 'cleanup_complete': False,
+                      'timings': dict(handle['timings'])}
             atomic_capture_marker(request.output_dir / CAPTURE_MARKER, marker)
+            # Keep the remote copy until captured bytes have reached durable
+            # storage outside the disposable worker.
+            preserve_capture = True
+            handle['phase'] = 'captured'
+            try: await checkpoint(handle.copy())
+            except Exception as exc:
+                raise BoxTransportError('Captured output awaits durable storage; retain the remote copy') from exc
+            preserve_capture = False
             terminal = True  # Delete only after all attempt artifacts are durable locally.
             return captured_result(request, handle, marker)
         finally:
             if box:
                 cleanup_error = None
-                if terminal or not checkpointed:
+                if (terminal and not preserve_capture) or not checkpointed:
                     try:
                         await box.delete()
+                        handle.setdefault('timings', {}).setdefault('deleted_at', time.time())
                         if marker:
                             marker['cleanup_complete'] = True
+                            marker['timings'] = dict(handle['timings'])
                             atomic_capture_marker(request.output_dir / CAPTURE_MARKER, marker)
                         handle['phase'] = 'deleted'; await checkpoint(handle.copy())
                     except Exception as exc:
