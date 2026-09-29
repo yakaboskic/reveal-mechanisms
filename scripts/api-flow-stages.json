@@ -41,18 +41,20 @@
     {
       "id": "draft",
       "title": "Continue and save",
-      "route": "POST /v1/drafts; PATCH /v1/drafts/{id}",
+      "route": "POST /v1/drafts; PATCH /v1/drafts/{id}; DELETE /v1/drafts/{id}",
       "action": "Choose ORCID, Google or anonymous at submit; preserve selection and autosave.",
       "incoming": "Trusted session, Composer, expected_version and Idempotency-Key.",
       "outgoing": "Owned Draft with confirmed revision.",
       "cases": [
         "createDraft.question_and_anchor",
         "updateDraft.save_revision_two",
-        "getDraft.request"
+        "getDraft.request",
+        "deleteDraft.delete_saved_draft"
       ],
       "rules": [
         "Local edits before session; no credentials stored in research data.",
-        "Composer accepts no free-text inquiry or editable linked DisMech list."
+        "Composer accepts no free-text inquiry or editable linked DisMech list.",
+        "Workspace groups named drafts by knowledge gap. Rename and delete use optimistic versions; active research prevents deletion. Deleting editable state preserves frozen research and results."
       ]
     },
     {
@@ -87,12 +89,14 @@
         "getJob.request",
         "getJobEvents.request",
         "getJobEvents.sse",
-        "getEvidencePackage.request"
+        "getEvidencePackage.request",
+        "retryJobReview.saved_output"
       ],
       "rules": [
         "One active loading state; no private reasoning.",
         "Package is the schema-current captured input; account fixture is separately authored, not its accepted agent output.",
-        "Completed activity compresses into Gap analysis complete."
+        "Completed activity compresses into Gap analysis complete.",
+        "Budget failures expose phase, cap and recorded spend. Incomplete independent review can be retried against verified saved output, without launching the research agent."
       ]
     },
     {
@@ -234,15 +238,16 @@
     },
     {
       "id": "history",
-      "title": "Your gaps and scientific accounts",
-      "route": "GET /v1/me/explorations; GET /v1/accounts",
-      "action": "Avatar opens two-tab personal dashboard.",
+      "title": "Your gaps, scientific accounts and explorations",
+      "route": "GET /v1/me/explorations; GET /v1/accounts; GET /v1/analysis-outcomes",
+      "action": "Avatar opens a personal dashboard with knowledge gaps, scientific accounts and completed explorations.",
       "incoming": "Trusted owner session, exact gap filters and pagination.",
       "outgoing": "Exploration/account summaries; saved drafts and immutable request/job history.",
       "cases": [
         "listExplorations.request",
         "recordExploration.selected_gap",
         "listAccounts.request",
+        "listAnalysisOutcomes.request",
         "listDrafts.request",
         "listResearchRequests.request",
         "getResearchRequest.request",

@@ -17,5 +17,15 @@ test("other hosts, schemes, ports, credentials and nonartifact paths never becom
     "/api/backend/v1/artifacts/not-a-sha", null, ""]) {
     assert.equal(sourceDownloadPath(value, "http://127.0.0.1:3000"), null, String(value));
   }
-  assert.equal(sourceDownloadPath("http://localhost:3000" + path, "https://reveal.example"), null);
+  assert.equal(sourceDownloadPath(path + "?redirect=evil", "https://reveal.example"), null);
+  assert.equal(sourceDownloadPath(path + "#fragment", "https://reveal.example"), null);
+});
+
+test("retained local links become authorized paths on the deployed app", () => {
+  for (const host of ["localhost", "127.0.0.1", "[::1]"]) {
+    for (const port of [3000, 3100]) {
+      assert.equal(sourceDownloadPath(`http://${host}:${port}${path}`, "https://reveal.example"), path);
+    }
+  }
+  assert.equal(sourceDownloadPath("https://other.example" + path, "https://reveal.example"), null);
 });

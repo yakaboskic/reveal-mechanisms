@@ -1,6 +1,6 @@
 # Authentication gateway contract
 
-**v12 implementation specification, not an implemented service.** This supplements [authentication](authentication.md) and the [scientific OpenAPI](../api/openapi.json). Next.js owns browser sessions; EC2 owns application principals and research authorization. Names below reserve the boundary for implementation; NextAuth retains its own provider/callback routes.
+**Implemented gateway contract, updated September 30, 2026.** Runtime code lives in `services/frontend/src/lib/gateway.ts` and the backend internal-auth routes. See [API walkthrough](api-quickstart.md) for local calls. This supplements [authentication](authentication.md) and the [scientific OpenAPI](../api/openapi.json). Next.js owns browser sessions; EC2 owns application principals and research authorization. Names below reserve the boundary for implementation; NextAuth retains its own provider/callback routes.
 
 ## Browser routes
 

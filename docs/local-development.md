@@ -1,4 +1,8 @@
-# Running REVEAL locally
+# Legacy host-based development
+
+**New colleague setup:** use [README.local.md](../README.local.md), which imports encrypted configuration and starts the full Docker stack. This page preserves the older host-Next.js workflow for deliberate source development; its disk-backed artifact configuration is not the current deployment default.
+
+The primary local application is now the [deployment stack](local-deployment.md), with Redis workers and real S3 storage at **http://localhost:3000**. Start it with `.venv/bin/python scripts/local_deployment.py up --build`; startup shuts down the legacy dev stack automatically. The workflow below documents the legacy host-based development setup.
 
 The local stack runs Next.js on the host, the FastAPI API and worker in Docker Compose, and agent execution in Upstash Box. Aurora is the existing database; this stack does not create a local substitute. EC2 deployment is outside this round's scope.
 
@@ -75,6 +79,44 @@ REVEAL_EXECUTION_MODE=deterministic ./scripts/dev-up.sh
 
 This exercises the actual application database and queue with the deterministic adapter. Its output is labeled as development execution and must not be reported as a live scientific result. Stop the stack before switching execution modes. Box mode requires both Box and Anthropic credentials.
 
+Authoring defaults to 100 turns (`REVEAL_AGENT_MAX_TURNS`), with the existing independent $3 cost cap and 900-second deadline. Configure a lower turn cap explicitly if needed. Changing environment limits requires recreating the worker container, not just restarting it. A turn-limit exit stays an operational failure with retained diagnostics; it never becomes an insufficient-evidence finding. Retrying starts a new attempt, and does not resume the completed failed provider session.
+
+The root `.env` controls the separate spending limits. For demos, for example:
+
+```dotenv
+REVEAL_AGENT_MAX_BUDGET_USD=25
+REVEAL_GROUNDING_MAX_BUDGET_USD=10
+REVEAL_GROUNDING_MAX_TURNS=32
+REVEAL_GROUNDING_MAX_REQUEST_BYTES=524288
+REVEAL_GROUNDING_MAX_INPUT_TOKENS=128000
+```
+
+Both dollar limits accept positive finite USD amounts. Defaults when unset are $3 per authoring job and $0.30 per account/paragraph review. These are individual caps, not a combined request cap: an analysis can produce several accounts and their paragraph jobs. Every explicit review retry receives the configured review allowance. Increasing these values does not bypass scientific validation or the separate time, turn, and context limits. Budget failures show which phase stopped, its cap, and recorded spend when available. Review can stop below the cap when reserving its next call would exceed the remaining amount.
+
+The three review context/turn settings accept positive integers. Defaults remain 8 model calls, 98,304 serialized request bytes and 64,000 actual input tokens. A limit failure identifies which limit stopped review and its configured value. The dollar cap applies throughout; raising the context or turn allowance never bypasses the spending guard or permits acceptance without a verdict.
+
+For `REVIEW_UNAVAILABLE` or `REVIEW_BUDGET_EXCEEDED`, **Retry scientific review** requeues the same job using its verified saved authoring output and frozen evidence. No authoring agent or evidence collection runs again. The retry keeps the original model/runtime provenance, checks captured files and sources again, and writes separate attempt diagnostics. A complete passing verdict is still required for account acceptance; scientific rejections cannot use this shortcut.
+
+Set `REVEAL_CLAUDE_MODEL` in the root `.env` to choose the model for research and paragraph authoring:
+
+```dotenv
+REVEAL_CLAUDE_MODEL=claude-sonnet-4-6
+# Alternatives (uncomment one and replace the setting above):
+# REVEAL_CLAUDE_MODEL=claude-opus-5-5
+# REVEAL_CLAUDE_MODEL=claude-fable-5-1
+```
+
+Use an exact [Claude API model ID](https://platform.claude.com/docs/en/models/overview) available to your Anthropic API key. Exact IDs let the worker verify the captured runtime against the frozen choice; avoid aliases such as `opus`. The authoring model is frozen when a job is first dispatched and retained during recovery. A later paragraph job selects its own model when dispatched. This setting does not change the independent review model or increase the authoring cost/time limits.
+
+After editing `.env`, let active jobs finish, then reload configuration and the current source:
+
+```bash
+./scripts/dev-down.sh
+./scripts/dev-up.sh --build
+```
+
+These scripts recreate this checkout's containers while preserving database records and artifacts. Running `dev-up.sh` alone reuses existing containers and does not apply changed environment values.
+
 Live account acceptance runs the pinned DAPPER linter, exact source-observation checks, and a separate model review of every Claim and the closing synthesis against captured evidence. The [bounded scientific reviewer](scientific-review.md) uses pinned `claude-sonnet-4-6` and a local evidence-pointer reader, without the authoring conversation or external tools. It enforces request/read/turn limits, actual response usage and `REVEAL_GROUNDING_MAX_BUDGET_USD` (default $0.30 cumulative per account), in addition to the authoring budget. Rejected scientific content is preserved as a diagnostic, never promoted to an accepted account. Operationally unavailable or incomplete reviews produce `REVIEW_UNAVAILABLE` without a scientific verdict. This fallible review does not establish experimental truth. There is no automatic paid repair loop or separate token-count request.
 
 Evidence collection treats the requested candidate count as a maximum. The complete collected package and original source bytes are frozen for recovery and uploaded as files. The agent starts from a bounded index and the project-local parsing skill, then reads relevant exact records progressively. The worker no longer token-counts or prunes the entire stored package to fit an inline prompt. Configured collection, upload, runtime and cost limits remain; see [file-backed agent reading](evidence-package-builder.md#file-backed-agent-reading).
@@ -102,3 +144,5 @@ Google and ORCID credentials enable registered sign-in. Register callbacks at `/
 Shutdown stops the frontend and asks the API/worker containers to exit gracefully with a 120-second grace period. Worker shutdown must cancel its active remote execution and fence its attempt; queued jobs remain persisted. Browser disconnect alone never cancels a job. After an abrupt failure, recovery uses the stored attempt/remote handle and lease state; it must not duplicate paid execution or allow a stale attempt to overwrite cancellation or accepted results. Artifacts remain under `.runtime/artifacts` for inspection and restart.
 
 The final validation report records which shutdown, recovery and live execution behaviors were actually exercised. It is the source for verified coverage; the intended lifecycle above is not itself evidence of a passing test.
+
+Admin telemetry is available at `/admin`; see [admin console configuration and metric definitions](admin-telemetry.md). Set `DISABLE_ADMIN_LOGIN=true` for local `next dev` access, or configure `ADMIN_EMAILS` for verified OAuth sign-in. Restart the frontend after changing these environment variables.

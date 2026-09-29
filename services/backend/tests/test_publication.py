@@ -156,7 +156,7 @@ class PublicationTests(unittest.TestCase):
         self.assertEqual(listing['items'][0]['attribution']['user_id'], self.owner)
         self.assertEqual(self.publish(self.other, visibility='private', version=2).status_code, 200)
 
-    def test_anonymous_workspace_owner_can_explicitly_publish(self):
+    def test_anonymous_workspace_owner_must_sign_in_to_publish(self):
         with self.repo.transaction() as tx:
             row = tx.get('principal', self.owner)['data']; row['me']['principal_kind'] = 'anonymous'
             row['me']['workspace_expires_at'] = '2099-01-01T00:00:00Z'; tx.put('principal', self.owner, self.owner, row)
@@ -165,7 +165,8 @@ class PublicationTests(unittest.TestCase):
         token['principal_kind'] = 'anonymous'
         response = self.client.post(self.control, headers={'Authorization': 'Bearer ' + jwt.encode(token, 's'*40, algorithm='HS256'),
             'Idempotency-Key': uid()}, json={'visibility': 'public', 'expected_version': 0})
-        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.status_code, 403, response.text)
+        self.assertEqual(response.json()['code'], 'SIGN_IN_REQUIRED')
 
     def test_random_ties_remain_stable_across_pages_and_expire_on_count_changes(self):
         for letter in 'abcdefgh':

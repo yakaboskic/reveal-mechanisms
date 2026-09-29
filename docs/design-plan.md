@@ -1,5 +1,7 @@
 # REVEAL Mechanisms — consolidated design plan
 
+**Implementation update, September 30, 2026:** this document preserves the consolidated design baseline. For current topology and operating behavior, use [implementation status](implementation-status.md), [colleague setup](../README.local.md) and [platform deployment](platform-deployment.md). Statements below about unbuilt components are historical planning context.
+
 **Revision v12.1 · September 25, 2026 · implementation handoff.** This is the current product and architecture plan. Earlier numbered plans are historical; the [document map and audit](design-package-audit.md) records what superseded them. This revision adopts the populated EAGGL→CFDE crosswalk as the initial application retrieval path. It updates the design and API documentation without deploying the application.
 
 **Purpose:** help researchers investigate existing DisMech knowledge gaps using genetic mechanisms, captured CFDE evidence and selected Proto-OKN knowledge graphs. A completed analysis produces assessed scientific accounts; it does not itself establish that a knowledge gap has closed.

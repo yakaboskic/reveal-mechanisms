@@ -55,6 +55,11 @@ def main():
                 for ex in media['examples'].values():
                     validate(ex['value'], media['schema']);request_count += 1
             for status, response in op['responses'].items():
+                if status == '307':
+                    assert op['operationId'] == 'downloadArtifact'
+                    assert response['headers']['Location']['schema']['type'] == 'string'
+                    assert not response.get('content'), 'Artifact redirects must not proxy the response body'
+                    continue
                 assert response.get('content'), (path, status)
                 for media_type, media in response['content'].items():
                     assert media.get('examples'), (path, status, media_type)

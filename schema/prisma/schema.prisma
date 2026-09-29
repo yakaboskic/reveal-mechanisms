@@ -24,6 +24,8 @@ model RevealRecord {
   updated_at String @db.VarChar(32)
   @@id([kind,id])
   @@index([owner_id,kind], map: "reveal_owner_kind")
+  @@index([updated_at,kind,id], map: "reveal_recent_records")
+  @@index([kind,updated_at,id], map: "reveal_kind_recent")
   @@map("reveal_records")
 }
 

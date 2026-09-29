@@ -65,4 +65,6 @@ def application_mysql_connection():
     return pool.acquire()
 
 def artifacts_root():
+    if setting('REVEAL_ARTIFACT_STORE') == 's3':
+        return Path(setting('REVEAL_WORK_DIR', '/work')).resolve()
     return Path(setting('REVEAL_ARTIFACTS_DIR', str(ROOT / '.runtime/artifacts'))).resolve()

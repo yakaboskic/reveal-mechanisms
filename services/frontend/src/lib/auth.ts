@@ -3,6 +3,7 @@ import type { NextAuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import type { OAuthConfig } from "next-auth/providers/oauth";
 import { anonymousCookie, assertion, readAnonymous, serviceRequest, type Principal, type VerifiedIdentity } from "./gateway";
+import { resolveVerifiedLogin } from "./identity-recovery";
 
 const orcidIssuer = process.env.AUTH_ORCID_ISSUER || "https://orcid.org";
 const providers: NextAuthOptions["providers"] = [];
@@ -32,7 +33,9 @@ export const authOptions: NextAuthOptions = {
         };
         const anonymous = await readAnonymous();
         const headers: Record<string, string> = anonymous ? { "X-Reveal-Anonymous-Session": await assertion(anonymous, { purpose: "anonymous_session" }) } : {};
-        token.principal = await serviceRequest<Principal>("principals/resolve", identity, crypto.randomUUID(), headers);
+        token.principal = await resolveVerifiedLogin(!!anonymous,
+          includeAnonymous => serviceRequest<Principal>("principals/resolve", identity, crypto.randomUUID(), includeAnonymous ? headers : {}),
+          async () => { (await cookies()).delete(anonymousCookie); });
         if (anonymous && token.principal.user_id === anonymous.user_id) (await cookies()).delete(anonymousCookie);
         token.verifiedIdentity = identity;
         token.loginObservedAt = Date.now();
@@ -41,11 +44,12 @@ export const authOptions: NextAuthOptions = {
     },
     async session({ session, token }) {
       session.principal = token.principal as Principal | undefined;
+      session.adminIdentity = { email: token.verifiedIdentity?.email ?? null, verified: token.verifiedIdentity?.email_verified === true };
       // No subject, OAuth token or private verified-login proof is returned to browser code.
       return session;
     },
   },
 };
 
-declare module "next-auth" { interface Session { principal?: Principal } }
+declare module "next-auth" { interface Session { principal?: Principal; adminIdentity?: { email: string | null; verified: boolean } } }
 declare module "next-auth/jwt" { interface JWT { principal?: Principal; verifiedIdentity?: VerifiedIdentity; loginObservedAt?: number } }

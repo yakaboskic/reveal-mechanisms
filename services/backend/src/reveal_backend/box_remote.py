@@ -225,7 +225,7 @@ def terminate(process):
             process.wait(timeout=5)
 
 
-def lint_tool(filename):
+def lint_tool(filename, ledger):
     from .scientific_account_lint import lint_scientific_account
     path = OUTPUT / filename
     if path.is_symlink() or not path.is_file() or path.stat().st_size > 4_000_000:
@@ -233,9 +233,15 @@ def lint_tool(filename):
     frozen = STATE / ('lint-' + filename)
     frozen.write_bytes(path.read_bytes())
     runtime = json.loads((STATE / 'runtime.json').read_text())
+    # The final manifest is written only when execution ends. Snapshot completed
+    # captures under the ledger lock so draft lint sees the same trusted bytes
+    # without freezing or interrupting the agent's remaining tool calls.
+    ledger_path = ledger.root / 'lint-sources.json'
+    with ledger.lock:
+        write_json(ledger_path, json.loads(ledger.sanitized_bytes({'calls': ledger.entries})[0]))
     report = lint_scientific_account(frozen, dapper_root=runtime['dapper_root'],
                                      release_lock=BASE / 'bundle/services/backend/agent-runtime/dapper-release.json',
-                                     evidence_package=runtime['evidence_package'], mode='draft')
+                                     evidence_package=runtime['evidence_package'], ledger_path=ledger_path, mode='draft')
     checks = {finding.get('check') for finding in report.get('findings', []) if finding.get('severity') == 'error'}
     if checks & {'cfde-ancestry', 'claim-evidence'}:
         report['repair_guidance'] = 'Each component Claim needs an explicit EvidenceItem and genuine lineage to a captured CFDE File. DisMech-only source-result Claims may be auxiliary sources but cannot substitute for CFDE-backed account components. Do not attach an unrelated CFDE row to satisfy lint. If the captured observations cannot support a useful CFDE-backed interpretation of the selected gap, write outcome.json with status insufficient_evidence and the specific missing link instead of repeatedly rewriting the same unsupported account.'
@@ -249,11 +255,23 @@ def deadline_reason(request, last_activity=None):
     return f"Agent reached its {request['timeout_seconds']}-second execution limit while {stage}{suffix}. No output was accepted."
 
 
+def provider_failure_reason(request, result):
+    if result.get('subtype') == 'error_max_turns':
+        return (f"The agent reached its {request['max_turns']}-turn execution limit before completing the result. "
+                'No scientific result was accepted. Retry the analysis to start a new attempt with the current execution limits.')
+    if result.get('subtype') == 'error_max_budget_usd':
+        return f"The agent reached its ${request['max_budget_usd']:g} execution budget. No scientific result was accepted."
+    return 'Claude execution failed: ' + str(result.get('subtype', 'nonzero exit'))
+
+
 def runtime_completion(request, started, status, reason, process=None, parser=None, last_activity=None):
     """Safe terminal metrics, including deadline exits without provider usage."""
     result = parser.result if parser else None
     summary = {'completed_at': stamp(), 'elapsed_seconds': round(time.monotonic() - started, 3),
                'time_limit_seconds': request['timeout_seconds'],
+               'max_budget_usd': request.get('max_budget_usd'),
+               'turn_limit': request['max_turns'], 'turns_used': result.get('num_turns') if result else None,
+               'provider_result_subtype': result.get('subtype') if result else None,
                'status': status, 'reason': reason, 'process_returncode': process.returncode if process else None,
                'provider_terminal_received': result is not None,
                'usage_status': 'reported' if result and result.get('total_cost_usd') is not None else 'unavailable',
@@ -356,7 +374,7 @@ def main():
         OUTPUT.mkdir(exist_ok=True)
         os.chown(OUTPUT, user.pw_uid, user.pw_gid)
         os.chmod(OUTPUT, 0o700)
-        tools = ScopedTools(request['selected_graphs'], ledger, lint=lint_tool if request['kind'] == 'research' else None,
+        tools = ScopedTools(request['selected_graphs'], ledger, lint=(lambda filename: lint_tool(filename, ledger)) if request['kind'] == 'research' else None,
                             write_draft=write_draft_tool if request['kind'] == 'research' else None,
                             literature=LiteratureClient() if request['kind'] == 'research' else None,
                             write_outcome=write_outcome_tool if request['kind'] == 'research' else None)
@@ -439,7 +457,7 @@ def main():
             for kind, payload in parser.finish():
                 emit(kind, payload)
             if process.returncode != 0 or parser.result.get('is_error'):
-                reason = 'Claude execution failed: ' + str(parser.result.get('subtype', 'nonzero exit'))
+                reason = provider_failure_reason(request, parser.result)
             else:
                 status = 'succeeded'
                 if (OUTPUT / 'outcome.json').exists():

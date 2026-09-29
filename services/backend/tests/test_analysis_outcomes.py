@@ -143,6 +143,36 @@ class AnalysisOutcomeTests(unittest.TestCase):
         self.assertEqual(response.status_code,200,response.text); api.validate(response.json(),'AnalysisOutcome')
         self.assertFalse(Worker(self.repo).accept_outcome(self.job,self.queue['token'],self.prepare()))
 
+    def test_workspace_lists_saved_outcomes_across_gaps_with_owner_bound_pagination(self):
+        first, prepared = self.save()
+        newer = deepcopy(prepared)
+        newer['record']['created_at'] = '2099-01-01T00:00:00Z'
+        newer['record']['knowledge_gap']['id'] = 'dapper:KnowledgeGap.' + 'x' * 32
+        with self.repo.transaction() as tx:
+            second = outcomes.save(tx, dict(self.job, id=uid()), newer)
+            foreign = outcomes.save(tx, dict(self.job, id=uid(), owner_user_id=self.other), prepared)
+        self.assertEqual(self.control(foreign, owner=self.other).status_code, 200)
+        route = '/v1/analysis-outcomes'
+        self.assertEqual(self.get(route).status_code, 401)
+        first_page = self.get(route + '?limit=1', self.owner).json()
+        api.validate(first_page, 'AnalysisOutcomeList')
+        self.assertEqual([item['id'] for item in first_page['items']], [second])
+        self.assertEqual(first_page['items'][0]['publication']['visibility'], 'private')
+        self.assertTrue(first_page['items'][0]['publication']['can_manage'])
+        self.assertNotIn('provenance', first_page['items'][0])
+        cursor = first_page['page']['next_cursor']
+        second_page = self.get(route + '?limit=1&cursor=' + cursor, self.owner).json()
+        self.assertEqual([item['id'] for item in second_page['items']], [first])
+        self.assertFalse(second_page['page']['has_more'])
+        self.assertEqual(self.get(route + '?cursor=' + cursor, self.other).status_code, 409)
+        self.assertEqual([item['id'] for item in self.get(route, self.other).json()['items']], [foreign])
+        # Claiming transfers private summaries too; it does not rewrite authorship.
+        with self.repo.transaction() as tx: tx.transfer(self.owner, self.other)
+        self.assertEqual(self.get(route, self.owner).json()['items'], [])
+        moved = self.get(route, self.other).json()['items']
+        self.assertEqual({item['id'] for item in moved}, {first, second, foreign})
+        self.assertEqual(next(item for item in moved if item['id'] == first)['attribution']['user_id'], self.owner)
+
     def test_cancelled_or_stale_attempt_cannot_save_outcome(self):
         prepared=self.prepare()
         self.assertFalse(Worker(self.repo).accept_outcome(self.job,'wrong-token',prepared))

@@ -62,12 +62,16 @@ export interface paths {
         get: operations["getDraft"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete a saved draft
+         * @description Delete an owned draft using expected_version. Active analysis jobs prevent deletion (409 DRAFT_IN_USE). Frozen research requests, jobs, accounts and explorations are preserved. Retry a lost acknowledgment with the same Idempotency-Key.
+         */
+        delete: operations["deleteDraft"];
         options?: never;
         head?: never;
         /**
          * Autosave a draft
-         * @description Replace composer using expected_version. The server increments the version only on commit. Stale revisions return 409 with current_version. Server derives ownership; unknown owner/provenance fields are rejected.
+         * @description Rename or replace composer using expected_version. Omitted fields are preserved. The server increments the version only on commit. Stale revisions return 409 with current_version. Server derives ownership; unknown owner/provenance fields are rejected.
          */
         patch: operations["updateDraft"];
         trace?: never;
@@ -456,6 +460,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/jobs/{job_id}/retry-review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retry independent review on saved output
+         * @description Owner-only, idempotent retry for REVIEW_UNAVAILABLE or REVIEW_BUDGET_EXCEEDED. Require the latest job event ID and a checksum-verified completed authoring capture. Requeue the same job with a new validation attempt; preserve original evidence, authoring model, artifacts and activity. Never launch the research agent. Scientific rejection, incomplete capture and active or successful jobs cannot use this route. Current configured review budget applies to each explicit retry. Normal account acceptance and paragraph generation follow a passing review.
+         */
+        post: operations["retryJobReview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/accounts": {
         parameters: {
             query?: never;
@@ -511,9 +535,29 @@ export interface paths {
         put?: never;
         /**
          * Publish, update or unpublish an account
-         * @description Explicit owner-only choice, also available to anonymous workspace owners. Publishing freezes the complete accepted account provenance and current accepted paragraph, exact citation revisions and only reachable source artifacts. Future paragraphs remain private until an explicit update. Unpublishing revokes this snapshot immediately; identical content independently published elsewhere stays public. No job logs, draft, queue, request or unrelated owner artifacts are published. Immutable scientific IDs, citations and original authorship do not change.
+         * @description Explicit owner-only choice. Publishing or updating a public snapshot requires a registered signed-in session; anonymous owners receive 403 SIGN_IN_REQUIRED, including on idempotent retries. Owners may unpublish an existing snapshot with either session kind. Publishing freezes the complete accepted account provenance and current accepted paragraph, exact citation revisions and only reachable source artifacts. Future paragraphs remain private until an explicit update. Unpublishing revokes this snapshot immediately; identical content independently published elsewhere stays public. No job logs, draft, queue, request or unrelated owner artifacts are published. Immutable scientific IDs, citations and original authorship do not change.
          */
         post: operations["updateAccountPublication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/analysis-outcomes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List saved workspace explorations
+         * @description Session-required, newest-first summaries of all completed insufficient-evidence explorations owned by this workspace, private or published, across every knowledge gap. Includes previously saved records without a new run or publication. Operational failures are not scientific exploration outcomes. Other owners are excluded, even for published records. Detail and provenance are loaded only when opened.
+         */
+        get: operations["listAnalysisOutcomes"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -595,7 +639,7 @@ export interface paths {
         put?: never;
         /**
          * Publish or unpublish a scoped exploration
-         * @description Explicit owner-only publication, including anonymous workspace owners. Freeze this exploration and its captured source artifacts, never job logs or unrelated workspace artifacts. Unpublish revokes this snapshot; independently published evidence can remain available. Immutable records and original attribution do not change.
+         * @description Explicit owner-only publication. Publishing or updating a public snapshot requires a registered signed-in session; anonymous owners receive 403 SIGN_IN_REQUIRED, including on idempotent retries. Owners may unpublish with either session kind. Freeze this exploration and its captured source artifacts, never job logs or unrelated workspace artifacts. Unpublish revokes this snapshot; independently published evidence can remain available. Immutable records and original attribution do not change.
          */
         post: operations["updateOutcomePublication"];
         delete?: never;
@@ -2928,12 +2972,14 @@ export interface components {
             selected_kgs: ("biomarkerkg" | "prokn")[];
         };
         DraftCreate: {
-            composer?: components["schemas"]["Composer"];
+            composer: components["schemas"]["Composer"];
+            name?: string;
         };
-        /** @description Replace the complete composer atomically using compare-and-swap; not JSON Merge Patch. Retry a lost acknowledgment with the same Idempotency-Key. */
+        /** @description Rename or replace the complete composer atomically using compare-and-swap. Omitted fields are preserved. Retry a lost acknowledgment with the same Idempotency-Key. */
         DraftPatch: {
             expected_version: number;
-            composer: components["schemas"]["Composer"];
+            composer?: components["schemas"]["Composer"];
+            name?: string;
         };
         Draft: {
             /** Format: uuid */
@@ -2946,6 +2992,16 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+            name?: string;
+        };
+        DraftDelete: {
+            expected_version: number;
+        };
+        DraftDeletion: {
+            /** Format: uuid */
+            id: string;
+            /** @constant */
+            deleted: true;
         };
         /** @description Opaque cursor pins sorting, filters and an authorized collection snapshot. A null cursor means no further page. Cursors cannot be reused with different filters or callers. */
         Page: {
@@ -3163,6 +3219,7 @@ export interface components {
             code: string;
             message: string;
             retryable: boolean;
+            budget?: components["schemas"]["JobBudgetFailure"];
         };
         /** @description Operational record, not a DAPPER scientific object. The result IDs point to minted DAPPER objects. Terminal-state guards prevent stale attempts from overwriting accepted results. */
         Job: {
@@ -6541,6 +6598,16 @@ export interface components {
             citation_targets: components["schemas"]["CitationTarget"][];
             warnings: string[];
         };
+        JobBudgetFailure: {
+            /** @enum {string} */
+            scope: "authoring" | "review";
+            limit_usd: number;
+            spent_usd: number | null;
+            next_call_max_usd: number | null;
+        };
+        ReviewRetryInput: {
+            expected_last_event_id: string;
+        };
     };
     responses: never;
     parameters: never;
@@ -6769,6 +6836,88 @@ export interface operations {
             };
             /** @description Not Found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate Limited */
+            429: {
+                headers: {
+                    /** @example 30 */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    deleteDraft: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description Unique per caller and operation for at least 7 days. Same key and same canonical body replay the original accepted response; changed body returns 409 IDEMPOTENCY_CONFLICT. Compare idempotency before draft-version checks on retries.
+                 * @example 66666666-6666-4666-8666-666666666666
+                 */
+                "Idempotency-Key": string;
+            };
+            path: {
+                /** @example 22222222-2222-4222-8222-222222222222 */
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DraftDelete"];
+            };
+        };
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftDeletion"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Version Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid Input */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -8325,6 +8474,98 @@ export interface operations {
             };
         };
     };
+    retryJobReview: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description Unique per caller and operation for at least 7 days. Same key and same canonical body replay the original accepted response; changed body returns 409 IDEMPOTENCY_CONFLICT. Compare idempotency before draft-version checks on retries.
+                 * @example 66666666-6666-4666-8666-666666666666
+                 */
+                "Idempotency-Key": string;
+            };
+            path: {
+                /** @example 44444444-4444-4444-8444-444444444444 */
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewRetryInput"];
+            };
+        };
+        responses: {
+            /** @description Accepted job; poll Location or consume job events. */
+            202: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    /**
+                     * @description Relative URL of the created resource.
+                     * @example /v1/jobs/44444444-4444-4444-8444-444444444444
+                     */
+                    Location?: string;
+                    /**
+                     * @description Suggested polling delay in seconds.
+                     * @example 2
+                     */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Job"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Version Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid Input */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate Limited */
+            429: {
+                headers: {
+                    /** @example 30 */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     listAccounts: {
         parameters: {
             query?: {
@@ -8587,6 +8828,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description Sign In Required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description Not Found */
             404: {
                 headers: {
@@ -8607,6 +8857,65 @@ export interface operations {
             };
             /** @description Invalid Input */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate Limited */
+            429: {
+                headers: {
+                    /** @example 30 */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listAnalysisOutcomes: {
+        parameters: {
+            query?: {
+                /** @example 20 */
+                limit?: number;
+                /**
+                 * @description Omit for the first page. A returned next_cursor is opaque; the example is illustrative and cannot be used against a live service.
+                 * @example opaque-next-page
+                 */
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalysisOutcomeList"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Version Conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -8918,6 +9227,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description Sign In Required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description Not Found */
             404: {
                 headers: {
@@ -9181,6 +9499,15 @@ export interface operations {
                 content: {
                     "*/*": string;
                 };
+            };
+            /** @description After authorization, redirect to an exact, verified S3 object version. The private URL expires after 60 seconds; previously issued URLs can remain valid until expiry after unpublication. */
+            307: {
+                headers: {
+                    /** @description Short-lived artifact download URL. Never cache or persist as an identifier. */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Authentication Required */
             401: {

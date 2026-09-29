@@ -160,6 +160,16 @@ class WorkerJourneyTests(unittest.TestCase):
         fixtures.EvidencePackageTests.setUpClass()
         cls.addClassCleanup(fixtures.EvidencePackageTests.tearDownClass)
     def test_accepted_account_auto_paragraph_and_complete_exports(self):
+        self.accepted_journey()
+
+    def test_s3_account_and_paragraph_keep_artifacts_after_scratch_removal(self):
+        self.accepted_journey(s3=True)
+
+    def accepted_journey(self,s3=False):
+        from contextlib import ExitStack
+        from reveal_backend.artifact_store import S3Store
+        from test_deployment import MemoryS3
+        storage=S3Store('reveal-test-artifacts',client=MemoryS3())
         with tempfile.TemporaryDirectory() as temp:
             repo=Repository(str(Path(temp)/'application.db')); repo.migrate(); user=uid()
             package=fixtures.EvidencePackageTests.built.package
@@ -171,7 +181,12 @@ class WorkerJourneyTests(unittest.TestCase):
                 job=jobs.enqueue(tx,user,'analysis',request_id=frozen['id'],inputs={'budgets':{'max_accounts':1}})
             capture=Path(temp)/job['id']/'evidence'; shutil.copytree(source.parent.parent,capture)
             source=capture/'package/evidence-package.json'
-            with patch.dict('os.environ',{'REVEAL_EXECUTION_MODE':'deterministic','REVEAL_ARTIFACTS_DIR':temp}), patch('reveal_backend.worker.collect',return_value=(source,package)):
+            with ExitStack() as stack:
+                stack.enter_context(patch.dict('os.environ',{'REVEAL_EXECUTION_MODE':'deterministic','REVEAL_ARTIFACTS_DIR':temp,
+                    'REVEAL_ARTIFACT_STORE':'s3' if s3 else 'filesystem','REVEAL_WORK_DIR':temp}))
+                stack.enter_context(patch('reveal_backend.worker.collect',return_value=(source,package)))
+                stack.enter_context(patch('reveal_backend.worker.artifact_store',return_value=storage))
+                stack.enter_context(patch('reveal_backend.artifact_store.store',return_value=storage))
                 worker=Worker(repo); asyncio.run(worker.process(*jobs.claim(repo,'test-worker')))
                 with repo.transaction() as tx:
                     result=tx.get('job',job['id'])['data']
@@ -186,17 +201,28 @@ class WorkerJourneyTests(unittest.TestCase):
                     self.assertTrue(any(item['stage']=='validating' for item in analysis_events[:-2]))
                     account_id=result['result']['account_ids'][0]; paragraph_job=result['result']['paragraph_job_ids'][0]
                     import json
-                    manifest_path=Path(temp)/job['id']/'attempt-1/worker-output.json'; manifest=json.loads(manifest_path.read_text())
-                    for entry in manifest['accounts']:
-                        published=(manifest_path.parent/entry['path']).resolve()
-                        self.assertTrue(published.is_relative_to(manifest_path.parent.resolve()))
-                        self.assertEqual(sha256(published.read_bytes()),entry['sha256'])
+                    if s3:
+                        self.assertFalse((Path(temp)/job['id']).exists())
+                        artifacts=tx.list('artifact',user); self.assertTrue(artifacts)
+                        for row in artifacts:
+                            self.assertNotIn('path',row['data'])
+                            self.assertEqual(sha256(storage.get(row['data']['storage'])),row['data']['sha256'])
+                    else:
+                        manifest_path=Path(temp)/job['id']/'attempt-1/worker-output.json'; manifest=json.loads(manifest_path.read_text())
+                        for entry in manifest['accounts']:
+                            published=(manifest_path.parent/entry['path']).resolve()
+                            self.assertTrue(published.is_relative_to(manifest_path.parent.resolve()))
+                            self.assertEqual(sha256(published.read_bytes()),entry['sha256'])
                 asyncio.run(worker.process(*jobs.claim(repo,'test-worker')))
                 with repo.transaction() as tx:
                     result=tx.get('job',paragraph_job)['data']
                     if result['status']!='succeeded':
                         self.fail(str(result)+' '+str([p.read_text() for p in Path(temp).rglob('failure.json')]))
                     paragraph_id=result['result']['paragraph_id']
+                    if s3:
+                        self.assertFalse((Path(temp)/paragraph_job).exists())
+                        storage.restore(tx.get('queue',paragraph_job)['data']['workspace'],Path(temp)/'recovered-paragraph')
+                        self.assertTrue((Path(temp)/'recovered-paragraph/attempt-1/accepted-paragraph.json').is_file())
                     paragraph_events=sorted((row['data'] for row in tx.list('event',user) if row['data']['job_id']==paragraph_job),key=lambda item:int(item['id']))
                     self.assertEqual(sum(item['stage']=='persisting' for item in paragraph_events),1)
                     self.assertEqual([item['stage'] for item in paragraph_events[-2:]],['persisting','complete'])

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { api, ApiError, messageOf, type Schema } from "@/lib/client";
 import { sourceDownloadPath } from "@/lib/source-download";
 import { useIdentity } from "./Session";
+import { PublicationSignIn } from "./PublicationSignIn";
 import { LoadingStatus, LoadingSurface } from "./LoadingSurface";
 import "./analysis-outcome.css";
 
@@ -32,6 +33,8 @@ export function JobOutcome({ jobId }: { jobId: string }) {
 }
 
 function OutcomePublication({ outcome, onRefresh }: { outcome: Schema<"AnalysisOutcome">; onRefresh: () => void }) {
+  const { me, ready } = useIdentity();
+  const signedIn = ready && me?.principal_kind === "registered";
   const [state, setState] = useState(outcome.publication), [confirm, setConfirm] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState("");
   const pending = useRef<{ body: Schema<"PublicationInput">; key: string } | null>(null);
   const mounted = useRef(true), inflight = useRef(false);
@@ -39,6 +42,7 @@ function OutcomePublication({ outcome, onRefresh }: { outcome: Schema<"AnalysisO
   useEffect(() => { setState(current => outcome.publication.version >= current.version ? outcome.publication : current); }, [outcome.publication]);
   async function save(visibility: "public" | "private", retry = false) {
     if (!state.can_manage || inflight.current) return;
+    if (visibility === "public" && !signedIn) { setConfirm(false); return; }
     if (!retry && pending.current && (pending.current.body.visibility !== visibility || pending.current.body.expected_version !== state.version)) {
       setError("The previous publication change is still unconfirmed. Retry it before choosing another change."); return;
     }
@@ -60,8 +64,9 @@ function OutcomePublication({ outcome, onRefresh }: { outcome: Schema<"AnalysisO
   if (!state.can_manage) return null;
   return <section className="outcome-publication" aria-label="Exploration publication">
     <div><h2>{state.visibility === "public" ? "Published exploration" : "Share what was explored"}</h2><p>{state.visibility === "public" ? "Other researchers can find this exploration under its knowledge gap." : "Publish this record to help others see what was tried and which evidence is still missing."}</p></div>
-    {!confirm && <button disabled={busy} onClick={() => state.visibility === "public" ? void save("private") : setConfirm(true)}>{state.visibility === "public" ? "Unpublish" : "Publish exploration…"}</button>}
-    {confirm && <div className="outcome-publish-confirm"><p>The question, selected mechanisms, author attribution, findings, limitations, source references, and captured source evidence will be public and downloadable. Job activity, workspace drafts, and the complete private evidence package stay private.</p><div><button disabled={busy} onClick={() => void save("public")}>Publish exploration</button><button disabled={busy} onClick={() => setConfirm(false)}>Cancel</button></div></div>}
+    {!signedIn && state.visibility !== "public" && <PublicationSignIn kind="exploration" />}
+    {!confirm && (signedIn || state.visibility === "public") && <button disabled={busy} onClick={() => state.visibility === "public" ? void save("private") : setConfirm(true)}>{state.visibility === "public" ? "Unpublish" : "Publish exploration…"}</button>}
+    {signedIn && confirm && <div className="outcome-publish-confirm"><p>The question, selected mechanisms, author attribution, findings, limitations, source references, and captured source evidence will be public and downloadable. Job activity, workspace drafts, and the complete private evidence package stay private.</p><div><button disabled={busy} onClick={() => void save("public")}>Publish exploration</button><button disabled={busy} onClick={() => setConfirm(false)}>Cancel</button></div></div>}
     {busy && <LoadingStatus>Saving publication settings…</LoadingStatus>}
     {error && <div className="error" role="alert">{error}{pending.current && <button disabled={busy} onClick={() => void save(pending.current!.body.visibility, true)}>Retry</button>}</div>}
   </section>;
@@ -80,8 +85,8 @@ function SourceDownloads({ artifacts }: { artifacts: Schema<"ArtifactAccess">[] 
 }
 
 export function AnalysisOutcomeView({ id }: { id: string }) {
-  const { me, ready } = useIdentity();
-  const binding = `${me?.user_id || "visitor"}:${id}`;
+  const { me, ready, status } = useIdentity();
+  const binding = `${me?.user_id || "visitor"}:${status.canClaim}:${id}`;
   const [record, setRecord] = useState<{ binding: string; value: Schema<"AnalysisOutcome"> } | null>(null);
   const [failure, setFailure] = useState<{ binding: string; message: string } | null>(null);
   const [retry, setRetry] = useState(0);

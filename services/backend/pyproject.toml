@@ -7,7 +7,7 @@ name = "reveal-backend"
 version = "0.1.0"
 description = "Backend components for REVEAL Mechanisms"
 requires-python = ">=3.10"
-dependencies = ["numpy>=1.26,<3", "certifi>=2024.2.2", "fastapi==0.115.12", "uvicorn==0.34.2", "PyJWT==2.10.1", "httpx==0.28.1", "PyMySQL==1.1.2", "python-dotenv==1.1.0", "PyYAML==6.0.2", "jsonschema==4.23.0", "linkml==1.11.1", "rdflib==7.6.0", "quickjs==1.19.4"]
+dependencies = ["numpy>=1.26,<3", "certifi>=2024.2.2", "fastapi==0.115.12", "uvicorn==0.34.2", "PyJWT==2.10.1", "httpx==0.28.1", "PyMySQL==1.1.2", "python-dotenv==1.1.0", "PyYAML==6.0.2", "jsonschema==4.23.0", "linkml==1.11.1", "rdflib==7.6.0", "quickjs==1.19.4", "boto3==1.40.45", "redis==6.4.0"]
 
 [project.optional-dependencies]
 eaggl = ["scipy>=1.11,<2", "PyMySQL==1.1.2", "python-dotenv>=1.0,<2"]

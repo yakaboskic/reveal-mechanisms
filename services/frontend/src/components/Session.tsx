@@ -1,13 +1,15 @@
 "use client";
-import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { signIn, signOut } from "next-auth/react";
 import Link from "next/link";
 import { selectedGap } from "@/lib/composer";
-import { api, messageOf, type Schema } from "@/lib/client";
+import { api, ApiError, messageOf, type Schema } from "@/lib/client";
 import { withRequestDeadline } from "@/lib/request-deadline";
+import { WorkspaceCacheProvider } from "./WorkspaceCache";
+import { invalidateWorkspace, resetWorkspaceCache } from "@/lib/workspace-events";
 import "./session-menu.css";
 
-type SessionStatus = { canClaim: boolean; providers: { google: boolean; orcid: boolean } };
+type SessionStatus = { canClaim: boolean; canAdmin?: boolean; providers: { google: boolean; orcid: boolean } };
 type SessionContextType = { me: Schema<"Me"> | null; ready: boolean; status: SessionStatus; refresh: () => Promise<Schema<"Me"> | null> };
 const SessionContext = createContext<SessionContextType>({ me: null, ready: false, status: { canClaim: false, providers: { google: false, orcid: false } }, refresh: async () => null });
 export const useIdentity = () => useContext(SessionContext);
@@ -19,16 +21,46 @@ export function Session({ children }: { children: ReactNode }) {
   const [menu, setMenu] = useState(false);
   const menuArea = useRef<HTMLDivElement>(null);
   const [claimMessage, setClaimMessage] = useState("");
-  const refresh = async () => {
+  const identityRef = useRef<Schema<"Me"> | null>(null);
+  const refreshSequence = useRef(0);
+  const pendingRefresh = useRef<Promise<Schema<"Me"> | null> | null>(null);
+  const refresh = useCallback((): Promise<Schema<"Me"> | null> => {
+    if (pendingRefresh.current) return pendingRefresh.current;
+    const sequence = ++refreshSequence.current;
+    const request = (async () => {
     try {
       const state = await withRequestDeadline(signal => fetch("/api/session/status", { cache: "no-store", signal }).then(r => {
-        if (!r.ok) throw new Error("Your session could not be checked. Please retry.");
+        if (!r.ok) throw new ApiError(r.status, "SESSION_CHECK_FAILED", "Your session could not be checked. Please retry.");
         return r.json();
-      })); setStatus(state);
-      const identity = state.principal ? await api.me() : null; setMe(identity); return identity;
-    } catch { setMe(null); return null; } finally { setReady(true); }
-  };
-  useEffect(() => { void refresh(); }, []);
+      }));
+      if (sequence !== refreshSequence.current) return null;
+      setStatus(state);
+      if (!state.principal || state.principal.user_id !== identityRef.current?.user_id) {
+        resetWorkspaceCache(); identityRef.current = null; setMe(null); setReady(false);
+      }
+      const identity = state.principal ? await api.me() : null;
+      if (sequence !== refreshSequence.current) return null;
+      identityRef.current = identity; setMe(identity); return identity;
+    } catch (error) {
+      if (sequence !== refreshSequence.current) return null;
+      if (error instanceof ApiError && [401, 403].includes(error.status)) {
+        resetWorkspaceCache(); identityRef.current = null; setMe(null);
+      }
+      // A transport outage does not change an already verified identity.
+      // Retain its cached rows; explicit logout/denial still purges them.
+      return identityRef.current;
+    } finally { if (sequence === refreshSequence.current) setReady(true); }
+    })();
+    pendingRefresh.current = request;
+    void request.finally(() => { if (pendingRefresh.current === request) pendingRefresh.current = null; });
+    return request;
+  }, []);
+  useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    const check = () => { if (document.visibilityState !== "hidden") void refresh(); };
+    window.addEventListener("focus", check); window.addEventListener("online", check);
+    return () => { window.removeEventListener("focus", check); window.removeEventListener("online", check); };
+  }, [refresh]);
   useEffect(() => {
     if (!menu) return;
     const closeOutside = (event: PointerEvent) => { if (!menuArea.current?.contains(event.target as Node)) setMenu(false); };
@@ -44,6 +76,8 @@ export function Session({ children }: { children: ReactNode }) {
     } catch { /* retain local selections when storage is unavailable */ }
   }, [me?.user_id]);
   const logout = async () => {
+    refreshSequence.current++; pendingRefresh.current = null; identityRef.current = null;
+    resetWorkspaceCache(); setMe(null); setStatus(current => ({ ...current, canClaim: false, canAdmin: false }));
     await fetch("/api/session/logout", { method: "POST" });
     for (const key of Object.keys(sessionStorage)) if (key.startsWith("reveal:")) sessionStorage.removeItem(key);
     await signOut({ callbackUrl: "/" });
@@ -52,16 +86,18 @@ export function Session({ children }: { children: ReactNode }) {
     try {
       const response = await fetch("/api/session/claim", { method: "POST", headers: { "content-type": "application/json", "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ consent: true }) });
       const result = await response.json(); if (!response.ok) throw new Error(result.detail);
-      setClaimMessage("Your anonymous work is now in this workspace. Scientific attribution is unchanged."); await refresh();
+      invalidateWorkspace(); setClaimMessage("Your anonymous work is now in this workspace. Scientific attribution is unchanged."); await refresh();
     } catch (error) { setClaimMessage(messageOf(error)); }
   };
-  return <SessionContext.Provider value={{ me, ready, status, refresh }}>
+  const workspaceScope = ready && me ? `${me.user_id}:${me.principal_kind}:${me.workspace_expires_at || ""}:${status.canClaim}` : null;
+  return <SessionContext.Provider value={{ me, ready, status, refresh }}><WorkspaceCacheProvider scope={workspaceScope} checkIdentity={refresh}>
     <a className="skip" href="#main">Skip to content</a>
     <header className="site-nav workspace-chrome">
       <div className="avatar-area" ref={menuArea}><button className="avatar" aria-label="Your workspace" aria-expanded={menu} onClick={() => setMenu(!menu)}>{me?.display_name?.slice(0, 1).toUpperCase() || <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" aria-hidden="true"><circle cx="12" cy="8" r="3.2" /><path d="M5 20v-2a7 7 0 0 1 14 0v2" /></svg>}</button>
         {menu && <div className="avatar-menu workspace-menu" onKeyDown={e => { if (e.key === "Escape") setMenu(false); }}>
           <p className="workspace-menu-title">{me?.display_name || (me ? "Anonymous workspace" : "Your workspace")}</p>
-          <nav><Link onClick={() => setMenu(false)} href="/workspace?tab=gaps">Your knowledge gaps</Link><Link onClick={() => setMenu(false)} href="/workspace?tab=accounts">Your scientific accounts</Link></nav>
+          <nav><Link onClick={() => setMenu(false)} href="/workspace?tab=gaps">Your knowledge gaps</Link><Link onClick={() => setMenu(false)} href="/workspace?tab=accounts">Your scientific accounts</Link><Link onClick={() => setMenu(false)} href="/workspace?tab=explorations">Your explorations</Link></nav>
+          {status.canAdmin && <nav><Link onClick={() => setMenu(false)} href="/admin">Admin telemetry</Link></nav>}
           {me?.principal_kind === "anonymous" && <small className="workspace-session-note">Anonymous access ends {me.workspace_expires_at ? new Date(me.workspace_expires_at).toLocaleDateString() : "with this session"}.</small>}
           {me?.principal_kind !== "registered" && <div className="workspace-signin"><small>Keep your work across devices.</small><ProviderButtons disabled={!ready} compact /></div>}
           {me && <button className="text-button workspace-signout" onClick={logout}>Sign out</button>}
@@ -71,7 +107,7 @@ export function Session({ children }: { children: ReactNode }) {
     {status.canClaim && <div className="continuity"><p>Keep the work from your anonymous session in this signed-in workspace?</p><button onClick={claim}>Move my anonymous work</button><small>Existing scientific identities and attribution stay unchanged.</small></div>}
     {claimMessage && <p role="status" className="notice">{claimMessage}</p>}
     {children}
-  </SessionContext.Provider>;
+  </WorkspaceCacheProvider></SessionContext.Provider>;
 }
 export function ProviderButtons({ disabled = false, onLogin, compact = false }: { disabled?: boolean; onLogin?: (provider: "google" | "orcid") => void; compact?: boolean }) {
   const { status, ready } = useIdentity(); const noteId = useId();

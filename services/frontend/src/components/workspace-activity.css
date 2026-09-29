@@ -2,6 +2,8 @@
 .reading-page.workspace-dashboard{max-width:960px;margin:0 auto;padding:8px 28px 72px;color:#20293a}
 .workspace-dashboard .workspace-topbar{display:flex;align-items:center;min-height:40px;margin-bottom:30px;font-size:12px}
 .workspace-dashboard .workspace-topbar a{display:inline-flex;align-items:center;min-height:40px;color:#5a7090;line-height:1.6}
+.workspace-dashboard .workspace-refresh{margin-left:auto;min-height:40px;color:#5a7090}
+.workspace-dashboard .workspace-refresh-status{font-size:12px;color:#70829a;margin:16px 0 0}
 .workspace-dashboard .workspace-heading h1{font-size:26px;line-height:1.35;font-weight:500;letter-spacing:-.5px;margin:0 0 9px}
 .workspace-dashboard .workspace-heading>p{color:#6f8098;font-size:13px;line-height:1.8;margin:0 0 26px}
 .workspace-dashboard .workspace-continuity{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:16px 18px;background:#f7f9fc;border-radius:10px;margin:0 0 24px}
@@ -19,8 +21,34 @@
 .workspace-dashboard .workspace-item-title:hover{color:#2563eb}
 .workspace-dashboard .workspace-item-meta{display:flex;flex-wrap:wrap;gap:4px 16px;align-items:center;margin-top:12px;font-size:12px;color:#70829a;line-height:1.7}
 .workspace-dashboard .workspace-item-meta a{color:#5b7ca7;min-height:30px;display:inline-flex;align-items:center}
+.workspace-draft-panel{margin-top:10px}
+.workspace-draft-panel>summary{display:flex;align-items:center;gap:8px;width:fit-content;min-height:36px;cursor:pointer;list-style:none;font-size:12px;color:#5b7ca7}
+.workspace-draft-panel>summary::-webkit-details-marker{display:none}
+.workspace-draft-caret{font-size:18px;line-height:1;color:#7b8ca3}
+.workspace-draft-panel[open]>summary .workspace-draft-caret{transform:rotate(90deg)}
+.workspace-drafts{display:flex;align-items:center;flex-wrap:wrap;gap:8px 16px;margin-top:8px;font-size:12px;color:#5b7ca7}
+.workspace-drafts select{flex:0 1 320px;min-width:0;max-width:100%;min-height:38px;border:1px solid #dfe6f0;border-radius:7px;padding:7px 28px 7px 10px;background:#fff;color:#405571;font:inherit;text-overflow:ellipsis}
+.workspace-drafts a,.workspace-drafts button{min-height:36px;display:inline-flex;align-items:center}
+.workspace-drafts .workspace-open-draft{gap:10px;padding:6px 12px;border:1px solid #d7e3f3;border-radius:7px;background:#f5f8fd;color:#426da9;white-space:nowrap}
+.workspace-drafts .workspace-open-draft:hover{background:#edf3fc;text-decoration:none}
+.workspace-drafts button:disabled{opacity:.45;cursor:not-allowed}
+.workspace-drafts .workspace-new-draft{margin-left:auto}
+.workspace-dashboard .workspace-draft-detail{margin-top:4px;font-size:11px}
+.workspace-no-drafts{color:#70829a}
+.workspace-draft-dialog{width:min(460px,calc(100vw - 32px))}
+.workspace-draft-dialog h2{font-size:20px;font-weight:500;margin:0 0 20px}
+.workspace-draft-dialog p{font-size:13px;line-height:1.7;color:#64768f;overflow-wrap:anywhere}
+.workspace-draft-dialog label{font-size:13px;color:#526986}
+.workspace-draft-dialog .field{display:block;width:100%;margin-top:8px}
+.workspace-draft-dialog .workspace-copy-draft{display:flex;align-items:flex-start;gap:10px;line-height:1.7;margin-top:16px;overflow-wrap:anywhere}
+.workspace-copy-draft input{margin-top:5px;flex-shrink:0}
+.workspace-draft-actions{display:flex;justify-content:flex-end;gap:20px;margin-top:24px;font-size:13px}
+.workspace-draft-actions button{min-height:40px;padding:8px 12px}
+.workspace-delete-draft{color:#a94432;border:1px solid #e9c2bb;border-radius:7px}
+@media(max-width:600px){.workspace-drafts select{flex:1 1 210px}.workspace-drafts .workspace-new-draft{margin-left:0}}
 .workspace-dashboard .workspace-account-row>.workspace-item-meta:first-child{margin:0 0 12px}
 .workspace-dashboard .workspace-account-conclusion{color:#62758e;font-size:13px;line-height:1.85;max-width:80ch;margin:10px 0 0;white-space:pre-wrap;overflow-wrap:anywhere}
+.workspace-dashboard .workspace-account-summary-link{font-size:13px;line-height:1.85;white-space:pre-wrap;text-decoration-thickness:1px;text-underline-offset:3px}.workspace-dashboard .workspace-account-summary-link:hover,.workspace-dashboard .workspace-account-summary-link:focus-visible{text-decoration-line:underline}
 .workspace-dashboard .workspace-account-question{display:block;max-width:80ch;font-size:12px;line-height:1.75;color:#657c9c;margin-top:14px;overflow-wrap:anywhere}
 .workspace-dashboard .workspace-empty{padding:52px 0;color:#6d7f98}
 .workspace-dashboard .workspace-empty h2{font-size:17px;font-weight:450;color:#596b85;margin:0 0 9px}

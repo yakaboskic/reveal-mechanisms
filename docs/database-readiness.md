@@ -1,5 +1,7 @@
 # Aurora MySQL readiness and persistence
 
+**Current runtime update:** the API now uses the populated database and preserves the original `reveal_*` records. Colleague setup runs no imports or table migrations. Catalog readiness and in-memory embedding search are explained in [local deployment](local-deployment.md); the audit details below retain their observation dates.
+
 **Current status (September 25, v12.1):** the original [read-only audit](../data/audit/2026-09-25-consolidation/database.json) covered 11 GeneSet/EAGGL tables and 3,103 live 768-dimensional embeddings. The later [crosswalk verification](../data/eaggl-cfde-mapping/2026-09-25/database-verification.json) records **14 applied tables**, **1,756 EAGGL→CFDE mappings** and **4,056 resolved GeneSet links**. Prisma maps these plus nine DisMech tables, still unapplied to Aurora. Application users/jobs/citations/general provenance storage remain planned. Use the [crosswalk-backed retrieval contract](design-plan.md#initial-crosswalk-backed-retrieval-contract) and [implementation sequence](implementation-handoff.md).
 
 **Initial audit:** 2026-09-24, read-only connectivity, authentication, grants, and capability inspection. [Machine-readable audit](../data/infrastructure/mysql-audit-2026-09-24.json). **Subsequent implementation:** the GeneSet importer created `cyaka_reveal_mechanisms` and its first three tables; see [the load report](../data/cfde-genesets/2026-09-24/database-load.json) and [import guide](geneset-import.md).

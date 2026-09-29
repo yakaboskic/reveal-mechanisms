@@ -1,0 +1,21 @@
+Subject: AWS permissions needed to deploy REVEAL
+
+Could you help enable the REVEAL deployment in AWS account 005901288866
+(us-east-1)? My IAM user is cyakabos. AWS currently denies iam:CreateRole
+and ecr:CreateRepository for this application.
+
+Please extract the attached ZIP and follow deploy/aws/README.md to:
+
+1. Create the dedicated cyaka-reveal-ec2 role and instance profile using
+   the included trust and runtime policies, plus AmazonSSMManagedInstanceCore.
+2. Create the cyaka-reveal-backend ECR repository and the
+   /cyaka/reveal/backend CloudWatch log group with 30-day retention.
+3. Review and attach deployment-operator-policy.json to my existing cyakabos
+   user so I can pass that role to EC2, publish the application image,
+   configure its backend secret, and administer the tagged host through SSM.
+
+I do not need broad IAM administrator access. These are dedicated application
+resources; please preserve the existing shared RDS database and S3 data.
+
+The ZIP contains exact commands and policy JSON, with no passwords or keys.
+Please let me know once the resources and operator permissions are ready.

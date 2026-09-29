@@ -6,7 +6,7 @@ account, claims, original authorship, or pinned citation revisions.
 
 ## Reading and publishing
 
-An owner opens a scientific account and chooses **Publish…**. The disclosure
+A signed-in owner opens a scientific account and chooses **Publish…**. The disclosure
 explains what will become publicly viewable and downloadable: the accepted
 account, its claims, original author attribution, supporting evidence and
 provenance, and its currently accepted research statement and citations.
@@ -14,6 +14,19 @@ provenance, and its currently accepted research statement and citations.
 Job activity, drafts, queue records, research requests and unrelated workspace
 artifacts remain private. Public scientific reads are limited to the published
 snapshot's authorized dependency closure.
+
+Publishing either a scientific account or an exploration requires a registered
+session, including updates to public snapshots. Anonymous owners see a sign-in
+prompt with the configured OAuth providers. Google sign-in returns to the same
+record; publication still requires an explicit confirmation afterward. Existing
+account holders can use the workspace claim prompt to move anonymous work before
+publishing. The record reloads after a successful claim. Historical authorship
+and scientific identifiers remain unchanged.
+
+Both publication endpoints enforce this rule before idempotent replay and return
+`403 SIGN_IN_REQUIRED` for anonymous publishing attempts. Anonymous owners retain
+private workspace access and may unpublish an existing snapshot. Public reads
+remain available without signing in.
 
 The snapshot is fixed at publication time. A statement accepted later, including
 a regenerated statement, remains private until the owner chooses **Update

@@ -18,6 +18,7 @@ if __package__ in (None, ''):
 
 from reveal_backend.dapper_release import verify_release
 from reveal_backend.evidence_package import EvidenceBuildError, canonical_json, decode, require, sha256
+from reveal_backend.source_validation import source_findings
 
 
 class AccountValidationError(ValueError):
@@ -26,11 +27,12 @@ class AccountValidationError(ValueError):
         super().__init__('Scientific account failed validation; inspect report.findings')
 
 
-def lint_scientific_account(document, *, dapper_root, release_lock, evidence_package=None, mode='draft', strict=False):
+def lint_scientific_account(document, *, dapper_root, release_lock, evidence_package=None, ledger_path=None, mode='draft', strict=False):
     """Return a machine-readable report. Files are read, never minted or edited."""
     command = [sys.executable, '-I', '-B', str(Path(__file__).resolve()), '--internal',
                str(Path(document).resolve()), str(Path(dapper_root).resolve()), str(Path(release_lock).resolve()),
-               str(Path(evidence_package).resolve()) if evidence_package else '', mode, 'strict' if strict else 'normal']
+               str(Path(evidence_package).resolve()) if evidence_package else '', mode, 'strict' if strict else 'normal',
+               str(Path(ledger_path).resolve()) if ledger_path else '']
     environment = dict(os.environ)
     environment.pop('PYTHONPATH', None); environment['PYTHONDONTWRITEBYTECODE'] = '1'
     try:
@@ -44,20 +46,20 @@ def lint_scientific_account(document, *, dapper_root, release_lock, evidence_pac
                 'findings': [{'severity': 'error', 'check': 'linter-runtime', 'where': 'runtime', 'message': str(exc), 'why': ''}]}
 
 
-def validate_scientific_account(document, *, dapper_root, release_lock, evidence_package, strict=False):
+def validate_scientific_account(document, *, dapper_root, release_lock, evidence_package, ledger_path=None, strict=False):
     """Backend gate: rerun the same linter on actual output, in final mode.
 
-    Passing this gate is structural validity, not scientific acceptance.
+    Passing this gate verifies structure and source fidelity, not scientific acceptance.
     Never accept an agent-written report as a replacement for this invocation.
     """
     report = lint_scientific_account(document, dapper_root=dapper_root, release_lock=release_lock,
-                                     evidence_package=evidence_package, mode='final', strict=strict)
+                                     evidence_package=evidence_package, ledger_path=ledger_path, mode='final', strict=strict)
     if not report['valid']:
         raise AccountValidationError(report)
     return report
 
 
-def _lint(document_path, dapper_root, lock_path, package_path, mode, strict):
+def _lint(document_path, dapper_root, lock_path, package_path, mode, strict, ledger_path=None):
     require(mode in ('draft', 'final', 'profile-only'), 'Unknown account lint mode')
     require(mode == 'profile-only' or package_path, 'REVEAL linting requires the frozen evidence package')
     release = verify_release(dapper_root, lock_path)
@@ -140,6 +142,7 @@ def _lint(document_path, dapper_root, lock_path, package_path, mode, strict):
                     for field in ('direction', 'context', 'explanation'):
                         if not isinstance(item.get(field), str) or not item[field].strip():
                             error('evidence-interpretation', evidence_id, f'EvidenceItem requires nonempty {field}')
+        findings.extend(source_findings(document, package, package_path, ledger_path or None))
         if mode == 'final':
             for identity, (cls, _) in nodes.items():
                 if cls in ('ScientificAccount', 'Claim', 'Proposition', 'EvidenceItem', 'KnowledgeGap') and not identity.startswith('dapper:' + cls + '.'):
@@ -151,14 +154,14 @@ def _lint(document_path, dapper_root, lock_path, package_path, mode, strict):
             'document_sha256': sha256(raw), 'evidence_package_sha256': package_hash,
             'dapper_release': release, 'counts': {**upstream.counts, 'errors': errors, 'warnings': warnings},
             'findings': findings, 'scientific_grounding_evaluated': False,
-            'remaining_acceptance_checks': ['trusted attribution and job ownership', 'exact source locators and metric agreement',
+            'remaining_acceptance_checks': ['trusted attribution and job ownership',
                                            'external-evidence ledger and tool policy', 'scientific support and synthesis review']}
 
 
 if __name__ == '__main__':
     try:
-        require(len(sys.argv) == 8 and sys.argv[1] == '--internal', 'Use scripts/lint_scientific_account.py')
-        result = _lint(*sys.argv[2:7], strict=sys.argv[7] == 'strict')
+        require(len(sys.argv) == 9 and sys.argv[1] == '--internal', 'Use scripts/lint_scientific_account.py')
+        result = _lint(*sys.argv[2:7], strict=sys.argv[7] == 'strict', ledger_path=sys.argv[8])
     except Exception as exc:
         result = {'report_version': 'reveal.account-lint/1', 'valid': False, 'operational_error': True,
                   'findings': [{'severity': 'error', 'check': 'linter-runtime', 'where': 'runtime', 'message': str(exc), 'why': ''}]}

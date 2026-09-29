@@ -17,16 +17,17 @@ def main(argv=None):
     parser.add_argument('--dapper-root', type=Path, default=os.getenv('REVEAL_DAPPER_ROOT'))
     parser.add_argument('--release-lock', type=Path, default=ROOT / 'services/backend/agent-runtime/dapper-release.json')
     parser.add_argument('--evidence-package', type=Path, default=os.getenv('REVEAL_EVIDENCE_PACKAGE'))
+    parser.add_argument('--ledger', type=Path, help='Trusted tool-ledger manifest for captured external evidence')
     parser.add_argument('--mode', choices=['draft', 'final', 'profile-only'], default='draft')
     parser.add_argument('--strict', action='store_true', help='Treat upstream warnings as failures')
     parser.add_argument('--output', type=Path, help='Save the JSON report as well as printing it')
     args = parser.parse_args(argv)
     if not args.dapper_root: parser.error('--dapper-root is required outside a prepared agent workspace')
     if args.mode != 'profile-only' and not args.evidence_package: parser.error('--evidence-package is required for REVEAL linting')
-    if args.output and args.output.resolve() in {args.document.resolve(), args.evidence_package.resolve() if args.evidence_package else None, args.release_lock.resolve()}:
+    if args.output and args.output.resolve() in {args.document.resolve(), args.evidence_package.resolve() if args.evidence_package else None, args.release_lock.resolve(), args.ledger.resolve() if args.ledger else None}:
         parser.error('Report output must not overwrite an input')
     report = lint_scientific_account(args.document, dapper_root=args.dapper_root, release_lock=args.release_lock,
-                                     evidence_package=args.evidence_package, mode=args.mode, strict=args.strict)
+                                     evidence_package=args.evidence_package, ledger_path=args.ledger, mode=args.mode, strict=args.strict)
     text = json.dumps(report, indent=2, ensure_ascii=False) + '\n'
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True); args.output.write_text(text)

@@ -39,7 +39,7 @@ class ExecutionRequest:
     selected_graphs: tuple[str, ...] = ()
     timeout_seconds: int = 900
     max_budget_usd: float = 3.0
-    max_turns: int = 40
+    max_turns: int = 100
     remote_handle: dict | None = None
     validation_feedback: tuple[str, ...] = ()
 

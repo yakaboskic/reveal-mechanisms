@@ -35,7 +35,9 @@ export function activitySections(events: Event[]) {
   for (const event of events) {
     const stage = activityStage(event.stage);
     const previous = sections.at(-1);
-    if (previous?.stage === stage) previous.events.push(event);
+    const ended = previous?.events.at(-1)?.status;
+    const resumed = ended && ["failed", "cancelled", "succeeded", "insufficient_evidence"].includes(ended) && ["queued", "running", "cancel_requested"].includes(event.status);
+    if (previous?.stage === stage && !resumed) previous.events.push(event);
     else sections.push({ id: event.id, stage, events: [event] });
   }
   return sections;

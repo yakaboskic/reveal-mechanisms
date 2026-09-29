@@ -16,7 +16,7 @@ from urllib.request import Request, urlopen
 import certifi
 
 from .evidence_package import (BUILD_VERSION, EvidenceBuildError, INPUT_VERSION, TARGETS, build_package, canonical_json,
-                               decode, finite, pointer, ref, require, sha256, unique)
+                               decode, finite, frozen_semantic_association, pointer, ref, require, sha256, unique)
 
 INTERACTIVE_BASE = 'https://dev.cfdeknowledge.org'
 BIOINDEX_BASE = 'https://cfde-dev.hugeampkpnbi.org'
@@ -231,8 +231,9 @@ def collect_package(*, gap_id, factor_ids, output, dapper, project_root, dismech
                     node['id'] = dapper.compute_id(node, 'Mechanism', dapper.schema)
                     if node['id'] not in {m['id'] for m in context['mechanisms']}: context['mechanisms'].append(node)
                     dismech['mechanisms'][attachment['target_id']] = {'dapper_id': node['id'], 'source_ref': location,
-                        'associated_eaggl_mechanisms': {factor: {'status': 'not_computed', 'semantic_similarity': None,
-                                                               'association_basis': 'user_supplied_anchor'} for factor in factor_ids}}
+                        'associated_eaggl_mechanisms': {factor: frozen_semantic_association(selection_metadata, factor,
+                            attachment['target_id'], hashes[attachment['target_source_file']], raw.get('description') or raw['name'])
+                            for factor in factor_ids}}
                 else:
                     dismech['other_context'].append({'source_id': attachment['target_id'], 'kind': attachment['target_kind'], 'source_ref': location})
             dismech['knowledge_gap']['attachments'].append(item)

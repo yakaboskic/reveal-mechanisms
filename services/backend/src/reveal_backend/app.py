@@ -9,10 +9,10 @@ import os
 import base64
 import hmac
 import re
-from fastapi import FastAPI, Request, Depends
-from fastapi.responses import JSONResponse, StreamingResponse, Response
+from fastapi import FastAPI, Request, Depends, Query
+from fastapi.responses import JSONResponse, StreamingResponse, Response, RedirectResponse
 from jsonschema import Draft202012Validator
-from .auth import Problem, decode_assertion, owned, require_owned, principal, service_authority
+from .auth import Problem, decode_assertion, owned, require_owned, principal, publication_principal, service_authority
 from .catalog import Catalog
 from .repository import Repository, now, uid, digest
 from .runtime_config import ROOT, artifacts_root
@@ -55,6 +55,20 @@ async def publication_cache_policy(request: Request, call_next):
         if 'authorization' not in {part.lower() for part in vary}: vary.append('Authorization')
         response.headers['Vary'] = ', '.join(vary)
     return response
+
+@app.middleware('http')
+async def measure_request(request: Request, call_next):
+    import time
+    from .runtime_metrics import observe
+    started = time.perf_counter()
+    status = 500
+    try:
+        response = await call_next(request)
+        status = response.status_code
+        return response
+    finally:
+        route = getattr(request.scope.get('route'), 'path', 'unmatched')
+        observe('http', request.method+' '+route, (time.perf_counter()-started)*1000, status >= 500)
 
 def validate(value, name, gateway=False):
     schema = GATEWAY if gateway else CONTRACT
@@ -147,10 +161,50 @@ def freeze_draft_bindings(tx,draft_id,owner,composer):
 @app.get('/healthz')
 def health(): return {'status':'ok'}
 
+@app.get('/internal/v1/admin/telemetry')
+def admin_telemetry(request: Request):
+    service_authority(request.headers.get('authorization'))
+    decode_assertion(request.headers.get('x-reveal-admin-assertion', ''), 'admin_telemetry')
+    from .telemetry import snapshot
+    from fastapi.encoders import jsonable_encoder
+    return JSONResponse(jsonable_encoder(snapshot(repo)), headers={'Cache-Control': 'private, no-store'})
+
+def admin_database_authority(request: Request):
+    service_authority(request.headers.get('authorization'))
+    decode_assertion(request.headers.get('x-reveal-admin-assertion', ''), 'admin_telemetry')
+
+@app.get('/internal/v1/admin/jobs/{job_id}', dependencies=[Depends(admin_database_authority)])
+def admin_job(job_id: str, before: str | None = Query(None, max_length=12), limit: int = Query(100, ge=1, le=100)):
+    from .admin_jobs import job_detail
+    return JSONResponse(job_detail(repo, job_id, before=before, limit=limit), headers={'Cache-Control': 'private, no-store'})
+
+@app.get('/internal/v1/admin/tables/{table}', dependencies=[Depends(admin_database_authority)])
+def admin_table(table: str, limit: int = Query(25, ge=1, le=50), cursor: str | None = Query(None, max_length=8192),
+                column: str | None = Query(None, max_length=128), operator: str = 'contains', q: str = Query('', max_length=256)):
+    from .admin_database import inspect_table
+    return JSONResponse(inspect_table(repo, table, limit=limit, cursor=cursor, column=column, operator=operator, q=q),
+                        headers={'Cache-Control': 'private, no-store'})
+
+@app.get('/internal/v1/admin/tables/{table}/row', dependencies=[Depends(admin_database_authority)])
+def admin_row(table: str, key: str = Query(..., max_length=4096)):
+    from .admin_database import inspect_row
+    return JSONResponse(inspect_row(repo, table, key), headers={'Cache-Control': 'private, no-store'})
+
+@app.get('/internal/v1/admin/tables/{table}/cell', dependencies=[Depends(admin_database_authority)])
+def admin_cell(table: str, key: str = Query(..., max_length=4096), column: str = Query(..., max_length=128),
+               offset: int = Query(0, ge=0, le=100_000_000), digest: str | None = Query(None, max_length=64)):
+    from .admin_database import inspect_cell
+    return JSONResponse(inspect_cell(repo, table, key, column, offset, digest), headers={'Cache-Control': 'private, no-store'})
+
 @app.get('/readyz')
 @app.get('/health/ready')
 def ready():
     database = repo.readiness(); catalog.load()
+    from .artifact_store import s3_enabled, store
+    if s3_enabled(): store().check()
+    if jobs.transport()=='redis':
+        from .job_transport import RedisTransport
+        RedisTransport().client.ping()
     return {'status': 'ready', **database, 'sources': {'dismech_import': catalog.dismech_import, 'gaps': len(catalog.gaps),
         'mapping_run': catalog.mapping_run, 'mapped_factors': len(catalog.factors), 'embedding_run': catalog.embedding_run}, 'execution_mode': os.getenv('REVEAL_EXECUTION_MODE','box')}
 
@@ -326,7 +380,8 @@ def build_suggestions(body):
     suggestion_id=uid()
     with repo.transaction() as tx:
         tx.insert_many([('suggestion',suggestion_id,'catalog',{'mode':body.get('mode','semantic'),'embedding_run_id':catalog.embedding_run,'mapping_run_id':catalog.mapping_run,
-            **context_provenance,'hits':{x['record']['source_id']:{'ranking':x['ranking'],'matched_context_ids':x['contexts']} for x in items}})])
+            **context_provenance,'hits':{x['record']['source_id']:{'ranking':x['ranking'],'matched_context_ids':x['contexts'],
+                **({'context_similarities':x['context_similarities']} if 'context_similarities' in x else {})} for x in items}})])
     return {'suggestion_id':suggestion_id,'automatic_anchors':[{'factor':x['record'],'ranking':x['ranking'],'matched_context_ids':x['contexts']} for x in items],
         'automatic_target_count':5,'search':catalog.provenance(query,body.get('mode','semantic'),True),'limitations':['Retrieval similarity is not evidence of biological support.']}
 
@@ -351,6 +406,7 @@ async def create_draft(request:Request):
         user=principal(tx,request.headers.get('authorization'))['user_id']
         def create():
             draft={'id':uid(),'owner_user_id':user,'version':1,'composer':body['composer'],'created_at':now(),'updated_at':now()}
+            if 'name' in body: draft['name']=body['name'].strip()
             freeze_draft_bindings(tx,draft['id'],user,body['composer'])
             tx.put('draft',draft['id'],user,draft); return draft
         return idempotent(tx,user,'draft',request.headers.get('idempotency-key'),body,create)
@@ -369,10 +425,37 @@ async def patch_draft(draft_id:str,request:Request):
         def update():
             row=owned(tx,'draft',draft_id,user); draft=row['data']
             if draft['version']!=body['expected_version']: raise Problem(409,'VERSION_CONFLICT','This draft changed in another tab.',current_version=draft['version'])
-            freeze_draft_bindings(tx,draft_id,user,body['composer'])
-            draft.update(composer=body['composer'],version=draft['version']+1,updated_at=now(),owner_user_id=user)
+            if 'composer' in body:
+                freeze_draft_bindings(tx,draft_id,user,body['composer'])
+                draft['composer']=body['composer']
+            if 'name' in body: draft['name']=body['name'].strip()
+            draft.update(version=draft['version']+1,updated_at=now(),owner_user_id=user)
             tx.put('draft',draft_id,user,draft,expected=row['version']); return draft
         return idempotent(tx,user,'draft:'+draft_id,request.headers.get('idempotency-key'),body,update)
+
+@app.delete('/v1/drafts/{draft_id}')
+async def delete_draft(draft_id:str,request:Request):
+    body=await request.json(); validate(body,'DraftDelete')
+    with repo.transaction() as tx:
+        user=principal(tx,request.headers.get('authorization'))['user_id']
+        def remove():
+            draft=owned(tx,'draft',draft_id,user)['data']
+            if draft['version']!=body['expected_version']: raise Problem(409,'VERSION_CONFLICT','This draft changed in another tab. Refresh before deleting it.',current_version=draft['version'])
+            requests={r['id'] for r in tx.list('request',user) if r['data']['source_draft_id']==draft_id}
+            if any(r['data']['kind']=='analysis' and r['data'].get('research_request_id') in requests and r['data']['status'] not in jobs.TERMINAL for r in tx.list('job',user)):
+                raise Problem(409,'DRAFT_IN_USE','This draft has active research. Wait for it to finish or stop the run before deleting the draft.')
+            tx.remove('draft',draft_id); tx.remove('draft_binding',draft_id)
+            # Editable state may be removed; submitted evidence and results remain immutable.
+            remaining=[r['data'] for r in tx.list('draft',user)]
+            remaining.sort(key=lambda d:(d['updated_at'],d['id']),reverse=True)
+            for row in tx.list('exploration',user):
+                exploration=row['data']
+                if exploration.get('draft_id')!=draft_id: continue
+                gap_id=exploration['source_gap']['id']
+                exploration['draft_id']=next((d['id'] for d in remaining if (d['composer'].get('source_gap') or {}).get('id')==gap_id),None)
+                tx.put('exploration',row['id'],user,exploration,expected=row['version'])
+            return {'id':draft_id,'deleted':True}
+        return idempotent(tx,user,'delete-draft:'+draft_id,request.headers.get('idempotency-key'),body,remove)
 
 @app.get('/v1/research-requests')
 def list_requests(request:Request,limit:int=50,cursor:str|None=None):
@@ -444,6 +527,23 @@ def cancel_job(job_id:str,request:Request):
         user=principal(tx,request.headers.get('authorization'))['user_id']; job=dict(owned(tx,'job',job_id,user)['data'],owner_user_id=user)
         return jobs.cancel(tx,job)
 
+@app.post('/v1/jobs/{job_id}/retry-review',status_code=202)
+async def retry_job_review(job_id:str,request:Request):
+    body=await request.json(); validate(body,'ReviewRetryInput')
+    return await asyncio.to_thread(retry_review_transaction,job_id,body,request.headers.get('authorization'),request.headers.get('idempotency-key'))
+
+def retry_review_transaction(job_id,body,authorization,idempotency_key):
+    from .review_retry import enqueue_review
+    with repo.transaction() as tx:
+        identity=principal(tx,authorization); user=identity['user_id']
+        job=dict(owned(tx,'job',job_id,user)['data'],owner_user_id=user)
+        def retry():
+            active=[r for r in tx.list('job',user) if r['data']['status'] not in jobs.TERMINAL]
+            if len(active)>=int(os.getenv('REVEAL_MAX_ACTIVE_JOBS','2')):
+                raise Problem(429,'JOB_QUOTA_EXCEEDED','Wait for an active job to finish or stop it.')
+            return enqueue_review(tx,job,body['expected_last_event_id'])
+        return idempotent(tx,user,'/v1/jobs/'+job_id+'/retry-review',idempotency_key,body,retry)
+
 def read_events(job_id,authorization,after,limit=100):
     with repo.read_transaction() as tx:
         user=principal(tx,authorization)['user_id']; job=owned(tx,'job',job_id,user)['data']
@@ -465,7 +565,10 @@ async def get_events(job_id:str,request:Request,after:str='0',limit:int=100):
     if 'text/event-stream' not in request.headers.get('accept',''): return initial
     async def stream():
         nonlocal cursor
+        import time
+        deadline=time.monotonic()+min(240,max(1,int(os.getenv('REVEAL_SSE_WINDOW_SECONDS','240'))))
         while True:
+            if time.monotonic()>=deadline: return
             try: data=await asyncio.to_thread(read_events,job_id,authorization,cursor,limit)
             except Problem: return
             for item in data['items']:
@@ -512,10 +615,17 @@ async def update_publication(dapper_id:str,request:Request):
     body=await request.json(); validate(body,'PublicationInput')
     def save():
         with repo.transaction() as tx:
-            user=principal(tx,request.headers.get('authorization'))['user_id']
+            user=publication_principal(tx,request.headers.get('authorization'),body['visibility'])['user_id']
             return idempotent(tx,user,'publication:'+dapper_id,request.headers.get('idempotency-key'),body,
                 lambda:publication.change(tx,user,dapper_id,body['visibility'],body['expected_version']))
     return await asyncio.to_thread(save)
+
+@app.get('/v1/analysis-outcomes')
+def workspace_outcomes(request:Request,limit:int=20,cursor:str|None=None):
+    with repo.read_transaction() as tx:
+        user=principal(tx,request.headers.get('authorization'))['user_id']
+        items=analysis_outcomes.listing(tx,owner=user,scope='workspace')
+    return page(items,user,limit,cursor,'workspace-outcomes')
 
 @app.get('/v1/jobs/{job_id}/outcome')
 def job_outcome(job_id:str,request:Request):
@@ -540,7 +650,7 @@ async def update_outcome_publication(outcome_id:str,request:Request):
     body=await request.json(); validate(body,'PublicationInput')
     def save():
         with repo.transaction() as tx:
-            user=principal(tx,request.headers.get('authorization'))['user_id']
+            user=publication_principal(tx,request.headers.get('authorization'),body['visibility'])['user_id']
             return idempotent(tx,user,'outcome-publication:'+outcome_id,request.headers.get('idempotency-key'),body,
                 lambda:analysis_outcomes.change(tx,outcome_id,user,body['visibility'],body['expected_version']))
     return await asyncio.to_thread(save)
@@ -660,6 +770,15 @@ def artifact_bytes(sha256:str,request:Request):
             except Problem as error:
                 if error.status!=404: raise
                 row=analysis_outcomes.published_artifact(tx,sha256)
+    from .artifact_store import s3_enabled, store, StorageUnavailable
+    if row.get('storage'):
+        if row['storage'].get('sha256')!=sha256: raise Problem(503,'ARTIFACT_CHECKSUM_MISMATCH','Artifact identity differs.')
+        try:
+            url=store().download_url(row['storage'],row['file'].get('filename','source-artifact'),row['file'].get('mime_type','application/octet-stream'))
+        except StorageUnavailable:
+            raise Problem(503,'ARTIFACT_UNAVAILABLE','The retained source bytes are currently unavailable.')
+        return RedirectResponse(url,status_code=307,headers={'Cache-Control':'private, no-store','Referrer-Policy':'no-referrer'})
+    if s3_enabled(): raise Problem(404,'ARTIFACT_UNAVAILABLE','This legacy artifact has not been migrated to object storage.')
     path=Path(row['path']).resolve()
     if not path.is_relative_to(artifacts_root()): raise Problem(404,'NOT_FOUND','The source artifact is unavailable.')
     try: data=path.read_bytes()

@@ -1,0 +1,34 @@
+{
+  "operation_id": "deleteDraft",
+  "case": "delete_saved_draft",
+  "method": "DELETE",
+  "path_template": "/v1/drafts/{draft_id}",
+  "request": {
+    "url": "https://api.reveal.example.org/v1/drafts/22222222-2222-4222-8222-222222222222",
+    "path": {
+      "draft_id": "22222222-2222-4222-8222-222222222222"
+    },
+    "query": {},
+    "headers": {
+      "Idempotency-Key": "66666666-6666-4666-8666-666666666666",
+      "Authorization": "Bearer <trusted-gateway-assertion>",
+      "Content-Type": "application/json",
+      "Accept": "application/json"
+    },
+    "body": {
+      "expected_version": 2
+    }
+  },
+  "responses": {
+    "200": {
+      "content_type": "application/json",
+      "examples": {
+        "deleted": {
+          "id": "22222222-2222-4222-8222-222222222222",
+          "deleted": true
+        }
+      }
+    }
+  },
+  "curl": "curl -X DELETE https://api.reveal.example.org/v1/drafts/22222222-2222-4222-8222-222222222222 -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"expected_version\":2}'"
+}

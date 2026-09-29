@@ -5,6 +5,7 @@ import { elapsedLabel, operationalStep, timedActivitySections, toolElapsed, type
 import { prettyRecordedValue, toolInvocation } from "@/lib/tool-display";
 import { api, ApiError, messageOf, readEvents, terminal, type Schema } from "@/lib/client";
 import { JobOutcome } from "./AnalysisOutcome";
+import { invalidateWorkspace } from "@/lib/workspace-events";
 import "./workspace-activity.css";
 export function Pulse() { return <span className="pulse" aria-hidden="true"><i /><i /><i /></span>; }
 
@@ -53,16 +54,24 @@ export function Activity({ initial, onJob }: { initial: Schema<"Job">; onJob: (j
   const [error, setError] = useState("");
   const [expanded, setExpanded] = useState(false);
   const [retry, setRetry] = useState(0);
+  const [retryingReview, setRetryingReview] = useState(false);
+  const [reviewRetryError, setReviewRetryError] = useState("");
+  const reviewRetryRequest = useRef<{ key: string; eventId: string } | null>(null);
+  const reviewRetryRunning = useRef(false);
   const [following, setFollowing] = useState(true);
   const [now, setNow] = useState(Date.now);
   const historyId = useId();
   const cursor = useRef("0"); const jobRef = useRef(initial); const callback = useRef(onJob); callback.current = onJob;
   const feed = useRef<HTMLDivElement>(null); const content = useRef<HTMLDivElement>(null); const follow = useRef(true);
-  const update = (value: Schema<"Job">) => { jobRef.current = value; setJob(value); callback.current(value); };
+  const update = (value: Schema<"Job">) => {
+    if (value.last_event_id !== jobRef.current.last_event_id && terminal(value.status)) invalidateWorkspace();
+    jobRef.current = value; setJob(value); callback.current(value);
+  };
   useEffect(() => {
     // A saved browser snapshot can mount before the explicit job fetch returns.
     // Accept that fresher snapshot without restarting or discarding the stream.
     if (initial !== jobRef.current && BigInt(initial.last_event_id) >= BigInt(jobRef.current.last_event_id)) {
+      if (initial.last_event_id !== jobRef.current.last_event_id && terminal(initial.status)) invalidateWorkspace();
       jobRef.current = initial; setJob(initial);
     }
   }, [initial]);
@@ -134,6 +143,19 @@ export function Activity({ initial, onJob }: { initial: Schema<"Job">; onJob: (j
     return () => { observer.disconnect(); window.removeEventListener("resize", resize); };
   }, [expanded, complete]);
   const cancel = async () => { try { update(await api.cancel(job.id)); } catch (failure) { setError(messageOf(failure)); } };
+  const retryReview = async () => {
+    if (reviewRetryRunning.current) return;
+    reviewRetryRunning.current = true; setRetryingReview(true); setReviewRetryError("");
+    const request = reviewRetryRequest.current ||= { key: crypto.randomUUID(), eventId: job.last_event_id };
+    try {
+      const queued = await api.retryReview(job.id, request.eventId, request.key);
+      reviewRetryRequest.current = null; update(queued); setRetry(value => value + 1);
+    } catch (failure) {
+      setReviewRetryError(messageOf(failure));
+      if (failure instanceof ApiError && failure.status >= 400 && failure.status < 500) reviewRetryRequest.current = null;
+    } finally { reviewRetryRunning.current = false; setRetryingReview(false); }
+  };
+  const canRetryReview = job.status === "failed" && job.failure?.retryable && ["REVIEW_UNAVAILABLE", "REVIEW_BUDGET_EXCEEDED"].includes(job.failure.code);
   return <section className={`activity reveal-activity ${active ? "is-running" : "is-terminal"} ${complete ? "is-complete" : ""}`} aria-label={paragraph ? "Statement activity" : "Research activity"}>
     {complete && <button className="complete-disclosure" aria-expanded={expanded} aria-controls={historyId} onClick={() => setExpanded(!expanded)}><span className="completion-check" aria-hidden="true">✓</span>{paragraph ? "Research statement ready" : insufficient ? "Exploration saved · Evidence insufficient" : job.result?.kind === "analysis" && job.result.account_ids.length === 1 ? "Scientific account ready" : "Scientific accounts ready"} <span className="completion-caret" aria-hidden="true">›</span></button>}
     {(!complete || expanded) && <>
@@ -165,7 +187,9 @@ export function Activity({ initial, onJob }: { initial: Schema<"Job">; onJob: (j
       </div>
       <div className="activity-follow">{following ? <span>{active ? "Following live activity" : "End of activity"}</span> : <><span>Auto-follow paused</span><button onClick={jumpToLatest}>Jump to latest <span aria-hidden="true">↓</span></button></>}</div>
     </>}
-    {job.failure && <p className="error" role="alert">{job.failure.message}</p>}
+    {job.failure && <p className="error" role="alert">{job.failure.message === "Claude execution failed: error_max_turns" ? "The agent reached its turn limit before completing the result. No scientific result was accepted. Your draft and activity are saved; retry to start a new analysis." : job.failure.message}</p>}
+    {canRetryReview && <div className="review-retry"><button className="text-button" disabled={retryingReview} onClick={() => void retryReview()}>{retryingReview ? "Queueing review…" : "Retry scientific review"}</button><p className="muted">Uses the saved output. The research agent will not run again. Review uses the currently configured review budget.</p></div>}
+    {reviewRetryError && <p className="error" role="alert">{reviewRetryError}</p>}
     {progress.status === "insufficient_evidence" && (paragraph ? <p className="notice">The saved account did not support a faithful research statement. The account and activity are retained.</p> : <JobOutcome key={job.id} jobId={job.id} />)}
     {error && <div className="error" role="alert">{error} <button onClick={() => { setError(""); setRetry(n => n + 1); }}>Reconnect</button></div>}
   </section>;

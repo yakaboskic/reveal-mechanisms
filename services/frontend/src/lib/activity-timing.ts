@@ -24,9 +24,10 @@ export function timedActivitySections(events: Schema<"JobEvent">[], job: Schema<
     ? timestamp(last.occurred_at) : timestamp(job.completed_at);
   return sections.map((section, index) => {
     const current = index === sections.length - 1;
-    const state: StepState = current ? active ? "working" : progress.status === "failed" ? "failed" : progress.status === "succeeded" ? "completed" : "stopped" : "completed";
+    const ended = section.events.at(-1)?.status;
+    const state: StepState = current ? active ? "working" : progress.status === "failed" ? "failed" : progress.status === "succeeded" ? "completed" : "stopped" : ended === "failed" ? "failed" : ended === "cancelled" ? "stopped" : "completed";
     const start = timestamp(section.events[0]?.occurred_at) ?? (current && progress.stage === "queued" ? timestamp(job.created_at) : null);
-    const end = current ? active ? now : finishedAt : timestamp(sections[index + 1].events[0]?.occurred_at);
+    const end = current ? active ? now : finishedAt : ended && isTerminal(ended) ? timestamp(section.events.at(-1)?.occurred_at) : timestamp(sections[index + 1].events[0]?.occurred_at);
     return { ...section, state, current, start, end, durationMs: duration(start, end) };
   });
 }

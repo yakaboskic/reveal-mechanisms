@@ -15,6 +15,18 @@ a useful account; it must not manufacture claims to force an account.
 
 ## Reading and sharing
 
+The workspace's **Explorations** tab lists all of its saved insufficient-evidence
+results, private or published, across knowledge gaps. It uses the owner-only
+paginated `GET /v1/analysis-outcomes` endpoint and includes previously saved
+records. A summary opens the full report; no new agent run or publication is
+needed. These records remain separate from accepted scientific accounts.
+
+While a draft has a queued, running, or stopping analysis, the knowledge-gap row
+opens that job and hides the gap's **Resume draft** links. Completed and failed
+runs leave the draft available for another attempt. The workspace follows all
+activity pages and refreshes active runs, so an older running job is not hidden
+by a newer completed one.
+
 The completed job links to `/analyses/{outcome_id}`. The record includes the exact
 selected gap, mechanism anchors and traits, original researcher attribution,
 captured explanation, evidence limitations, proposed next steps when supplied,

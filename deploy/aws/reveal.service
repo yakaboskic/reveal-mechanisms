@@ -1,0 +1,21 @@
+[Unit]
+Description=REVEAL API, dispatcher, Redis, and two workers
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/reveal
+RuntimeDirectory=reveal
+RuntimeDirectoryMode=0700
+RuntimeDirectoryPreserve=yes
+UMask=0077
+ExecStart=/bin/bash /opt/reveal/deploy/aws/host-stack.sh start
+ExecStop=/bin/bash /opt/reveal/deploy/aws/host-stack.sh stop
+TimeoutStartSec=1200
+TimeoutStopSec=2000
+
+[Install]
+WantedBy=multi-user.target

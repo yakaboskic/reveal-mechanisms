@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { api, ApiError, messageOf, terminal, type Schema } from "@/lib/client";
 import { applySuggestions, emptyComposer, factorSelection, removeAnchor, selectedGap } from "@/lib/composer";
 import { ProviderButtons, useIdentity } from "./Session";
@@ -72,14 +73,19 @@ export function Composer({ initialJobId }: { initialJobId?: string } = {}) {
     try {
       const local = JSON.parse(sessionStorage.getItem(storageKey) || "null") as LocalDraft | null;
       const params = new URLSearchParams(window.location.search);
-      const matchesLink = local && (!params.get("job") || params.get("job") === local.job?.id) &&
+      // A submitted snapshot belongs to its explicit link, not the home page.
+      // Keep refresh recovery for an unsubmitted question and OAuth below.
+      const hasSelectionLink = ["job", "draft", "gap"].some(key => params.get(key));
+      const matchesLink = local && (!local.job || hasSelectionLink) &&
+        (!params.get("job") || params.get("job") === local.job?.id) &&
         (!params.get("draft") || params.get("draft") === local.draft?.id) &&
         (!params.get("gap") || params.get("gap") === local.gap?.object.id);
-      if (local && matchesLink) { setComposer(local.composer); setGap(local.gap); setFactors(local.factors); setDraft(local.draft); draftRef.current = local.draft; loadedOwner.current = local.owner; submitKey.current = local.submitKey || null; if (local.job) setJob(local.job); }
+      if (local && matchesLink) { setComposer(local.composer); setGap(local.gap); setFactors(local.factors); setDraft(local.draft); draftRef.current = local.draft; loadedOwner.current = local.owner; submitKey.current = local.submitKey || null; if (local.job && params.get("job") === local.job.id) setJob(local.job); }
     } catch { sessionStorage.removeItem(storageKey); }
-    // An explicit job link always opens that job, even if another submission
-    // left a pending browser snapshot after a lost response.
-    const pending = new URLSearchParams(window.location.search).has("job") ? null : restoreSubmission();
+    // Explicit workspace links open the requested record. A pending submission
+    // may resume only at the unqualified home/OAuth return URL.
+    const params = new URLSearchParams(window.location.search);
+    const pending = ["job", "draft", "gap"].some(key => params.get(key)) ? null : restoreSubmission();
     if (pending) {
       pendingSubmission.current = pending;
       setComposer(pending.composer); currentRef.current = pending.composer;
@@ -111,19 +117,36 @@ export function Composer({ initialJobId }: { initialJobId?: string } = {}) {
       if (jobId && !me) { setRetrievingJob(false); setJob(null); setJobRestoreError("Sign in with the account that started this job to retrieve its status."); return; }
       if (jobId) { setRetrievingJob(true); setJobRestoreError(""); }
       if ((draftId && me) || gapId) setRestoring(draftId ? "Restoring your saved question" : "Opening knowledge gap");
+      const savedJob = jobId && me ? api.job(jobId) : null;
       const restoreJob = async () => {
-        if (!jobId || !me) return;
-        try { const value = await api.job(jobId); if (canRestore()) setJob(value); }
+        if (!savedJob) return;
+        try { const value = await savedJob; if (canRestore()) setJob(value); }
         catch (failure) { if (canRestore()) setJobRestoreError(messageOf(failure)); }
         finally { if (canRestore()) setRetrievingJob(false); }
       };
       const restoreSelection = async () => {
+      const restoreSubmitted = async () => {
+        const value = await savedJob;
+        if (!value?.research_request_id) return;
+        const frozen = await api.request(value.research_request_id);
+        const source = frozen.composer.source_gap ? await api.gap(frozen.composer.source_gap.id) : null;
+        if (!canRestore()) return;
+        saveEpoch.current++; draftRef.current = null; setDraft(null);
+        setComposer(frozen.composer); setGap(source);
+      };
       try {
         if (draftId && me) {
-          const value = await api.draft(draftId);
+          let value: Schema<"Draft">;
+          try { value = await api.draft(draftId); }
+          catch (failure) {
+            if (savedJob && failure instanceof ApiError && failure.status === 404) { await restoreSubmitted(); return; }
+            throw failure;
+          }
           const source = value.composer.source_gap ? await api.gap(value.composer.source_gap.id) : null;
           if (!canRestore()) return;
           saveEpoch.current++; draftRef.current = value; setDraft(value); setSaveState("Saved"); setComposer(value.composer); setGap(source); if (!jobId) setJob(null);
+        } else if (savedJob) {
+          await restoreSubmitted();
         } else if (gapId) {
           const source = await api.gap(gapId); if (!canRestore()) return;
           if (currentRef.current.source_gap?.id === source.object.id && currentRef.current.source_gap.source_revision === source.source.source_revision) setGap(source);
@@ -381,6 +404,7 @@ export function Composer({ initialJobId }: { initialJobId?: string } = {}) {
   const jobStatusSurface = <LoadingSurface compact={!!job} skeleton={job ? "none" : "rows"} title={jobRestoreError ? "Unable to retrieve job status" : "Retrieving job status"} description="Checking the current stage and reconnecting to recorded activity." error={jobRestoreError} onRetry={() => { setJobRestoreError(""); setRetrievingJob(true); setRestoreAttempt(value => value + 1); }} />;
   if (!job && (retrievingJob || jobRestoreError)) return <main id="main" className="composer-page prototype-composer has-job">{jobStatusSurface}{jobRestoreError && <a className="text-button" href="/">Return to knowledge gaps</a>}</main>;
   return <main id="main" className={`composer-page prototype-composer ${!gap && !job ? "is-gap-browsing" : ""} ${gap ? "has-gap" : ""} ${job ? "has-job" : ""} ${job && terminal(job.status) ? "job-complete" : ""}`}>
+    {draft && !job && <nav className="composer-draft-nav" aria-label="Draft navigation"><Link href="/workspace?tab=gaps">← Your drafts</Link><strong>{draft.name || `Draft ${draft.id.slice(0, 8)}`}</strong><span role="status">{saveState}</span></nav>}
     {(retrievingJob || jobRestoreError) && jobStatusSurface}
     {restoring && !retrievingJob && <LoadingSurface compact={!!gap || !!job} skeleton={gap || job ? "none" : "rows"} title={restoring} description="Retrieving your saved question and mechanism anchors." />}
     {!gap && !job && <p className="invitation">Help us close these <a href="https://dismech.monarchinitiative.org/app/discussions/index.html" target="_blank" rel="noopener noreferrer">knowledge gaps</a></p>}
@@ -397,7 +421,7 @@ export function Composer({ initialJobId }: { initialJobId?: string } = {}) {
               <details><summary>Linked DisMech mechanisms <span className="disclosure-count">{linkedMechanisms.length} linked</span></summary><p className="muted">Mechanisms linked to this curated knowledge gap. Source context is read-only.</p>{linkedMechanisms.map((item, i) => <button className="linked-mechanism" key={i} onClick={() => setInspection({ title: item.label || "DisMech source context", value: item })}><span>{item.label || item.source_reference}<small>{item.target_kind} · {item.resolution.replaceAll("_", " ")}</small></span><span aria-hidden="true">↗</span></button>)}{!linkedMechanisms.length && <p className="muted">No linked mechanisms in this source observation.</p>}</details>
               <details><summary>Additional knowledge graphs</summary><div className="checks">{(["biomarkerkg", "prokn"] as const).map(kg => <label key={kg}><input type="checkbox" checked={composer.selected_kgs.includes(kg)} onChange={e => setComposer(c => ({ ...c, selected_kgs: e.target.checked ? [...c.selected_kgs, kg] : c.selected_kgs.filter(k => k !== kg) }))} />{kg === "prokn" ? "ProKN" : "BiomarkerKG"}</label>)}</div></details>
             </div>
-            <span className="sr-only" role="status">{me ? saveState : "Selections kept in this browser"}</span>
+            {!draft && <span className="sr-only" role="status">{me ? saveState : "Selections kept in this browser"}</span>}
             <p id="research-result-options" className="research-result-options">A completed analysis returns <strong>scientific accounts</strong> supported by the evidence, or a <strong>saved exploration</strong> explaining why an account could not be supported.</p>
             <div className="submit-row"><button className="gap-submit" aria-label="Let’s close this gap" aria-describedby="research-result-options" disabled={!composer.eaggl_anchors.length || suggesting || conflict || !ready} onClick={() => me ? void launch() : dialog.current?.showModal()}><span>Let’s close this gap</span><span className="send" aria-hidden="true"><span>↑</span></span></button></div>
           </>}

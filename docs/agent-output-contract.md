@@ -1,6 +1,6 @@
 # Research-agent output and worker acceptance boundary
 
-**v12 transport specification.** The research skill and linter exist; the queue/Box result collector and trusted assembly pipeline do not yet exist. The input is the frozen [evidence-package schema](../schema/README.md). The scientific output remains DAPPER, using [account construction](scientific-account-construction.md) and [result templates](pigean-claim-model.md).
+**Implemented transport/acceptance contract, updated September 30, 2026.** The research skill, shared linter, Redis/RDS worker pipeline, Box capture and trusted assembly are implemented. See [linting](scientific-account-linting.md) and [local deployment](local-deployment.md). The input is the frozen [evidence-package schema](../schema/README.md). The scientific output remains DAPPER, using [account construction](scientific-account-construction.md) and [result templates](pigean-claim-model.md).
 
 ## Files and responsibility
 

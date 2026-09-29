@@ -11,7 +11,14 @@ export type GapScope = "public" | "workspace";
 export const gapScopeLabel = (scope: GapScope) => scope === "public" ? "Trending knowledge gaps" : "Top questions in your workspace";
 export function GapScopeSelector({ scope, onChange }: { scope: GapScope; onChange: (scope: GapScope) => void }) {
   const { me } = useIdentity();
-  return <div className="gap-scope-selector"><label className="sr-only" htmlFor="gap-list-scope">Knowledge gap list</label><select id="gap-list-scope" value={scope} onChange={event => onChange(event.target.value as GapScope)}><option value="public">Trending knowledge gaps</option><option value="workspace" disabled={!me}>Top questions in your workspace</option></select><p>{scope === "public" ? "Ranked by published scientific accounts across all researchers." : "Ranked by scientific accounts saved in your workspace."}</p></div>;
+  return <div className="gap-scope-selector">
+    <label className="sr-only" htmlFor="gap-list-scope">Knowledge gap list</label>
+    <div className="gap-scope-control">
+      {scope === "public" && <svg className="gap-scope-trending-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false"><path d="m3 17 6-6 4 4 8-8M15 7h6v6" /></svg>}
+      <select id="gap-list-scope" value={scope} onChange={event => onChange(event.target.value as GapScope)}><option value="public">Trending knowledge gaps</option><option value="workspace" disabled={!me}>Top questions in your workspace</option></select>
+    </div>
+    <p>{scope === "public" ? "Ranked by published scientific accounts across all researchers." : "Ranked by scientific accounts saved in your workspace."}</p>
+  </div>;
 }
 
 export function GapBrowser({ scope, onSelect, onRanked }: { scope: GapScope; onSelect: (gap: Schema<"GapRecord">) => void; onRanked: (gaps: Schema<"GapRecord">[]) => void }) {

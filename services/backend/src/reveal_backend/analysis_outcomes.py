@@ -10,6 +10,7 @@ from .auth import Problem, owned
 from .repository import digest, now, uid
 from .evidence_package import canonical_json, decode, require, sha256
 from .runtime_config import setting
+from .artifact_store import retained_file
 
 SCOPE_NOTE = ('This is a report of the selected investigation and captured evidence, not a ScientificAccount or a globally established absence of a relationship. Unavailable or unqueried sources do not establish a negative finding.')
 READ_TOOLS = {'query_graph', 'describe_kg', 'get_schema', 'list_types', 'list_predicates', 'search_papers', 'read_paper'}
@@ -107,7 +108,7 @@ def prepare(job,frozen,binding,package_path,result,*,attempt,mode,expected_model
             pointer(decode(data),ref['pointer']); checksum=artifact['sha256']
         url=None
         if ref['source']=='tool_response':
-            records[checksum]={'sha256':checksum,'path':str(target),'job_id':job['id'],
+            records[checksum]={'sha256':checksum,**retained_file(target,checksum),'job_id':job['id'],
                 'file':{'filename':'tool-response-'+str(call['sequence'])+'.json','mime_type':'application/json'}}
             url=setting('NEXTAUTH_URL','http://localhost:3000').rstrip('/')+'/api/backend/v1/artifacts/'+checksum
         references.append({**ref,'ledger_sequence':ref.get('ledger_sequence'),'artifact_sha256':checksum,'download_url':url})
@@ -185,15 +186,16 @@ def get(tx,identity,owner=None):
     return record
 
 
-def listing(tx,gap_id,owner=None,scope='public'):
+def listing(tx,gap_id=None,owner=None,scope='public'):
     if scope=='public':
         records=[]
         for row in tx.list('outcome_publication'):
             metadata=row['data']; item=metadata.get('summary')
-            if metadata.get('visibility')=='public' and item and item['knowledge_gap']['id']==gap_id:
+            if metadata.get('visibility')=='public' and item and (gap_id is None or item['knowledge_gap']['id']==gap_id):
                 records.append({**deepcopy(item),'publication':publication_state(row)})
     else:
-        rows=[row for row in tx.list('outcome_summary',owner) if row['data']['knowledge_gap']['id']==gap_id]
+        if owner is None: raise Problem(401,'SESSION_EXPIRED','A workspace session is required.')
+        rows=[row for row in tx.list('outcome_summary',owner) if gap_id is None or row['data']['knowledge_gap']['id']==gap_id]
         publications=tx.get_many('outcome_publication',[row['id'] for row in rows])
         records=[{**deepcopy(row['data']),'publication':publication_state(publications.get(row['id']),True)} for row in rows]
     return sorted(records,key=lambda row:(row['created_at'],row['id']),reverse=True)

@@ -247,14 +247,16 @@ class Catalog:
         if precomputed:
             inputs = self.stored_context_inputs(contexts)
             stored_vectors = np.stack([self.dismech_embeddings['vectors'][row['source_id']] for row in inputs])
-        if mode=='semantic':
-            vectors = stored_vectors
+        vectors = stored_vectors
+        scores = None
+        if mode in ('semantic', 'hybrid'):
             if vectors is None:
                 try:
                     vectors=self.runtime_query_vectors([text for _,text in contexts])
                 except ValueError as error:
                     raise Problem(503,'EMBEDDING_UNAVAILABLE','The embedding service returned incompatible vectors.') from error
             scores=self.index.matrix @ vectors.T
+        if mode=='semantic':
             candidates={}
             for index,factor in enumerate(self.index.factors):
                 record=self.factor_legacy.get(factor['factor_id'])
@@ -266,9 +268,24 @@ class Catalog:
         else:
             candidates={}
             for position,(context_id,text) in enumerate(contexts):
-                for item in self.search_factors(text,mode,5,exclude,query_vector=None if stored_vectors is None else stored_vectors[position]):
+                for item in self.search_factors(text,mode,5,exclude,query_vector=None if vectors is None else vectors[position]):
                     identity=item['record']['source_id']; old=candidates.get(identity)
                     if old is None or item['ranking']['value']>old['ranking']['value']: candidates[identity]={**item,'contexts':[context_id]}
         items=sorted(candidates.values(),key=lambda x:(-x['ranking']['value'],x['record']['source_id']))[:remaining]
         for rank,item in enumerate(items,1): item['ranking']['rank']=rank
+        if scores is not None:
+            # Retain actual cosines independently of maximum-context selection
+            # or hybrid rank fusion. Multiple atlas aliases use the same native
+            # deduplication rule as semantic retrieval, separately per context.
+            selected = {item['record']['source_id']: item for item in items}
+            for item in items: item['context_similarities'] = {}
+            for index, factor in enumerate(self.index.factors):
+                record = self.factor_legacy.get(factor['factor_id'])
+                item = selected.get(record['source_id']) if record else None
+                if item is None: continue
+                for position, (context_id, _) in enumerate(contexts):
+                    score = float(np.clip(scores[index, position], -1, 1))
+                    previous = item['context_similarities'].get(context_id)
+                    if previous is None or score > previous:
+                        item['context_similarities'][context_id] = score
         return items

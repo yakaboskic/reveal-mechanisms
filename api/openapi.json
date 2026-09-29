@@ -9,8 +9,12 @@
   },
   "servers": [
     {
-      "url": "http://localhost:8000",
-      "description": "Local Docker Compose backend"
+      "url": "http://127.0.0.1:18000",
+      "description": "Local Docker deployment backend (private routes require a gateway assertion)"
+    },
+    {
+      "url": "http://localhost:3000/api/backend",
+      "description": "Local Next.js gateway (browser session required for private routes)"
     },
     {
       "url": "https://api.reveal.example.org",
@@ -851,7 +855,7 @@
           "Drafts"
         ],
         "summary": "Autosave a draft",
-        "description": "Replace composer using expected_version. The server increments the version only on commit. Stale revisions return 409 with current_version. Server derives ownership; unknown owner/provenance fields are rejected.",
+        "description": "Rename or replace composer using expected_version. Omitted fields are preserved. The server increments the version only on commit. Stale revisions return 409 with current_version. Server derives ownership; unknown owner/provenance fields are rejected.",
         "parameters": [
           {
             "name": "draft_id",
@@ -1126,6 +1130,235 @@
             "lang": "Shell",
             "label": "save_revision_two",
             "source": "curl -X PATCH https://api.reveal.example.org/v1/drafts/22222222-2222-4222-8222-222222222222 -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"composer\":{\"dismissed_source_ids\":[],\"eaggl_anchors\":[{\"origin\":\"manual\",\"reference\":{\"dapper_id\":\"dapper:Mechanism.MyhahXB55tDUS667sJzeJZ40BeeQBWOR\",\"source\":\"eaggl\",\"source_id\":\"factor:portal:CADinT2D:cfde-inc-v2:Factor1\",\"source_revision\":\"5797893b517def4fdc82f285c9bf835195f9f88eddfb6409cbf3b1e31dd63d83\"},\"suggestion_id\":null}],\"mechanism_subquery\":\"CADinT2D\",\"model\":\"cfde-inc-v2\",\"selected_kgs\":[\"biomarkerkg\",\"prokn\"],\"source_gap\":{\"id\":\"dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk\",\"source_id\":\"dismech:disorders/Coronary_Artery_Disease#discussion:cad_pgsxc_reverse_causation\",\"source_revision\":\"8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd\"}},\"expected_version\":1}'"
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "deleteDraft",
+        "tags": [
+          "Drafts"
+        ],
+        "summary": "Delete a saved draft",
+        "description": "Delete an owned draft using expected_version. Active analysis jobs prevent deletion (409 DRAFT_IN_USE). Frozen research requests, jobs, accounts and explorations are preserved. Retry a lost acknowledgment with the same Idempotency-Key.",
+        "parameters": [
+          {
+            "name": "draft_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "22222222-2222-4222-8222-222222222222",
+            "description": ""
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 8,
+              "maxLength": 128
+            },
+            "example": "66666666-6666-4666-8666-666666666666",
+            "description": "Unique per caller and operation for at least 7 days. Same key and same canonical body replay the original accepted response; changed body returns 409 IDEMPOTENCY_CONFLICT. Compare idempotency before draft-version checks on retries."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftDeletion"
+                },
+                "examples": {
+                  "deleted": {
+                    "summary": "Deleted",
+                    "value": {
+                      "id": "22222222-2222-4222-8222-222222222222",
+                      "deleted": true
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "description": "Correlation ID for this HTTP request.",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication Required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "authentication_required": {
+                    "summary": "Authentication required",
+                    "value": {
+                      "type": "urn:reveal:problem:authentication-required",
+                      "title": "Authentication Required",
+                      "status": 401,
+                      "code": "AUTHENTICATION_REQUIRED",
+                      "detail": "A valid trusted-gateway API assertion is required.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "not_found": {
+                    "summary": "Not found",
+                    "value": {
+                      "type": "urn:reveal:problem:not-found",
+                      "title": "Not Found",
+                      "status": 404,
+                      "code": "NOT_FOUND",
+                      "detail": "No accessible record exists for the supplied identifier or exact revision.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Version Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "version_conflict": {
+                    "summary": "Version conflict",
+                    "value": {
+                      "type": "urn:reveal:problem:version-conflict",
+                      "title": "Version Conflict",
+                      "status": 409,
+                      "code": "VERSION_CONFLICT",
+                      "detail": "The saved draft has changed. Reload and reconcile before retrying.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false,
+                      "current_version": 3
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid Input",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "invalid_input": {
+                    "summary": "Invalid input",
+                    "value": {
+                      "type": "urn:reveal:problem:invalid-input",
+                      "title": "Invalid Input",
+                      "status": 422,
+                      "code": "INVALID_INPUT",
+                      "detail": "The request does not satisfy the operation contract.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false,
+                      "field_errors": [
+                        {
+                          "pointer": "/inquiry",
+                          "message": "A valid DAPPER inquiry is required."
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate Limited",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "rate_limited": {
+                    "summary": "Rate limited",
+                    "value": {
+                      "type": "urn:reveal:problem:rate-limited",
+                      "title": "Rate Limited",
+                      "status": 429,
+                      "code": "RATE_LIMITED",
+                      "detail": "Retry after the interval in Retry-After.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": true
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "example": 30
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "GatewayAssertion": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DraftDelete"
+              },
+              "examples": {
+                "delete_saved_draft": {
+                  "summary": "Delete saved draft",
+                  "value": {
+                    "expected_version": 2
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "label": "delete_saved_draft",
+            "source": "curl -X DELETE https://api.reveal.example.org/v1/drafts/22222222-2222-4222-8222-222222222222 -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"expected_version\":2}'"
           }
         ]
       }
@@ -11879,6 +12112,270 @@
         ]
       }
     },
+    "/v1/jobs/{job_id}/retry-review": {
+      "post": {
+        "operationId": "retryJobReview",
+        "tags": [
+          "Jobs"
+        ],
+        "summary": "Retry independent review on saved output",
+        "description": "Owner-only, idempotent retry for REVIEW_UNAVAILABLE or REVIEW_BUDGET_EXCEEDED. Require the latest job event ID and a checksum-verified completed authoring capture. Requeue the same job with a new validation attempt; preserve original evidence, authoring model, artifacts and activity. Never launch the research agent. Scientific rejection, incomplete capture and active or successful jobs cannot use this route. Current configured review budget applies to each explicit retry. Normal account acceptance and paragraph generation follow a passing review.",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "44444444-4444-4444-8444-444444444444",
+            "description": ""
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 8,
+              "maxLength": 128
+            },
+            "example": "66666666-6666-4666-8666-666666666666",
+            "description": "Unique per caller and operation for at least 7 days. Same key and same canonical body replay the original accepted response; changed body returns 409 IDEMPOTENCY_CONFLICT. Compare idempotency before draft-version checks on retries."
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Accepted job; poll Location or consume job events.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                },
+                "examples": {
+                  "queued": {
+                    "summary": "Queued",
+                    "value": {
+                      "id": "44444444-4444-4444-8444-444444444444",
+                      "kind": "analysis",
+                      "owner_user_id": "11111111-1111-4111-8111-111111111111",
+                      "status": "queued",
+                      "stage": "validating",
+                      "research_request_id": "33333333-3333-4333-8333-333333333333",
+                      "input_account_id": null,
+                      "created_at": "2026-09-24T16:01:00Z",
+                      "updated_at": "2026-09-24T16:01:00Z",
+                      "completed_at": null,
+                      "result": null,
+                      "failure": null,
+                      "warnings": [],
+                      "last_event_id": "2",
+                      "links": {
+                        "self": "/v1/jobs/44444444-4444-4444-8444-444444444444",
+                        "events": "/v1/jobs/44444444-4444-4444-8444-444444444444/events",
+                        "cancel": "/v1/jobs/44444444-4444-4444-8444-444444444444/cancel"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "description": "Correlation ID for this HTTP request.",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              },
+              "Location": {
+                "description": "Relative URL of the created resource.",
+                "schema": {
+                  "type": "string",
+                  "format": "uri-reference"
+                },
+                "example": "/v1/jobs/44444444-4444-4444-8444-444444444444"
+              },
+              "Retry-After": {
+                "description": "Suggested polling delay in seconds.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "example": 2
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication Required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "authentication_required": {
+                    "summary": "Authentication required",
+                    "value": {
+                      "type": "urn:reveal:problem:authentication-required",
+                      "title": "Authentication Required",
+                      "status": 401,
+                      "code": "AUTHENTICATION_REQUIRED",
+                      "detail": "A valid trusted-gateway API assertion is required.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "not_found": {
+                    "summary": "Not found",
+                    "value": {
+                      "type": "urn:reveal:problem:not-found",
+                      "title": "Not Found",
+                      "status": 404,
+                      "code": "NOT_FOUND",
+                      "detail": "No accessible record exists for the supplied identifier or exact revision.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Version Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "version_conflict": {
+                    "summary": "Version conflict",
+                    "value": {
+                      "type": "urn:reveal:problem:version-conflict",
+                      "title": "Version Conflict",
+                      "status": 409,
+                      "code": "VERSION_CONFLICT",
+                      "detail": "The saved draft has changed. Reload and reconcile before retrying.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false,
+                      "current_version": 3
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid Input",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "invalid_input": {
+                    "summary": "Invalid input",
+                    "value": {
+                      "type": "urn:reveal:problem:invalid-input",
+                      "title": "Invalid Input",
+                      "status": 422,
+                      "code": "INVALID_INPUT",
+                      "detail": "The request does not satisfy the operation contract.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false,
+                      "field_errors": [
+                        {
+                          "pointer": "/inquiry",
+                          "message": "A valid DAPPER inquiry is required."
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate Limited",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "rate_limited": {
+                    "summary": "Rate limited",
+                    "value": {
+                      "type": "urn:reveal:problem:rate-limited",
+                      "title": "Rate Limited",
+                      "status": 429,
+                      "code": "RATE_LIMITED",
+                      "detail": "Retry after the interval in Retry-After.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": true
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "example": 30
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "GatewayAssertion": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewRetryInput"
+              },
+              "examples": {
+                "saved_output": {
+                  "summary": "Saved output",
+                  "value": {
+                    "expected_last_event_id": "2"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "label": "saved_output",
+            "source": "curl -X POST https://api.reveal.example.org/v1/jobs/44444444-4444-4444-8444-444444444444/retry-review -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"expected_last_event_id\":\"2\"}'"
+          }
+        ]
+      }
+    },
     "/v1/accounts": {
       "get": {
         "operationId": "listAccounts",
@@ -12599,7 +13096,7 @@
           "Scientific content"
         ],
         "summary": "Publish, update or unpublish an account",
-        "description": "Explicit owner-only choice, also available to anonymous workspace owners. Publishing freezes the complete accepted account provenance and current accepted paragraph, exact citation revisions and only reachable source artifacts. Future paragraphs remain private until an explicit update. Unpublishing revokes this snapshot immediately; identical content independently published elsewhere stays public. No job logs, draft, queue, request or unrelated owner artifacts are published. Immutable scientific IDs, citations and original authorship do not change.",
+        "description": "Explicit owner-only choice. Publishing or updating a public snapshot requires a registered signed-in session; anonymous owners receive 403 SIGN_IN_REQUIRED, including on idempotent retries. Owners may unpublish an existing snapshot with either session kind. Publishing freezes the complete accepted account provenance and current accepted paragraph, exact citation revisions and only reachable source artifacts. Future paragraphs remain private until an explicit update. Unpublishing revokes this snapshot immediately; identical content independently published elsewhere stays public. No job logs, draft, queue, request or unrelated owner artifacts are published. Immutable scientific IDs, citations and original authorship do not change.",
         "parameters": [
           {
             "name": "dapper_id",
@@ -12710,6 +13207,30 @@
                       "status": 401,
                       "code": "AUTHENTICATION_REQUIRED",
                       "detail": "A valid trusted-gateway API assertion is required.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sign In Required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "sign_in_required": {
+                    "summary": "Sign in required",
+                    "value": {
+                      "type": "urn:reveal:problem:sign-in-required",
+                      "title": "Sign In Required",
+                      "status": 403,
+                      "code": "SIGN_IN_REQUIRED",
+                      "detail": "Sign in to publish a scientific account or exploration.",
                       "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
                       "retryable": false
                     }
@@ -12872,6 +13393,224 @@
             "lang": "Shell",
             "label": "unpublish",
             "source": "curl -X POST https://api.reveal.example.org/v1/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/publication -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"expected_version\":1,\"visibility\":\"private\"}'"
+          }
+        ]
+      }
+    },
+    "/v1/analysis-outcomes": {
+      "get": {
+        "operationId": "listAnalysisOutcomes",
+        "tags": [
+          "Personal workspace"
+        ],
+        "summary": "List saved workspace explorations",
+        "description": "Session-required, newest-first summaries of all completed insufficient-evidence explorations owned by this workspace, private or published, across every knowledge gap. Includes previously saved records without a new run or publication. Operational failures are not scientific exploration outcomes. Other owners are excluded, even for published records. Detail and provenance are loaded only when opened.",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            },
+            "example": 20,
+            "description": ""
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "example": "opaque-next-page",
+            "description": "Omit for the first page. A returned next_cursor is opaque; the example is illustrative and cannot be used against a live service."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalysisOutcomeList"
+                },
+                "examples": {
+                  "saved": {
+                    "summary": "Saved",
+                    "value": {
+                      "items": [
+                        {
+                          "id": "66666666-6666-4666-8666-666666666666",
+                          "outcome": "insufficient_evidence",
+                          "summary": "The captured investigation did not support an accepted scientific account.",
+                          "knowledge_gap": {
+                            "text": "Are the CAD PGS×context interactions driven by adverse exposures causally amplifying genetic risk, or are some \"contexts\" actually downstream readouts of incipient disease (reverse causation)?",
+                            "gap_description": "Population PGS×context analyses (Nagpal & Gibson 2026, PMID:42443528) are largely unable to establish the causality of specific contexts. dismech separates true environmental exposures (smoking, high-fat diet, sedentary lifestyle) from biochemical readouts (LDL, HDL, C-reactive protein); the biochemical \"contexts\" are prime reverse-causation suspects, since they may be partly downstream of the atherosclerotic process rather than upstream drivers, and behavioural contexts such as reduced physical activity may be rapid responses to incipient angina rather than causes. Distinguishing genuine amplification of genetic effects from reverse causation determines whether the modelled interventions (e.g. lowering cholesterol in high-PGS smokers) would actually reduce risk.",
+                            "gap_kind": "KNOWLEDGE_GAP",
+                            "scope": "Coronary Artery Disease",
+                            "about_entities": [
+                              "http://purl.obolibrary.org/obo/MONDO_0021661"
+                            ],
+                            "id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk"
+                          },
+                          "anchors": [
+                            {
+                              "source_id": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                              "mechanism_id": "dapper:Mechanism.MyhahXB55tDUS667sJzeJZ40BeeQBWOR",
+                              "name": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                              "trait": null,
+                              "origin": "manual"
+                            }
+                          ],
+                          "created_at": "2026-09-24T16:00:00Z",
+                          "attribution": {
+                            "user_id": "11111111-1111-4111-8111-111111111111",
+                            "person_id": "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he",
+                            "display_name": "Example Researcher",
+                            "orcid": null,
+                            "orcid_authenticated": false,
+                            "observed_at": "2026-09-24T16:00:00Z",
+                            "principal_kind": "registered"
+                          },
+                          "publication": {
+                            "visibility": "private",
+                            "version": 0,
+                            "published_at": null,
+                            "updated_at": null,
+                            "can_manage": true,
+                            "has_unpublished_changes": false
+                          }
+                        }
+                      ],
+                      "page": {
+                        "next_cursor": null,
+                        "has_more": false,
+                        "snapshot_id": "illustrative-contract-snapshot"
+                      }
+                    }
+                  },
+                  "empty": {
+                    "summary": "Empty",
+                    "value": {
+                      "items": [],
+                      "page": {
+                        "next_cursor": null,
+                        "has_more": false,
+                        "snapshot_id": "illustrative-contract-snapshot"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "description": "Correlation ID for this HTTP request.",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication Required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "authentication_required": {
+                    "summary": "Authentication required",
+                    "value": {
+                      "type": "urn:reveal:problem:authentication-required",
+                      "title": "Authentication Required",
+                      "status": 401,
+                      "code": "AUTHENTICATION_REQUIRED",
+                      "detail": "A valid trusted-gateway API assertion is required.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Version Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "version_conflict": {
+                    "summary": "Version conflict",
+                    "value": {
+                      "type": "urn:reveal:problem:version-conflict",
+                      "title": "Version Conflict",
+                      "status": 409,
+                      "code": "VERSION_CONFLICT",
+                      "detail": "The saved draft has changed. Reload and reconcile before retrying.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false,
+                      "current_version": 3
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate Limited",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "rate_limited": {
+                    "summary": "Rate limited",
+                    "value": {
+                      "type": "urn:reveal:problem:rate-limited",
+                      "title": "Rate Limited",
+                      "status": 429,
+                      "code": "RATE_LIMITED",
+                      "detail": "Retry after the interval in Retry-After.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": true
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "example": 30
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "GatewayAssertion": []
+          }
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "label": "request",
+            "source": "curl -X GET 'https://api.reveal.example.org/v1/analysis-outcomes?limit=20' -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Accept: application/json'"
           }
         ]
       }
@@ -13870,7 +14609,7 @@
           "Scientific content"
         ],
         "summary": "Publish or unpublish a scoped exploration",
-        "description": "Explicit owner-only publication, including anonymous workspace owners. Freeze this exploration and its captured source artifacts, never job logs or unrelated workspace artifacts. Unpublish revokes this snapshot; independently published evidence can remain available. Immutable records and original attribution do not change.",
+        "description": "Explicit owner-only publication. Publishing or updating a public snapshot requires a registered signed-in session; anonymous owners receive 403 SIGN_IN_REQUIRED, including on idempotent retries. Owners may unpublish with either session kind. Freeze this exploration and its captured source artifacts, never job logs or unrelated workspace artifacts. Unpublish revokes this snapshot; independently published evidence can remain available. Immutable records and original attribution do not change.",
         "parameters": [
           {
             "name": "outcome_id",
@@ -13980,6 +14719,30 @@
                       "status": 401,
                       "code": "AUTHENTICATION_REQUIRED",
                       "detail": "A valid trusted-gateway API assertion is required.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sign In Required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "sign_in_required": {
+                    "summary": "Sign in required",
+                    "value": {
+                      "type": "urn:reveal:problem:sign-in-required",
+                      "title": "Sign In Required",
+                      "status": 403,
+                      "code": "SIGN_IN_REQUIRED",
+                      "detail": "Sign in to publish a scientific account or exploration.",
                       "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
                       "retryable": false
                     }
@@ -18446,6 +19209,18 @@
                       "retryable": true
                     }
                   }
+                }
+              }
+            }
+          },
+          "307": {
+            "description": "After authorization, redirect to an exact, verified S3 object version. The private URL expires after 60 seconds; previously issued URLs can remain valid until expiry after unpublication.",
+            "headers": {
+              "Location": {
+                "description": "Short-lived artifact download URL. Never cache or persist as an identifier.",
+                "schema": {
+                  "type": "string",
+                  "format": "uri"
                 }
               }
             }
@@ -27042,9 +27817,17 @@
         "properties": {
           "composer": {
             "$ref": "#/components/schemas/Composer"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "pattern": "\\S"
           }
         },
-        "required": [],
+        "required": [
+          "composer"
+        ],
         "additionalProperties": false
       },
       "DraftPatch": {
@@ -27056,14 +27839,20 @@
           },
           "composer": {
             "$ref": "#/components/schemas/Composer"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "pattern": "\\S"
           }
         },
         "required": [
-          "expected_version",
-          "composer"
+          "expected_version"
         ],
         "additionalProperties": false,
-        "description": "Replace the complete composer atomically using compare-and-swap; not JSON Merge Patch. Retry a lost acknowledgment with the same Idempotency-Key."
+        "minProperties": 2,
+        "description": "Rename or replace the complete composer atomically using compare-and-swap. Omitted fields are preserved. Retry a lost acknowledgment with the same Idempotency-Key."
       },
       "Draft": {
         "type": "object",
@@ -27090,6 +27879,12 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "pattern": "\\S"
           }
         },
         "required": [
@@ -27099,6 +27894,37 @@
           "composer",
           "created_at",
           "updated_at"
+        ],
+        "additionalProperties": false
+      },
+      "DraftDelete": {
+        "type": "object",
+        "properties": {
+          "expected_version": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "expected_version"
+        ],
+        "additionalProperties": false
+      },
+      "DraftDeletion": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "deleted": {
+            "type": "boolean",
+            "const": true
+          }
+        },
+        "required": [
+          "id",
+          "deleted"
         ],
         "additionalProperties": false
       },
@@ -28065,6 +28891,9 @@
           },
           "retryable": {
             "type": "boolean"
+          },
+          "budget": {
+            "$ref": "#/components/schemas/JobBudgetFailure"
           }
         },
         "required": [
@@ -39868,6 +40697,64 @@
         ],
         "additionalProperties": false,
         "description": "Download content or clipboard HTML/plain text derived from the same immutable Paragraph and pinned citation registry. rich-text HTML is sanitized; canonical resolver links enforce authorization. latex includes cite commands and requires references.bib."
+      },
+      "JobBudgetFailure": {
+        "type": "object",
+        "properties": {
+          "scope": {
+            "type": "string",
+            "enum": [
+              "authoring",
+              "review"
+            ]
+          },
+          "limit_usd": {
+            "type": "number",
+            "minimum": 0
+          },
+          "spent_usd": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "next_call_max_usd": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "scope",
+          "limit_usd",
+          "spent_usd",
+          "next_call_max_usd"
+        ],
+        "additionalProperties": false
+      },
+      "ReviewRetryInput": {
+        "type": "object",
+        "properties": {
+          "expected_last_event_id": {
+            "type": "string",
+            "pattern": "^[0-9]+$"
+          }
+        },
+        "required": [
+          "expected_last_event_id"
+        ],
+        "additionalProperties": false
       }
     }
   },

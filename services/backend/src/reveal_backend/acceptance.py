@@ -5,13 +5,13 @@ import os
 from pathlib import Path
 import subprocess
 import sys
-import re
 from functools import lru_cache
 from .runtime_config import ROOT, setting
 from .repository import digest, now
-from .evidence_package import canonical_json, decode, require, sha256, pointer
+from .evidence_package import canonical_json, decode, require, sha256
 from .dapper_release import verify_release
 from .scientific_account_lint import validate_scientific_account
+from .source_validation import ledger_sources, validate_new_files, validate_observations
 
 LOCK=ROOT/'services/backend/agent-runtime/dapper-release.json'
 
@@ -55,26 +55,48 @@ def replace_authored_attribution(document,trusted,person,activity):
     document.setdefault('activities',[]).append(activity)
     return document
 
-def ledger_sources(ledger_path):
-    """Read exact completed tool response captures from the trusted ledger."""
-    if ledger_path is None: return {}
-    ledger_path=Path(ledger_path).resolve(); ledger=decode(ledger_path.read_bytes()); sources={}
-    for call in ledger['calls']:
-        if call.get('tool') not in ('query_graph','read_paper') or call.get('status') not in ('completed','empty') or not call.get('response'): continue
-        if call.get('tool')=='read_paper' and call.get('status')!='completed': continue
-        source=call['response']; path=(ledger_path.parent/source['path']).resolve()
-        require(path.is_relative_to(ledger_path.parent),'Tool source artifact path escape')
-        data=path.read_bytes()
-        require(sha256(data)==source['sha256'] and len(data)==source['size_bytes'],'Tool source checksum or size changed')
-        sources[source['sha256']]={'path':path,'bytes':data,'size_bytes':len(data),'tool':call['tool'],'selected_graph':call.get('selected_graph')}
-    return sources
 
-def validate_new_files(document,trusted,sources):
-    for file in document.get('files',[]):
-        if file['id'] in trusted: continue
-        captured=sources.get(file.get('sha256'))
-        require(captured is not None and file.get('size_in_bytes')==captured['size_bytes'],
-            'New evidence File is not bound to an exact trusted tool response checksum and size')
+@lru_cache(maxsize=4)
+def _reference_fields(root, lock_sha256):
+    """Use the same pinned schema as lint, isolated from imported catalog schemas."""
+    program='''import json,sys,yaml
+from pathlib import Path
+schema=Path(sys.argv[1])/'schema'
+sys.path[:0]=[str(schema/'lint'),str(schema/'identity'),str(schema)]
+from dapper_identity import load_schema
+from lint_provenance import Vocabulary
+sv=load_schema(schema/'dapper.yaml')
+vocab=Vocabulary.build(sv,yaml.safe_load((schema/'lint/profiles.yaml').read_text()))
+fields={group:sorted(vocab.relationship_slots.get(cls,{})) for group,cls in vocab.node_groups.items()}
+fields.update({group:['subject','object'] for group in vocab.edge_groups})
+print(json.dumps(fields))
+'''
+    result=subprocess.run([sys.executable,'-I','-B','-c',program,root],capture_output=True,text=True,timeout=120)
+    require(result.returncode==0,'Trusted reference schema could not be loaded: '+result.stderr[-1500:])
+    return decode(result.stdout.encode())
+
+
+def hydrate_inputs(document,trusted):
+    """Hydrate exact schema-declared references, never IDs mentioned in prose."""
+    root=release_root(); release=verify_release(root,LOCK)
+    fields=_reference_fields(str(root.resolve()),release['lock_sha256'])
+    for _ in range(len(trusted)+1):
+        present={node['id'] for rows in document.values() if isinstance(rows,list)
+                 for node in rows if isinstance(node,dict) and 'id' in node}
+        references=set()
+        for group,names in fields.items():
+            rows=document.get(group,[])
+            for node in rows if isinstance(rows,list) else []:
+                if not isinstance(node,dict): continue
+                for name in names:
+                    value=node.get(name,[])
+                    references.update(item for item in (value if isinstance(value,list) else [value]) if isinstance(item,str))
+        missing=[identity for identity in trusted if identity not in present and identity in references]
+        if not missing: break
+        for identity in missing:
+            group,node=trusted[identity]; document.setdefault(group,[]).append(deepcopy(node))
+    return document
+
 
 def assemble_account(raw_path,package_path,output_path,attribution,job,attempt,execution,ledger_path=None):
     raw=Path(raw_path).read_bytes(); require(len(raw)<=4_000_000,'Account output exceeds byte limit')
@@ -86,13 +108,7 @@ def assemble_account(raw_path,package_path,output_path,attribution,job,attempt,e
         if isinstance(rows,list):
             for node in rows:
                 if isinstance(node,dict) and node.get('id') in trusted: require(node==trusted[node['id']][1],'Agent altered a trusted input payload')
-    # Hydrate only referenced inputs and their transitive dependencies.
-    for _ in range(len(trusted)+1):
-        present={n['id'] for rows in doc.values() if isinstance(rows,list) for n in rows if isinstance(n,dict) and 'id' in n}
-        serialized=json.dumps(doc); missing=[i for i in trusted if i not in present and i in serialized]
-        if not missing: break
-        for identity in missing:
-            group,node=trusted[identity]; doc.setdefault(group,[]).append(deepcopy(node))
+    doc=hydrate_inputs(doc,trusted)
     # Operational attribution comes from the frozen submitting principal and
     # actual worker, never an agent-authored Person or runtime declaration.
     actor_id='urn:reveal:actor:'+digest(['scientific-actor',attribution['user_id']])
@@ -104,70 +120,16 @@ def assemble_account(raw_path,package_path,output_path,attribution,job,attempt,e
         'command':'reveal-worker '+execution,'software_name':'REVEAL Mechanisms worker','software_version':'0.2.0',
         'generated_at_time':now()}
     doc=replace_authored_attribution(doc,trusted,person,activity)
-    captured=ledger_sources(ledger_path)
-    validate_new_files(doc,trusted,captured)
     for group in ('claims','scientific_accounts'):
         for node in doc.get(group,[]):
             if node['id'] not in trusted: node['was_generated_by']=activity_id; node['was_attributed_to']=[actor_id]
     sources=sorted({ref for item in doc.get('evidence_items',[]) for ref in item.get('was_derived_from',[]) if ref in trusted})
     doc.setdefault('used_edges',[]).extend({'subject':activity_id,'predicate':'prov:used','object':ref} for ref in sources)
     document=mint(doc,output_path)
-    report=validate_scientific_account(output_path,dapper_root=release_root(),release_lock=LOCK,evidence_package=package_path)
-    # ClaimScore values must be traceable to observed numeric source data. The
-    # final linter separately verifies explicit File ancestry and proposition targets.
-    observed={}
-    for artifact in package['source_artifacts'].values():
-        path=(Path(package_path).parent/artifact['path']).resolve()
-        require(path.is_relative_to(Path(package_path).parent.resolve()),'Source artifact path escape')
-        data=path.read_bytes(); require(sha256(data)==artifact['sha256'],'Captured source checksum changed')
-        if artifact.get('format')=='json': observed[artifact['dapper_file_id']]=decode(data)
-    for file in document.get('files',[]):
-        if file.get('sha256') in captured: observed[file['id']]=decode(captured[file['sha256']]['bytes'])
-    validate_observations(document,observed)
+    report=validate_scientific_account(output_path,dapper_root=release_root(),release_lock=LOCK,
+        evidence_package=package_path,ledger_path=ledger_path)
     return document,report
 
-def validate_observations(document,observed):
-    """Quantities bind to a cited artifact, exact JSON row and original metric.
-
-    A coincident numeric value elsewhere in a response is not a match. Free-text
-    biological interpretation remains explicitly separate from this source check.
-    """
-    nodes={n['id']:n for rows in document.values() if isinstance(rows,list) for n in rows if isinstance(n,dict) and 'id' in n}
-    def rows_for(evidence,seen=None):
-        seen=set() if seen is None else seen
-        if evidence.get('id') in seen: return []
-        seen=seen|{evidence.get('id')}
-        pointers=re.findall(r'/(?:data|response|content|structuredContent)(?:/[A-Za-z0-9_~.-]+)*',evidence.get('context','')+' '+evidence.get('source_locator',''))
-        values=[]
-        for source in evidence.get('was_derived_from',[]):
-            if source not in observed: continue
-            for locator in pointers:
-                try: value=pointer(observed[source],locator)
-                except ValueError: continue
-                if isinstance(value,dict): values.append(value)
-        for identity in evidence.get('source_claims',[]):
-            if identity in nodes: values.extend(rows_for(nodes[identity],seen))
-        return values
-    for claim in document.get('claims',[]):
-        scores=[nodes[s] for s in claim.get('has_score',[]) if s in nodes]
-        scores.extend(claim.get('scores',[]))
-        evidence=[nodes[e] for e in claim.get('has_evidence',[]) if e in nodes]
-        rows=rows_for(claim)+[row for item in evidence for row in rows_for(item)]
-        for score in scores:
-            metric=score['metric']; value=score['value']
-            require(any(metric in row and isinstance(row[metric],(int,float)) and not isinstance(row[metric],bool) and row[metric]==value for row in rows),
-                'ClaimScore does not match the exact metric at its cited source row')
-            expected={'factor_value':'LOADING','beta':'EFFECT_ESTIMATE','beta_uncorrected':'EFFECT_ESTIMATE','combined':'SCORE'}.get(metric)
-            if expected: require(score['score_kind']==expected,'Source metric was relabeled as a different mathematical quantity')
-        for item in evidence:
-            snippet=item.get('snippet')
-            if not snippet: continue
-            direct=[observed[s] for s in item.get('was_derived_from',[]) if s in observed]
-            if not direct: continue
-            candidates=rows_for(item) or direct
-            def norm(text): return re.sub(r'\s+','',text)
-            require(any(norm(snippet) in norm(json.dumps(value,ensure_ascii=False)) or norm(snippet) in norm(json.dumps(value,ensure_ascii=False,separators=(',',':'))) for value in candidates),
-                'Evidence snippet is not a verbatim excerpt of the cited source observation')
 
 def object_envelope(document,identity,metadata,artifact_access=None,*,max_depth=5,max_nodes=250,offset=0,continuation=None):
     runtime=public_runtime()

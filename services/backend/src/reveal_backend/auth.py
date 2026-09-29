@@ -39,6 +39,12 @@ def principal(tx, authorization):
         raise Problem(401, 'SESSION_EXPIRED', 'Refresh the workspace session.')
     return me
 
+def publication_principal(tx, authorization, visibility):
+    me = principal(tx, authorization)
+    if visibility == 'public' and me['principal_kind'] != 'registered':
+        raise Problem(403, 'SIGN_IN_REQUIRED', 'Sign in to publish a scientific account or exploration.')
+    return me
+
 def require_owned(tx, kind, identity, user, row):
     """Authorize one exact row from this transaction, including batched reads."""
     from .repository import digest

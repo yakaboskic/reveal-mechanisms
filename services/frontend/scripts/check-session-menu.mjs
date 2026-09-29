@@ -67,7 +67,7 @@ async function harness(name, { mobile = false, registered = false, google = fals
     if (path === `/api/backend/v1/jobs/${job.id}`) return respond(job);
     unexpected.push(`${method} ${path}`); return route.fulfill({ status: 503, json: { title: 'Unexpected mocked request' } });
   });
-  await page.goto(origin);
+  await page.goto(frozen ? `${origin}/?job=${job.id}` : origin);
   return { context, page, async finish() {
     assert.deepEqual(unexpected, []); assert.deepEqual(errors, []);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
@@ -86,7 +86,8 @@ try {
     assert.equal(await menu.getByRole('button', { name: 'Continue with ORCID' }).isDisabled(), true);
     assert.equal(await menu.getByText('Admin telemetry', { exact: true }).count(), 1);
     const box = await menu.boundingBox();
-    assert.ok(box.height < (mobile ? 380 : 350), `Menu stays compact with larger mobile touch targets (observed ${box.height}px)`);
+    assert.ok(box.height < (mobile ? 420 : 390), `Menu with three workspace links stays compact (observed ${box.height}px)`);
+    await menu.getByRole('link', { name: 'Your explorations', exact: true }).waitFor();
     await h.page.keyboard.press('Escape'); assert.equal(await menu.count(), 0);
     assert.equal(await h.page.getByRole('button', { name: 'Your workspace', exact: true }).evaluate(button => button === document.activeElement), true);
     await h.page.getByRole('button', { name: 'Your workspace', exact: true }).click();

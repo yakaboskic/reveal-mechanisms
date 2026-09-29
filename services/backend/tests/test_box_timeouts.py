@@ -204,5 +204,40 @@ class DraftAndRuntimeTests(unittest.TestCase):
                 self.assertTrue(json.loads((state / 'ledger/manifest.json').read_text())['complete'])
 
 
+    def test_turn_limit_remains_failure_even_if_agent_left_an_outcome_file(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary); state = root / 'state'; output = root / 'output'; output.mkdir()
+            request = {'job_id': 'offline', 'attempt': 1, 'kind': 'research', 'selected_graphs': [],
+                       'claude_version': 'test', 'model': 'test', 'max_turns': 40, 'max_budget_usd': 3, 'timeout_seconds': 900}
+            (root / 'request.json').write_text(json.dumps(request))
+            (root / 'credentials.json').write_text('{"ANTHROPIC_API_KEY":"offline-placeholder"}')
+            (output / 'outcome.json').write_text('{"status":"insufficient_evidence","reason":"Unfinished draft"}')
+            runtime = {'dapper_root': str(root / 'dapper')}
+            process = SimpleNamespace(stdin=io.BytesIO(), stdout=object(), stderr=object(),
+                                      pid=999999, returncode=1, poll=lambda: 1)
+            parser = SimpleNamespace(result={'is_error': True, 'subtype': 'error_max_turns', 'num_turns': 40, 'total_cost_usd': 1.26},
+                                     runtime={}, finish=lambda: [])
+            selector = Mock(); selector.get_map.return_value = {}
+            user = SimpleNamespace(pw_uid=os.getuid(), pw_gid=os.getgid(), pw_dir=str(root))
+            with patch.multiple(box_remote, BASE=root, STATE=state, OUTPUT=output, SECRETS=()), \
+                 patch.object(box_remote.os, 'getuid', return_value=0), \
+                 patch.object(box_remote.pwd, 'getpwnam', return_value=user), \
+                 patch.object(box_remote, 'setup', return_value=(root, runtime, 'Offline prompt')), \
+                 patch.object(box_remote, 'serve', return_value=Mock()), \
+                 patch.object(box_remote, 'ClaudeStream', return_value=parser), \
+                 patch.object(box_remote.subprocess, 'run', return_value=SimpleNamespace(stdout='test version')), \
+                 patch.object(box_remote.subprocess, 'Popen', return_value=process), \
+                 patch.object(box_remote.selectors, 'DefaultSelector', return_value=selector):
+                box_remote.main()
+            status = json.loads((state / 'status.json').read_text())
+            completion = json.loads((state / 'runtime.json').read_text())['completion']
+            self.assertEqual(status['status'], 'failed')
+            self.assertIn('40-turn execution limit', status['reason'])
+            self.assertIn('Retry', status['reason'])
+            self.assertEqual(completion['provider_result_subtype'], 'error_max_turns')
+            self.assertEqual(completion['turns_used'], 40)
+            self.assertEqual(completion['cost_usd'], 1.26)
+
+
 if __name__ == '__main__':
     unittest.main()

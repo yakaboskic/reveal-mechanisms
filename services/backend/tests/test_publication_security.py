@@ -41,7 +41,7 @@ class PublicationSecurityTests(unittest.TestCase):
                             'REVEAL_GATEWAY_ISSUER': 'reveal-nextjs', 'REVEAL_GATEWAY_AUDIENCE': 'reveal-api'})):
             context.start(); self.addCleanup(context.stop)
         self.client = TestClient(api.app)
-        self.owner = self.principal('anonymous'); self.other = self.principal('registered')
+        self.owner = self.principal('registered'); self.other = self.principal('registered')
         self.job_id, self.request_id, self.draft_id = uid(), uid(), uid()
         self.attribution = {'user_id': self.owner, 'person_id': None, 'principal_kind': 'anonymous',
             'display_name': 'Original anonymous author', 'orcid': None, 'orcid_authenticated': False, 'observed_at': STAMP}
@@ -83,7 +83,7 @@ class PublicationSecurityTests(unittest.TestCase):
         return identity
 
     def headers(self, owner, **claims):
-        kind = 'anonymous' if owner == self.owner else 'registered'
+        kind = 'registered'
         token = jwt.encode({'sub': owner, 'principal_kind': kind, 'iss': 'reveal-nextjs', 'aud': 'reveal-api',
             'iat': int(time.time()), 'exp': int(time.time()) + 120, 'jti': uid(), **claims}, 's' * 40, algorithm='HS256')
         return {'Authorization': 'Bearer ' + token, 'Idempotency-Key': uid()}

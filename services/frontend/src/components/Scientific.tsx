@@ -8,6 +8,7 @@ import { ParagraphActivity } from "./ParagraphActivity";
 import { AccountPublication } from "./AccountPublication";
 import { useIdentity } from "./Session";
 import { paragraphStateFromJob } from "@/lib/paragraph-state";
+import { sourceDownloadPath } from "@/lib/source-download";
 import "./scientific.css";
 
 type Document = Schema<"DapperDocument">;
@@ -35,8 +36,8 @@ export function Tabs({ labels, value, onChange, pending }: { labels: string[]; v
   }}>{label}{pending === label && <><span className="statement-progress" aria-hidden="true"><LoadingPulse /></span><span id={`${id}-pending-${i}`} className="sr-only">Preparing cited research statement</span></>}</button>)}</div>;
 }
 function useAccount(id: string) {
-  const { me, ready } = useIdentity();
-  const binding = `${id}:${me?.user_id || "visitor"}`;
+  const { me, ready, status } = useIdentity();
+  const binding = `${id}:${me?.user_id || "visitor"}:${status.canClaim}`;
   const [loaded, setLoaded] = useState<{ binding: string; value: Schema<"AccountResult"> } | null>(null);
   const [failure, setFailure] = useState<{ binding: string; message: string } | null>(null);
   const [refresh, setRefresh] = useState(0);
@@ -212,7 +213,7 @@ function Technical({ label = "DAPPER record", value }: { label?: string; value: 
 }
 function safeDownload(value?: string | null) {
   if (!value || typeof window === "undefined") return null;
-  try { const url = new URL(value, window.location.origin); return url.origin === window.location.origin && /^\/api\/backend\/v1\/artifacts\/[a-f0-9]{64}$/.test(url.pathname) ? url.pathname : null; } catch { return null; }
+  return sourceDownloadPath(value, window.location.origin);
 }
 function SourceArtifact({ artifact }: { artifact: Schema<"ArtifactAccess"> }) {
   const href = safeDownload(artifact.download_url), file = artifact.file;
@@ -273,7 +274,7 @@ export function Record({ value }: { value: unknown }) {
   return <dl className="record">{Object.entries(value).map(([key, item]) => {
     let download: string | null = null;
     if (key === "download_url" && typeof item === "string" && typeof window !== "undefined") {
-      try { const url = new URL(item, window.location.origin); if (url.origin === window.location.origin && /^\/api\/backend\/v1\/artifacts\/[a-f0-9]{64}$/.test(url.pathname)) download = url.pathname; } catch { /* show invalid source values as text */ }
+      download = sourceDownloadPath(item, window.location.origin);
     }
     const file = (value as { file?: { filename?: string } }).file;
     return <div key={key}><dt>{key.replaceAll("_", " ")}</dt><dd>{download ? <ArtifactDownload href={download} filename={file?.filename || "source-artifact"} /> : typeof item === "object" && item !== null ? <Record value={item} /> : String(item ?? "Not recorded")}</dd></div>;

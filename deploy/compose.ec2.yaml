@@ -1,0 +1,46 @@
+# Compose >= 2.24.4. Backend environment files live on /run (tmpfs).
+x-cloud-logs: &cloud-logs
+  driver: awslogs
+  options:
+    awslogs-region: us-east-1
+    awslogs-group: /cyaka/reveal/backend
+    awslogs-create-group: "false"
+    tag: "{{.Name}}/{{.ID}}"
+    mode: non-blocking
+    max-buffer-size: 4m
+
+services:
+  api:
+    logging: !override
+      <<: *cloud-logs
+  worker:
+    logging: !override
+      <<: *cloud-logs
+  dispatcher:
+    logging: !override
+      <<: *cloud-logs
+  redis:
+    logging: !override
+      <<: *cloud-logs
+  caddy:
+    image: caddy:2.11.4-alpine@sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b
+    restart: unless-stopped
+    read_only: true
+    mem_limit: 256m
+    environment:
+      REVEAL_API_HOST: ${REVEAL_API_HOST:?Set the backend Elastic IP or domain}
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    tmpfs: ["/tmp:rw,nosuid,nodev,size=16777216"]
+    logging: *cloud-logs
+    depends_on:
+      api: {condition: service_healthy}
+    networks: [backend]
+
+volumes:
+  # Certificate/account state only. Scientific artifacts remain in S3.
+  caddy-data:
+  caddy-config:

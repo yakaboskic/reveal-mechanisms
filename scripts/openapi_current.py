@@ -230,6 +230,16 @@ def endpoints(b,f,e):
     for ex in suggestion['requestBody']['content']['application/json']['examples'].values():
         v=ex['value'];v.pop('inquiry');v.pop('dismech_context');v['source_gap']=e['composer']['source_gap'];v['subquery']='Endothelial dysfunction'
     submit=op('/v1/jobs','post')
+    S['JobBudgetFailure']=obj({'scope':enum('authoring','review'),
+        'limit_usd':{'type':'number','minimum':0},'spent_usd':null({'type':'number','minimum':0}),
+        'next_call_max_usd':null({'type':'number','minimum':0})})
+    S['JobFailure']['properties']['budget']=ref('JobBudgetFailure')
+    S['ReviewRetryInput']=obj({'expected_last_event_id':string(pattern='^[0-9]+$')})
+    b.operation('/v1/jobs/{job_id}/retry-review','post','retryJobReview','Jobs','Retry independent review on saved output',
+        'Owner-only, idempotent retry for REVIEW_UNAVAILABLE or REVIEW_BUDGET_EXCEEDED. Require the latest job event ID and a checksum-verified completed authoring capture. Requeue the same job with a new validation attempt; preserve original evidence, authoring model, artifacts and activity. Never launch the research agent. Scientific rejection, incomplete capture and active or successful jobs cannot use this route. Current configured review budget applies to each explicit retry. Normal account acceptance and paragraph generation follow a passing review.',
+        'Job',{'queued':dict(e['complete'],status='queued',stage='validating',failure=None,result=None,completed_at=None)},
+        request_schema='ReviewRetryInput',request_examples={'saved_output':{'expected_last_event_id':'2'}},
+        parameters=[b.parameter('job_id','path',uuid,b.JOB_ID,True)],status=202,idempotent=True,errors=('401','404','409','422','429'))
     submit['description']+=' Analysis submission requires an exact imported DisMech gap and nonempty resolved CFDE anchors. Freeze the saved source/mapping-run bindings and native IDs with the request; later mapping imports do not retarget historical jobs. Label/gene disagreement does not reject a mapped anchor. Persist each accepted account with an outbox record that automatically schedules its default paragraph job, unique by account payload, citation pins and paragraph settings. Analysis completion does not wait for paragraph success. Manual paragraph jobs support retries or alternate focus/settings.'
     for code,detail in [('SOURCE_GAP_REQUIRED','Select an imported DisMech gap; typed search text is not an inquiry.'),('SOURCE_REVISION_UNAVAILABLE','The exact gap source observation is unavailable; choose an available catalog revision.'),('EAGGL_MODEL_MISMATCH','The selected anchor does not resolve to cfde-inc-v2 in its pinned source/mapping context.')]:
         submit['responses']['422']['content']['application/problem+json']['examples'][code.lower()]={'value':b.problem(422,code,detail)}
@@ -256,10 +266,10 @@ def endpoints(b,f,e):
         'PublicationState',{'private_owner':private_publication,'public_reader':dict(public_publication,can_manage=False)},
         parameters=[b.parameter('dapper_id','path',did('ScientificAccount'),f['account']['id'],True)],public=True,errors=('401','404','429'))
     b.operation('/v1/accounts/{dapper_id}/publication','post','updateAccountPublication','Scientific content','Publish, update or unpublish an account',
-        'Explicit owner-only choice, also available to anonymous workspace owners. Publishing freezes the complete accepted account provenance and current accepted paragraph, exact citation revisions and only reachable source artifacts. Future paragraphs remain private until an explicit update. Unpublishing revokes this snapshot immediately; identical content independently published elsewhere stays public. No job logs, draft, queue, request or unrelated owner artifacts are published. Immutable scientific IDs, citations and original authorship do not change.',
+        'Explicit owner-only choice. Publishing or updating a public snapshot requires a registered signed-in session; anonymous owners receive 403 SIGN_IN_REQUIRED, including on idempotent retries. Owners may unpublish an existing snapshot with either session kind. Publishing freezes the complete accepted account provenance and current accepted paragraph, exact citation revisions and only reachable source artifacts. Future paragraphs remain private until an explicit update. Unpublishing revokes this snapshot immediately; identical content independently published elsewhere stays public. No job logs, draft, queue, request or unrelated owner artifacts are published. Immutable scientific IDs, citations and original authorship do not change.',
         'PublicationState',{'published':public_publication,'unpublished':dict(private_publication,version=2,updated_at=b.NOW)},
         parameters=[b.parameter('dapper_id','path',did('ScientificAccount'),f['account']['id'],True)],request_schema='PublicationInput',
-        request_examples={'publish':{'visibility':'public','expected_version':0},'unpublish':{'visibility':'private','expected_version':1}},idempotent=True,errors=('400','401','404','409','422','429'))
+        request_examples={'publish':{'visibility':'public','expected_version':0},'unpublish':{'visibility':'private','expected_version':1}},idempotent=True,errors=('400','401','403','404','409','422','429'))
     outcome_id='66666666-6666-4666-8666-666666666666'
     outcome={'id':outcome_id,'outcome':'insufficient_evidence','summary':'The captured investigation did not support an accepted scientific account.',
         'reason':'This illustrative scoped investigation lacked evidence connecting the selected mechanism to the selected question.',
@@ -275,6 +285,10 @@ def endpoints(b,f,e):
     public_outcome={**outcome,'job_id':None,'publication':dict(public_publication,can_manage=False)}
     outcome_summary={key:public_outcome[key] for key in ('id','outcome','summary','knowledge_gap','anchors','created_at','attribution','publication')}
     description='A durable scoped insufficient-evidence exploration, separate from ScientificAccounts and excluded from their popularity counts. Captured author reasons are not independently validated scientific findings. Private by default; explicit publication shares only this frozen scope, original attribution and captured source evidence. Job logs, requests, runtime/ledger contents and the complete private package remain private. Invalid supplied credentials never downgrade to public.'
+    b.operation('/v1/analysis-outcomes','get','listAnalysisOutcomes','Personal workspace','List saved workspace explorations',
+        'Session-required, newest-first summaries of all completed insufficient-evidence explorations owned by this workspace, private or published, across every knowledge gap. Includes previously saved records without a new run or publication. Operational failures are not scientific exploration outcomes. Other owners are excluded, even for published records. Detail and provenance are loaded only when opened.',
+        'AnalysisOutcomeList',{'saved':{'items':[dict(outcome_summary,publication=private_publication)],'page':e['page']},'empty':{'items':[],'page':e['page']}},
+        parameters=b.page_parameters(),errors=('401','409','429'))
     b.operation('/v1/analysis-outcomes/{outcome_id}','get','getAnalysisOutcome','Scientific content','Read an explored analysis outcome',description,
         'AnalysisOutcome',{'private_owner':outcome,'public_reader':public_outcome},parameters=[b.parameter('outcome_id','path',uuid,outcome_id,True)],public=True,errors=('401','404','429'))
     b.operation('/v1/jobs/{job_id}/outcome','get','getJobAnalysisOutcome','Jobs','Find the saved scoped outcome for an owned job',
@@ -289,10 +303,10 @@ def endpoints(b,f,e):
         description,'PublicationState',{'private_owner':private_publication,'public_reader':dict(public_publication,can_manage=False)},
         parameters=[b.parameter('outcome_id','path',uuid,outcome_id,True)],public=True,errors=('401','404','429'))
     b.operation('/v1/analysis-outcomes/{outcome_id}/publication','post','updateOutcomePublication','Scientific content','Publish or unpublish a scoped exploration',
-        'Explicit owner-only publication, including anonymous workspace owners. Freeze this exploration and its captured source artifacts, never job logs or unrelated workspace artifacts. Unpublish revokes this snapshot; independently published evidence can remain available. Immutable records and original attribution do not change.',
+        'Explicit owner-only publication. Publishing or updating a public snapshot requires a registered signed-in session; anonymous owners receive 403 SIGN_IN_REQUIRED, including on idempotent retries. Owners may unpublish with either session kind. Freeze this exploration and its captured source artifacts, never job logs or unrelated workspace artifacts. Unpublish revokes this snapshot; independently published evidence can remain available. Immutable records and original attribution do not change.',
         'PublicationState',{'published':public_publication,'unpublished':dict(private_publication,version=2,updated_at=b.NOW)},
         parameters=[b.parameter('outcome_id','path',uuid,outcome_id,True)],request_schema='PublicationInput',
-        request_examples={'publish':{'visibility':'public','expected_version':0},'unpublish':{'visibility':'private','expected_version':1}},idempotent=True,errors=('400','401','404','409','422','429'))
+        request_examples={'publish':{'visibility':'public','expected_version':0},'unpublish':{'visibility':'private','expected_version':1}},idempotent=True,errors=('400','401','403','404','409','422','429'))
     for path in ('/v1/analysis-outcomes/{outcome_id}','/v1/analysis-outcomes/{outcome_id}/publication','/v1/knowledge-gaps/{gap_id}/outcomes'):
         op(path)['security']=[{}, {'GatewayAssertion': []}]
     exploration={'source_gap':e['composer']['source_gap'],'knowledge_gap':f['gap'],'last_explored_at':b.NOW,'draft_id':b.DRAFT_ID,
@@ -313,6 +327,8 @@ def endpoints(b,f,e):
         'Download exact captured bytes after owner authorization and SHA-256 verification. A digest is not an access grant. The File metadata describes the media type; the response uses attachment disposition, private no-store caching and nosniff. Missing captures remain explicitly unavailable; this route never fetches mutable source URLs.',
         string(format='binary'),{'captured_bytes':artifact_text},parameters=[b.parameter('sha256','path',string(pattern='^[a-f0-9]{64}$'),artifact['sha256'],True)],errors=('401','404','503'))
     download['responses']['200']['content']={'*/*':download['responses']['200']['content']['application/json']}
+    download['responses']['307']={'description':'After authorization, redirect to an exact, verified S3 object version. The private URL expires after 60 seconds; previously issued URLs can remain valid until expiry after unpublication.',
+        'headers':{'Location':{'description':'Short-lived artifact download URL. Never cache or persist as an identifier.','schema':{'type':'string','format':'uri'}}}}
     for exchange in b.EXCHANGES:
         if exchange['operation_id']=='downloadArtifact':
             exchange['request']['headers']['Accept']='*/*'

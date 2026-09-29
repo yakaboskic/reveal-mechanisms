@@ -25,6 +25,13 @@ test("terminal SSE freezes failure and cancellation before the job snapshot catc
     assert.equal(section.state, status === "failed" ? "failed" : "stopped");
   }
 });
+test("review retry keeps the failed review separate and excludes idle time from its duration", () => {
+  const events = [event(1, 2, "validating"), { ...event(2, 8, "validating"), status: "failed" as const },
+    { ...event(3, 100, "validating"), status: "queued" as const }, event(4, 101, "validating")];
+  const sections = timedActivitySections(events, job, base + 105_000);
+  assert.deepEqual(sections.map(section => section.state), ["failed", "working"]);
+  assert.deepEqual(sections.map(section => section.durationMs), [6000, 5000]);
+});
 test("partial replay does not fabricate start/end times and repeated stages remain separate", () => {
   const newer = { ...job, stage: "validating" as const, last_event_id: "9" };
   assert.deepEqual(timedActivitySections([event(1, 1)], newer, base + 10_000).map(s => s.durationMs), [null, null]);

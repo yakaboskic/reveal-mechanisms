@@ -31,7 +31,7 @@ async function harness(name, { owned = false, mobile = false, failOnce = false, 
     if (!path.startsWith('/api/')) return route.continue();
     state.requests.push({ method, path }); const respond = json => route.fulfill({ status: 200, json });
     if (path === '/api/session/status') return respond({ principal: state.principal ? { user_id: state.principal } : null, canClaim: state.canClaim, providers: { google: false, orcid: false } });
-    if (path === '/api/backend/v1/me') return respond({ user_id: state.principal, principal_kind: 'anonymous', display_name: null, workspace_expires_at: '2026-10-28T00:00:00Z' });
+    if (path === '/api/backend/v1/me') return respond({ user_id: state.principal, principal_kind: 'registered', display_name: 'Signed-in owner', workspace_expires_at: null });
     if (path === '/api/session/claim') {
       state.principal = '55555555-5555-4555-8555-555555555555'; state.canClaim = false;
       state.outcome = record(false); state.outcome.summary = 'Only the public snapshot is available after changing identity.';

@@ -85,9 +85,11 @@ Choose ORCID, Google or anonymous at submit; preserve selection and autosave.
 - `POST /v1/drafts` — [question and anchor request/response](examples/createDraft.question_and_anchor.json)
 - `PATCH /v1/drafts/{draft_id}` — [save revision two request/response](examples/updateDraft.save_revision_two.json)
 - `GET /v1/drafts/{draft_id}` — [request request/response](examples/getDraft.request.json)
+- `DELETE /v1/drafts/{draft_id}` — [delete saved draft request/response](examples/deleteDraft.delete_saved_draft.json)
 
 - Local edits before session; no credentials stored in research data.
 - Composer accepts no free-text inquiry or editable linked DisMech list.
+- Workspace groups named drafts by knowledge gap. Rename and delete use optimistic versions; active research prevents deletion. Deleting editable state preserves frozen research and results.
 
 ### 4. Submit saved gap analysis
 
@@ -121,10 +123,12 @@ Evidence preparation followed by public agent/tool activity; Stop stays availabl
 - `GET /v1/jobs/{job_id}/events` — [request request/response](examples/getJobEvents.request.json)
 - `GET /v1/jobs/{job_id}/events` — [sse request/response](examples/getJobEvents.sse.json)
 - `GET /v1/jobs/{job_id}/evidence-package` — [request request/response](examples/getEvidencePackage.request.json)
+- `POST /v1/jobs/{job_id}/retry-review` — [saved output request/response](examples/retryJobReview.saved_output.json)
 
 - One active loading state; no private reasoning.
 - Package is the schema-current captured input; account fixture is separately authored, not its accepted agent output.
 - Completed activity compresses into Gap analysis complete.
+- Budget failures expose phase, cap and recorded spend. Incomplete independent review can be retried against verified saved output, without launching the research agent.
 
 ### 6. Read the scientific account
 
@@ -248,9 +252,9 @@ Gateway establishes trusted session and resolves a stable application UUID.
 - Browser OAuth/bootstrap and service provisioning are separately specified in docs/gateway-contract.md.
 - No bearer is not anonymous write permission.
 
-### Your gaps and scientific accounts
+### Your gaps, scientific accounts and explorations
 
-Avatar opens two-tab personal dashboard.
+Avatar opens a personal dashboard with knowledge gaps, scientific accounts and completed explorations.
 
 **Request:** Trusted owner session, exact gap filters and pagination.
 
@@ -259,6 +263,7 @@ Avatar opens two-tab personal dashboard.
 - `GET /v1/me/explorations` — [request request/response](examples/listExplorations.request.json)
 - `POST /v1/me/explorations` — [selected gap request/response](examples/recordExploration.selected_gap.json)
 - `GET /v1/accounts` — [request request/response](examples/listAccounts.request.json)
+- `GET /v1/analysis-outcomes` — [request request/response](examples/listAnalysisOutcomes.request.json)
 - `GET /v1/drafts` — [request request/response](examples/listDrafts.request.json)
 - `GET /v1/research-requests` — [request request/response](examples/listResearchRequests.request.json)
 - `GET /v1/research-requests/{request_id}` — [request request/response](examples/getResearchRequest.request.json)
@@ -284,4 +289,4 @@ Request cancellation or recover from stale save/event cursor.
 
 Requests/responses are taken from the existing validated OpenAPI exchange library. The CADinT2D analysis/paragraph sequence is internally linked. The CAD source-selected gap now frames the request and account. The evidence package is a separate captured input; the authored account is not its validated agent output. Semantic scores and agent outputs remain illustrative fixtures.
 
-The mapping covers 39 operations and all 52 exchanges. OpenAPI SHA-256: `75dab1029b990324ec347e16567adb0b433ccd85d50558e9922e668bd6eb1802`. No endpoints or payloads were changed to build this diagram.
+The mapping covers 42 operations and all 55 exchanges. OpenAPI SHA-256: `cf66fbdfe47239be4c885b073960140242df98af5451cf399ce847d426d28240`. No endpoints or payloads were changed to build this diagram.

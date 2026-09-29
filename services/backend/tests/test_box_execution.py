@@ -357,6 +357,12 @@ class LifecycleTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(FakeFactory.instance.deleted)
         self.assertTrue(any(x[0] == 'agent_message' for x in self.events))
         self.assertEqual(self.checkpoints[-1]['phase'], 'deleted')
+        timing = self.checkpoints[-1]['timings']
+        ordered = [self.checkpoints[-1]['created_at']] + [timing[key] for key in
+            ('prepared_at', 'running_at', 'terminal_at', 'captured_at', 'deleted_at')]
+        self.assertEqual(ordered, sorted(ordered))
+        marker = json.loads((self.request.output_dir / CAPTURE_MARKER).read_text())
+        self.assertEqual(marker['timings'], timing)
     async def test_recovery_reuses_handle_without_duplicate_launch(self):
         request = replace(self.request, remote_handle={'job_id':'job','attempt':1,'box_id':'test-box','cursor':1,'phase':'running','created_at':__import__('time').time()})
         await self.adapter.execute(request, self.emit, self.cancelled, self.checkpoint)
@@ -507,8 +513,18 @@ class LifecycleTests(unittest.IsolatedAsyncioTestCase):
                 await self.adapter.execute(self.request, self.emit, self.cancelled, self.checkpoint)
         self.assertTrue((self.request.output_dir / 'runtime.json').exists())
         self.assertTrue(FakeFactory.instance.closed)
-        self.assertEqual(self.checkpoints[-1]['phase'], 'running')
+        self.assertEqual(self.checkpoints[-1]['phase'], 'captured')
         self.assertTrue(any(p.get('code') == 'box_cleanup_pending' for _,p in self.events))
+
+    async def test_failed_durable_capture_checkpoint_preserves_remote_copy(self):
+        async def checkpoint(handle):
+            if handle['phase'] == 'captured': raise OSError('object storage unavailable')
+            await self.checkpoint(handle)
+        with self.assertRaises(BoxTransportError):
+            await self.adapter.execute(self.request, self.emit, self.cancelled, checkpoint)
+        self.assertFalse(FakeFactory.instance.deleted)
+        self.assertTrue(FakeFactory.instance.closed)
+        self.assertEqual(self.checkpoints[-1]['phase'], 'running')
 
     async def test_deleted_box_with_failed_checkpoint_resumes_local_capture(self):
         async def checkpoint(handle):
@@ -519,7 +535,7 @@ class LifecycleTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(FakeFactory.instance.deleted)
         self.assertTrue(json.loads((self.request.output_dir / CAPTURE_MARKER).read_text())['cleanup_complete'])
         saved = self.checkpoints[-1].copy()
-        self.assertEqual(saved['phase'], 'running')
+        self.assertEqual(saved['phase'], 'captured')
         calls = list(self.adapter.calls)
         resumed = replace(self.request, remote_handle=saved)
         result = await self.adapter.execute(resumed, self.emit, self.cancelled, self.checkpoint)
