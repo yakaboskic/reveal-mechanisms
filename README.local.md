@@ -14,10 +14,10 @@ The encrypted bundle includes shared development database, S3, embedding, OAuth 
 
 ## 2. Clone and start
 
-Until this work is merged, use the handoff branch:
+Clone the `main` branch:
 
 ```sh
-git clone --branch codex/research-progress-and-discovery https://github.com/yakaboskic/reveal-mechanisms.git
+git clone --branch main https://github.com/yakaboskic/reveal-mechanisms.git
 cd reveal-mechanisms
 python3 scripts/local_setup.py --bundle ~/Downloads/reveal-local.env.json.gpg
 ```
@@ -45,9 +45,12 @@ Run these from the repository root; activating `.venv` is optional.
 .venv/bin/python scripts/local_deployment.py logs
 .venv/bin/python scripts/local_deployment.py down
 .venv/bin/python scripts/local_deployment.py up
-# After pulling source changes:
+# Update from main, then rebuild:
+git pull --ff-only origin main
 .venv/bin/python scripts/local_deployment.py up --build
 ```
+
+If you previously cloned the handoff branch, preserve any local code changes, then run `git fetch origin`, `git switch main` and `git pull --ff-only origin main` before rebuilding. Your ignored `.env` and `.runtime/` configuration stay in the same checkout; do not reimport the encrypted bundle.
 
 `down` drains this clone's workers before stopping containers. It preserves shared RDS records and S3 objects. `up` also stops this checkout's legacy development stack before taking port 3000. If another unrelated program uses the port, stop it deliberately; do not kill arbitrary processes.
 

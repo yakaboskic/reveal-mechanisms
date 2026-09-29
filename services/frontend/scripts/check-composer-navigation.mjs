@@ -107,6 +107,10 @@ async function runLink(h) {
   await h.page.getByRole('button', { name: 'Return to question', exact: true }).waitFor();
   await h.page.locator('.selected-question').waitFor();
 }
+async function draftOnly(h) {
+  assert.equal(await h.page.locator('.gap-scope-selector, .gap-browser, .gap-accounts, .gap-outcomes, .invitation').count(), 0);
+  assert.equal(h.requests.filter(r => r.path === '/api/backend/v1/knowledge-gaps' || /\/knowledge-gaps\/[^/]+\/(accounts|outcomes)$/.test(r.path)).length, 0);
+}
 try {
   for (const status of ['failed', 'running', 'succeeded', 'insufficient_evidence']) {
     const h = await harness(`home-after-${status}`, saved({ ...failedJob, status }), status === 'failed');
@@ -134,6 +138,23 @@ try {
     await h.page.waitForFunction(() => JSON.parse(sessionStorage.getItem('reveal:composer') || 'null')?.job === null);
     assert.equal(await h.page.getByRole('region', { name: 'Research activity', exact: true }).count(), 0);
     assert.equal(h.requests.filter(r => r.path.includes('/jobs/')).length, 0);
+    if (selector.startsWith('draft=')) await draftOnly(h);
+    else await h.page.locator('.gap-scope-selector').waitFor();
+    await h.finish();
+  }
+  {
+    const h = await harness('cold-draft-to-browsing', null, true);
+    await h.page.goto(`${origin}/?draft=${draftId}`);
+    await h.page.getByRole('navigation', { name: 'Draft navigation' }).waitFor();
+    await draftOnly(h);
+    await h.page.reload();
+    await h.page.getByRole('navigation', { name: 'Draft navigation' }).waitFor();
+    await draftOnly(h);
+    await h.page.getByRole('button', { name: 'Search for a different knowledge gap', exact: true }).click();
+    await h.page.getByRole('combobox', { name: 'Search DisMech knowledge gaps' }).waitFor();
+    await h.page.locator('.gap-scope-selector').waitFor();
+    await h.page.locator('.gap-browser').waitFor();
+    assert.equal(new URL(h.page.url()).searchParams.has('draft'), false);
     await h.finish();
   }
   {
@@ -142,6 +163,18 @@ try {
     await h.page.getByRole('button', { name: 'Search for a different knowledge gap', exact: true }).waitFor();
     await h.page.reload();
     await h.page.getByRole('button', { name: 'Search for a different knowledge gap', exact: true }).waitFor();
+    await draftOnly(h);
+    await h.finish();
+  }
+  {
+    const h = await harness('missing-draft-recovery', null, false, true);
+    await h.page.goto(`${origin}/?draft=${draftId}`);
+    await h.page.getByText('This draft was deleted.', { exact: true }).waitFor();
+    await draftOnly(h);
+    assert.equal(await h.page.getByRole('combobox', { name: 'Search DisMech knowledge gaps' }).count(), 0);
+    await h.page.getByRole('link', { name: 'Return to knowledge gaps', exact: true }).click();
+    await h.page.getByRole('combobox', { name: 'Search DisMech knowledge gaps' }).waitFor();
+    await h.page.locator('.gap-browser').waitFor();
     await h.finish();
   }
   for (const includeDraft of [true, false]) {

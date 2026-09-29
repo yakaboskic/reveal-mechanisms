@@ -2,7 +2,7 @@
 
 Updated September 30, 2026. The application exists; this is a handoff to run and extend it. The former implementation checklist is retained in Git history and the dated design plans.
 
-1. Follow [README.local.md](../README.local.md) with the encrypted environment and separately delivered password. Setup is agent-friendly and uses shared development credentials.
+1. Clone the `main` branch and follow [README.local.md](../README.local.md) with the encrypted environment and separately delivered password. Setup is agent-friendly and uses shared development credentials; existing handoff-branch clones can switch to `main` using the README's update instructions.
 2. Confirm `http://localhost:3000` and API readiness, then follow the [API walkthrough](api-quickstart.md). Read-only examples do not submit research.
 3. Read [implementation status](implementation-status.md), [local deployment](local-deployment.md) and the scientific [linting](scientific-account-linting.md)/[review](scientific-review.md) boundaries before changing workers.
 4. Use the [documentation index](README.md) for specialized contracts and historical decisions.

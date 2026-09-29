@@ -18,12 +18,14 @@ import { mechanismName } from "@/lib/mechanism-display";
 
 const storageKey = "reveal:composer";
 type LocalDraft = { composer: Schema<"Composer">; gap: Schema<"GapRecord"> | null; factors: Record<string, Schema<"EagglFactor">>; draft: Schema<"Draft"> | null; owner: string | null; job?: Schema<"Job"> | null; submitKey?: { binding: string; key: string } | null };
-export function Composer({ initialJobId }: { initialJobId?: string } = {}) {
+export function Composer({ initialJobId, initialDraftId }: { initialJobId?: string; initialDraftId?: string } = {}) {
   const { me, ready, refresh } = useIdentity();
   const [composer, setComposer] = useState(emptyComposer);
   const [gap, setGap] = useState<Schema<"GapRecord"> | null>(null);
   const [factors, setFactors] = useState<Record<string, Schema<"EagglFactor">>>({});
   const [draft, setDraft] = useState<Schema<"Draft"> | null>(null);
+  // Browsing also autosaves drafts; only opening/restoring one enters editor mode.
+  const [draftView, setDraftView] = useState(!!initialDraftId);
   const [restoring, setRestoring] = useState("");
   const [retrievingJob, setRetrievingJob] = useState(!!initialJobId);
   const [jobRestoreError, setJobRestoreError] = useState("");
@@ -64,6 +66,7 @@ export function Composer({ initialJobId }: { initialJobId?: string } = {}) {
     return requestKeys.current.get(body)!;
   };
   currentRef.current = composer;
+  useEffect(() => { setDraftView(!!initialDraftId); }, [initialDraftId]);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; suggestionRequest.current?.abort(); }; }, []);
   useEffect(() => {
     // Fast Refresh replays effects while preserving refs and active promises.
@@ -81,6 +84,7 @@ export function Composer({ initialJobId }: { initialJobId?: string } = {}) {
         (!params.get("draft") || params.get("draft") === local.draft?.id) &&
         (!params.get("gap") || params.get("gap") === local.gap?.object.id);
       if (local && matchesLink) { setComposer(local.composer); setGap(local.gap); setFactors(local.factors); setDraft(local.draft); draftRef.current = local.draft; loadedOwner.current = local.owner; submitKey.current = local.submitKey || null; if (local.job && params.get("job") === local.job.id) setJob(local.job); }
+      if (local?.draft && matchesLink && !hasSelectionLink) setDraftView(true);
     } catch { sessionStorage.removeItem(storageKey); }
     // Explicit workspace links open the requested record. A pending submission
     // may resume only at the unqualified home/OAuth return URL.
@@ -161,7 +165,7 @@ export function Composer({ initialJobId }: { initialJobId?: string } = {}) {
       await Promise.allSettled([restoreJob(), restoreSelection()]);
     };
     void restore(); return () => { active = false; setRestoring(""); };
-  }, [booted, ready, me?.user_id, restoreAttempt]);
+  }, [booted, ready, me?.user_id, restoreAttempt, initialDraftId, initialJobId]);
   useEffect(() => {
     if (query.trim()) {
       const controller = new AbortController(); setSearching(true); setResults([]);
@@ -387,6 +391,7 @@ export function Composer({ initialJobId }: { initialJobId?: string } = {}) {
   const reset = () => { restoreEpoch.current++; setRestoring(""); setRetrievingJob(false); setJobRestoreError(""); setJob(null); submitKey.current = null; const url = new URL(window.location.href); url.searchParams.delete("job"); window.history.replaceState(null, "", url); };
   const accountIds = job?.result?.kind === "analysis" ? job.result.account_ids : [];
   const clearGap = () => {
+    setDraftView(false);
     restoreEpoch.current++; setRestoring(""); setRetrievingJob(false); setJobRestoreError("");
     suggestionRequest.current?.abort(); suggestionRequest.current = null; setSuggesting(false); setLimitations([]);
     saveEpoch.current++; setGap(null); setComposer(emptyComposer()); setDraft(null); draftRef.current = null; setError(""); setAdding(false); setQuery("");
@@ -400,14 +405,22 @@ export function Composer({ initialJobId }: { initialJobId?: string } = {}) {
     return anchor && factor?.source_revision === anchor.reference.source_revision && factor.object.id === anchor.reference.dapper_id ? factor : undefined;
   };
   const anchorName = (id: string) => mechanismName(selectedFactor(id));
+  const discoveryVisible = !draftView && !job;
   if (submission) return <SubmissionProgress stage={submission.stage} provider={pendingSubmission.current?.method} question={pendingSubmission.current?.question} error={submission.error} onRetry={retrySubmission} onBack={backToQuestion} retryLabel={pendingSubmission.current?.method === "google" || pendingSubmission.current?.method === "orcid" ? "Try again" : "Retry"} />;
   const jobStatusSurface = <LoadingSurface compact={!!job} skeleton={job ? "none" : "rows"} title={jobRestoreError ? "Unable to retrieve job status" : "Retrieving job status"} description="Checking the current stage and reconnecting to recorded activity." error={jobRestoreError} onRetry={() => { setJobRestoreError(""); setRetrievingJob(true); setRestoreAttempt(value => value + 1); }} />;
   if (!job && (retrievingJob || jobRestoreError)) return <main id="main" className="composer-page prototype-composer has-job">{jobStatusSurface}{jobRestoreError && <a className="text-button" href="/">Return to knowledge gaps</a>}</main>;
-  return <main id="main" className={`composer-page prototype-composer ${!gap && !job ? "is-gap-browsing" : ""} ${gap ? "has-gap" : ""} ${job ? "has-job" : ""} ${job && terminal(job.status) ? "job-complete" : ""}`}>
+  if (draftView && !gap && !job) {
+    const draftError = error || (ready && !me ? "Sign in to open your saved draft." : draft ? "This draft has no selected knowledge gap." : undefined);
+    return <main id="main" className="composer-page prototype-composer">
+      <LoadingSurface title={draftError ? "Unable to open this draft" : "Opening your saved draft"} description="Retrieving your saved question and mechanism anchors." error={draftError} onRetry={error ? () => { setError(""); setRestoreAttempt(value => value + 1); } : undefined} />
+      <a className="text-button" href="/">Return to knowledge gaps</a>
+    </main>;
+  }
+  return <main id="main" className={`composer-page prototype-composer ${!gap && discoveryVisible ? "is-gap-browsing" : ""} ${gap ? "has-gap" : ""} ${job ? "has-job" : ""} ${job && terminal(job.status) ? "job-complete" : ""}`}>
     {draft && !job && <nav className="composer-draft-nav" aria-label="Draft navigation"><Link href="/workspace?tab=gaps">← Your drafts</Link><strong>{draft.name || `Draft ${draft.id.slice(0, 8)}`}</strong><span role="status">{saveState}</span></nav>}
     {(retrievingJob || jobRestoreError) && jobStatusSurface}
     {restoring && !retrievingJob && <LoadingSurface compact={!!gap || !!job} skeleton={gap || job ? "none" : "rows"} title={restoring} description="Retrieving your saved question and mechanism anchors." />}
-    {!gap && !job && <p className="invitation">Help us close these <a href="https://dismech.monarchinitiative.org/app/discussions/index.html" target="_blank" rel="noopener noreferrer">knowledge gaps</a></p>}
+    {!gap && discoveryVisible && <p className="invitation">Help us close these <a href="https://dismech.monarchinitiative.org/app/discussions/index.html" target="_blank" rel="noopener noreferrer">knowledge gaps</a></p>}
     {(!job || gap) && <section className={`question-shell ${job ? "submitted" : ""}`} aria-label="Knowledge gap and mechanism anchors">
       {!gap ? <div className="gap-input-wrap"><label className="sr-only" htmlFor="gap-search">Search DisMech knowledge gaps</label><input id="gap-search" type="search" role="combobox" aria-autocomplete="list" aria-expanded={!!query.trim() && showResults && !!visibleResults.length} value={query} autoComplete="off" onChange={e => { setQuery(e.target.value); setResults([]); setSearching(!!e.target.value.trim()); pendingResultFocus.current = false; setError(""); setShowResults(true); }} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)} onKeyDown={e => { if ((e.key === "ArrowDown" || e.key === "Enter") && query.trim()) { e.preventDefault(); focusResult(); } if (e.key === "Escape") { setShowResults(false); pendingResultFocus.current = false; } }} placeholder={focused ? "Search DisMech knowledge gaps" : ""} aria-controls="gap-results-list" />{!query && !focused && <span className="idle-question" aria-hidden="true">{example}</span>}<button className="send search-arrow" disabled={!query.trim()} aria-label="Show matching knowledge gaps" title="Show matching knowledge gaps" onClick={focusResult}><span aria-hidden="true">↑</span></button></div> : <>
         <div className="selected-question-row"><h1 id="submitted-question" tabIndex={job ? -1 : undefined} className="selected-question">{gap.object.text}</h1>{!job && <button className="clear-question" aria-label="Search for a different knowledge gap" onClick={clearGap}>×</button>}</div>
@@ -428,10 +441,10 @@ export function Composer({ initialJobId }: { initialJobId?: string } = {}) {
         </div>
       </>}
     </section>}
-    {!job && <GapScopeSelector scope={gapScope} onChange={scope => { setGapScope(scope); setError(""); }} />}
-    {gap && !job && <GapAccounts gap={gap} scope={gapScope} />}
-    {!gap && !job && !!query.trim() && showResults && <section className="search-results" aria-label="Knowledge gap search results">{searching ? <LoadingSurface key={query.trim()} compact rows={2} title="Searching knowledge gaps" description="Looking for matching questions in DisMech." /> : <p className="result-heading" role="status">{error ? "Search unavailable" : `${visibleResults.length} related knowledge gaps`}</p>}<div id="gap-results-list" role="listbox" aria-label="Matching knowledge gaps">{visibleResults.map((value, index) => <button className="gap-result" role="option" aria-selected="false" key={value.source.source_id} onClick={() => void selectGap(value)} onKeyDown={e => { if (e.key === "Escape") { setShowResults(false); document.getElementById("gap-search")?.focus(); } if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); if (e.key === "ArrowUp" && index === 0) document.getElementById("gap-search")?.focus(); else { const buttons = e.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>("button"); buttons?.[(index + (e.key === "ArrowDown" ? 1 : -1)) % visibleResults.length]?.focus(); } } }}><span>{value.object.text}</span><small>{value.source.disease_label} · {value.source.status || "Status not specified"}</small></button>)}</div>{!searching && !error && !visibleResults.length && <p className="empty">No matching knowledge gaps. Try a disease, gene or mechanism.</p>}</section>}
-    {!gap && !job && !query.length && <GapBrowser scope={gapScope} onSelect={value => void selectGap(value)} onRanked={setTrending} />}
+    {discoveryVisible && <GapScopeSelector scope={gapScope} onChange={scope => { setGapScope(scope); setError(""); }} />}
+    {gap && discoveryVisible && <GapAccounts gap={gap} scope={gapScope} />}
+    {!gap && discoveryVisible && !!query.trim() && showResults && <section className="search-results" aria-label="Knowledge gap search results">{searching ? <LoadingSurface key={query.trim()} compact rows={2} title="Searching knowledge gaps" description="Looking for matching questions in DisMech." /> : <p className="result-heading" role="status">{error ? "Search unavailable" : `${visibleResults.length} related knowledge gaps`}</p>}<div id="gap-results-list" role="listbox" aria-label="Matching knowledge gaps">{visibleResults.map((value, index) => <button className="gap-result" role="option" aria-selected="false" key={value.source.source_id} onClick={() => void selectGap(value)} onKeyDown={e => { if (e.key === "Escape") { setShowResults(false); document.getElementById("gap-search")?.focus(); } if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); if (e.key === "ArrowUp" && index === 0) document.getElementById("gap-search")?.focus(); else { const buttons = e.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>("button"); buttons?.[(index + (e.key === "ArrowDown" ? 1 : -1)) % visibleResults.length]?.focus(); } } }}><span>{value.object.text}</span><small>{value.source.disease_label} · {value.source.status || "Status not specified"}</small></button>)}</div>{!searching && !error && !visibleResults.length && <p className="empty">No matching knowledge gaps. Try a disease, gene or mechanism.</p>}</section>}
+    {!gap && discoveryVisible && !query.length && <GapBrowser scope={gapScope} onSelect={value => void selectGap(value)} onRanked={setTrending} />}
     {error && <div className="error" role="alert">{error}</div>}
     {conflict && <div className="conflict"><p>This draft changed in another session. Your edits are retained here.</p><button onClick={async () => { if (!draftRef.current) return; const latest = await api.draft(draftRef.current.id); draftRef.current = latest; setDraft(latest); setComposer(latest.composer); setConflict(false); setError(""); }}>Load saved version</button><button onClick={() => { draftRef.current = null; setDraft(null); setConflict(false); setError(""); void save().catch(e => setError(messageOf(e))); }}>Save my edits as a new draft</button></div>}
     {job && <><Activity key={job.id} initial={job} onJob={setJob} />{accountIds.map(id => <AccountPreview key={id} id={id} />)}{terminal(job.status) && <button className="text-button return-to-question" onClick={reset}>Return to question</button>}</>}
