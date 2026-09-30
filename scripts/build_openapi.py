@@ -761,7 +761,7 @@ def main():
     PATHS['/v1/jobs/{job_id}/events']['get']['responses']['409'] = {
         'description': 'Requested event history has expired.', 'content': content('Problem', {'cursor_expired':
             problem(409, 'EVENT_CURSOR_EXPIRED', 'Recover current job status and reconnect from its last_event_id.')}, 'application/problem+json')}
-    spec = {'openapi': '3.1.1', 'jsonSchemaDialect': 'https://json-schema.org/draft/2020-12/schema',
+    spec = {'openapi': '3.1.1', 'jsonSchemaDialect': 'https://spec.openapis.org/oas/3.1/dialect/base',
         'info': {'title': 'REVEAL Mechanisms API', 'version': '0.2.0-draft',
             'summary': 'DAPPER scientific content, knowledge-gap search, and shared analysis/paragraph jobs.',
             'description': 'Local API implementation contract; production deployment is deferred. Scientific schemas are generated from the pinned DAPPER schema. Application envelopes handle ownership, drafts, search, jobs and pagination. All DAPPER IDs in scientific examples are computed, not placeholders. Research/job/user timestamps and semantic rankings are illustrative; no Claude Code or embedding run was performed. The account fixture is the approved 12-claim HTML example: captured CFDE observations plus explicitly invented KG/membership assertions, never a production grounding-pass example. The evidence package is a separately verified live capture, not a claim that this example account was generated from it. Examples using example.org are not live resources. Do not treat example output as published research.'},

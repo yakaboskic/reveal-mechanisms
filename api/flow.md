@@ -302,4 +302,4 @@ Subscribe once per workspace provider and apply committed invalidations.
 
 Requests/responses are taken from the existing validated OpenAPI exchange library. The CADinT2D analysis/paragraph sequence is internally linked. The CAD source-selected gap now frames the request and account. The evidence package is a separate captured input; the authored account is not its validated agent output. Semantic scores and agent outputs remain illustrative fixtures.
 
-The mapping covers 43 operations and all 56 exchanges. OpenAPI SHA-256: `ddebd496346ee953d82eb695e4dff964b8602d78d9cc1cdbab001472e37e9ff3`. No endpoints or payloads were changed to build this diagram.
+The mapping covers 43 operations and all 56 exchanges. OpenAPI SHA-256: `03894c0feb9205208628276aaea20b26e8673b739e4514dfcba9c458037dab36`. No endpoints or payloads were changed to build this diagram.
