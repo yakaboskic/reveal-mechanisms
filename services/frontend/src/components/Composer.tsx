@@ -482,6 +482,11 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
       <a className="text-button" href="/">Return to knowledge gaps</a>
     </main>;
   }
+  if (selection.gap && !gap && !job) return <main id="main" className="composer-page prototype-composer">
+    <LoadingSurface title={error ? "Unable to open this knowledge gap" : "Opening knowledge gap"} description="Retrieving the selected question and mechanism anchors." error={error || undefined}
+      onRetry={error ? () => { setError(""); setRestoreAttempt(value => value + 1); } : undefined} />
+    <Link className="text-button" href="/">Return to knowledge gaps</Link>
+  </main>;
   return <main id="main" className={`composer-page prototype-composer ${!gap && discoveryVisible ? "is-gap-browsing" : ""} ${gap ? "has-gap" : ""} ${job ? "has-job" : ""} ${job && terminal(job.status) ? "job-complete" : ""}`}>
     {draft && !job && <nav className="composer-draft-nav" aria-label="Draft navigation"><Link href="/workspace?tab=gaps">← Your drafts</Link><strong>{draft.name || `Draft ${draft.id.slice(0, 8)}`}</strong><span role="status">{saveState}</span></nav>}
     {(retrievingJob || jobRestoreError) && jobStatusSurface}
