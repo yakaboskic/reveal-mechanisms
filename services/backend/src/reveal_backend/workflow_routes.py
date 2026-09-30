@@ -36,7 +36,10 @@ def config():
 
 def client():
     from qstash import AsyncQStash
-    return AsyncQStash(os.environ['QSTASH_TOKEN'], base_url=os.getenv('QSTASH_URL'), retry=False)
+    from .workflow_transport import WorkflowHttp
+    result = AsyncQStash(os.environ['QSTASH_TOKEN'], base_url=os.getenv('QSTASH_URL'), retry=False)
+    result.http = WorkflowHttp(result.http)
+    return result
 
 
 def payload_for(intent):
@@ -188,6 +191,8 @@ def mount_workflow(app, repository):
 
     @Serve(app).post(PATH, qstash_client=client(), receiver=receiver, url=url, retries=5, failure_function=failure)
     async def research(context):
+        from .workflow_compat import normalize_history
+        normalize_history(context)
         payload = context.request_payload
         # Deterministic control flow: all mutable reads/effects live in steps.
         index = payload.get('index', 0)

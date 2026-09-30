@@ -181,6 +181,8 @@ def mount_vector_workflow(app, repository):
 
     @Serve(app).post(PATH, qstash_client=client(), receiver=receiver, url=callback_url(), retries=5, failure_function=failure)
     async def vector_import(context):
+        from .workflow_compat import normalize_history
+        normalize_history(context)
         payload = context.request_payload
         details = await context.run('import-plan', lambda: asyncio.to_thread(plan, registry, payload))
         identity = payload['snapshot_id']

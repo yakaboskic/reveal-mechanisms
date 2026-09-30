@@ -103,6 +103,28 @@ class WorkflowTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(fake.http.request.call_args_list[0].kwargs['body'], fake.http.request.call_args_list[1].kwargs['body'])
         with self.repo.read_transaction() as tx: self.assertIsNone(tx.get('workflow_dispatch', job['id']))
 
+    async def test_continuations_keep_timeout_and_stable_provider_dedup_identity(self):
+        from reveal_backend.workflow_transport import WorkflowHttp
+        from upstash_workflow import AsyncWorkflowContext
+        from upstash_workflow.error import WorkflowAbort
+        delegate = Mock(); delegate.request = AsyncMock(return_value=[])
+        qstash = Mock(); qstash.http = WorkflowHttp(delegate)
+        def context(run='run-1'):
+            return AsyncWorkflowContext(qstash_client=qstash, workflow_run_id=run,
+                headers={}, steps=[], url='https://example.test/workflow', failure_url=None, initial_payload={})
+        for _ in range(2):
+            with self.assertRaises(WorkflowAbort): await context().run('phase-0', lambda: {'index': 1})
+        first, replay = [json.loads(call.kwargs['body'])[0] for call in delegate.request.call_args_list]
+        self.assertEqual(first['headers']['Upstash-Timeout'], '420s')
+        self.assertEqual(first['headers']['Upstash-Deduplication-Id'], replay['headers']['Upstash-Deduplication-Id'])
+        with self.assertRaises(WorkflowAbort): await context('run-2').run('phase-0', lambda: {'index': 1})
+        newer = json.loads(delegate.request.call_args.kwargs['body'])[0]
+        self.assertNotEqual(first['headers']['Upstash-Deduplication-Id'], newer['headers']['Upstash-Deduplication-Id'])
+        with self.assertRaises(WorkflowAbort): await context().sleep('wait-1', 5)
+        sleep = json.loads(delegate.request.call_args.kwargs['body'])[0]
+        self.assertEqual(sleep['headers']['Upstash-Timeout'], '420s')
+        self.assertNotEqual(first['headers']['Upstash-Deduplication-Id'], sleep['headers']['Upstash-Deduplication-Id'])
+
     async def test_reconciler_fences_stale_owner_and_preserves_paid_intent(self):
         job, payload = self.new()
         with self.repo.transaction() as tx:
