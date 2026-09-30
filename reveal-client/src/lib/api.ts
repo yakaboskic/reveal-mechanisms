@@ -1,0 +1,52 @@
+import type { AnalysisInput, Composer, Draft, Gap, Job, Me, Page, Schema } from "./types";
+
+export class ApiError extends Error {
+  constructor(public status: number, public code: string, message: string) { super(message); }
+}
+export async function responseError(response: Response): Promise<ApiError> {
+  const value = await response.json().catch(() => null);
+  return new ApiError(response.status, value?.code || "API_UNAVAILABLE", value?.detail || `Request failed (${response.status}).`);
+}
+export async function request<T>(path: string, options: { method?: string; body?: unknown; key?: string; signal?: AbortSignal } = {}): Promise<T> {
+  const headers = new Headers({ Accept: "application/json" });
+  if (options.body !== undefined) headers.set("Content-Type", "application/json");
+  if (options.key) headers.set("Idempotency-Key", options.key);
+  const timeout = AbortSignal.timeout(30000);
+  const response = await fetch(path, { method: options.method || "GET", credentials: "same-origin", cache: "no-store", headers,
+    body: options.body === undefined ? undefined : JSON.stringify(options.body), signal: options.signal ? AbortSignal.any([options.signal, timeout]) : timeout });
+  if (!response.ok) throw await responseError(response);
+  if (response.status === 204) return undefined as T;
+  return response.json();
+}
+export const backend = (path: string) => "/api/backend/v1/" + path;
+export const api = {
+  session: () => request<{ principal: Me | null }>("/api/session"),
+  connect: () => request<{ principal: Me }>("/api/session", { method: "POST", body: {} }),
+  disconnect: () => request<{ principal: null }>("/api/session", { method: "DELETE" }),
+  drafts: () => request<Page<Draft>>(backend("drafts?limit=100")),
+  draft: (id: string) => request<Draft>(backend("drafts/" + encodeURIComponent(id))),
+  jobs: () => request<Page<Job>>(backend("jobs?limit=100")),
+  job: (id: string) => request<Job>(backend("jobs/" + encodeURIComponent(id))),
+  gap: (id: string, signal?: AbortSignal) => request<Gap>(backend("knowledge-gaps/" + encodeURIComponent(id)), { signal }),
+  gaps: async (query: string, signal?: AbortSignal): Promise<Gap[]> => {
+    if (!query.trim()) return (await request<Schema<"GapList">>(backend("knowledge-gaps?limit=12"), { signal })).items;
+    return (await request<Schema<"GapSearchResults">>(backend("knowledge-gaps/search?mode=fuzzy&limit=12&q=" + encodeURIComponent(query)), { signal })).items.map(hit => hit.gap);
+  },
+  suggest: (composer: Composer, signal?: AbortSignal) => request<Schema<"Suggestions">>(backend("mechanisms/suggest"), {
+    method: "POST", signal, body: { source_gap: composer.source_gap, manual_eaggl_anchors: [], dismissed_source_ids: [],
+      subquery: composer.mechanism_subquery, mode: "semantic", model: composer.model },
+  }),
+  save: (draft: Draft | null, composer: Composer, name: string, key: string) => request<Draft>(backend("drafts" + (draft ? "/" + encodeURIComponent(draft.id) : "")), {
+    method: draft ? "PATCH" : "POST", key, body: { composer, ...(name.trim() ? { name: name.trim() } : {}), ...(draft ? { expected_version: draft.version } : {}) },
+  }),
+  submit: (body: AnalysisInput, key: string) => request<Job>(backend("jobs"), { method: "POST", body, key }),
+  cancel: (id: string) => request<Job>(backend("jobs/" + encodeURIComponent(id) + "/cancel"), { method: "POST" }),
+  retryReview: (job: Job, key: string) => request<Job>(backend("jobs/" + encodeURIComponent(job.id) + "/retry-review"), {
+    method: "POST", key, body: { expected_last_event_id: job.last_event_id },
+  }),
+};
+export function errorMessage(error: unknown) {
+  if (error instanceof ApiError) return error.message;
+  if (error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name)) return "The request timed out. Its outcome may be unknown; retry the same action to recover its result.";
+  return "The API could not be reached. Your selections are still here; retry the same action.";
+}
