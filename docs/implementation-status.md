@@ -43,9 +43,9 @@ downloaded its exact input bundle directly from S3 with API download, restore
 and temporary directories disabled in the probe. Setup including installation
 took 26.267 seconds; the original-handle lost-acknowledgment retry took 1.020
 seconds. Remote checksum, fingerprint and subsequent deletion checks passed.
-Both local images are healthy, and running transfer modules match the tested source. These
-optimizations are not deployed to QA or production and have no verified paid
-scientific run. See the
+Both local images are healthy, and running transfer modules match the tested source.
+The backend is also deployed to QA; production awaits the approval recorded below.
+These optimizations have no new paid scientific acceptance run. See the
 [runtime guide](durable-workflow-runtime.md#direct-transfers-and-capture-optimizations)
 for protocol, rollback and benchmark details.
 
@@ -61,9 +61,11 @@ The original `reveal_*` users, jobs, publications and artifact references remain
 
 ## Public deployment
 
-Broad's DIG service platform hosts the HTTP-only QA backend with application source `cf87246e1aedf06afa3deedd023a09a19e002d3f` and platform image revision `c563f40e1061c408459081310f4dc534f0038680`. [QA deployment run 36657927190](https://github.com/broadinstitute/dig-service-platform/actions/runs/36657927190) succeeded, and the platform suite passed 240 tests. Public HTTPS checks passed, including authorized SSE/replay, semantic retrieval and environment isolation. Managed signed probe `1e817d2a-d6bc-4558-b6d0-de3cf8ff9ce3` completed exactly two phases in generation 1 across distinct ECS tasks, restoring the same S3 checkpoint checksum. The [read-only lifecycle audit](https://github.com/broadinstitute/dig-service-platform/actions/runs/36660817274) confirmed the old task stopped and the replacement is the sole running task, with the same image and task definition; it made no mutations.
+Application source `473aa6f4932d32be0de0045d5d103a81269968bd`, exported as platform revision `baa1b581eb3bc2b2c644503fa7358321748e8b39`, is deployed to QA by [QA run 36685849303](https://github.com/broadinstitute/dig-service-platform/actions/runs/36685849303). All 240 platform/service tests, service validation and template lint passed. Public HTTPS acceptance passed all 15 checks, including semantic retrieval, authenticated SSE, reconnect replay and environment isolation. Unsigned cleanup callbacks returned 401.
 
-[Production run 36660894864](https://github.com/broadinstitute/dig-service-platform/actions/runs/36660894864) is queued for the same platform revision and awaits the existing required reviewer `sagehen03`. The personal Vercel project has all 16 prepared frontend settings uploaded as sensitive production variables with explicit user authorization. Frontend deployment awaits production backend readiness. Cloud ingress limits remain unchanged; long scientific phases through the complete cloud path remain unqualified. The earlier standalone EC2 route remains on hold. See [platform deployment](platform-deployment.md); retained [EC2 preparation](cloud-deployment.md) is reference material.
+Managed signed probe `ce4b4ebd-0691-4433-908b-625de20ae032` completed in generation 1 with exactly two durable phases, restoring the same S3 checksum on the deployed ECS task. It created no Box, made no model calls or Redis reads, and left the active Vector snapshot unchanged. No task replacement was requested for this probe. Reports are `.runtime/workflow/qa-direct-transfer-public.json`, `.runtime/workflow/qa-direct-transfer-managed.json` and `.runtime/workflow/qa-direct-transfer-cleanup-auth.json`.
+
+[Production run 36686792641](https://github.com/broadinstitute/dig-service-platform/actions/runs/36686792641) requests the same QA-tested platform revision and awaits required reviewer `sagehen03` (Drew Hite); the current operator cannot approve that environment. The older pending run `36660894864` was cancelled. A read-only production preflight found no queued, running or cancellation-pending jobs. All 16 frontend production settings are already uploaded to Vercel as sensitive variables. Frontend deployment awaits production backend readiness. Real Box direct-transfer and deletion probes passed locally. The deployed QA probe verifies task-role S3 checkpoint reads/writes and signed delivery; full cloud Box transfer and long scientific execution remain unverified. No new paid scientific run was made. Shared ingress limits are unchanged. See [platform deployment](platform-deployment.md).
 
 ## Data baseline
 

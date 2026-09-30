@@ -53,9 +53,10 @@ candidate retrieval. Upstash Redis provides Pub/Sub wakeups only.
 The direct transfer, parallel restore and independent cleanup changes passed
 807 backend tests (8 skipped, 303 subtests), plus all 70 frontend tests and
 typecheck. Both local images are running with healthy API/frontend responses;
-the running transfer modules match the tested source hashes. QA and the queued production release still use
-the older revisions recorded below. No paid scientific run has verified these
-optimizations.
+the running transfer modules match the tested source hashes. The same backend
+source is deployed to QA and has passed public and signed checkpoint checks.
+Production awaits the approval recorded below. No paid scientific run has
+verified these optimizations.
 
 Initial preparation still uses local scratch to collect and validate evidence.
 It builds the existing allowlisted input/harness bundle once, stores that bundle
@@ -239,8 +240,8 @@ state and event hashes stayed unchanged, and the original generation completed
 with exactly two recorded phases and restored S3 evidence. No Box or model call
 was used by that failure-injection probe.
 
-Source revision `cf87246e1aedf06afa3deedd023a09a19e002d3f`, using platform image
-revision `c563f40e1061c408459081310f4dc534f0038680`, is deployed to QA by
+An earlier QA release used source `cf87246e1aedf06afa3deedd023a09a19e002d3f` and platform image
+revision `c563f40e1061c408459081310f4dc534f0038680`, deployed by
 [platform run 36657927190](https://github.com/broadinstitute/dig-service-platform/actions/runs/36657927190)
 at `https://api-qa.hugeampkpnbi.org/api/reveal`. The platform suite passed 240 tests.
 All 15 public HTTPS checks passed:
@@ -255,17 +256,19 @@ snapshot unchanged, and used no Redis read commands. The saved report is
 `.runtime/workflow/qa-managed-replacement-final.json`. The QA managed
 reconciliation schedule is installed. The
 [read-only lifecycle audit](https://github.com/broadinstitute/dig-service-platform/actions/runs/36660817274)
-passed: the old task is stopped, the replacement is the sole running task, and
-both use task definition `svc-reveal-qa:2` and image digest
+reported that the old task was stopped and its replacement was then the sole
+running task; both used task definition `svc-reveal-qa:2` and image digest
 `sha256:b9f27ba0ebc2ed31cb0f3c4f8b7ec7218399a0347609a8a2d715d2e68536ff93`.
 Its report is `.runtime/workflow/qa-replacement-completion-audit/report.json`;
 the audit made no mutations.
 
-[Production run 36660894864](https://github.com/broadinstitute/dig-service-platform/actions/runs/36660894864)
-is queued for platform revision `c563f40e1061c408459081310f4dc534f0038680`,
-awaiting the existing required reviewer `sagehen03`. All 16 prepared frontend settings are uploaded
-to Vercel as sensitive production variables with explicit user authorization.
-Frontend deployment awaits production backend readiness.
+Application source `473aa6f4932d32be0de0045d5d103a81269968bd`, exported as platform revision `baa1b581eb3bc2b2c644503fa7358321748e8b39`, is deployed to QA by [QA run 36685849303](https://github.com/broadinstitute/dig-service-platform/actions/runs/36685849303). All 240 platform/service tests, service validation and template lint passed. Public HTTPS acceptance passed all 15 checks, including semantic retrieval, authenticated SSE, reconnect replay and environment isolation. Unsigned cleanup callbacks returned 401.
+
+Managed signed probe `ce4b4ebd-0691-4433-908b-625de20ae032` completed in generation 1 with exactly two durable phases, restoring the same S3 checksum on the deployed ECS task. It created no Box, made no model calls or Redis reads, and left the active Vector snapshot unchanged. No task replacement was requested for this probe. Reports are `.runtime/workflow/qa-direct-transfer-public.json`, `.runtime/workflow/qa-direct-transfer-managed.json` and `.runtime/workflow/qa-direct-transfer-cleanup-auth.json`.
+
+[Production run 36686792641](https://github.com/broadinstitute/dig-service-platform/actions/runs/36686792641) requests the same QA-tested platform revision and awaits required reviewer `sagehen03` (Drew Hite); the current operator cannot approve that environment. The older pending run `36660894864` was cancelled. A read-only production preflight found no queued, running or cancellation-pending jobs. All 16 frontend production settings are already uploaded to Vercel as sensitive variables. Frontend deployment awaits production backend readiness.
+
+Real Box direct-transfer and deletion probes passed locally. The deployed QA probe verifies task-role S3 checkpoint reads/writes and signed delivery; full cloud Box transfer and long scientific execution remain unverified. No new paid scientific run was made. Shared ingress limits are unchanged.
 
 The first scientific pilot completed one authoring attempt, durable capture and Box
 cleanup. After 31 acknowledged reviewer calls, its final response was not
