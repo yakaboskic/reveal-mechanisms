@@ -11,7 +11,7 @@
     "query": {},
     "headers": {
       "Idempotency-Key": "66666666-6666-4666-8666-666666666666",
-      "Authorization": "Bearer <trusted-gateway-assertion>",
+      "Authorization": "Bearer <api-key-or-gateway-assertion>",
       "Content-Type": "application/json",
       "Accept": "application/json"
     },
@@ -47,5 +47,5 @@
       }
     }
   },
-  "curl": "curl -X POST https://api.reveal.example.org/v1/jobs/44444444-4444-4444-8444-444444444444/retry-review -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"expected_last_event_id\":\"2\"}'"
+  "curl": "curl -X POST https://api.reveal.example.org/v1/jobs/44444444-4444-4444-8444-444444444444/retry-review -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"expected_last_event_id\":\"2\"}'"
 }

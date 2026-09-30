@@ -10,7 +10,7 @@
       "limit": 20
     },
     "headers": {
-      "Authorization": "Bearer <trusted-gateway-assertion>",
+      "Authorization": "Bearer <api-key-or-gateway-assertion>",
       "Accept": "application/json"
     },
     "body": null
@@ -57,5 +57,5 @@
       }
     }
   },
-  "curl": "curl -X GET 'https://api.reveal.example.org/v1/me/explorations?limit=20' -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Accept: application/json'"
+  "curl": "curl -X GET 'https://api.reveal.example.org/v1/me/explorations?limit=20' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
 }

@@ -1,6 +1,6 @@
 {
   "openapi": "3.1.1",
-  "openapi_sha256": "03894c0feb9205208628276aaea20b26e8673b739e4514dfcba9c458037dab36",
+  "openapi_sha256": "61aa74ceb1e98512869a200db220993d9e8daaab32558d781215afe23ee6b30c",
   "paths": 36,
   "operations": 43,
   "local_refs_resolved": 678,

@@ -11,7 +11,7 @@
     "query": {},
     "headers": {
       "Idempotency-Key": "66666666-6666-4666-8666-666666666666",
-      "Authorization": "Bearer <trusted-gateway-assertion>",
+      "Authorization": "Bearer <api-key-or-gateway-assertion>",
       "Content-Type": "application/json",
       "Accept": "application/json"
     },
@@ -85,5 +85,5 @@
       }
     }
   },
-  "curl": "curl -X PATCH https://api.reveal.example.org/v1/drafts/22222222-2222-4222-8222-222222222222 -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"composer\":{\"dismissed_source_ids\":[],\"eaggl_anchors\":[{\"origin\":\"manual\",\"reference\":{\"dapper_id\":\"dapper:Mechanism.MyhahXB55tDUS667sJzeJZ40BeeQBWOR\",\"source\":\"eaggl\",\"source_id\":\"factor:portal:CADinT2D:cfde-inc-v2:Factor1\",\"source_revision\":\"5797893b517def4fdc82f285c9bf835195f9f88eddfb6409cbf3b1e31dd63d83\"},\"suggestion_id\":null}],\"mechanism_subquery\":\"CADinT2D\",\"model\":\"cfde-inc-v2\",\"selected_kgs\":[\"biomarkerkg\",\"prokn\"],\"source_gap\":{\"id\":\"dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk\",\"source_id\":\"dismech:disorders/Coronary_Artery_Disease#discussion:cad_pgsxc_reverse_causation\",\"source_revision\":\"8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd\"}},\"expected_version\":1}'"
+  "curl": "curl -X PATCH https://api.reveal.example.org/v1/drafts/22222222-2222-4222-8222-222222222222 -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"composer\":{\"dismissed_source_ids\":[],\"eaggl_anchors\":[{\"origin\":\"manual\",\"reference\":{\"dapper_id\":\"dapper:Mechanism.MyhahXB55tDUS667sJzeJZ40BeeQBWOR\",\"source\":\"eaggl\",\"source_id\":\"factor:portal:CADinT2D:cfde-inc-v2:Factor1\",\"source_revision\":\"5797893b517def4fdc82f285c9bf835195f9f88eddfb6409cbf3b1e31dd63d83\"},\"suggestion_id\":null}],\"mechanism_subquery\":\"CADinT2D\",\"model\":\"cfde-inc-v2\",\"selected_kgs\":[\"biomarkerkg\",\"prokn\"],\"source_gap\":{\"id\":\"dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk\",\"source_id\":\"dismech:disorders/Coronary_Artery_Disease#discussion:cad_pgsxc_reverse_causation\",\"source_revision\":\"8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd\"}},\"expected_version\":1}'"
 }

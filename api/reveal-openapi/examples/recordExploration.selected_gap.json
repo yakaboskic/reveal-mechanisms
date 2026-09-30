@@ -9,7 +9,7 @@
     "query": {},
     "headers": {
       "Idempotency-Key": "66666666-6666-4666-8666-666666666666",
-      "Authorization": "Bearer <trusted-gateway-assertion>",
+      "Authorization": "Bearer <api-key-or-gateway-assertion>",
       "Content-Type": "application/json",
       "Accept": "application/json"
     },
@@ -55,5 +55,5 @@
       }
     }
   },
-  "curl": "curl -X POST https://api.reveal.example.org/v1/me/explorations -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"draft_id\":\"22222222-2222-4222-8222-222222222222\",\"source_gap\":{\"id\":\"dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk\",\"source_id\":\"dismech:disorders/Coronary_Artery_Disease#discussion:cad_pgsxc_reverse_causation\",\"source_revision\":\"8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd\"}}'"
+  "curl": "curl -X POST https://api.reveal.example.org/v1/me/explorations -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"draft_id\":\"22222222-2222-4222-8222-222222222222\",\"source_gap\":{\"id\":\"dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk\",\"source_id\":\"dismech:disorders/Coronary_Artery_Disease#discussion:cad_pgsxc_reverse_causation\",\"source_revision\":\"8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd\"}}'"
 }

@@ -14,7 +14,7 @@
     },
     "headers": {
       "Last-Event-ID": "0",
-      "Authorization": "Bearer <trusted-gateway-assertion>",
+      "Authorization": "Bearer <api-key-or-gateway-assertion>",
       "Accept": "application/json"
     },
     "body": null
@@ -130,5 +130,5 @@
       }
     }
   },
-  "curl": "curl -X GET 'https://api.reveal.example.org/v1/jobs/44444444-4444-4444-8444-444444444444/events?after=0&limit=100' -H 'Last-Event-ID: 0' -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Accept: application/json'"
+  "curl": "curl -X GET 'https://api.reveal.example.org/v1/jobs/44444444-4444-4444-8444-444444444444/events?after=0&limit=100' -H 'Last-Event-ID: 0' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
 }

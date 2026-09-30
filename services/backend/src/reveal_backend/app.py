@@ -202,6 +202,8 @@ def admin_cell(table: str, key: str = Query(..., max_length=4096), column: str =
 @app.get('/readyz')
 @app.get('/health/ready')
 def ready():
+    from .api_keys import configuration as api_key_configuration
+    api_key_configuration()
     database = repo.readiness(); catalog.load()
     from .artifact_store import s3_enabled, store
     if s3_enabled(): store().check()

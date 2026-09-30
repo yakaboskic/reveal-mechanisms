@@ -102,6 +102,9 @@ qa:
     ANTHROPIC_API_KEY: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-qa-uiJnVi:ANTHROPIC_API_KEY::'
     REVEAL_GATEWAY_SECRET: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-qa-uiJnVi:REVEAL_GATEWAY_SECRET::'
     REVEAL_GATEWAY_SERVICE_TOKEN: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-qa-uiJnVi:REVEAL_GATEWAY_SERVICE_TOKEN::'
+    # Optional paired fields: an absent key is represented by two empty strings.
+    REVEAL_API_KEY_SHA256: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-qa-uiJnVi:REVEAL_API_KEY_SHA256::'
+    REVEAL_API_KEY_USER_ID: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-qa-uiJnVi:REVEAL_API_KEY_USER_ID::'
     UPSTASH_REDIS_REST_URL: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-qa-uiJnVi:UPSTASH_REDIS_REST_URL::'
     UPSTASH_REDIS_REST_TOKEN: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-qa-uiJnVi:UPSTASH_REDIS_REST_TOKEN::'
     UPSTASH_VECTOR_REST_URL: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-qa-uiJnVi:UPSTASH_VECTOR_REST_URL::'
@@ -141,6 +144,8 @@ prod:
     ANTHROPIC_API_KEY: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-prod-n0rcbA:ANTHROPIC_API_KEY::'
     REVEAL_GATEWAY_SECRET: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-prod-n0rcbA:REVEAL_GATEWAY_SECRET::'
     REVEAL_GATEWAY_SERVICE_TOKEN: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-prod-n0rcbA:REVEAL_GATEWAY_SERVICE_TOKEN::'
+    REVEAL_API_KEY_SHA256: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-prod-n0rcbA:REVEAL_API_KEY_SHA256::'
+    REVEAL_API_KEY_USER_ID: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-prod-n0rcbA:REVEAL_API_KEY_USER_ID::'
     UPSTASH_REDIS_REST_URL: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-prod-n0rcbA:UPSTASH_REDIS_REST_URL::'
     UPSTASH_REDIS_REST_TOKEN: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-prod-n0rcbA:UPSTASH_REDIS_REST_TOKEN::'
     UPSTASH_VECTOR_REST_URL: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-prod-n0rcbA:UPSTASH_VECTOR_REST_URL::'

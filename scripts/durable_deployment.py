@@ -25,6 +25,12 @@ def prepare(*, scheduler='local', api_port=18001, frontend_port=3100, callback_u
     if not 1024 <= api_port <= 65535 or not 1024 <= frontend_port <= 65535 or api_port == frontend_port:
         raise ValueError('Use distinct unprivileged ports')
     source = {k:v for k,v in dotenv_values(ROOT / '.env', interpolate=False).items() if v is not None}
+    from reveal_backend.api_keys import configuration as api_key_configuration
+    from reveal_backend.auth import Problem
+    # Do not inherit an API key bound to the baseline deployment's namespace.
+    for key in ('REVEAL_API_KEY_SHA256', 'REVEAL_API_KEY_USER_ID'): source.setdefault(key, '')
+    try: api_key_configuration(source)
+    except Problem: raise ValueError('Invalid local API key configuration pair') from None
     if callback_url: source['REVEAL_WORKFLOW_URL'] = callback_url
     baseline = ROOT / '.runtime/deployment/backend.env'
     if not baseline.exists():

@@ -12,7 +12,7 @@ import logging
 import os
 import time
 
-from .auth import Problem, principal, decode_assertion
+from .auth import Problem, principal, credential_expiry
 from .repository import now, uid, digest, canonical
 from . import redis_notifications
 
@@ -161,9 +161,13 @@ def sse(event, payload, cursor=None):
     return (f'id: {cursor}\n' if cursor else '')+f'event: {event}\ndata: {json.dumps(payload, separators=(",", ":"))}\n\n'
 
 
-def stream_deadline(authorization):
-    claims = decode_assertion(authorization[7:])
-    lifetime = min(240, max(1, int(os.getenv('REVEAL_SSE_WINDOW_SECONDS', '240'))), max(0, claims['exp']-time.time()))
+def stream_deadline(authorization, workspace_expires_at=None):
+    expiry = credential_expiry(authorization)
+    lifetime = min(240, max(1, int(os.getenv('REVEAL_SSE_WINDOW_SECONDS', '240'))))
+    if expiry is not None: lifetime = min(lifetime, max(0, expiry-time.time()))
+    if workspace_expires_at:
+        from datetime import datetime
+        lifetime = min(lifetime, max(0, datetime.fromisoformat(workspace_expires_at.replace('Z', '+00:00')).timestamp()-time.time()))
     return time.monotonic()+lifetime
 
 
@@ -171,12 +175,12 @@ async def workspace_response(repository, request, after=None):
     from fastapi.responses import StreamingResponse
     authorization = request.headers.get('authorization')
     def identify():
-        with repository.read_transaction() as tx: return principal(tx, authorization)['user_id']
-    owner = await asyncio.to_thread(identify)
+        with repository.read_transaction() as tx: return principal(tx, authorization)
+    identity = await asyncio.to_thread(identify); owner = identity['user_id']
     header = request.headers.get('last-event-id')
     if header and after and header != after: raise Problem(400, 'INVALID_CURSOR', 'Last-Event-ID and after must agree.')
     positions = decode_cursor(owner, header or after)
-    deadline = stream_deadline(authorization)
+    deadline = stream_deadline(authorization, identity.get('workspace_expires_at'))
 
     async def generate():
         nonlocal positions
@@ -186,7 +190,9 @@ async def workspace_response(repository, request, after=None):
                 # Notifications queued while reading it trigger another replay.
                 while time.monotonic() < deadline:
                     try:
-                        _, events, highwater, expired = await asyncio.to_thread(replay, repository, authorization, positions)
+                        current_owner, events, highwater, expired = await asyncio.to_thread(replay, repository, authorization, positions)
+                        if current_owner != owner:
+                            yield sse('access_revoked', {'schema_version':1}); return
                     except Problem:
                         yield sse('access_revoked', {'schema_version':1}); return
                     if expired:

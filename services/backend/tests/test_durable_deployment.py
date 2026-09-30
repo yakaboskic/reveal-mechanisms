@@ -27,17 +27,22 @@ def test_default_stack_has_no_queue_consumers_or_self_hosted_redis():
     ]
 
 
-def test_prepare_separates_application_state_and_backend_secrets(tmp_path, monkeypatch):
+@pytest.mark.parametrize('local_api_key', [False, True])
+def test_prepare_separates_application_state_and_backend_secrets(tmp_path, monkeypatch, local_api_key):
     root = tmp_path
     runtime = root/'.runtime/workflow'
     runtime.mkdir(parents=True)
     baseline = root/'.runtime/deployment'; baseline.mkdir()
-    (baseline/'backend.env').write_text('REVEAL_MYSQL_PASSWORD=db-secret\nREVEAL_REDIS_URL=redis://old-queue\n')
+    (baseline/'backend.env').write_text('REVEAL_MYSQL_PASSWORD=db-secret\nREVEAL_REDIS_URL=redis://old-queue\n'
+        'REVEAL_API_KEY_SHA256='+('c'*64)+'\nREVEAL_API_KEY_USER_ID=33333333-3333-4333-8333-333333333333\n')
     assets=root/'.deployment-assets'; assets.mkdir()
     for name in ('dapper','dismech','rds-ca.pem'): (assets/name).touch()
     (root/'.env').write_text('UPSTASH_REDIS_REST_URL=https://redis.example\nUPSTASH_REDIS_REST_TOKEN=redis-secret\n'
         'UPSTASH_VECTOR_REST_URL=https://vector.example\nUPSTASH_VECTOR_REST_TOKEN=vector-secret\n'
         'QSTASH_TOKEN=live-token\nQSTASH_CURRENT_SIGNING_KEY=live-current\nQSTASH_NEXT_SIGNING_KEY=live-next\n')
+    if local_api_key:
+        with (root/'.env').open('a') as output:
+            output.write('REVEAL_API_KEY_SHA256='+('a'*64)+'\nREVEAL_API_KEY_USER_ID=11111111-1111-4111-8111-111111111111\n')
     (runtime/'qstash.log').write_text('QSTASH_URL=http://127.0.0.1:18080\nQSTASH_TOKEN=local-token\n'
         'QSTASH_CURRENT_SIGNING_KEY=local-current\nQSTASH_NEXT_SIGNING_KEY=local-next\n')
     monkeypatch.setattr(module,'ROOT',root); monkeypatch.setattr(module,'RUNTIME',runtime)
@@ -53,10 +58,22 @@ def test_prepare_separates_application_state_and_backend_secrets(tmp_path, monke
     assert backend['QSTASH_TOKEN']=='local-token'
     assert backend['QSTASH_URL']=='http://host.docker.internal:18080'
     assert 'REVEAL_REDIS_URL' not in backend
+    assert backend['REVEAL_API_KEY_SHA256'] == ('a'*64 if local_api_key else '')
+    assert backend['REVEAL_API_KEY_USER_ID'] == ('11111111-1111-4111-8111-111111111111' if local_api_key else '')
+    assert not {'REVEAL_API_KEY_SHA256','REVEAL_API_KEY_USER_ID'} & frontend.keys()
     assert not any(k.startswith(('UPSTASH_','QSTASH_','AWS_','REVEAL_MYSQL')) for k in frontend)
     assert result['worker_services']==0
     assert (runtime/'backend.env').stat().st_mode & 0o777 == 0o600
     assert 'redis-secret' not in json.dumps(result)
+
+
+def test_malformed_local_api_key_fails_before_config_preparation(tmp_path, monkeypatch):
+    (tmp_path/'.env').write_text('REVEAL_API_KEY_SHA256='+('a'*64)+'\n')
+    runtime=tmp_path/'.runtime/workflow'
+    monkeypatch.setattr(module,'ROOT',tmp_path); monkeypatch.setattr(module,'RUNTIME',runtime)
+    with pytest.raises(ValueError,match='Invalid local API key configuration pair'):
+        module.prepare()
+    assert not runtime.exists()
 
 
 def test_platform_qa_isolates_authoritative_state_and_callbacks():
@@ -73,6 +90,7 @@ def test_platform_qa_isolates_authoritative_state_and_callbacks():
     assert config['qa']['env']['REVEAL_S3_PREFIX']=='qa/'
     assert 'api-qa.' in config['qa']['env']['REVEAL_WORKFLOW_URL']
     required = {'REVEAL_MYSQL_PASSWORD', 'REVEAL_GATEWAY_SECRET', 'REVEAL_GATEWAY_SERVICE_TOKEN',
+        'REVEAL_API_KEY_SHA256', 'REVEAL_API_KEY_USER_ID',
         'UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN',
         'UPSTASH_VECTOR_REST_URL', 'UPSTASH_VECTOR_REST_TOKEN', 'UPSTASH_VECTOR_WRITE_TOKEN',
         'QSTASH_TOKEN', 'QSTASH_CURRENT_SIGNING_KEY', 'QSTASH_NEXT_SIGNING_KEY'}
@@ -85,3 +103,5 @@ def test_platform_qa_isolates_authoritative_state_and_callbacks():
             assert secrets[key].endswith(f':{key}::')
         assert 'REVEAL_REDIS_URL' not in {**config['env'], **config[environment].get('env', {})}
     assert config['qa']['secrets']['REVEAL_GATEWAY_SECRET'] != config['prod']['secrets']['REVEAL_GATEWAY_SECRET']
+    for key in ('REVEAL_API_KEY_SHA256', 'REVEAL_API_KEY_USER_ID'):
+        assert config['qa']['secrets'][key] != config['prod']['secrets'][key]

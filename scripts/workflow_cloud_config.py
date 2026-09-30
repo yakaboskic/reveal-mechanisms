@@ -9,6 +9,34 @@ import yaml
 
 from local_deployment import ROOT, env_file, read_env
 
+API_KEY_SETTINGS = ('REVEAL_API_KEY_SHA256', 'REVEAL_API_KEY_USER_ID')
+
+
+def api_key_configuration(runtime, environment):
+    """Only the selected environment's private record enables owner API access.
+
+    Shared .env and legacy backend values never cross into QA or production.
+    These are a digest and principal UUID; the raw bearer belongs only in the
+    separate private delivery file created by the issuance command.
+    """
+    from reveal_backend.api_keys import configuration
+    from reveal_backend.auth import Problem
+    path = runtime / f'{environment}-api-key-config.json'
+    values = dict.fromkeys(API_KEY_SETTINGS, '')
+    if path.is_symlink(): raise ValueError('API key configuration must be a regular private file')
+    if path.exists():
+        try:
+            with path.open('rb') as stream: raw = stream.read(4097)
+            if len(raw) > 4096: raise ValueError()
+            values = json.loads(raw)
+            if (not isinstance(values, dict) or set(values) != set(API_KEY_SETTINGS)
+                    or not all(isinstance(value, str) for value in values.values())): raise ValueError()
+        except (OSError, ValueError, TypeError):
+            raise ValueError('Invalid environment API key configuration record') from None
+    try: configuration(values)
+    except Problem: raise ValueError('Invalid environment API key configuration pair') from None
+    return values
+
 
 def prepare(environment):
     if environment not in ('qa', 'prod'):
@@ -20,6 +48,7 @@ def prepare(environment):
     settings['SERVICE_PATH_PREFIX'] = '/api/reveal'
     source = read_env(ROOT / '.runtime/deployment/backend.env')
     source.update({k: v for k, v in dotenv_values(ROOT / '.env', interpolate=False).items() if v is not None})
+    source.update(api_key_configuration(runtime, environment))
     keyfile = runtime / f'{environment}-session-keys.json'
     if not keyfile.exists():
         keyfile.write_text(json.dumps({k: secrets.token_hex(32) for k in ('session', 'gateway', 'service')}))
@@ -28,7 +57,7 @@ def prepare(environment):
     source.update(REVEAL_GATEWAY_SECRET=keys['gateway'], REVEAL_GATEWAY_SERVICE_TOKEN=keys['service'])
     source['UPSTASH_VECTOR_WRITE_TOKEN'] = source.get('UPSTASH_VECTOR_WRITE_TOKEN') or source.get('UPSTASH_VECTOR_REST_TOKEN')
     names = manifest[environment]['secrets']
-    missing = [name for name in names if not source.get(name)]
+    missing = [name for name in names if name not in API_KEY_SETTINGS and not source.get(name)]
     if missing:
         raise ValueError('Missing credentials: ' + ', '.join(missing))
     backend_secret = {name: source[name] for name in names}

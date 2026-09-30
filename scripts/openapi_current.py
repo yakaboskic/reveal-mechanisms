@@ -206,10 +206,10 @@ def endpoints(b,f,e):
     P['/v1/me/workspace/events']={'get':{'operationId':'subscribeWorkspaceEvents','tags':['Research history'],
         'summary':'Subscribe to committed workspace changes',
         'description':'Authenticated SSE backed by durable RDS replay and managed Redis Pub/Sub wakeups. Subscribe before replay. Send Last-Event-ID or after to resume; both must agree if supplied. workspace_change carries WorkspaceEvent. ready, resync_required, connection_degraded and access_revoked are stream control events. Resync explicitly reloads authorized collections. Heartbeats do not read Redis or query application state.',
-        'security':[{'GatewayAssertion':[]}],
+        'security':[{'ApplicationBearer':[]}],
         'parameters':[{'name':'Last-Event-ID','in':'header','required':False,'schema':string(),'example':'opaque-signed-cursor','description':'Opaque signed reconnect cursor.'},
                       {'name':'after','in':'query','required':False,'schema':string(),'example':'opaque-signed-cursor','description':'Opaque signed reconnect cursor, equivalent to Last-Event-ID.'}],
-        'x-codeSamples':[{'lang':'Shell','label':'Subscribe','source':"curl --no-buffer http://localhost:3100/api/backend/v1/me/workspace/events -H 'Accept: text/event-stream' -H 'Authorization: Bearer <trusted-gateway-assertion>'"}],
+        'x-codeSamples':[{'lang':'Shell','label':'Subscribe','source':"curl --no-buffer http://localhost:3100/api/backend/v1/me/workspace/events -H 'Accept: text/event-stream' -H 'Authorization: Bearer <api-key-or-gateway-assertion>'"}],
         'responses':{'200':{'description':'Committed events and stream control messages. Each workspace_change data frame is a WorkspaceEvent JSON object.',
             'content':{'text/event-stream':{'schema':string(),'examples':{'change':{'value':'id: opaque-signed-cursor\nevent: workspace_change\ndata: '+json.dumps({
                 'schema_version':1,'event_id':'scope:1','cursor':'1','scope':'workspace','committed_at':'2026-09-30T00:00:00Z',
@@ -219,7 +219,7 @@ def endpoints(b,f,e):
     b.EXCHANGES.append({'operation_id':'subscribeWorkspaceEvents','case':'request','method':'GET',
         'path_template':'/v1/me/workspace/events',
         'request':{'url':b.BASE+'/v1/me/workspace/events','path':{},'query':{},
-            'headers':{'Authorization':'Bearer <trusted-gateway-assertion>','Accept':'text/event-stream'},'body':None},
+            'headers':{'Authorization':'Bearer <api-key-or-gateway-assertion>','Accept':'text/event-stream'},'body':None},
         'responses':{'200':{'content_type':'text/event-stream','examples':{
             'change':P['/v1/me/workspace/events']['get']['responses']['200']['content']['text/event-stream']['examples']['change']['value']}}},'curl':''})
     def op(path,method='get'):return P[path][method]
@@ -333,7 +333,7 @@ def endpoints(b,f,e):
         parameters=[b.parameter('outcome_id','path',uuid,outcome_id,True)],request_schema='PublicationInput',
         request_examples={'publish':{'visibility':'public','expected_version':0},'unpublish':{'visibility':'private','expected_version':1}},idempotent=True,errors=('400','401','403','404','409','422','429'))
     for path in ('/v1/analysis-outcomes/{outcome_id}','/v1/analysis-outcomes/{outcome_id}/publication','/v1/knowledge-gaps/{gap_id}/outcomes'):
-        op(path)['security']=[{}, {'GatewayAssertion': []}]
+        op(path)['security']=[{}, {'ApplicationBearer': []}]
     exploration={'source_gap':e['composer']['source_gap'],'knowledge_gap':f['gap'],'last_explored_at':b.NOW,'draft_id':b.DRAFT_ID,
         'scientific_accounts':{'count':1,'scope':'owner_exact_gap','as_of':b.NOW,'ranking':'curated','window_days':None}}
     b.operation('/v1/me/explorations','get','listExplorations','Research history','List your explored knowledge gaps',
@@ -388,7 +388,7 @@ def endpoints(b,f,e):
     stream['responses']['200']['content']['text/event-stream']['examples']['result_event']['value']='id: 4\nevent: result\ndata: '+b.canonical(e['event'])+'\n\n'
     for path,method in [('/v1/accounts/{dapper_id}','get'),('/v1/claims/{dapper_id}','get'),('/v1/objects/{dapper_id}','get'),('/v1/gene-sets/{dapper_id}','get'),('/v1/paragraphs/{dapper_id}','get'),('/v1/paragraphs/{dapper_id}/export','get'),('/v1/citations/{dapper_id}','get'),('/v1/citations/render','post'),('/v1/artifacts/{sha256}','get')]:
         if path not in P: continue
-        operation=op(path,method); operation['security']=[{}, {'GatewayAssertion': []}]
+        operation=op(path,method); operation['security']=[{}, {'ApplicationBearer': []}]
         operation['description']+=' A valid owner retains private access. Without owner access, only an active explicit publication snapshot authorizes this scientific resource, exact cited revisions and reachable source artifacts. Invalid supplied credentials fail even on public reads. Unpublication revokes snapshot access; job/draft/request routes remain private.'
     for example in op('/v1/accounts/{dapper_id}')['responses']['200']['content']['application/json']['examples'].values():
         example['value']['publication']=private_publication

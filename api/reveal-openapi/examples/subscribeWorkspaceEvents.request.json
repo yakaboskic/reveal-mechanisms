@@ -10,7 +10,7 @@
       "after": "opaque-signed-cursor"
     },
     "headers": {
-      "Authorization": "Bearer <trusted-gateway-assertion>",
+      "Authorization": "Bearer <api-key-or-gateway-assertion>",
       "Accept": "text/event-stream"
     },
     "body": null
@@ -23,5 +23,5 @@
       }
     }
   },
-  "curl": "curl -X GET 'https://api.reveal.example.org/v1/me/workspace/events?after=opaque-signed-cursor' -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Accept: text/event-stream'"
+  "curl": "curl -X GET 'https://api.reveal.example.org/v1/me/workspace/events?after=opaque-signed-cursor' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: text/event-stream'"
 }
