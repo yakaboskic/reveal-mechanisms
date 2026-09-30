@@ -63,6 +63,22 @@ class WorkflowTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await WorkflowExecution(self.repo, storage=self.store).step(payload, 1), result)
         with self.repo.read_transaction() as tx: self.assertEqual(len(tx.list('event')), events)
 
+    async def test_production_probe_requires_exact_isolated_qa_configuration(self):
+        configs = [
+            ({'SERVICE_ENV': 'qa', 'REVEAL_JOB_NAMESPACE': 'reveal-workflow-qa', 'REVEAL_APPLICATION_TABLE_PREFIX': 'reveal_workflow_qa'}, True),
+            ({'SERVICE_ENV': 'prod', 'REVEAL_JOB_NAMESPACE': 'reveal-workflow-qa', 'REVEAL_APPLICATION_TABLE_PREFIX': 'reveal_workflow_qa'}, False),
+            ({'SERVICE_ENV': 'qa', 'REVEAL_JOB_NAMESPACE': 'reveal-workflow-prod', 'REVEAL_APPLICATION_TABLE_PREFIX': 'reveal_workflow_qa'}, False),
+            ({'SERVICE_ENV': 'qa', 'REVEAL_JOB_NAMESPACE': 'reveal-workflow-qa', 'REVEAL_APPLICATION_TABLE_PREFIX': 'reveal_workflow_prod'}, False),
+        ]
+        for config, allowed in configs:
+            with patch.dict('os.environ', {**config, 'REVEAL_ENVIRONMENT': 'production'}):
+                job, payload = self.new(); payload['namespace'] = config['REVEAL_JOB_NAMESPACE']
+                result = await WorkflowExecution(self.repo, storage=self.store).step(payload, 0)
+                self.assertEqual(result['phase'], 'probe_finish' if allowed else 'complete')
+                if not allowed:
+                    with self.repo.read_transaction() as tx:
+                        self.assertEqual(tx.get('job', job['id'])['data']['status'], 'failed')
+
     async def test_legacy_claimers_never_take_workflow_jobs(self):
         self.new()
         self.assertIsNone(jobs.claim(self.repo, 'legacy'))

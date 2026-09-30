@@ -387,7 +387,11 @@ class WorkflowExecution:
 
     async def probe(self, payload, token, job, queue, execution, root):
         """No paid services: prove replacement during a durable wait and restore."""
-        require(setting('REVEAL_ENVIRONMENT', 'development') in ('development', 'test'), 'Probes are restricted to development/test')
+        isolated_qa = (setting('SERVICE_ENV') == 'qa'
+                       and setting('REVEAL_JOB_NAMESPACE') == 'reveal-workflow-qa'
+                       and setting('REVEAL_APPLICATION_TABLE_PREFIX') == 'reveal_workflow_qa')
+        require(setting('REVEAL_ENVIRONMENT', 'development') in ('development', 'test') or isolated_qa,
+                'Probes are restricted to development/test or the isolated workflow QA namespace')
         if execution['phase'] == 'prepare':
             (root/'probe.json').write_bytes(canonical_json({'job_id': job['id'], 'nonce': queue['inputs']['nonce']}))
             await run_sync(self.checkpoint, payload, token, root)
