@@ -75,7 +75,8 @@ def prepare(*, scheduler='local', api_port=18001, frontend_port=3100, callback_u
         REVEAL_RETRIEVAL_BACKEND='upstash', REVEAL_VECTOR_ENVIRONMENT='local',
         REVEAL_NOTIFICATION_NAMESPACE='reveal-workflow-local',
         REVEAL_MYSQL_CA_FILE='/app/runtime-ca.pem', REVEAL_DAPPER_ROOT='/app/.runtime/dapper',
-        REVEAL_DISMECH_SOURCE='/app/dismech', REVEAL_WORK_DIR='/work', REVEAL_ARTIFACT_STORE='s3',
+        REVEAL_DISMECH_SOURCE='/app/dismech', REVEAL_WORK_DIR='/work', TMPDIR='/work', REVEAL_ARTIFACT_STORE='s3',
+        REVEAL_MAX_SCRATCH_STEPS='2', REVEAL_WORKSPACE_MAX_BYTES='268435456',
         REVEAL_GATEWAY_SECRET=keys['gateway'], REVEAL_GATEWAY_SERVICE_TOKEN=keys['service'],
         REVEAL_GATEWAY_ISSUER='reveal-nextjs', REVEAL_GATEWAY_AUDIENCE='reveal-api',
         NEXTAUTH_URL=origin, REVEAL_CANONICAL_URL=origin)

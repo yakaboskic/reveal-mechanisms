@@ -24,7 +24,7 @@ class MemoryStore:
         files = {str(p.relative_to(root)): p.read_bytes().hex() for p in root.rglob('*') if p.is_file()}
         key = digest(files); self.values[key] = files
         return {'sha256': key, 'store': 'test-only'}
-    def restore(self, ref, root):
+    def restore(self, ref, root, *, cancelled=None):
         for name, data in self.values[ref['sha256']].items():
             path = root/name; path.parent.mkdir(parents=True, exist_ok=True); path.write_bytes(bytes.fromhex(data))
 
@@ -258,6 +258,96 @@ class WorkflowTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result['phase'],'prepare'); self.assertEqual(result['sleep'],10)
         self.assertIsNone(self.execution(second)['fence'])
 
+    async def test_scratch_limit_is_shared_across_preparation_review_and_capture(self):
+        _, first = self.new(); _, second = self.new(); _, third = self.new()
+        with self.repo.transaction() as tx:
+            for payload, phase in ((second, 'review_call'), (third, 'capture')):
+                row = tx.get('execution', payload['job_id']); row['data']['phase'] = phase
+                tx.put('execution', payload['job_id'], row['owner'], row['data'])
+        with patch.dict('os.environ', {'REVEAL_MAX_SCRATCH_STEPS': '2'}):
+            state.acquire(self.repo, first, 0)
+            state.acquire(self.repo, second, 0)
+            with patch('reveal_backend.workflow_execution.tempfile.TemporaryDirectory', side_effect=AssertionError('Deferred phase allocated scratch')):
+                result = await WorkflowExecution(self.repo, storage=self.store).step(third, 0)
+        self.assertEqual(result['phase'], 'capture'); self.assertEqual(result['sleep'], 10)
+        self.assertIsNone(self.execution(third)['fence'])
+
+    async def test_restore_timeout_drains_writer_before_releasing_scratch_fence(self):
+        import time
+        from threading import Event
+        _, payload = self.new()
+        with self.repo.transaction() as tx:
+            row = tx.get('execution', payload['job_id']); row['data']['workspace'] = {'sha256': 'saved'}
+            tx.put('execution', payload['job_id'], row['owner'], row['data'])
+        drained = Event(); paths = []
+        def restore(reference, root, *, cancelled):
+            paths.append(root)
+            time.sleep(1.1)  # Stand in for one bounded in-flight S3 response.
+            self.assertTrue(cancelled())
+            self.assertIsNotNone(self.execution(payload)['fence'])
+            drained.set()
+            raise OSError('Restore stopped before writing received bytes')
+        self.store.restore = restore
+        engine = WorkflowExecution(self.repo, storage=self.store); engine.operate = AsyncMock()
+        with patch.dict('os.environ', {'REVEAL_WORKFLOW_STEP_TIMEOUT_SECONDS': '1'}):
+            with self.assertRaises(TimeoutError): await engine.step(payload, 0)
+        engine.operate.assert_not_awaited()
+        self.assertTrue(drained.is_set()); self.assertFalse(paths[0].exists())
+        self.assertIsNone(self.execution(payload)['fence'])
+
+    async def test_phase_timeout_drains_sync_writer_before_workspace_cleanup(self):
+        import time
+        from threading import Event
+        from reveal_backend.workflow_execution import run_sync
+        _, payload = self.new(); drained = Event(); paths = []
+        engine = WorkflowExecution(self.repo, storage=self.store)
+        def writer(root):
+            paths.append(root); time.sleep(1.1)
+            (root/'late-file').write_text('Completed before scratch was released')
+            self.assertIsNotNone(self.execution(payload)['fence'])
+            drained.set()
+        async def operation(_payload, token, job, execution, root):
+            await run_sync(writer, root)
+            raise AssertionError('A timed-out phase must not continue')
+        engine.operate = operation
+        with patch.dict('os.environ', {'REVEAL_WORKFLOW_STEP_TIMEOUT_SECONDS': '1'}):
+            with self.assertRaises(TimeoutError): await engine.step(payload, 0)
+        self.assertTrue(drained.is_set()); self.assertFalse(paths[0].exists())
+        self.assertIsNone(self.execution(payload)['fence'])
+
+    async def test_repeated_cancellation_keeps_scratch_and_fence_until_writer_finishes(self):
+        from threading import Event
+        from reveal_backend.workflow_execution import run_sync
+        for restoring in (False, True):
+            _, payload = self.new(); started = Event(); release = Event(); paths = []
+            if restoring:
+                with self.repo.transaction() as tx:
+                    row = tx.get('execution', payload['job_id']); row['data']['workspace'] = {'sha256': 'saved'}
+                    tx.put('execution', payload['job_id'], row['owner'], row['data'])
+            def writer(root, cancelled=None):
+                paths.append(root); started.set(); release.wait(3)
+                self.assertTrue(root.exists())
+                if restoring: self.assertTrue(cancelled())
+                else: (root/'late-write').write_text('still owned')
+            engine = WorkflowExecution(self.repo, storage=self.store)
+            if restoring:
+                self.store.restore = lambda reference, root, *, cancelled: writer(root, cancelled)
+            else:
+                async def operation(_payload, token, job, execution, root): await run_sync(writer, root)
+                engine.operate = operation
+            task = asyncio.create_task(engine.step(payload, 0))
+            try:
+                self.assertTrue(await asyncio.to_thread(started.wait, 1))
+                task.cancel(); await asyncio.sleep(.01)
+                task.cancel(); await asyncio.sleep(.01)
+                self.assertFalse(task.done())
+                self.assertTrue(paths[0].exists())
+                self.assertIsNotNone(self.execution(payload)['fence'])
+            finally:
+                release.set()
+                with self.assertRaises(asyncio.CancelledError): await task
+            self.assertFalse(paths[0].exists())
+
     async def test_cancellation_winning_finish_race_is_terminal_before_workflow_retires(self):
         job,payload=self.new()
         engine=WorkflowExecution(self.repo,storage=self.store)
@@ -315,6 +405,29 @@ class WorkflowTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result['phase'],'observe')
             self.assertEqual(self.execution(payload)['workspace'],workspace)
             storage.restore.assert_not_called(); storage.snapshot.assert_not_called()
+
+    async def test_create_and_abandoned_cleanup_preserve_workspace_without_s3_reads(self):
+        job, payload = self.new('paragraph'); workspace = {'sha256': 'preserved'}
+        with self.repo.transaction() as tx:
+            row = tx.get('execution', job['id']); row['data'].update(phase='create', workspace=workspace)
+            tx.put('execution', job['id'], row['owner'], row['data'])
+        adapter = Mock(); adapter.create_once = AsyncMock(return_value={'box_id': 'box', 'phase': 'created'})
+        adapter.delete_once = AsyncMock(return_value={'box_id': 'box', 'phase': 'deleted'})
+        adapter.cancel_once = AsyncMock(side_effect=AssertionError('Unlaunched Box has no runner to cancel'))
+        storage = Mock(); storage.restore.side_effect = AssertionError('Phase must not restore workspace')
+        storage.snapshot.side_effect = AssertionError('Phase must preserve workspace')
+        engine = WorkflowExecution(self.repo, storage=storage, adapter=adapter)
+        self.assertEqual((await engine.step(payload, 0))['phase'], 'bootstrap')
+        adapter.create_once.assert_awaited_once_with(job['id'], 1)
+        with self.repo.transaction() as tx:
+            row = tx.get('execution', job['id']); row['data'].update(phase='cleanup', abandoned=True)
+            tx.put('execution', job['id'], row['owner'], row['data'])
+            jobs.cancel(tx, tx.get('job', job['id'])['data'])
+        self.assertTrue((await engine.step(payload, 1))['done'])
+        self.assertEqual(self.execution(payload)['workspace'], workspace)
+        self.assertFalse(self.execution(payload)['capacity_reserved'])
+        adapter.cancel_once.assert_not_awaited()
+        storage.restore.assert_not_called(); storage.snapshot.assert_not_called()
 
     async def test_unsigned_workflow_control_and_reconcile_rejected(self):
         from fastapi import FastAPI

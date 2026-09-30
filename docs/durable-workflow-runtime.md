@@ -20,6 +20,12 @@ candidate retrieval. Upstash Redis provides Pub/Sub wakeups only.
 - Workflow transport retries reuse a stable run/dispatch identity. RDS fences
   prevent duplicate or stale commits. A lost Box creation response is explicitly
   retained for operator recovery rather than creating a second paid agent.
+- The pinned Python Workflow SDK needs a compatibility guard for duplicate
+  history records after a lost HTTP response. Both workflow routes normalize
+  history only after signature verification, acknowledge duplicate tails without
+  effects, and reject conflicting results. Continuations carry stable step
+  deduplication identities and the configured delivery timeout. Keep the signed
+  SDK integration tests when upgrading the pinned SDK.
 - Box observation performs one bounded status request followed by a durable
   Workflow sleep. The selected Python SDK does not expose `wait_for_event`.
   These are Box requests, not Redis polling. No handler remains alive while
@@ -94,6 +100,13 @@ prefix and Vector environment. Production uses the existing application records.
 The release renderer emits only the HTTP service; it no longer emits a background
 worker stack. Production remains subject to the platform's environment gate.
 
+Scratch-heavy phases share an RDS concurrency limit of two across preparation,
+capture and review. Local and cloud containers use `TMPDIR=/work`, a 1 GiB work
+tmpfs and a 256 MiB checkpoint limit. Restore participates in the bounded step
+deadline; cancellation drains the restore thread before deleting its directory.
+REVEAL requests a 300-second target-group drain and a 120-second process stop
+window, while other DIG services retain their existing defaults.
+
 Prepare the private environment files without changing remote configuration:
 
 ```sh
@@ -131,6 +144,14 @@ in immutable S3. The real browser gateway delivered create/rename/delete events
 to two tabs, with zero collection requests over 40 seconds idle and no browser
 errors. The backend suite passed 650 tests (8 skipped), and the frontend passed
 typecheck and all 69 tests. Scientific-run and cloud acceptance are still pending.
+
+A subsequent managed Vector workflow verified two bindings, both import batches,
+the exact inventory and two frozen quality probes without changing the serving
+snapshot. A non-scientific managed workflow also passed lost-response retry and
+duplicate-history injection through the actual signed HTTP route: application
+state and event hashes stayed unchanged, and the original generation completed
+with exactly two recorded phases and restored S3 evidence. No Box or model call
+was used by that failure-injection probe.
 
 Provider references: [FastAPI integration](https://upstash.com/docs/workflow/quickstarts/fastapi),
 [QStash regions](https://upstash.com/docs/qstash/howto/multi-region),

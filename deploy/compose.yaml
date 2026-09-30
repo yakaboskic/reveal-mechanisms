@@ -12,8 +12,8 @@ x-backend: &backend
   restart: unless-stopped
   read_only: true
   tmpfs:
-    - /work:rw,nosuid,nodev,size=536870912,mode=1777
-    - /tmp:rw,nosuid,nodev,size=134217728,mode=1777
+    - /work:rw,nosuid,nodev,size=1073741824,mode=1777
+    - /tmp:rw,nosuid,nodev,size=67108864,mode=1777
   stop_grace_period: 120s
   logging:
     driver: json-file

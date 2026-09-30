@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import tempfile
+from threading import Event
 import time
 
 from . import jobs, workflow_state as state
@@ -23,6 +24,32 @@ from .worker import (Worker, collect, read_preparation_inputs, restore_dispatch_
     public_activity, validate_execution_ledger, assert_artifact, assemble_account)
 
 
+async def drain_task(task):
+    # Shutdown can cancel the parent again while a timed-out thread is draining.
+    # Every wait must remain shielded: cancelling a to_thread Task does not stop
+    # its real writer, and would falsely report that scratch is safe to remove.
+    while not task.done():
+        try: await asyncio.shield(task)
+        except asyncio.CancelledError: continue
+        except Exception: break
+    if not task.cancelled():
+        try: task.result()
+        except Exception: pass
+
+
+async def drain_on_cancel(awaitable):
+    """A timeout cannot release a workspace while its sync writer is alive."""
+    task = asyncio.ensure_future(awaitable)
+    try: return await asyncio.shield(task)
+    except asyncio.CancelledError:
+        await drain_task(task)
+        raise
+
+
+async def run_sync(function, *args, **kwargs):
+    return await drain_on_cancel(asyncio.to_thread(function, *args, **kwargs))
+
+
 class WorkflowExecution:
     def __init__(self, repository=None, *, storage=None, adapter=None):
         self.repository = repository or Repository()
@@ -32,6 +59,19 @@ class WorkflowExecution:
     def store(self):
         if self.storage is None: self.storage = artifact_store()
         return self.storage
+
+    async def restore_workspace(self, reference, root):
+        # Cancelling to_thread alone leaves a writer alive after scratch cleanup.
+        # Stop at the next bounded S3 response, and drain it before releasing the
+        # global scratch lease or removing this invocation's directory.
+        cancelled = Event()
+        task = asyncio.create_task(asyncio.to_thread(self.store().restore, reference, root,
+                                                   cancelled=cancelled.is_set))
+        try: await asyncio.shield(task)
+        except asyncio.CancelledError:
+            cancelled.set()
+            await drain_task(task)
+            raise
 
     def context(self, payload):
         with self.repository.read_transaction() as tx:
@@ -94,33 +134,33 @@ class WorkflowExecution:
             tx.update_existing('queue', payload['job_id'], owner, queue)
 
     async def step(self, payload, index):
-        job, execution, replay = await asyncio.to_thread(state.acquire, self.repository, payload, index)
+        job, execution, replay = await run_sync(state.acquire, self.repository, payload, index)
         if replay is not None: return replay
         token = execution['fence']
         try:
             if execution.get('deferred'):
-                return await asyncio.to_thread(state.complete, self.repository, payload, token, next_phase=execution['phase'], sleep=10)
+                return await run_sync(state.complete, self.repository, payload, token, next_phase=execution['phase'], sleep=10)
             # Even an acknowledgment lost after outcome commit must replay the
             # authoritative outcome rather than attempting scientific work twice.
             if job['status'] in jobs.TERMINAL and not execution.get('capacity_reserved'):
-                return await asyncio.to_thread(state.complete, self.repository, payload, token, next_phase='complete', done=True)
+                return await run_sync(state.complete, self.repository, payload, token, next_phase='complete', done=True)
             with tempfile.TemporaryDirectory(prefix='reveal-step-') as temporary:
                 root = Path(temporary)
-                if execution.get('workspace') and execution['phase'] not in ('observe', 'launch'):
-                    await asyncio.to_thread(self.store().restore, execution['workspace'], root)
                 async with asyncio.timeout(int(setting('REVEAL_WORKFLOW_STEP_TIMEOUT_SECONDS', '360'))):
+                    if execution.get('workspace') and state.needs_scratch(execution):
+                        await self.restore_workspace(execution['workspace'], root)
                     result = await self.operate(payload, token, job, execution, root)
-                return await asyncio.to_thread(state.complete, self.repository, payload, token, **result)
+                return await run_sync(state.complete, self.repository, payload, token, **result)
         except state.StepBusy:
-            return await asyncio.to_thread(state.complete, self.repository, payload, token,
+            return await run_sync(state.complete, self.repository, payload, token,
                                            next_phase=execution['phase'], sleep=10)
         except state.RecoveryRequired:
-            await asyncio.to_thread(state.release, self.repository, payload, token, recovery=True, reason='External creation requires reconciliation')
+            await run_sync(state.release, self.repository, payload, token, recovery=True, reason='External creation requires reconciliation')
             raise
         except state.StaleExecution:
             raise
         except (BoxTransportError, StorageUnavailable, TimeoutError, OSError):
-            await asyncio.to_thread(state.release, self.repository, payload, token, reason='Transient external operation; retry the same phase')
+            await run_sync(state.release, self.repository, payload, token, reason='Transient external operation; retry the same phase')
             raise
         except Exception as exc:
             from .scientific_grounding import ScientificReviewUnavailable
@@ -129,63 +169,71 @@ class WorkflowExecution:
                 'code': 'EVIDENCE_PREPARATION_FAILED' if execution['phase'] == 'prepare' else 'VALIDATION_FAILED',
                 'message': 'The workflow phase could not be completed. Saved output and source captures are preserved.', 'retryable': True}
             # Never terminalize a paid execution whose remote cleanup is unresolved.
-            _, _, latest = await asyncio.to_thread(self.context, payload)
+            _, _, latest = await run_sync(self.context, payload)
             if latest.get('capacity_reserved'):
-                await asyncio.to_thread(state.release, self.repository, payload, token, recovery=True, reason=type(exc).__name__)
+                await run_sync(state.release, self.repository, payload, token, recovery=True, reason=type(exc).__name__)
                 raise
-            await asyncio.to_thread(jobs.finish, self.repository, payload['job_id'], token, 'failed', failure=failure)
-            return await asyncio.to_thread(state.complete, self.repository, payload, token, next_phase='complete', done=True)
+            await run_sync(jobs.finish, self.repository, payload['job_id'], token, 'failed', failure=failure)
+            return await run_sync(state.complete, self.repository, payload, token, next_phase='complete', done=True)
 
     async def operate(self, payload, token, job, execution, root):
-        job, queue, execution = await asyncio.to_thread(self.context, payload)
+        job, queue, execution = await run_sync(self.context, payload)
         phase = execution['phase']; box = execution.get('box')
         if job['status'] in ('cancel_requested', 'cancelled'):
             if not box and not execution.get('creation_intent'):
-                if job['status'] != 'cancelled': await asyncio.to_thread(jobs.finish, self.repository, job['id'], token, 'cancelled')
+                if job['status'] != 'cancelled': await run_sync(jobs.finish, self.repository, job['id'], token, 'cancelled')
                 return {'next_phase': 'complete', 'done': True}
-            if box and box['phase'] in ('created', 'prepared') and not execution.get('launch_intent'):
+            if box and box['phase'] in ('created', 'prepared') and not execution.get('launch_intent') and phase != 'cleanup':
                 return {'next_phase': 'cleanup', 'abandoned': True}
-            if box and box['phase'] not in ('captured', 'deleted', 'terminal'):
+            if (box and box['phase'] not in ('captured', 'deleted', 'terminal')
+                    and (execution.get('launch_intent') or box['phase'] not in ('created', 'prepared'))):
                 await self.box_adapter(queue).cancel_once(box)
                 if phase not in ('observe', 'capture', 'cleanup'): return {'next_phase': 'observe'}
             if box and box['phase'] == 'deleted':
-                await asyncio.to_thread(jobs.finish, self.repository, job['id'], token, 'cancelled')
+                await run_sync(jobs.finish, self.repository, job['id'], token, 'cancelled')
                 return {'next_phase': 'complete', 'done': True}
         if job['kind'] == 'deployment_probe': return await self.probe(payload, token, job, queue, execution, root)
         if phase == 'prepare': return await self.prepare(payload, token, job, queue, root)
         adapter = self.box_adapter(queue)
+        if phase == 'create':
+            if box: return {'next_phase': 'bootstrap'}
+            if execution.get('creation_intent'):
+                raise state.RecoveryRequired('A previous Box creation may have succeeded; never create a duplicate')
+            await run_sync(self.activity, payload, token, 'stage', {'stage': 'starting_agent', 'message': 'Allocating the isolated research runtime.'})
+            await run_sync(state.reserve_box, self.repository, payload, token)
+            handle = await adapter.create_once(job['id'], execution['authoring_attempt'])
+            await run_sync(self.observe_commit, payload, token, handle, [])
+            return {'next_phase': 'bootstrap'}
+        if phase == 'cleanup' and execution.get('abandoned'):
+            handle = await adapter.delete_once(box)
+            await run_sync(state.save, self.repository, payload, token, box=handle,
+                                    cleanup_complete=True, capacity_reserved=False)
+            await run_sync(self.observe_commit, payload, token, handle, [])
+            await run_sync(jobs.finish, self.repository, job['id'], token, 'cancelled')
+            return {'next_phase': 'complete', 'done': True}
         if phase == 'launch':
             if box['phase'] == 'running': return {'next_phase': 'observe', 'sleep': 5}
-            await asyncio.to_thread(state.save, self.repository, payload, token, launch_intent=True,
+            await run_sync(state.save, self.repository, payload, token, launch_intent=True,
                                     deadline=time.time() + int(setting('REVEAL_AGENT_TIMEOUT_SECONDS', '900')) + 420)
             handle = await adapter.launch_once(box)
-            await asyncio.to_thread(self.observe_commit, payload, token, handle, [])
+            await run_sync(self.observe_commit, payload, token, handle, [])
             return {'next_phase': 'observe', 'sleep': 5}
         if phase == 'observe':
             if time.time() > execution.get('deadline', float('inf')): await adapter.cancel_once(box)
             handle, events, terminal = await adapter.inspect_once(box)
-            await asyncio.to_thread(self.observe_commit, payload, token, handle, events)
+            await run_sync(self.observe_commit, payload, token, handle, events)
             return {'next_phase': 'capture' if terminal else 'observe', 'sleep': 0 if terminal else 5}
         request, inputs = self.request(job, queue, execution, root)
-        if phase == 'create':
-            if box: return {'next_phase': 'bootstrap'}
-            if execution.get('creation_intent') and not box:
-                raise state.RecoveryRequired('A previous Box creation may have succeeded; never create a duplicate')
-            await asyncio.to_thread(self.activity, payload, token, 'stage', {'stage': 'starting_agent', 'message': 'Allocating the isolated research runtime.'})
-            await asyncio.to_thread(state.reserve_box, self.repository, payload, token)
-            handle = await adapter.create_once(request)
-            await asyncio.to_thread(self.checkpoint, payload, token, root, box=handle)
-            return {'next_phase': 'bootstrap'}
         if phase == 'bootstrap':
             if box['phase'] == 'prepared': return {'next_phase': 'launch'}
             handle = await adapter.prepare_once(request, box)
-            await asyncio.to_thread(self.checkpoint, payload, token, root, box=handle)
+            await run_sync(self.checkpoint, payload, token, root, box=handle)
             return {'next_phase': 'launch'}
         if phase == 'capture':
             if execution.get('capture_complete'): return {'next_phase': 'cleanup'}
-            await asyncio.to_thread(self.activity, payload, token, 'stage', {'stage': 'collecting_output', 'message': 'Saving completed output and captured evidence to durable storage.'})
+            await run_sync(self.activity, payload, token, 'stage', {'stage': 'collecting_output', 'message': 'Saving completed output and captured evidence to durable storage.'})
             handle = await adapter.capture_once(request, box)
-            await asyncio.to_thread(self.checkpoint, payload, token, root, box=handle, capture_complete=True)
+            await run_sync(self.checkpoint, payload, token, root, box=handle, capture_complete=True)
             return {'next_phase': 'cleanup'}
         if phase == 'cleanup':
             require(execution.get('capture_complete') or execution.get('abandoned'), 'Cannot delete the sole complete output')
@@ -197,9 +245,9 @@ class WorkflowExecution:
                 if marker['state']['status'] == 'succeeded':
                     updates['review_capture'] = {'attempt': request.attempt, 'box_id': box['box_id'],
                         'capture_sha256': sha256((request.output_dir / CAPTURE_MARKER).read_bytes())}
-            await asyncio.to_thread(self.checkpoint, payload, token, root, **updates)
+            await run_sync(self.checkpoint, payload, token, root, **updates)
             if execution.get('abandoned'):
-                await asyncio.to_thread(jobs.finish, self.repository, job['id'], token, 'cancelled')
+                await run_sync(jobs.finish, self.repository, job['id'], token, 'cancelled')
                 return {'next_phase': 'complete', 'done': True}
             return {'next_phase': 'validate'}
         if phase == 'validate': return await self.validate(payload, token, job, queue, execution, root, request, inputs)
@@ -228,12 +276,12 @@ class WorkflowExecution:
             return {'next_phase': 'create'}
         mode = setting('REVEAL_EXECUTION_MODE', 'box')
         require(mode == 'box', 'Workflow scientific execution requires Box; deployment probes do not use a model')
-        await asyncio.to_thread(self.activity, payload, token, 'stage', {'stage': 'preparing_evidence', 'message': 'Preparing frozen evidence for durable execution.'})
-        source = await asyncio.to_thread(read_preparation_inputs, self.repository, job)
+        await run_sync(self.activity, payload, token, 'stage', {'stage': 'preparing_evidence', 'message': 'Preparing frozen evidence for durable execution.'})
+        source = await run_sync(read_preparation_inputs, self.repository, job)
         if job['kind'] == 'analysis':
             frozen, binding = source
-            path, package = await asyncio.to_thread(collect, job, frozen, binding, queue['inputs'].get('budgets', {}), root/'evidence')
-            path, package, measurement = await asyncio.to_thread(fit_input_budget, path, mode, queue['inputs'].get('budgets', {}).get('evidence_tokens', 24000))
+            path, package = await run_sync(collect, job, frozen, binding, queue['inputs'].get('budgets', {}), root/'evidence')
+            path, package, measurement = await run_sync(fit_input_budget, path, mode, queue['inputs'].get('budgets', {}).get('evidence_tokens', 24000))
             (root/'token-budget.json').write_bytes(canonical_json(measurement))
         else:
             metadata = source['result']['citation_metadata']
@@ -243,7 +291,7 @@ class WorkflowExecution:
             path = root/'paragraph-input.json'; path.write_bytes(canonical_json(package))
         snapshot = {'path': str(path.relative_to(root)), 'sha256': sha256(path.read_bytes()), 'mode': mode,
                     'model': setting('REVEAL_CLAUDE_MODEL', 'claude-sonnet-4-6'), 'kind': job['kind']}
-        await asyncio.to_thread(self.checkpoint, payload, token, root, dispatch_input=snapshot, evidence_package=package if job['kind'] == 'analysis' else None)
+        await run_sync(self.checkpoint, payload, token, root, dispatch_input=snapshot, evidence_package=package if job['kind'] == 'analysis' else None)
         with self.repository.transaction() as tx:
             owner, _ = state.owned(tx, payload, token)
             current = tx.get('job', job['id'])['data']; current['owner_user_id'] = owner
@@ -257,22 +305,22 @@ class WorkflowExecution:
         marker = read_capture_marker(request, execution['box'])
         require(marker and marker['cleanup_complete'], 'Capture cleanup checkpoint is missing')
         result = captured_result(request, execution['box'], marker)
-        await asyncio.to_thread(self.activity, payload, token, 'stage', {'stage': 'validating', 'message': 'Checking source fidelity, identities and captured provenance.'})
+        await run_sync(self.activity, payload, token, 'stage', {'stage': 'validating', 'message': 'Checking source fidelity, identities and captured provenance.'})
         if result.status not in ('succeeded', 'insufficient_evidence'):
             from .job_failures import authoring_failure
-            await asyncio.to_thread(jobs.finish, self.repository, job['id'], token, result.status,
+            await run_sync(jobs.finish, self.repository, job['id'], token, result.status,
                                    failure=authoring_failure(result, request) if result.status == 'failed' else None)
             return {'next_phase': 'complete', 'done': True}
-        await asyncio.to_thread(validate_execution_ledger, result, request, queue['dispatch_input']['model'])
+        await run_sync(validate_execution_ledger, result, request, queue['dispatch_input']['model'])
         if result.status == 'insufficient_evidence': return {'next_phase': 'commit', 'outcome': True}
         if job['kind'] == 'analysis':
-            frozen, _ = await asyncio.to_thread(read_preparation_inputs, self.repository, job)
+            frozen, _ = await run_sync(read_preparation_inputs, self.repository, job)
             require(0 < len(result.account_paths) <= queue['inputs'].get('budgets', {}).get('max_accounts', 3), 'Invalid account count')
             directory = root/'validated'; directory.mkdir(exist_ok=True)
             paths = []
             for index, path in enumerate(result.account_paths):
                 target = directory/f'account-{index}.json'
-                document, report = await asyncio.to_thread(assemble_account, assert_artifact(path, request.output_dir), request.input_path,
+                document, report = await run_sync(assemble_account, assert_artifact(path, request.output_dir), request.input_path,
                     target, frozen['attribution'], job, request.attempt, 'box', result.ledger_manifest_path)
                 (directory/f'report-{index}.json').write_bytes(canonical_json(report)); paths.append(str(target.relative_to(root)))
         else:
@@ -280,7 +328,7 @@ class WorkflowExecution:
             require(result.paragraph_path is not None, 'Missing paragraph')
             validate_paragraph_segments(decode(result.paragraph_path.read_bytes()), inputs)
             paths = [str(result.paragraph_path.relative_to(root))]
-        await asyncio.to_thread(self.checkpoint, payload, token, root, validated_paths=paths, review_index=0, review_checkpoint=None)
+        await run_sync(self.checkpoint, payload, token, root, validated_paths=paths, review_index=0, review_checkpoint=None)
         return {'next_phase': 'review_init'}
 
     async def review(self, payload, token, job, queue, execution, root, request, inputs):
@@ -293,16 +341,16 @@ class WorkflowExecution:
         if execution['phase'] == 'review_init':
             document = decode((root/execution['validated_paths'][index]).read_bytes())
             marker = read_capture_marker(request, execution['box']); result = captured_result(request, execution['box'], marker)
-            review = await asyncio.to_thread(durable_review.initial, job['kind'], document, inputs,
+            review = await run_sync(durable_review.initial, job['kind'], document, inputs,
                 ledger_path=result.ledger_manifest_path, budget=float(setting('REVEAL_GROUNDING_MAX_BUDGET_USD', '0.30')))
-            await asyncio.to_thread(checkpoint, review)
+            await run_sync(checkpoint, review)
             return {'next_phase': 'review_call'}
         review = decode((root/execution['review_checkpoint']).read_bytes())
         if execution['phase'] == 'review_call':
-            await asyncio.to_thread(durable_review.call_one, review, setting('ANTHROPIC_API_KEY'), checkpoint)
+            await run_sync(durable_review.call_one, review, setting('ANTHROPIC_API_KEY'), checkpoint)
             return {'next_phase': 'review_tools'}
-        review = await asyncio.to_thread(durable_review.process_response, review)
-        await asyncio.to_thread(checkpoint, review)
+        review = await run_sync(durable_review.process_response, review)
+        await run_sync(checkpoint, review)
         if not review['complete']: return {'next_phase': 'review_call'}
         require(review['result']['accepted'], 'Independent source-grounding review rejected scientific content')
         if index + 1 < len(execution['validated_paths']):
@@ -321,20 +369,20 @@ class WorkflowExecution:
         directory = root/'validated'; directory.mkdir(exist_ok=True)
         marker = read_capture_marker(request, execution['box']); result = captured_result(request, execution['box'], marker)
         if job['kind'] == 'analysis':
-            frozen, binding = await asyncio.to_thread(read_preparation_inputs, self.repository, job)
+            frozen, binding = await run_sync(read_preparation_inputs, self.repository, job)
             if execution.get('outcome'):
                 from .analysis_outcomes import prepare
-                prepared = await asyncio.to_thread(prepare, job, frozen, binding, request.input_path, result,
+                prepared = await run_sync(prepare, job, frozen, binding, request.input_path, result,
                     attempt=request.attempt, mode='box', expected_model=queue['dispatch_input']['model'])
-                await asyncio.to_thread(worker.accept_outcome, job, token, prepared)
+                await run_sync(worker.accept_outcome, job, token, prepared)
             else:
                 accepted = [(decode((root/path).read_bytes()), decode((directory/f'report-{index}.json').read_bytes()), root/path)
                             for index, path in enumerate(execution['validated_paths'])]
-                await worker.accept_accounts(job, token, accepted, frozen, request.input_path, result, directory, 'box')
+                await drain_on_cancel(worker.accept_accounts(job, token, accepted, frozen, request.input_path, result, directory, 'box'))
         else:
-            await worker.accept_paragraph(job, token, decode((root/execution['validated_paths'][0]).read_bytes()), inputs, directory)
-        current, _, _ = await asyncio.to_thread(self.context, payload)
-        if current['status'] == 'cancel_requested': await asyncio.to_thread(jobs.finish, self.repository, job['id'], token, 'cancelled')
+            await drain_on_cancel(worker.accept_paragraph(job, token, decode((root/execution['validated_paths'][0]).read_bytes()), inputs, directory))
+        current, _, _ = await run_sync(self.context, payload)
+        if current['status'] == 'cancel_requested': await run_sync(jobs.finish, self.repository, job['id'], token, 'cancelled')
         return {'next_phase': 'complete', 'done': True}
 
     async def probe(self, payload, token, job, queue, execution, root):
@@ -342,16 +390,16 @@ class WorkflowExecution:
         require(setting('REVEAL_ENVIRONMENT', 'development') in ('development', 'test'), 'Probes are restricted to development/test')
         if execution['phase'] == 'prepare':
             (root/'probe.json').write_bytes(canonical_json({'job_id': job['id'], 'nonce': queue['inputs']['nonce']}))
-            await asyncio.to_thread(self.checkpoint, payload, token, root)
+            await run_sync(self.checkpoint, payload, token, root)
             return {'next_phase': 'probe_finish', 'sleep': min(120, max(1, int(queue['inputs'].get('delay', 3))))}
         value = decode((root/'probe.json').read_bytes())
         require(value == {'job_id': job['id'], 'nonce': queue['inputs']['nonce']}, 'Probe checkpoint changed after wait')
-        await asyncio.to_thread(jobs.finish, self.repository, job['id'], token, 'succeeded', result={
+        await run_sync(jobs.finish, self.repository, job['id'], token, 'succeeded', result={
             'kind': 'deployment_probe', 'checkpoint_sha256': sha256((root/'probe.json').read_bytes()), 'restored': True})
         return {'next_phase': 'complete', 'done': True}
 
     async def cancel(self, payload):
-        job, _, execution = await asyncio.to_thread(self.context, payload)
+        job, _, execution = await run_sync(self.context, payload)
         if job['status'] not in ('cancel_requested', 'cancelled'): return {'cancelled': False}
         box = execution.get('box')
         if box and box['phase'] in ('running', 'prepared', 'created'):

@@ -69,7 +69,12 @@ def owned(tx, payload, token, *, terminal=False):
     return row['owner'], state
 
 
-def acquire(repository, payload, index, *, lease_seconds=480):
+def needs_scratch(execution):
+    return execution['phase'] not in ('create', 'observe', 'launch', 'complete') and not (
+        execution['phase'] == 'cleanup' and execution.get('abandoned'))
+
+
+def acquire(repository, payload, index, *, lease_seconds=600):
     """Acquire exactly the persisted next phase, or replay its committed result."""
     key = digest([payload['job_id'], payload['generation'], index])
     with repository.transaction() as tx:
@@ -86,13 +91,19 @@ def acquire(repository, payload, index, *, lease_seconds=480):
         groups = {'prepare': 'preparation', 'bootstrap': 'preparation', 'validate': 'review',
                   'review_init': 'review', 'review_call': 'review', 'review_tools': 'review', 'commit': 'review', 'capture': 'capture'}
         group = groups.get(state['phase']); deferred = False
+        if group or needs_scratch(state):
+            active = [item['data'] for item in tx.list('execution')
+                      if (item['data'].get('lease_until') or '') > now()
+                      and item['data']['namespace'] == state['namespace']]
+        if needs_scratch(state):
+            scratch_cap = int(os.getenv('REVEAL_MAX_SCRATCH_STEPS', '2'))
+            if scratch_cap < 1: raise ValueError('Workflow scratch concurrency must be positive')
+            deferred = sum(needs_scratch(item) for item in active) >= scratch_cap
         if group:
             cap = int(os.getenv({'preparation': 'REVEAL_MAX_PREPARATION_STEPS', 'review': 'REVEAL_MAX_REVIEW_STEPS', 'capture': 'REVEAL_MAX_CAPTURE_STEPS'}[group], '2'))
             if cap < 1: raise ValueError('Workflow stage concurrency must be positive')
-            running = sum((item['data'].get('lease_until') or '') > now()
-                          and item['data']['namespace'] == state['namespace']
-                          and groups.get(item['data']['phase']) == group for item in tx.list('execution'))
-            deferred = running >= cap
+            running = sum(groups.get(item['phase']) == group for item in active)
+            deferred = deferred or running >= cap
         job = tx.get('job', payload['job_id'])['data']; job['owner_user_id'] = row['owner']
         token = uid()
         state.update(fence=token, lease_until=after(lease_seconds), step=key, updated_at=now())

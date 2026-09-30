@@ -18,13 +18,13 @@ class BoxLifecycle(BoxExecutionAdapter):
     async def connect(self, handle):
         return await self.factory().get(handle['box_id'], api_key=self.environ['UPSTASH_BOX_API_KEY'])
 
-    async def create_once(self, request):
+    async def create_once(self, job_id, attempt):
         missing = required_environment(self.environ)
         if missing: raise BoxConfigurationError('Missing required environment: ' + ', '.join(missing))
         box = await self.factory().create(runtime='node', api_key=self.environ['UPSTASH_BOX_API_KEY'],
-            labels=['reveal', 'job-' + hashlib.sha256(request.job_id.encode()).hexdigest()[:16], 'attempt-' + str(request.attempt)])
+            labels=['reveal', 'job-' + hashlib.sha256(job_id.encode()).hexdigest()[:16], 'attempt-' + str(attempt)])
         try:
-            return {'box_id': box.id, 'job_id': request.job_id, 'attempt': request.attempt,
+            return {'box_id': box.id, 'job_id': job_id, 'attempt': attempt,
                     'cursor': 0, 'phase': 'created', 'created_at': time.time(), 'timings': {}}
         finally: await box.aclose()
 

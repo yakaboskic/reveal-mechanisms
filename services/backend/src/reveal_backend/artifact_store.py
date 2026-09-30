@@ -211,9 +211,13 @@ class S3Store:
         manifest = {'format': 'reveal.workspace/1', 'files': files}
         return self.put(json.dumps(manifest, sort_keys=True, separators=(',', ':')).encode(), 'application/json')
 
-    def restore(self, ref, root):
+    def restore(self, ref, root, *, cancelled=None):
+        def check_cancelled():
+            if cancelled and cancelled(): raise StorageUnavailable('Workspace restore cancelled before further writes')
+        check_cancelled()
         root = Path(root).resolve()
         manifest = json.loads(self.get(ref))
+        check_cancelled()
         if manifest.get('format') != 'reveal.workspace/1' or not isinstance(manifest.get('files'), list):
             raise StorageUnavailable('Invalid workspace manifest')
         seen, total, targets = set(), 0, []
@@ -232,10 +236,13 @@ class S3Store:
                 raise StorageUnavailable('Restored workspace exceeds its limit')
             targets.append((target, item['storage']))
         for target, storage in targets:
+            check_cancelled()
             target.parent.mkdir(parents=True, exist_ok=True)
             temporary = target.with_name('.restore-' + uuid4().hex)
             try:
-                temporary.write_bytes(self.get(storage))
+                data = self.get(storage)
+                check_cancelled()
+                temporary.write_bytes(data)
                 temporary.replace(target)
             finally:
                 temporary.unlink(missing_ok=True)

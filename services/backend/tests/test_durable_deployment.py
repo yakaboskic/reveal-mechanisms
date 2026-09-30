@@ -19,6 +19,12 @@ def test_default_stack_has_no_queue_consumers_or_self_hosted_redis():
     assert set(stack['services']) == {'api', 'tools', 'bootstrap'}
     assert 'depends_on' not in stack['services']['api']
     assert 'redis' not in json.dumps(stack['services']['api'].get('healthcheck', {})).lower()
+    assert stack['services']['api']['mem_limit'] == '4g'
+    assert stack['services']['api']['stop_grace_period'] == '120s'
+    assert stack['services']['api']['tmpfs'] == [
+        '/work:rw,nosuid,nodev,size=1073741824,mode=1777',
+        '/tmp:rw,nosuid,nodev,size=67108864,mode=1777',
+    ]
 
 
 def test_prepare_separates_application_state_and_backend_secrets(tmp_path, monkeypatch):
@@ -41,6 +47,9 @@ def test_prepare_separates_application_state_and_backend_secrets(tmp_path, monke
     assert backend['REVEAL_APPLICATION_TABLE_PREFIX']=='reveal_workflow_local'
     assert backend['REVEAL_JOB_TRANSPORT']=='workflow'
     assert backend['REVEAL_RETRIEVAL_BACKEND']=='upstash'
+    assert backend['TMPDIR'] == backend['REVEAL_WORK_DIR'] == '/work'
+    assert backend['REVEAL_MAX_SCRATCH_STEPS'] == '2'
+    assert backend['REVEAL_WORKSPACE_MAX_BYTES'] == '268435456'
     assert backend['QSTASH_TOKEN']=='local-token'
     assert backend['QSTASH_URL']=='http://host.docker.internal:18080'
     assert 'REVEAL_REDIS_URL' not in backend
@@ -53,6 +62,13 @@ def test_prepare_separates_application_state_and_backend_secrets(tmp_path, monke
 def test_platform_qa_isolates_authoritative_state_and_callbacks():
     config=yaml.safe_load((ROOT/'deploy/dig/service.yaml').read_text())
     assert config['env']['REVEAL_JOB_TRANSPORT']=='workflow'
+    assert config['memory'] == 4096
+    assert config['runtime']['stop_timeout_seconds'] == 120
+    assert config['runtime']['deregistration_delay_seconds'] == 300
+    assert {item['container_path']: item['size_mib'] for item in config['runtime']['tmpfs']} == {'/work': 1024, '/tmp': 64}
+    assert config['env']['TMPDIR'] == config['env']['REVEAL_WORK_DIR'] == '/work'
+    assert config['env']['REVEAL_MAX_SCRATCH_STEPS'] == '2'
+    assert config['env']['REVEAL_WORKSPACE_MAX_BYTES'] == '268435456'
     assert config['qa']['env']['REVEAL_APPLICATION_TABLE_PREFIX']!='reveal'
     assert config['qa']['env']['REVEAL_S3_PREFIX']=='qa/'
     assert 'api-qa.' in config['qa']['env']['REVEAL_WORKFLOW_URL']

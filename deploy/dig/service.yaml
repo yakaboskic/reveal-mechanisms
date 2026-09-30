@@ -12,10 +12,11 @@ health_grace_seconds: 900
 runtime:
   read_only: true
   init_process_enabled: true
-  stop_timeout_seconds: 30
+  stop_timeout_seconds: 120
+  deregistration_delay_seconds: 300
   tmpfs:
   - container_path: /work
-    size_mib: 256
+    size_mib: 1024
     mount_options:
     - rw
     - nosuid
@@ -52,6 +53,8 @@ env:
   REVEAL_DAPPER_ROOT: /app/.runtime/dapper
   REVEAL_DISMECH_SOURCE: /app/dismech
   REVEAL_WORK_DIR: /work
+  TMPDIR: /work
+  REVEAL_WORKSPACE_MAX_BYTES: '268435456'
   REVEAL_GATEWAY_ISSUER: reveal-nextjs
   REVEAL_GATEWAY_AUDIENCE: reveal-api
   REVEAL_CANONICAL_URL: https://reveal-mechanisms.vercel.app
@@ -75,6 +78,7 @@ env:
   QSTASH_URL: https://qstash-us-east-1.upstash.io
   REVEAL_WORKFLOW_URL: https://api-prod.hugeampkpnbi.org/api/reveal/internal/workflows/research-v1
   REVEAL_MAX_ACTIVE_BOXES: '2'
+  REVEAL_MAX_SCRATCH_STEPS: '2'
   REVEAL_MAX_PREPARATION_STEPS: '2'
   REVEAL_MAX_REVIEW_STEPS: '2'
   REVEAL_WORKFLOW_STEP_TIMEOUT_SECONDS: '360'
