@@ -187,8 +187,9 @@ the audit made no mutations.
 
 [Production run 36660894864](https://github.com/broadinstitute/dig-service-platform/actions/runs/36660894864)
 is queued for platform revision `c563f40e1061c408459081310f4dc534f0038680`,
-awaiting the existing required reviewer `sagehen03`. Vercel secret-upload
-approval and deployment remain pending.
+awaiting the existing required reviewer `sagehen03`. All 16 prepared frontend settings are uploaded
+to Vercel as sensitive production variables with explicit user authorization.
+Frontend deployment awaits production backend readiness.
 
 The scientific pilot completed one authoring attempt, durable capture and Box
 cleanup. After 31 acknowledged reviewer calls, its final response was not
