@@ -12112,6 +12112,142 @@
         ]
       }
     },
+    "/v1/me/workspace/events": {
+      "get": {
+        "operationId": "subscribeWorkspaceEvents",
+        "tags": [
+          "Research history"
+        ],
+        "summary": "Subscribe to committed workspace changes",
+        "description": "Authenticated SSE backed by durable RDS replay and managed Redis Pub/Sub wakeups. Subscribe before replay. Send Last-Event-ID or after to resume; both must agree if supplied. workspace_change carries WorkspaceEvent. ready, resync_required, connection_degraded and access_revoked are stream control events. Resync explicitly reloads authorized collections. Heartbeats do not read Redis or query application state.",
+        "security": [
+          {
+            "GatewayAssertion": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Last-Event-ID",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "example": "opaque-signed-cursor",
+            "description": "Opaque signed reconnect cursor."
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "example": "opaque-signed-cursor",
+            "description": "Opaque signed reconnect cursor, equivalent to Last-Event-ID."
+          }
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "label": "request",
+            "source": "curl -X GET 'https://api.reveal.example.org/v1/me/workspace/events?after=opaque-signed-cursor' -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Accept: text/event-stream'"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Committed events and stream control messages. Each workspace_change data frame is a WorkspaceEvent JSON object.",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                },
+                "examples": {
+                  "change": {
+                    "value": "id: opaque-signed-cursor\nevent: workspace_change\ndata: {\"schema_version\": 1, \"event_id\": \"scope:1\", \"cursor\": \"1\", \"scope\": \"workspace\", \"committed_at\": \"2026-09-30T00:00:00Z\", \"event_type\": \"draft.changed\", \"entity_id\": \"22222222-2222-4222-8222-222222222222\", \"entity_revision\": 2, \"operation\": \"upsert\", \"collections\": [\"drafts\", \"gaps\"]}\n\n"
+                  }
+                }
+              }
+            },
+            "x-event-schema": {
+              "$ref": "#/components/schemas/WorkspaceEvent"
+            }
+          },
+          "400": {
+            "description": "Invalid Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "invalid_request": {
+                    "summary": "Invalid request",
+                    "value": {
+                      "type": "urn:reveal:problem:invalid-request",
+                      "title": "Invalid Request",
+                      "status": 400,
+                      "code": "INVALID_REQUEST",
+                      "detail": "A parameter or cursor does not match the requested operation.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication Required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "authentication_required": {
+                    "summary": "Authentication required",
+                    "value": {
+                      "type": "urn:reveal:problem:authentication-required",
+                      "title": "Authentication Required",
+                      "status": 401,
+                      "code": "AUTHENTICATION_REQUIRED",
+                      "detail": "A valid trusted-gateway API assertion is required.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Dependency Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "dependency_unavailable": {
+                    "summary": "Dependency unavailable",
+                    "value": {
+                      "type": "urn:reveal:problem:dependency-unavailable",
+                      "title": "Dependency Unavailable",
+                      "status": 503,
+                      "code": "DEPENDENCY_UNAVAILABLE",
+                      "detail": "A required dependency is temporarily unavailable; no replacement ranking or scientific result was fabricated.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/jobs/{job_id}/retry-review": {
       "post": {
         "operationId": "retryJobReview",
@@ -28946,7 +29082,8 @@
               "persisting",
               "complete",
               "preparing_evidence",
-              "starting_agent"
+              "starting_agent",
+              "collecting_output"
             ]
           },
           "research_request_id": {
@@ -29340,7 +29477,8 @@
               "persisting",
               "complete",
               "preparing_evidence",
-              "starting_agent"
+              "starting_agent",
+              "collecting_output"
             ]
           },
           "message": {
@@ -30240,6 +30378,82 @@
           "page"
         ],
         "additionalProperties": false
+      },
+      "WorkspaceEvent": {
+        "type": "object",
+        "properties": {
+          "schema_version": {
+            "type": "integer",
+            "const": 1
+          },
+          "event_id": {
+            "type": "string"
+          },
+          "cursor": {
+            "type": "string",
+            "pattern": "^[0-9]+$"
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "workspace",
+              "public"
+            ]
+          },
+          "committed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "event_type": {
+            "type": "string"
+          },
+          "entity_id": {
+            "type": "string"
+          },
+          "entity_revision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "operation": {
+            "type": "string",
+            "enum": [
+              "upsert",
+              "remove",
+              "invalidate",
+              "resync"
+            ]
+          },
+          "collections": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "drafts",
+                "gaps",
+                "explorations",
+                "requests",
+                "jobs",
+                "accounts",
+                "identity",
+                "catalog"
+              ]
+            }
+          }
+        },
+        "required": [
+          "schema_version",
+          "event_id",
+          "cursor",
+          "scope",
+          "committed_at",
+          "event_type",
+          "entity_id",
+          "entity_revision",
+          "operation",
+          "collections"
+        ],
+        "additionalProperties": false,
+        "description": "Committed invalidation event. SSE id is an opaque signed cursor bound to the principal and notification namespace; the envelope cursor is scope-local. Replay requires current authorization."
       },
       "SelectedGap": {
         "type": "object",

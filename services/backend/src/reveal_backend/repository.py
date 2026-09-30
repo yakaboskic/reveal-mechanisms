@@ -34,6 +34,7 @@ def application_sql(sql, prefix):
 class Transaction:
     def __init__(self, connection, sqlite=False, table_prefix='reveal'):
         self.connection, self.sqlite, self.table_prefix = connection, sqlite, table_prefix
+        self.workspace_changes, self.notification_jobs = {}, set()
     def execute(self, sql, params=()):
         cursor = self.connection.cursor()
         started = time.perf_counter()
@@ -74,11 +75,16 @@ class Transaction:
             values.extend((kind, identity, owner, 1, canonical(data), now()))
         self.execute('INSERT INTO reveal_records(kind,id,owner_id,version,payload,updated_at) VALUES '+
             ','.join(['(%s,%s,%s,%s,%s,%s)'] * len(records)), tuple(values))
+        from .workspace_events import track
+        for kind, identity, owner, data in records: track(self, kind, identity, owner, data)
     def update_existing(self, kind, identity, owner, data):
         """Update a row already read under the transaction's exclusive fence."""
+        from .workspace_events import tracked, track
+        old = self.get(kind, identity) if tracked(kind) else None
         cursor = self.execute('UPDATE reveal_records SET owner_id=%s,version=version+1,payload=%s,updated_at=%s WHERE kind=%s AND id=%s',
             (owner, canonical(data), now(), kind, identity))
         if cursor.rowcount != 1: raise Conflict('Expected existing record')
+        track(self, kind, identity, owner, data, old, revision=old['version']+1 if old else 1)
     def list(self, kind, owner=None):
         sql, args = 'SELECT id,owner_id,version,payload FROM reveal_records WHERE kind=%s', [kind]
         if owner is not None: sql += ' AND owner_id=%s'; args.append(owner)
@@ -94,10 +100,17 @@ class Transaction:
         else:
             self.execute('INSERT INTO reveal_records(kind,id,owner_id,version,payload,updated_at) VALUES (%s,%s,%s,%s,%s,%s)',
                          (kind, identity, owner, version, canonical(data), now()))
+        from .workspace_events import track
+        track(self, kind, identity, owner, data, old, revision=version)
         return version
     def remove(self, kind, identity):
+        from .workspace_events import tracked, track
+        old = self.get(kind, identity) if tracked(kind) else None
+        if old: track(self, kind, identity, old['owner'], old['data'], operation='remove', revision=old['version']+1)
         self.execute('DELETE FROM reveal_records WHERE kind=%s AND id=%s', (kind, identity))
     def transfer(self, source, target):
+        from .workspace_events import ownership_changed
+        ownership_changed(self, source, target)
         for kind in ('object','account','paragraph','grant','account_membership','publication','exploration','outbox','artifact','object_document','scientific_document','object_observation'):
             for row in self.list(kind,source):
                 data=row['data']
@@ -109,7 +122,7 @@ class Transaction:
                     destination=digest([target,identity,sha256(canonical_json(data['payload']))])
                 if not self.get(kind,destination): self.put(kind,destination,target,data)
                 self.remove(kind,row['id'])
-        self.execute('UPDATE reveal_records SET owner_id=%s WHERE owner_id=%s AND kind NOT IN (%s,%s)', (target, source, 'principal', 'identity'))
+        self.execute('UPDATE reveal_records SET owner_id=%s WHERE owner_id=%s AND kind NOT IN (%s,%s,%s,%s)', (target, source, 'principal', 'identity', 'workspace_event', 'workspace_cursor'))
 
 class Repository:
     def __init__(self, sqlite_path=None, table_prefix=None):
@@ -146,17 +159,22 @@ class Repository:
     @contextmanager
     def transaction(self):
         connection = self.connect()
+        pending = []
         try:
             tx = Transaction(connection, bool(self.sqlite_path), self.table_prefix)
             if self.sqlite_path: connection.execute('BEGIN IMMEDIATE')
             else: tx.execute('SELECT revision FROM reveal_transaction_lock WHERE id=1 FOR UPDATE').fetchone()
             yield tx
+            from .workspace_events import prepare_commit
+            pending = prepare_commit(tx)
             connection.commit()
         except BaseException:
             try: connection.rollback()
             except Exception: pass
             raise
         finally: connection.close()
+        from .workspace_events import publish_committed
+        publish_committed(self, pending)
     def migrate(self):
         connection = self.connect() if self.sqlite_path else mysql_connection()
         try:

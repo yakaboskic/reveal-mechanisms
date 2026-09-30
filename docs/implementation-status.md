@@ -25,7 +25,7 @@ The original `reveal_*` users, jobs, publications and artifact references are au
 
 ## Public deployment
 
-Public deployment is pending access to Broad's DIG service platform. The repository could not yet be read with the active `yakaboskic` GitHub account. The personal Vercel project exists but no frontend deployment is asserted. The earlier standalone EC2 route and IAM request are on hold. See [platform deployment](platform-deployment.md); retained [EC2 preparation](cloud-deployment.md) is reference material.
+Broad's DIG service platform is accessible and cloned. Its ECS infrastructure supports the worker pool; a local integration draft uses Fargate API/workers/dispatcher and Upstash Redis. Public deployment remains pending wiring, provisioning and live verification. The personal Vercel project exists but no frontend deployment is asserted. The earlier standalone EC2 route and IAM request are on hold. See [platform deployment](platform-deployment.md); retained [EC2 preparation](cloud-deployment.md) is reference material.
 
 ## Data baseline
 

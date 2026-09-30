@@ -52,3 +52,19 @@ test("live SSE advances stage and terminal status before refresh; stale replay c
   assert.deepEqual(activityProgress(job, [{...validation, status:"failed"}]), {status:"failed", stage:"validating"});
   assert.deepEqual(activityProgress({...job, status:"succeeded", stage:"complete", last_event_id:"12"}, [validation]), {status:"succeeded", stage:"complete"});
 });
+
+test("output collection follows final agent prose without waiting for a job refresh or claiming acceptance", () => {
+  for (const stage of ["authoring_account", "authoring_paragraph"] as const) {
+    const job = { status: "running", stage, last_event_id: "10" } as Schema<"Job">;
+    const prose = { ...event("11", "The causal question remains open.", true), stage };
+    const collection = { ...event("12", "Collecting the finished output."), stage: "collecting_output" as const,
+      detail: { ...event("12", "").detail!, kind: "preparation" as const, source: "worker" as const } };
+    assert.deepEqual(activityProgress(job, [prose, collection]), { status: "running", stage: "collecting_output" });
+    const sections = activitySections([prose, collection]);
+    assert.deepEqual(sections.map(section => section.stage), ["research", "collection"]);
+    assert.equal(activityRows(sections[0].events)[0].event.message, prose.message);
+    const validation = { ...event("13", "Checking source fidelity."), stage: "validating" as const };
+    assert.deepEqual(activitySections([prose, collection, validation]).map(section => section.stage), ["research", "collection", "validation"]);
+    assert.deepEqual(activityProgress({ ...job, last_event_id: "13", stage: "validating" }, [prose, collection]), { status: "running", stage: "validating" });
+  }
+});

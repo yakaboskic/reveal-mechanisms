@@ -1,6 +1,12 @@
 # Run REVEAL on your laptop
 
+For the new API-only execution stack, use [the durable workflow guide](docs/durable-workflow-runtime.md)
+and `scripts/durable_deployment.py`. This page retains the existing encrypted
+colleague handoff and legacy worker stack during migration.
+
 This is the colleague onboarding guide. The complete stack runs in Docker at **http://localhost:3000**: Next.js, FastAPI, Redis, a dispatcher and two workers. It connects to the existing development Aurora/RDS database and real S3 storage. You do not need an EC2 instance, Vercel account, Node installation, local database, or storage emulator.
+
+The [DIG platform integration](docs/platform-deployment.md) is a separate local draft. Continue using this guide for colleague setup; no cloud backend has replaced the local stack.
 
 ## 1. Prerequisites
 

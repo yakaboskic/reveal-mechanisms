@@ -17,6 +17,22 @@ test("recorded stage boundaries freeze prior stages while the current timer adva
   assert.deepEqual(later.map(s => s.durationMs), [4000, 4000, 9000]);
   assert.deepEqual(later.map(s => s.state), ["completed", "completed", "working"]);
 });
+test("agent completion freezes research timing while output collection continues before acceptance", () => {
+  const staleJob = { ...job, stage: "authoring_account" as const, last_event_id: "1" };
+  const events = [event(1, 2, "authoring_account"), event(2, 12, "collecting_output")];
+  for (const elapsed of [15, 25]) {
+    const sections = timedActivitySections(events, staleJob, base + elapsed * 1000);
+    assert.deepEqual(sections.map(section => [section.stage, section.state, section.durationMs]), [
+      ["research", "completed", 10000], ["collection", "working", (elapsed - 12) * 1000],
+    ]);
+  }
+  const validation = event(3, 30, "validating");
+  assert.deepEqual(timedActivitySections([...events, validation], staleJob, base + 35000)
+    .map(section => [section.state, section.durationMs]), [["completed", 10000], ["completed", 18000], ["working", 5000]]);
+  const failed = { ...event(3, 30, "collecting_output"), status: "failed" as const };
+  assert.deepEqual(timedActivitySections([...events, failed], staleJob, base + 35000)
+    .map(section => [section.state, section.durationMs]), [["completed", 10000], ["failed", 18000]]);
+});
 test("terminal SSE freezes failure and cancellation before the job snapshot catches up", () => {
   for (const status of ["failed", "cancelled"] as const) {
     const events = [event(1, 2), { ...event(2, 8), status }];

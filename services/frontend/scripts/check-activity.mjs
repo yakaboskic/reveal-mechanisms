@@ -287,6 +287,50 @@ async function replayAheadScenario() {
     assert.ok(h.state.requests.every(request => request.method === 'GET'));
   } finally { await h.close(); }
 }
+async function outputCollectionScenario(name, viewport) {
+  const h = await harness(name, viewport);
+  try {
+    h.state.job = { ...h.state.job, stage: 'authoring_account' };
+    h.state.gapGate.release();
+    await h.open();
+    const base = Date.now() - 12000;
+    const time = seconds => new Date(base + seconds * 1000).toISOString();
+    const prose = 'The agent has finished its interpretation; the causal question remains open.';
+    await h.emit([h.event(prose, 'authoring_account', { occurred_at: time(0) })], { advanceJob: false });
+    await stage(h, 'research');
+    await h.emit([h.event('Collecting the finished output and captured evidence.', 'collecting_output', {
+      occurred_at: time(10), detail: detail({ kind: 'preparation', source: 'worker' }),
+    })], { advanceJob: false });
+    await stage(h, 'collection');
+    const research = h.page.locator('.activity-stage[data-stage="research"]');
+    const collection = h.page.locator('.activity-stage[data-stage="collection"]');
+    assert.equal(await research.getAttribute('data-state'), 'completed');
+    assert.equal(await research.locator('.stage-state').innerText(), 'Complete');
+    assert.equal(await research.locator('.stage-duration').innerText(), '10s');
+    assert.equal(await research.locator('.pulse').count(), 0);
+    assert.equal(await collection.locator('.stage-name').innerText(), 'Collecting results');
+    await h.page.getByText(prose, { exact: true }).waitFor();
+    const timer = collection.locator('.stage-duration');
+    const before = await timer.innerText();
+    await until(async () => await timer.innerText() !== before, 'collection timer advances while the job snapshot is still authoring');
+    assert.equal(await research.locator('.stage-duration').innerText(), '10s');
+    assert.equal(await h.page.getByText('Scientific accounts ready', { exact: true }).count(), 0);
+    await screenshot(h, 'collecting-output');
+    await h.emit([h.event('Validating source fidelity and scientific identities.', 'validating', {
+      occurred_at: time(12), detail: detail({ kind: 'validation', source: 'validator' }),
+    })], { advanceJob: false });
+    await stage(h, 'validation');
+    assert.equal(await collection.getAttribute('data-state'), 'completed');
+    assert.equal(await collection.locator('.stage-duration').innerText(), '2s');
+    assert.equal(await research.locator('.stage-duration').innerText(), '10s');
+    await h.page.getByText(prose, { exact: true }).waitFor();
+    assert.equal(h.state.job.stage, 'authoring_account', 'SSE alone advances every displayed stage');
+    h.result.checks.push('Final agent prose remains visible; research completes at handoff; output collection becomes the only working section before any refreshed job snapshot');
+    h.result.checks.push('Collection timer advances independently, then stops at scientific validation without claiming the job is accepted');
+    assert.deepEqual(h.state.errors, []); assert.deepEqual(h.state.unexpected, []);
+    assert.ok(h.state.requests.every(request => request.method === 'GET'));
+  } finally { await h.close(); }
+}
 async function compactToolsScenario(name, viewport) {
   const h = await harness(name, viewport);
   const warning = 'Fixture warning: the selected graph returned no matching rows.';
@@ -431,6 +475,8 @@ try {
     ['desktop', () => activityScenario('desktop', { width: 1280, height: 900 })],
     ['mobile', () => activityScenario('mobile', { width: 390, height: 844 })],
     ['replay-ahead', replayAheadScenario],
+    ['output-collection-desktop', () => outputCollectionScenario('output-collection-desktop', { width: 1280, height: 900 })],
+    ['output-collection-mobile', () => outputCollectionScenario('output-collection-mobile', { width: 390, height: 844 })],
     ['compact-tools-desktop', () => compactToolsScenario('compact-tools-desktop', { width: 1280, height: 900 })],
     ['compact-tools-mobile', () => compactToolsScenario('compact-tools-mobile', { width: 390, height: 844 })],
   ].filter(([name]) => !filter || filter.test(name));

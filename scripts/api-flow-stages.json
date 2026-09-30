@@ -272,6 +272,21 @@
         "Stopping is not stopped; committed results win cancellation races.",
         "Browser disconnect does not cancel. Resume with monotonic event IDs."
       ]
+    },
+    {
+      "id": "workspace-events",
+      "title": "Live workspace changes",
+      "route": "GET /v1/me/workspace/events",
+      "action": "Subscribe once per workspace provider and apply committed invalidations.",
+      "incoming": "Trusted owner session and optional signed reconnect cursor.",
+      "outgoing": "WorkspaceEvent SSE messages and explicit ready/resync/access controls.",
+      "cases": [
+        "subscribeWorkspaceEvents.request"
+      ],
+      "rules": [
+        "Redis Pub/Sub wakes authorized RDS replay after commit; there are no periodic workspace list refreshes.",
+        "Reconnect with the signed cursor. Reload authorized collections only when an explicit resync is required."
+      ]
     }
   ]
 }

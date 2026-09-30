@@ -196,13 +196,14 @@ def configured_limit(name, default):
 
 class _ReviewSession:
     """Reserve each next call conservatively; accumulate actual usage only."""
-    def __init__(self, model, api_key, budget, client):
+    def __init__(self, model, api_key, budget, client, reserve=None):
         _available(model == MODEL, "Grounding review requires its pinned model and price bound")
         _available(bool(api_key), "Grounding review requires ANTHROPIC_API_KEY")
         from math import isfinite
         _available(type(budget) in (int, float) and isfinite(budget) and budget > 0,
                    "Grounding review budget must be a positive finite USD amount")
         self.model, self.api_key, self.budget = model, api_key, budget
+        self.reserve = reserve
         self.max_turns = configured_limit('REVEAL_GROUNDING_MAX_TURNS', MAX_REVIEW_TURNS)
         self.max_request_bytes = configured_limit('REVEAL_GROUNDING_MAX_REQUEST_BYTES', MAX_REQUEST_BYTES)
         self.max_input_tokens = configured_limit('REVEAL_GROUNDING_MAX_INPUT_TOKENS', MAX_INPUT_TOKENS)
@@ -244,6 +245,8 @@ class _ReviewSession:
             self.blocked_call = {"reason": "budget", "reserved_max_usd": maximum,
                                  "remaining_usd": max(0, self.budget - self.spent)}
             raise ScientificReviewUnavailable("Scientific review remaining budget is insufficient")
+        if self.reserve:
+            self.reserve({"request_sha256": sha256(data), "reserved_max_usd": maximum, "reserved_at": now()})
         response = self.client.post("https://api.anthropic.com/v1/messages", headers={
             "x-api-key": self.api_key, "anthropic-version": "2023-06-01"}, json=payload, timeout=120)
         _available(response.status_code == 200, "Scientific review service unavailable")

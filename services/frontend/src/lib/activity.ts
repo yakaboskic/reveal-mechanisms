@@ -15,15 +15,16 @@ export function coalesceMessageDeltas(events: Schema<"JobEvent">[]): Schema<"Job
 }
 
 type Event = Schema<"JobEvent">;
-export type ActivityStage = "preparation" | "setup" | "research" | "validation" | "saving";
+export type ActivityStage = "preparation" | "setup" | "research" | "collection" | "validation" | "saving";
 export const stageLabels: Record<ActivityStage, string> = {
   preparation: "Evidence preparation", setup: "Runtime setup", research: "Research agent",
-  validation: "Scientific validation", saving: "Saving results",
+  collection: "Collecting results", validation: "Scientific validation", saving: "Saving results",
 };
 
 export function activityStage(stage: Schema<"Job">["stage"]): ActivityStage {
   if (["queued", "freezing_inputs", "retrieving_cfde", "preparing_evidence"].includes(stage)) return "preparation";
   if (stage === "starting_agent") return "setup";
+  if (stage === "collecting_output") return "collection";
   if (stage === "validating") return "validation";
   if (stage === "persisting" || stage === "complete") return "saving";
   return "research";

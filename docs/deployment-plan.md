@@ -1,5 +1,7 @@
 # REVEAL deployment plan
 
+> Durable workflow migration: the supported target is now the HTTP-only service described in [durable-workflow-runtime.md](durable-workflow-runtime.md). The worker/Redis Streams instructions below are retained as historical migration and rollback guidance; they do not describe the new default `deploy/compose.yaml`. Live release status must be verified separately.
+
 **Current deployment route:** use the administrator's [DIG service platform](platform-deployment.md), pending repository access and confirmation of background worker/Redis support. The dedicated EC2 architecture below is the earlier plan; its provisioning is on hold. Vercel, existing RDS data, and S3 remain requirements.
 
 Prepared September 29, 2026. Target: one deployed environment using the existing RDS/Aurora database. Separate staging and production environments are deferred until later. Backend compute runs on EC2, durable file storage is S3, and the frontend stays on Vercel. Include Redis for job delivery and worker coordination.

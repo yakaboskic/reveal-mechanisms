@@ -1,4 +1,5 @@
 "use client";
+import { onWorkspaceChange } from "@/lib/workspace-events";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { api, messageOf, type Schema } from "@/lib/client";
@@ -43,11 +44,15 @@ function useAccount(id: string) {
   const [refresh, setRefresh] = useState(0);
   useEffect(() => {
     if (!ready) return;
-    let active = true; let timer: ReturnType<typeof setTimeout>;
+    let active = true;
     setFailure(null);
-    const load = async () => { try { const value = await api.account(id); if (!active) return; setLoaded({ binding, value }); setFailure(null); if (value.publication?.can_manage === true && ["queued", "running", "cancel_requested"].includes(value.research_statement.status)) timer = setTimeout(load, 2500); } catch (error) { if (active) setFailure({ binding, message: messageOf(error) }); } };
-    void load(); return () => { active = false; clearTimeout(timer); };
+    const load = async () => { try { const value = await api.account(id); if (!active) return; setLoaded({ binding, value }); setFailure(null); } catch (error) { if (active) setFailure({ binding, message: messageOf(error) }); } };
+    void load(); return () => { active = false; };
   }, [id, binding, ready, refresh]);
+  useEffect(() => onWorkspaceChange((reset, event) => {
+    if (reset) { setLoaded(null); return; }
+    if (!event || event.collections.some(collection => ["accounts", "catalog", "identity"].includes(collection))) setRefresh(value => value + 1);
+  }), []);
   // Keep an already loaded account readable during a status refresh, while
   // never displaying a previous account's data or errors after navigation.
   return { result: ready && loaded?.binding === binding ? loaded.value : null, error: ready && failure?.binding === binding ? failure.message : "",

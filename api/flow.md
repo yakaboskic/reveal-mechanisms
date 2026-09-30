@@ -285,8 +285,21 @@ Request cancellation or recover from stale save/event cursor.
 - Stopping is not stopped; committed results win cancellation races.
 - Browser disconnect does not cancel. Resume with monotonic event IDs.
 
+### Live workspace changes
+
+Subscribe once per workspace provider and apply committed invalidations.
+
+**Request:** Trusted owner session and optional signed reconnect cursor.
+
+**Response:** WorkspaceEvent SSE messages and explicit ready/resync/access controls.
+
+- `GET /v1/me/workspace/events` — [request request/response](examples/subscribeWorkspaceEvents.request.json)
+
+- Redis Pub/Sub wakes authorized RDS replay after commit; there are no periodic workspace list refreshes.
+- Reconnect with the signed cursor. Reload authorized collections only when an explicit resync is required.
+
 ## Evidence and validation
 
 Requests/responses are taken from the existing validated OpenAPI exchange library. The CADinT2D analysis/paragraph sequence is internally linked. The CAD source-selected gap now frames the request and account. The evidence package is a separate captured input; the authored account is not its validated agent output. Semantic scores and agent outputs remain illustrative fixtures.
 
-The mapping covers 42 operations and all 55 exchanges. OpenAPI SHA-256: `cf66fbdfe47239be4c885b073960140242df98af5451cf399ce847d426d28240`. No endpoints or payloads were changed to build this diagram.
+The mapping covers 43 operations and all 56 exchanges. OpenAPI SHA-256: `ddebd496346ee953d82eb695e4dff964b8602d78d9cc1cdbab001472e37e9ff3`. No endpoints or payloads were changed to build this diagram.

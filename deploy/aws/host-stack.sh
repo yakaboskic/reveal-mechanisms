@@ -4,7 +4,7 @@ umask 077
 cd /opt/reveal
 export DOCKER_CONFIG=/run/reveal/docker
 compose() {
-  docker compose --env-file /etc/reveal/compose.env -f deploy/compose.yaml -f deploy/compose.ec2.yaml "$@"
+  docker compose --env-file /etc/reveal/compose.env -f deploy/compose.legacy.yaml -f deploy/compose.ec2.yaml "$@"
 }
 case "${1:-}" in
   start)

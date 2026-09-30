@@ -104,7 +104,9 @@ def snapshot(repository):
         else:
             tables = [{'name': name, 'present': name == 'reveal_records', 'estimated_rows': None, 'bytes': None} for name in mapped]
     from .runtime_metrics import metrics
+    from .workspace_events import notification_health
     return {'generated_at': now(), 'query_ms': round((time.perf_counter()-started)*1000, 1), 'runtime': metrics(),
+            'notifications':notification_health(repository),
             'database': 'sqlite-test' if repository.sqlite_path else 'aurora-mysql',
             'counts': counts, 'recent': recent, 'statuses': statuses, 'jobs': job_items, 'events': events,
             'tables': tables, 'imports': imports, 'limits': {'jobs': 100, 'events': 100, 'recent': 100, 'imports_per_table': 10}}

@@ -265,25 +265,37 @@ class BoxExecutionAdapter:
         return await self.command(box, shlex.join(command))
 
     async def prepare(self, box, request, bundle):
-        await box.files.write(path='/tmp/reveal-bundle.tgz', content=base64.b64encode(bundle).decode(), encoding='base64')
         config = {'job_id': request.job_id, 'attempt': request.attempt, 'kind': request.kind,
                   'selected_graphs': list(request.selected_graphs), 'timeout_seconds': request.timeout_seconds,
                   'max_budget_usd': request.max_budget_usd, 'max_turns': request.max_turns,
                   'model': self.environ.get('REVEAL_CLAUDE_MODEL', MODEL), 'claude_version': CLAUDE_VERSION,
                   'input_sha256': hashlib.sha256(request.input_path.read_bytes()).hexdigest()}
         config['validation_feedback'] = list(request.validation_feedback)
+        # Persist a trusted bootstrap identity before narrowing network egress.
+        # A lost policy-update response must not rerun apt/pip/npm behind the
+        # now-restricted firewall. The root-owned sentinel binds the exact
+        # harness bundle, input, model, limits and selected evidence services.
+        fingerprint = hashlib.sha256(bundle + json.dumps(config, sort_keys=True).encode()).hexdigest()
+        marker = await self.command(box, "sudo -n sh -c 'if [ -f /reveal/state/bootstrap-ready ]; then cat /reveal/state/bootstrap-ready; fi'")
+        policy = {'mode': 'custom', 'allowed_domains': ['api.anthropic.com', 'apps.okn.us', 'github.com']}
+        if marker.strip():
+            if marker.strip() != fingerprint:
+                raise BoxConfigurationError('Existing Box bootstrap belongs to different frozen input or harness')
+            await box.update_network_policy(policy)
+            return
+        await box.files.write(path='/tmp/reveal-bundle.tgz', content=base64.b64encode(bundle).decode(), encoding='base64')
         await box.files.write(path='/tmp/reveal-request.json', content=json.dumps(config))
         # Setup is a trusted static command; no model-authored shell or credentials.
         bootstrap = '''set -eu
 sudo mkdir -p /reveal/state
 sudo tar -xzf /tmp/reveal-bundle.tgz -C /reveal
 sudo mv /tmp/reveal-request.json /reveal/request.json
-sudo useradd --create-home --uid 1999 --shell /usr/sbin/nologin reveal-agent
+id reveal-agent >/dev/null 2>&1 || sudo useradd --create-home --uid 1999 --shell /usr/sbin/nologin reveal-agent
 sudo apt-get update -qq
 sudo apt-get install -y -qq python3-venv
 sudo python3 -m venv /reveal/venv
 sudo /reveal/venv/bin/pip -q install PyYAML==6.0.2 linkml==1.11.1 rdflib==7.6.0
-sudo mkdir /reveal/claude
+sudo mkdir -p /reveal/claude
 sudo npm install --prefix /reveal/claude --no-audit --no-fund @anthropic-ai/claude-code@''' + CLAUDE_VERSION + '''
 sudo chmod 755 /reveal
 sudo chmod 755 /reveal/state
@@ -294,8 +306,9 @@ sudo /reveal/claude/node_modules/.bin/claude --version
         # Secret only uses structured SDK file input, then root-only protection before launch.
         await box.files.write(path='/tmp/reveal-credential.json', content=json.dumps({'ANTHROPIC_API_KEY': self.environ['ANTHROPIC_API_KEY']}))
         await self.command(box, 'sudo mv /tmp/reveal-credential.json /reveal/credentials.json && sudo chown root:root /reveal/credentials.json && sudo chmod 600 /reveal/credentials.json')
+        await self.command(box, "sudo -n sh -c " + shlex.quote("printf '%s' " + fingerprint + " > /reveal/state/bootstrap-ready && chmod 600 /reveal/state/bootstrap-ready"))
         # After installation only Anthropic and the fixed evidence service are reachable.
-        await box.update_network_policy({'mode': 'custom', 'allowed_domains': ['api.anthropic.com', 'apps.okn.us', 'github.com']})
+        await box.update_network_policy(policy)
         # DAPPER clone is intentionally fresh and requires github.com after policy tightening.
 
     async def execute(self, request, emit, cancelled, checkpoint):
@@ -327,6 +340,8 @@ sudo /reveal/claude/node_modules/.bin/claude --version
                 if marker:
                     handle.setdefault('timings', {}).update(marker.get('timings', {}))
                 if marker and (marker['cleanup_complete'] or handle.get('phase') == 'deleted'):
+                    await emit('stage', {'stage': 'collecting_output',
+                                        'message': 'Restoring the saved results before validation.'})
                     handle['phase'] = 'deleted'
                     handle.setdefault('timings', {}).setdefault('deleted_at', time.time())
                     try: await checkpoint(handle.copy())
@@ -347,6 +362,8 @@ sudo /reveal/claude/node_modules/.bin/claude --version
                         return captured_result(request, handle, marker)
                     raise BoxTransportError('Box reconnect failed; retain the existing handle') from exc
                 if marker:
+                    await emit('stage', {'stage': 'collecting_output',
+                                        'message': 'Finalizing the saved results before validation.'})
                     terminal = True  # Complete local capture; only acknowledged cleanup remains.
                     return captured_result(request, handle, marker)
             else:
@@ -423,6 +440,8 @@ sudo /reveal/claude/node_modules/.bin/claude --version
                     if time.time() - handle['created_at'] > request.timeout_seconds + 480:
                         raise BoxTransportError('Box cancellation not yet finalized; resume the existing handle')
                 await asyncio.sleep(self.poll_interval)
+            await emit('stage', {'stage': 'collecting_output',
+                                'message': 'Retrieving the agent’s results and captured evidence.'})
             captured = json.loads(await self.remote(box, 'collect'))
             total, captured_files = 0, {}
             for name, encoded in captured['files'].items():
@@ -451,10 +470,13 @@ sudo /reveal/claude/node_modules/.bin/claude --version
             # storage outside the disposable worker.
             preserve_capture = True
             handle['phase'] = 'captured'
+            await emit('stage', {'stage': 'collecting_output',
+                                'message': 'Saving the results and evidence to durable storage.'})
             try: await checkpoint(handle.copy())
             except Exception as exc:
                 raise BoxTransportError('Captured output awaits durable storage; retain the remote copy') from exc
             preserve_capture = False
+            handle['timings']['capture_saved_at'] = time.time()
             terminal = True  # Delete only after all attempt artifacts are durable locally.
             return captured_result(request, handle, marker)
         finally:
@@ -462,6 +484,9 @@ sudo /reveal/claude/node_modules/.bin/claude --version
                 cleanup_error = None
                 if (terminal and not preserve_capture) or not checkpointed:
                     try:
+                        if marker:
+                            await emit('stage', {'stage': 'collecting_output',
+                                                'message': 'Finalizing the saved results before validation.'})
                         await box.delete()
                         handle.setdefault('timings', {}).setdefault('deleted_at', time.time())
                         if marker:

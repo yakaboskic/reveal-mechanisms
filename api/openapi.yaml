@@ -6660,6 +6660,94 @@ paths:
         source: 'curl -X POST https://api.reveal.example.org/v1/citations/render -H
           ''Content-Type: application/json'' -H ''Accept: application/json'' --data-raw
           ''{"locale":"en-US","paragraph_id":"dapper:Paragraph.uSYa1LdXNPuwlSgsCz3oZ7IfrVoztroD","style":"apa"}'''
+  /v1/me/workspace/events:
+    get:
+      operationId: subscribeWorkspaceEvents
+      tags:
+      - Research history
+      summary: Subscribe to committed workspace changes
+      description: Authenticated SSE backed by durable RDS replay and managed Redis
+        Pub/Sub wakeups. Subscribe before replay. Send Last-Event-ID or after to resume;
+        both must agree if supplied. workspace_change carries WorkspaceEvent. ready,
+        resync_required, connection_degraded and access_revoked are stream control
+        events. Resync explicitly reloads authorized collections. Heartbeats do not
+        read Redis or query application state.
+      security:
+      - GatewayAssertion: []
+      parameters:
+      - name: Last-Event-ID
+        in: header
+        required: false
+        schema:
+          type: string
+        example: opaque-signed-cursor
+        description: Opaque signed reconnect cursor.
+      - name: after
+        in: query
+        required: false
+        schema:
+          type: string
+        example: opaque-signed-cursor
+        description: Opaque signed reconnect cursor, equivalent to Last-Event-ID.
+      x-codeSamples:
+      - lang: Shell
+        label: request
+        source: 'curl -X GET ''https://api.reveal.example.org/v1/me/workspace/events?after=opaque-signed-cursor''
+          -H ''Authorization: Bearer <trusted-gateway-assertion>'' -H ''Accept: text/event-stream'''
+      responses:
+        '200':
+          description: Committed events and stream control messages. Each workspace_change
+            data frame is a WorkspaceEvent JSON object.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+              examples:
+                change:
+                  value: 'id: opaque-signed-cursor
+
+                    event: workspace_change
+
+                    data: {"schema_version": 1, "event_id": "scope:1", "cursor": "1",
+                    "scope": "workspace", "committed_at": "2026-09-30T00:00:00Z",
+                    "event_type": "draft.changed", "entity_id": "22222222-2222-4222-8222-222222222222",
+                    "entity_revision": 2, "operation": "upsert", "collections": ["drafts",
+                    "gaps"]}
+
+
+                    '
+          x-event-schema:
+            $ref: '#/components/schemas/WorkspaceEvent'
+        '400':
+          description: Invalid Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                invalid_request:
+                  summary: Invalid request
+                  value: *id004
+        '401':
+          description: Authentication Required
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                authentication_required:
+                  summary: Authentication required
+                  value: *id001
+        '503':
+          description: Dependency Unavailable
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                dependency_unavailable:
+                  summary: Dependency unavailable
+                  value: *id014
   /v1/jobs/{job_id}/retry-review:
     post:
       operationId: retryJobReview
@@ -18605,7 +18693,7 @@ components:
           - registered
         workspace_expires_at:
           anyOf:
-          - &id062
+          - &id061
             type: string
             format: date-time
           - type: 'null'
@@ -19165,7 +19253,7 @@ components:
             type: string
             format: uuid
           maxItems: 3
-        evidence_package_sha256: &id061
+        evidence_package_sha256: &id062
           type: string
           pattern: ^[a-f0-9]{64}$
       required:
@@ -19247,6 +19335,7 @@ components:
           - complete
           - preparing_evidence
           - starting_agent
+          - collecting_output
         research_request_id:
           anyOf:
           - *id057
@@ -20063,6 +20152,65 @@ components:
       - items
       - page
       additionalProperties: false
+    WorkspaceEvent:
+      type: object
+      properties:
+        schema_version:
+          type: integer
+          const: 1
+        event_id:
+          type: string
+        cursor:
+          type: string
+          pattern: ^[0-9]+$
+        scope:
+          type: string
+          enum:
+          - workspace
+          - public
+        committed_at: *id061
+        event_type:
+          type: string
+        entity_id:
+          type: string
+        entity_revision:
+          type: integer
+          minimum: 0
+        operation:
+          type: string
+          enum:
+          - upsert
+          - remove
+          - invalidate
+          - resync
+        collections:
+          type: array
+          items:
+            type: string
+            enum:
+            - drafts
+            - gaps
+            - explorations
+            - requests
+            - jobs
+            - accounts
+            - identity
+            - catalog
+      required:
+      - schema_version
+      - event_id
+      - cursor
+      - scope
+      - committed_at
+      - event_type
+      - entity_id
+      - entity_revision
+      - operation
+      - collections
+      additionalProperties: false
+      description: Committed invalidation event. SSE id is an opaque signed cursor
+        bound to the principal and notification namespace; the envelope cursor is
+        scope-local. Replay requires current authorization.
     SelectedGap:
       type: object
       properties:
@@ -20074,7 +20222,7 @@ components:
         source_id:
           type: string
           pattern: '^dismech:'
-        source_revision: *id061
+        source_revision: *id062
       required:
       - id
       - source_id
@@ -20089,7 +20237,7 @@ components:
           type: string
         source_pointer:
           type: string
-        payload_sha256: *id061
+        payload_sha256: *id062
         raw:
           type: object
           additionalProperties: true
@@ -20113,7 +20261,7 @@ components:
           enum:
           - public_exact_gap
           - owner_exact_gap
-        as_of: *id062
+        as_of: *id061
         ranking:
           type: string
           enum:
@@ -20187,7 +20335,7 @@ components:
           - type: 'null'
         artifact_sha256:
           anyOf:
-          - *id061
+          - *id062
           - type: 'null'
         duration_ms:
           anyOf:
@@ -20211,7 +20359,7 @@ components:
                 minimum: 0
               truncated:
                 type: boolean
-              snapshot_sha256: *id061
+              snapshot_sha256: *id062
             required:
             - scope
             - nodes
@@ -20282,11 +20430,11 @@ components:
           minimum: 0
         published_at:
           anyOf:
-          - *id062
+          - *id061
           - type: 'null'
         updated_at:
           anyOf:
-          - *id062
+          - *id061
           - type: 'null'
         can_manage:
           type: boolean
@@ -20332,7 +20480,7 @@ components:
           type: string
           const: analysis_outcome
         outcome_id: *id063
-        evidence_package_sha256: *id061
+        evidence_package_sha256: *id062
       required:
       - kind
       - outcome_id
@@ -20378,7 +20526,7 @@ components:
           - type: integer
             minimum: 1
           - type: 'null'
-        artifact_sha256: *id061
+        artifact_sha256: *id062
         download_url:
           anyOf:
           - type: string
@@ -20394,15 +20542,15 @@ components:
     OutcomeProvenance:
       type: object
       properties:
-        evidence_package_sha256: *id061
-        outcome_sha256: *id061
+        evidence_package_sha256: *id062
+        outcome_sha256: *id062
         runtime_sha256:
           anyOf:
-          - *id061
+          - *id062
           - type: 'null'
         ledger_sha256:
           anyOf:
-          - *id061
+          - *id062
           - type: 'null'
         execution_mode:
           type: string
@@ -20464,8 +20612,8 @@ components:
                 - failed
                 - denied
                 - interrupted
-              request_sha256: *id061
-              response_sha256: *id061
+              request_sha256: *id062
+              response_sha256: *id062
             required:
             - sequence
             - graph
@@ -20528,7 +20676,7 @@ components:
             enum:
             - biomarkerkg
             - prokn
-        created_at: *id062
+        created_at: *id061
         attribution:
           anyOf:
           - $ref: '#/components/schemas/AttributionSnapshot'
@@ -20634,7 +20782,7 @@ components:
         claim_count:
           type: integer
           minimum: 1
-        created_at: *id062
+        created_at: *id061
         job_id:
           anyOf:
           - *id063
@@ -20692,7 +20840,7 @@ components:
           $ref: '#/components/schemas/SelectedGap'
         knowledge_gap:
           $ref: '#/components/schemas/DapperKnowledgeGap'
-        last_explored_at: *id062
+        last_explored_at: *id061
         draft_id:
           anyOf:
           - *id063
@@ -28059,7 +28207,7 @@ components:
       type: object
       properties:
         job_id: *id063
-        package_sha256: *id061
+        package_sha256: *id062
         package:
           $ref: '#/components/schemas/EvidencePackage'
       required:

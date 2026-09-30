@@ -1,0 +1,71 @@
+"""The durable pilot is isolated and cannot accidentally launch queue workers."""
+import importlib.util
+import json
+from pathlib import Path
+import sys
+
+import pytest
+import yaml
+
+ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(ROOT/'scripts'))
+spec = importlib.util.spec_from_file_location('durable_deployment', ROOT/'scripts/durable_deployment.py')
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+
+
+def test_default_stack_has_no_queue_consumers_or_self_hosted_redis():
+    stack = yaml.safe_load((ROOT/'deploy/compose.yaml').read_text())
+    assert set(stack['services']) == {'api', 'tools', 'bootstrap'}
+    assert 'depends_on' not in stack['services']['api']
+    assert 'redis' not in json.dumps(stack['services']['api'].get('healthcheck', {})).lower()
+
+
+def test_prepare_separates_application_state_and_backend_secrets(tmp_path, monkeypatch):
+    root = tmp_path
+    runtime = root/'.runtime/workflow'
+    runtime.mkdir(parents=True)
+    baseline = root/'.runtime/deployment'; baseline.mkdir()
+    (baseline/'backend.env').write_text('REVEAL_MYSQL_PASSWORD=db-secret\nREVEAL_REDIS_URL=redis://old-queue\n')
+    assets=root/'.deployment-assets'; assets.mkdir()
+    for name in ('dapper','dismech','rds-ca.pem'): (assets/name).touch()
+    (root/'.env').write_text('UPSTASH_REDIS_REST_URL=https://redis.example\nUPSTASH_REDIS_REST_TOKEN=redis-secret\n'
+        'UPSTASH_VECTOR_REST_URL=https://vector.example\nUPSTASH_VECTOR_REST_TOKEN=vector-secret\n'
+        'QSTASH_TOKEN=live-token\nQSTASH_CURRENT_SIGNING_KEY=live-current\nQSTASH_NEXT_SIGNING_KEY=live-next\n')
+    (runtime/'qstash.log').write_text('QSTASH_URL=http://127.0.0.1:18080\nQSTASH_TOKEN=local-token\n'
+        'QSTASH_CURRENT_SIGNING_KEY=local-current\nQSTASH_NEXT_SIGNING_KEY=local-next\n')
+    monkeypatch.setattr(module,'ROOT',root); monkeypatch.setattr(module,'RUNTIME',runtime)
+    monkeypatch.setattr(module,'storage_config',lambda path:({'REVEAL_S3_BUCKET':'test','REVEAL_S3_PREFIX':'local/'},'https://test.example/local/'))
+    result=module.prepare()
+    backend=module.read_env(runtime/'backend.env'); frontend=module.read_env(runtime/'frontend.env')
+    assert backend['REVEAL_APPLICATION_TABLE_PREFIX']=='reveal_workflow_local'
+    assert backend['REVEAL_JOB_TRANSPORT']=='workflow'
+    assert backend['REVEAL_RETRIEVAL_BACKEND']=='upstash'
+    assert backend['QSTASH_TOKEN']=='local-token'
+    assert backend['QSTASH_URL']=='http://host.docker.internal:18080'
+    assert 'REVEAL_REDIS_URL' not in backend
+    assert not any(k.startswith(('UPSTASH_','QSTASH_','AWS_','REVEAL_MYSQL')) for k in frontend)
+    assert result['worker_services']==0
+    assert (runtime/'backend.env').stat().st_mode & 0o777 == 0o600
+    assert 'redis-secret' not in json.dumps(result)
+
+
+def test_platform_qa_isolates_authoritative_state_and_callbacks():
+    config=yaml.safe_load((ROOT/'deploy/dig/service.yaml').read_text())
+    assert config['env']['REVEAL_JOB_TRANSPORT']=='workflow'
+    assert config['qa']['env']['REVEAL_APPLICATION_TABLE_PREFIX']!='reveal'
+    assert config['qa']['env']['REVEAL_S3_PREFIX']=='qa/'
+    assert 'api-qa.' in config['qa']['env']['REVEAL_WORKFLOW_URL']
+    required = {'REVEAL_MYSQL_PASSWORD', 'REVEAL_GATEWAY_SECRET', 'REVEAL_GATEWAY_SERVICE_TOKEN',
+        'UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN',
+        'UPSTASH_VECTOR_REST_URL', 'UPSTASH_VECTOR_REST_TOKEN', 'UPSTASH_VECTOR_WRITE_TOKEN',
+        'QSTASH_TOKEN', 'QSTASH_CURRENT_SIGNING_KEY', 'QSTASH_NEXT_SIGNING_KEY'}
+    for environment in ('qa', 'prod'):
+        secrets = config[environment]['secrets']
+        assert 'REVEAL_REDIS_URL' not in secrets
+        assert required <= secrets.keys()
+        for key in required:
+            assert secrets[key].startswith('arn:aws:secretsmanager:')
+            assert secrets[key].endswith(f':{key}::')
+        assert 'REVEAL_REDIS_URL' not in {**config['env'], **config[environment].get('env', {})}
+    assert config['qa']['secrets']['REVEAL_GATEWAY_SECRET'] != config['prod']['secrets']['REVEAL_GATEWAY_SECRET']

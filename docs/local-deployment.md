@@ -1,5 +1,7 @@
 # Local Docker deployment
 
+> Durable workflow migration: the supported target is now the HTTP-only service described in [durable-workflow-runtime.md](durable-workflow-runtime.md). The worker/Redis Streams instructions below are retained as historical migration and rollback guidance; they do not describe the new default `deploy/compose.yaml`. Live release status must be verified separately.
+
 **Fresh clone:** start with [README.local.md](../README.local.md). `scripts/local_setup.py` provisions pinned sources and encrypted configuration automatically. The public hosting route is now the [DIG platform](platform-deployment.md), pending access; EC2 sections below describe the retained earlier option.
 
 This stack runs the deployable API image, Redis Streams, a dispatcher, and two worker containers against the **existing dev RDS database**. A separately built Next.js container represents Vercel. Artifacts use the real AWS bucket `cyaka-reveal-data` in `us-east-1`: this stack uses `local/`, and EC2 will use `prod/`. Public deployment URLs remain `https://<domain>` and `https://api.<domain>`, without a staging prefix.

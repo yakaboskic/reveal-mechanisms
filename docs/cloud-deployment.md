@@ -1,6 +1,8 @@
 # Cloud rollout
 
-**Current direction:** the administrator requested deployment through [DIG service platform](platform-deployment.md). The dedicated EC2 rollout below is on hold until that platform is inspected. Do not apply the earlier IAM setup solely to bypass the platform workflow.
+> Durable workflow migration: the supported target is now the HTTP-only service described in [durable-workflow-runtime.md](durable-workflow-runtime.md). The worker/Redis Streams instructions below are retained as historical migration and rollback guidance; they do not describe the new default `deploy/compose.yaml`. Live release status must be verified separately.
+
+**Current direction:** the administrator requested deployment through [DIG service platform](platform-deployment.md). The platform has been inspected and supports the required worker services; the current draft uses Upstash Redis. The dedicated EC2 rollout below remains a fallback. Do not apply the earlier IAM setup solely to bypass the platform workflow.
 
 Status on September 29, 2026: prepared locally, **not live**. AWS denied runtime-role and ECR repository creation. Complete [the administrator handoff](../deploy/aws/README.md) before provisioning billable compute. Local development remains running.
 

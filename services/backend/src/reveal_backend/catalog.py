@@ -11,6 +11,8 @@ from .evidence_package import DapperRuntime, canonical_json, sha256
 from .eaggl_embeddings import database_search_index
 from .embedding_client import get_embeddings
 from .dismech_embeddings import context_input, load_context_vectors
+from .vector_retrieval import UpstashFactorIndex, VectorUnavailable, retrieve_native, query_vector_provenance
+from .vector_ingestion import VectorRegistry
 import numpy as np
 
 class Catalog:
@@ -19,6 +21,8 @@ class Catalog:
         self.lock = threading.Lock()
         self.dismech_catalog_lock=threading.Lock()
         self.complete_dismech_catalog=None
+        self.vector_lock = threading.Lock()
+        self.vector_indexes = {}
     def load(self):
         with self.lock:
             if self.loaded: return
@@ -57,7 +61,17 @@ class Catalog:
                     self.embedding_run = runs[0]
                     cursor.execute('SELECT f.factor_id,f.label,l.cfde_node_id,l.payload FROM eaggl_cfde_factor_links l JOIN eaggl_factors f ON f.import_id=l.eaggl_import_id AND f.factor_index=l.factor_index WHERE l.run_id=%s', (self.mapping_run,))
                     factor_rows = cursor.fetchall()
-                self.index = database_search_index(connection, self.eaggl_import, self.embedding_run)
+                backend = setting('REVEAL_RETRIEVAL_BACKEND', 'upstash')
+                if backend not in ('upstash', 'legacy'): raise ValueError('Invalid retrieval backend')
+                self.vector_backend = backend == 'upstash'
+                if self.vector_backend:
+                    self.index = self.retrieval_index()
+                    self.index.check()
+                    expected_factors = {(row[0], row[1], row[2]) for row in factor_rows}
+                    actual_factors = {(row['factor_id'], row['label'], row['native_id']) for row in self.index.factors}
+                    if actual_factors != expected_factors: raise VectorUnavailable('Vector aliases differ from selected mapping')
+                else:
+                    self.index = database_search_index(connection, self.eaggl_import, self.embedding_run)
                 # Import-time vectors cover all source mechanisms. Readiness
                 # preloads only those currently used by gaps plus exact fallback
                 # questions, so the first automatic suggestion does no I/O.
@@ -67,10 +81,16 @@ class Catalog:
                 inputs.extend(context_input(row['id'], 'knowledge_gap', self.file_hashes[row['source_file']], row['raw']['prompt'])
                     for row in gap_rows if not any(item.get('target_id') in context_ids for item in attachments[row['id']]))
                 try:
-                    self.dismech_embeddings = load_context_vectors(connection, self.dismech_import, self.index.run, inputs,
-                        run_id=setting('REVEAL_DISMECH_EMBEDDING_RUN_ID'))
-                    self.context_text_vectors = {row['input_sha256']: (row['input_text'], self.dismech_embeddings['vectors'][identity])
-                        for identity, row in self.dismech_embeddings['bindings'].items()}
+                    if self.vector_backend:
+                        self.dismech_embeddings = self.index.contexts
+                        if any(self.dismech_embeddings['bindings'].get(row['source_id']) != row for row in inputs):
+                            raise VectorUnavailable('Vector context bindings differ from current source revisions/text')
+                        self.context_text_vectors = {}
+                    else:
+                        self.dismech_embeddings = load_context_vectors(connection, self.dismech_import, self.index.run, inputs,
+                            run_id=setting('REVEAL_DISMECH_EMBEDDING_RUN_ID'))
+                        self.context_text_vectors = {row['input_sha256']: (row['input_text'], self.dismech_embeddings['vectors'][identity])
+                            for identity, row in self.dismech_embeddings['bindings'].items()}
                 except Exception as error:
                     raise Problem(503, 'DISMECH_EMBEDDINGS_NOT_READY',
                         'Import and verify compatible DisMech context embeddings before automatic retrieval.') from error
@@ -110,7 +130,30 @@ class Catalog:
                 self.factors[native] = record; self.factor_legacy[legacy] = record
                 self.bindings[native] = {'eaggl_factor_id': legacy, 'eaggl_import_id': self.eaggl_import, 'embedding_run_id': self.embedding_run,
                     'mapping_run_id': self.mapping_run, 'gene_set_import_id': self.geneset_import, 'cfde_node_id': native, 'cfde_payload': raw}
+            if self.vector_backend and any(row['source_revision'] != self.factor_legacy[row['factor_id']]['source_revision'] for row in self.index.factors):
+                raise VectorUnavailable('Vector source revisions differ from current canonical factor payloads')
             self.loaded = True
+    def retrieval_index(self):
+        if not getattr(self, 'vector_backend', False): return self.index
+        try:
+            registry = VectorRegistry()
+            identity = registry.active_identity()
+            with self.vector_lock:
+                cached = self.vector_indexes.get(identity)
+            if cached is not None: return cached
+            snapshot = registry.get(identity)
+            if (snapshot['mapping_run'] != self.mapping_run or snapshot['run']['run_id'] != self.embedding_run
+                    or snapshot['run']['config']['import_id'] != self.eaggl_import or snapshot['dismech_import'] != self.dismech_import
+                    or (getattr(self, 'dismech_embeddings', None) and snapshot['context_run_id'] != self.dismech_embeddings['run_id'])):
+                raise VectorUnavailable('Active Vector snapshot differs from selected source runs')
+            with self.vector_lock:
+                if identity not in self.vector_indexes:
+                    self.vector_indexes[identity] = UpstashFactorIndex(snapshot)
+                    while len(self.vector_indexes) > 4: self.vector_indexes.pop(next(iter(self.vector_indexes)))
+                return self.vector_indexes[identity]
+        except VectorUnavailable as error:
+            raise Problem(503, 'SEMANTIC_SEARCH_UNAVAILABLE', str(error)) from error
+
     def dismech_catalog(self):
         """Load the independent full corpus only when mechanism search needs it."""
         self.load()
@@ -168,44 +211,49 @@ class Catalog:
             if score: scored.append((score, gap))
         scored.sort(key=lambda r: (-r[0], r[1]['source']['source_id']))
         return [{'gap': g, 'ranking': {'value': s, 'metric': 'fuzzy_similarity' if mode=='fuzzy' else 'lexical_rank', 'rank': i+1}} for i,(s,g) in enumerate(scored[:limit])]
-    def search_factors(self, query, mode='semantic', limit=20, exclude=(), *, query_vector=None):
+    def search_factors(self, query, mode='semantic', limit=20, exclude=(), *, query_vector=None, _index=None):
         self.load()
-        if mode=='hybrid':
-            combined={}
-            for family in ('semantic','lexical'):
-                for item in self.search_factors(query,family,len(self.factors),exclude,query_vector=query_vector):
-                    identity=item['record']['source_id']
-                    if identity not in combined: combined[identity]=[0,item['record']]
-                    combined[identity][0]+=1/(60+item['ranking']['rank'])
-            ranked=sorted(combined.values(),key=lambda r:(-r[0],r[1]['source_id']))[:limit]
-            return [{'record':record,'ranking':{'value':score,'metric':'reciprocal_rank_fusion','rank':i+1}} for i,(score,record) in enumerate(ranked)]
-        if mode == 'semantic' and query.strip():
-            # Retrieve the full small index, filter mappings and deduplicate BEFORE cutoff.
-            if query_vector is None:
-                imported = getattr(self, 'context_text_vectors', {}).get(sha256(query.strip().encode('utf-8')))
-                if imported and imported[0] == query.strip(): query_vector = imported[1]
-            rows = self.index.search(query=query, top_k=len(self.index.factors), query_vector=query_vector)
-            candidates = [(row['cosine_similarity'], self.factor_legacy[row['factor_id']]) for row in rows if row['factor_id'] in self.factor_legacy]
-            metric = 'cosine_similarity'
-        else:
-            candidates = []
-            for factor in self.factors.values():
-                text = (factor['cfde_anchor']['label']+' '+factor['source_id']).casefold()
-                score = sum(word in text for word in query.casefold().split())/max(1,len(query.split())) if query else 1
-                if mode=='fuzzy' and query and not score:
-                    score=max((SequenceMatcher(None,query.casefold(),word).ratio() for word in text.split()),default=0)
-                    if score<0.7: score=0
-                if score: candidates.append((score, factor))
-            candidates.sort(key=lambda r: (-r[0], r[1]['source_id'])); metric = 'fuzzy_similarity' if mode=='fuzzy' else 'lexical_rank'
-        seen = set(exclude); result = []
-        for score, record in candidates:
-            if record['source_id'] in seen: continue
-            seen.add(record['source_id']); result.append({'record': record, 'ranking': {'value': score, 'metric': metric, 'rank': len(result)+1}})
-            if len(result) == limit: break
-        return result
+        if mode in ('semantic', 'hybrid') and query.strip():
+            index = _index or self.retrieval_index()
+            try:
+                vector = query_vector if query_vector is not None else self.runtime_query_vectors([query.strip()], index=index)[0]
+                # Hybrid retains RRF over semantic and lexical ranks. The ANN
+                # semantic leg is explicitly bounded and recorded in provenance.
+                semantic_limit = min(len(self.factors), index.candidate_limit) if mode == 'hybrid' else limit
+                semantic = retrieve_native(index, self.factor_legacy, np.asarray([vector]), semantic_limit, exclude)
+                items = [{'record': row['record'], 'ranking': {'value': row['value'], 'metric': 'cosine_similarity', 'rank': rank},
+                          **({'retrieval': {**row['retrieval'], 'query_inputs': [{'context_id': 'search_query',
+                              'input_sha256': sha256((query if query_vector is not None else query.strip()).encode('utf-8'))}]}}
+                             if 'retrieval' in row else {})}
+                         for rank, row in enumerate(semantic, 1)]
+                if mode == 'semantic': return items
+                combined = {item['record']['source_id']: [1/(60+item['ranking']['rank']), item['record'], item.get('retrieval')]
+                            for item in items}
+                for item in self.search_factors(query, 'lexical', len(self.factors), exclude):
+                    identity = item['record']['source_id']
+                    if identity not in combined: combined[identity] = [0, item['record'], None]
+                    combined[identity][0] += 1/(60+item['ranking']['rank'])
+                ranked = sorted(combined.values(), key=lambda row: (-row[0], row[1]['source_id']))[:limit]
+                return [{'record': record, 'ranking': {'value': score, 'metric': 'reciprocal_rank_fusion', 'rank': rank},
+                         **({'retrieval': provenance} if provenance else {})}
+                        for rank, (score, record, provenance) in enumerate(ranked, 1)]
+            except VectorUnavailable as error:
+                raise Problem(503, 'SEMANTIC_SEARCH_UNAVAILABLE', str(error)) from error
+        candidates = []
+        for factor in self.factors.values():
+            text = (factor['cfde_anchor']['label']+' '+factor['source_id']).casefold()
+            score = sum(word in text for word in query.casefold().split())/max(1,len(query.split())) if query else 1
+            if mode=='fuzzy' and query and not score:
+                score=max((SequenceMatcher(None,query.casefold(),word).ratio() for word in text.split()),default=0)
+                if score<0.7: score=0
+            if score and factor['source_id'] not in exclude: candidates.append((score, factor))
+        candidates.sort(key=lambda row: (-row[0], row[1]['source_id']))
+        metric = 'fuzzy_similarity' if mode=='fuzzy' else 'lexical_rank'
+        return [{'record': record, 'ranking': {'value': score, 'metric': metric, 'rank': rank}}
+                for rank, (score, record) in enumerate(candidates[:limit], 1)]
 
-    def stored_context_inputs(self, contexts):
-        stored = getattr(self, 'dismech_embeddings', None)
+    def stored_context_inputs(self, contexts, *, stored=None):
+        stored = stored if stored is not None else getattr(self, 'dismech_embeddings', None)
         if stored is None:
             raise Problem(503, 'DISMECH_EMBEDDINGS_NOT_READY', 'Compatible imported DisMech context vectors are unavailable.')
         inputs = []
@@ -230,62 +278,73 @@ class Catalog:
                 'context_embedding_templates': stored['config']['templates'],
                 'context_embedding_inputs': [{key: value for key, value in row.items() if key != 'input_text'} for row in inputs]}
 
-    def runtime_query_vectors(self, texts):
+    def runtime_query_vectors(self, texts, *, index=None):
+        index = index or self.index
+        if isinstance(index, UpstashFactorIndex): return index.query_vectors(texts, embedder=get_embeddings)
         imported = getattr(self, 'context_text_vectors', {})
         known = [imported.get(sha256(text.encode('utf-8'))) for text in texts]
         missing = [i for i, (text, row) in enumerate(zip(texts, known)) if row is None or row[0] != text]
         resolved = {i: row[1] for i, row in enumerate(known) if i not in missing}
         if missing:
-            fresh = self.index.query_vectors([texts[i] for i in missing], embedder=get_embeddings)
+            fresh = index.query_vectors([texts[i] for i in missing], embedder=get_embeddings)
             resolved.update(zip(missing, fresh))
         return np.stack([resolved[i] for i in range(len(texts))])
 
     def suggest_factors(self,contexts,mode,remaining,exclude,*,precomputed=False):
         self.load()
         if not remaining: return []
-        stored_vectors = None
-        if precomputed:
-            inputs = self.stored_context_inputs(contexts)
-            stored_vectors = np.stack([self.dismech_embeddings['vectors'][row['source_id']] for row in inputs])
-        vectors = stored_vectors
-        scores = None
-        if mode in ('semantic', 'hybrid'):
-            if vectors is None:
-                try:
-                    vectors=self.runtime_query_vectors([text for _,text in contexts])
-                except ValueError as error:
-                    raise Problem(503,'EMBEDDING_UNAVAILABLE','The embedding service returned incompatible vectors.') from error
-            scores=self.index.matrix @ vectors.T
-        if mode=='semantic':
-            candidates={}
-            for index,factor in enumerate(self.index.factors):
-                record=self.factor_legacy.get(factor['factor_id'])
-                if not record or record['source_id'] in exclude: continue
-                score=float(np.clip(scores[index].max(),-1,1)); matched=[contexts[i][0] for i,value in enumerate(scores[index]) if np.isclose(value,score)]
-                previous=candidates.get(record['source_id'])
-                if previous is None or score>previous['ranking']['value']:
-                    candidates[record['source_id']]={'record':record,'ranking':{'value':score,'metric':'cosine_similarity','rank':1},'contexts':matched}
-        else:
-            candidates={}
-            for position,(context_id,text) in enumerate(contexts):
-                for item in self.search_factors(text,mode,5,exclude,query_vector=None if vectors is None else vectors[position]):
-                    identity=item['record']['source_id']; old=candidates.get(identity)
-                    if old is None or item['ranking']['value']>old['ranking']['value']: candidates[identity]={**item,'contexts':[context_id]}
-        items=sorted(candidates.values(),key=lambda x:(-x['ranking']['value'],x['record']['source_id']))[:remaining]
-        for rank,item in enumerate(items,1): item['ranking']['rank']=rank
-        if scores is not None:
-            # Retain actual cosines independently of maximum-context selection
-            # or hybrid rank fusion. Multiple atlas aliases use the same native
-            # deduplication rule as semantic retrieval, separately per context.
-            selected = {item['record']['source_id']: item for item in items}
-            for item in items: item['context_similarities'] = {}
-            for index, factor in enumerate(self.index.factors):
-                record = self.factor_legacy.get(factor['factor_id'])
-                item = selected.get(record['source_id']) if record else None
-                if item is None: continue
-                for position, (context_id, _) in enumerate(contexts):
-                    score = float(np.clip(scores[index, position], -1, 1))
-                    previous = item['context_similarities'].get(context_id)
-                    if previous is None or score > previous:
-                        item['context_similarities'][context_id] = score
-        return items
+        index = self.retrieval_index() if mode in ('semantic', 'hybrid') else self.index
+        vectors = None
+        query_inputs = [{'context_id': identity, 'input_sha256': sha256(text.encode('utf-8'))} for identity, text in contexts]
+        try:
+            if mode in ('semantic', 'hybrid'):
+                if precomputed:
+                    stored = index.contexts if isinstance(index, UpstashFactorIndex) else self.dismech_embeddings
+                    inputs = self.stored_context_inputs(contexts, stored=stored)
+                    query_inputs = [{**frozen, **{key: value for key, value in row.items() if key != 'input_text'}}
+                                    for frozen, row in zip(query_inputs, inputs)]
+                    vectors = (index.context_vectors([row['source_id'] for row in inputs]) if isinstance(index, UpstashFactorIndex)
+                               else np.stack([stored['vectors'][row['source_id']] for row in inputs]))
+                else:
+                    vectors = self.runtime_query_vectors([text for _, text in contexts], index=index)
+            if mode == 'semantic':
+                rows = retrieve_native(index, self.factor_legacy, vectors, remaining, exclude)
+                items = [{'record': row['record'], 'ranking': {'value': row['value'], 'metric': 'cosine_similarity', 'rank': rank},
+                    'contexts': [contexts[i][0] for i, score in enumerate(row['scores']) if np.isclose(score, row['value'])],
+                    'context_similarities': {identity: float(score) for (identity, _), score in zip(contexts, row['scores'])},
+                    **({'retrieval': {**row['retrieval'], 'query_inputs': query_inputs}} if 'retrieval' in row else {})} for rank, row in enumerate(rows, 1)]
+                return items
+            candidates = {}
+            context_retrievals = {}
+            for position, (identity, text) in enumerate(contexts):
+                for item in self.search_factors(text, mode, 5, exclude, query_vector=None if vectors is None else vectors[position], _index=index):
+                    if item.get('retrieval') and identity not in context_retrievals:
+                        context_retrievals[identity] = item['retrieval']
+                    native = item['record']['source_id']; previous = candidates.get(native)
+                    if previous is None or item['ranking']['value'] > previous['ranking']['value']:
+                        candidates[native] = {**item, 'contexts': [identity]}
+            items = sorted(candidates.values(), key=lambda row: (-row['ranking']['value'], row['record']['source_id']))[:remaining]
+            for rank, item in enumerate(items, 1): item['ranking']['rank'] = rank
+            if vectors is not None and items:
+                selected = {item['record']['source_id']: item for item in items}
+                aliases = [row['factor_id'] for row in index.factors if row['factor_id'] in self.factor_legacy
+                           and self.factor_legacy[row['factor_id']]['source_id'] in selected]
+                scores = index.fetch_vectors(aliases) @ vectors.T
+                for item in items: item['context_similarities'] = {}
+                for alias, row in zip(aliases, scores):
+                    item = selected[self.factor_legacy[alias]['source_id']]
+                    for (identity, _), score in zip(contexts, row):
+                        item['context_similarities'][identity] = max(item['context_similarities'].get(identity, -1), float(np.clip(score, -1, 1)))
+                if isinstance(index, UpstashFactorIndex):
+                    for item in items:
+                        # Lexical-only hybrid winners still freeze the actual
+                        # semantic vectors used to score every context/alias.
+                        item['retrieval'] = {**index.provenance(), **item.get('retrieval', {}), **query_vector_provenance(vectors),
+                            'context_retrievals': context_retrievals, 'query_inputs': query_inputs,
+                            'aliases': [{'id': index.by_id[alias]['id'], 'original_vector_sha256': index.by_id[alias]['original_vector_sha256']}
+                                for alias in aliases if self.factor_legacy[alias]['source_id'] == item['record']['source_id']]}
+            return items
+        except VectorUnavailable as error:
+            raise Problem(503, 'SEMANTIC_SEARCH_UNAVAILABLE', str(error)) from error
+        except ValueError as error:
+            raise Problem(503, 'EMBEDDING_UNAVAILABLE', 'The embedding service returned incompatible vectors.') from error

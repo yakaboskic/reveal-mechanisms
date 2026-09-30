@@ -196,7 +196,9 @@ class QueryVectorCache:
 
 
 class FactorSearchIndex:
-    """Keep this small matrix in a backend worker; compute top-k only when requested."""
+    """Offline exact reference, selected only by explicit legacy configuration."""
+
+    candidate_limit = 1000000
 
     def __init__(self, factors, run, rows):
         self.factors, self.run = factors, run
@@ -245,6 +247,12 @@ class FactorSearchIndex:
         # Return an independent matrix while preserving every occurrence and
         # its original position, including mixed imported and novel text.
         return np.stack([imported[text] for text in texts])
+
+    def candidates(self, vectors, top_k, *, exclude=()):
+        return [self.search(query='stored query', query_vector=vector, top_k=top_k) for vector in vectors]
+
+    def fetch_vectors(self, factor_ids):
+        return self.matrix[[self.by_id[identity] for identity in factor_ids]].copy()
 
     def search(self, *, query=None, factor_id=None, top_k=10, trait=None, embedder=get_embeddings, query_vector=None):
         if (query is None) == (factor_id is None) or top_k < 1:

@@ -6,16 +6,23 @@ is retained for the existing developer workflow and isolated unit tests.
 from __future__ import annotations
 
 import base64
+from collections import OrderedDict, deque
+from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
 import hashlib
 import json
 import os
 from pathlib import Path, PurePosixPath
 import re
+from threading import Lock
 from urllib.parse import quote
 from uuid import uuid4
 
 from .runtime_config import setting
+
+VERIFIED_PUT_CACHE_SIZE = 4096
+SNAPSHOT_CONCURRENCY = 4
+SNAPSHOT_PENDING_BYTES = 16 * 1024 * 1024
 
 
 class StorageUnavailable(RuntimeError):
@@ -58,6 +65,12 @@ class S3Store:
             signer = client if public == endpoint else boto3.client('s3', endpoint_url=public, **options)
         self.client, self.signer = client, signer or client
         self.maximum = int(setting('REVEAL_ARTIFACT_MAX_BYTES', str(128 * 1024 * 1024)))
+        # Keep only confirmed immutable version references, never artifact bytes.
+        # This store instance is scoped to its bucket, prefix and client settings.
+        self._verified_puts = OrderedDict()
+        self._cache_lock = Lock()
+        # Duplicate content submitted concurrently shares one verification/upload.
+        self._put_locks = tuple(Lock() for _ in range(32))
 
     def check(self):
         try:
@@ -86,6 +99,23 @@ class S3Store:
         key = self.prefix + 'artifacts/sha256/' + sha[:2] + '/' + sha
         ref = {'store': 's3', 'bucket': self.bucket, 'key': key, 'sha256': sha,
                'size_bytes': len(data), 'content_type': content_type}
+        with self._put_locks[int(sha[:2], 16) % len(self._put_locks)]:
+            cache_key = (self.bucket, key)
+            with self._cache_lock:
+                verified = self._verified_puts.get(cache_key)
+                if verified is not None and verified[1] == len(data):
+                    self._verified_puts.move_to_end(cache_key)
+                    return dict(ref, version_id=verified[0])
+            ref = self._put_verified(data, ref)
+            with self._cache_lock:
+                self._verified_puts[cache_key] = (ref['version_id'], ref['size_bytes'])
+                self._verified_puts.move_to_end(cache_key)
+                while len(self._verified_puts) > VERIFIED_PUT_CACHE_SIZE:
+                    self._verified_puts.popitem(last=False)
+            return ref
+
+    def _put_verified(self, data, ref):
+        key, sha = ref['key'], ref['sha256']
         try:
             # Avoid another version for identical immutable bytes on every
             # checkpoint. Integrity is established by a server-verified SHA-256.
@@ -98,13 +128,15 @@ class S3Store:
             encoded = base64.b64encode(bytes.fromhex(sha)).decode()
             if (previous and previous.get('ContentLength') == len(data)
                     and previous.get('ChecksumSHA256') == encoded and previous.get('VersionId') not in (None, 'null')):
-                return dict(ref, version_id=previous['VersionId'])
+                ref = dict(ref, version_id=previous['VersionId'])
+                self.validate(ref)
+                return ref
             options = {}
             encryption = setting('REVEAL_S3_ENCRYPTION', 'AES256')
             if encryption:
                 options['ServerSideEncryption'] = encryption
             result = self.client.put_object(Bucket=self.bucket, Key=key, Body=data,
-                ContentType=content_type, ChecksumSHA256=encoded, Metadata={'sha256': sha}, **options)
+                ContentType=ref['content_type'], ChecksumSHA256=encoded, Metadata={'sha256': sha}, **options)
             ref['version_id'] = result.get('VersionId')
             self.validate(ref)
             return ref
@@ -142,16 +174,40 @@ class S3Store:
         root = Path(root).resolve()
         files = []
         total = 0
-        for path in sorted(root.rglob('*')):
-            if path.is_symlink():
-                raise StorageUnavailable('Checkpoint contains a symbolic link')
-            if not path.is_file():
-                continue
-            data = path.read_bytes()
-            total += len(data)
-            if len(files) >= 10000 or total > int(setting('REVEAL_WORKSPACE_MAX_BYTES', str(256 * 1024 * 1024))):
-                raise StorageUnavailable('Checkpoint exceeds the workspace limit')
-            files.append({'path': path.relative_to(root).as_posix(), 'storage': self.put(data)})
+        maximum = int(setting('REVEAL_WORKSPACE_MAX_BYTES', str(256 * 1024 * 1024)))
+        pending = deque()
+        pending_bytes = 0
+
+        def finish_one():
+            nonlocal pending_bytes
+            name, future, size = pending.popleft()
+            files.append({'path': name, 'storage': future.result()})
+            pending_bytes -= size
+
+        # Bound submitted data as well as threads. A file larger than the byte
+        # window is sent alone; otherwise at most one small window is buffered.
+        # Consume futures in path order to keep the manifest deterministic.
+        with ThreadPoolExecutor(max_workers=SNAPSHOT_CONCURRENCY) as pool:
+            for path in sorted(root.rglob('*')):
+                if path.is_symlink():
+                    raise StorageUnavailable('Checkpoint contains a symbolic link')
+                if not path.is_file():
+                    continue
+                size = path.stat().st_size
+                if len(files) + len(pending) >= 10000 or size > self.maximum or total + size > maximum:
+                    raise StorageUnavailable('Checkpoint exceeds the workspace limit')
+                while pending and (len(pending) >= SNAPSHOT_CONCURRENCY or pending_bytes + size > SNAPSHOT_PENDING_BYTES):
+                    finish_one()
+                with path.open('rb') as source:
+                    data = source.read(size + 1)
+                if len(data) != size:
+                    raise StorageUnavailable('Checkpoint file changed during capture')
+                total += size
+                pending.append((path.relative_to(root).as_posix(), pool.submit(self.put, data), size))
+                pending_bytes += size
+                del data
+            while pending:
+                finish_one()
         manifest = {'format': 'reveal.workspace/1', 'files': files}
         return self.put(json.dumps(manifest, sort_keys=True, separators=(',', ':')).encode(), 'application/json')
 
