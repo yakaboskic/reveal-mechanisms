@@ -101,6 +101,7 @@ optionally writes the two hash/owner configuration fields to a separate file.
 It never uploads secrets or changes a running deployment.
 
 ```bash
+install -d -m 700 .runtime/api-keys
 .venv/bin/python scripts/issue_api_key.py \
   --env-file .runtime/workflow/qa-backend.env \
   --api-url https://api-qa.hugeampkpnbi.org/api/reveal \

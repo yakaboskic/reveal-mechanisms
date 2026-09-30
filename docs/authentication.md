@@ -1,5 +1,11 @@
 # Login and researcher identity
 
+Direct API clients can use an [operator-issued workspace API key](api-keys.md)
+for drafts, jobs, results and event streams. Keys resolve an existing principal
+and retain its ownership, expiry and quotas. The backend stores a hash/owner pair;
+gateway provisioning, administrator access and Workflow callbacks retain their
+separate credentials. The browser login flows below continue to use gateway JWTs.
+
 **Status, September 30, 2026:** anonymous sessions, Google/ORCID integrations, gateway assertions, durable principal mapping, workspace claims and publication sign-in are implemented. See [colleague startup](../README.local.md), [API walkthrough](api-quickstart.md) and [gateway contract](gateway-contract.md). Sections below retain design rationale and explicit future features such as provider linking; the HTML study is a historical simulation, not the running application. Live callback validity depends on the configured provider and origin.
 
 ## 1. Initial scope
