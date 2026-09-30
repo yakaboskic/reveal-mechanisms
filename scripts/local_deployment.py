@@ -159,7 +159,7 @@ def prepare():
 
 
 def compose(*args, capture=False):
-    command = ['docker', 'compose', '--env-file', str(RUNTIME / 'compose.env'), '-f', str(ROOT / 'deploy/compose.yaml'),
+    command = ['docker', 'compose', '--env-file', str(RUNTIME / 'compose.env'), '-f', str(ROOT / 'deploy/compose.legacy.yaml'),
                '-f', str(ROOT / 'deploy/compose.local.yaml'), *args]
     result = subprocess.run(command, cwd=ROOT, text=True, stdout=subprocess.PIPE if capture else None, check=True)
     return result.stdout if capture else None

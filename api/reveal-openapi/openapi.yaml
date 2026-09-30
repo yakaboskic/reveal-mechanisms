@@ -1,5 +1,5 @@
 openapi: 3.1.1
-jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
+jsonSchemaDialect: https://spec.openapis.org/oas/3.1/dialect/base
 info:
   title: REVEAL Mechanisms API
   version: 0.2.0-draft
@@ -32,7 +32,7 @@ tags:
 - name: Scientific content
 - name: Citations
 security:
-- GatewayAssertion: []
+- ApplicationBearer: []
 paths:
   /v1/me:
     get:
@@ -125,12 +125,12 @@ paths:
                 minimum: 1
               example: 30
       security:
-      - GatewayAssertion: []
+      - ApplicationBearer: []
       x-codeSamples:
       - lang: Shell
         label: request
         source: 'curl -X GET https://api.reveal.example.org/v1/me -H ''Authorization:
-          Bearer <trusted-gateway-assertion>'' -H ''Accept: application/json'''
+          Bearer <api-key-or-gateway-assertion>'' -H ''Accept: application/json'''
   /v1/drafts:
     get:
       operationId: listDrafts
@@ -250,12 +250,13 @@ paths:
                 minimum: 1
               example: 30
       security:
-      - GatewayAssertion: []
+      - ApplicationBearer: []
       x-codeSamples:
       - lang: Shell
         label: request
         source: 'curl -X GET ''https://api.reveal.example.org/v1/drafts?limit=20''
-          -H ''Authorization: Bearer <trusted-gateway-assertion>'' -H ''Accept: application/json'''
+          -H ''Authorization: Bearer <api-key-or-gateway-assertion>'' -H ''Accept:
+          application/json'''
     post:
       operationId: createDraft
       tags:
@@ -402,7 +403,7 @@ paths:
                 minimum: 1
               example: 30
       security:
-      - GatewayAssertion: []
+      - ApplicationBearer: []
       requestBody:
         required: true
         content:
@@ -436,7 +437,7 @@ paths:
       - lang: Shell
         label: question_and_anchor
         source: 'curl -X POST https://api.reveal.example.org/v1/drafts -H ''Idempotency-Key:
-          66666666-6666-4666-8666-666666666666'' -H ''Authorization: Bearer <trusted-gateway-assertion>''
+          66666666-6666-4666-8666-666666666666'' -H ''Authorization: Bearer <api-key-or-gateway-assertion>''
           -H ''Content-Type: application/json'' -H ''Accept: application/json'' --data-raw
           ''{"composer":{"dismissed_source_ids":[],"eaggl_anchors":[{"origin":"manual","reference":{"dapper_id":"dapper:Mechanism.MyhahXB55tDUS667sJzeJZ40BeeQBWOR","source":"eaggl","source_id":"factor:portal:CADinT2D:cfde-inc-v2:Factor1","source_revision":"5797893b517def4fdc82f285c9bf835195f9f88eddfb6409cbf3b1e31dd63d83"},"suggestion_id":null}],"mechanism_subquery":"CADinT2D","model":"cfde-inc-v2","selected_kgs":["biomarkerkg","prokn"],"source_gap":{"id":"dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk","source_id":"dismech:disorders/Coronary_Artery_Disease#discussion:cad_pgsxc_reverse_causation","source_revision":"8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd"}}}'''
   /v1/drafts/{draft_id}:
@@ -528,12 +529,13 @@ paths:
                 minimum: 1
               example: 30
       security:
-      - GatewayAssertion: []
+      - ApplicationBearer: []
       x-codeSamples:
       - lang: Shell
         label: request
         source: 'curl -X GET https://api.reveal.example.org/v1/drafts/22222222-2222-4222-8222-222222222222
-          -H ''Authorization: Bearer <trusted-gateway-assertion>'' -H ''Accept: application/json'''
+          -H ''Authorization: Bearer <api-key-or-gateway-assertion>'' -H ''Accept:
+          application/json'''
     patch:
       operationId: updateDraft
       tags:
@@ -638,7 +640,7 @@ paths:
                 minimum: 1
               example: 30
       security:
-      - GatewayAssertion: []
+      - ApplicationBearer: []
       requestBody:
         required: true
         content:
@@ -656,7 +658,7 @@ paths:
         label: save_revision_two
         source: 'curl -X PATCH https://api.reveal.example.org/v1/drafts/22222222-2222-4222-8222-222222222222
           -H ''Idempotency-Key: 66666666-6666-4666-8666-666666666666'' -H ''Authorization:
-          Bearer <trusted-gateway-assertion>'' -H ''Content-Type: application/json''
+          Bearer <api-key-or-gateway-assertion>'' -H ''Content-Type: application/json''
           -H ''Accept: application/json'' --data-raw ''{"composer":{"dismissed_source_ids":[],"eaggl_anchors":[{"origin":"manual","reference":{"dapper_id":"dapper:Mechanism.MyhahXB55tDUS667sJzeJZ40BeeQBWOR","source":"eaggl","source_id":"factor:portal:CADinT2D:cfde-inc-v2:Factor1","source_revision":"5797893b517def4fdc82f285c9bf835195f9f88eddfb6409cbf3b1e31dd63d83"},"suggestion_id":null}],"mechanism_subquery":"CADinT2D","model":"cfde-inc-v2","selected_kgs":["biomarkerkg","prokn"],"source_gap":{"id":"dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk","source_id":"dismech:disorders/Coronary_Artery_Disease#discussion:cad_pgsxc_reverse_causation","source_revision":"8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd"}},"expected_version":1}'''
     delete:
       operationId: deleteDraft
@@ -764,7 +766,7 @@ paths:
                 minimum: 1
               example: 30
       security:
-      - GatewayAssertion: []
+      - ApplicationBearer: []
       requestBody:
         required: true
         content:
@@ -781,7 +783,7 @@ paths:
         label: delete_saved_draft
         source: 'curl -X DELETE https://api.reveal.example.org/v1/drafts/22222222-2222-4222-8222-222222222222
           -H ''Idempotency-Key: 66666666-6666-4666-8666-666666666666'' -H ''Authorization:
-          Bearer <trusted-gateway-assertion>'' -H ''Content-Type: application/json''
+          Bearer <api-key-or-gateway-assertion>'' -H ''Content-Type: application/json''
           -H ''Accept: application/json'' --data-raw ''{"expected_version":2}'''
   /v1/research-requests:
     get:
@@ -933,12 +935,13 @@ paths:
                 minimum: 1
               example: 30
       security:
-      - GatewayAssertion: []
+      - ApplicationBearer: []
       x-codeSamples:
       - lang: Shell
         label: request
         source: 'curl -X GET ''https://api.reveal.example.org/v1/research-requests?limit=20''
-          -H ''Authorization: Bearer <trusted-gateway-assertion>'' -H ''Accept: application/json'''
+          -H ''Authorization: Bearer <api-key-or-gateway-assertion>'' -H ''Accept:
+          application/json'''
   /v1/research-requests/{request_id}:
     get:
       operationId: getResearchRequest
@@ -1020,12 +1023,13 @@ paths:
                 minimum: 1
               example: 30
       security:
-      - GatewayAssertion: []
+      - ApplicationBearer: []
       x-codeSamples:
       - lang: Shell
         label: request
         source: 'curl -X GET https://api.reveal.example.org/v1/research-requests/33333333-3333-4333-8333-333333333333
-          -H ''Authorization: Bearer <trusted-gateway-assertion>'' -H ''Accept: application/json'''
+          -H ''Authorization: Bearer <api-key-or-gateway-assertion>'' -H ''Accept:
+          application/json'''
   /v1/knowledge-gaps/search:
     get:
       operationId: searchKnowledgeGaps
@@ -1323,7 +1327,7 @@ paths:
                     retryable: true
       security:
       - {}
-      - GatewayAssertion: []
+      - ApplicationBearer: []
       x-codeSamples:
       - lang: Shell
         label: request
@@ -1472,7 +1476,7 @@ paths:
               example: 30
       security:
       - {}
-      - GatewayAssertion: []
+      - ApplicationBearer: []
       x-codeSamples:
       - lang: Shell
         label: request
@@ -1585,7 +1589,7 @@ paths:
               example: 30
       security:
       - {}
-      - GatewayAssertion: []
+      - ApplicationBearer: []
       x-codeSamples:
       - lang: Shell
         label: request
@@ -1766,7 +1770,7 @@ paths:
                   value: *id014
       security:
       - {}
-      - GatewayAssertion: []
+      - ApplicationBearer: []
       x-codeSamples:
       - lang: Shell
         label: request
@@ -1886,7 +1890,7 @@ paths:
               example: 30
       security:
       - {}
-      - GatewayAssertion: []
+      - ApplicationBearer: []
       x-codeSamples:
       - lang: Shell
         label: request
@@ -2127,7 +2131,7 @@ paths:
                   value: *id014
       security:
       - {}
-      - GatewayAssertion: []
+      - ApplicationBearer: []
       requestBody:
         required: true
         content:
@@ -2303,12 +2307,13 @@ paths:
                 minimum: 1
               example: 30
       security:
-      - GatewayAssertion: []
+      - ApplicationBearer: []
       x-codeSamples:
       - lang: Shell
         label: request
         source: 'curl -X GET ''https://api.reveal.example.org/v1/jobs?kind=analysis&status=succeeded&research_request_id=33333333-3333-4333-8333-333333333333&limit=20''
-          -H ''Authorization: Bearer <trusted-gateway-assertion>'' -H ''Accept: application/json'''
+          -H ''Authorization: Bearer <api-key-or-gateway-assertion>'' -H ''Accept:
+          application/json'''
     post:
       operationId: createJob
       tags:
@@ -2540,7 +2545,7 @@ paths:
                   summary: Dependency unavailable
                   value: *id014
       security:
-      - GatewayAssertion: []
+      - ApplicationBearer: []
       requestBody:
         required: true
         content:
@@ -2570,13 +2575,13 @@ paths:
       - lang: Shell
         label: analysis
         source: 'curl -X POST https://api.reveal.example.org/v1/jobs -H ''Idempotency-Key:
-          66666666-6666-4666-8666-666666666666'' -H ''Authorization: Bearer <trusted-gateway-assertion>''
+          66666666-6666-4666-8666-666666666666'' -H ''Authorization: Bearer <api-key-or-gateway-assertion>''
           -H ''Content-Type: application/json'' -H ''Accept: application/json'' --data-raw
           ''{"budgets":{"max_accounts":3},"draft_id":"22222222-2222-4222-8222-222222222222","draft_version":2,"kind":"analysis"}'''
       - lang: Shell
         label: paragraph
         source: 'curl -X POST https://api.reveal.example.org/v1/jobs -H ''Idempotency-Key:
-          88888888-8888-4888-8888-888888888888'' -H ''Authorization: Bearer <trusted-gateway-assertion>''
+          88888888-8888-4888-8888-888888888888'' -H ''Authorization: Bearer <api-key-or-gateway-assertion>''
           -H ''Content-Type: application/json'' -H ''Accept: application/json'' --data-raw
           ''{"account_id":"dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd","additional_citations":[],"audience":"researcher","focus_claim_id":"dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km","kind":"paragraph","language":"en","target_words":180}'''
   /v1/jobs/{job_id}:
@@ -2662,16 +2667,18 @@ paths:
                 minimum: 1
               example: 30
       security:
-      - GatewayAssertion: []
+      - ApplicationBearer: []
       x-codeSamples:
       - lang: Shell
         label: request
         source: 'curl -X GET https://api.reveal.example.org/v1/jobs/44444444-4444-4444-8444-444444444444
-          -H ''Authorization: Bearer <trusted-gateway-assertion>'' -H ''Accept: application/json'''
+          -H ''Authorization: Bearer <api-key-or-gateway-assertion>'' -H ''Accept:
+          application/json'''
       - lang: Shell
         label: paragraph
         source: 'curl -X GET https://api.reveal.example.org/v1/jobs/55555555-5555-4555-8555-555555555555
-          -H ''Authorization: Bearer <trusted-gateway-assertion>'' -H ''Accept: application/json'''
+          -H ''Authorization: Bearer <api-key-or-gateway-assertion>'' -H ''Accept:
+          application/json'''
   /v1/jobs/{job_id}/events:
     get:
       operationId: getJobEvents
@@ -2889,17 +2896,17 @@ paths:
                 minimum: 1
               example: 30
       security:
-      - GatewayAssertion: []
+      - ApplicationBearer: []
       x-codeSamples:
       - lang: Shell
         label: request
         source: 'curl -X GET ''https://api.reveal.example.org/v1/jobs/44444444-4444-4444-8444-444444444444/events?after=0&limit=100''
-          -H ''Last-Event-ID: 0'' -H ''Authorization: Bearer <trusted-gateway-assertion>''
+          -H ''Last-Event-ID: 0'' -H ''Authorization: Bearer <api-key-or-gateway-assertion>''
           -H ''Accept: application/json'''
       - lang: Shell
         label: sse
         source: 'curl -X GET ''https://api.reveal.example.org/v1/jobs/44444444-4444-4444-8444-444444444444/events?after=0&limit=100''
-          -H ''Last-Event-ID: 0'' -H ''Authorization: Bearer <trusted-gateway-assertion>''
+          -H ''Last-Event-ID: 0'' -H ''Authorization: Bearer <api-key-or-gateway-assertion>''
           -H ''Accept: text/event-stream'''
   /v1/jobs/{job_id}/cancel:
     post:
@@ -2996,12 +3003,13 @@ paths:
                 minimum: 1
               example: 30
       security:
-      - GatewayAssertion: []
+      - ApplicationBearer: []
       x-codeSamples:
       - lang: Shell
         label: request
         source: 'curl -X POST https://api.reveal.example.org/v1/jobs/44444444-4444-4444-8444-444444444444/cancel
-          -H ''Authorization: Bearer <trusted-gateway-assertion>'' -H ''Accept: application/json'''
+          -H ''Authorization: Bearer <api-key-or-gateway-assertion>'' -H ''Accept:
+          application/json'''
   /v1/accounts/{dapper_id}:
     get:
       operationId: getAccount
@@ -4469,7 +4477,7 @@ paths:
               example: 30
       security:
       - {}
-      - GatewayAssertion: []
+      - ApplicationBearer: []
       x-codeSamples:
       - lang: Shell
         label: request
@@ -4744,7 +4752,7 @@ paths:
               example: 30
       security:
       - {}
-      - GatewayAssertion: []
+      - ApplicationBearer: []
       x-codeSamples:
       - lang: Shell
         label: request
@@ -4872,7 +4880,7 @@ paths:
               example: 30
       security:
       - {}
-      - GatewayAssertion: []
+      - ApplicationBearer: []
       x-codeSamples:
       - lang: Shell
         label: request
@@ -6004,7 +6012,7 @@ paths:
               example: 30
       security:
       - {}
-      - GatewayAssertion: []
+      - ApplicationBearer: []
       x-codeSamples:
       - lang: Shell
         label: request
@@ -6156,7 +6164,7 @@ paths:
               example: 30
       security:
       - {}
-      - GatewayAssertion: []
+      - ApplicationBearer: []
       x-codeSamples:
       - lang: Shell
         label: request
@@ -6362,7 +6370,7 @@ paths:
                     retryable: false
       security:
       - {}
-      - GatewayAssertion: []
+      - ApplicationBearer: []
       x-codeSamples:
       - lang: Shell
         label: request
@@ -6640,7 +6648,7 @@ paths:
                   value: *id014
       security:
       - {}
-      - GatewayAssertion: []
+      - ApplicationBearer: []
       requestBody:
         required: true
         content:
@@ -6660,6 +6668,95 @@ paths:
         source: 'curl -X POST https://api.reveal.example.org/v1/citations/render -H
           ''Content-Type: application/json'' -H ''Accept: application/json'' --data-raw
           ''{"locale":"en-US","paragraph_id":"dapper:Paragraph.uSYa1LdXNPuwlSgsCz3oZ7IfrVoztroD","style":"apa"}'''
+  /v1/me/workspace/events:
+    get:
+      operationId: subscribeWorkspaceEvents
+      tags:
+      - Research history
+      summary: Subscribe to committed workspace changes
+      description: Authenticated SSE backed by durable RDS replay and managed Redis
+        Pub/Sub wakeups. Subscribe before replay. Send Last-Event-ID or after to resume;
+        both must agree if supplied. workspace_change carries WorkspaceEvent. ready,
+        resync_required, connection_degraded and access_revoked are stream control
+        events. Resync explicitly reloads authorized collections. Heartbeats do not
+        read Redis or query application state.
+      security:
+      - ApplicationBearer: []
+      parameters:
+      - name: Last-Event-ID
+        in: header
+        required: false
+        schema:
+          type: string
+        example: opaque-signed-cursor
+        description: Opaque signed reconnect cursor.
+      - name: after
+        in: query
+        required: false
+        schema:
+          type: string
+        example: opaque-signed-cursor
+        description: Opaque signed reconnect cursor, equivalent to Last-Event-ID.
+      x-codeSamples:
+      - lang: Shell
+        label: request
+        source: 'curl -X GET ''https://api.reveal.example.org/v1/me/workspace/events?after=opaque-signed-cursor''
+          -H ''Authorization: Bearer <api-key-or-gateway-assertion>'' -H ''Accept:
+          text/event-stream'''
+      responses:
+        '200':
+          description: Committed events and stream control messages. Each workspace_change
+            data frame is a WorkspaceEvent JSON object.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+              examples:
+                change:
+                  value: 'id: opaque-signed-cursor
+
+                    event: workspace_change
+
+                    data: {"schema_version": 1, "event_id": "scope:1", "cursor": "1",
+                    "scope": "workspace", "committed_at": "2026-09-30T00:00:00Z",
+                    "event_type": "draft.changed", "entity_id": "22222222-2222-4222-8222-222222222222",
+                    "entity_revision": 2, "operation": "upsert", "collections": ["drafts",
+                    "gaps"]}
+
+
+                    '
+          x-event-schema:
+            $ref: '#/components/schemas/WorkspaceEvent'
+        '400':
+          description: Invalid Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                invalid_request:
+                  summary: Invalid request
+                  value: *id004
+        '401':
+          description: Authentication Required
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                authentication_required:
+                  summary: Authentication required
+                  value: *id001
+        '503':
+          description: Dependency Unavailable
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                dependency_unavailable:
+                  summary: Dependency unavailable
+                  value: *id014
   /v1/jobs/{job_id}/retry-review:
     post:
       operationId: retryJobReview
@@ -6796,7 +6893,7 @@ paths:
                 minimum: 1
               example: 30
       security:
-      - GatewayAssertion: []
+      - ApplicationBearer: []
       requestBody:
         required: true
         content:
@@ -6813,7 +6910,7 @@ paths:
         label: saved_output
         source: 'curl -X POST https://api.reveal.example.org/v1/jobs/44444444-4444-4444-8444-444444444444/retry-review
           -H ''Idempotency-Key: 66666666-6666-4666-8666-666666666666'' -H ''Authorization:
-          Bearer <trusted-gateway-assertion>'' -H ''Content-Type: application/json''
+          Bearer <api-key-or-gateway-assertion>'' -H ''Content-Type: application/json''
           -H ''Accept: application/json'' --data-raw ''{"expected_last_event_id":"2"}'''
   /v1/accounts:
     get:
@@ -6918,12 +7015,13 @@ paths:
                 minimum: 1
               example: 30
       security:
-      - GatewayAssertion: []
+      - ApplicationBearer: []
       x-codeSamples:
       - lang: Shell
         label: request
         source: 'curl -X GET ''https://api.reveal.example.org/v1/accounts?gap_id=dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk&limit=20''
-          -H ''Authorization: Bearer <trusted-gateway-assertion>'' -H ''Accept: application/json'''
+          -H ''Authorization: Bearer <api-key-or-gateway-assertion>'' -H ''Accept:
+          application/json'''
   /v1/knowledge-gaps/{gap_id}/accounts:
     get:
       operationId: listKnowledgeGapAccounts
@@ -7078,7 +7176,7 @@ paths:
               example: 30
       security:
       - {}
-      - GatewayAssertion: []
+      - ApplicationBearer: []
       x-codeSamples:
       - lang: Shell
         label: request
@@ -7170,7 +7268,7 @@ paths:
               example: 30
       security:
       - {}
-      - GatewayAssertion: []
+      - ApplicationBearer: []
       x-codeSamples:
       - lang: Shell
         label: request
@@ -7331,7 +7429,7 @@ paths:
                 minimum: 1
               example: 30
       security:
-      - GatewayAssertion: []
+      - ApplicationBearer: []
       requestBody:
         required: true
         content:
@@ -7354,13 +7452,13 @@ paths:
         label: publish
         source: 'curl -X POST https://api.reveal.example.org/v1/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/publication
           -H ''Idempotency-Key: 66666666-6666-4666-8666-666666666666'' -H ''Authorization:
-          Bearer <trusted-gateway-assertion>'' -H ''Content-Type: application/json''
+          Bearer <api-key-or-gateway-assertion>'' -H ''Content-Type: application/json''
           -H ''Accept: application/json'' --data-raw ''{"expected_version":0,"visibility":"public"}'''
       - lang: Shell
         label: unpublish
         source: 'curl -X POST https://api.reveal.example.org/v1/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/publication
           -H ''Idempotency-Key: 66666666-6666-4666-8666-666666666666'' -H ''Authorization:
-          Bearer <trusted-gateway-assertion>'' -H ''Content-Type: application/json''
+          Bearer <api-key-or-gateway-assertion>'' -H ''Content-Type: application/json''
           -H ''Accept: application/json'' --data-raw ''{"expected_version":1,"visibility":"private"}'''
   /v1/analysis-outcomes:
     get:
@@ -7468,12 +7566,13 @@ paths:
                 minimum: 1
               example: 30
       security:
-      - GatewayAssertion: []
+      - ApplicationBearer: []
       x-codeSamples:
       - lang: Shell
         label: request
         source: 'curl -X GET ''https://api.reveal.example.org/v1/analysis-outcomes?limit=20''
-          -H ''Authorization: Bearer <trusted-gateway-assertion>'' -H ''Accept: application/json'''
+          -H ''Authorization: Bearer <api-key-or-gateway-assertion>'' -H ''Accept:
+          application/json'''
   /v1/analysis-outcomes/{outcome_id}:
     get:
       operationId: getAnalysisOutcome
@@ -7624,7 +7723,7 @@ paths:
               example: 30
       security:
       - {}
-      - GatewayAssertion: []
+      - ApplicationBearer: []
       x-codeSamples:
       - lang: Shell
         label: request
@@ -7702,12 +7801,13 @@ paths:
                 minimum: 1
               example: 30
       security:
-      - GatewayAssertion: []
+      - ApplicationBearer: []
       x-codeSamples:
       - lang: Shell
         label: request
         source: 'curl -X GET https://api.reveal.example.org/v1/jobs/44444444-4444-4444-8444-444444444444/outcome
-          -H ''Authorization: Bearer <trusted-gateway-assertion>'' -H ''Accept: application/json'''
+          -H ''Authorization: Bearer <api-key-or-gateway-assertion>'' -H ''Accept:
+          application/json'''
   /v1/knowledge-gaps/{gap_id}/outcomes:
     get:
       operationId: listKnowledgeGapOutcomes
@@ -7849,7 +7949,7 @@ paths:
               example: 30
       security:
       - {}
-      - GatewayAssertion: []
+      - ApplicationBearer: []
       x-codeSamples:
       - lang: Shell
         label: request
@@ -7941,7 +8041,7 @@ paths:
               example: 30
       security:
       - {}
-      - GatewayAssertion: []
+      - ApplicationBearer: []
       x-codeSamples:
       - lang: Shell
         label: request
@@ -8083,7 +8183,7 @@ paths:
                 minimum: 1
               example: 30
       security:
-      - GatewayAssertion: []
+      - ApplicationBearer: []
       requestBody:
         required: true
         content:
@@ -8106,13 +8206,13 @@ paths:
         label: publish
         source: 'curl -X POST https://api.reveal.example.org/v1/analysis-outcomes/66666666-6666-4666-8666-666666666666/publication
           -H ''Idempotency-Key: 66666666-6666-4666-8666-666666666666'' -H ''Authorization:
-          Bearer <trusted-gateway-assertion>'' -H ''Content-Type: application/json''
+          Bearer <api-key-or-gateway-assertion>'' -H ''Content-Type: application/json''
           -H ''Accept: application/json'' --data-raw ''{"expected_version":0,"visibility":"public"}'''
       - lang: Shell
         label: unpublish
         source: 'curl -X POST https://api.reveal.example.org/v1/analysis-outcomes/66666666-6666-4666-8666-666666666666/publication
           -H ''Idempotency-Key: 66666666-6666-4666-8666-666666666666'' -H ''Authorization:
-          Bearer <trusted-gateway-assertion>'' -H ''Content-Type: application/json''
+          Bearer <api-key-or-gateway-assertion>'' -H ''Content-Type: application/json''
           -H ''Accept: application/json'' --data-raw ''{"expected_version":1,"visibility":"private"}'''
   /v1/me/explorations:
     get:
@@ -8210,12 +8310,13 @@ paths:
                 minimum: 1
               example: 30
       security:
-      - GatewayAssertion: []
+      - ApplicationBearer: []
       x-codeSamples:
       - lang: Shell
         label: request
         source: 'curl -X GET ''https://api.reveal.example.org/v1/me/explorations?limit=20''
-          -H ''Authorization: Bearer <trusted-gateway-assertion>'' -H ''Accept: application/json'''
+          -H ''Authorization: Bearer <api-key-or-gateway-assertion>'' -H ''Accept:
+          application/json'''
     post:
       operationId: recordExploration
       tags:
@@ -8312,7 +8413,7 @@ paths:
                 minimum: 1
               example: 30
       security:
-      - GatewayAssertion: []
+      - ApplicationBearer: []
       requestBody:
         required: true
         content:
@@ -8330,7 +8431,7 @@ paths:
         label: selected_gap
         source: 'curl -X POST https://api.reveal.example.org/v1/me/explorations -H
           ''Idempotency-Key: 66666666-6666-4666-8666-666666666666'' -H ''Authorization:
-          Bearer <trusted-gateway-assertion>'' -H ''Content-Type: application/json''
+          Bearer <api-key-or-gateway-assertion>'' -H ''Content-Type: application/json''
           -H ''Accept: application/json'' --data-raw ''{"draft_id":"22222222-2222-4222-8222-222222222222","source_gap":{"id":"dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk","source_id":"dismech:disorders/Coronary_Artery_Disease#discussion:cad_pgsxc_reverse_causation","source_revision":"8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd"}}'''
   /v1/jobs/{job_id}/evidence-package:
     get:
@@ -11273,12 +11374,13 @@ paths:
                 minimum: 1
               example: 30
       security:
-      - GatewayAssertion: []
+      - ApplicationBearer: []
       x-codeSamples:
       - lang: Shell
         label: request
         source: 'curl -X GET https://api.reveal.example.org/v1/jobs/44444444-4444-4444-8444-444444444444/evidence-package
-          -H ''Authorization: Bearer <trusted-gateway-assertion>'' -H ''Accept: application/json'''
+          -H ''Authorization: Bearer <api-key-or-gateway-assertion>'' -H ''Accept:
+          application/json'''
   /v1/artifacts/{sha256}:
     get:
       operationId: downloadArtifact
@@ -11364,12 +11466,13 @@ paths:
                 format: uri
       security:
       - {}
-      - GatewayAssertion: []
+      - ApplicationBearer: []
       x-codeSamples:
       - lang: Shell
         label: request
         source: 'curl -X GET https://api.reveal.example.org/v1/artifacts/dc0bfbd8c23271a7e0a6d2285a90de9be7698f2ede9465b6d5877bbd24e96006
-          -H ''Authorization: Bearer <trusted-gateway-assertion>'' -H ''Accept: */*'''
+          -H ''Authorization: Bearer <api-key-or-gateway-assertion>'' -H ''Accept:
+          */*'''
   /v1/paragraphs/{dapper_id}/export:
     get:
       operationId: exportParagraph
@@ -12115,7 +12218,7 @@ paths:
               example: 30
       security:
       - {}
-      - GatewayAssertion: []
+      - ApplicationBearer: []
       x-codeSamples:
       - lang: Shell
         label: request
@@ -12135,16 +12238,17 @@ paths:
           -H ''Accept: application/json'''
 components:
   securitySchemes:
-    GatewayAssertion:
+    ApplicationBearer:
       type: http
       scheme: bearer
-      bearerFormat: JWT
-      description: Short-lived assertion issued by a trusted Next.js/auth gateway
-        after Google/ORCID login or trusted anonymous session bootstrap. The backend
-        validates signature/algorithm/issuer/audience/expiry and resolves the external
-        subject to an internal user ID. Never send provider access tokens or Auth.js
-        cookies as this bearer. Public operations permit anonymous access only to
-        public records.
+      bearerFormat: API key or JWT
+      description: Paste your rvl_ workspace API key or a short-lived trusted-gateway
+        JWT. Swagger adds the Bearer prefix automatically. API keys resolve to one
+        configured existing workspace and retain its ownership, expiry and job limits;
+        they grant no internal or administrator access. Gateway JWTs are issued after
+        registered login or anonymous session bootstrap. Never share gateway signing/service
+        credentials or send provider access tokens or Auth.js cookies. Without a bearer,
+        only public operations are available.
   schemas:
     DapperAccessLevelEnum:
       description: Coarse access classification for the dataset.
@@ -18605,7 +18709,7 @@ components:
           - registered
         workspace_expires_at:
           anyOf:
-          - &id062
+          - &id061
             type: string
             format: date-time
           - type: 'null'
@@ -19165,7 +19269,7 @@ components:
             type: string
             format: uuid
           maxItems: 3
-        evidence_package_sha256: &id061
+        evidence_package_sha256: &id062
           type: string
           pattern: ^[a-f0-9]{64}$
       required:
@@ -19247,6 +19351,7 @@ components:
           - complete
           - preparing_evidence
           - starting_agent
+          - collecting_output
         research_request_id:
           anyOf:
           - *id057
@@ -20063,6 +20168,65 @@ components:
       - items
       - page
       additionalProperties: false
+    WorkspaceEvent:
+      type: object
+      properties:
+        schema_version:
+          type: integer
+          const: 1
+        event_id:
+          type: string
+        cursor:
+          type: string
+          pattern: ^[0-9]+$
+        scope:
+          type: string
+          enum:
+          - workspace
+          - public
+        committed_at: *id061
+        event_type:
+          type: string
+        entity_id:
+          type: string
+        entity_revision:
+          type: integer
+          minimum: 0
+        operation:
+          type: string
+          enum:
+          - upsert
+          - remove
+          - invalidate
+          - resync
+        collections:
+          type: array
+          items:
+            type: string
+            enum:
+            - drafts
+            - gaps
+            - explorations
+            - requests
+            - jobs
+            - accounts
+            - identity
+            - catalog
+      required:
+      - schema_version
+      - event_id
+      - cursor
+      - scope
+      - committed_at
+      - event_type
+      - entity_id
+      - entity_revision
+      - operation
+      - collections
+      additionalProperties: false
+      description: Committed invalidation event. SSE id is an opaque signed cursor
+        bound to the principal and notification namespace; the envelope cursor is
+        scope-local. Replay requires current authorization.
     SelectedGap:
       type: object
       properties:
@@ -20074,7 +20238,7 @@ components:
         source_id:
           type: string
           pattern: '^dismech:'
-        source_revision: *id061
+        source_revision: *id062
       required:
       - id
       - source_id
@@ -20089,7 +20253,7 @@ components:
           type: string
         source_pointer:
           type: string
-        payload_sha256: *id061
+        payload_sha256: *id062
         raw:
           type: object
           additionalProperties: true
@@ -20113,7 +20277,7 @@ components:
           enum:
           - public_exact_gap
           - owner_exact_gap
-        as_of: *id062
+        as_of: *id061
         ranking:
           type: string
           enum:
@@ -20187,7 +20351,7 @@ components:
           - type: 'null'
         artifact_sha256:
           anyOf:
-          - *id061
+          - *id062
           - type: 'null'
         duration_ms:
           anyOf:
@@ -20211,7 +20375,7 @@ components:
                 minimum: 0
               truncated:
                 type: boolean
-              snapshot_sha256: *id061
+              snapshot_sha256: *id062
             required:
             - scope
             - nodes
@@ -20282,11 +20446,11 @@ components:
           minimum: 0
         published_at:
           anyOf:
-          - *id062
+          - *id061
           - type: 'null'
         updated_at:
           anyOf:
-          - *id062
+          - *id061
           - type: 'null'
         can_manage:
           type: boolean
@@ -20332,7 +20496,7 @@ components:
           type: string
           const: analysis_outcome
         outcome_id: *id063
-        evidence_package_sha256: *id061
+        evidence_package_sha256: *id062
       required:
       - kind
       - outcome_id
@@ -20378,7 +20542,7 @@ components:
           - type: integer
             minimum: 1
           - type: 'null'
-        artifact_sha256: *id061
+        artifact_sha256: *id062
         download_url:
           anyOf:
           - type: string
@@ -20394,15 +20558,15 @@ components:
     OutcomeProvenance:
       type: object
       properties:
-        evidence_package_sha256: *id061
-        outcome_sha256: *id061
+        evidence_package_sha256: *id062
+        outcome_sha256: *id062
         runtime_sha256:
           anyOf:
-          - *id061
+          - *id062
           - type: 'null'
         ledger_sha256:
           anyOf:
-          - *id061
+          - *id062
           - type: 'null'
         execution_mode:
           type: string
@@ -20464,8 +20628,8 @@ components:
                 - failed
                 - denied
                 - interrupted
-              request_sha256: *id061
-              response_sha256: *id061
+              request_sha256: *id062
+              response_sha256: *id062
             required:
             - sequence
             - graph
@@ -20528,7 +20692,7 @@ components:
             enum:
             - biomarkerkg
             - prokn
-        created_at: *id062
+        created_at: *id061
         attribution:
           anyOf:
           - $ref: '#/components/schemas/AttributionSnapshot'
@@ -20634,7 +20798,7 @@ components:
         claim_count:
           type: integer
           minimum: 1
-        created_at: *id062
+        created_at: *id061
         job_id:
           anyOf:
           - *id063
@@ -20692,7 +20856,7 @@ components:
           $ref: '#/components/schemas/SelectedGap'
         knowledge_gap:
           $ref: '#/components/schemas/DapperKnowledgeGap'
-        last_explored_at: *id062
+        last_explored_at: *id061
         draft_id:
           anyOf:
           - *id063
@@ -28059,7 +28223,7 @@ components:
       type: object
       properties:
         job_id: *id063
-        package_sha256: *id061
+        package_sha256: *id062
         package:
           $ref: '#/components/schemas/EvidencePackage'
       required:

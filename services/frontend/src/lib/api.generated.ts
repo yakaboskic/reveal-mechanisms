@@ -460,6 +460,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/me/workspace/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Subscribe to committed workspace changes
+         * @description Authenticated SSE backed by durable RDS replay and managed Redis Pub/Sub wakeups. Subscribe before replay. Send Last-Event-ID or after to resume; both must agree if supplied. workspace_change carries WorkspaceEvent. ready, resync_required, connection_degraded and access_revoked are stream control events. Resync explicitly reloads authorized collections. Heartbeats do not read Redis or query application state.
+         */
+        get: operations["subscribeWorkspaceEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/jobs/{job_id}/retry-review": {
         parameters: {
             query?: never;
@@ -3232,7 +3252,7 @@ export interface components {
             /** @enum {string} */
             status: "queued" | "running" | "cancel_requested" | "cancelled" | "succeeded" | "insufficient_evidence" | "failed";
             /** @enum {string} */
-            stage: "queued" | "freezing_inputs" | "retrieving_cfde" | "authoring_account" | "enriching_okn" | "authoring_paragraph" | "validating" | "persisting" | "complete" | "preparing_evidence" | "starting_agent";
+            stage: "queued" | "freezing_inputs" | "retrieving_cfde" | "authoring_account" | "enriching_okn" | "authoring_paragraph" | "validating" | "persisting" | "complete" | "preparing_evidence" | "starting_agent" | "collecting_output";
             research_request_id: string | null;
             input_account_id: string | null;
             /** Format: date-time */
@@ -3264,7 +3284,7 @@ export interface components {
             /** @enum {string} */
             status: "queued" | "running" | "cancel_requested" | "cancelled" | "succeeded" | "insufficient_evidence" | "failed";
             /** @enum {string} */
-            stage: "queued" | "freezing_inputs" | "retrieving_cfde" | "authoring_account" | "enriching_okn" | "authoring_paragraph" | "validating" | "persisting" | "complete" | "preparing_evidence" | "starting_agent";
+            stage: "queued" | "freezing_inputs" | "retrieving_cfde" | "authoring_account" | "enriching_okn" | "authoring_paragraph" | "validating" | "persisting" | "complete" | "preparing_evidence" | "starting_agent" | "collecting_output";
             message: string;
             result: (components["schemas"]["AnalysisResult"] | components["schemas"]["ParagraphResult"] | components["schemas"]["AnalysisOutcomeResult"]) | null;
             detail: components["schemas"]["ActivityDetail"] | null;
@@ -3457,6 +3477,23 @@ export interface components {
         JobList: {
             items: components["schemas"]["Job"][];
             page: components["schemas"]["Page"];
+        };
+        /** @description Committed invalidation event. SSE id is an opaque signed cursor bound to the principal and notification namespace; the envelope cursor is scope-local. Replay requires current authorization. */
+        WorkspaceEvent: {
+            /** @constant */
+            schema_version: 1;
+            event_id: string;
+            cursor: string;
+            /** @enum {string} */
+            scope: "workspace" | "public";
+            /** Format: date-time */
+            committed_at: string;
+            event_type: string;
+            entity_id: string;
+            entity_revision: number;
+            /** @enum {string} */
+            operation: "upsert" | "remove" | "invalidate" | "resync";
+            collections: ("drafts" | "gaps" | "explorations" | "requests" | "jobs" | "accounts" | "identity" | "catalog")[];
         };
         /** @description Exact imported DisMech source observation and DAPPER mapping. Resolve and validate server-side. No client-authored question. */
         SelectedGap: {
@@ -8457,6 +8494,65 @@ export interface operations {
                 headers: {
                     /** @example 30 */
                     "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dependency Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    subscribeWorkspaceEvents: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Opaque signed reconnect cursor, equivalent to Last-Event-ID.
+                 * @example opaque-signed-cursor
+                 */
+                after?: string;
+            };
+            header?: {
+                /**
+                 * @description Opaque signed reconnect cursor.
+                 * @example opaque-signed-cursor
+                 */
+                "Last-Event-ID"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Committed events and stream control messages. Each workspace_change data frame is a WorkspaceEvent JSON object. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": string;
+                };
+            };
+            /** @description Invalid Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
                     [name: string]: unknown;
                 };
                 content: {

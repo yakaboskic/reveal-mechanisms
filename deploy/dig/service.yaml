@@ -1,0 +1,177 @@
+# HTTP-only durable service. Each environment uses its own credential record and S3 scope.
+name: reveal
+port: 8000
+arch: arm64
+health_path: /api/reveal/readyz
+liveness_path: /api/reveal/health
+path_pattern: /api/reveal/*
+priority: 40
+cpu: 1024
+memory: 4096
+health_grace_seconds: 900
+runtime:
+  read_only: true
+  init_process_enabled: true
+  stop_timeout_seconds: 120
+  deregistration_delay_seconds: 300
+  tmpfs:
+  - container_path: /work
+    size_mib: 1024
+    mount_options:
+    - rw
+    - nosuid
+    - nodev
+    - mode=1777
+  - container_path: /tmp
+    size_mib: 64
+    mount_options:
+    - rw
+    - nosuid
+    - nodev
+    - mode=1777
+env:
+  REVEAL_ENVIRONMENT: production
+  REVEAL_LOCAL_DEPLOYMENT: '0'
+  REVEAL_APPLICATION_TABLE_PREFIX: reveal
+  REVEAL_JOB_NAMESPACE: reveal-workflow-prod
+  REVEAL_EXECUTION_MODE: box
+  REVEAL_JOB_TRANSPORT: workflow
+  REVEAL_MAX_RUNNING_JOBS: '2'
+  REVEAL_ARTIFACT_STORE: s3
+  REVEAL_S3_BUCKET: cyaka-reveal-data
+  REVEAL_S3_PREFIX: prod/
+  REVEAL_S3_READ_PREFIXES: local/
+  REVEAL_S3_ADDRESSING_STYLE: virtual
+  REVEAL_S3_ENCRYPTION: AES256
+  AWS_REGION: us-east-1
+  AWS_S3_US_EAST_1_REGIONAL_ENDPOINT: regional
+  REVEAL_MYSQL_HOST: aurora-giant-bioindex.cluster-cxrzznxifeib.us-east-1.rds.amazonaws.com
+  REVEAL_MYSQL_PORT: '3306'
+  REVEAL_MYSQL_USER: cyaka
+  REVEAL_MYSQL_DATABASE: cyaka_reveal_mechanisms
+  REVEAL_MYSQL_CA_FILE: /app/runtime-ca.pem
+  REVEAL_DAPPER_ROOT: /app/.runtime/dapper
+  REVEAL_DISMECH_SOURCE: /app/dismech
+  REVEAL_WORK_DIR: /work
+  TMPDIR: /work
+  REVEAL_WORKSPACE_MAX_BYTES: '268435456'
+  REVEAL_GATEWAY_ISSUER: reveal-nextjs
+  REVEAL_GATEWAY_AUDIENCE: reveal-api
+  REVEAL_CANONICAL_URL: https://reveal-mechanisms.vercel.app
+  NEXTAUTH_URL: https://reveal-mechanisms.vercel.app
+  REVEAL_MAPPING_RUN_ID: 272cfa19d093257863d7e7134776229dbc9b9b018d974e6b311285686833ec31
+  EMBEDDING_SERVICE_URL: https://embedding-service-27386110942.us-east1.run.app
+  EMBEDDING_MODEL: pritamdeka/BioBERT-mnli-snli-scinli-scitail-mednli-stsb
+  EMBEDDING_PROVIDER: huggingface
+  EMBEDDING_MODEL_REVISION: unspecified
+  REVEAL_CLAUDE_MODEL: claude-sonnet-4-6
+  REVEAL_AGENT_TIMEOUT_SECONDS: '900'
+  REVEAL_AGENT_MAX_BUDGET_USD: '3'
+  REVEAL_GROUNDING_MAX_BUDGET_USD: '0.30'
+  REVEAL_GROUNDING_MAX_TURNS: '8'
+  REVEAL_GROUNDING_MAX_REQUEST_BYTES: '98304'
+  REVEAL_GROUNDING_MAX_INPUT_TOKENS: '64000'
+  REVEAL_AGENT_MAX_TURNS: '100'
+  REVEAL_RETRIEVAL_BACKEND: upstash
+  REVEAL_VECTOR_ENVIRONMENT: prod
+  REVEAL_NOTIFICATION_NAMESPACE: reveal-prod
+  QSTASH_URL: https://qstash-us-east-1.upstash.io
+  REVEAL_WORKFLOW_URL: https://api-prod.hugeampkpnbi.org/api/reveal/internal/workflows/research-v1
+  REVEAL_MAX_ACTIVE_BOXES: '2'
+  REVEAL_MAX_SCRATCH_STEPS: '2'
+  REVEAL_MAX_PREPARATION_STEPS: '2'
+  REVEAL_MAX_REVIEW_STEPS: '2'
+  REVEAL_WORKFLOW_STEP_TIMEOUT_SECONDS: '360'
+  REVEAL_WORKFLOW_DELIVERY_TIMEOUT: 420s
+qa:
+  min_tasks: 1
+  max_tasks: 1
+  on_demand_base: 1
+  env:
+    REVEAL_APPLICATION_TABLE_PREFIX: reveal_workflow_qa
+    REVEAL_JOB_NAMESPACE: reveal-workflow-qa
+    REVEAL_VECTOR_ENVIRONMENT: qa
+    REVEAL_NOTIFICATION_NAMESPACE: reveal-qa
+    REVEAL_S3_PREFIX: qa/
+    REVEAL_S3_READ_PREFIXES: ''
+    REVEAL_WORKFLOW_URL: https://api-qa.hugeampkpnbi.org/api/reveal/internal/workflows/research-v1
+  secrets:
+    REVEAL_MYSQL_PASSWORD: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-qa-uiJnVi:REVEAL_MYSQL_PASSWORD::'
+    EMBEDDING_SERVICE_API_KEY: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-qa-uiJnVi:EMBEDDING_SERVICE_API_KEY::'
+    UPSTASH_BOX_API_KEY: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-qa-uiJnVi:UPSTASH_BOX_API_KEY::'
+    ANTHROPIC_API_KEY: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-qa-uiJnVi:ANTHROPIC_API_KEY::'
+    REVEAL_GATEWAY_SECRET: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-qa-uiJnVi:REVEAL_GATEWAY_SECRET::'
+    REVEAL_GATEWAY_SERVICE_TOKEN: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-qa-uiJnVi:REVEAL_GATEWAY_SERVICE_TOKEN::'
+    # Optional paired fields: an absent key is represented by two empty strings.
+    REVEAL_API_KEY_SHA256: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-qa-uiJnVi:REVEAL_API_KEY_SHA256::'
+    REVEAL_API_KEY_USER_ID: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-qa-uiJnVi:REVEAL_API_KEY_USER_ID::'
+    UPSTASH_REDIS_REST_URL: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-qa-uiJnVi:UPSTASH_REDIS_REST_URL::'
+    UPSTASH_REDIS_REST_TOKEN: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-qa-uiJnVi:UPSTASH_REDIS_REST_TOKEN::'
+    UPSTASH_VECTOR_REST_URL: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-qa-uiJnVi:UPSTASH_VECTOR_REST_URL::'
+    UPSTASH_VECTOR_REST_TOKEN: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-qa-uiJnVi:UPSTASH_VECTOR_REST_TOKEN::'
+    QSTASH_TOKEN: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-qa-uiJnVi:QSTASH_TOKEN::'
+    QSTASH_CURRENT_SIGNING_KEY: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-qa-uiJnVi:QSTASH_CURRENT_SIGNING_KEY::'
+    QSTASH_NEXT_SIGNING_KEY: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-qa-uiJnVi:QSTASH_NEXT_SIGNING_KEY::'
+    UPSTASH_VECTOR_WRITE_TOKEN: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-qa-uiJnVi:UPSTASH_VECTOR_WRITE_TOKEN::'
+  task_policy:
+  - Sid: InspectArtifactBucket
+    Effect: Allow
+    Action:
+    - s3:ListBucket
+    - s3:GetBucketLocation
+    - s3:GetBucketVersioning
+    Resource: arn:aws:s3:::cyaka-reveal-data
+  - Sid: ReadEnvironmentArtifacts
+    Effect: Allow
+    Action:
+    - s3:GetObject
+    - s3:GetObjectVersion
+    Resource:
+    - arn:aws:s3:::cyaka-reveal-data/qa/artifacts/*
+  - Sid: WriteEnvironmentArtifacts
+    Effect: Allow
+    Action:
+    - s3:PutObject
+    Resource: arn:aws:s3:::cyaka-reveal-data/${Env}/artifacts/*
+prod:
+  min_tasks: 1
+  max_tasks: 1
+  on_demand_base: 1
+  secrets:
+    REVEAL_MYSQL_PASSWORD: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-prod-n0rcbA:REVEAL_MYSQL_PASSWORD::'
+    EMBEDDING_SERVICE_API_KEY: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-prod-n0rcbA:EMBEDDING_SERVICE_API_KEY::'
+    UPSTASH_BOX_API_KEY: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-prod-n0rcbA:UPSTASH_BOX_API_KEY::'
+    ANTHROPIC_API_KEY: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-prod-n0rcbA:ANTHROPIC_API_KEY::'
+    REVEAL_GATEWAY_SECRET: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-prod-n0rcbA:REVEAL_GATEWAY_SECRET::'
+    REVEAL_GATEWAY_SERVICE_TOKEN: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-prod-n0rcbA:REVEAL_GATEWAY_SERVICE_TOKEN::'
+    REVEAL_API_KEY_SHA256: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-prod-n0rcbA:REVEAL_API_KEY_SHA256::'
+    REVEAL_API_KEY_USER_ID: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-prod-n0rcbA:REVEAL_API_KEY_USER_ID::'
+    UPSTASH_REDIS_REST_URL: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-prod-n0rcbA:UPSTASH_REDIS_REST_URL::'
+    UPSTASH_REDIS_REST_TOKEN: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-prod-n0rcbA:UPSTASH_REDIS_REST_TOKEN::'
+    UPSTASH_VECTOR_REST_URL: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-prod-n0rcbA:UPSTASH_VECTOR_REST_URL::'
+    UPSTASH_VECTOR_REST_TOKEN: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-prod-n0rcbA:UPSTASH_VECTOR_REST_TOKEN::'
+    QSTASH_TOKEN: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-prod-n0rcbA:QSTASH_TOKEN::'
+    QSTASH_CURRENT_SIGNING_KEY: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-prod-n0rcbA:QSTASH_CURRENT_SIGNING_KEY::'
+    QSTASH_NEXT_SIGNING_KEY: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-prod-n0rcbA:QSTASH_NEXT_SIGNING_KEY::'
+    UPSTASH_VECTOR_WRITE_TOKEN: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-prod-n0rcbA:UPSTASH_VECTOR_WRITE_TOKEN::'
+  task_policy:
+  - Sid: InspectArtifactBucket
+    Effect: Allow
+    Action:
+    - s3:ListBucket
+    - s3:GetBucketLocation
+    - s3:GetBucketVersioning
+    Resource: arn:aws:s3:::cyaka-reveal-data
+  - Sid: ReadEnvironmentArtifacts
+    Effect: Allow
+    Action:
+    - s3:GetObject
+    - s3:GetObjectVersion
+    Resource:
+    - arn:aws:s3:::cyaka-reveal-data/prod/artifacts/*
+    - arn:aws:s3:::cyaka-reveal-data/local/artifacts/*
+  - Sid: WriteEnvironmentArtifacts
+    Effect: Allow
+    Action:
+    - s3:PutObject
+    Resource: arn:aws:s3:::cyaka-reveal-data/${Env}/artifacts/*

@@ -33,6 +33,14 @@ def prepare_source(tx, job, queue):
             # Verify bytes after worker restore, outside the API write lock.
             source=deepcopy(queue.get('review_source') or queue.get('review_capture'))
             require(queue.get('workspace') and source and source.get('capture_sha256'), 'Missing durable review capture')
+            if source.get('cleanup_id'):
+                from .workflow_state import cleanup_record
+                row=cleanup_record(tx,source['cleanup_id'])
+                require(queue.get('transport')=='workflow' and row and row['owner']==job['owner_user_id'], 'Missing workflow cleanup capture')
+                value=row['data']
+                require(value['namespace']==queue['namespace'] and value['job_id']==job['id'] and
+                    value['authoring_attempt']==source['attempt'] and value['box_id']==source['box_id'] and
+                    value['capture_sha256']==source['capture_sha256'] and value.get('workspace'), 'Workflow cleanup capture binding differs')
             return source
         root = (artifacts_root() / job['id']).resolve()
         path = (root / snapshot['path']).resolve()

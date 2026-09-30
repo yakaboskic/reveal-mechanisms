@@ -9,7 +9,7 @@
       "path": {},
       "query": {},
       "headers": {
-        "Authorization": "Bearer <trusted-gateway-assertion>",
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
         "Accept": "application/json"
       },
       "body": null
@@ -36,7 +36,7 @@
         }
       }
     },
-    "curl": "curl -X GET https://api.reveal.example.org/v1/me -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Accept: application/json'"
+    "curl": "curl -X GET https://api.reveal.example.org/v1/me -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
   },
   {
     "operation_id": "listDrafts",
@@ -50,7 +50,7 @@
         "limit": 20
       },
       "headers": {
-        "Authorization": "Bearer <trusted-gateway-assertion>",
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
         "Accept": "application/json"
       },
       "body": null
@@ -104,7 +104,7 @@
         }
       }
     },
-    "curl": "curl -X GET 'https://api.reveal.example.org/v1/drafts?limit=20' -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Accept: application/json'"
+    "curl": "curl -X GET 'https://api.reveal.example.org/v1/drafts?limit=20' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
   },
   {
     "operation_id": "createDraft",
@@ -117,7 +117,7 @@
       "query": {},
       "headers": {
         "Idempotency-Key": "66666666-6666-4666-8666-666666666666",
-        "Authorization": "Bearer <trusted-gateway-assertion>",
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
         "Content-Type": "application/json",
         "Accept": "application/json"
       },
@@ -190,7 +190,7 @@
         }
       }
     },
-    "curl": "curl -X POST https://api.reveal.example.org/v1/drafts -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"composer\":{\"dismissed_source_ids\":[],\"eaggl_anchors\":[{\"origin\":\"manual\",\"reference\":{\"dapper_id\":\"dapper:Mechanism.MyhahXB55tDUS667sJzeJZ40BeeQBWOR\",\"source\":\"eaggl\",\"source_id\":\"factor:portal:CADinT2D:cfde-inc-v2:Factor1\",\"source_revision\":\"5797893b517def4fdc82f285c9bf835195f9f88eddfb6409cbf3b1e31dd63d83\"},\"suggestion_id\":null}],\"mechanism_subquery\":\"CADinT2D\",\"model\":\"cfde-inc-v2\",\"selected_kgs\":[\"biomarkerkg\",\"prokn\"],\"source_gap\":{\"id\":\"dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk\",\"source_id\":\"dismech:disorders/Coronary_Artery_Disease#discussion:cad_pgsxc_reverse_causation\",\"source_revision\":\"8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd\"}}}'"
+    "curl": "curl -X POST https://api.reveal.example.org/v1/drafts -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"composer\":{\"dismissed_source_ids\":[],\"eaggl_anchors\":[{\"origin\":\"manual\",\"reference\":{\"dapper_id\":\"dapper:Mechanism.MyhahXB55tDUS667sJzeJZ40BeeQBWOR\",\"source\":\"eaggl\",\"source_id\":\"factor:portal:CADinT2D:cfde-inc-v2:Factor1\",\"source_revision\":\"5797893b517def4fdc82f285c9bf835195f9f88eddfb6409cbf3b1e31dd63d83\"},\"suggestion_id\":null}],\"mechanism_subquery\":\"CADinT2D\",\"model\":\"cfde-inc-v2\",\"selected_kgs\":[\"biomarkerkg\",\"prokn\"],\"source_gap\":{\"id\":\"dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk\",\"source_id\":\"dismech:disorders/Coronary_Artery_Disease#discussion:cad_pgsxc_reverse_causation\",\"source_revision\":\"8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd\"}}}'"
   },
   {
     "operation_id": "getDraft",
@@ -204,7 +204,7 @@
       },
       "query": {},
       "headers": {
-        "Authorization": "Bearer <trusted-gateway-assertion>",
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
         "Accept": "application/json"
       },
       "body": null
@@ -249,7 +249,7 @@
         }
       }
     },
-    "curl": "curl -X GET https://api.reveal.example.org/v1/drafts/22222222-2222-4222-8222-222222222222 -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Accept: application/json'"
+    "curl": "curl -X GET https://api.reveal.example.org/v1/drafts/22222222-2222-4222-8222-222222222222 -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
   },
   {
     "operation_id": "updateDraft",
@@ -264,7 +264,7 @@
       "query": {},
       "headers": {
         "Idempotency-Key": "66666666-6666-4666-8666-666666666666",
-        "Authorization": "Bearer <trusted-gateway-assertion>",
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
         "Content-Type": "application/json",
         "Accept": "application/json"
       },
@@ -338,7 +338,7 @@
         }
       }
     },
-    "curl": "curl -X PATCH https://api.reveal.example.org/v1/drafts/22222222-2222-4222-8222-222222222222 -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"composer\":{\"dismissed_source_ids\":[],\"eaggl_anchors\":[{\"origin\":\"manual\",\"reference\":{\"dapper_id\":\"dapper:Mechanism.MyhahXB55tDUS667sJzeJZ40BeeQBWOR\",\"source\":\"eaggl\",\"source_id\":\"factor:portal:CADinT2D:cfde-inc-v2:Factor1\",\"source_revision\":\"5797893b517def4fdc82f285c9bf835195f9f88eddfb6409cbf3b1e31dd63d83\"},\"suggestion_id\":null}],\"mechanism_subquery\":\"CADinT2D\",\"model\":\"cfde-inc-v2\",\"selected_kgs\":[\"biomarkerkg\",\"prokn\"],\"source_gap\":{\"id\":\"dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk\",\"source_id\":\"dismech:disorders/Coronary_Artery_Disease#discussion:cad_pgsxc_reverse_causation\",\"source_revision\":\"8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd\"}},\"expected_version\":1}'"
+    "curl": "curl -X PATCH https://api.reveal.example.org/v1/drafts/22222222-2222-4222-8222-222222222222 -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"composer\":{\"dismissed_source_ids\":[],\"eaggl_anchors\":[{\"origin\":\"manual\",\"reference\":{\"dapper_id\":\"dapper:Mechanism.MyhahXB55tDUS667sJzeJZ40BeeQBWOR\",\"source\":\"eaggl\",\"source_id\":\"factor:portal:CADinT2D:cfde-inc-v2:Factor1\",\"source_revision\":\"5797893b517def4fdc82f285c9bf835195f9f88eddfb6409cbf3b1e31dd63d83\"},\"suggestion_id\":null}],\"mechanism_subquery\":\"CADinT2D\",\"model\":\"cfde-inc-v2\",\"selected_kgs\":[\"biomarkerkg\",\"prokn\"],\"source_gap\":{\"id\":\"dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk\",\"source_id\":\"dismech:disorders/Coronary_Artery_Disease#discussion:cad_pgsxc_reverse_causation\",\"source_revision\":\"8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd\"}},\"expected_version\":1}'"
   },
   {
     "operation_id": "deleteDraft",
@@ -353,7 +353,7 @@
       "query": {},
       "headers": {
         "Idempotency-Key": "66666666-6666-4666-8666-666666666666",
-        "Authorization": "Bearer <trusted-gateway-assertion>",
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
         "Content-Type": "application/json",
         "Accept": "application/json"
       },
@@ -372,7 +372,7 @@
         }
       }
     },
-    "curl": "curl -X DELETE https://api.reveal.example.org/v1/drafts/22222222-2222-4222-8222-222222222222 -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"expected_version\":2}'"
+    "curl": "curl -X DELETE https://api.reveal.example.org/v1/drafts/22222222-2222-4222-8222-222222222222 -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"expected_version\":2}'"
   },
   {
     "operation_id": "listResearchRequests",
@@ -386,7 +386,7 @@
         "limit": 20
       },
       "headers": {
-        "Authorization": "Bearer <trusted-gateway-assertion>",
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
         "Accept": "application/json"
       },
       "body": null
@@ -472,7 +472,7 @@
         }
       }
     },
-    "curl": "curl -X GET 'https://api.reveal.example.org/v1/research-requests?limit=20' -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Accept: application/json'"
+    "curl": "curl -X GET 'https://api.reveal.example.org/v1/research-requests?limit=20' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
   },
   {
     "operation_id": "getResearchRequest",
@@ -486,7 +486,7 @@
       },
       "query": {},
       "headers": {
-        "Authorization": "Bearer <trusted-gateway-assertion>",
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
         "Accept": "application/json"
       },
       "body": null
@@ -563,7 +563,7 @@
         }
       }
     },
-    "curl": "curl -X GET https://api.reveal.example.org/v1/research-requests/33333333-3333-4333-8333-333333333333 -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Accept: application/json'"
+    "curl": "curl -X GET https://api.reveal.example.org/v1/research-requests/33333333-3333-4333-8333-333333333333 -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
   },
   {
     "operation_id": "searchKnowledgeGaps",
@@ -1355,7 +1355,7 @@
         "limit": 20
       },
       "headers": {
-        "Authorization": "Bearer <trusted-gateway-assertion>",
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
         "Accept": "application/json"
       },
       "body": null
@@ -1421,7 +1421,7 @@
         }
       }
     },
-    "curl": "curl -X GET 'https://api.reveal.example.org/v1/jobs?kind=analysis&status=succeeded&research_request_id=33333333-3333-4333-8333-333333333333&limit=20' -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Accept: application/json'"
+    "curl": "curl -X GET 'https://api.reveal.example.org/v1/jobs?kind=analysis&status=succeeded&research_request_id=33333333-3333-4333-8333-333333333333&limit=20' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
   },
   {
     "operation_id": "createJob",
@@ -1434,7 +1434,7 @@
       "query": {},
       "headers": {
         "Idempotency-Key": "66666666-6666-4666-8666-666666666666",
-        "Authorization": "Bearer <trusted-gateway-assertion>",
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
         "Content-Type": "application/json",
         "Accept": "application/json"
       },
@@ -1475,7 +1475,7 @@
         }
       }
     },
-    "curl": "curl -X POST https://api.reveal.example.org/v1/jobs -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"budgets\":{\"max_accounts\":3},\"draft_id\":\"22222222-2222-4222-8222-222222222222\",\"draft_version\":2,\"kind\":\"analysis\"}'"
+    "curl": "curl -X POST https://api.reveal.example.org/v1/jobs -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"budgets\":{\"max_accounts\":3},\"draft_id\":\"22222222-2222-4222-8222-222222222222\",\"draft_version\":2,\"kind\":\"analysis\"}'"
   },
   {
     "operation_id": "createJob",
@@ -1488,7 +1488,7 @@
       "query": {},
       "headers": {
         "Idempotency-Key": "88888888-8888-4888-8888-888888888888",
-        "Authorization": "Bearer <trusted-gateway-assertion>",
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
         "Content-Type": "application/json",
         "Accept": "application/json"
       },
@@ -1530,7 +1530,7 @@
         }
       }
     },
-    "curl": "curl -X POST https://api.reveal.example.org/v1/jobs -H 'Idempotency-Key: 88888888-8888-4888-8888-888888888888' -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"account_id\":\"dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd\",\"additional_citations\":[],\"audience\":\"researcher\",\"focus_claim_id\":\"dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km\",\"kind\":\"paragraph\",\"language\":\"en\",\"target_words\":180}'"
+    "curl": "curl -X POST https://api.reveal.example.org/v1/jobs -H 'Idempotency-Key: 88888888-8888-4888-8888-888888888888' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"account_id\":\"dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd\",\"additional_citations\":[],\"audience\":\"researcher\",\"focus_claim_id\":\"dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km\",\"kind\":\"paragraph\",\"language\":\"en\",\"target_words\":180}'"
   },
   {
     "operation_id": "getJob",
@@ -1544,7 +1544,7 @@
       },
       "query": {},
       "headers": {
-        "Authorization": "Bearer <trusted-gateway-assertion>",
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
         "Accept": "application/json"
       },
       "body": null
@@ -1601,7 +1601,7 @@
         }
       }
     },
-    "curl": "curl -X GET https://api.reveal.example.org/v1/jobs/44444444-4444-4444-8444-444444444444 -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Accept: application/json'"
+    "curl": "curl -X GET https://api.reveal.example.org/v1/jobs/44444444-4444-4444-8444-444444444444 -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
   },
   {
     "operation_id": "getJobEvents",
@@ -1619,7 +1619,7 @@
       },
       "headers": {
         "Last-Event-ID": "0",
-        "Authorization": "Bearer <trusted-gateway-assertion>",
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
         "Accept": "application/json"
       },
       "body": null
@@ -1735,7 +1735,7 @@
         }
       }
     },
-    "curl": "curl -X GET 'https://api.reveal.example.org/v1/jobs/44444444-4444-4444-8444-444444444444/events?after=0&limit=100' -H 'Last-Event-ID: 0' -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Accept: application/json'"
+    "curl": "curl -X GET 'https://api.reveal.example.org/v1/jobs/44444444-4444-4444-8444-444444444444/events?after=0&limit=100' -H 'Last-Event-ID: 0' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
   },
   {
     "operation_id": "cancelJob",
@@ -1749,7 +1749,7 @@
       },
       "query": {},
       "headers": {
-        "Authorization": "Bearer <trusted-gateway-assertion>",
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
         "Accept": "application/json"
       },
       "body": null
@@ -1827,7 +1827,7 @@
         }
       }
     },
-    "curl": "curl -X POST https://api.reveal.example.org/v1/jobs/44444444-4444-4444-8444-444444444444/cancel -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Accept: application/json'"
+    "curl": "curl -X POST https://api.reveal.example.org/v1/jobs/44444444-4444-4444-8444-444444444444/cancel -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
   },
   {
     "operation_id": "getAccount",
@@ -7444,6 +7444,33 @@
     "curl": "curl -X POST https://api.reveal.example.org/v1/citations/render -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"locale\":\"en-US\",\"paragraph_id\":\"dapper:Paragraph.uSYa1LdXNPuwlSgsCz3oZ7IfrVoztroD\",\"style\":\"apa\"}'"
   },
   {
+    "operation_id": "subscribeWorkspaceEvents",
+    "case": "request",
+    "method": "GET",
+    "path_template": "/v1/me/workspace/events",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/me/workspace/events?after=opaque-signed-cursor",
+      "path": {},
+      "query": {
+        "after": "opaque-signed-cursor"
+      },
+      "headers": {
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
+        "Accept": "text/event-stream"
+      },
+      "body": null
+    },
+    "responses": {
+      "200": {
+        "content_type": "text/event-stream",
+        "examples": {
+          "change": "id: opaque-signed-cursor\nevent: workspace_change\ndata: {\"schema_version\": 1, \"event_id\": \"scope:1\", \"cursor\": \"1\", \"scope\": \"workspace\", \"committed_at\": \"2026-09-30T00:00:00Z\", \"event_type\": \"draft.changed\", \"entity_id\": \"22222222-2222-4222-8222-222222222222\", \"entity_revision\": 2, \"operation\": \"upsert\", \"collections\": [\"drafts\", \"gaps\"]}\n\n"
+        }
+      }
+    },
+    "curl": "curl -X GET 'https://api.reveal.example.org/v1/me/workspace/events?after=opaque-signed-cursor' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: text/event-stream'"
+  },
+  {
     "operation_id": "retryJobReview",
     "case": "saved_output",
     "method": "POST",
@@ -7456,7 +7483,7 @@
       "query": {},
       "headers": {
         "Idempotency-Key": "66666666-6666-4666-8666-666666666666",
-        "Authorization": "Bearer <trusted-gateway-assertion>",
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
         "Content-Type": "application/json",
         "Accept": "application/json"
       },
@@ -7492,7 +7519,7 @@
         }
       }
     },
-    "curl": "curl -X POST https://api.reveal.example.org/v1/jobs/44444444-4444-4444-8444-444444444444/retry-review -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"expected_last_event_id\":\"2\"}'"
+    "curl": "curl -X POST https://api.reveal.example.org/v1/jobs/44444444-4444-4444-8444-444444444444/retry-review -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"expected_last_event_id\":\"2\"}'"
   },
   {
     "operation_id": "listAccounts",
@@ -7507,7 +7534,7 @@
         "limit": 20
       },
       "headers": {
-        "Authorization": "Bearer <trusted-gateway-assertion>",
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
         "Accept": "application/json"
       },
       "body": null
@@ -7580,7 +7607,7 @@
         }
       }
     },
-    "curl": "curl -X GET 'https://api.reveal.example.org/v1/accounts?gap_id=dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk&limit=20' -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Accept: application/json'"
+    "curl": "curl -X GET 'https://api.reveal.example.org/v1/accounts?gap_id=dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk&limit=20' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
   },
   {
     "operation_id": "listKnowledgeGapAccounts",
@@ -7743,7 +7770,7 @@
       "query": {},
       "headers": {
         "Idempotency-Key": "66666666-6666-4666-8666-666666666666",
-        "Authorization": "Bearer <trusted-gateway-assertion>",
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
         "Content-Type": "application/json",
         "Accept": "application/json"
       },
@@ -7775,7 +7802,7 @@
         }
       }
     },
-    "curl": "curl -X POST https://api.reveal.example.org/v1/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/publication -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"expected_version\":0,\"visibility\":\"public\"}'"
+    "curl": "curl -X POST https://api.reveal.example.org/v1/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/publication -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"expected_version\":0,\"visibility\":\"public\"}'"
   },
   {
     "operation_id": "updateAccountPublication",
@@ -7790,7 +7817,7 @@
       "query": {},
       "headers": {
         "Idempotency-Key": "66666666-6666-4666-8666-666666666666",
-        "Authorization": "Bearer <trusted-gateway-assertion>",
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
         "Content-Type": "application/json",
         "Accept": "application/json"
       },
@@ -7822,7 +7849,7 @@
         }
       }
     },
-    "curl": "curl -X POST https://api.reveal.example.org/v1/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/publication -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"expected_version\":1,\"visibility\":\"private\"}'"
+    "curl": "curl -X POST https://api.reveal.example.org/v1/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/publication -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"expected_version\":1,\"visibility\":\"private\"}'"
   },
   {
     "operation_id": "listAnalysisOutcomes",
@@ -7836,7 +7863,7 @@
         "limit": 20
       },
       "headers": {
-        "Authorization": "Bearer <trusted-gateway-assertion>",
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
         "Accept": "application/json"
       },
       "body": null
@@ -7907,7 +7934,7 @@
         }
       }
     },
-    "curl": "curl -X GET 'https://api.reveal.example.org/v1/analysis-outcomes?limit=20' -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Accept: application/json'"
+    "curl": "curl -X GET 'https://api.reveal.example.org/v1/analysis-outcomes?limit=20' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
   },
   {
     "operation_id": "getAnalysisOutcome",
@@ -8118,7 +8145,7 @@
       },
       "query": {},
       "headers": {
-        "Authorization": "Bearer <trusted-gateway-assertion>",
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
         "Accept": "application/json"
       },
       "body": null
@@ -8216,7 +8243,7 @@
         }
       }
     },
-    "curl": "curl -X GET https://api.reveal.example.org/v1/jobs/44444444-4444-4444-8444-444444444444/outcome -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Accept: application/json'"
+    "curl": "curl -X GET https://api.reveal.example.org/v1/jobs/44444444-4444-4444-8444-444444444444/outcome -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
   },
   {
     "operation_id": "listKnowledgeGapOutcomes",
@@ -8360,7 +8387,7 @@
       "query": {},
       "headers": {
         "Idempotency-Key": "66666666-6666-4666-8666-666666666666",
-        "Authorization": "Bearer <trusted-gateway-assertion>",
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
         "Content-Type": "application/json",
         "Accept": "application/json"
       },
@@ -8392,7 +8419,7 @@
         }
       }
     },
-    "curl": "curl -X POST https://api.reveal.example.org/v1/analysis-outcomes/66666666-6666-4666-8666-666666666666/publication -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"expected_version\":0,\"visibility\":\"public\"}'"
+    "curl": "curl -X POST https://api.reveal.example.org/v1/analysis-outcomes/66666666-6666-4666-8666-666666666666/publication -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"expected_version\":0,\"visibility\":\"public\"}'"
   },
   {
     "operation_id": "updateOutcomePublication",
@@ -8407,7 +8434,7 @@
       "query": {},
       "headers": {
         "Idempotency-Key": "66666666-6666-4666-8666-666666666666",
-        "Authorization": "Bearer <trusted-gateway-assertion>",
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
         "Content-Type": "application/json",
         "Accept": "application/json"
       },
@@ -8439,7 +8466,7 @@
         }
       }
     },
-    "curl": "curl -X POST https://api.reveal.example.org/v1/analysis-outcomes/66666666-6666-4666-8666-666666666666/publication -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"expected_version\":1,\"visibility\":\"private\"}'"
+    "curl": "curl -X POST https://api.reveal.example.org/v1/analysis-outcomes/66666666-6666-4666-8666-666666666666/publication -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"expected_version\":1,\"visibility\":\"private\"}'"
   },
   {
     "operation_id": "listExplorations",
@@ -8453,7 +8480,7 @@
         "limit": 20
       },
       "headers": {
-        "Authorization": "Bearer <trusted-gateway-assertion>",
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
         "Accept": "application/json"
       },
       "body": null
@@ -8500,7 +8527,7 @@
         }
       }
     },
-    "curl": "curl -X GET 'https://api.reveal.example.org/v1/me/explorations?limit=20' -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Accept: application/json'"
+    "curl": "curl -X GET 'https://api.reveal.example.org/v1/me/explorations?limit=20' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
   },
   {
     "operation_id": "recordExploration",
@@ -8513,7 +8540,7 @@
       "query": {},
       "headers": {
         "Idempotency-Key": "66666666-6666-4666-8666-666666666666",
-        "Authorization": "Bearer <trusted-gateway-assertion>",
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
         "Content-Type": "application/json",
         "Accept": "application/json"
       },
@@ -8559,7 +8586,7 @@
         }
       }
     },
-    "curl": "curl -X POST https://api.reveal.example.org/v1/me/explorations -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"draft_id\":\"22222222-2222-4222-8222-222222222222\",\"source_gap\":{\"id\":\"dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk\",\"source_id\":\"dismech:disorders/Coronary_Artery_Disease#discussion:cad_pgsxc_reverse_causation\",\"source_revision\":\"8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd\"}}'"
+    "curl": "curl -X POST https://api.reveal.example.org/v1/me/explorations -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"draft_id\":\"22222222-2222-4222-8222-222222222222\",\"source_gap\":{\"id\":\"dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk\",\"source_id\":\"dismech:disorders/Coronary_Artery_Disease#discussion:cad_pgsxc_reverse_causation\",\"source_revision\":\"8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd\"}}'"
   },
   {
     "operation_id": "getEvidencePackage",
@@ -8573,7 +8600,7 @@
       },
       "query": {},
       "headers": {
-        "Authorization": "Bearer <trusted-gateway-assertion>",
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
         "Accept": "application/json"
       },
       "body": null
@@ -12167,7 +12194,7 @@
         }
       }
     },
-    "curl": "curl -X GET https://api.reveal.example.org/v1/jobs/44444444-4444-4444-8444-444444444444/evidence-package -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Accept: application/json'"
+    "curl": "curl -X GET https://api.reveal.example.org/v1/jobs/44444444-4444-4444-8444-444444444444/evidence-package -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
   },
   {
     "operation_id": "downloadArtifact",
@@ -12181,7 +12208,7 @@
       },
       "query": {},
       "headers": {
-        "Authorization": "Bearer <trusted-gateway-assertion>",
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
         "Accept": "*/*"
       },
       "body": null
@@ -12194,7 +12221,7 @@
         }
       }
     },
-    "curl": "curl -X GET https://api.reveal.example.org/v1/artifacts/dc0bfbd8c23271a7e0a6d2285a90de9be7698f2ede9465b6d5877bbd24e96006 -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Accept: */*'"
+    "curl": "curl -X GET https://api.reveal.example.org/v1/artifacts/dc0bfbd8c23271a7e0a6d2285a90de9be7698f2ede9465b6d5877bbd24e96006 -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: */*'"
   },
   {
     "operation_id": "exportParagraph",
@@ -12495,7 +12522,7 @@
       },
       "query": {},
       "headers": {
-        "Authorization": "Bearer <trusted-gateway-assertion>",
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
         "Accept": "application/json"
       },
       "body": null
@@ -12532,7 +12559,7 @@
         }
       }
     },
-    "curl": "curl -X GET https://api.reveal.example.org/v1/jobs/55555555-5555-4555-8555-555555555555 -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Accept: application/json'"
+    "curl": "curl -X GET https://api.reveal.example.org/v1/jobs/55555555-5555-4555-8555-555555555555 -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
   },
   {
     "operation_id": "getCitation",
@@ -12999,7 +13026,7 @@
       },
       "headers": {
         "Last-Event-ID": "0",
-        "Authorization": "Bearer <trusted-gateway-assertion>",
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
         "Accept": "text/event-stream"
       },
       "body": null
@@ -13012,6 +13039,6 @@
         }
       }
     },
-    "curl": "curl -X GET 'https://api.reveal.example.org/v1/jobs/44444444-4444-4444-8444-444444444444/events?after=0&limit=100' -H 'Last-Event-ID: 0' -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Accept: text/event-stream'"
+    "curl": "curl -X GET 'https://api.reveal.example.org/v1/jobs/44444444-4444-4444-8444-444444444444/events?after=0&limit=100' -H 'Last-Event-ID: 0' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: text/event-stream'"
   }
 ]

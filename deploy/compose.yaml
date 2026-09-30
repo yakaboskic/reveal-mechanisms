@@ -1,20 +1,21 @@
+# Durable HTTP deployment: managed workflow delivery and Redis Pub/Sub only.
 x-backend: &backend
-  image: ${REVEAL_BACKEND_IMAGE:-reveal-deployment-backend:local}
+  image: ${REVEAL_BACKEND_IMAGE:-reveal-workflow-backend:local}
   build:
     context: ..
     dockerfile: services/backend/Dockerfile
     target: deployment
   env_file:
-    - path: ${REVEAL_RUNTIME_DIR:-../.runtime/deployment}/backend.env
+    - path: ${REVEAL_RUNTIME_DIR:-../.runtime/workflow}/backend.env
       format: raw
   init: true
   restart: unless-stopped
   read_only: true
   tmpfs:
-    - /work:rw,nosuid,nodev,size=268435456,mode=1777
+    - /work:rw,nosuid,nodev,size=1073741824,mode=1777
     - /tmp:rw,nosuid,nodev,size=67108864,mode=1777
   stop_grace_period: 120s
-  logging: &logs
+  logging:
     driver: json-file
     options: {max-size: 10m, max-file: "3"}
   networks: [backend]
@@ -22,64 +23,15 @@ x-backend: &backend
 services:
   api:
     <<: *backend
-    mem_limit: 3g
-    ports: ["127.0.0.1:${REVEAL_DEPLOY_API_PORT:-18000}:8000"]
+    mem_limit: 4g
+    ports: ["127.0.0.1:${REVEAL_DEPLOY_API_PORT:-18001}:8000"]
+    extra_hosts: ["host.docker.internal:host-gateway"]
     healthcheck:
       test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz',timeout=30)"]
-      interval: 20s
+      interval: 30s
       timeout: 35s
       start_period: 120s
       retries: 5
-    depends_on:
-      redis: {condition: service_healthy}
-  worker:
-    <<: *backend
-    command: [python, -m, reveal_backend.worker]
-    mem_limit: 2g
-    scale: ${REVEAL_WORKER_REPLICAS:-2}
-    healthcheck:
-      test: [CMD, python, -m, reveal_backend.deployment, health, worker]
-      interval: 20s
-      timeout: 20s
-      start_period: 60s
-      retries: 3
-    depends_on:
-      api: {condition: service_healthy}
-  dispatcher:
-    <<: *backend
-    command: [python, -m, reveal_backend.dispatcher]
-    mem_limit: 512m
-    healthcheck:
-      test: [CMD, python, -m, reveal_backend.deployment, health, dispatcher]
-      interval: 20s
-      timeout: 20s
-      start_period: 30s
-      retries: 3
-    depends_on:
-      api: {condition: service_healthy}
-  redis:
-    image: redis:7.4.2-alpine@sha256:02419de7eddf55aa5bcf49efb74e88fa8d931b4d77c07eff8a6b2144472b6952
-    command: [redis-server, /usr/local/etc/redis/redis.conf]
-    env_file:
-      - path: ${REVEAL_RUNTIME_DIR:-../.runtime/deployment}/redis.env
-        format: raw
-    volumes:
-      - type: bind
-        source: ${REVEAL_RUNTIME_DIR:-../.runtime/deployment}/redis.conf
-        target: /usr/local/etc/redis/redis.conf
-        read_only: true
-        bind: {create_host_path: false}
-    tmpfs: ["/data:rw,nosuid,nodev,size=1048576"]
-    read_only: true
-    mem_limit: 384m
-    restart: unless-stopped
-    logging: *logs
-    healthcheck:
-      test: [CMD, redis-cli, ping]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-    networks: [backend]
   bootstrap:
     <<: *backend
     profiles: [tools]

@@ -71,7 +71,7 @@ def main():
                         if media_type == 'text/event-stream':
                             for line in ex['value'].splitlines():
                                 if line.startswith('data: '):
-                                    validate(json.loads(line[6:]), {'$ref': '#/components/schemas/JobEvent'})
+                                    validate(json.loads(line[6:]), response.get('x-event-schema', {'$ref': '#/components/schemas/JobEvent'}))
     sv = load_schema(DAPPER / 'dapper.yaml')
     vocab = Vocabulary.build(sv, yaml.safe_load((DAPPER / 'lint/profiles.yaml').read_text()))
     vocab.profiles.update(yaml.safe_load((API / 'paragraph-profile.yaml').read_text()))

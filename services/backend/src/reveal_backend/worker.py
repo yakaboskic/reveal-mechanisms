@@ -42,8 +42,16 @@ def public_activity(job,kind,payload):
             artifact_sha256=payload.get('artifact_sha256'),
             duration_ms=payload['duration_ms'] if type(payload.get('duration_ms')) in (int,float) and payload['duration_ms']>=0 else None)
     elif kind in ('agent_started','agent_completed'):
-        if kind=='agent_started': job['stage']=payload.get('stage') or ('authoring_paragraph' if job.get('kind')=='paragraph' else 'authoring_account')
-        detail=activity('preparation','failed' if payload.get('status')=='failed' else 'completed','harness')
+        if kind=='agent_started':
+            job['stage']=payload.get('stage') or ('authoring_paragraph' if job.get('kind')=='paragraph' else 'authoring_account')
+            detail=activity('preparation','completed','harness')
+        else:
+            # A provider result ends authoring, not the job. Output still needs
+            # durable capture and independent validation before acceptance.
+            job['stage']='collecting_output'
+            # This is a completion notice, not the start of a timed capture
+            # operation. The job remains running in its collection stage.
+            detail=activity('preparation','failed' if payload.get('status')=='failed' else 'completed','harness')
     elif kind in ('agent_message','message'):
         detail=activity('agent_message','started','harness',
             **({'message_delta':True} if payload.get('delta') is True else {}))
@@ -269,6 +277,7 @@ class Worker:
         require(mode!='deterministic' or setting('REVEAL_ENVIRONMENT','development') in ('development','test'),'Deterministic execution is restricted to development/test environments')
         root=artifacts_root()/job['id']; directory=root/('attempt-'+str(queue['attempt'])); directory.mkdir(parents=True,exist_ok=True)
         lost=False
+        durable_capture_handle=None
         def cancellation_requested():
             with self.repository.read_transaction() as tx:
                 pair=jobs.fenced(tx,job['id'],token)
@@ -286,6 +295,7 @@ class Worker:
                 await asyncio.sleep(min(20,jobs.lease_duration()/3))
                 if not await asyncio.to_thread(jobs.heartbeat,self.repository,job['id'],token): lost=True; return
         def persist_checkpoint(handle):
+            nonlocal durable_capture_handle
             if s3_enabled() and handle.get('phase') in ('captured','deleted'):
                 self.save_workspace(job,token,root)
             with self.repository.transaction() as tx:
@@ -293,6 +303,8 @@ class Worker:
                 if not pair: raise RuntimeError('Attempt lease lost')
                 current,q=pair; q['remote_handle']=handle
                 tx.put('queue',job['id'],current['owner_user_id'],q)
+            if s3_enabled() and handle.get('phase')=='deleted':
+                durable_capture_handle=deepcopy(handle)
         async def checkpoint(handle):
             try:
                 await asyncio.to_thread(persist_checkpoint,handle)
@@ -391,12 +403,16 @@ class Worker:
                         from .box_adapter import BoxExecutionAdapter
                         adapter=BoxExecutionAdapter(ROOT,environ={**os.environ,'REVEAL_CLAUDE_MODEL':snapshot['model']})
                 result=await adapter.execute(request,emit,cancelled,checkpoint)
-            await asyncio.to_thread(self.save_workspace,job,token,root)
+            # The Box deleted checkpoint already saved the exact final capture
+            # and its cleanup marker. Other adapters/replays still need a save.
+            if durable_capture_handle is None or result.remote_handle!=durable_capture_handle:
+                await asyncio.to_thread(self.save_workspace,job,token,root)
             if await cancelled():
                 jobs.finish(self.repository,job['id'],token,'cancelled'); return
             if result.status=='insufficient_evidence' and job['kind']=='analysis':
                 phase='scientific_validation'
                 from .analysis_outcomes import prepare
+                await emit('stage',{'stage':'validating','message':'Checking the captured evidence and reasons no scientific account could be supported.'})
                 prepared=await asyncio.to_thread(prepare,job,frozen,binding,input_path,result,
                     attempt=queue['attempt'],mode=mode,expected_model=snapshot['model'])
                 if await self.begin_persistence(job,token,'Saving the scoped exploration and captured reasons; no scientific account was accepted.'):
@@ -407,8 +423,8 @@ class Worker:
                 failure=authoring_failure(result,request) if result.status=='failed' else None
                 jobs.finish(self.repository,job['id'],token,result.status,failure=failure); return
             phase='scientific_validation'
-            if mode=='box': validate_execution_ledger(result,request,snapshot['model'])
             await emit('stage',{'stage':'validating','message':'Validating scientific identities, source fidelity and provenance.'})
+            if mode=='box': await asyncio.to_thread(validate_execution_ledger,result,request,snapshot['model'])
             if job['kind']=='analysis':
                 require(0<len(result.account_paths)<=queue['inputs'].get('budgets',{}).get('max_accounts',3),'Execution returned an invalid account count')
                 accepted=[]

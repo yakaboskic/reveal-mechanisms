@@ -17,6 +17,22 @@ test("recorded stage boundaries freeze prior stages while the current timer adva
   assert.deepEqual(later.map(s => s.durationMs), [4000, 4000, 9000]);
   assert.deepEqual(later.map(s => s.state), ["completed", "completed", "working"]);
 });
+test("agent completion freezes research timing while output collection continues before acceptance", () => {
+  const staleJob = { ...job, stage: "authoring_account" as const, last_event_id: "1" };
+  const events = [event(1, 2, "authoring_account"), event(2, 12, "collecting_output")];
+  for (const elapsed of [15, 25]) {
+    const sections = timedActivitySections(events, staleJob, base + elapsed * 1000);
+    assert.deepEqual(sections.map(section => [section.stage, section.state, section.durationMs]), [
+      ["research", "completed", 10000], ["collection", "working", (elapsed - 12) * 1000],
+    ]);
+  }
+  const validation = event(3, 30, "validating");
+  assert.deepEqual(timedActivitySections([...events, validation], staleJob, base + 35000)
+    .map(section => [section.state, section.durationMs]), [["completed", 10000], ["completed", 18000], ["working", 5000]]);
+  const failed = { ...event(3, 30, "collecting_output"), status: "failed" as const };
+  assert.deepEqual(timedActivitySections([...events, failed], staleJob, base + 35000)
+    .map(section => [section.state, section.durationMs]), [["completed", 10000], ["failed", 18000]]);
+});
 test("terminal SSE freezes failure and cancellation before the job snapshot catches up", () => {
   for (const status of ["failed", "cancelled"] as const) {
     const events = [event(1, 2), { ...event(2, 8), status }];
@@ -46,6 +62,23 @@ test("operational dots complete on the next worker step while errors remain erro
   assert.deepEqual(operationalStep(row, [next], { state: "working", end: base + 5000 }, base + 5000), { state: "completed", durationMs: 3000 });
   const failed = { event: event(1, 1, "preparing_evidence", { state: "failed" }) };
   assert.deepEqual(operationalStep(failed, [next], { state: "completed", end: base + 5000 }, base + 5000), { state: "failed", durationMs: null });
+});
+test("new and saved agent completion notices never time the wait before capture", () => {
+  for (const state of ["started", "completed"] as const) {
+    const notice = { event: event(1, 10, "collecting_output", { source: "harness", state }) };
+    const capture = { event: event(2, 60, "collecting_output") };
+    for (const next of [[], [capture]]) {
+      assert.deepEqual(operationalStep(notice, next, { state: "working", end: base + 210_000 }, base + 210_000),
+        { state: "completed", durationMs: null });
+    }
+    // Capture remains an actual worker operation, with its own forward timer.
+    assert.deepEqual(operationalStep(capture, [], { state: "working", end: base + 210_000 }, base + 210_000),
+      { state: "working", durationMs: 150_000 });
+    const validation = event(3, 210, "validating");
+    const section = timedActivitySections([notice.event, capture.event, validation], job, base + 300_000)[0];
+    assert.equal(section.durationMs, 200_000);
+    assert.deepEqual(operationalStep(capture, [], section, base + 300_000), { state: "completed", durationMs: 150_000 });
+  }
 });
 test("parallel tool timers use their own results and stopped calls do not keep ticking", () => {
   const call = (id: number, time: number, callId: string) => event(id, time, "authoring_account", { kind: "tool_call", call_id: callId });

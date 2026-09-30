@@ -4,7 +4,13 @@ REVEAL connects existing DisMech knowledge gaps to EAGGL/CFDE mechanisms and cap
 
 ## Start locally
 
-**New colleague: follow [README.local.md](README.local.md).** Chase provides an encrypted development configuration and a separate password. From a fresh clone:
+For the durable workflow pilot, follow [the workflow runtime guide](docs/durable-workflow-runtime.md).
+It runs the API and frontend at `http://localhost:3100`, with managed Upstash
+Redis Pub/Sub and Vector, isolated application tables, and QStash delivery.
+`scripts/durable_deployment.py up --build` starts the prepared pilot.
+The older colleague handoff below remains an explicit legacy development option.
+
+**Legacy colleague handoff: follow [README.local.md](README.local.md).** Chase provides an encrypted development configuration and a separate password. From a fresh clone:
 
 ```sh
 python3 scripts/local_setup.py --bundle ~/Downloads/reveal-local.env.json.gpg
@@ -26,19 +32,20 @@ Startup preserves the original `reveal_*` tables, accounts, publications and S3 
 ## Learn the system
 
 - [API walkthrough](docs/api-quickstart.md): request path, authentication, examples, job lifecycle and code map.
-- [OpenAPI reference](api/README.md): 42 operations, request/response fixtures, offline viewer and portable ZIP.
-- [Local deployment](docs/local-deployment.md): Docker topology, durable queue, S3 artifacts, readiness and shutdown.
+- [OpenAPI reference](api/README.md): 43 operations, request/response fixtures, offline viewer and portable ZIP.
+- [Workflow runtime](docs/durable-workflow-runtime.md): current local startup, event delivery, verification and release guidance.
+- [Legacy local deployment](docs/local-deployment.md): retained worker topology, S3 artifacts and migration/rollback guidance.
 - [Implementation status](docs/implementation-status.md): current behavior, validation and remaining deployment blockers.
 - [Documentation index](docs/README.md): operating guides, scientific contracts, data imports and historical design records.
 
 ## Architecture
 
-The Next.js gateway owns browser sessions and signs short-lived assertions for FastAPI. RDS owns users, drafts, jobs, scientific records and dispatch intent. Redis Streams delivers work to the worker pool; RDS leases fence duplicate/stale attempts. Artifacts and recovery checkpoints are versioned and checksum-verified in S3. Containers use bounded RAM scratch for execution.
+The Next.js gateway owns browser sessions and signs short-lived assertions for FastAPI. RDS owns users, drafts, jobs, scientific records, execution fences and dispatch intent. Upstash Workflow delivers bounded execution steps over signed HTTP requests. Artifacts and recovery checkpoints are versioned and checksum-verified in S3. Containers use bounded scratch space. Managed Redis Pub/Sub wakes durable event replay and frontend invalidation without Redis polling.
 
-Workers collect frozen evidence, run Claude in Upstash Box, and apply the same structural/source checks available to the authoring agent, followed by independent scientific review. Scientific identifiers and provenance survive publication and deployment changes. Embeddings retrieve candidate mechanisms; they do not establish scientific support.
+Workflow steps collect frozen evidence, launch Claude in Upstash Box, capture output, and apply structural/source checks followed by checkpointed independent scientific review. Scientific identifiers and provenance survive publication and deployment changes. Upstash Vector retrieves candidate mechanisms; embeddings do not establish scientific support.
 
 ## Deployment status — September 30, 2026
 
-The local Docker stack runs. Public deployment remains pending access to Broad's [DIG service platform](docs/platform-deployment.md); the earlier standalone EC2 route is on hold. The intended frontend remains Vercel in **Chase Yakaboski's personal projects**. No public backend or Vercel deployment is claimed by this repository.
+The local Workflow pilot runs with managed Upstash Redis Pub/Sub and Vector. The HTTP-only QA backend is deployed through Broad's [DIG service platform](docs/platform-deployment.md); public HTTPS event/replay, retrieval and signed workflow/S3 checks passed. Final task-replacement and scientific-review checks are in progress. Production requires the platform's approval, and Vercel awaits authorization to upload its prepared frontend secrets. See the [runtime verification status](docs/durable-workflow-runtime.md#verification-status) for the recorded checks.
 
 The existing database already contains the imported scientific catalog. A colleague must not reload it to start the app. Source inventories and import commands are in [data inventory](docs/data-inventory.md), [DisMech import](docs/dismech-import.md), [EAGGL import](docs/eaggl-factor-import.md), and [CFDE GeneSets](docs/geneset-import.md). Historical measured runs remain in the [validation report](docs/validation-report.md).

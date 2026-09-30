@@ -476,7 +476,7 @@ def operation(path, method, name, tag, summary, description, response_schema, re
             responses[code]['headers'] = {'Retry-After': {'schema': {'type': 'integer', 'minimum': 1}, 'example': 30}}
     op = {'operationId': name, 'tags': [tag], 'summary': summary, 'description': description,
           'parameters': parameters, 'responses': responses,
-          'security': [{}, {'GatewayAssertion': []}] if public else [{'GatewayAssertion': []}]}
+          'security': [{}, {'ApplicationBearer': []}] if public else [{'ApplicationBearer': []}]}
     if request_schema:
         op['requestBody'] = {'required': True, 'content': content(request_schema, request_examples)}
     cases = request_examples or {'request': None}
@@ -487,7 +487,7 @@ def operation(path, method, name, tag, summary, description, response_schema, re
         if name == 'createJob' and key == 'paragraph':
             headers['Idempotency-Key'] = '88888888-8888-4888-8888-888888888888'
         if not public:
-            headers['Authorization'] = 'Bearer <trusted-gateway-assertion>'
+            headers['Authorization'] = 'Bearer <api-key-or-gateway-assertion>'
         if body is not None:
             headers['Content-Type'] = 'application/json'
         headers['Accept'] = 'application/json'
@@ -761,7 +761,7 @@ def main():
     PATHS['/v1/jobs/{job_id}/events']['get']['responses']['409'] = {
         'description': 'Requested event history has expired.', 'content': content('Problem', {'cursor_expired':
             problem(409, 'EVENT_CURSOR_EXPIRED', 'Recover current job status and reconnect from its last_event_id.')}, 'application/problem+json')}
-    spec = {'openapi': '3.1.1', 'jsonSchemaDialect': 'https://json-schema.org/draft/2020-12/schema',
+    spec = {'openapi': '3.1.1', 'jsonSchemaDialect': 'https://spec.openapis.org/oas/3.1/dialect/base',
         'info': {'title': 'REVEAL Mechanisms API', 'version': '0.2.0-draft',
             'summary': 'DAPPER scientific content, knowledge-gap search, and shared analysis/paragraph jobs.',
             'description': 'Local API implementation contract; production deployment is deferred. Scientific schemas are generated from the pinned DAPPER schema. Application envelopes handle ownership, drafts, search, jobs and pagination. All DAPPER IDs in scientific examples are computed, not placeholders. Research/job/user timestamps and semantic rankings are illustrative; no Claude Code or embedding run was performed. The account fixture is the approved 12-claim HTML example: captured CFDE observations plus explicitly invented KG/membership assertions, never a production grounding-pass example. The evidence package is a separately verified live capture, not a claim that this example account was generated from it. Examples using example.org are not live resources. Do not treat example output as published research.'},
@@ -769,9 +769,9 @@ def main():
                     {'url': 'http://localhost:3000/api/backend', 'description': 'Local Next.js gateway (browser session required for private routes)'},
                     {'url': BASE, 'description': 'Reserved example domain; replace for deployment'}],
         'tags': [{'name': n} for n in ['Identity', 'Knowledge gaps', 'Mechanisms', 'Drafts', 'Research history', 'Jobs', 'Scientific content', 'Citations']],
-        'security': [{'GatewayAssertion': []}], 'paths': PATHS,
-        'components': {'securitySchemes': {'GatewayAssertion': {'type': 'http', 'scheme': 'bearer', 'bearerFormat': 'JWT',
-            'description': 'Short-lived assertion issued by a trusted Next.js/auth gateway after Google/ORCID login or trusted anonymous session bootstrap. The backend validates signature/algorithm/issuer/audience/expiry and resolves the external subject to an internal user ID. Never send provider access tokens or Auth.js cookies as this bearer. Public operations permit anonymous access only to public records.'}}, 'schemas': SCHEMAS},
+        'security': [{'ApplicationBearer': []}], 'paths': PATHS,
+        'components': {'securitySchemes': {'ApplicationBearer': {'type': 'http', 'scheme': 'bearer', 'bearerFormat': 'API key or JWT',
+            'description': 'Paste your rvl_ workspace API key or a short-lived trusted-gateway JWT. Swagger adds the Bearer prefix automatically. API keys resolve to one configured existing workspace and retain its ownership, expiry and job limits; they grant no internal or administrator access. Gateway JWTs are issued after registered login or anonymous session bootstrap. Never share gateway signing/service credentials or send provider access tokens or Auth.js cookies. Without a bearer, only public operations are available.'}}, 'schemas': SCHEMAS},
         'x-dapper-dependency': {'base_commit': PIN['base_commit'], 'schema_sha256': PIN['root_schema_sha256'],
             'snapshot_sha256': PIN['snapshot_sha256'], 'identity_profile': 'DAPPER-ID-1',
             'source': '../data/dapper/2026-09-24-v8/snapshot/schema/dapper.yaml'},

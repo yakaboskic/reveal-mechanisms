@@ -9,7 +9,7 @@
     "query": {},
     "headers": {
       "Idempotency-Key": "66666666-6666-4666-8666-666666666666",
-      "Authorization": "Bearer <trusted-gateway-assertion>",
+      "Authorization": "Bearer <api-key-or-gateway-assertion>",
       "Content-Type": "application/json",
       "Accept": "application/json"
     },
@@ -50,5 +50,5 @@
       }
     }
   },
-  "curl": "curl -X POST https://api.reveal.example.org/v1/jobs -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"budgets\":{\"max_accounts\":3},\"draft_id\":\"22222222-2222-4222-8222-222222222222\",\"draft_version\":2,\"kind\":\"analysis\"}'"
+  "curl": "curl -X POST https://api.reveal.example.org/v1/jobs -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"budgets\":{\"max_accounts\":3},\"draft_id\":\"22222222-2222-4222-8222-222222222222\",\"draft_version\":2,\"kind\":\"analysis\"}'"
 }

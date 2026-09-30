@@ -121,6 +121,7 @@ try {
     await h.page.goto(origin + '/workspace?tab=explorations');
     await h.page.getByText(outcome.summary, { exact: true }).waitFor();
     await h.page.getByRole('tab', { name: 'Explorations 1+' }).waitFor();
+    assert.equal(await h.page.locator('.workspace-continuity').count(), mobile ? 1 : 0, 'Only anonymous visitors see the workspace sign-in card');
     assert.equal(h.state.requests.filter(r => r.path.includes('/analysis-outcomes/')).length, 0, 'Only summary list fetched');
     await h.page.getByRole('button', { name: 'Load more', exact: true }).click();
     await h.page.getByText('A second saved investigation with a different evidence gap.', { exact: true }).waitFor();
@@ -160,7 +161,8 @@ try {
   let release;
   state.holdOutcomes = new Promise(resolve => { release = resolve; });
   await page.clock.fastForward(31_000);
-  await page.getByText('Refreshing your workspace…', { exact: true }).waitFor();
+  await page.locator('#workspace-results[aria-busy="true"]').waitFor();
+  assert.equal(await page.getByText('Refreshing your workspace…', { exact: true }).count(), 0);
   assert.ok(await page.getByText(outcome.summary, { exact: true }).isVisible());
   assert.equal(await page.getByText('Loading your explorations', { exact: true }).count(), 0);
   state.failOutcomes = true; release();
@@ -179,7 +181,8 @@ try {
   await page.screenshot({ path: resolve(output, 'cache-refreshed.png'), fullPage: true });
   state.holdOutcomes = new Promise(resolve => { release = resolve; });
   await page.getByRole('button', { name: 'Refresh', exact: true }).click();
-  await page.getByText('Refreshing your workspace…', { exact: true }).waitFor();
+  await page.locator('#workspace-results[aria-busy="true"]').waitFor();
+  assert.equal(await page.getByText('Refreshing your workspace…', { exact: true }).count(), 0);
   state.owner = '22222222-2222-4222-8222-222222222222';
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await page.getByText('Only the second user can see this exploration.', { exact: true }).waitFor();

@@ -9,7 +9,7 @@
     "query": {},
     "headers": {
       "Idempotency-Key": "88888888-8888-4888-8888-888888888888",
-      "Authorization": "Bearer <trusted-gateway-assertion>",
+      "Authorization": "Bearer <api-key-or-gateway-assertion>",
       "Content-Type": "application/json",
       "Accept": "application/json"
     },
@@ -51,5 +51,5 @@
       }
     }
   },
-  "curl": "curl -X POST https://api.reveal.example.org/v1/jobs -H 'Idempotency-Key: 88888888-8888-4888-8888-888888888888' -H 'Authorization: Bearer <trusted-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"account_id\":\"dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd\",\"additional_citations\":[],\"audience\":\"researcher\",\"focus_claim_id\":\"dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km\",\"kind\":\"paragraph\",\"language\":\"en\",\"target_words\":180}'"
+  "curl": "curl -X POST https://api.reveal.example.org/v1/jobs -H 'Idempotency-Key: 88888888-8888-4888-8888-888888888888' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"account_id\":\"dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd\",\"additional_citations\":[],\"audience\":\"researcher\",\"focus_claim_id\":\"dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km\",\"kind\":\"paragraph\",\"language\":\"en\",\"target_words\":180}'"
 }

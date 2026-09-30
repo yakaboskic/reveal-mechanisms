@@ -43,13 +43,18 @@ class DatabaseInspectorTests(unittest.TestCase):
             self.assertNotIn('lease-credential',response.text)
 
     def test_composite_pagination_no_duplicates_and_bound_to_filter(self):
+        # Observable writes also create durable notification cursors/events.
+        # Compare against the actual full composite-key inventory independently
+        # of the inspector's cursor implementation.
+        with self.repo.read_transaction() as tx:
+            expected=tx.execute('SELECT kind,id FROM reveal_records ORDER BY kind,id').fetchall()
         keys=[]; cursor=None
         while True:
             page=inspect_table(self.repo,'reveal_records',limit=5,cursor=cursor)
             keys.extend((r['key']['kind'],r['key']['id']) for r in page['rows'])
             cursor=page['next_cursor']
             if not cursor: break
-        self.assertEqual(len(keys),12); self.assertEqual(len(set(keys)),12); self.assertEqual(keys,sorted(keys))
+        self.assertEqual(keys,expected); self.assertEqual(len(set(keys)),len(expected)); self.assertEqual(keys,sorted(keys))
         first=inspect_table(self.repo,'reveal_records',limit=2,column='kind',operator='equals',q='job')
         self.assertEqual(len(first['rows']),2)
         for kwargs in ({'limit':3,'column':'kind','operator':'equals','q':'job'}, {'limit':2,'column':'kind','operator':'equals','q':'draft'}):

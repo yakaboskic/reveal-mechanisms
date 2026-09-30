@@ -16,6 +16,7 @@ from .auth import Problem, decode_assertion, owned, require_owned, principal, pu
 from .catalog import Catalog
 from .repository import Repository, now, uid, digest
 from .runtime_config import ROOT, artifacts_root
+from .service_routing import mount_service
 from . import jobs
 from .account_discovery import visible_accounts, counts_by_gap, counted_gap, count_snapshot
 from . import publication
@@ -47,7 +48,8 @@ app.openapi = lambda: CONTRACT
 @app.middleware('http')
 async def publication_cache_policy(request: Request, call_next):
     response = await call_next(request)
-    if request.url.path.startswith(('/v1/accounts', '/v1/claims', '/v1/objects', '/v1/gene-sets',
+    path = request.url.path.removeprefix(request.scope.get('root_path', ''))
+    if path.startswith(('/v1/accounts', '/v1/claims', '/v1/objects', '/v1/gene-sets',
             '/v1/paragraphs', '/v1/citations', '/v1/artifacts', '/v1/knowledge-gaps', '/v1/analysis-outcomes')):
         # Visibility is revocable and workspace responses vary by principal.
         response.headers['Cache-Control'] = 'private, no-store'
@@ -158,6 +160,7 @@ def freeze_draft_bindings(tx,draft_id,owner,composer):
     tx.put('draft_binding',draft_id,owner,frozen)
     return frozen
 
+@app.get('/health')
 @app.get('/healthz')
 def health(): return {'status':'ok'}
 
@@ -199,14 +202,19 @@ def admin_cell(table: str, key: str = Query(..., max_length=4096), column: str =
 @app.get('/readyz')
 @app.get('/health/ready')
 def ready():
+    from .api_keys import configuration as api_key_configuration
+    api_key_configuration()
     database = repo.readiness(); catalog.load()
     from .artifact_store import s3_enabled, store
     if s3_enabled(): store().check()
-    if jobs.transport()=='redis':
-        from .job_transport import RedisTransport
-        RedisTransport().client.ping()
+    # Health probes must never generate recurring Redis commands. Notifications
+    # are observed from subscriber state; authoritative API writes survive a
+    # notification outage and retain their durable publication intent.
+    from .redis_notifications import configuration
     return {'status': 'ready', **database, 'sources': {'dismech_import': catalog.dismech_import, 'gaps': len(catalog.gaps),
-        'mapping_run': catalog.mapping_run, 'mapped_factors': len(catalog.factors), 'embedding_run': catalog.embedding_run}, 'execution_mode': os.getenv('REVEAL_EXECUTION_MODE','box')}
+        'mapping_run': catalog.mapping_run, 'mapped_factors': len(catalog.factors), 'embedding_run': catalog.embedding_run},
+        'execution_mode': os.getenv('REVEAL_EXECUTION_MODE','box'), 'job_transport':jobs.transport(),
+        'notifications':{'transport':configuration()[0], 'delivery':'pubsub', 'polling':False}}
 
 @app.post('/internal/v1/principals/anonymous', status_code=201)
 async def provision(request: Request):
@@ -381,6 +389,7 @@ def build_suggestions(body):
     with repo.transaction() as tx:
         tx.insert_many([('suggestion',suggestion_id,'catalog',{'mode':body.get('mode','semantic'),'embedding_run_id':catalog.embedding_run,'mapping_run_id':catalog.mapping_run,
             **context_provenance,'hits':{x['record']['source_id']:{'ranking':x['ranking'],'matched_context_ids':x['contexts'],
+                **({'retrieval':x['retrieval']} if 'retrieval' in x else {}),
                 **({'context_similarities':x['context_similarities']} if 'context_similarities' in x else {})} for x in items}})])
     return {'suggestion_id':suggestion_id,'automatic_anchors':[{'factor':x['record'],'ranking':x['ranking'],'matched_context_ids':x['contexts']} for x in items],
         'automatic_target_count':5,'search':catalog.provenance(query,body.get('mode','semantic'),True),'limitations':['Retrieval similarity is not evidence of biological support.']}
@@ -472,7 +481,21 @@ def get_request(request_id:str,request:Request):
 @app.post('/v1/jobs',status_code=202)
 async def create_job(request:Request):
     body=await request.json(); validate(body,'JobCreate')
-    return await asyncio.to_thread(create_job_transaction,body,request.headers.get('authorization'),request.headers.get('idempotency-key'))
+    result = await asyncio.to_thread(create_job_transaction,body,request.headers.get('authorization'),request.headers.get('idempotency-key'))
+    await deliver_workflow_intents(result['id'])
+    return result
+
+async def deliver_workflow_intents(job_id):
+    if jobs.transport() != 'workflow': return
+    from .workflow_routes import dispatch_job
+    try:
+        async with asyncio.timeout(8):
+            await dispatch_job(repo, job_id)
+    except Exception as error:
+        # The job and dispatch intent already committed. Managed reconciliation
+        # repairs delivery; never misrepresent a committed submission as failed.
+        import logging
+        logging.getLogger('reveal.workflow').warning('Dispatch deferred to reconciliation (%s)', type(error).__name__)
 
 def create_job_transaction(body,authorization,idempotency_key):
     with repo.transaction() as tx:
@@ -522,15 +545,22 @@ def get_job(job_id:str,request:Request):
         user=principal(tx,request.headers.get('authorization'))['user_id']; return dict(owned(tx,'job',job_id,user)['data'],owner_user_id=user)
 
 @app.post('/v1/jobs/{job_id}/cancel')
-def cancel_job(job_id:str,request:Request):
+async def cancel_job(job_id:str,request:Request):
+    result = await asyncio.to_thread(cancel_job_transaction, job_id, request.headers.get('authorization'))
+    await deliver_workflow_intents(job_id)
+    return result
+
+def cancel_job_transaction(job_id, authorization):
     with repo.transaction() as tx:
-        user=principal(tx,request.headers.get('authorization'))['user_id']; job=dict(owned(tx,'job',job_id,user)['data'],owner_user_id=user)
+        user=principal(tx,authorization)['user_id']; job=dict(owned(tx,'job',job_id,user)['data'],owner_user_id=user)
         return jobs.cancel(tx,job)
 
 @app.post('/v1/jobs/{job_id}/retry-review',status_code=202)
 async def retry_job_review(job_id:str,request:Request):
     body=await request.json(); validate(body,'ReviewRetryInput')
-    return await asyncio.to_thread(retry_review_transaction,job_id,body,request.headers.get('authorization'),request.headers.get('idempotency-key'))
+    result = await asyncio.to_thread(retry_review_transaction,job_id,body,request.headers.get('authorization'),request.headers.get('idempotency-key'))
+    await deliver_workflow_intents(job_id)
+    return result
 
 def retry_review_transaction(job_id,body,authorization,idempotency_key):
     from .review_retry import enqueue_review
@@ -563,20 +593,9 @@ async def get_events(job_id:str,request:Request,after:str='0',limit:int=100):
     if cursor<0: raise Problem(400,'INVALID_CURSOR','Event cursor must be nonnegative.')
     authorization=request.headers.get('authorization'); initial=await asyncio.to_thread(read_events,job_id,authorization,cursor,limit)
     if 'text/event-stream' not in request.headers.get('accept',''): return initial
-    async def stream():
-        nonlocal cursor
-        import time
-        deadline=time.monotonic()+min(240,max(1,int(os.getenv('REVEAL_SSE_WINDOW_SECONDS','240'))))
-        while True:
-            if time.monotonic()>=deadline: return
-            try: data=await asyncio.to_thread(read_events,job_id,authorization,cursor,limit)
-            except Problem: return
-            for item in data['items']:
-                cursor=int(item['id']); yield f"id: {item['id']}\nevent: {item['event_type']}\ndata: {json.dumps(item)}\n\n"
-            if data['terminal']: return
-            if await request.is_disconnected(): return
-            yield ': heartbeat\n\n'; await asyncio.sleep(1)
-    return StreamingResponse(stream(),media_type='text/event-stream',headers={'Cache-Control':'no-cache','X-Accel-Buffering':'no'})
+    from .workspace_events import job_event_stream
+    return StreamingResponse(job_event_stream(repo, request, job_id, authorization, cursor, limit, read_events),
+        media_type='text/event-stream', headers={'Cache-Control':'private, no-store','X-Accel-Buffering':'no'})
 
 @app.get('/v1/me/explorations')
 def explorations(request:Request,limit:int=50,cursor:str|None=None):
@@ -813,3 +832,14 @@ async def render_citations(request:Request):
             if error.status!=404: raise
             _,snapshot=publication.find(tx,body['paragraph_id'],'paragraph'); reader=publication.SnapshotReader(snapshot)
             return render(reader,reader.user,body['paragraph_id'],body.get('style','apa'),body.get('locale','en-US'))
+
+
+from .workspace_events import register as register_workspace_events
+register_workspace_events(app, lambda: repo)
+from .workflow_routes import mount_workflow
+mount_workflow(app, repo)
+from .vector_workflow import mount_vector_workflow
+if jobs.transport() == 'workflow':
+    mount_vector_workflow(app, repo)
+
+app = mount_service(app, os.getenv('SERVICE_PATH_PREFIX', ''))

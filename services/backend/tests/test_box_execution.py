@@ -370,6 +370,31 @@ class LifecycleTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(FakeFactory.retrieved, 1)
         self.assertNotIn('nohup', ' '.join(self.adapter.calls))
 
+    async def test_collection_progress_precedes_capture_and_durable_checkpoint(self):
+        original = self.adapter.remote
+        observed = []
+        async def remote(box, action, *args):
+            if action == 'collect':
+                self.assertEqual(self.events[-1][1]['stage'], 'collecting_output')
+                self.assertIn('Retrieving', self.events[-1][1]['message'])
+                observed.append('collect')
+            return await original(box, action, *args)
+        async def checkpoint(handle):
+            if handle['phase'] == 'captured':
+                self.assertEqual(self.events[-1][1]['stage'], 'collecting_output')
+                self.assertIn('Saving', self.events[-1][1]['message'])
+                self.assertFalse(FakeFactory.instance.deleted)
+                observed.append('durable-capture')
+            elif handle['phase'] == 'deleted':
+                self.assertEqual(observed, ['collect', 'durable-capture'])
+                self.assertIn('Finalizing', self.events[-1][1]['message'])
+                self.assertTrue(FakeFactory.instance.deleted)
+                observed.append('durable-cleanup')
+            await self.checkpoint(handle)
+        self.adapter.remote = remote
+        await self.adapter.execute(self.request, self.emit, self.cancelled, checkpoint)
+        self.assertEqual(observed, ['collect', 'durable-capture', 'durable-cleanup'])
+
     async def test_batch_durability_checkpoints_and_cancellation_between_chunks(self):
         request = replace(self.request, remote_handle={'job_id':'job','attempt':1,'box_id':'test-box','cursor':0,'phase':'running','created_at':__import__('time').time()})
         available = [{'type':'agent_message','payload':{'text':str(i),'delta':True}} for i in range(45)]
@@ -379,7 +404,7 @@ class LifecycleTests(unittest.IsolatedAsyncioTestCase):
             ordering.append(action)
             if action == 'poll':
                 return json.dumps({'state':{'status':'succeeded'},'events':available[args[0]:], 'cursor':45,'has_more':False})
-            if action == 'collect': self.assertEqual(len(self.events), 45)
+            if action == 'collect': self.assertEqual(sum('remote_sequence' in payload for _,payload in self.events), 45)
             return await original(box, action, *args)
         self.adapter.remote = remote
         class Sink:
@@ -388,7 +413,7 @@ class LifecycleTests(unittest.IsolatedAsyncioTestCase):
                 chunks.append(len(events)); ordering.append('committed-' + str(events[-1][1]['remote_sequence']))
                 self.events.extend(events)
         async def checkpoint(handle):
-            self.assertEqual(handle['cursor'], self.events[-1][1]['remote_sequence'])
+            self.assertEqual(handle['cursor'], next(payload['remote_sequence'] for _,payload in reversed(self.events) if 'remote_sequence' in payload))
             ordering.append('checkpoint-' + str(handle['cursor']))
             await self.checkpoint(handle)
         async def cancelled(): return bool(chunks)
@@ -399,8 +424,8 @@ class LifecycleTests(unittest.IsolatedAsyncioTestCase):
         self.assertLess(ordering.index('committed-20'), ordering.index('checkpoint-20'))
         self.assertLess(ordering.index('checkpoint-20'), ordering.index('cancel'))
         self.assertLess(ordering.index('cancel'), ordering.index('committed-40'))
-        self.assertEqual([p['remote_sequence'] for _,p in self.events], list(range(1,46)))
-        self.assertEqual({p['remote_stream_id'] for _,p in self.events}, {'test-box:job:1'})
+        self.assertEqual([p['remote_sequence'] for _,p in self.events if 'remote_sequence' in p], list(range(1,46)))
+        self.assertEqual({p['remote_stream_id'] for _,p in self.events if 'remote_sequence' in p}, {'test-box:job:1'})
         self.assertTrue(FakeFactory.instance.deleted)
 
     async def test_failed_batch_retains_box_and_resumes_from_last_durable_chunk(self):
@@ -429,7 +454,7 @@ class LifecycleTests(unittest.IsolatedAsyncioTestCase):
         sink.fail = False
         result = await self.adapter.execute(replace(request, remote_handle=self.checkpoints[-1]), sink, self.cancelled, self.checkpoint)
         self.assertEqual(result.status, 'succeeded')
-        self.assertEqual([p['remote_sequence'] for _,p in self.events], list(range(1,46)))
+        self.assertEqual([p['remote_sequence'] for _,p in self.events if 'remote_sequence' in p], list(range(1,46)))
         self.assertEqual(self.adapter.calls, ['poll-0','poll-20','collect'])
         self.assertEqual(FakeFactory.created, 0)
         self.assertTrue(FakeFactory.instance.deleted)

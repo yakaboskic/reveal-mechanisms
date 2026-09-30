@@ -1,0 +1,27 @@
+{
+  "operation_id": "subscribeWorkspaceEvents",
+  "case": "request",
+  "method": "GET",
+  "path_template": "/v1/me/workspace/events",
+  "request": {
+    "url": "https://api.reveal.example.org/v1/me/workspace/events?after=opaque-signed-cursor",
+    "path": {},
+    "query": {
+      "after": "opaque-signed-cursor"
+    },
+    "headers": {
+      "Authorization": "Bearer <api-key-or-gateway-assertion>",
+      "Accept": "text/event-stream"
+    },
+    "body": null
+  },
+  "responses": {
+    "200": {
+      "content_type": "text/event-stream",
+      "examples": {
+        "change": "id: opaque-signed-cursor\nevent: workspace_change\ndata: {\"schema_version\": 1, \"event_id\": \"scope:1\", \"cursor\": \"1\", \"scope\": \"workspace\", \"committed_at\": \"2026-09-30T00:00:00Z\", \"event_type\": \"draft.changed\", \"entity_id\": \"22222222-2222-4222-8222-222222222222\", \"entity_revision\": 2, \"operation\": \"upsert\", \"collections\": [\"drafts\", \"gaps\"]}\n\n"
+      }
+    }
+  },
+  "curl": "curl -X GET 'https://api.reveal.example.org/v1/me/workspace/events?after=opaque-signed-cursor' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: text/event-stream'"
+}

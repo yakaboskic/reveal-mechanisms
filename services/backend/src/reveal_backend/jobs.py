@@ -8,7 +8,7 @@ TERMINAL = {'succeeded', 'failed', 'cancelled', 'insufficient_evidence'}
 
 def transport():
     value = os.getenv('REVEAL_JOB_TRANSPORT', 'database')
-    if value not in ('database', 'redis'): raise ValueError('Invalid job transport')
+    if value not in ('database', 'redis', 'workflow'): raise ValueError('Invalid job transport')
     return value
 
 def namespace():
@@ -25,6 +25,9 @@ def lease_duration():
 def dispatch(tx, job, queue):
     """The durable outbox shares the job's transaction; Redis is never called here."""
     queue.update(transport=transport(), namespace=namespace(), dispatch_id=uid())
+    if queue['transport'] == 'workflow':
+        from .workflow_state import create
+        create(tx, job, queue)
     if queue['transport'] == 'redis':
         tx.put('dispatch', job['id'], job['owner_user_id'], {
             'job_id': job['id'], 'namespace': queue['namespace'], 'dispatch_id': queue['dispatch_id'],
@@ -72,7 +75,15 @@ def cancel(tx, job):
     if job['status'] in TERMINAL: return job
     if job['status']=='cancel_requested': return job
     queue=tx.get('queue',job['id'])
-    active=queue and (queue['data'].get('token') or queue['data'].get('remote_handle'))
+    execution=tx.get('execution',job['id']) if queue and queue['data'].get('transport')=='workflow' else None
+    if execution:
+        state=execution['data']; state['cancel_requested']=True
+        tx.put('execution',job['id'],job['owner_user_id'],state)
+        tx.put('workflow_control',job['id'],job['owner_user_id'],{
+            'job_id':job['id'],'generation':state['generation'],'namespace':state['namespace'],
+            'published_at':None,'created_at':now()})
+    active=queue and (queue['data'].get('token') or queue['data'].get('remote_handle') or
+                     execution and execution['data'].get('capacity_reserved'))
     job['status'] = 'cancel_requested' if active else 'cancelled'
     job['completed_at'] = None if active else now()
     update_paragraph_state(tx,job)
@@ -80,6 +91,7 @@ def cancel(tx, job):
     return job
 
 def claim(repository, worker_id, lease_seconds=None, *, job_id=None, dispatch_id=None):
+    if transport() == 'workflow': return None  # Legacy consumers never acquire workflow jobs.
     lease_seconds = lease_seconds or lease_duration()
     with repository.transaction() as tx:
         control=tx.get('worker_control',namespace())
@@ -125,6 +137,9 @@ def fenced(tx, job_id, token):
     row = tx.get('job', job_id); queue = tx.get('queue', job_id)
     if not row or not queue or queue['data']['token'] != token or queue['data']['lease_until'] <= now() or row['data']['status'] in TERMINAL:
         return None
+    if queue['data'].get('transport') == 'workflow':
+        execution=tx.get('execution',job_id)
+        if not execution or execution['data'].get('fence') != token or execution['data'].get('lease_until','') <= now(): return None
     job = row['data']; job['owner_user_id'] = row['owner']
     return job, queue['data']
 

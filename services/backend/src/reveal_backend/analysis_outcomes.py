@@ -49,7 +49,7 @@ def pointer(value, path):
     return value
 
 
-def prepare(job,frozen,binding,package_path,result,*,attempt,mode,expected_model):
+def prepare(job,frozen,binding,package_path,result,*,attempt,mode,expected_model,capture_sha256=None):
     """Validate captured bytes and create an immutable, explicitly scoped report."""
     from .agent_execution import ExecutionRequest
     from .worker import assert_artifact, validate_execution_ledger, prepare_source_artifacts
@@ -61,10 +61,12 @@ def prepare(job,frozen,binding,package_path,result,*,attempt,mode,expected_model
     require(result.outcome_path is not None,'Insufficient evidence result lacks its captured outcome artifact')
     path=assert_artifact(result.outcome_path,request.output_dir)
     if mode=='box':
-        from .box_adapter import read_capture_marker
+        from .box_adapter import read_capture_marker, CAPTURE_MARKER
         require(result.remote_handle is not None,'Captured outcome lacks its trusted execution binding')
         marker=read_capture_marker(request,result.remote_handle)
-        require(marker and marker['state']['status']=='insufficient_evidence' and marker['cleanup_complete'],'Outcome capture is not a completed insufficient-evidence execution')
+        require(marker and marker['state']['status']=='insufficient_evidence' and
+            (marker['cleanup_complete'] or capture_sha256 and sha256((request.output_dir/CAPTURE_MARKER).read_bytes())==capture_sha256),
+            'Outcome capture is not a completed insufficient-evidence execution')
         relative=str(path.relative_to(request.output_dir.resolve()))
         require(relative in marker['files'],'Outcome was not included in the trusted result capture')
         validate_execution_ledger(result,request,expected_model)

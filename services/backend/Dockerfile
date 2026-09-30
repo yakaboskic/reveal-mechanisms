@@ -25,7 +25,7 @@ COPY data/dismech-gaps/2026-09-24 /app/data/dismech-gaps/2026-09-24
 COPY data/cfde-genesets/2026-09-24/manifest.json data/cfde-genesets/2026-09-24/activity.json /app/data/cfde-genesets/2026-09-24/
 ENV PYTHONPATH=/app/services/backend/src REVEAL_DAPPER_ROOT=/app/.runtime/dapper REVEAL_DISMECH_SOURCE=/app/dismech REVEAL_ARTIFACTS_DIR=/app/.runtime/artifacts
 EXPOSE 8000
-CMD ["uvicorn", "reveal_backend.app:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "exec uvicorn reveal_backend.app:app --host 0.0.0.0 --port \"${PORT:-8000}\""]
 
 FROM runtime AS deployment
 COPY .deployment-assets/dapper /app/.runtime/dapper

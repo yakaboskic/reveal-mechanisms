@@ -1,0 +1,44 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  Operator-owned REVEAL network prerequisite. Creates a stable application
+  security group and authorizes it on existing RDS before API/workers start.
+  Redis is an external TLS service such as Upstash, configured in the runtime
+  secret. Deploy only with database-owner authorization.
+Parameters:
+  Env:
+    Type: String
+    AllowedValues: [qa, prod]
+  DatabaseSecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+    Description: Existing RDS SG; this stack authorizes REVEAL clients on MySQL port 3306.
+Resources:
+  ClientSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: REVEAL API and background tasks; app ingress only from the shared ALB
+      VpcId: !ImportValue
+        Fn::Sub: 'dig-platform-${Env}-VpcId'
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 8000
+          ToPort: 8000
+          SourceSecurityGroupId: !ImportValue
+            Fn::Sub: 'dig-platform-${Env}-AlbSecurityGroupId'
+          Description: Shared ALB to API only; background tasks expose no listener
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+          Description: ECR, S3, CloudWatch, external TLS Redis and dependency access
+  DatabaseIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref DatabaseSecurityGroupId
+      IpProtocol: tcp
+      FromPort: 3306
+      ToPort: 3306
+      SourceSecurityGroupId: !Ref ClientSecurityGroup
+      Description: REVEAL clients to existing development RDS
+Outputs:
+  ClientSecurityGroupId:
+    Description: Attach this SG to API and background ECS tasks before starting services.
+    Value: !Ref ClientSecurityGroup

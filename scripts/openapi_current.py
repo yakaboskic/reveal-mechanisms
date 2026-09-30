@@ -52,6 +52,12 @@ def fixtures(b, f):
 def schemas(b):
     S=b.SCHEMAS; ref=b.ref; obj=b.obj; array=b.array; string=b.string; enum=b.enum; null=b.nullable; did=b.did
     uuid=string(format='uuid'); digest=string(pattern='^[a-f0-9]{64}$'); time=string(format='date-time')
+    b.add('WorkspaceEvent', obj({'schema_version':{'type':'integer','const':1},
+        'event_id':string(), 'cursor':string(pattern='^[0-9]+$'), 'scope':enum('workspace','public'),
+        'committed_at':time, 'event_type':string(), 'entity_id':string(),
+        'entity_revision':{'type':'integer','minimum':0}, 'operation':enum('upsert','remove','invalidate','resync'),
+        'collections':array(enum('drafts','gaps','explorations','requests','jobs','accounts','identity','catalog'))},
+        description='Committed invalidation event. SSE id is an opaque signed cursor bound to the principal and notification namespace; the envelope cursor is scope-local. Replay requires current authorization.'))
     b.add('SelectedGap', obj({'id':did('KnowledgeGap'),'source_id':string(pattern='^dismech:'),'source_revision':digest},
         description='Exact imported DisMech source observation and DAPPER mapping. Resolve and validate server-side. No client-authored question.'))
     props=S['Composer']['properties'];props.pop('inquiry');props.pop('dismech_context');props['source_gap']=null(ref('SelectedGap'))
@@ -83,7 +89,7 @@ def schemas(b):
     S['AnalysisJobInput']['description']='Freeze the owned saved draft after exact source-gap/revision and current EAGGL alias checks. Queue evidence collection; accounts automatically fan out to paragraph jobs after validation/persistence.'
     S['AnalysisResult']['properties'].update(paragraph_job_ids=array(uuid,maxItems=3),evidence_package_sha256=digest)
     S['AnalysisResult']['required']+=['paragraph_job_ids','evidence_package_sha256']
-    stages=S['Job']['properties']['stage']['enum'];stages+=['preparing_evidence','starting_agent']
+    stages=S['Job']['properties']['stage']['enum'];stages+=['preparing_evidence','starting_agent','collecting_output']
     b.add('ActivityDetail',obj({'kind':enum('preparation','agent_message','tool_call','tool_result','validation','account_saved'),
         'state':enum('started','completed','failed','cancelled','unavailable'), 'source':enum('worker','harness','validator'),
         'call_id':null(string()),'tool_name':null(string()),'selected_kg':null(enum('biomarkerkg','prokn')),
@@ -197,6 +203,25 @@ def examples(b, f, e):
 def endpoints(b,f,e):
     P=b.PATHS;S=b.SCHEMAS;ref=b.ref;obj=b.obj;array=b.array;string=b.string;enum=b.enum;did=b.did;null=b.nullable
     uuid=string(format='uuid')
+    P['/v1/me/workspace/events']={'get':{'operationId':'subscribeWorkspaceEvents','tags':['Research history'],
+        'summary':'Subscribe to committed workspace changes',
+        'description':'Authenticated SSE backed by durable RDS replay and managed Redis Pub/Sub wakeups. Subscribe before replay. Send Last-Event-ID or after to resume; both must agree if supplied. workspace_change carries WorkspaceEvent. ready, resync_required, connection_degraded and access_revoked are stream control events. Resync explicitly reloads authorized collections. Heartbeats do not read Redis or query application state.',
+        'security':[{'ApplicationBearer':[]}],
+        'parameters':[{'name':'Last-Event-ID','in':'header','required':False,'schema':string(),'example':'opaque-signed-cursor','description':'Opaque signed reconnect cursor.'},
+                      {'name':'after','in':'query','required':False,'schema':string(),'example':'opaque-signed-cursor','description':'Opaque signed reconnect cursor, equivalent to Last-Event-ID.'}],
+        'x-codeSamples':[{'lang':'Shell','label':'Subscribe','source':"curl --no-buffer http://localhost:3100/api/backend/v1/me/workspace/events -H 'Accept: text/event-stream' -H 'Authorization: Bearer <api-key-or-gateway-assertion>'"}],
+        'responses':{'200':{'description':'Committed events and stream control messages. Each workspace_change data frame is a WorkspaceEvent JSON object.',
+            'content':{'text/event-stream':{'schema':string(),'examples':{'change':{'value':'id: opaque-signed-cursor\nevent: workspace_change\ndata: '+json.dumps({
+                'schema_version':1,'event_id':'scope:1','cursor':'1','scope':'workspace','committed_at':'2026-09-30T00:00:00Z',
+                'event_type':'draft.changed','entity_id':b.DRAFT_ID,'entity_revision':2,'operation':'upsert','collections':['drafts','gaps']})+'\n\n'}}}},
+            'x-event-schema':ref('WorkspaceEvent')},
+            **{code:{'description':b.ERRORS[code]['title'],'content':b.content('Problem',{b.ERRORS[code]['code'].lower():b.ERRORS[code]},'application/problem+json')} for code in ('400','401','503')}}}}
+    b.EXCHANGES.append({'operation_id':'subscribeWorkspaceEvents','case':'request','method':'GET',
+        'path_template':'/v1/me/workspace/events',
+        'request':{'url':b.BASE+'/v1/me/workspace/events','path':{},'query':{},
+            'headers':{'Authorization':'Bearer <api-key-or-gateway-assertion>','Accept':'text/event-stream'},'body':None},
+        'responses':{'200':{'content_type':'text/event-stream','examples':{
+            'change':P['/v1/me/workspace/events']['get']['responses']['200']['content']['text/event-stream']['examples']['change']['value']}}},'curl':''})
     def op(path,method='get'):return P[path][method]
     def response_values(operation):
         for response in operation['responses'].values():
@@ -308,7 +333,7 @@ def endpoints(b,f,e):
         parameters=[b.parameter('outcome_id','path',uuid,outcome_id,True)],request_schema='PublicationInput',
         request_examples={'publish':{'visibility':'public','expected_version':0},'unpublish':{'visibility':'private','expected_version':1}},idempotent=True,errors=('400','401','403','404','409','422','429'))
     for path in ('/v1/analysis-outcomes/{outcome_id}','/v1/analysis-outcomes/{outcome_id}/publication','/v1/knowledge-gaps/{gap_id}/outcomes'):
-        op(path)['security']=[{}, {'GatewayAssertion': []}]
+        op(path)['security']=[{}, {'ApplicationBearer': []}]
     exploration={'source_gap':e['composer']['source_gap'],'knowledge_gap':f['gap'],'last_explored_at':b.NOW,'draft_id':b.DRAFT_ID,
         'scientific_accounts':{'count':1,'scope':'owner_exact_gap','as_of':b.NOW,'ranking':'curated','window_days':None}}
     b.operation('/v1/me/explorations','get','listExplorations','Research history','List your explored knowledge gaps',
@@ -363,7 +388,7 @@ def endpoints(b,f,e):
     stream['responses']['200']['content']['text/event-stream']['examples']['result_event']['value']='id: 4\nevent: result\ndata: '+b.canonical(e['event'])+'\n\n'
     for path,method in [('/v1/accounts/{dapper_id}','get'),('/v1/claims/{dapper_id}','get'),('/v1/objects/{dapper_id}','get'),('/v1/gene-sets/{dapper_id}','get'),('/v1/paragraphs/{dapper_id}','get'),('/v1/paragraphs/{dapper_id}/export','get'),('/v1/citations/{dapper_id}','get'),('/v1/citations/render','post'),('/v1/artifacts/{sha256}','get')]:
         if path not in P: continue
-        operation=op(path,method); operation['security']=[{}, {'GatewayAssertion': []}]
+        operation=op(path,method); operation['security']=[{}, {'ApplicationBearer': []}]
         operation['description']+=' A valid owner retains private access. Without owner access, only an active explicit publication snapshot authorizes this scientific resource, exact cited revisions and reachable source artifacts. Invalid supplied credentials fail even on public reads. Unpublication revokes snapshot access; job/draft/request routes remain private.'
     for example in op('/v1/accounts/{dapper_id}')['responses']['200']['content']['application/json']['examples'].values():
         example['value']['publication']=private_publication

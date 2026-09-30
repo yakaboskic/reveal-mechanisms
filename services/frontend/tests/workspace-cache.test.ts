@@ -99,3 +99,27 @@ test("running-job refresh reuses frozen requests until it discovers an unknown r
   await loadWorkspaceData("gaps", initial, "activity", signal); assert.equal(frozenReads, 0);
   requestId = "new"; await loadWorkspaceData("gaps", initial, "activity", signal); assert.equal(frozenReads, 1);
 });
+
+test("server events only invalidate affected tabs and leave unrelated cached accounts fresh", async () => {
+  const { affectedWorkspaceTabs } = await import("../src/lib/workspace-events");
+  const cache = new RevalidationCache<string, string[]>(async key => [key]);
+  cache.bind("owner"); await cache.revalidate("owner", "gaps"); await cache.revalidate("owner", "accounts");
+  cache.invalidate(affectedWorkspaceTabs({ collections: ["jobs", "gaps"] } as never));
+  assert.equal(cache.read("owner", "gaps").stale, true);
+  assert.equal(cache.read("owner", "accounts").stale, false);
+});
+
+test("multiple committed events during a fetch retain the newer invalidation until a fresh read", async () => {
+  let next = Promise.resolve(["retained"]), calls = 0;
+  const cache = new RevalidationCache<string, string[]>(async () => { calls++; return next; });
+  cache.bind("owner"); await cache.revalidate("owner", "gaps");
+  const delayed = deferred<string[]>(); next = delayed.promise;
+  const pending = cache.revalidate("owner", "gaps", true);
+  cache.invalidate(["gaps"]); cache.invalidate(["gaps"]);
+  assert.equal(cache.revalidate("owner", "gaps"), pending);
+  delayed.resolve(["older response"]); await pending;
+  assert.deepEqual(cache.read("owner", "gaps").data, ["retained"]);
+  assert.equal(cache.read("owner", "gaps").stale, true);
+  next = Promise.resolve(["current"]); await cache.revalidate("owner", "gaps");
+  assert.equal(calls, 3); assert.deepEqual(cache.read("owner", "gaps").data, ["current"]);
+});

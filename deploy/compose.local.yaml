@@ -6,7 +6,7 @@ services:
       context: ..
       dockerfile: services/frontend/Dockerfile
     env_file:
-      - path: ../.runtime/deployment/frontend.env
+      - path: ${REVEAL_RUNTIME_DIR:-../.runtime/deployment}/frontend.env
         format: raw
     ports: ["127.0.0.1:${REVEAL_DEPLOY_FRONTEND_PORT:-3000}:3000"]
     mem_limit: 1g

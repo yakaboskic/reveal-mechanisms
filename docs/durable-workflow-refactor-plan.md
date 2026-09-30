@@ -4,11 +4,13 @@ Draft — September 29, 2026; updated September 30, 2026. This document proposes
 
 **Proposed decision:** replace the dedicated Docker worker pool and Redis delivery stack with Upstash Workflow invoking bounded Python execution steps, and use Upstash Vector to store embeddings and perform vector search. Keep Upstash Box for the research agent, Aurora/RDS for authoritative application state and source records, and S3 for frozen inputs, outputs, and checkpoints. Job concurrency should be independent of backend container count. Upstash Vector is a required part of the target architecture, not an optional cache in front of local vector search.
 
-Use Redis Pub/Sub, preferably managed Upstash Redis, to push committed workspace changes to the frontend through an authenticated server-sent events (SSE) endpoint. Knowledge gaps, scientific accounts, explorations, drafts, publication state, and job summaries should update from events rather than recurring workspace refresh polling. Redis remains in the target architecture for notifications; the old Redis job queue is retired.
+Prefer a managed Upstash Redis instance over self-managed Redis for Pub/Sub, subject to the infrastructure team's agreement on service ownership, region, connectivity, capacity, and cost. Push committed workspace changes to the frontend through an authenticated server-sent events (SSE) endpoint. Knowledge gaps, scientific accounts, explorations, drafts, publication state, and job summaries should update from events rather than recurring workspace refresh polling. Redis remains in the target architecture for notifications; the old Redis job queue is retired.
+
+Use the refactor to converge on DIG's standard HTTP-service deployment: a REVEAL backend service on ECS Fargate behind the shared ALB, with durable execution and data outside replaceable tasks. This is the proposed target, not a claim that the Upstash services or REVEAL's platform integration have been approved or deployed. Section 9 distinguishes the published platform contract from local integration work.
 
 ## 1. Target deployment and scope
 
-Deploy the existing Next.js frontend and a Python backend that serves both application requests and authenticated workflow endpoints. Initially, the backend can use the existing deployable image and EC2 hosting approach. Docker remains useful for packaging Python, DAPPER, and pinned scientific source assets. There is no dedicated worker container per concurrent job.
+Keep the existing Next.js frontend and deploy the Python backend, serving both application requests and authenticated workflow endpoints, as a DIG ECS Fargate HTTP service. Reuse the existing deployable image and service-bundling work where compatible. Docker remains useful for packaging Python, DAPPER, and pinned scientific source assets; backend replicas scale HTTP and computation capacity independently of concurrent Box jobs. There is no dedicated worker container per concurrent job. The earlier EC2/Compose approach remains a development or transition option rather than the target infrastructure shape.
 
 Upstash Workflow schedules, retries, and resumes steps. The Python backend still performs evidence collection, validation, review, and persistence. A workflow does not make those computations run inside Upstash's infrastructure. Its main benefit here is releasing application execution capacity while Box is running.
 
@@ -16,7 +18,7 @@ Upstash Vector serves stored embeddings and semantic nearest-neighbor queries. K
 
 ```mermaid
 flowchart LR
-    UI[Next.js frontend] --> API[Python backend]
+    UI[Next.js frontend] --> API[Python backend on DIG ECS Fargate]
     API -->|Job and dispatch intent| DB[(Aurora / RDS)]
     API -->|Trigger after commit| WF[Upstash Workflow]
     WF -->|Authenticated step requests| API
@@ -30,7 +32,7 @@ flowchart LR
     API -->|Prepare, launch, inspect, collect| BOX[Upstash Box]
     BOX --> AGENT[Existing isolated research agent]
     API --> REVIEW[Independent scientific reviewer]
-    API -->|Publish committed changes| REDIS[(Redis Pub/Sub)]
+    API -->|Publish committed changes| REDIS[(Upstash Redis Pub/Sub)]
     REDIS -->|Notify subscribed backend instances| PUSH[Authenticated SSE bridge]
     DB -->|Authorized event replay| PUSH
     PUSH -->|Workspace change events through gateway| UI
@@ -177,6 +179,16 @@ On Vector failure, return an explicit semantic-search availability error with bo
 
 ## 8. Redis Pub/Sub and workspace events
 
+### Managed Redis deployment
+
+Use Upstash Redis as the preferred production notification service, removing the need to run, patch, size, and recover a REVEAL-owned Redis container. Keep notifications behind a small Redis adapter so deployment configuration determines the endpoint. A local Redis instance can remain a development convenience. Upstash Redis, Vector, Workflow/QStash, and Box have separate roles and credentials; adopting Redis does not replace the other services or turn Pub/Sub into a durable work queue.
+
+The current [platform deployment draft](/Users/cyakaboski/src/research/reveal-mechanisms/docs/platform-deployment.md) already proposes Upstash Redis over TLS TCP for the existing Streams queue. Preserve that as an independent near-term deployment option. This refactor changes the eventual workload to Pub/Sub and retires the queue after legacy jobs drain. Do not move active queue consumers between Redis endpoints as part of notification cutover. Use separate notification configuration and channels during overlap; decide whether to reuse the managed database or isolate notifications based on measured capacity and operational needs.
+
+In Phase 0, record the selected region near the backend, database ownership, environment isolation, supported subscriber transport, connection/message limits, expected event fanout, and measured costs. Prefer separate QA and production instances and credentials. Keep TLS credentials in backend Secrets Manager bindings, rotate them with subscriber reconnect and RDS replay, and never expose them through frontend configuration. Start by evaluating the existing TLS TCP client on Fargate; REST streaming is also supported, but its behavior must be verified with the selected client. [Upstash Redis connection options](https://upstash.com/docs/redis/howto/connect-client), [REST Pub/Sub](https://upstash.com/docs/redis/features/restapi#subscribe--publish-commands).
+
+Redis availability affects notification latency, not the authority of committed application state. Retain the RDS event log/outbox and replay guarantees below even with a managed provider. Alert on subscriber disconnects, publish failures, outbox age, throttling, and connection pressure. A provider outage must not discard accepted scientific results or quietly reinstate permanent workspace polling.
+
 ### Commit, publish, and deliver
 
 Write an authorized workspace event and notification outbox record in the same RDS transaction as each observable mutation, including workflow completion, paragraph completion, draft changes, exploration changes, publication/withdrawal, and catalog activation. Attempt publication after commit with bounded I/O. The scheduled reconciler retries unpublished outbox records; a Redis outage must neither roll back an already committed scientific result nor lose its notification permanently.
@@ -207,7 +219,41 @@ Remove the recurring 10/30-second workspace refresh timers in normal operation. 
 
 Extend the existing job SSE path to wake from Redis notifications too: it currently reads RDS every second. Retain its public event contract and replay semantics, while preventing a workspace-wide update or full list fetch for every agent token/tool event. Workspace job summaries should update on relevant state/result transitions; detailed activity stays in its job stream.
 
-## 9. Implementation phases and reviewable changes
+## 9. Align the backend with DIG service platform
+
+### Verified platform contract and existing integration
+
+Reviewed `broadinstitute/dig-service-platform` at published `main` commit `7810744ba7f915e23ad88ea5e008297b14efe67e` on September 30, 2026. The repository defines one HTTP service per service directory, with its own image and `service.yaml`, deployed to ECS Fargate behind the shared ALB. GitHub Actions uses AWS OIDC; `main` deploys QA and production promotion uses the `prod` environment's approval gate. These are repository conventions, not evidence that REVEAL is already registered or that external providers have infrastructure approval. [Platform README](https://github.com/broadinstitute/dig-service-platform/blob/7810744ba7f915e23ad88ea5e008297b14efe67e/README.md), [runbook](https://github.com/broadinstitute/dig-service-platform/blob/7810744ba7f915e23ad88ea5e008297b14efe67e/docs/runbook.md).
+
+The local platform checkout also contains an **uncommitted REVEAL integration** and changes to its runtime schema/renderer. The matching REVEAL [deployment draft](/Users/cyakaboski/src/research/reveal-mechanisms/docs/platform-deployment.md) describes the API, two workers, a dispatcher, managed Redis, a service bundle, and RDS networking. Treat this as existing work to reconcile during implementation. The published registry currently contains `hello`, `kg`, and `genesets`; it does not yet register REVEAL. The proposed `runtime` block and worker/release renderers are not part of the reviewed published platform contract. Do not overwrite that integration or assume it is deployed.
+
+The architectural fit is an inference from that contract: bounded HTTP workflow steps let the backend use the normal service template, while external durable state makes task replacement safe. Managed Redis and Vector reduce the application services operated alongside that API. Fargate can also host background services; the reason to retire the dedicated workers is to simplify REVEAL's execution lifecycle, not a platform prohibition on workers. Keep the frontend on its current Vercel deployment initially; this backend alignment does not require moving it.
+
+### Proposed REVEAL deployment contract
+
+| Area | Plan for the refactor |
+| --- | --- |
+| Service packaging | Reuse the allowlisted service-local bundle and pinned scientific assets. Supply a Dockerfile, tests, and `service.yaml` in the platform's `reveal/` directory. Record the REVEAL source revision and bundle hashes so release and rollback identify the code actually built. |
+| HTTP routing | Use `/api/reveal/*`, honoring `SERVICE_PATH_PREFIX` for application, workflow, SSE, artifact, health, and documentation routes. Reserve an available listener priority through the registry; the draft's priority 40 is a proposal, not a registration. |
+| Runtime configuration | Honor platform-provided `SERVICE_NAME`, `SERVICE_ENV`, `PORT`, and `SERVICE_PATH_PREFIX`. Declare architecture, valid Fargate CPU/memory, task limits, health paths, grace periods, and scaling targets in `service.yaml`; measure sizes rather than transferring worker allocations unchanged. |
+| State and scratch | Persist all workflow checkpoints, events, and results in RDS/S3 and serving embeddings in Upstash Vector. Temporary paths are scoped to one invocation. Preserve required read-only-root, init, bounded scratch, and shutdown behavior through a reviewed platform runtime extension or an agreed supported equivalent. |
+| Secrets and access | Use Secrets Manager ARN bindings for backend credentials and the task role for scoped AWS access, including retained S3 object versions. Reuse or adapt the RDS client security-group work. Confirm outbound TLS access to Upstash, embedding, and model services; managed Redis removes the need to host a Redis service in the VPC. |
+| Delivery and promotion | Register the service, validation/tests, QA/prod workflow jobs, and manual deploy choices according to the runbook. Use the platform's ECR build, CloudFormation render/deploy, rollout verification, and rollback workflow. Retain platform production approval requirements. |
+| Operations | Send structured job/run/stage identifiers to CloudWatch. Track workflow age, cleanup and notification backlogs, dependency failures, and SSE connection counts alongside the platform's request/CPU metrics. Keep Box concurrency and paid-call budgets independent of ECS replica count. |
+
+The runtime fields, supplied environment variables, Secrets Manager injection, task policy, health probes, and scaling behavior are grounded in the reviewed [schema](https://github.com/broadinstitute/dig-service-platform/blob/7810744ba7f915e23ad88ea5e008297b14efe67e/platform/dig_platform/schema.py), [renderer](https://github.com/broadinstitute/dig-service-platform/blob/7810744ba7f915e23ad88ea5e008297b14efe67e/platform/dig_platform/render.py), and [service stack](https://github.com/broadinstitute/dig-service-platform/blob/7810744ba7f915e23ad88ea5e008297b14efe67e/infra/service-stack.yaml). Release behavior comes from the [deploy workflow](https://github.com/broadinstitute/dig-service-platform/blob/7810744ba7f915e23ad88ea5e008297b14efe67e/.github/workflows/deploy-service.yml). Revalidate these against the platform revision selected for implementation.
+
+### Integration decisions and checks before cutover
+
+- **Public callback and stream path.** The published public HTTPS path is `https://api-<env>.hugeampkpnbi.org/api/reveal/...`; TLS terminates at the existing portal nginx proxy, which forwards `/api/` unchanged to the shared ALB. Configure Workflow callbacks against the backend's public HTTPS URL, independent of browser sessions. Verify QStash signatures and canonical URL handling through nginx and the ALB; retain the separate gateway authorization for user-facing routes. The platform's HTTP ALB smoke test alone does not verify this full path.
+- **Streaming and replacement.** Verify buffering, idle timeouts, heartbeats, cursor forwarding, and auth renewal across browser → Next.js → nginx → ALB → backend. Published task stop timeout and target deregistration delay are both 30 seconds, with stickiness disabled. Close/reconnect SSE safely during replacement and make interrupted workflow steps retryable; do not extend drain time to the full agent runtime. Include open-stream count and memory pressure when sizing because request/CPU scaling alone may not capture stream capacity.
+- **Readiness.** Use prefixed liveness and readiness routes, retain `curl` for the platform's container probe, and verify cold-start time under real dependencies. Define degraded behavior explicitly: Redis disconnection must not make every otherwise healthy API task unusable, while unavailable authoritative storage or invalid required configuration must not report full readiness. Verify separate container start-period and ALB health-grace limits.
+- **Environment isolation and provider ownership.** The current local deployment draft intentionally targets a single QA-labelled service using existing application state. That is a transitional choice, not independent QA/prod isolation. Before enabling both platform environments, establish separate application/job/event namespaces, S3 write scopes, Vector snapshots/indexes, Redis credentials/channels, and workflow callback destinations. Agree who owns and pays for each Upstash service and who handles credential rotation and incidents; the platform repository does not establish that policy.
+- **Existing integration handoff.** Keep useful bundle, prefix, secret, network, and runtime work. Once workflow execution passes migration checks, remove the need for `render_workers.py` and simplify `render_release.py` toward the standard HTTP deployment. Resolve any remaining runtime/secret/network extensions as explicit platform changes before enabling stock deployment jobs. Roll back application, workflow, and vector versions coherently; a container-image rollback alone cannot reverse a database migration or retire an active workflow definition.
+
+Phase 0 should produce a small infrastructure handoff: reviewed service manifest and rendered-template diff, source/build provenance, routing and authentication contract, dependency/secret bindings, environment isolation map, measured capacity assumptions, and rollout/rollback steps. These are future implementation deliverables; this plan does not provision resources or alter platform files.
+
+## 10. Implementation phases and reviewable changes
 
 ### Phase 0 — Verify the integration contract
 
@@ -215,11 +261,13 @@ Pin compatible Workflow and Box SDK versions. Build an isolated, non-scientific 
 
 Also pin the Vector SDK and verify raw-vector ingestion/query/fetch, namespaces, filters, cosine score conversion, readback precision, indexing visibility, request limits, and credentials. Establish the frozen search-quality baseline and candidate-expansion policy using existing EAGGL/DisMech embeddings.
 
-Verify Redis publish/subscribe across two backend instances and authenticated SSE through Next.js, including connection renewal, permission checks, disconnect replay, and publish-after-commit recovery. Measure commit-to-visible-update latency and steady-state workspace fetch counts.
+Verify managed Upstash Redis publish/subscribe across two backend instances and authenticated SSE through Next.js and the DIG nginx/ALB path, including connection renewal, permission checks, disconnect replay, credential rotation, and publish-after-commit recovery. Measure commit-to-visible-update latency, steady-state workspace fetch counts, subscription limits, and provider cost under representative fanout.
+
+Reconcile the existing DIG integration with Section 9. Produce the infrastructure handoff, verify the service bundle and manifest against the selected platform revision, and identify any required platform extensions. Confirm callback ingress, dependency egress, RDS access, environment isolation, and ownership of managed Upstash services. Keep these decisions separate from approval to provision or deploy.
 
 Measure preparation, bootstrap, artifact transfer, validation, and individual review-call duration/memory. Record endpoint limits, workflow history/payload limits, poll request counts, and API responsiveness. The current offline collector benchmark is not a production sizing result.
 
-**Exit:** a written integration contract and passing probe demonstrate that waiting survives backend restart without holding a handler open. Unresolved provider semantics have an explicit recovery policy.
+**Exit:** a written integration contract and passing probe demonstrate that waiting survives backend restart without holding a handler open. The DIG deployment contract and managed Redis choice have resolved implementation requirements or explicitly recorded open infrastructure decisions. Unresolved provider semantics have an explicit recovery policy.
 
 ### Phase 1 — Extract operations and add persisted execution state
 
@@ -263,6 +311,8 @@ Connect `WorkspaceCacheProvider` and `workspace-events.ts` to the stream, add ta
 
 ### Phase 6 — Pilot and cut over
 
+Pilot the backend on the agreed DIG Fargate service using isolated test state. Verify the complete HTTPS callback/SSE path and task replacement, then use the platform's promotion process for the live release. Do not activate a second environment against the transitional draft's shared primary state. Keep hosting cutover, execution routing, retrieval activation, and notification rollout independently observable and reversible where their data contracts permit.
+
 Use the existing isolated application-table approach for verification; do not point two execution systems at unpartitioned jobs. Freeze runner/version/namespace on each job and verify legacy claimers exclude workflow-owned jobs.
 
 For the live cutover, pause new submissions briefly, drain legacy jobs and unresolved cleanup, enable workflow routing for new jobs, and reopen submissions. Keep the old path available until completion/recovery checks pass. During any deliberate overlap, enforce provider caps across both execution systems rather than giving each its own full allowance.
@@ -277,13 +327,13 @@ Pin workflow endpoint versions for active runs. A deployment must retain compati
 
 ### Phase 7 — Retire the worker deployment
 
-Remove worker, legacy queue Redis, and Redis job-dispatcher services from the deployment configuration after legacy drain is verified. Retain/configure managed Redis Pub/Sub for workspace and job notifications, with separate notification settings and credentials. Update deployment scripts, readiness checks, admin views, and documentation to report workflow delivery, stage age, active Boxes, review attempts, cleanup backlog, and notification health. Remove worker-specific settings from the default deployment while preserving any explicitly supported legacy development tooling.
+Remove worker, self-managed queue Redis, and Redis job-dispatcher services from the deployment configuration after legacy drain is verified. Retire any legacy Streams queue in managed Redis separately; do not delete a database still serving notifications. Retain/configure Upstash Redis Pub/Sub for workspace and job notifications, with separate notification settings and credentials. Remove the obsolete DIG worker-stack deployment and simplify release integration to the reviewed HTTP service contract. Update deployment scripts, readiness checks, admin views, and documentation to report workflow delivery, stage age, active Boxes, review attempts, cleanup backlog, and notification health. Remove worker-specific settings from the default deployment while preserving any explicitly supported legacy development tooling.
 
-Archive or remove unused queue/worker modules only after their callers and recovery dependencies are accounted for. Keep historical job/event/artifact records readable. Update `docs/deployment-plan.md` and `docs/local-deployment.md` to reflect the delivered architecture.
+Archive or remove unused queue/worker modules only after their callers and recovery dependencies are accounted for. Keep historical job/event/artifact records readable. Update `docs/deployment-plan.md`, `docs/platform-deployment.md`, `docs/cloud-deployment.md`, and `docs/local-deployment.md` to reflect the delivered architecture and distinguish the supported DIG deployment from historical EC2/worker instructions.
 
 **Exit:** job execution and recovery no longer require the dedicated worker or Redis job queue. Live workspace delivery uses the configured Redis Pub/Sub service and durable RDS replay.
 
-## 10. Acceptance and failure-injection checks
+## 11. Acceptance and failure-injection checks
 
 Use mocks and the existing deterministic/non-scientific probes first, then bounded live research runs. These are required implementation checks, not actions performed while drafting this plan.
 
@@ -303,15 +353,19 @@ Use mocks and the existing deterministic/non-scientific probes first, then bound
 14. **Workspace push coverage:** exercise gaps, scientific accounts, paragraphs, drafts, explorations, publication/withdrawal, and catalog changes from workflows and other browser sessions. Updates, removals, and dependent counts appear through events without full-page reloads or periodic workspace fetching.
 15. **Notification durability:** interrupt after RDS commit before publish, duplicate/reorder publishes, disconnect Redis/SSE, restart backend instances, overflow a slow subscriber, and expire a replay cursor. Outbox repair/replay or explicit resync restores the correct state without phantom pre-commit events or missed final updates.
 16. **Frontend and access:** test an event arriving during revalidation, duplicate local/server notifications, multiple viewers/backend instances, session expiration, logout/login, ownership changes, and access revocation. No stale response clears a newer invalidation or leaks another principal's data; drafts and navigation state survive updates. An idle connected workspace has zero periodic list-refresh requests, and job SSE no longer reads unchanged RDS events once per second.
+17. **Managed Redis operations:** verify TLS, credential rotation, reconnect and replay, throttling/connection exhaustion, and environment separation against the chosen Upstash service. Run without self-managed Redis; notification outages preserve authoritative writes and recover pending notifications. Retiring legacy queue keys/services must not interrupt Pub/Sub clients.
+18. **DIG platform compatibility:** validate/render the service against the selected platform revision, build its declared architecture from the service-local bundle, and verify prefixed health, authorized API/artifacts, signed workflow callbacks, and SSE through the actual public HTTPS path. Replace/scale tasks during active probes and browser streams with no shared local disk or sticky-session dependence. Verify source provenance, secret/IAM bindings, environment isolation, production gating, and rollback with active workflow versions retained.
 
 Measure total and per-stage latency, progress/cancellation latency, request counts, retry amplification, actual provider usage, reserved spend, database pressure, and orphan/cleanup counts. Agree numerical service targets from Phase 0 measurements; this draft makes no unmeasured throughput or cost-saving claim.
 
-## 11. Completion criteria
+## 12. Completion criteria
 
 The refactor is complete when one supported backend deployment can serve application requests and execute bounded workflow steps, concurrent Box jobs are controlled independently of backend container count, and no application execution slot is held throughout an agent run. Recovery, cancellation, trusted validation, review budgets, progress history, and durable artifacts must work with the dedicated worker pool and legacy Redis job queue stopped.
 
 Completion also requires Upstash Vector to hold the serving embedding corpus and execute all semantic candidate retrieval, including automatic suggestions and the semantic leg of hybrid search. Full-corpus vector blobs in MySQL and NumPy matrix scans must no longer be production serving dependencies. The established source bindings, per-context score semantics, and frozen evidence provenance must remain verifiable.
 
 Workspace knowledge gaps, scientific accounts, explorations, drafts, publication state, and job summaries must refresh from committed Redis-backed events consumed by the frontend, with authorized replay after disconnects and no recurring workspace data polling during healthy streaming operation.
+
+The preferred deployment outcome is the reviewed DIG HTTP service on ECS Fargate, plus managed Upstash Redis for notifications, with no REVEAL-owned production Redis container or dedicated worker/dispatcher service. The service must follow platform packaging, routing, secrets, health, promotion, and rollback conventions and pass the actual callback/streaming path checks. Record any infrastructure-agreed deviation explicitly instead of describing an unverified or unapproved option as completed.
 
 Start with Phase 0 and Phase 1. The smallest useful first review should establish the integration contract and extract lifecycle boundaries; replacing all of `worker.py` in one change would make the behavior and migration harder to verify.

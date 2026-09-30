@@ -47,7 +47,7 @@ function ActivityEntry({ row, active, now, step, onInspect }: { row: ActivityRow
 }
 export function Activity({ initial, onJob }: { initial: Schema<"Job">; onJob: (job: Schema<"Job">) => void }) {
   const paragraph = initial.kind === "paragraph";
-  const labels = paragraph ? { ...stageLabels, preparation: "Statement preparation", research: "Writing statement", validation: "Checking claims and citations", saving: "Saving statement" } : stageLabels;
+  const labels = paragraph ? { ...stageLabels, preparation: "Statement preparation", research: "Writing statement", collection: "Collecting statement", validation: "Checking claims and citations", saving: "Saving statement" } : stageLabels;
   const [job, setJob] = useState(initial);
   const [events, setEvents] = useState<Schema<"JobEvent">[]>([]);
   const [connection, setConnection] = useState("Connecting to activity…");

@@ -3,7 +3,6 @@
 .workspace-dashboard .workspace-topbar{display:flex;align-items:center;min-height:40px;margin-bottom:30px;font-size:12px}
 .workspace-dashboard .workspace-topbar a{display:inline-flex;align-items:center;min-height:40px;color:#5a7090;line-height:1.6}
 .workspace-dashboard .workspace-refresh{margin-left:auto;min-height:40px;color:#5a7090}
-.workspace-dashboard .workspace-refresh-status{font-size:12px;color:#70829a;margin:16px 0 0}
 .workspace-dashboard .workspace-heading h1{font-size:26px;line-height:1.35;font-weight:500;letter-spacing:-.5px;margin:0 0 9px}
 .workspace-dashboard .workspace-heading>p{color:#6f8098;font-size:13px;line-height:1.8;margin:0 0 26px}
 .workspace-dashboard .workspace-continuity{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:16px 18px;background:#f7f9fc;border-radius:10px;margin:0 0 24px}

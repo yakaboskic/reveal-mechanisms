@@ -1,4 +1,4 @@
-"""Gateway assertions are credentials; research payloads never choose owners."""
+"""Application credentials resolve existing principals; payloads never choose owners."""
 import hmac
 import os
 import time
@@ -28,16 +28,33 @@ def service_authority(authorization):
         raise Problem(403, 'SERVICE_IDENTITY_REQUIRED', 'A trusted gateway service credential is required.')
 
 def principal(tx, authorization):
-    if not authorization or not authorization.startswith('Bearer '):
+    if not authorization or not authorization.startswith('Bearer ') or not authorization[7:]:
         raise Problem(401, 'SESSION_EXPIRED', 'Continue with a registered or anonymous session.')
-    claims = decode_assertion(authorization[7:])
-    row = tx.get('principal', claims.get('sub', ''))
+    token = authorization[7:]
+    if token.startswith('rvl_'):
+        from .api_keys import authenticate
+        identity = authenticate(token); claims = None
+    else:
+        claims = decode_assertion(token); identity = claims.get('sub', '')
+    row = tx.get('principal', identity)
     if not row or row['data'].get('retired') or (row['data']['me']['workspace_expires_at'] and row['data']['me']['workspace_expires_at'] <= now()):
         raise Problem(401, 'SESSION_EXPIRED', 'This workspace session is expired or retired.')
     me = row['data']['me']
-    if claims.get('principal_kind') != me['principal_kind']:
+    if claims is not None and claims.get('principal_kind') != me['principal_kind']:
         raise Problem(401, 'SESSION_EXPIRED', 'Refresh the workspace session.')
     return me
+
+
+def credential_expiry(authorization):
+    """Credential-only bound; event replay independently rechecks its RDS user."""
+    if not authorization or not authorization.startswith('Bearer ') or not authorization[7:]:
+        raise Problem(401, 'SESSION_EXPIRED', 'Continue with a registered or anonymous session.')
+    token = authorization[7:]
+    if token.startswith('rvl_'):
+        from .api_keys import authenticate
+        authenticate(token)
+        return None  # Opaque keys use the ordinary bounded SSE renewal window.
+    return decode_assertion(token)['exp']
 
 def publication_principal(tx, authorization, visibility):
     me = principal(tx, authorization)

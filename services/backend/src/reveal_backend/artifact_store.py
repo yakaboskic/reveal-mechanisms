@@ -6,16 +6,25 @@ is retained for the existing developer workflow and isolated unit tests.
 from __future__ import annotations
 
 import base64
+from collections import OrderedDict, deque
+from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
 import hashlib
 import json
 import os
 from pathlib import Path, PurePosixPath
 import re
+from threading import Lock
 from urllib.parse import quote
 from uuid import uuid4
 
 from .runtime_config import setting
+
+VERIFIED_PUT_CACHE_SIZE = 4096
+SNAPSHOT_CONCURRENCY = 4
+SNAPSHOT_PENDING_BYTES = 16 * 1024 * 1024
+RESTORE_CONCURRENCY = 4
+RESTORE_PENDING_BYTES = 16 * 1024 * 1024
 
 
 class StorageUnavailable(RuntimeError):
@@ -58,6 +67,12 @@ class S3Store:
             signer = client if public == endpoint else boto3.client('s3', endpoint_url=public, **options)
         self.client, self.signer = client, signer or client
         self.maximum = int(setting('REVEAL_ARTIFACT_MAX_BYTES', str(128 * 1024 * 1024)))
+        # Keep only confirmed immutable version references, never artifact bytes.
+        # This store instance is scoped to its bucket, prefix and client settings.
+        self._verified_puts = OrderedDict()
+        self._cache_lock = Lock()
+        # Duplicate content submitted concurrently shares one verification/upload.
+        self._put_locks = tuple(Lock() for _ in range(32))
 
     def check(self):
         try:
@@ -86,6 +101,23 @@ class S3Store:
         key = self.prefix + 'artifacts/sha256/' + sha[:2] + '/' + sha
         ref = {'store': 's3', 'bucket': self.bucket, 'key': key, 'sha256': sha,
                'size_bytes': len(data), 'content_type': content_type}
+        with self._put_locks[int(sha[:2], 16) % len(self._put_locks)]:
+            cache_key = (self.bucket, key)
+            with self._cache_lock:
+                verified = self._verified_puts.get(cache_key)
+                if verified is not None and verified[1] == len(data):
+                    self._verified_puts.move_to_end(cache_key)
+                    return dict(ref, version_id=verified[0])
+            ref = self._put_verified(data, ref)
+            with self._cache_lock:
+                self._verified_puts[cache_key] = (ref['version_id'], ref['size_bytes'])
+                self._verified_puts.move_to_end(cache_key)
+                while len(self._verified_puts) > VERIFIED_PUT_CACHE_SIZE:
+                    self._verified_puts.popitem(last=False)
+            return ref
+
+    def _put_verified(self, data, ref):
+        key, sha = ref['key'], ref['sha256']
         try:
             # Avoid another version for identical immutable bytes on every
             # checkpoint. Integrity is established by a server-verified SHA-256.
@@ -98,13 +130,15 @@ class S3Store:
             encoded = base64.b64encode(bytes.fromhex(sha)).decode()
             if (previous and previous.get('ContentLength') == len(data)
                     and previous.get('ChecksumSHA256') == encoded and previous.get('VersionId') not in (None, 'null')):
-                return dict(ref, version_id=previous['VersionId'])
+                ref = dict(ref, version_id=previous['VersionId'])
+                self.validate(ref)
+                return ref
             options = {}
             encryption = setting('REVEAL_S3_ENCRYPTION', 'AES256')
             if encryption:
                 options['ServerSideEncryption'] = encryption
             result = self.client.put_object(Bucket=self.bucket, Key=key, Body=data,
-                ContentType=content_type, ChecksumSHA256=encoded, Metadata={'sha256': sha}, **options)
+                ContentType=ref['content_type'], ChecksumSHA256=encoded, Metadata={'sha256': sha}, **options)
             ref['version_id'] = result.get('VersionId')
             self.validate(ref)
             return ref
@@ -138,51 +172,172 @@ class S3Store:
         except Exception as exc:
             raise StorageUnavailable('Artifact download is unavailable') from exc
 
-    def snapshot(self, root):
-        root = Path(root).resolve()
-        files = []
-        total = 0
-        for path in sorted(root.rglob('*')):
-            if path.is_symlink():
-                raise StorageUnavailable('Checkpoint contains a symbolic link')
-            if not path.is_file():
-                continue
-            data = path.read_bytes()
-            total += len(data)
-            if len(files) >= 10000 or total > int(setting('REVEAL_WORKSPACE_MAX_BYTES', str(256 * 1024 * 1024))):
-                raise StorageUnavailable('Checkpoint exceeds the workspace limit')
-            files.append({'path': path.relative_to(root).as_posix(), 'storage': self.put(data)})
-        manifest = {'format': 'reveal.workspace/1', 'files': files}
-        return self.put(json.dumps(manifest, sort_keys=True, separators=(',', ':')).encode(), 'application/json')
+    @staticmethod
+    def workspace_path(name):
+        if (not isinstance(name, str) or not name or PurePosixPath(name).is_absolute()
+                or any(part in ('', '.', '..') for part in name.split('/')) or '\\' in name):
+            raise StorageUnavailable('Unsafe workspace manifest path')
+        return name
 
-    def restore(self, ref, root):
-        root = Path(root).resolve()
-        manifest = json.loads(self.get(ref))
-        if manifest.get('format') != 'reveal.workspace/1' or not isinstance(manifest.get('files'), list):
+    def workspace_manifest(self, ref):
+        """Validate immutable file references without materializing a workspace."""
+        try:
+            manifest = json.loads(self.get(ref))
+        except (ValueError, TypeError) as exc:
+            raise StorageUnavailable('Invalid workspace manifest') from exc
+        if (not isinstance(manifest, dict) or manifest.get('format') != 'reveal.workspace/1'
+                or not isinstance(manifest.get('files'), list)):
             raise StorageUnavailable('Invalid workspace manifest')
-        seen, total, targets = set(), 0, []
+        seen, total = set(), 0
         for item in manifest['files']:
-            name = item['path']
-            relative = PurePosixPath(name)
-            target = root / name
-            if (not name or name in seen or len(seen) >= 10000 or relative.is_absolute()
-                    or any(part in ('', '.', '..') for part in name.split('/')) or '\\' in name
-                    or not target.resolve().is_relative_to(root) or target.is_symlink()):
+            if not isinstance(item, dict) or not isinstance(item.get('storage'), dict):
+                raise StorageUnavailable('Invalid workspace file reference')
+            name = self.workspace_path(item.get('path'))
+            if name in seen or len(seen) >= 10000:
                 raise StorageUnavailable('Unsafe workspace manifest path')
             self.validate(item['storage'])
             seen.add(name)
             total += item['storage']['size_bytes']
             if total > int(setting('REVEAL_WORKSPACE_MAX_BYTES', str(256 * 1024 * 1024))):
                 raise StorageUnavailable('Restored workspace exceeds its limit')
+        if any(str(parent) in seen for name in seen for parent in PurePosixPath(name).parents if str(parent) != '.'):
+            raise StorageUnavailable('Workspace file conflicts with a parent path')
+        return manifest
+
+    def read_workspace_file(self, ref, name):
+        """Read one exact checkpoint object, without downloading its siblings."""
+        name = self.workspace_path(name)
+        for item in self.workspace_manifest(ref)['files']:
+            if item['path'] == name:
+                return self.get(item['storage'])
+        raise StorageUnavailable('Workspace file is missing')
+
+    def replace_workspace_files(self, ref, updates):
+        """Commit changed objects and a manifest while retaining existing versions."""
+        manifest = self.workspace_manifest(ref)
+        files = {item['path']: item['storage'] for item in manifest['files']}
+        if not isinstance(updates, dict):
+            raise StorageUnavailable('Invalid workspace file updates')
+        sizes = {name: value['size_bytes'] for name, value in files.items()}
+        for name, data in updates.items():
+            self.workspace_path(name)
+            if not isinstance(data, bytes) or len(data) > self.maximum:
+                raise StorageUnavailable('Artifact exceeds the configured size limit')
+            sizes[name] = len(data)
+        if (len(sizes) > 10000 or sum(sizes.values()) >
+                int(setting('REVEAL_WORKSPACE_MAX_BYTES', str(256 * 1024 * 1024)))):
+            raise StorageUnavailable('Checkpoint exceeds the workspace limit')
+        if any(str(parent) in sizes for name in sizes for parent in PurePosixPath(name).parents if str(parent) != '.'):
+            raise StorageUnavailable('Workspace file conflicts with a parent path')
+        changed = False
+        for name, data in updates.items():
+            previous = files.get(name)
+            if previous and previous['size_bytes'] == len(data) and previous['sha256'] == checksum(data):
+                continue
+            files[name] = self.put(data)
+            changed = True
+        if not changed:
+            return ref
+        updated = {'format': 'reveal.workspace/1',
+                   'files': [{'path': name, 'storage': files[name]} for name in sorted(files)]}
+        return self.put(json.dumps(updated, sort_keys=True, separators=(',', ':')).encode(), 'application/json')
+
+    def snapshot(self, root):
+        root = Path(root).resolve()
+        files = []
+        total = 0
+        maximum = int(setting('REVEAL_WORKSPACE_MAX_BYTES', str(256 * 1024 * 1024)))
+        pending = deque()
+        pending_bytes = 0
+
+        def finish_one():
+            nonlocal pending_bytes
+            name, future, size = pending.popleft()
+            files.append({'path': name, 'storage': future.result()})
+            pending_bytes -= size
+
+        # Bound submitted data as well as threads. A file larger than the byte
+        # window is sent alone; otherwise at most one small window is buffered.
+        # Consume futures in path order to keep the manifest deterministic.
+        with ThreadPoolExecutor(max_workers=SNAPSHOT_CONCURRENCY) as pool:
+            for path in sorted(root.rglob('*')):
+                if path.is_symlink():
+                    raise StorageUnavailable('Checkpoint contains a symbolic link')
+                if not path.is_file():
+                    continue
+                size = path.stat().st_size
+                if len(files) + len(pending) >= 10000 or size > self.maximum or total + size > maximum:
+                    raise StorageUnavailable('Checkpoint exceeds the workspace limit')
+                while pending and (len(pending) >= SNAPSHOT_CONCURRENCY or pending_bytes + size > SNAPSHOT_PENDING_BYTES):
+                    finish_one()
+                with path.open('rb') as source:
+                    data = source.read(size + 1)
+                if len(data) != size:
+                    raise StorageUnavailable('Checkpoint file changed during capture')
+                total += size
+                pending.append((path.relative_to(root).as_posix(), pool.submit(self.put, data), size))
+                pending_bytes += size
+                del data
+            while pending:
+                finish_one()
+        manifest = {'format': 'reveal.workspace/1', 'files': files}
+        return self.put(json.dumps(manifest, sort_keys=True, separators=(',', ':')).encode(), 'application/json')
+
+    def restore(self, ref, root, *, cancelled=None):
+        def check_cancelled():
+            if cancelled and cancelled(): raise StorageUnavailable('Workspace restore cancelled before further writes')
+        check_cancelled()
+        root = Path(root).resolve()
+        manifest = self.workspace_manifest(ref)
+        check_cancelled()
+        targets = []
+        for item in manifest['files']:
+            name = item['path']
+            target = root / name
+            if not target.resolve().is_relative_to(root) or target.is_symlink():
+                raise StorageUnavailable('Unsafe workspace manifest path')
             targets.append((target, item['storage']))
-        for target, storage in targets:
+        pending = deque()
+        pending_bytes = 0
+
+        def download(storage):
+            check_cancelled()
+            return self.get(storage)
+
+        def finish_one():
+            nonlocal pending_bytes
+            target, future, size = pending.popleft()
+            data = future.result()
+            check_cancelled()
             target.parent.mkdir(parents=True, exist_ok=True)
             temporary = target.with_name('.restore-' + uuid4().hex)
             try:
-                temporary.write_bytes(self.get(storage))
+                temporary.write_bytes(data)
+                check_cancelled()
                 temporary.replace(target)
             finally:
                 temporary.unlink(missing_ok=True)
+            pending_bytes -= size
+
+        # Download immutable, checksum-verified bytes in a bounded window. Only
+        # this coordinating thread writes files, and pool shutdown drains every
+        # in-flight response before callers can remove the scratch directory.
+        # An object larger than the byte window is downloaded alone.
+        with ThreadPoolExecutor(max_workers=RESTORE_CONCURRENCY) as pool:
+            try:
+                for target, storage in targets:
+                    check_cancelled()
+                    size = storage['size_bytes']
+                    while pending and (len(pending) >= RESTORE_CONCURRENCY or pending_bytes + size > RESTORE_PENDING_BYTES):
+                        finish_one()
+                    check_cancelled()
+                    pending.append((target, pool.submit(download, storage), size))
+                    pending_bytes += size
+                while pending:
+                    finish_one()
+            finally:
+                for _, future, _ in pending:
+                    future.cancel()
 
 
 @lru_cache(maxsize=8)
