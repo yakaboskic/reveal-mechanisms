@@ -2,7 +2,7 @@
 
 > Durable workflow migration: the supported target is now the HTTP-only service described in [durable-workflow-runtime.md](durable-workflow-runtime.md). The worker/Redis Streams instructions below are retained as historical migration and rollback guidance; they do not describe the new default `deploy/compose.yaml`. Live release status must be verified separately.
 
-**Current direction:** use the [DIG service platform](platform-deployment.md) HTTP-only service with managed Workflow delivery, Vector retrieval and Redis Pub/Sub. The QA backend is deployed and its public HTTPS and managed callback checks passed; final rollout status is in the runtime guide. The dedicated EC2 worker rollout below remains a historical fallback. Do not apply the earlier IAM setup solely to bypass the platform workflow.
+**Current direction:** use the [DIG service platform](platform-deployment.md#current-rollout-status--september-30-2026) HTTP-only service with managed Workflow delivery, Vector retrieval and Redis Pub/Sub. The QA backend and protected [QA frontend Preview](https://reveal-mechanisms-qa.vercel.app) are live; visitors need the privately shared access link. The linked rollout status records hosted checks, the completed QA scientific run and remaining OAuth setup. Production remains approval-gated. The dedicated EC2 worker rollout below remains a historical fallback. Do not apply the earlier IAM setup solely to bypass the platform workflow.
 
 Historical EC2 status on September 29, 2026: prepared locally, **not live**. AWS denied the dedicated runtime-role and ECR repository creation. These EC2-specific denials do not describe the current DIG rollout. The [administrator handoff](../deploy/aws/README.md) applies only if this older route is resumed.
 
@@ -15,7 +15,7 @@ Historical EC2 status on September 29, 2026: prepared locally, **not live**. AWS
 - Dedicated `m7i.xlarge` host: two workers, API, dispatcher, Redis, and Caddy. Use encrypted gp3 root storage for OS/images/certificate state; all job work uses bounded tmpfs and durable artifacts use S3.
 - Amazon Linux 2023 x86-64 AMI inspected: `ami-06135a74df036ebc9` (`al2023-ami-2023.12.20260928.0-kernel-6.1-x86_64`). Revalidate availability immediately before launch.
 - Personal Vercel workspace `chase-yakaboskis-projects`; project `reveal-mechanisms`, ID `prj_mEKMUihmi5lcRSlGNaA1B6Lnqbxs`, workspace ID `team_9lGG9RszAuyJ892vy3DXmInE`.
-- Assigned and verified frontend domain: `reveal-mechanisms.vercel.app`. No deployment yet. Framework Next.js, Node 22, functions in `iad1`.
+- Production frontend domain: `reveal-mechanisms.vercel.app`, deployment pending. The protected QA Preview is live at `reveal-mechanisms-qa.vercel.app`; see the current rollout status above. Framework Next.js, project Node setting 22, functions in `iad1`.
 
 The backend can use its Elastic IP with a trusted IP certificate, so buying a domain is not required. [Let's Encrypt supports six-day IP certificates](https://letsencrypt.org/2026/01/15/6day-and-ip-general-availability). The pinned [Caddy configuration](../deploy/Caddyfile) explicitly uses the public ACME issuer and `shortlived` profile, with HTTP-01 renewal on port 80. Its configuration has been validated locally; actual certificate issuance and renewal still require the live public host. See [Caddy's TLS settings](https://caddyserver.com/docs/caddyfile/directives/tls).
 

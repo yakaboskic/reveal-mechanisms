@@ -29,3 +29,25 @@ test("retained local links become authorized paths on the deployed app", () => {
   }
   assert.equal(sourceDownloadPath("https://other.example" + path, "https://reveal.example"), null);
 });
+
+test("retained canonical source links use only the preview's authorized checksum path", () => {
+  const preview = "https://reveal-mechanisms-qa.vercel.app";
+  const canonical = "https://reveal-mechanisms.vercel.app";
+  assert.equal(sourceDownloadPath(canonical + path, preview), path);
+  assert.equal(sourceDownloadPath(canonical + path, "http://localhost:3100"), path);
+  assert.equal(sourceDownloadPath(preview + path, preview), path);
+  for (const value of [
+    "https://reveal-mechanisms.vercel.app.evil.example" + path,
+    "https://other.reveal-mechanisms.vercel.app" + path,
+    "https://unrelated-preview.vercel.app" + path,
+    "http://reveal-mechanisms.vercel.app" + path,
+    "https://reveal-mechanisms.vercel.app:8443" + path,
+    "https://user:secret@reveal-mechanisms.vercel.app" + path,
+    canonical + path + "?redirect=https://evil.example",
+    canonical + path + "#fragment",
+    canonical + "/api/backend/v1/jobs/private",
+    canonical + "/api/backend/v1/artifacts/" + "A".repeat(64),
+    canonical + "/api/backend/v1/artifacts/" + "a".repeat(63),
+    canonical + path + "/extra",
+  ]) assert.equal(sourceDownloadPath(value, preview), null, value);
+});
