@@ -1,12 +1,13 @@
 # Documentation index
 
-Updated September 30, 2026. Start with [colleague setup](../README.local.md) and the [API walkthrough](api-quickstart.md). Operating guides describe the current code; dated inventories and validation reports describe observations at the stated time. Historical plans are retained for rationale, not as startup instructions.
+Updated September 30, 2026. Start with the [Workflow runtime](durable-workflow-runtime.md) and the [API walkthrough](api-quickstart.md). The [legacy colleague handoff](../README.local.md) remains available during migration. Dated inventories and validation reports describe observations at the stated time. Historical plans are retained for rationale, not as current startup instructions.
 
 ## Run and develop
 
-- [Run REVEAL on your laptop](../README.local.md)
+- [Durable Workflow runtime and local pilot](durable-workflow-runtime.md)
+- [Legacy colleague handoff on your laptop](../README.local.md)
 - [Learn the REVEAL API locally](api-quickstart.md)
-- [Local Docker deployment](local-deployment.md)
+- [Legacy local Docker deployment](local-deployment.md)
 - [Implementation status — September 30, 2026](implementation-status.md)
 - [Colleague implementation handoff](implementation-handoff.md)
 - [Legacy host-based development](local-development.md)
@@ -34,9 +35,8 @@ Updated September 30, 2026. Start with [colleague setup](../README.local.md) and
 ## Deployment and proposed follow-up work
 
 - [DIG service platform deployment](platform-deployment.md)
-- [REVEAL deployment plan](deployment-plan.md)
-- [Cloud rollout](cloud-deployment.md)
-- [REVEAL deployment plan](staging-deployment-plan.md)
+- [Historical EC2 deployment plan](deployment-plan.md)
+- [Retained EC2 rollout](cloud-deployment.md)
 - [Refactor REVEAL execution and retrieval to Upstash](durable-workflow-refactor-plan.md)
 - [DisMech demo prioritization with Jev](jev-demo-prioritization.md)
 

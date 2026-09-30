@@ -73,7 +73,9 @@ class WorkflowTests(unittest.IsolatedAsyncioTestCase):
         for config, allowed in configs:
             with patch.dict('os.environ', {**config, 'REVEAL_ENVIRONMENT': 'production'}):
                 job, payload = self.new(); payload['namespace'] = config['REVEAL_JOB_NAMESPACE']
-                result = await WorkflowExecution(self.repo, storage=self.store).step(payload, 0)
+                with patch('reveal_backend.workflow_execution.probe_task_identity', return_value={
+                    'kind': 'ecs_task', 'task_arn': 'arn:aws:ecs:us-east-1:005901288866:task/dig-qa/' + 'a' * 32}):
+                    result = await WorkflowExecution(self.repo, storage=self.store).step(payload, 0)
                 self.assertEqual(result['phase'], 'probe_finish' if allowed else 'complete')
                 if not allowed:
                     with self.repo.read_transaction() as tx:
@@ -520,15 +522,51 @@ class ReviewTests(unittest.TestCase):
         with self.assertRaises(ScientificReviewUnavailable):
             durable_review.call_one(self.initial(), 'fake', lambda value: saved.append(deepcopy(value)), client=client)
         self.assertIsNotNone(saved[-1]['pending'])
+        self.assertEqual(saved[-1]['failure']['error_type'], 'TimeoutError')
         with self.assertRaises(ScientificReviewUnavailable):
             durable_review.call_one(saved[-1], 'fake', lambda value: saved.append(deepcopy(value)), client=client)
         self.assertEqual(client.post.call_count, 1)
 
     def test_paid_call_is_not_made_if_reservation_checkpoint_fails(self):
         client=Mock()
-        with self.assertRaises(ScientificReviewUnavailable):
+        with self.assertRaises(OSError):
             durable_review.call_one(self.initial(), 'fake', Mock(side_effect=OSError('S3 down')), client=client)
         client.post.assert_not_called()
+
+    def test_forced_final_turn_uses_supported_schema_and_requires_one_decision(self):
+        from jsonschema import validate, ValidationError
+        from reveal_backend.scientific_grounding import FINISH_SCHEMA
+        value=self.initial(); value['session']['max_turns']=1
+        client=Mock(); client.post.return_value=self.response('final', 'finish_review', {'unavailable_reason': 'Insufficient inspected evidence.'})
+        saved=[]
+        value=durable_review.call_one(value,'fake',lambda item:saved.append(deepcopy(item)),client=client)
+        payload=client.post.call_args.kwargs['json']
+        schema=next(tool['input_schema'] for tool in payload['tools'] if tool['name']=='finish_review')
+        self.assertIs(schema, FINISH_SCHEMA)
+        self.assertEqual(payload['tool_choice'], {'type':'tool','name':'finish_review'})
+        self.assertFalse({'oneOf','anyOf','allOf'}.intersection(schema))
+        verdict={'claims':[],'synthesis':{'verdict':'unsupported','finding':'Unknown.','source_refs':[]}}
+        for valid in ({'review':verdict},{'unavailable_reason':'Unavailable.'}): validate(valid,schema)
+        for invalid in ({},{'review':verdict,'unavailable_reason':'Unavailable.'},{'unavailable_reason':''},{'unexpected':True},{'review':None}):
+            with self.subTest(invalid=invalid),self.assertRaises(ValidationError): validate(invalid,schema)
+        with self.assertRaises(ScientificReviewUnavailable): durable_review.process_response(value)
+        self.assertIsNone(saved[-1]['pending']); self.assertEqual(len(saved[-1]['session']['calls']),1)
+        self.assertEqual(saved[-1]['response']['content'][0]['input']['unavailable_reason'],'Insufficient inspected evidence.')
+
+    def test_provider_rejection_keeps_private_diagnostics_without_implicit_retry(self):
+        client=Mock(); response=Mock(status_code=400)
+        response.json.return_value={'type':'error','error':{'type':'invalid_request_error','message':'Unsupported final tool schema private-api-key'},
+            'request_id':'req-test','untrusted_extra':'not retained'}
+        client.post.return_value=response; saved=[]
+        with self.assertRaises(ScientificReviewUnavailable):
+            durable_review.call_one(self.initial(),'private-api-key',lambda value:saved.append(deepcopy(value)),client=client)
+        restored=json.loads(json.dumps(saved[-1]))
+        self.assertIsNotNone(restored['pending']); self.assertEqual(restored['session']['spent'],0)
+        error=restored['failure']['audit']['provider_error']
+        self.assertEqual(error,{'status':400,'type':'invalid_request_error','message':'Unsupported final tool schema [redacted]','request_id':'req-test'})
+        self.assertNotIn('private-api-key',json.dumps(restored)); self.assertNotIn('untrusted_extra',json.dumps(restored))
+        with self.assertRaises(ScientificReviewUnavailable): durable_review.call_one(restored,'fake',Mock(),client=client)
+        self.assertEqual(client.post.call_count,1)
 
     def test_frozen_evidence_tamper_is_rejected(self):
         value=self.initial(); value['document']['claims'].append({'id': 'injected'})

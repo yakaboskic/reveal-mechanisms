@@ -88,6 +88,15 @@ SCHEMA = {
     "required": ["claims", "synthesis"],
     "additionalProperties": False,
 }
+FINISH_SCHEMA = {
+    # Anthropic rejects top-level oneOf/anyOf/allOf even for non-strict tools.
+    # The property count preserves the exclusive decision locally and remotely.
+    "type": "object", "properties": {
+        "review": SCHEMA,
+        "unavailable_reason": {"type": "string", "minLength": 1, "maxLength": 1600},
+    },
+    "minProperties": 1, "maxProperties": 1, "additionalProperties": False,
+}
 
 
 def review_evidence(package: dict, ledger_path: Path) -> dict:
@@ -214,6 +223,7 @@ class _ReviewSession:
         self.previous_configuration = None
         self.previous_input_tokens = None
         self.blocked_call = None
+        self.provider_error = None
 
     def audit(self):
         return {"model": self.model, "checked_at": now(), "calls": self.calls,
@@ -221,7 +231,8 @@ class _ReviewSession:
                 "configured_limits": {"turns": self.max_turns, "request_bytes": self.max_request_bytes,
                                       "input_tokens": self.max_input_tokens},
                 "token_measurement": "API response usage; no token-count request",
-                **({"blocked_call": self.blocked_call} if self.blocked_call else {})}
+                **({"blocked_call": self.blocked_call} if self.blocked_call else {}),
+                **({"provider_error": self.provider_error} if self.provider_error else {})}
 
     def post(self, payload):
         self.check_limit('turns', len(self.calls) + 1, self.max_turns, 'Scientific review turn limit exceeded')
@@ -249,6 +260,22 @@ class _ReviewSession:
             self.reserve({"request_sha256": sha256(data), "reserved_max_usd": maximum, "reserved_at": now()})
         response = self.client.post("https://api.anthropic.com/v1/messages", headers={
             "x-api-key": self.api_key, "anthropic-version": "2023-06-01"}, json=payload, timeout=120)
+        if response.status_code != 200:
+            # Retain bounded provider diagnostics privately, never response
+            # headers, request credentials, or an arbitrary response body.
+            self.provider_error = {"status": response.status_code}
+            try:
+                failure = response.json()
+                if isinstance(failure, dict):
+                    error = failure.get('error')
+                    if isinstance(error, dict):
+                        for key in ('type', 'message'):
+                            if isinstance(error.get(key), str):
+                                self.provider_error[key] = error[key].replace(self.api_key, '[redacted]')[:1600]
+                    if isinstance(failure.get('request_id'), str):
+                        self.provider_error['request_id'] = failure['request_id'].replace(self.api_key, '[redacted]')[:160]
+            except (ValueError, TypeError):
+                pass
         _available(response.status_code == 200, "Scientific review service unavailable")
         body = response.json()
         usage = body.get('usage', {})
@@ -310,10 +337,7 @@ def _read_account_review(document, evidence, *, model, api_key, max_budget_usd, 
             {"name": "review_unavailable", "description": "Stop without a scientific verdict when the available reading or evidence cannot support an adequate review. This never accepts the account.", "input_schema": {"type": "object", "properties": {"reason": {"type": "string", "maxLength": 1600}}, "required": ["reason"], "additionalProperties": False}},
         ]
         finish_tool = {"name": "finish_review", "description": "Finish with either a complete scientific review of the inspected evidence or an explicit reason no verdict can be reached. No further evidence reads are available on this call.",
-            "input_schema": {"type": "object", "oneOf": [
-                {"type": "object", "properties": {"review": SCHEMA}, "required": ["review"], "additionalProperties": False},
-                {"type": "object", "properties": {"unavailable_reason": {"type": "string", "minLength": 1, "maxLength": 1600}},
-                 "required": ["unavailable_reason"], "additionalProperties": False}]}}
+            "input_schema": FINISH_SCHEMA}
         used_ids = set()
         while True:
             # Reserve the final allowed call for a decision. Exhausting a read

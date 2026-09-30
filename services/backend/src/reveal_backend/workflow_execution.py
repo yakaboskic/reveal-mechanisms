@@ -8,9 +8,14 @@ from copy import deepcopy
 import json
 import os
 from pathlib import Path
+import re
+import socket
 import tempfile
 from threading import Event
 import time
+from urllib.parse import urlsplit
+
+import httpx
 
 from . import jobs, workflow_state as state
 from .agent_execution import ExecutionRequest
@@ -48,6 +53,35 @@ async def drain_on_cancel(awaitable):
 
 async def run_sync(function, *args, **kwargs):
     return await drain_on_cancel(asyncio.to_thread(function, *args, **kwargs))
+
+
+def probe_task_identity():
+    """Nonpaid probe evidence only; never request ECS credentials or use IAM."""
+    uri = os.getenv('ECS_CONTAINER_METADATA_URI_V4')
+    if not uri:
+        require(setting('SERVICE_ENV') != 'qa', 'QA deployment probe requires ECS task identity')
+        return {'kind': 'hostname', 'hostname': socket.gethostname()}
+    parsed = urlsplit(uri)
+    require(parsed.scheme == 'http' and parsed.hostname == '169.254.170.2' and parsed.port in (None, 80)
+        and not parsed.username and not parsed.password and not parsed.query and not parsed.fragment
+        and re.fullmatch(r'/v4/[A-Za-z0-9-]+', parsed.path), 'Deployment probe metadata endpoint is not the ECS link-local endpoint')
+    try:
+        deadline = time.monotonic() + 3
+        with httpx.stream('GET', uri + '/task', timeout=2, trust_env=False, follow_redirects=False) as response:
+            response.raise_for_status()
+            chunks = bytearray()
+            for chunk in response.iter_bytes():
+                chunks.extend(chunk)
+                if len(chunks) > 65536 or time.monotonic() > deadline:
+                    raise ValueError('Metadata response exceeds the probe limit')
+            identity = json.loads(chunks)['TaskARN']
+        require(isinstance(identity, str) and re.fullmatch(r'arn:aws:ecs:[a-z0-9-]+:[0-9]{12}:task/[A-Za-z0-9_-]+/[a-f0-9]{32}', identity),
+            'Deployment probe metadata task identity is invalid')
+        if setting('SERVICE_ENV') == 'qa':
+            require(identity.startswith('arn:aws:ecs:us-east-1:005901288866:task/dig-qa/'), 'Deployment probe metadata task is outside QA')
+        return {'kind': 'ecs_task', 'task_arn': identity}
+    except Exception:
+        raise ValueError('Deployment probe could not obtain a valid ECS task identity') from None
 
 
 class WorkflowExecution:
@@ -392,14 +426,17 @@ class WorkflowExecution:
                        and setting('REVEAL_APPLICATION_TABLE_PREFIX') == 'reveal_workflow_qa')
         require(setting('REVEAL_ENVIRONMENT', 'development') in ('development', 'test') or isolated_qa,
                 'Probes are restricted to development/test or the isolated workflow QA namespace')
+        identity = await run_sync(probe_task_identity)
         if execution['phase'] == 'prepare':
             (root/'probe.json').write_bytes(canonical_json({'job_id': job['id'], 'nonce': queue['inputs']['nonce']}))
             await run_sync(self.checkpoint, payload, token, root)
-            return {'next_phase': 'probe_finish', 'sleep': min(120, max(1, int(queue['inputs'].get('delay', 3))))}
+            return {'next_phase': 'probe_finish', 'sleep': min(600 if isolated_qa else 120, max(1, int(queue['inputs'].get('delay', 3)))),
+                'probe_prepared_task_identity': identity}
         value = decode((root/'probe.json').read_bytes())
         require(value == {'job_id': job['id'], 'nonce': queue['inputs']['nonce']}, 'Probe checkpoint changed after wait')
         await run_sync(jobs.finish, self.repository, job['id'], token, 'succeeded', result={
-            'kind': 'deployment_probe', 'checkpoint_sha256': sha256((root/'probe.json').read_bytes()), 'restored': True})
+            'kind': 'deployment_probe', 'checkpoint_sha256': sha256((root/'probe.json').read_bytes()), 'restored': True,
+            'prepared_task_identity': execution.get('probe_prepared_task_identity'), 'restored_task_identity': identity})
         return {'next_phase': 'complete', 'done': True}
 
     async def cancel(self, payload):

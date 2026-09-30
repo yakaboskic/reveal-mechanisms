@@ -107,6 +107,14 @@ deadline; cancellation drains the restore thread before deleting its directory.
 REVEAL requests a 300-second target-group drain and a 120-second process stop
 window, while other DIG services retain their existing defaults.
 
+The shared QA and production ALBs currently retain their 60-second idle timeout;
+the nginx timeout configuration has not been inspected. Setting a 420-second
+QStash delivery timeout does not extend those ingress limits. Lost-response
+recovery has been exercised through the local public tunnel, while the cloud
+acceptance probes cover short callbacks, durable waits and SSE. Long scientific
+phases through the complete cloud ingress path remain a separate qualification
+check; no shared timeout setting was changed by this release.
+
 Prepare the private environment files without changing remote configuration:
 
 ```sh
@@ -142,8 +150,10 @@ minimum recall@10 and top-result agreement of 1.0, and maximum cosine error
 20,588 context bindings; 2,281 unmapped factor bindings are archived separately
 in immutable S3. The real browser gateway delivered create/rename/delete events
 to two tabs, with zero collection requests over 40 seconds idle and no browser
-errors. The backend suite passed 650 tests (8 skipped), and the frontend passed
-typecheck and all 69 tests. Scientific-run and cloud acceptance are still pending.
+errors. The backend suite passed 690 tests (8 skipped, 299 subtests), and the
+frontend passed typecheck and all 69 tests. Focused resource/cancellation checks
+passed 40 tests, and QA configuration guards passed 30 tests. These counts are
+test results; scientific-run and cloud acceptance are recorded separately.
 
 A subsequent managed Vector workflow verified two bindings, both import batches,
 the exact inventory and two frozen quality probes without changing the serving
@@ -152,6 +162,33 @@ duplicate-history injection through the actual signed HTTP route: application
 state and event hashes stayed unchanged, and the original generation completed
 with exactly two recorded phases and restored S3 evidence. No Box or model call
 was used by that failure-injection probe.
+
+Source revision `2675a4a` is deployed to QA by
+[platform run 36655465721](https://github.com/broadinstitute/dig-service-platform/actions/runs/36655465721)
+at `https://api-qa.hugeampkpnbi.org/api/reveal`. All 15 public HTTPS checks passed:
+readiness, catalog and stored-context semantic retrieval, exact QA provenance,
+anonymous authentication, table isolation, three pushed workspace mutations,
+two-event reconnect replay and invalid-credential denials. A managed signed
+workflow completed in generation 1 with exactly two phases, verified S3 restore,
+no Box allocation and no change to the active Vector snapshot. The QA managed
+reconciliation schedule is installed. Cloud task replacement, production and
+Vercel acceptance are tracked separately.
+
+The scientific pilot completed one authoring attempt, durable capture and Box
+cleanup. After 31 acknowledged reviewer calls, its final response was not
+acknowledged; the original HTTP status was not retained. Independent free
+token-count requests reproduced rejection of the old final-decision tool schema
+and acceptance of the corrected schema. Both review paths now use that schema,
+and durable private checkpoints preserve bounded provider-error diagnostics.
+The fix passed 82 focused tests and 35 subtests.
+
+The original job remains `REVIEW_UNAVAILABLE`, with no accepted account or
+paragraph. A private operator S3 download verified the captured account's hash;
+the scientific artifact API correctly returns 404 until acceptance. Its sole
+Box was deleted and capacity released. Acknowledged author/reviewer spend totals
+$4.6584054; the unresolved $0.508677 final-call reservation remains accounted.
+No authoring or paid review was repeated. Scientific acceptance after the fix
+has not been verified by another paid run.
 
 Provider references: [FastAPI integration](https://upstash.com/docs/workflow/quickstarts/fastapi),
 [QStash regions](https://upstash.com/docs/qstash/howto/multi-region),

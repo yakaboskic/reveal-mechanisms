@@ -16,9 +16,7 @@ TOOLS = [
     {'name': 'review_unavailable', 'description': 'Stop when the evidence cannot support an adequate review.', 'input_schema': {'type': 'object', 'properties': {'reason': {'type': 'string', 'maxLength': 1600}}, 'required': ['reason'], 'additionalProperties': False}},
 ]
 FINISH = {'name': 'finish_review', 'description': 'Finish with the complete review or an unavailable reason. No further reads remain.',
-    'input_schema': {'type': 'object', 'oneOf': [
-        {'type': 'object', 'properties': {'review': grounding.SCHEMA}, 'required': ['review'], 'additionalProperties': False},
-        {'type': 'object', 'properties': {'unavailable_reason': {'type': 'string', 'minLength': 1, 'maxLength': 1600}}, 'required': ['unavailable_reason'], 'additionalProperties': False}]}}
+    'input_schema': grounding.FINISH_SCHEMA}
 
 
 def initial(kind, document, inputs, *, ledger_path=None, budget=.30):
@@ -78,8 +76,14 @@ def call_one(state, api_key, checkpoint, *, client=None):
         payload.update(system=grounding.PARAGRAPH_SYSTEM, output_config={'format': {'type': 'json_schema', 'schema': grounding.PARAGRAPH_SCHEMA}})
     try: response = session.post(payload)
     except Exception as exc:
+        audit = {**session.audit(), 'ambiguous_call': state.get('pending')}
+        state.update(session=export_session(session), failure={
+            'error_type': type(exc).__name__,
+            'message': str(exc)[:1600] if isinstance(exc, grounding.ScientificReviewUnavailable) else 'Scientific review request failed',
+            'audit': audit})
+        checkpoint(state)
         raise grounding.ScientificReviewUnavailable('Scientific review response unavailable; any reserved call remains accounted',
-            {**session.audit(), 'ambiguous_call': state.get('pending')}) from exc
+            audit) from exc
     state.update(response=response, session=export_session(session), pending=None, processed_response_sha256=None)
     checkpoint(state)  # A response is durable before any tool/decision processing.
     return state

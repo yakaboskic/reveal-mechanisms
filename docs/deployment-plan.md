@@ -2,9 +2,9 @@
 
 > Durable workflow migration: the supported target is now the HTTP-only service described in [durable-workflow-runtime.md](durable-workflow-runtime.md). The worker/Redis Streams instructions below are retained as historical migration and rollback guidance; they do not describe the new default `deploy/compose.yaml`. Live release status must be verified separately.
 
-**Current deployment route:** use the administrator's [DIG service platform](platform-deployment.md), pending repository access and confirmation of background worker/Redis support. The dedicated EC2 architecture below is the earlier plan; its provisioning is on hold. Vercel, existing RDS data, and S3 remain requirements.
+**Current deployment route:** use the [DIG service platform](platform-deployment.md) HTTP-only Workflow service. The QA backend is deployed and its public HTTPS and managed callback checks passed; production and frontend promotion remain pending. The dedicated EC2 worker architecture below is the earlier plan; its provisioning is on hold. Vercel, existing RDS data, and S3 remain requirements.
 
-Prepared September 29, 2026. Target: one deployed environment using the existing RDS/Aurora database. Separate staging and production environments are deferred until later. Backend compute runs on EC2, durable file storage is S3, and the frontend stays on Vercel. Include Redis for job delivery and worker coordination.
+Historical plan prepared September 29, 2026. Its original target was one deployed environment using the existing RDS/Aurora database, with EC2 compute, S3 files, Vercel and Redis job delivery. The current DIG manifest instead isolates QA from production and uses Workflow for execution; the remaining sections retain the earlier design rationale and rollout instructions.
 
 **Recommended architecture: one EC2 host running the FastAPI API, a dispatch/recovery process, a pool of worker containers, and Redis; private S3 for all durable artifacts; existing Aurora MySQL for application state, job state, and recovery records; Vercel for Next.js and its authentication gateway.**
 

@@ -1,14 +1,33 @@
-# DIG service platform deployment draft
+# DIG service platform deployment
 
-> Durable workflow migration: the supported target is now the HTTP-only service described in [durable-workflow-runtime.md](durable-workflow-runtime.md). The worker/Redis Streams instructions below are retained as historical migration and rollback guidance; they do not describe the new default `deploy/compose.yaml`. Live release status must be verified separately.
+The supported target is the HTTP-only service described in [durable-workflow-runtime.md](durable-workflow-runtime.md). Upstash Workflow delivers signed execution steps, Upstash Vector serves semantic retrieval, and Redis Pub/Sub provides event wakeups without queue polling. Aurora owns durable state and versioned S3 owns artifacts and recovery checkpoints.
 
-Access to `broadinstitute/dig-service-platform` is confirmed. The repository is cloned beside REVEAL; this review used platform commit `7810744ba7f915e23ad88ea5e008297b14efe67e`. Local integration branches are `codex/dig-service-platform` in REVEAL and `codex/reveal-service` in the platform checkout. Nothing has been pushed, merged, provisioned or deployed by this integration work.
+## Current rollout status — September 30, 2026
 
-## Decision: Fargate workers and Upstash Redis
+The HTTP-only QA backend is deployed at `https://api-qa.hugeampkpnbi.org/api/reveal`, using REVEAL source `2675a4a` and platform image revision `8856bb3`. [Platform run 36655465721](https://github.com/broadinstitute/dig-service-platform/actions/runs/36655465721) completed successfully. All 15 public HTTPS acceptance checks passed, including authorized SSE/replay, stored-context Vector retrieval and QA isolation; a managed signed workflow also verified S3 checkpoint restoration. Task replacement, the scientific final-review correction, production approval and Vercel deployment remain outstanding. Production uses the platform's required reviewer gate; its protection is unchanged.
+
+| Component | Current deployment target |
+| --- | --- |
+| Frontend | Personal Vercel project `reveal-mechanisms`; deployment pending |
+| Backend | One HTTP Fargate service under `/api/reveal/*`; no worker or dispatcher service |
+| Execution delivery | Managed Upstash Workflow/QStash signed callbacks |
+| Notifications | Managed Redis REST streaming Pub/Sub; Aurora event replay |
+| Semantic retrieval | Verified, environment-specific Upstash Vector snapshots |
+| Durable state and files | Existing Aurora database and versioned S3 |
+
+`deploy/dig/service.yaml` selects ARM64, read-only runtime storage, bounded scratch, a 120-second process stop timeout and 300-second target-group drain. QA uses `reveal_workflow_qa_*` tables, separate job/notification namespaces, the `qa/` S3 prefix and Vector environment `qa`. Production preserves `reveal_*` records, writes `prod/`, retains historical `local/` artifact reads and uses its own namespaces. Backend credentials come from environment-specific Secrets Manager records; the frontend receives only its documented gateway/session settings.
+
+Local probes have exercised managed QStash callbacks, Redis fanout with no idle reads, verified Vector retrieval/import and two-tab workspace delivery. The [runtime guide](durable-workflow-runtime.md#verification-status) records test counts and live local evidence separately from cloud acceptance. `scripts/workflow_cloud_config.py` prepares private environment files, and `deploy/dig/render_release.py` emits the HTTP service only.
+
+## Historical worker proposal
+
+The remainder records the initial platform assessment and worker rollout proposal before the Workflow refactor. Its Redis Streams, background-service and provisioning checklist is retained for migration context and rollback planning; it is not the current release procedure. The default `deploy/compose.yaml` is worker-free, while `deploy/compose.legacy.yaml` retains the old pool.
+
+### Initial decision: Fargate workers and Upstash Redis
 
 **The platform can run REVEAL's worker pool.** Its ECS Fargate cluster supports long-running services without a load balancer, and its existing CloudFormation role can create/update services, register task definitions, create service IAM roles and write logs. Its current HTTP template needs a separate background-service deployment, rather than an architectural replacement. The existing genesets service already uses application-specific background infrastructure alongside its API.
 
-Use this initial shape:
+The initial proposal used this shape:
 
 | Component | Deployment |
 | --- | --- |
@@ -22,11 +41,11 @@ Use this initial shape:
 
 The scientific agent runs in Upstash Box; these workers coordinate execution, assemble evidence, validate results and save artifacts. They are persistent background containers, with no HTTP endpoint or request-duration limit. ECS service scheduling maintains their desired count. Fargate avoids maintaining a dedicated EC2 host; this is a suitable deployment for the current application.
 
-Upstash supports the commands used by `job_transport.py`: consumer groups, stream writes/reads, `XAUTOCLAIM`, and transactional acknowledgement/deletion. Use `REVEAL_REDIS_URL=rediss://...` with the existing redis-py TCP client. Its REST API does not support blocking `XREADGROUP`, which our queue uses. Keep eviction disabled and select a primary region near us-east-1. Set capacity/command budgets after measuring polling traffic. Redis contains delivery metadata; RDS remains authoritative for jobs, leases and results. No Upstash database has been created or tested live yet.
+The legacy `job_transport.py` uses consumer groups, stream writes/reads, `XAUTOCLAIM`, and transactional acknowledgement/deletion through the redis-py TCP client. The initial proposal considered `REVEAL_REDIS_URL=rediss://...`; the REST API cannot replace its blocking `XREADGROUP` path. This queue design was superseded: current Upstash Redis usage is tested REST streaming Pub/Sub only, with no Redis queue or recurring read commands. RDS remains authoritative for jobs and events.
 
 References: [ECS services](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/ecs_services.html), [Upstash TCP connection](https://upstash.com/docs/redis/howto/connect-client), [XREADGROUP](https://upstash.com/docs/redis/commands/streams/xreadgroup), [XAUTOCLAIM](https://upstash.com/docs/redis/commands/streams/xautoclaim), [transactions](https://upstash.com/docs/redis/commands/transactions/exec), [eviction](https://upstash.com/docs/redis/features/eviction).
 
-## Local changes prepared
+### Initial integration notes (historical)
 
 - Backend `SERVICE_PATH_PREFIX=/api/reveal` mounts all API/internal/SSE/artifact/docs routes. `/api/reveal/health` is liveness; `/api/reveal/readyz` checks dependencies and catalog readiness. Unset prefix preserves local URLs.
 - `deploy/dig/service.yaml` proposes priority 40, currently unused, with existing database identities and queue namespace `reveal-compose`. Only QA is enabled by the release renderer; the prod block exists solely to satisfy the platform schema.
@@ -38,9 +57,9 @@ References: [ECS services](https://docs.aws.amazon.com/AmazonECS/latest/develope
 
 [Fargate supports tmpfs](https://aws.amazon.com/about-aws/whats-new/2026/01/amazon-ecs-tmpfs-mounts-aws-fargate-managed-instances/). [ECS Exec does not support read-only roots](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/ecs-exec.html). Initial task allocations (API 1 vCPU/4 GiB, each worker 1 vCPU/3 GiB, dispatcher 0.25 vCPU/1 GiB) are conservative starting points, not measured capacity requirements.
 
-## Remaining deployment work
+### Initial worker rollout checklist (superseded)
 
-1. Review the runtime extension and register `reveal` with validation/build jobs and a background-stack release step. No registry entries or CI deployment jobs have been added yet. A background stack named `svc-reveal-workers-qa` fits the existing deployment role's `svc-*-qa` stack permissions.
+1. The initial proposal required registering `reveal` with validation/build jobs and a background-stack release step. At that assessment, registry entries and CI deployment jobs had not yet been added. A background stack named `svc-reveal-workers-qa` fit the existing deployment role's `svc-*-qa` stack permissions.
 2. Create an Upstash Redis database and validate real publish/claim/reclaim/acknowledgement using disposable keys. Supply its TLS TCP URL privately. AWS tasks already have outbound internet access in the platform network shape.
 3. Provision the client SG/RDS rule, and create a JSON backend secret containing the seven keys listed in service.yaml. Match fresh gateway keys in Vercel. Task roles provide AWS S3 credentials; never copy local AWS access keys into runtime secrets.
 4. Add a maintenance-task path for `python -m reveal_backend.deployment drain --wait 1200`, `status`, and `resume`. The current GitHub deploy role lacks `ecs:RunTask`; an operator can run maintenance tasks, or the role can receive a narrowly scoped extension. A 120-second stop timeout alone cannot finish every research job.

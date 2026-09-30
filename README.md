@@ -10,7 +10,7 @@ Redis Pub/Sub and Vector, isolated application tables, and QStash delivery.
 `scripts/durable_deployment.py up --build` starts the prepared pilot.
 The older colleague handoff below remains an explicit legacy development option.
 
-**New colleague: follow [README.local.md](README.local.md).** Chase provides an encrypted development configuration and a separate password. From a fresh clone:
+**Legacy colleague handoff: follow [README.local.md](README.local.md).** Chase provides an encrypted development configuration and a separate password. From a fresh clone:
 
 ```sh
 python3 scripts/local_setup.py --bundle ~/Downloads/reveal-local.env.json.gpg
@@ -32,8 +32,9 @@ Startup preserves the original `reveal_*` tables, accounts, publications and S3 
 ## Learn the system
 
 - [API walkthrough](docs/api-quickstart.md): request path, authentication, examples, job lifecycle and code map.
-- [OpenAPI reference](api/README.md): 42 operations, request/response fixtures, offline viewer and portable ZIP.
-- [Local deployment](docs/local-deployment.md): Docker topology, durable queue, S3 artifacts, readiness and shutdown.
+- [OpenAPI reference](api/README.md): 43 operations, request/response fixtures, offline viewer and portable ZIP.
+- [Workflow runtime](docs/durable-workflow-runtime.md): current local startup, event delivery, verification and release guidance.
+- [Legacy local deployment](docs/local-deployment.md): retained worker topology, S3 artifacts and migration/rollback guidance.
 - [Implementation status](docs/implementation-status.md): current behavior, validation and remaining deployment blockers.
 - [Documentation index](docs/README.md): operating guides, scientific contracts, data imports and historical design records.
 
@@ -45,6 +46,6 @@ Workflow steps collect frozen evidence, launch Claude in Upstash Box, capture ou
 
 ## Deployment status — September 30, 2026
 
-The local Docker stack runs. Access to Broad's [DIG service platform](docs/platform-deployment.md) is confirmed. A local draft adapts the backend to Fargate workers with Upstash Redis; public deployment is pending integration and provisioning. The intended frontend remains Vercel in **Chase Yakaboski's personal projects**. No public backend or Vercel deployment is claimed by this repository.
+The local Workflow pilot runs with managed Upstash Redis Pub/Sub and Vector. The HTTP-only QA backend is deployed through Broad's [DIG service platform](docs/platform-deployment.md); public HTTPS event/replay, retrieval and signed workflow/S3 checks passed. Final task-replacement and scientific-review checks are in progress. Production requires the platform's approval, and Vercel awaits authorization to upload its prepared frontend secrets. See the [runtime verification status](docs/durable-workflow-runtime.md#verification-status) for the recorded checks.
 
 The existing database already contains the imported scientific catalog. A colleague must not reload it to start the app. Source inventories and import commands are in [data inventory](docs/data-inventory.md), [DisMech import](docs/dismech-import.md), [EAGGL import](docs/eaggl-factor-import.md), and [CFDE GeneSets](docs/geneset-import.md). Historical measured runs remain in the [validation report](docs/validation-report.md).

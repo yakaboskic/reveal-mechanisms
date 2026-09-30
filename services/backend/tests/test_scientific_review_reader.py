@@ -123,6 +123,8 @@ class ReaderTests(unittest.TestCase):
         self.assertTrue(result['accepted'])
         tools = client.post.call_args_list[-1].kwargs['json']['tools']
         self.assertIn('finish_review', [tool['name'] for tool in tools])
+        from reveal_backend.scientific_grounding import FINISH_SCHEMA
+        self.assertIs(next(tool['input_schema'] for tool in tools if tool['name']=='finish_review'),FINISH_SCHEMA)
         self.assertEqual(client.post.call_args_list[-1].kwargs['json']['tool_choice'], {'type': 'tool', 'name': 'finish_review'})
         with patch.dict('os.environ', {'REVEAL_GROUNDING_MAX_TURNS': '1'}), self.assertRaises(ScientificReviewUnavailable):
             self.run_review([response([call('f', 'finish_review', {'review': self.review})])])
