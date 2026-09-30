@@ -8,7 +8,8 @@ from unittest.mock import patch
 
 import numpy as np
 
-from reveal_backend.catalog import Catalog
+from reveal_backend.catalog import Catalog, check_vector_readiness
+from reveal_backend.auth import Problem
 from reveal_backend.repository import Repository, digest
 from reveal_backend.vector_ingestion import VectorRegistry, import_batch, save_export, verify_snapshot
 from reveal_backend.vector_retrieval import (POLICY_VERSION, UpstashFactorIndex, VectorUnavailable,
@@ -88,6 +89,14 @@ class RetrievalTests(unittest.TestCase):
         rows = index.candidates([[1., 0.]] * 24, 100)
         self.assertEqual(len(rows), 24)
         self.assertEqual(provider.query_batches, [1000, 1000, 400])
+
+    def test_catalog_readiness_provider_failure_is_explicit_503(self):
+        snapshot, provider, _ = fixture()
+        index = UpstashFactorIndex(snapshot, client=provider)
+        with patch.object(provider, 'info', side_effect=TimeoutError('provider unavailable')):
+            with self.assertRaises(Problem) as failure: check_vector_readiness(index)
+        self.assertEqual(failure.exception.status, 503)
+        self.assertEqual(failure.exception.code, 'SEMANTIC_SEARCH_UNAVAILABLE')
 
     def test_score_conversion_rejects_invalid_provider_values(self):
         self.assertEqual([cosine_score(x) for x in (0, .5, 1)], [-1, 0, 1])

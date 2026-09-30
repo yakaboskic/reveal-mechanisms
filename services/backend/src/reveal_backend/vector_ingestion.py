@@ -69,6 +69,8 @@ class VectorRegistry:
         with self.repo.read_transaction() as tx:
             return tx.get('vector_batch', digest([identity, key])) is not None
     def register(self, manifest):
+        if manifest['status'] != 'loading' or manifest['environment'] != self.scope or manifest.get('verified_batches'):
+            raise ValueError('Register an unverified loading snapshot in the selected environment')
         with self.repo.transaction() as tx:
             old = tx.get('vector_snapshot', manifest['snapshot_id'])
             if old:

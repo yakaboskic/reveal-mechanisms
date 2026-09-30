@@ -15,6 +15,13 @@ from .vector_retrieval import UpstashFactorIndex, VectorUnavailable, retrieve_na
 from .vector_ingestion import VectorRegistry
 import numpy as np
 
+def check_vector_readiness(index):
+    try:
+        index.check()
+    except VectorUnavailable as error:
+        raise Problem(503, 'SEMANTIC_SEARCH_UNAVAILABLE', str(error)) from error
+
+
 class Catalog:
     def __init__(self):
         self.loaded = False
@@ -66,10 +73,10 @@ class Catalog:
                 self.vector_backend = backend == 'upstash'
                 if self.vector_backend:
                     self.index = self.retrieval_index()
-                    self.index.check()
+                    check_vector_readiness(self.index)
                     expected_factors = {(row[0], row[1], row[2]) for row in factor_rows}
                     actual_factors = {(row['factor_id'], row['label'], row['native_id']) for row in self.index.factors}
-                    if actual_factors != expected_factors: raise VectorUnavailable('Vector aliases differ from selected mapping')
+                    if actual_factors != expected_factors: raise Problem(503, 'SEMANTIC_SEARCH_UNAVAILABLE', 'Vector aliases differ from selected mapping')
                 else:
                     self.index = database_search_index(connection, self.eaggl_import, self.embedding_run)
                 # Import-time vectors cover all source mechanisms. Readiness
@@ -131,7 +138,7 @@ class Catalog:
                 self.bindings[native] = {'eaggl_factor_id': legacy, 'eaggl_import_id': self.eaggl_import, 'embedding_run_id': self.embedding_run,
                     'mapping_run_id': self.mapping_run, 'gene_set_import_id': self.geneset_import, 'cfde_node_id': native, 'cfde_payload': raw}
             if self.vector_backend and any(row['source_revision'] != self.factor_legacy[row['factor_id']]['source_revision'] for row in self.index.factors):
-                raise VectorUnavailable('Vector source revisions differ from current canonical factor payloads')
+                raise Problem(503, 'SEMANTIC_SEARCH_UNAVAILABLE', 'Vector source revisions differ from current canonical factor payloads')
             self.loaded = True
     def retrieval_index(self):
         if not getattr(self, 'vector_backend', False): return self.index

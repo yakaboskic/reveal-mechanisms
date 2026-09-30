@@ -134,8 +134,10 @@ class UpstashFactorIndex:
         self.by_id = {row['binding']['factor_id']: row for row in snapshot['factors']}
         self.by_vector_id = {row['id']: row for row in snapshot['factors']}
         self.context_by_id = {row['binding']['source_id']: row for row in snapshot['contexts']}
+        if (len(self.by_id) != len(snapshot['factors']) or len(self.by_vector_id) != len(snapshot['factors'])
+                or len(self.context_by_id) != len(snapshot['contexts'])):
+            raise VectorUnavailable('Vector snapshot contains duplicate source bindings')
         self.query_cache = QueryVectorCache()
-        self.vector_cache = QueryVectorCache(max_entries=256)
         self.text_bindings = {}
         for identity, row in self.by_id.items():
             self.text_bindings[row['binding']['input_sha256']] = ('factor', identity, row['binding']['input_text'])

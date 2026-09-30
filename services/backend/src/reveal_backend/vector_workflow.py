@@ -8,6 +8,7 @@ import os
 
 import numpy as np
 
+from . import jobs
 from .repository import Repository, digest, now
 from .vector_ingestion import VectorRegistry, environment, import_batch
 from .vector_retrieval import UpstashFactorIndex, VectorUnavailable, client_from_environment, value, metadata, vector_checksum
@@ -27,14 +28,20 @@ def enroll(registry, identity, *, activate=False, expected_previous=None):
         if not row or row['data']['environment'] != environment(): raise ValueError('Unknown vector snapshot')
         if not row['data'].get('quality_probes'): raise ValueError('Export exact quality probes before Workflow ingestion')
         existing = tx.get('vector_dispatch', identity)
-        intent = {'snapshot_id': identity, 'environment': environment(), 'activate': bool(activate),
+        request = tx.get('vector_import_request', identity)
+        intent = {'snapshot_id': identity, 'environment': environment(), 'namespace': jobs.namespace(), 'activate': bool(activate),
                   'expected_previous': expected_previous, 'created_at': now()}
-        if existing:
+        for saved in (existing, request):
+            if not saved: continue
             for key in ('snapshot_id', 'environment', 'activate', 'expected_previous'):
-                if existing['data'][key] != intent[key]: raise ValueError('Vector dispatch identity conflicts with existing intent')
-        else:
-            tx.put('vector_dispatch', identity, 'catalog', intent)
-            tx.put('vector_import_request', identity, 'catalog', intent)
+                if saved['data'][key] != intent[key]: raise ValueError('Vector dispatch identity conflicts with existing intent')
+            if saved['data'].get('namespace', jobs.namespace()) != jobs.namespace():
+                raise ValueError('Vector dispatch namespace conflicts with existing intent')
+            intent['created_at'] = saved['data']['created_at']
+        # An explicit operator reenrollment upgrades pre-namespace intents only
+        # after checking the snapshot and every persisted request field.
+        tx.put('vector_dispatch', identity, 'catalog', intent)
+        tx.put('vector_import_request', identity, 'catalog', intent)
 
 
 async def dispatch_pending(repository, *, limit=10):
@@ -42,11 +49,12 @@ async def dispatch_pending(repository, *, limit=10):
     from upstash_workflow.workflow_requests import _get_first_invocation_batch_body
     delivered, failed = 0, 0
     for identity, intent in await asyncio.to_thread(pending, repository, 'vector_dispatch', min(limit, 25)):
-        if intent['environment'] != environment(): continue
-        payload = {'snapshot_id': identity, 'environment': intent['environment']}
-        batch = _get_first_invocation_batch_body('vector-' + identity[:40], callback_url(), {}, payload,
+        if intent['environment'] != environment() or intent.get('namespace') != jobs.namespace(): continue
+        payload = {'snapshot_id': identity, 'environment': intent['environment'], 'namespace': intent['namespace']}
+        dispatch_id = digest(['vector-import-v1', intent['namespace'], identity])
+        batch = _get_first_invocation_batch_body('vector-' + dispatch_id[:40], callback_url(), {}, payload,
             retries=5, workflow_failure_url=callback_url())
-        batch[0]['headers']['Upstash-Deduplication-Id'] = digest(['vector-import-v1', identity])
+        batch[0]['headers']['Upstash-Deduplication-Id'] = dispatch_id
         batch[0]['headers']['Upstash-Timeout'] = os.getenv('REVEAL_WORKFLOW_DELIVERY_TIMEOUT', '420s')
         try:
             async with asyncio.timeout(15):
@@ -63,10 +71,12 @@ async def dispatch_pending(repository, *, limit=10):
 
 def plan(registry, payload):
     if payload.get('environment') != environment(): raise ValueError('Vector workflow environment mismatch')
+    if payload.get('namespace') != jobs.namespace(): raise ValueError('Vector workflow namespace mismatch')
     snapshot = registry.get(payload['snapshot_id'])
     with registry.repo.read_transaction() as tx:
         request = tx.get('vector_import_request', payload['snapshot_id'])
-    if not request or request['data']['environment'] != environment(): raise ValueError('No authorized vector import intent')
+    if not request or request['data']['environment'] != environment() or request['data'].get('namespace') != jobs.namespace():
+        raise ValueError('No authorized vector import intent')
     return {'batches': list(snapshot['batches']), 'probes': len(snapshot['quality_probes']),
             'activate': request['data']['activate'], 'expected_previous': request['data']['expected_previous']}
 
@@ -163,7 +173,7 @@ def mount_vector_workflow(app, repository):
 
     async def failure(context, status, body, headers):
         payload = context.request_payload
-        if payload.get('environment') != environment(): return
+        if payload.get('environment') != environment() or payload.get('namespace') != jobs.namespace(): return
         def record_failure():
             with repository.transaction() as tx:
                 tx.put('vector_failure', payload['snapshot_id'], 'catalog', {'status': status, 'at': now(), 'recovery_required': True})
