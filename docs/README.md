@@ -4,6 +4,9 @@ Updated September 30, 2026. Start with the [Workflow runtime](durable-workflow-r
 
 ## Run and develop
 
+- [Standalone REVEAL client against QA](../reveal-client/README.md)
+- [Agent instructions for integrating another frontend](../reveal-client/INTEGRATION.md)
+- [Trusted application gateway](application-gateway.md)
 - [Durable Workflow runtime and local pilot](durable-workflow-runtime.md)
 - [Legacy colleague handoff on your laptop](../README.local.md)
 - [Learn the REVEAL API locally](api-quickstart.md)

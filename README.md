@@ -2,7 +2,26 @@
 
 REVEAL connects existing DisMech knowledge gaps to EAGGL/CFDE mechanisms and captured scientific evidence. Researchers select a question and anchors, run a bounded investigation, and inspect a validated DAPPER ScientificAccount or an explicit insufficient-evidence outcome. Accepted accounts can produce cited research statements and be published for discovery.
 
-## Start locally
+## Build a frontend against the existing API
+
+Start with **[reveal-client](reveal-client/README.md)**, a standalone example that
+connects to the deployed QA backend. It handles workspace sessions, drafts, job
+submission, event streaming and results. You only need Node.js and the private
+QA gateway environment file supplied separately.
+
+```sh
+cd reveal-client
+npm ci
+npm run setup -- --credentials /absolute/path/to/dk-qa.env
+npm run dev
+# Open http://localhost:3200
+```
+
+Give your coding agent [the integration instructions](reveal-client/INTEGRATION.md)
+to reuse the gateway in another framework or replace the example UI. Authentication
+runs automatically on the frontend server; manual token generation is unnecessary.
+
+## Run the backend and original frontend locally
 
 For the durable workflow pilot, follow [the workflow runtime guide](docs/durable-workflow-runtime.md).
 It runs the API and frontend at `http://localhost:3100`, with managed Upstash
@@ -46,6 +65,6 @@ Workflow steps collect frozen evidence, launch Claude in Upstash Box, capture ou
 
 ## Deployment status — September 30, 2026
 
-The local Workflow pilot runs with managed Upstash Redis Pub/Sub and Vector. The HTTP-only QA backend is deployed through Broad's [DIG service platform](docs/platform-deployment.md); public HTTPS event/replay, retrieval and signed workflow/S3 checks passed. Final task-replacement and scientific-review checks are in progress. Production requires the platform's approval, and Vercel awaits authorization to upload its prepared frontend secrets. See the [runtime verification status](docs/durable-workflow-runtime.md#verification-status) for the recorded checks.
+The local Workflow pilot runs with managed Upstash Redis Pub/Sub and Vector. The HTTP-only QA backend is deployed through Broad's [DIG service platform](docs/platform-deployment.md); public HTTPS event/replay, retrieval and signed workflow/S3 checks passed. Final task-replacement and scientific-review checks are in progress. Production requires the platform's approval; Vercel's prepared frontend secrets are uploaded and its deployment awaits backend readiness. See the [runtime verification status](docs/durable-workflow-runtime.md#verification-status) for the recorded checks.
 
 The existing database already contains the imported scientific catalog. A colleague must not reload it to start the app. Source inventories and import commands are in [data inventory](docs/data-inventory.md), [DisMech import](docs/dismech-import.md), [EAGGL import](docs/eaggl-factor-import.md), and [CFDE GeneSets](docs/geneset-import.md). Historical measured runs remain in the [validation report](docs/validation-report.md).
