@@ -4,3 +4,4 @@
 .prototype-composer .chip .label:has(.mechanism-label){padding-block:7px;white-space:normal;min-height:47px}
 .prototype-composer .mechanism-match .mechanism-label{flex:1}
 .prototype-composer .mechanism-match .mechanism-trait{font-size:11px}
+.mechanism-label .mechanism-outdated{color:#8a7440}

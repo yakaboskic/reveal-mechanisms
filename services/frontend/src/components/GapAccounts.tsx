@@ -7,6 +7,8 @@ import { useIdentity } from "./Session";
 import { LoadingSurface } from "./LoadingSurface";
 import type { GapScope } from "./GapBrowser";
 import { GapOutcomes } from "./GapOutcomes";
+import { ReferenceBadge, ReferenceFilter, useReferenceReloaded } from "./ReferenceArchive";
+import { isArchived, type ReferenceState } from "@/lib/reference";
 import "./gap-accounts.css";
 
 type Listing = { binding: string; items: Schema<"AccountSummary">[]; page: Schema<"Page"> };
@@ -24,7 +26,11 @@ function dateLabel(value: string) {
 
 export function GapAccounts({ gap, scope }: { gap: Schema<"GapRecord">; scope: GapScope }) {
   const { me, ready } = useIdentity();
-  const binding = `${scope}\0${gap.object.id}\0${gap.source.source_revision}\0${me?.user_id || "visitor"}`;
+  // One reference filter serves both listings; current work is listed first either way.
+  const [reference, setReference] = useState<ReferenceState>("all");
+  const [outcomesArchived, setOutcomesArchived] = useState(false);
+  const reloaded = useReferenceReloaded();
+  const binding = `${scope}\0${gap.object.id}\0${gap.source.source_revision}\0${me?.user_id || "visitor"}\0${reference}`;
   const current = useRef(binding); current.current = binding;
   const sequence = useRef(0);
   const request = useRef<AbortController | null>(null);
@@ -40,7 +46,7 @@ export function GapAccounts({ gap, scope }: { gap: Schema<"GapRecord">; scope: G
     const controller = new AbortController(); request.current = controller;
     setBusy(true); setError("");
     try {
-      const result = await api.gapAccounts(gap.object.id, gap.source.source_revision, append ? visible?.page.next_cursor || undefined : undefined, controller.signal, scope);
+      const result = await api.gapAccounts(gap.object.id, gap.source.source_revision, append ? visible?.page.next_cursor || undefined : undefined, controller.signal, scope, reference);
       if (controller.signal.aborted || serial !== sequence.current || current.current !== binding) return;
       if (result.items.some(item => item.knowledge_gap.id !== gap.object.id || item.account.question !== gap.object.id)) {
         throw new Error("The returned accounts could not be matched to this knowledge gap. Please retry.");
@@ -68,20 +74,21 @@ export function GapAccounts({ gap, scope }: { gap: Schema<"GapRecord">; scope: G
     <div className="gap-accounts-heading"><div><h2 id="gap-accounts-heading">Scientific accounts</h2><p>{scope === "workspace" ? "Proposed answers in your workspace for this question." : "Published scientific accounts from all researchers for this question."}</p></div>
       {visible && <span className="gap-accounts-count" aria-label={`${visible.items.length}${visible.page.has_more ? " or more" : ""} scientific accounts`}>{visible.items.length}{visible.page.has_more ? "+" : ""}</span>}
     </div>
+    <ReferenceFilter value={reference} visible={reloaded || outcomesArchived || !!visible?.items.some(isArchived)} onChange={setReference} />
     {!visible && busy && <LoadingSurface compact title="Loading scientific accounts" description="Finding proposed answers for this knowledge gap." rows={2} />}
     {visible?.items.map(item => {
       const href = `/accounts/${encodeURIComponent(item.account.id)}?view=conclusions`;
       const date = dateLabel(item.created_at);
       return <article className="gap-account-card" key={item.account.id}>
-        <div className="gap-account-meta"><span>{item.attribution && "Proposed by "}<strong title={item.attribution?.user_id}>{author(item)}</strong></span>{date && <time dateTime={item.created_at}>{date}</time>}</div>
+        <div className="gap-account-meta"><span>{item.attribution && "Proposed by "}<strong title={item.attribution?.user_id}>{author(item)}</strong></span><span className="gap-account-dates"><ReferenceBadge archive={item.archive} />{date && <time dateTime={item.created_at}>{date}</time>}</span></div>
         <h3><Link href={href}>{item.account.name || "Scientific account"}</Link></h3>
         {item.account.closing_remarks && <p className="gap-account-synthesis">{item.account.closing_remarks}</p>}
         <div className="gap-account-footer"><span>{item.claim_count} claim{item.claim_count === 1 ? "" : "s"}</span><Link href={href}>View scientific account <span aria-hidden="true">↗</span></Link></div>
       </article>;
     })}
-    {visible && !visible.items.length && <p className="gap-accounts-empty">{scope === "workspace" ? "No scientific accounts have been proposed in your workspace for this knowledge gap yet." : "No scientific accounts have been published for this knowledge gap yet."}</p>}
+    {visible && !visible.items.length && <p className="gap-accounts-empty">{reference === "archived" ? "No scientific accounts for this knowledge gap were built on an outdated EAGGL reference." : reference === "current" ? "No scientific accounts for this knowledge gap use the current EAGGL reference yet." : scope === "workspace" ? "No scientific accounts have been proposed in your workspace for this knowledge gap yet." : "No scientific accounts have been published for this knowledge gap yet."}</p>}
     {error && <LoadingSurface compact title="Scientific accounts are unavailable" error={error} onRetry={() => void load(!!visible)} skeleton="none" />}
     {visible && busy && <LoadingSurface compact title="Loading more scientific accounts" skeleton="none" />}
     {visible?.page.has_more && !busy && !error && <button className="gap-accounts-more" onClick={() => void load(true)}>Show more accounts <span aria-hidden="true">↓</span></button>}
-  </section><GapOutcomes gap={gap} scope={scope} /></>;
+  </section><GapOutcomes gap={gap} scope={scope} reference={reference} onArchived={setOutcomesArchived} /></>;
 }

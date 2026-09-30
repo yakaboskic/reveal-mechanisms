@@ -1,8 +1,8 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { api, ApiError, messageOf, terminal, type Schema } from "@/lib/client";
-import { applySuggestions, emptyComposer, factorSelection, removeAnchor, selectedGap } from "@/lib/composer";
+import { api, ApiError, messageOf, supersededReference, terminal, type Schema } from "@/lib/client";
+import { applySuggestions, dropOutdatedAnchors, emptyComposer, factorSelection, persistDraft, removeAnchor, selectedGap } from "@/lib/composer";
 import { ProviderButtons, useIdentity } from "./Session";
 import { Activity } from "./Activity";
 import { AccountPreview, Record } from "./Scientific";
@@ -14,7 +14,10 @@ import { LoadingSurface, LoadingStatus } from "./LoadingSurface";
 import { withRequestDeadline } from "@/lib/request-deadline";
 import { providerRedirect } from "@/lib/provider-redirect";
 import { MechanismLabel } from "./MechanismLabel";
-import { mechanismName } from "@/lib/mechanism-display";
+import { mechanismName, mechanismTrait } from "@/lib/mechanism-display";
+import { anchorKey, currentComposer, isReferenceReload, observedReferenceModel, outdatedFromAnchor, outdatedFromFactor, referenceRechecker, type OutdatedAnchor, type ReferenceArchive } from "@/lib/reference";
+import { ReferenceArchiveBanner } from "./ReferenceArchive";
+import { onWorkspaceChange } from "@/lib/workspace-events";
 
 const storageKey = "reveal:composer";
 type LocalDraft = { composer: Schema<"Composer">; gap: Schema<"GapRecord"> | null; factors: Record<string, Schema<"EagglFactor">>; draft: Schema<"Draft"> | null; owner: string | null; job?: Schema<"Job"> | null; submitKey?: { binding: string; key: string } | null };
@@ -23,6 +26,9 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
   const [composer, setComposer] = useState(emptyComposer);
   const [gap, setGap] = useState<Schema<"GapRecord"> | null>(null);
   const [factors, setFactors] = useState<Record<string, Schema<"EagglFactor">>>({});
+  // Anchors from a superseded reference generation render from their archive stamp or frozen factor.
+  const [outdated, setOutdated] = useState<Record<string, OutdatedAnchor>>({});
+  const [requestArchive, setRequestArchive] = useState<ReferenceArchive | null>(null);
   const [draft, setDraft] = useState<Schema<"Draft"> | null>(null);
   // Browsing also autosaves drafts; only opening/restoring one enters editor mode.
   const [draftView, setDraftView] = useState(!!initialDraftId);
@@ -74,7 +80,11 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
     if (hydrated.current) return;
     hydrated.current = true;
     try {
-      const local = JSON.parse(sessionStorage.getItem(storageKey) || "null") as LocalDraft | null;
+      const stored = JSON.parse(sessionStorage.getItem(storageKey) || "null") as LocalDraft | null;
+      // Anchors kept from a superseded reference model cannot be analysed; discard that snapshot.
+      const composer = stored && currentComposer(stored.composer);
+      if (stored && !composer) sessionStorage.removeItem(storageKey);
+      const local = stored && composer ? { ...stored, composer } : null;
       const params = new URLSearchParams(window.location.search);
       // A submitted snapshot belongs to its explicit link, not the home page.
       // Keep refresh recovery for an unsubmitted question and OAuth below.
@@ -136,6 +146,13 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
         const source = frozen.composer.source_gap ? await api.gap(frozen.composer.source_gap.id) : null;
         if (!canRestore()) return;
         saveEpoch.current++; draftRef.current = null; setDraft(null);
+        // Archived requests label their original anchors from the stamp, not the live catalog.
+        const archive = frozen.archive || null;
+        setRequestArchive(archive);
+        if (archive) setOutdated(current => ({ ...current, ...Object.fromEntries(frozen.composer.eaggl_anchors.flatMap(anchor => {
+          const stamped = archive.reference.anchors.find(item => item.source_id === anchor.reference.source_id);
+          return stamped ? [[anchorKey(anchor.reference), outdatedFromAnchor(stamped)]] : [];
+        })) }));
         setComposer(frozen.composer); setGap(source);
       };
       try {
@@ -148,7 +165,12 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
           }
           const source = value.composer.source_gap ? await api.gap(value.composer.source_gap.id) : null;
           if (!canRestore()) return;
-          saveEpoch.current++; draftRef.current = value; setDraft(value); setSaveState("Saved"); setComposer(value.composer); setGap(source); if (!jobId) setJob(null);
+          saveEpoch.current++; draftRef.current = value; setDraft(value); setSaveState("Saved"); setComposer(value.composer); setGap(source); setRequestArchive(null); if (!jobId) setJob(null);
+          // "Start a new analysis with current factors" opens its new draft here to suggest anchors.
+          if (params.get("suggest") === "current") {
+            const url = new URL(window.location.href); url.searchParams.delete("suggest"); window.history.replaceState(null, "", url);
+            if (value.composer.source_gap && !value.composer.eaggl_anchors.length) void suggest(value.composer);
+          }
         } else if (savedJob) {
           await restoreSubmitted();
         } else if (gapId) {
@@ -230,38 +252,72 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
       if (previous && JSON.stringify(previous.composer) === JSON.stringify(snapshot)) { setSaveState("Saved"); return previous; }
       setSaveState("Saving…");
       try {
-        const key = getKey(JSON.stringify({ draft: previous?.id, version: previous?.version, composer: snapshot }));
-        const next = previous ? await api.saveDraft(previous, snapshot, key) : await api.createDraft(snapshot, key);
+        // A draft gone since it was saved (dropped at a reference cutover, or deleted elsewhere) is replaced by a new one.
+        const { draft: next, replaced } = await persistDraft(api, previous, snapshot, getKey,
+          { current: () => epoch === saveEpoch.current, gone: () => { draftRef.current = null; setDraft(null); } });
         if (epoch !== saveEpoch.current) return null;
         draftRef.current = next; setDraft(next); setSaveState("Saved"); setConflict(false);
+        if (replaced) {
+          const url = new URL(window.location.href);
+          if (url.searchParams.get("draft") === replaced) { url.searchParams.set("draft", next.id); window.history.replaceState(null, "", url); }
+        }
         return next;
       } catch (failure) {
         setSaveState("Save failed — edits retained locally");
-        if (failure instanceof ApiError && failure.status === 409) setConflict(true);
+        if (failure instanceof ApiError && failure.status === 409 && !supersededReference(failure)) setConflict(true);
         throw failure;
       }
     }); saveQueue.current = queued; return queued;
   };
+  const outdatedAnchors = composer.eaggl_anchors.filter(anchor => outdated[anchorKey(anchor.reference)]);
   useEffect(() => {
-    if (!booted || !me || !composer.source_gap || job || retrievingJob || restoring || jobRestoreError || conflict || suggesting || submission) return;
-    const timer = setTimeout(() => { void save(composer).catch(e => setError(messageOf(e))); }, 1000);
+    // Outdated anchors cannot be saved; wait until they are replaced with current factors.
+    if (!booted || !me || !composer.source_gap || job || retrievingJob || restoring || jobRestoreError || conflict || suggesting || submission || outdatedAnchors.length) return;
+    const timer = setTimeout(() => { void save(composer).catch(e => { setError(messageOf(e)); if (supersededReference(e)) void verifyAnchors(); }); }, 1000);
     return () => clearTimeout(timer);
-  }, [composer, me?.user_id, booted, job, retrievingJob, restoring, jobRestoreError, conflict, suggesting, submission]);
+  }, [composer, me?.user_id, booted, job, retrievingJob, restoring, jobRestoreError, conflict, suggesting, submission, outdatedAnchors.length]);
   useEffect(() => {
     if (!booted || !ready || !pendingSubmission.current || submissionResumed.current) return;
     submissionResumed.current = true;
     void provision(pendingSubmission.current);
   }, [booted, ready, me?.user_id]);
   useEffect(() => {
-    const missing = composer.eaggl_anchors.filter(anchor => { const factor = factors[anchor.reference.source_id]; return !factor || factor.source_revision !== anchor.reference.source_revision || factor.object.id !== anchor.reference.dapper_id; });
+    const missing = composer.eaggl_anchors.filter(anchor => { if (outdated[anchorKey(anchor.reference)]) return false; const factor = factors[anchor.reference.source_id]; return !factor || factor.source_revision !== anchor.reference.source_revision || factor.object.id !== anchor.reference.dapper_id; });
     if (!missing.length) return; let active = true;
     void Promise.allSettled(missing.map(anchor => api.mechanism(anchor.reference.source_id, anchor.reference.source_revision))).then(values => {
       if (!active) return;
       const records = values.flatMap((value, index) => value.status === "fulfilled" && value.value.source === "eaggl" && value.value.source_revision === missing[index].reference.source_revision && value.value.object.id === missing[index].reference.dapper_id ? [value.value] : []);
       if (records.length) setFactors(current => ({ ...current, ...Object.fromEntries(records.map(record => [record.source_id, record])) }));
+      // 410: a superseded factor; show its frozen snapshot instead of retrying the live catalog.
+      const gone = values.flatMap((value, index) => value.status === "rejected" && supersededReference(value.reason) ? [outdatedEntry(missing[index], value.reason)] : []);
+      if (gone.length) setOutdated(current => ({ ...current, ...Object.fromEntries(gone) }));
     });
     return () => { active = false; };
-  }, [composer.eaggl_anchors, factors]);
+  }, [composer.eaggl_anchors, factors, outdated]);
+  const outdatedEntry = (anchor: Schema<"Selection">, failure: ApiError) => {
+    const cached = factors[anchor.reference.source_id];
+    return [anchorKey(anchor.reference), outdatedFromFactor(anchor.reference.source_id, failure.problem?.archived_reference_factor, cached && { name: mechanismName(cached), trait: mechanismTrait(cached) })] as const;
+  };
+  // A 409 REFERENCE_GENERATION_SUPERSEDED names no anchor: re-read each one to find the superseded ones.
+  // After such a 409 a changed revision is also a superseded generation (KPN ids can recur).
+  const verifyAnchors = async (revisions = true) => {
+    const anchors = currentRef.current.eaggl_anchors;
+    const values = await Promise.allSettled(anchors.map(anchor => api.mechanism(anchor.reference.source_id, anchor.reference.source_revision)));
+    const stale = values.flatMap((value, index) => value.status === "rejected" && (supersededReference(value.reason) || (revisions && value.reason instanceof ApiError && value.reason.code === "SOURCE_REVISION_CHANGED")) ? [outdatedEntry(anchors[index], value.reason as ApiError)] : []);
+    if (stale.length && mounted.current) setOutdated(current => ({ ...current, ...Object.fromEntries(stale) }));
+  };
+  const verifyRef = useRef(verifyAnchors); verifyRef.current = verifyAnchors;
+  // A reference cutover publishes a `reference` catalog event (publications emit other catalog events);
+  // recheck anchors kept in an open composer, now and after the API has swapped catalogs (410 only).
+  useEffect(() => {
+    const rechecks = referenceRechecker(() => { if (mounted.current && currentRef.current.eaggl_anchors.length) void verifyRef.current(false); });
+    const remove = onWorkspaceChange((reset, event) => { if (!reset && isReferenceReload(event)) rechecks.schedule(); });
+    return () => { remove(); rechecks.cancel(); };
+  }, []);
+  const replaceOutdated = () => {
+    const next = dropOutdatedAnchors(currentRef.current, new Set(outdatedAnchors.map(anchor => anchor.reference.source_id)));
+    setError(""); setConflict(false); setComposer(next); void suggest(next);
+  };
   const rememberFactors = (values: Schema<"EagglFactor">[]) => setFactors(current => ({ ...current, ...Object.fromEntries(values.map(f => [f.source_id, f])) }));
   const suggest = async (snapshot: Schema<"Composer">) => {
     if (!snapshot.source_gap) return;
@@ -269,17 +325,18 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
     const controller = new AbortController(); suggestionRequest.current = controller;
     setSuggesting(true);
     try {
-      const value = await api.suggest({ source_gap: snapshot.source_gap, manual_eaggl_anchors: snapshot.eaggl_anchors.filter(a => a.origin === "manual").map(a => a.reference), dismissed_source_ids: snapshot.dismissed_source_ids, subquery: snapshot.mechanism_subquery, mode: "semantic", model: "cfde-inc-v2" }, controller.signal);
+      // The API serves one active reference model; the composer's own model is the fallback.
+      const value = await api.suggest({ source_gap: snapshot.source_gap, manual_eaggl_anchors: snapshot.eaggl_anchors.filter(a => a.origin === "manual").map(a => a.reference), dismissed_source_ids: snapshot.dismissed_source_ids, subquery: snapshot.mechanism_subquery, mode: "semantic", model: observedReferenceModel() || snapshot.model }, controller.signal);
       if (controller.signal.aborted) return;
       rememberFactors(value.automatic_anchors.map(item => item.factor)); setLimitations(value.limitations);
       setComposer(current => current.source_gap?.id === snapshot.source_gap?.id && current.source_gap?.source_revision === snapshot.source_gap?.source_revision ? applySuggestions(current, value) : current);
-    } catch (failure) { if (!controller.signal.aborted) setError(messageOf(failure)); }
+    } catch (failure) { if (!controller.signal.aborted) { setError(messageOf(failure)); if (supersededReference(failure)) void verifyAnchors(); } }
     finally { if (suggestionRequest.current === controller) { suggestionRequest.current = null; setSuggesting(false); } }
   };
   async function selectGap(value: Schema<"GapRecord">, restoringSelection = false) {
     if (!restoringSelection) { restoreEpoch.current++; setRestoring(""); setRetrievingJob(false); setJobRestoreError(""); }
     saveEpoch.current++;
-    setGap(value); setQuery(""); setJob(null); setError(""); setConflict(false); submitKey.current = null;
+    setGap(value); setQuery(""); setJob(null); setError(""); setConflict(false); submitKey.current = null; setRequestArchive(null); setOutdated({});
     const next = { ...emptyComposer(), source_gap: selectedGap(value) };
     setComposer(next); setDraft(null); draftRef.current = null;
     if (me) void api.explore({ source_gap: selectedGap(value) }).catch(e => setError(messageOf(e)));
@@ -350,7 +407,11 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
       if (mounted.current) requestAnimationFrame(() => document.getElementById("submitted-question")?.focus());
       // Recording the visit is bookkeeping; it must not delay or block a research job.
       void api.explore({ source_gap: saved.composer.source_gap!, draft_id: saved.id }).catch(() => {});
-    } catch (failure) { submissionFailed(failure); }
+    } catch (failure) {
+      // Retrying cannot help outdated anchors: return to the question and mark them for replacement.
+      if (supersededReference(failure)) { pendingSubmission.current = null; rememberSubmission(null); setSubmission(null); setError(messageOf(failure)); void verifyAnchors(); }
+      else submissionFailed(failure);
+    }
     finally { submissionRunning.current = false; }
   }
   const launch = () => { const attempt = beginSubmission("session"); if (attempt) void provision(attempt); };
@@ -394,7 +455,7 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
     setDraftView(false);
     restoreEpoch.current++; setRestoring(""); setRetrievingJob(false); setJobRestoreError("");
     suggestionRequest.current?.abort(); suggestionRequest.current = null; setSuggesting(false); setLimitations([]);
-    saveEpoch.current++; setGap(null); setComposer(emptyComposer()); setDraft(null); draftRef.current = null; setError(""); setAdding(false); setQuery("");
+    saveEpoch.current++; setGap(null); setComposer(emptyComposer()); setDraft(null); draftRef.current = null; setError(""); setAdding(false); setQuery(""); setRequestArchive(null); setOutdated({});
     const url = new URL(window.location.href); ["draft", "gap", "job"].forEach(key => url.searchParams.delete(key)); window.history.replaceState(null, "", url);
     requestAnimationFrame(() => document.getElementById("gap-search")?.focus());
   };
@@ -404,7 +465,13 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
     const anchor = composer.eaggl_anchors.find(item => item.reference.source_id === id); const factor = factors[id];
     return anchor && factor?.source_revision === anchor.reference.source_revision && factor.object.id === anchor.reference.dapper_id ? factor : undefined;
   };
-  const anchorName = (id: string) => mechanismName(selectedFactor(id));
+  const outdatedAnchor = (anchor: Schema<"Selection">) => outdated[anchorKey(anchor.reference)];
+  const anchorName = (anchor: Schema<"Selection">) => outdatedAnchor(anchor)?.name || mechanismName(selectedFactor(anchor.reference.source_id));
+  const inspectAnchor = (anchor: Schema<"Selection">) => {
+    const old = outdatedAnchor(anchor), factor = selectedFactor(anchor.reference.source_id);
+    if (old) setInspection({ title: old.name, description: "This anchor belongs to an outdated EAGGL reference generation. It is shown from its archived record and can no longer be analysed.", value: { ...old, reference: anchor.reference } });
+    else setInspection({ title: factor?.cfde_anchor.label || "Mechanism anchor", description: factor?.object.description, value: factor || anchor });
+  };
   const discoveryVisible = !draftView && !job;
   if (submission) return <SubmissionProgress stage={submission.stage} provider={pendingSubmission.current?.method} question={pendingSubmission.current?.question} error={submission.error} onRetry={retrySubmission} onBack={backToQuestion} retryLabel={pendingSubmission.current?.method === "google" || pendingSubmission.current?.method === "orcid" ? "Try again" : "Retry"} />;
   const jobStatusSurface = <LoadingSurface compact={!!job} skeleton={job ? "none" : "rows"} title={jobRestoreError ? "Unable to retrieve job status" : "Retrieving job status"} description="Checking the current stage and reconnecting to recorded activity." error={jobRestoreError} onRetry={() => { setJobRestoreError(""); setRetrievingJob(true); setRestoreAttempt(value => value + 1); }} />;
@@ -426,17 +493,18 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
         <div className="selected-question-row"><h1 id="submitted-question" tabIndex={job ? -1 : undefined} className="selected-question">{gap.object.text}</h1>{!job && <button className="clear-question" aria-label="Search for a different knowledge gap" onClick={clearGap}>×</button>}</div>
         <div className="inline-context">
           {!job && <><div className="question-meta"><button className="subtle" onClick={() => setInspection({ title: "About this knowledge gap", description: gap.object.gap_description, value: gap })}>About this knowledge gap ↗</button><span>DisMech</span></div><p className="anchor-guidance">Anchor on possible genetic mechanisms to explore evidence for answering this gap.</p><div className="chip-group-label">Mechanism anchors <span>{composer.eaggl_anchors.length}</span>{suggesting && <LoadingStatus>Finding anchors…</LoadingStatus>}{!!limitations.length && <button className="matching-note" onClick={() => setInspection({ title: "About mechanism matching", description: limitations.join(" "), value: { model: composer.model, automatic_anchors: composer.eaggl_anchors.filter(anchor => anchor.origin === "automatic").length } })}>About matching</button>}</div></>}
-          <div className="anchor-chips" aria-label="Selected mechanism anchors">{composer.eaggl_anchors.map(anchor => <span className="chip" key={anchor.reference.source_id}><button className="label" title={[anchorName(anchor.reference.source_id), selectedFactor(anchor.reference.source_id)?.cfde_anchor.subtitle].filter(Boolean).join(" · ")} onClick={() => setInspection({ title: selectedFactor(anchor.reference.source_id)?.cfde_anchor.label || "Mechanism anchor", description: selectedFactor(anchor.reference.source_id)?.object.description, value: selectedFactor(anchor.reference.source_id) || anchor })}><MechanismLabel factor={selectedFactor(anchor.reference.source_id)} sourceId={anchor.reference.source_id} /></button>{!job && <button className="remove" aria-label={`Remove ${anchorName(anchor.reference.source_id)}`} onClick={() => setComposer(current => removeAnchor(current, anchor.reference.source_id))}>×</button>}</span>)}{!job && <button className="chip-add" aria-expanded={adding} aria-controls="factor-picker" aria-label="Add a mechanism anchor" onClick={() => { setAdding(!adding); if (!adding) requestAnimationFrame(() => document.getElementById("mechanism-search")?.focus()); }}>+</button>}</div>
+          <div className="anchor-chips" aria-label="Selected mechanism anchors">{composer.eaggl_anchors.map(anchor => <span className="chip" key={anchor.reference.source_id}><button className="label" title={(outdatedAnchor(anchor) ? [anchorName(anchor), outdatedAnchor(anchor)!.trait, "Outdated reference"] : [anchorName(anchor), selectedFactor(anchor.reference.source_id)?.cfde_anchor.subtitle]).filter(Boolean).join(" · ")} onClick={() => inspectAnchor(anchor)}><MechanismLabel factor={selectedFactor(anchor.reference.source_id)} sourceId={anchor.reference.source_id} outdated={outdatedAnchor(anchor)} /></button>{!job && <button className="remove" aria-label={`Remove ${anchorName(anchor)}`} onClick={() => setComposer(current => removeAnchor(current, anchor.reference.source_id))}>×</button>}</span>)}{!job && <button className="chip-add" aria-expanded={adding} aria-controls="factor-picker" aria-label="Add a mechanism anchor" onClick={() => { setAdding(!adding); if (!adding) requestAnimationFrame(() => document.getElementById("mechanism-search")?.focus()); }}>+</button>}</div>
           {!job && <>
+            {!!outdatedAnchors.length && <div className="conflict reference-outdated" role="status"><p>{outdatedAnchors.length === 1 ? "One mechanism anchor comes" : `${outdatedAnchors.length} mechanism anchors come`} from an outdated EAGGL reference and can’t be analysed. Replace {outdatedAnchors.length === 1 ? "it" : "them"} with current factors to continue.</p><button disabled={suggesting} onClick={replaceOutdated}>Replace with current factors</button></div>}
             {!composer.eaggl_anchors.length && !suggesting && <p className="anchor-required" role="status">Add at least one mechanism anchor to continue.</p>}
             <div className="context-disclosures">
-              <details id="factor-picker" open={adding} onToggle={e => setAdding(e.currentTarget.open)}><summary>Find more mechanisms</summary><label className="sr-only" htmlFor="mechanism-search">Search possible genetic mechanisms</label><input id="mechanism-search" type="search" className="field" value={composer.mechanism_subquery} onChange={e => setComposer(c => ({ ...c, mechanism_subquery: e.target.value }))} placeholder="Search possible genetic mechanisms" />{matches.map(factor => <button className="mechanism-match" key={factor.source_id} title={factor.cfde_anchor.subtitle || factor.source_id} disabled={composer.eaggl_anchors.length >= 10 || composer.eaggl_anchors.some(a => a.reference.source_id === factor.source_id)} onClick={() => { rememberFactors([factor]); setComposer(c => ({ ...c, eaggl_anchors: [...c.eaggl_anchors, factorSelection(factor, "manual")], dismissed_source_ids: c.dismissed_source_ids.filter(id => id !== factor.source_id) })); }}><MechanismLabel factor={factor} /><span aria-hidden="true">+</span></button>)}{findingMatches && <LoadingSurface compact skeleton={matches.length ? "none" : "rows"} rows={2} title={matches.length ? "Finding related mechanisms" : "Finding mechanisms"} description="Matching your search to available genetic mechanism anchors." />}{!!composer.mechanism_subquery.trim() && !findingMatches && !matches.length && <p className="muted">No mapped anchors found.</p>}<button className="text-button" disabled={suggesting} onClick={() => { const next = { ...composer, dismissed_source_ids: [], eaggl_anchors: composer.eaggl_anchors.filter(a => a.origin === "manual") }; setComposer(next); void suggest(next); }}>Reset suggestions</button><small>Up to five automatic anchors. Removed anchors stay dismissed until reset.</small></details>
+              <details id="factor-picker" open={adding} onToggle={e => setAdding(e.currentTarget.open)}><summary>Find more mechanisms</summary><label className="sr-only" htmlFor="mechanism-search">Search possible genetic mechanisms</label><input id="mechanism-search" type="search" className="field" value={composer.mechanism_subquery} onChange={e => setComposer(c => ({ ...c, mechanism_subquery: e.target.value }))} placeholder="Search possible genetic mechanisms" />{matches.map(factor => <button className="mechanism-match" key={factor.source_id} title={factor.cfde_anchor.subtitle || factor.source_id} disabled={composer.eaggl_anchors.length >= 10 || composer.eaggl_anchors.some(a => a.reference.source_id === factor.source_id)} onClick={() => { rememberFactors([factor]); setComposer(c => ({ ...c, model: factor.model, eaggl_anchors: [...c.eaggl_anchors, factorSelection(factor, "manual")], dismissed_source_ids: c.dismissed_source_ids.filter(id => id !== factor.source_id) })); }}><MechanismLabel factor={factor} /><span aria-hidden="true">+</span></button>)}{findingMatches && <LoadingSurface compact skeleton={matches.length ? "none" : "rows"} rows={2} title={matches.length ? "Finding related mechanisms" : "Finding mechanisms"} description="Matching your search to available genetic mechanism anchors." />}{!!composer.mechanism_subquery.trim() && !findingMatches && !matches.length && <p className="muted">No mapped anchors found.</p>}<button className="text-button" disabled={suggesting} onClick={() => { const next = { ...composer, dismissed_source_ids: [], eaggl_anchors: composer.eaggl_anchors.filter(a => a.origin === "manual") }; setComposer(next); void suggest(next); }}>Reset suggestions</button><small>Up to five automatic anchors. Removed anchors stay dismissed until reset.</small></details>
               <details><summary>Linked DisMech mechanisms <span className="disclosure-count">{linkedMechanisms.length} linked</span></summary><p className="muted">Mechanisms linked to this curated knowledge gap. Source context is read-only.</p>{linkedMechanisms.map((item, i) => <button className="linked-mechanism" key={i} onClick={() => setInspection({ title: item.label || "DisMech source context", value: item })}><span>{item.label || item.source_reference}<small>{item.target_kind} · {item.resolution.replaceAll("_", " ")}</small></span><span aria-hidden="true">↗</span></button>)}{!linkedMechanisms.length && <p className="muted">No linked mechanisms in this source observation.</p>}</details>
               <details><summary>Additional knowledge graphs</summary><div className="checks">{(["biomarkerkg", "prokn"] as const).map(kg => <label key={kg}><input type="checkbox" checked={composer.selected_kgs.includes(kg)} onChange={e => setComposer(c => ({ ...c, selected_kgs: e.target.checked ? [...c.selected_kgs, kg] : c.selected_kgs.filter(k => k !== kg) }))} />{kg === "prokn" ? "ProKN" : "BiomarkerKG"}</label>)}</div></details>
             </div>
             {!draft && <span className="sr-only" role="status">{me ? saveState : "Selections kept in this browser"}</span>}
             <p id="research-result-options" className="research-result-options">A completed analysis returns <strong>scientific accounts</strong> supported by the evidence, or a <strong>saved exploration</strong> explaining why an account could not be supported.</p>
-            <div className="submit-row"><button className="gap-submit" aria-label="Let’s close this gap" aria-describedby="research-result-options" disabled={!composer.eaggl_anchors.length || suggesting || conflict || !ready} onClick={() => me ? void launch() : dialog.current?.showModal()}><span>Let’s close this gap</span><span className="send" aria-hidden="true"><span>↑</span></span></button></div>
+            <div className="submit-row"><button className="gap-submit" aria-label="Let’s close this gap" aria-describedby="research-result-options" disabled={!composer.eaggl_anchors.length || suggesting || conflict || !ready || !!outdatedAnchors.length} onClick={() => me ? void launch() : dialog.current?.showModal()}><span>Let’s close this gap</span><span className="send" aria-hidden="true"><span>↑</span></span></button></div>
           </>}
         </div>
       </>}
@@ -447,7 +515,8 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
     {!gap && discoveryVisible && !query.length && <GapBrowser scope={gapScope} onSelect={value => void selectGap(value)} onRanked={setTrending} />}
     {error && <div className="error" role="alert">{error}</div>}
     {conflict && <div className="conflict"><p>This draft changed in another session. Your edits are retained here.</p><button onClick={async () => { if (!draftRef.current) return; const latest = await api.draft(draftRef.current.id); draftRef.current = latest; setDraft(latest); setComposer(latest.composer); setConflict(false); setError(""); }}>Load saved version</button><button onClick={() => { draftRef.current = null; setDraft(null); setConflict(false); setError(""); void save().catch(e => setError(messageOf(e))); }}>Save my edits as a new draft</button></div>}
-    {job && <><Activity key={job.id} initial={job} onJob={setJob} />{accountIds.map(id => <AccountPreview key={id} id={id} />)}{terminal(job.status) && <button className="text-button return-to-question" onClick={reset}>Return to question</button>}</>}
+    {job && requestArchive && <ReferenceArchiveBanner compact archive={requestArchive} subject="analysis" gapId={requestArchive.gap?.id || composer.source_gap?.id} anchorsOpen={false} settings={async () => ({ selected_kgs: composer.selected_kgs, mechanism_subquery: composer.mechanism_subquery })} />}
+    {job && <><Activity key={job.id} initial={job} onJob={setJob} archived={!!requestArchive} />{accountIds.map(id => <AccountPreview key={id} id={id} />)}{terminal(job.status) && <button className="text-button return-to-question" onClick={reset}>Return to question</button>}</>}
     <dialog ref={inspectionDialog} className="inspection-dialog" aria-labelledby="inspection-title" onClose={() => setInspection(null)}><div className="inspection-heading"><h2 id="inspection-title">{inspection?.title}</h2><button aria-label="Close record" onClick={() => inspectionDialog.current?.close()}>×</button></div><div className="inspection-body">{inspection?.title === "About this knowledge gap" && <p>{gap?.object.text}</p>}{inspection?.description && <><h3>{inspection.title === "About this knowledge gap" ? "What remains unknown" : "Context"}</h3><p>{inspection.description}</p></>}<details open={!inspection?.description}><summary>Source evidence and record</summary><Record value={inspection?.value} /></details></div></dialog>
     <dialog ref={dialog} className="auth-dialog" aria-labelledby="auth-title"><button className="dialog-close" aria-label="Close sign-in choices" onClick={() => dialog.current?.close()}>×</button><h2 id="auth-title">Continue your exploration</h2><p>Sign in to keep your work, or continue anonymously.</p><ProviderButtons onLogin={oauth} /><div className="or">or</div><button className="provider" onClick={anonymous}>Continue anonymously</button><small>Your selected question and anchors stay with you. Anonymous access depends on this browser session.</small>{error && <p role="alert" className="error">{error}</p>}</dialog>
   </main>;

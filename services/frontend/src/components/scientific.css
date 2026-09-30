@@ -113,6 +113,7 @@
 .account-preview-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:12px}
 .account-preview-heading h3{font-size:14px;font-weight:500;color:#4f6380;margin:0}
 .account-preview-heading>span{font-size:11px;color:#718399}
+.account-preview-state{display:inline-flex;align-items:center;flex-wrap:wrap;justify-content:flex-end;gap:8px}
 .account-result{padding:23px;border:1px solid #e1e8f2;border-radius:12px;background:#fff}
 .account-result h4{font-size:16px;font-weight:500;line-height:1.6;color:#354963;margin:0 0 12px}
 .account-result-closing{font-size:13px;line-height:1.85;color:#4d5e76;margin:0;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:5;overflow:hidden;overflow-wrap:anywhere}

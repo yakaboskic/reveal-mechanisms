@@ -1,4 +1,5 @@
 import type { Schema } from "./client";
+import { currentComposer } from "./reference";
 
 export const submissionStorageKey = "reveal:submission";
 export type SubmissionMethod = "anonymous" | "google" | "orcid" | "session";
@@ -25,7 +26,9 @@ export function rememberSubmission(attempt: SubmissionAttempt | null) {
 export function restoreSubmission(): SubmissionAttempt | null {
   try {
     const value = JSON.parse(sessionStorage.getItem(submissionStorageKey) || "null") as SubmissionAttempt | null;
-    if (value && ["anonymous", "google", "orcid", "session"].includes(value.method) && value.composer?.source_gap && value.composer.eaggl_anchors.length && Array.isArray(value.requestKeys) && value.requestKeys.every(entry => Array.isArray(entry) && entry.length === 2 && entry.every(part => typeof part === "string")) && typeof value.anonymousKey === "string") return value;
+    if (value && ["anonymous", "google", "orcid", "session"].includes(value.method) && value.composer?.source_gap && value.composer.eaggl_anchors.length && Array.isArray(value.requestKeys) && value.requestKeys.every(entry => Array.isArray(entry) && entry.length === 2 && entry.every(part => typeof part === "string")) && typeof value.anonymousKey === "string"
+      // A submission kept across a reference reload holds superseded anchors; it cannot succeed.
+      && currentComposer(value.composer)) return value;
   } catch { /* Ignore an incomplete browser snapshot. */ }
   rememberSubmission(null);
   return null;

@@ -1,9 +1,16 @@
 import { api, type Schema } from "./client";
 import { allWorkspacePages } from "./workspace";
 import type { LoadMode } from "./revalidation-cache";
+import { parseReferenceState, type ReferenceState } from "./reference";
 
 export const workspaceTabs = ["gaps", "accounts", "explorations"] as const;
 export type WorkspaceTab = typeof workspaceTabs[number];
+/** Accounts and explorations can be listed by reference state; `all` keeps the plain tab key. */
+export type WorkspaceKey = WorkspaceTab | `${"accounts" | "explorations"}:${"current" | "archived"}`;
+export const workspaceKey = (tab: WorkspaceTab, reference: ReferenceState = "all"): WorkspaceKey => tab === "gaps" || reference === "all" ? tab : `${tab}:${reference}`;
+export const workspaceKeyTab = (key: WorkspaceKey) => key.split(":")[0] as WorkspaceTab;
+/** Every cached variant of the given tabs, for invalidation. */
+export const workspaceKeys = (tabs: readonly WorkspaceTab[]): WorkspaceKey[] => tabs.flatMap(tab => tab === "gaps" ? [tab] : [tab, `${tab}:current`, `${tab}:archived`] as const);
 export type WorkspaceData = {
   gaps: Schema<"Exploration">[]; accounts: Schema<"AccountSummary">[]; outcomes: Schema<"AnalysisOutcomeSummary">[];
   drafts: Schema<"Draft">[]; jobs: Schema<"Job">[]; requests: Schema<"ResearchRequest">[];
@@ -26,8 +33,8 @@ async function listing<T>(fetch: (cursor?: string) => Promise<{ items: T[]; page
   return { items: [...items.values()], cursor: next, pages: append ? depth + 1 : pages };
 }
 
-export async function loadWorkspaceData(tab: WorkspaceTab, previous: WorkspaceData | undefined, mode: LoadMode, signal: AbortSignal): Promise<WorkspaceData> {
-  const saved = previous || blank;
+export async function loadWorkspaceData(key: WorkspaceKey, previous: WorkspaceData | undefined, mode: LoadMode, signal: AbortSignal): Promise<WorkspaceData> {
+  const saved = previous || blank, tab = workspaceKeyTab(key), reference = parseReferenceState(key.split(":")[1]);
   if (mode === "activity" && previous && tab === "gaps") {
     const jobs = await allWorkspacePages(cursor => api.jobs(cursor, signal));
     const known = new Set(previous.requests.map(request => request.id));
@@ -39,11 +46,11 @@ export async function loadWorkspaceData(tab: WorkspaceTab, previous: WorkspaceDa
   if (append && !saved.cursor) return saved;
   const depth = Math.max(1, saved.pages);
   if (tab === "accounts") {
-    const list = await listing(cursor => api.accounts(cursor, signal), item => item.account.id, saved.accounts, depth, append, saved.cursor);
+    const list = await listing(cursor => api.accounts(cursor, signal, reference), item => item.account.id, saved.accounts, depth, append, saved.cursor);
     return { ...saved, accounts: list.items, cursor: list.cursor, pages: list.pages };
   }
   if (tab === "explorations") {
-    const list = await listing(cursor => api.outcomes(cursor, signal), item => item.id, saved.outcomes, depth, append, saved.cursor);
+    const list = await listing(cursor => api.outcomes(cursor, signal, reference), item => item.id, saved.outcomes, depth, append, saved.cursor);
     return { ...saved, outcomes: list.items, cursor: list.cursor, pages: list.pages };
   }
   const [list, drafts, jobs, requests] = await Promise.all([

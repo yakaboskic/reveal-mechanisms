@@ -3,9 +3,15 @@ import type { AnalysisInput, Composer, Draft, Gap, Job, Me, Page, Schema } from 
 export class ApiError extends Error {
   constructor(public status: number, public code: string, message: string) { super(message); }
 }
+// Reference reloads (docs/reference-reload.md) replace the EAGGL factors the API serves.
+const referenceCopy: Record<string, string> = {
+  REFERENCE_GENERATION_SUPERSEDED: "These mechanism anchors come from an outdated EAGGL reference. Select a knowledge gap again to use current factors.",
+  REFERENCE_RELOAD_IN_PROGRESS: "EAGGL reference data is being updated. Your selections are kept; please try again in a few minutes.",
+};
 export async function responseError(response: Response): Promise<ApiError> {
   const value = await response.json().catch(() => null);
-  return new ApiError(response.status, value?.code || "API_UNAVAILABLE", value?.detail || `Request failed (${response.status}).`);
+  const code = value?.code || "API_UNAVAILABLE";
+  return new ApiError(response.status, code, referenceCopy[code] || value?.detail || `Request failed (${response.status}).`);
 }
 export async function request<T>(path: string, options: { method?: string; body?: unknown; key?: string; signal?: AbortSignal } = {}): Promise<T> {
   const headers = new Headers({ Accept: "application/json" });

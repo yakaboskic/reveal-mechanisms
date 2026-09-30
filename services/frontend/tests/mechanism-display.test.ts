@@ -26,3 +26,16 @@ test("trait text is not guessed or expanded and numeric content in real trait la
   assert.equal(mechanismTrait(withAnchor({ subtitle: "HDL" })), "HDL");
   assert.equal(mechanismTrait(withAnchor({ subtitle: "Trait (subtype) (Factor2)" })), "Trait (subtype)");
 });
+
+const spec = JSON.parse(readFileSync(new URL("../../../api/openapi.json", import.meta.url), "utf8"));
+const kpn = spec.paths["/v1/mechanisms/{source_id}"].get.responses["200"].content["application/json"].examples.kpn_factor.value as Schema<"EagglFactor">;
+
+test("KPN factors show the KPN phenotype name and the EAGGL factor label", () => {
+  assert.equal(mechanismTrait(kpn), "Type 2 diabetes (T2D)");
+  assert.equal(mechanismName(kpn), "Metabolic Dysregulation Indicators");
+  // kpn_trait wins over a subtitle; without either, the KPN trait identity is shown.
+  assert.equal(mechanismTrait({ ...kpn, cfde_anchor: { ...kpn.cfde_anchor, subtitle: "Other (Factor1)" } }), "Type 2 diabetes (T2D)");
+  assert.equal(mechanismTrait({ ...kpn, kpn_trait: null, cfde_anchor: { ...kpn.cfde_anchor, subtitle: "" } }), "KPN.TRAIT:0000398");
+  assert.equal(mechanismTrait(undefined, "factor:kpn:0000398:eaggl-capped-v1:Factor12"), "KPN.TRAIT:0000398");
+  assert.equal(mechanismTrait(undefined, "factor:kpn:398:eaggl-capped-v1:Factor1"), null);
+});

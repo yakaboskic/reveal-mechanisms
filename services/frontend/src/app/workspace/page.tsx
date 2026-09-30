@@ -10,6 +10,8 @@ import { WorkspaceGapRow } from "@/components/WorkspaceDrafts";
 import { useWorkspaceData } from "@/components/WorkspaceCache";
 import { workspaceTabs as tabs, type WorkspaceTab } from "@/lib/workspace-data";
 import { outcomeHref } from "@/components/AnalysisOutcome";
+import { ReferenceBadge, ReferenceFilter, useReferenceReloaded } from "@/components/ReferenceArchive";
+import { isArchived, parseReferenceState, type ReferenceState } from "@/lib/reference";
 import "@/components/workspace-activity.css";
 
 const tabLabels = { gaps: "Knowledge gaps", accounts: "Scientific accounts", explorations: "Explorations" };
@@ -19,9 +21,13 @@ function Workspace() {
   const searchParams = useSearchParams();
   const requestedTab = searchParams.get("tab");
   const tab: WorkspaceTab = tabs.includes(requestedTab as WorkspaceTab) ? requestedTab as WorkspaceTab : "gaps";
+  // Accounts and explorations can be filtered by EAGGL reference; drafts and gaps cannot.
+  const reference = parseReferenceState(searchParams.get("reference"));
+  const listedReference: ReferenceState = tab === "gaps" ? "all" : reference;
   const [localGaps, setLocalGaps] = useState<Schema<"GapRecord">[]>([]);
   const { me, ready } = useIdentity();
-  const cached = useWorkspaceData(tab);
+  const cached = useWorkspaceData(tab, listedReference);
+  const reloaded = useReferenceReloaded();
   const { gaps = [], accounts = [], outcomes = [], drafts = [], jobs = [], requests = [], cursor = null } = cached.data || {};
   const { loading, loadingMore, counts } = cached;
   const error = cached.error ? messageOf(cached.error) : "";
@@ -29,12 +35,15 @@ function Workspace() {
   useEffect(() => { try { setLocalGaps(JSON.parse(sessionStorage.getItem("reveal:local-explorations") || "[]")); } catch { /* empty browser history */ } }, []);
   const activity = workspaceRuns(jobs, requests, drafts);
   const load = (append = false) => append ? cached.loadMore() : cached.refresh();
-  const chooseTab = (value: WorkspaceTab) => { window.history.replaceState(null, "", `?tab=${value}`); };
+  const navigate = (value: WorkspaceTab, state: ReferenceState) => { window.history.replaceState(null, "", `?tab=${value}${state === "all" ? "" : `&reference=${state}`}`); };
+  const chooseTab = (value: WorkspaceTab) => navigate(value, reference);
   const count = (value: WorkspaceTab) => me ? counts[value] : ready ? String(value === "gaps" ? localGaps.length : 0) : undefined;
   const initialLoading = !ready || (!!me && !cached.data && !error);
   const signedIn = me?.principal_kind === "registered";
   const hasCurrentData = !!me && !!cached.data;
   const isEmpty = tab === "gaps" ? (me ? gaps.length : localGaps.length) === 0 : !me || (tab === "accounts" ? accounts.length === 0 : outcomes.length === 0);
+  const showReference = tab !== "gaps" && hasCurrentData && (reloaded || (tab === "accounts" ? accounts : outcomes).some(isArchived));
+  const filteredEmpty = listedReference === "all" ? null : listedReference === "current" ? `No ${tab === "accounts" ? "scientific accounts" : "explorations"} use the current EAGGL reference yet.` : `No ${tab === "accounts" ? "scientific accounts" : "explorations"} were built on an outdated EAGGL reference.`;
   return <main id="main" className="reading-page workspace-dashboard">
     <nav className="workspace-topbar" aria-label="Workspace navigation"><Link href="/">← Explore knowledge gaps</Link>{me && <button className="text-button workspace-refresh" disabled={loading} onClick={() => void cached.refresh()}>Refresh</button>}</nav>
     <div className="workspace-heading"><h1>Your workspace</h1><p>{signedIn ? "Your knowledge gaps, scientific accounts, and explorations, together." : "A place for the questions you explore and the accounts you build."}</p></div>
@@ -45,21 +54,23 @@ function Workspace() {
       const next: WorkspaceTab = event.key === "Home" ? "gaps" : event.key === "End" ? tabs[tabs.length - 1] : tabs[(index + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length];
       chooseTab(next); document.getElementById(`workspace-tab-${next}`)?.focus();
     }}>{tabLabels[value]}{count(value) !== undefined && <span title={count(value)!.endsWith("+") ? "More records are available. Load more to see the remaining history." : undefined}>{count(value)}</span>}</button>)}</div>
+    {tab !== "gaps" && me && <ReferenceFilter value={listedReference} visible={showReference} onChange={value => navigate(tab, value)} />}
     <div id="workspace-results" role="tabpanel" aria-labelledby={`workspace-tab-${tab}`} aria-busy={initialLoading || loading}>
       {initialLoading ? <LoadingSurface key={`${me?.user_id || "session"}:${tab}`} title={!ready ? "Opening your workspace" : `Loading your ${tabLabels[tab].toLowerCase()}`} description={!ready ? "Checking this browser’s access to your saved work." : "Your saved explorations will appear here when the request completes."} /> : <>
         {tab === "gaps" ? me ? (hasCurrentData ? gaps : []).map(item => <WorkspaceGapRow key={`${me.user_id}:${item.source_gap.source_id}`} item={item} drafts={drafts.filter(draft => draft.composer.source_gap?.id === item.source_gap.id)} activity={activity} refresh={cached.refresh} />) : localGaps.map(gap => <article className="workspace-gap-row" key={gap.object.id}><Link className="workspace-item-title" href={`/?gap=${encodeURIComponent(gap.object.id)}`}>{gap.object.text}</Link><div className="workspace-item-meta">{gap.source.disease_label && <span>{gap.source.disease_label}</span>}<span>Kept in this browser</span></div></article>) : tab === "explorations" ? (hasCurrentData ? outcomes : []).map(item => <article className="workspace-account-row" key={item.id}>
-          <div className="workspace-item-meta"><time dateTime={item.created_at}>Explored {shortDate(item.created_at)}</time><span>{item.publication.visibility === "public" ? "Published" : "Private"}</span></div>
+          <div className="workspace-item-meta"><time dateTime={item.created_at}>Explored {shortDate(item.created_at)}</time><span>{item.publication.visibility === "public" ? "Published" : "Private"}</span><ReferenceBadge archive={item.archive} /></div>
           <Link className="workspace-item-title" href={outcomeHref(item.id)}>{item.knowledge_gap.text}</Link>
           <p className="workspace-account-conclusion">{item.summary}</p>
           <div className="workspace-item-meta"><span>No supported scientific account</span><span>{item.anchors.length} mechanism {item.anchors.length === 1 ? "anchor" : "anchors"}</span><Link href={outcomeHref(item.id)}>View findings and evidence gaps</Link></div>
         </article>) : (hasCurrentData ? accounts : []).map(item => <article className="workspace-account-row" key={item.account.id}>
-          <div className="workspace-item-meta"><time dateTime={item.created_at}>Saved {shortDate(item.created_at)}</time></div>
+          <div className="workspace-item-meta"><time dateTime={item.created_at}>Saved {shortDate(item.created_at)}</time><ReferenceBadge archive={item.archive} /></div>
           <Link className="workspace-item-title workspace-account-summary-link" href={`/accounts/${encodeURIComponent(item.account.id)}`}>{item.account.closing_remarks || item.account.context || item.account.name || item.knowledge_gap.text}</Link>
           <Link className="workspace-account-question" href={`/?gap=${encodeURIComponent(item.knowledge_gap.id)}`}>{item.knowledge_gap.text}</Link>
           <div className="workspace-item-meta"><span>{item.claim_count} associated {item.claim_count === 1 ? "claim" : "claims"}</span><span>Research statement {item.research_statement.status.replaceAll("_", " ")}</span><Link href={`/?gap=${encodeURIComponent(item.knowledge_gap.id)}`}>View knowledge gap</Link></div>
         </article>)}
         {loadingMore && <LoadingSurface compact skeleton="none" title={`Loading more ${tabLabels[tab].toLowerCase()}`} description="The records already shown remain available." />}
-        {isEmpty && !loading && !error && <div className="workspace-empty"><h2>{tab === "gaps" ? "Your next question starts here." : "Room for your findings."}</h2><p>{tab === "gaps" ? "Knowledge gaps you explore will appear here." : tab === "accounts" ? "Scientific accounts will appear here as your analyses finish. Runs without a supported account are saved under Explorations." : "Completed runs without a supported scientific account will appear here with their findings and evidence gaps."}</p><Link href="/">Explore knowledge gaps</Link></div>}
+        {isEmpty && !loading && !error && filteredEmpty && <div className="workspace-empty"><h2>Nothing matches this filter.</h2><p>{filteredEmpty}</p><button type="button" className="text-button" onClick={() => navigate(tab, "all")}>Show all {tab === "accounts" ? "scientific accounts" : "explorations"}</button></div>}
+        {isEmpty && !loading && !error && !filteredEmpty && <div className="workspace-empty"><h2>{tab === "gaps" ? "Your next question starts here." : "Room for your findings."}</h2><p>{tab === "gaps" ? "Knowledge gaps you explore will appear here." : tab === "accounts" ? "Scientific accounts will appear here as your analyses finish. Runs without a supported account are saved under Explorations." : "Completed runs without a supported scientific account will appear here with their findings and evidence gaps."}</p><Link href="/">Explore knowledge gaps</Link></div>}
         {me && cursor && <button className="text-button workspace-load-more" disabled={loading} onClick={() => void load(true)}>Load more</button>}
       </>}
     </div>
