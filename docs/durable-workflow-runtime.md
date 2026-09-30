@@ -163,16 +163,32 @@ state and event hashes stayed unchanged, and the original generation completed
 with exactly two recorded phases and restored S3 evidence. No Box or model call
 was used by that failure-injection probe.
 
-Source revision `2675a4a` is deployed to QA by
-[platform run 36655465721](https://github.com/broadinstitute/dig-service-platform/actions/runs/36655465721)
-at `https://api-qa.hugeampkpnbi.org/api/reveal`. All 15 public HTTPS checks passed:
+Source revision `cf87246e1aedf06afa3deedd023a09a19e002d3f`, using platform image
+revision `c563f40e1061c408459081310f4dc534f0038680`, is deployed to QA by
+[platform run 36657927190](https://github.com/broadinstitute/dig-service-platform/actions/runs/36657927190)
+at `https://api-qa.hugeampkpnbi.org/api/reveal`. The platform suite passed 240 tests.
+All 15 public HTTPS checks passed:
 readiness, catalog and stored-context semantic retrieval, exact QA provenance,
 anonymous authentication, table isolation, three pushed workspace mutations,
-two-event reconnect replay and invalid-credential denials. A managed signed
-workflow completed in generation 1 with exactly two phases, verified S3 restore,
-no Box allocation and no change to the active Vector snapshot. The QA managed
-reconciliation schedule is installed. Cloud task replacement, production and
-Vercel acceptance are tracked separately.
+two-event reconnect replay and invalid-credential denials. Managed signed QA
+probe `1e817d2a-d6bc-4558-b6d0-de3cf8ff9ce3` then survived task replacement in
+generation 1 with exactly two phases: task `c0531f378af645e382c26b85f412c02c`
+prepared its S3 checkpoint, and task `d027d3b88a0b4cf6b45310397070830c` restored
+the same checksum and completed. It allocated no Box, left the active Vector
+snapshot unchanged, and used no Redis read commands. The saved report is
+`.runtime/workflow/qa-managed-replacement-final.json`. The QA managed
+reconciliation schedule is installed. The
+[read-only lifecycle audit](https://github.com/broadinstitute/dig-service-platform/actions/runs/36660817274)
+passed: the old task is stopped, the replacement is the sole running task, and
+both use task definition `svc-reveal-qa:2` and image digest
+`sha256:b9f27ba0ebc2ed31cb0f3c4f8b7ec7218399a0347609a8a2d715d2e68536ff93`.
+Its report is `.runtime/workflow/qa-replacement-completion-audit/report.json`;
+the audit made no mutations.
+
+[Production run 36660894864](https://github.com/broadinstitute/dig-service-platform/actions/runs/36660894864)
+is queued for platform revision `c563f40e1061c408459081310f4dc534f0038680`,
+awaiting the existing required reviewer `sagehen03`. Vercel secret-upload
+approval and deployment remain pending.
 
 The scientific pilot completed one authoring attempt, durable capture and Box
 cleanup. After 31 acknowledged reviewer calls, its final response was not
