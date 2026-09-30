@@ -64,6 +64,8 @@ See `schema/migrations/008_reference_generation.sql` for the full DDL. Summary:
   - `kpn` (phenotype_name, trait_group, trait_type, gwas_source_category)
   - `lap` (projection generation, pigean commit)
 - **`kpn_traits.metadata`**: `ontology_mappings` (from `kpn_trait_flat.tsv`), the `kpn_release` and its commit.
+- **`cfde_gene_sets.metadata`**: the `gene_set_index` fields (cfde_label, partition, model, comparison, program, gmt_row, cfde_snapshot) and `dapper_gene_set`, the exact GeneSet node as written in its GeneSetCollection document (bundle schema 2; `build` streams each document's `gene_sets` list and refuses when it differs from `gene_set_index`). The KPN evidence collector binds these exact GeneSets. `cfde_gene_set_collections.payload` holds the collection node (without members), its `cfde_index` row, the document sha256 and `provenance` (prefixes, organizations, datasets, files, activities).
+- **`reference_vectors`**: `input_sha256` = sha256 of `input_text`; `vector` is little-endian float32 and `vector_sha256` is the sha256 of that blob. All gene-set and collection vectors of a generation share one `space_id`, whose `embedding_spaces` row has the EAGGL run's dimensions and metric `cosine`.
 
 **`archived_reference_factors.snapshot`** (JSON):
 
@@ -85,8 +87,8 @@ See `schema/migrations/008_reference_generation.sql` for the full DDL. Summary:
 |---|---|---|
 | `reference_active` | `active` | `{generation_id, model, previous_generation_id, vector_snapshot_id, activated_at}` |
 | `reference_control` | `reload` | `{closed: bool, changed_at, reason, target, plan_sha256}`. When closed, the reload gate is set. |
-| `reference_archive_run` | `digest([prefix, from, to])` | `{prefix, from_generation, to_generation, started_at, completed_at, counts: {kind: n}, dropped_drafts: [...], unresolved: [...]}` |
-| `reference_reload` | `digest([plan_sha256])` | audit: `{plan_sha256, target, generation_id, backups, steps: [...], counts, namespaces_deleted}` |
+| `reference_archive_run` | `digest([prefix, from, to])` | `{prefix, from_generation, to_generation, started_at, completed_at, counts: {kind: n}, dropped_drafts: [...], unresolved: [...], runs}`; counts are cumulative over reruns |
+| `reference_reload` | `digest([plan_sha256])` | audit: `{plan_sha256, target, generation_id, from_generation, status, error, backups, steps: [...], counts, verification, namespaces_deleted}`; `purge-retired` gates on `verification.passed`. An audit whose steps include `activated` (or `resumed`) but whose status is not `complete` makes the next plan a resume plan (§7). |
 
 **Catalog bindings** (frozen into `draft_binding.selections[*].binding` and `request_binding.anchors[]`):
 - Legacy bindings keep their shape: `mapping_run_id`, `gene_set_import_id`, `cfde_node_id`, `cfde_payload`, …
@@ -178,10 +180,12 @@ A KPN snapshot keeps the existing `vector_snapshot` manifest format and machiner
 | `gene_sets` | `{env}-cfde-geneset-{snapshot_id[:24]}` | `dapper:GeneSet.*` | `{source_kind:'cfde_gene_set', source_id, name, collection_id, library, n_genes, input_sha256, generation_id}` |
 | `collections` | `{env}-cfde-collection-{snapshot_id[:24]}` | `dapper:GeneSetCollection.*` | `{source_kind:'cfde_collection', source_id, label, library, n_sets, input_sha256, generation_id}` |
 
-- The manifest adds `id_scheme: 'source-id-v1'`, `reference_generation_id`, `gene_set_namespace` and `collection_namespace`.
-- The readiness check (`UpstashFactorIndex.check`) and `verify_snapshot` cover every namespace present, with exact counts and the id inventory.
+- The manifest adds `id_scheme: 'source-id-v1'`, `reference_generation_id`, `reference_model`, `gene_set_embedding_space` (the `reference_vectors` space), `gene_set_namespace` and `collection_namespace`. `mapping_run` and `geneset_import` carry the generation id, as KPN catalog bindings do.
+- The `vector_snapshot` record keeps compact manifest rows for gene sets and collections, `{id, batch, original_vector_sha256, roundtrip_sha256}` with `id` = the DAPPER id: full bindings would add about 38 MB to that single record. The full bindings live in the export batches (`read_export`) and in the Upstash metadata, which import readback checks vector by vector.
+- The readiness check (`UpstashFactorIndex.check`), `verify_snapshot` and the durable Workflow import (`vector_workflow`, inventory and finalize) cover every namespace present, with exact counts and the id inventory. For gene sets and collections the Workflow inventory compares source kind, source id, snapshot, embedding space and original checksum.
 - The retrieval quality gate still uses factors and contexts only.
-- After verification, every uploaded vector is recorded in `vector_bindings`.
+- After verification, every uploaded vector is recorded in `vector_bindings` (`record_vector_bindings`).
+- Only `deletable_namespace(name, env)` names can be deleted: `{env}-(f|c)-<48 hex>` (legacy) or `{env}-(eaggl-factor|dismech-context|cfde-geneset|cfde-collection)-<24 hex>`, never an active one.
 
 **Where the vectors come from:**
 - Factors: `eaggl_name_embeddings` of the EAGGL embedding run. The LAP raw bundle reproduces the current import `a548ad80…`, so the DisMech context run stays valid.
@@ -197,14 +201,20 @@ Every subcommand prints one JSON result. Nothing destructive runs without `apply
 | `build --lap-project-dir P --kpn-release v0.0.2 --out DIR` | Pure files. Writes `DIR/<gen>/` (`manifest.json`, `kpn_traits.jsonl`, `reference_factors.jsonl.gz`, `cfde_collections.jsonl`, `cfde_gene_sets.jsonl.gz`, `projections.tsv.gz`). Refuses unless every LAP projection row has `qc_pass`. |
 | `embed --bundle DIR/<gen>` | Calibrates and converts the CFDE snapshot vectors into `DIR/<gen>/vectors/`, and records the `embedding_space`. |
 | `load --bundle DIR/<gen> [--apply]` | **Additive.** Applies migration 008 and registers the legacy generation. Checks that the EAGGL import and embedding run exist and are complete. Inserts the KPN generation (`status` loading → complete) and verifies counts. |
-| `capture --from GEN --prefixes a,b --cold-export [--apply]` | **Additive, idempotent.** Freezes `archived_reference_factors` for every factor referenced by any draft_binding, request_binding, outcome or account in the given prefixes. Backfills `request_binding.anchor_display`. Writes the S3 cold export of the whole generation. |
-| `snapshot --generation GEN --target T [--apply]` | Builds, uploads and verifies the Upstash snapshot for the target's vector environment, without activating it. Writes `vector_bindings`. |
-| `plan --target T --generation GEN` | Read-only. Writes `plan.json`: counts per kind, archive candidates, drafts to drop, non-terminal jobs, namespaces, the active generation, and the plan sha. |
+| `capture --from GEN\|active --prefixes a,b --cold-export [--apply]` | **Additive, idempotent.** Freezes `archived_reference_factors` for every factor referenced by any draft_binding, request_binding, outcome or account in the given prefixes. Backfills `request_binding.anchor_display`. Writes the S3 cold export of the whole generation (content-addressed gzip JSONL parts plus a root index, recorded in `reference_generations.cold_export_ref`, format `reveal.reference-cold-export/2`). The export holds every row `purge-retired` deletes for the generation: besides its own rows, the `Activity` and unaliased `GeneSet` rows of `dapper_objects` (legacy), every embedding run of its EAGGL import with their name embeddings, and the DisMech context runs, vectors and inputs bound to them. An export of an older format is written again. `--from active` resolves the one generation the prefixes serve now (the registered legacy generation in legacy mode) and refuses when they serve different ones. |
+| `snapshot --generation GEN --target T [--batch-size 200] [--apply]` | Builds, uploads and verifies the Upstash snapshot for the target's vector environment, without activating it. Reuses a verified snapshot of the generation. Writes `vector_bindings`. |
+| `plan --target T --generation GEN` | Read-only. Writes `plan.json`: counts per kind, archive candidates, drafts to drop, non-terminal jobs, namespaces, the active generation, and the plan sha. The sha pins the drafts to drop, the rows archived by assumption, the anchor display backfill, the pointers, the snapshot and the namespaces. Row counts, archive candidates and job states are under `observed` and excluded, so normal activity between plan and apply does not drift the plan (stamping is idempotent and jobs are re-evaluated under the gate). An unverified target snapshot is a blocker. When the target is already active on GEN but no `complete` audit of that cutover exists (it failed after activation, or its verification failed), the plan is a **resume plan** (`resume: {from_generation, interrupted_plans}`); otherwise "already active" is a blocker. |
 | `approve --plan plan.json` | Interactive, run by hand. Shows the diff and takes a typed confirmation. Writes `approval.json`. Production also needs `--allow-production` and `REVEAL_RELOAD_PRODUCTION_APPROVAL=<plan_sha>`. |
-| `apply --target T --plan plan.json --approval approval.json` | Protected cutover for one prefix: gate → drain/cancel → backups → delta capture → verify snapshot → activate (`vector_active` + `reference_active`, one transaction) → archive pass → drop anchored drafts → verify → audit → open the gate. |
-| `verify --target T` | Read-only post-conditions (§9). |
-| `purge-retired --plan purge-plan.json --approval …` | Protected. Runs only when every allow-listed target is active on the new generation, has verified, has a cold export, and has no non-terminal old-generation jobs. It then purges retired data child-first in batches. |
+| `apply --target T --plan plan.json --approval approval.json --backup-dir DIR (--backup-snapshot-id ID \| --create-aurora-snapshot) [--aurora-cluster-id C] [--cancel-active] [--drain-seconds 600] [--keep-gate] [--allow-production]` | Protected cutover for one prefix. It re-plans and refuses on drift, then pre-flights, before the gate closes and before any job is cancelled: the target snapshot is verified, a schema-only mysqldump (`--no-data`, removed afterwards) succeeds, and the Aurora snapshot is available (or the cluster to snapshot exists). Then: global lock → gate → drain (cancel uncollected jobs, wait for collected ones or stop them with `--cancel-active`; stopped jobs keep their row owner) → backups (mysqldump of `<prefix>_records` with the password only in `MYSQL_PWD`, plus an available or new Aurora cluster snapshot) → delta capture → check the snapshot is verified → activate (`vector_active` + `reference_active`, one transaction, both compare-and-swap) → mark the old generation `superseded` → archive pass, which also drops anchored drafts and their `draft_binding` → capture again for this prefix (stamps whose anchors came from frozen Mechanism nodes) → verify → reopen the gate (unless `--keep-gate`) → audit → release the lock. **Resume plan:** the backup options are not needed; after lock → gate it checks that `reference_active` and `vector_active` still name the plan's generation and snapshot, then runs only the idempotent tail (archive pass → capture → verify → gate → audit, step `resumed`), so the audit records the verification `purge-retired` needs. |
+| `verify --target T [--generation GEN]` | Read-only post-conditions (§9). |
+| `purge-retired [--generation GEN] [--out purge-plan.json]` | Read-only: writes the purge plan (approve it like an apply plan). The per-prefix record counts of step 6 are under `observed` and excluded from the sha: that step drops every catalog-owned `suggestion` and each non-active snapshot, recomputed at purge time. |
+| `purge-retired --apply --plan purge-plan.json --approval … [--allow-production]` | Protected. Runs only when every allow-listed target is active on the new generation, has a recorded passing verification and passes a fresh one, has a cold export of the current format whose root index and every part exist (in S3 when a production target is allow-listed), and has no non-terminal old-generation jobs. It also refuses while an EAGGL mapping run other than the registered legacy one references a retiring EAGGL or gene-set import (no export holds its links, and steps 3–4 would fail on its foreign keys partway through). It re-plans, refuses on drift, and purges retired data child-first in batches with the freshly computed statements. |
+| `gate --target T --open\|--close [--reason R]` | Sets or clears the target's reload gate, for example to reopen it after `apply --keep-gate`. |
 | `status` | Generations, the active pointers per allow-listed target, the gates and the last audits. |
+
+**Exit codes.** 0 when the command ran (a plan with blockers still exits 0 and lists them); 1 when the result has `ok: false` (verify failed, or apply ended `verify_failed`); 2 when a protection refused (`{"ok": false, "refused": "..."}`). Every command first loads the targets file.
+
+**Generation status is shared.** `apply` marks the old generation `superseded` in the shared `reference_generations` table at the first target's cutover, while other prefixes may still serve it. Nothing decides superseded-ness from that status: the catalog, guards, stamps and evidence collector compare with the prefix's own `reference_active` (legacy mode serves the legacy generation), and `complete` and `superseded` generations both stay servable and verifiable.
 
 **Targets.** Targets come from `config/reference_reload.targets.yaml`: `{name: {database, prefix, vector_environment, upstash_host, production}}`. The command refuses when:
 - `REVEAL_APPLICATION_TABLE_PREFIX` or `REVEAL_VECTOR_ENVIRONMENT` in the shell disagrees with the target;
@@ -214,7 +224,7 @@ Every subcommand prints one JSON result. Nothing destructive runs without `apply
 
 **`purge-retired` delete order** (children first, `DELETE … LIMIT 10000` per commit):
 1. `eaggl_cfde_gene_set_links`, `eaggl_cfde_factor_links`, `eaggl_cfde_link_runs`
-2. DisMech embedding inputs, vectors and runs not bound to the active EAGGL run
+2. DisMech embedding inputs, vectors and runs bound to an embedding run of a retired generation's EAGGL import, except those bound to a kept generation's run (exactly what the cold exports hold; step 3 needs them gone)
 3. retired EAGGL imports' name embeddings, embedding runs, graph, loadings, factors, genes and imports
 4. `cfde_gene_set_aliases`, `gene_set_imports`, unreferenced `GeneSet`/`Activity` rows in `dapper_objects`
 5. retired generations' `factor_gene_set_projections`, `reference_vectors`, `cfde_gene_sets`, `cfde_gene_set_collections`, `reference_factors`, `kpn_traits`
@@ -227,7 +237,8 @@ Never touched: the DisMech source tables (`003_dismech.sql`) and `archived_refer
 ## 8. App behaviour
 
 **Catalog**
-- Resolves the active generation when it loads, and re-checks it at most every 5 s. A change reloads the catalog, so no restart is needed.
+- Resolves the active generation on its cold load. Once loaded, `load()` does no I/O (as before reloads), because draft saves and job submits call it inside pooled write transactions. The API's background poller re-checks the active generation every 5 s, off the request path; a change reloads the catalog beside the serving one and swaps it in, so no restart is needed. A failed reload fails closed: the next request reloads inline into a fresh catalog, never on top of the previous generation's state.
+- `GET /v1/reference-factors/{archive_id}` caches hits for the process and misses for 5 s; while `archived_reference_factors` is missing or empty (legacy mode) it connects at most once per 5 s.
 - **KPN mode:**
   - it serves all factors of the generation from `reference_factors`, joined to `kpn_traits`;
   - bindings and records follow §4;
@@ -240,10 +251,12 @@ Never touched: the DisMech source tables (`003_dismech.sql`) and `archived_refer
   - factor gene loadings from `eaggl_gene_loadings`;
   - factor gene-set loadings from `factor_gene_set_projections`;
   - gene-set DAPPER objects from `cfde_gene_sets`/collections.
+- MySQL holds no PIGEAN trait-level (phenotype) associations, so KPN packages record the explicit capture blockers `bioindex:trait:trait:kpn:NNNNNNN:(gene|gene_set):not_captured` instead of trait-scope rows. The dispatch gate (`box_adapter.dispatchable_capture`) accepts a KPN package whose only blockers are these, and refuses any other incomplete capture.
 
 **Guards**
-- Submit, retry-review and anchor writes are rejected with 409 if any selection's generation is not the active one, and with 503 while the gate is set.
+- Submit, retry-review and anchor writes are rejected with 409 if any selection's generation is not the active one, and with 503 while the gate is set. Rename-only edits, unchanged anchors, removing anchors, gap-only drafts and paragraph jobs stay allowed under the gate.
 - Suggest rejects manual anchors that are not in the active generation.
+- Legacy mode never rejects by generation: as before, a saved selection keeps the exact run bindings first saved with it, even after a mapping-run switch.
 
 **Stamping at creation.** Accounts and outcomes produced from a superseded generation (for example a job that finished after cutover) are stamped when they are written (`worker.accept`, `analysis_outcomes.save`).
 
@@ -256,10 +269,13 @@ Never touched: the DisMech source tables (`003_dismech.sql`) and `archived_refer
 - An "Outdated reference" badge and a current/archived/all filter on the workspace and gap pages.
 - A banner on account and outcome pages showing the original anchors from `archive.reference`, with a "Start a new analysis on this gap with current factors" button (new draft with the gap, inquiry and KGs copied and empty anchors, then auto-suggest).
 - In the Composer: render archived anchors from the stamp; clear copy for `REFERENCE_GENERATION_SUPERSEDED`; no hardcoded model; `mechanism-display` understands `factor:kpn:`.
+- A cutover's public `catalog.updated` event has `entity_id` `reference` (a `vector_active` change; publications emit `catalog`). Only that event makes an open composer re-read its anchors, now and again after 7 s, 30 s and 120 s, since each API process switches catalogs on its next poll. A draft dropped at cutover (404 on save) is replaced by a new draft holding the composer's edits.
+- A frozen KPN factor displays its KPN phenotype name (`metadata.kpn.phenotype_name`), not the EAGGL trait code in its `trait`.
+- URLs: the new-analysis button creates a gap-only draft and opens `/?draft=<id>&suggest=current`, which runs auto-suggest; the workspace keeps its filter in `?tab=accounts|explorations&reference=current|archived` (absent means all).
 
 ## 9. Verification post-conditions (`verify`)
 
-**KPN generation counts:** 711 traits / 4,037 factors / 133 collections / 44,399 gene sets / 278,272 projection rows. Every `reference_factors.kpn_trait_id` exists in `kpn_traits`.
+**KPN generation counts:** 711 traits / 4,037 factors / 133 collections / 44,399 gene sets / 278,272 projection rows, matching the stored manifest, with status `complete` or `superseded`. Every `reference_factors.kpn_trait_id` exists in `kpn_traits`.
 
 **Active target**
 - `reference_active` and `vector_active` agree on the generation.
@@ -286,6 +302,9 @@ Never touched: the DisMech source tables (`003_dismech.sql`) and `archived_refer
 |---|---|
 | project | `db_build` → `db_embed` → `db_load` → `db_capture` (additive) |
 | per target | `db_snapshot` → `db_plan` → `db_apply` (needs a hand-made `approval.json`) → `db_verify` |
-| project | `db_purge`, a fan-in over every target's verify output, with its own approval |
+| project | `db_purge_plan` (read-only, a fan-in over every target's verify output) → `db_purge` (needs its own approval) |
 
-An unattended LAP run therefore stops at "plans ready". The runbook is in `lap/README.md`.
+- Approval files are written only by the interactive `approve`: `out/projects/<project>/reload/targets/<t>/<t>.approval.json` per target and `<project>.purge.approval.json` for the purge. A re-plan deletes the earlier approval.
+- `db_capture` runs `capture --from $reload_from_generation`; the meta key defaults to `active`, so a later reload captures the generation the targets serve without regenerating the meta.
+
+An unattended LAP run therefore stops at "plans ready". The runbook is in `lap/README.md`, section "Reference reload (`db_` stage)".

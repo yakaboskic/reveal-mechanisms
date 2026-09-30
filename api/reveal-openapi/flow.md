@@ -69,10 +69,12 @@ Review up to five mapped EAGGL mechanism chips; edit anchors, not linked DisMech
 - `POST /v1/mechanisms/suggest` — [dismech context request/response](examples/suggestMechanisms.dismech_context.json)
 - `GET /v1/mechanisms/search` — [request request/response](examples/searchMechanisms.request.json)
 - `GET /v1/mechanisms/{source_id}` — [request request/response](examples/getMechanism.request.json)
+- `GET /v1/mechanisms/{source_id}` — [kpn factor request/response](examples/getMechanism.kpn_factor.json)
 
 - Search existing EAGGL label embeddings; join the populated exact-trait/factor-number CFDE crosswalk before selecting five. Ignore label/gene differences.
-- Five total, maximum cosine across linked mechanisms, deterministic native-ID deduplication; fewer if needed. At least one resolved cfde-inc-v2 anchor is required.
+- Five total, maximum cosine across linked mechanisms, deterministic native-ID deduplication; fewer if needed. At least one resolved anchor of the active reference model is required.
 - Existing ranked GeneSet links resolve through aliases to DAPPER objects. Missing summary links do not disable a mapped factor.
+- After a reference reload, anchors come from the active eaggl-capped-v1 generation; superseded anchors return 409 on write and 410 on read.
 
 ### 3. Continue and save
 
@@ -146,8 +148,10 @@ Read closing remarks; open associated claims on demand.
 - `GET /v1/accounts/{dapper_id}/publication` — [request request/response](examples/getAccountPublication.request.json)
 - `POST /v1/accounts/{dapper_id}/publication` — [publish request/response](examples/updateAccountPublication.publish.json)
 - `POST /v1/accounts/{dapper_id}/publication` — [unpublish request/response](examples/updateAccountPublication.unpublish.json)
+- `GET /v1/reference-factors/{archive_id}` — [request request/response](examples/getArchivedReferenceFactor.request.json)
 
 - Conclusions and Research statement are divider tabs.
+- An account built on a superseded reference generation carries archive: show its original anchors from the frozen reference factors and offer a new analysis on the gap with current factors.
 - Claims open inline; no auto-opened first claim. Dedicated claim page has Assessment, Proposition, Evidence and Provenance tabs.
 - Partial provenance and unavailable downloads remain explicit.
 - Accounts remain private until the owner publishes a frozen snapshot with an optimistic version and idempotency key. Later accepted statements require an explicit publication update; unpublishing revokes public access. Public readers cannot access job telemetry or research writes.
@@ -302,4 +306,4 @@ Subscribe once per workspace provider and apply committed invalidations.
 
 Requests/responses are taken from the existing validated OpenAPI exchange library. The CADinT2D analysis/paragraph sequence is internally linked. The CAD source-selected gap now frames the request and account. The evidence package is a separate captured input; the authored account is not its validated agent output. Semantic scores and agent outputs remain illustrative fixtures.
 
-The mapping covers 43 operations and all 56 exchanges. OpenAPI SHA-256: `61aa74ceb1e98512869a200db220993d9e8daaab32558d781215afe23ee6b30c`. No endpoints or payloads were changed to build this diagram.
+The mapping covers 44 operations and all 58 exchanges. OpenAPI SHA-256: `7b318840c3ae2257959e406ef681b5b55ce032baeae62d63c6126223ab41905f`. No endpoints or payloads were changed to build this diagram.

@@ -4,9 +4,10 @@
   "method": "GET",
   "path_template": "/v1/analysis-outcomes",
   "request": {
-    "url": "https://api.reveal.example.org/v1/analysis-outcomes?limit=20",
+    "url": "https://api.reveal.example.org/v1/analysis-outcomes?reference_state=all&limit=20",
     "path": {},
     "query": {
+      "reference_state": "all",
       "limit": 20
     },
     "headers": {
@@ -77,9 +78,102 @@
             "has_more": false,
             "snapshot_id": "illustrative-contract-snapshot"
           }
+        },
+        "archived": {
+          "items": [
+            {
+              "id": "66666666-6666-4666-8666-666666666666",
+              "outcome": "insufficient_evidence",
+              "summary": "The captured investigation did not support an accepted scientific account.",
+              "knowledge_gap": {
+                "text": "Are the CAD PGS×context interactions driven by adverse exposures causally amplifying genetic risk, or are some \"contexts\" actually downstream readouts of incipient disease (reverse causation)?",
+                "gap_description": "Population PGS×context analyses (Nagpal & Gibson 2026, PMID:42443528) are largely unable to establish the causality of specific contexts. dismech separates true environmental exposures (smoking, high-fat diet, sedentary lifestyle) from biochemical readouts (LDL, HDL, C-reactive protein); the biochemical \"contexts\" are prime reverse-causation suspects, since they may be partly downstream of the atherosclerotic process rather than upstream drivers, and behavioural contexts such as reduced physical activity may be rapid responses to incipient angina rather than causes. Distinguishing genuine amplification of genetic effects from reverse causation determines whether the modelled interventions (e.g. lowering cholesterol in high-PGS smokers) would actually reduce risk.",
+                "gap_kind": "KNOWLEDGE_GAP",
+                "scope": "Coronary Artery Disease",
+                "about_entities": [
+                  "http://purl.obolibrary.org/obo/MONDO_0021661"
+                ],
+                "id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk"
+              },
+              "anchors": [
+                {
+                  "source_id": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                  "mechanism_id": "dapper:Mechanism.MyhahXB55tDUS667sJzeJZ40BeeQBWOR",
+                  "name": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                  "trait": null,
+                  "origin": "manual"
+                }
+              ],
+              "created_at": "2026-09-24T16:00:00Z",
+              "attribution": {
+                "user_id": "11111111-1111-4111-8111-111111111111",
+                "person_id": "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he",
+                "display_name": "Example Researcher",
+                "orcid": null,
+                "orcid_authenticated": false,
+                "observed_at": "2026-09-24T16:00:00Z",
+                "principal_kind": "registered"
+              },
+              "publication": {
+                "visibility": "private",
+                "version": 0,
+                "published_at": null,
+                "updated_at": null,
+                "can_manage": true,
+                "has_unpublished_changes": false
+              },
+              "archive": {
+                "status": "archived",
+                "reason": "reference_generation_superseded",
+                "archived_at": "2026-10-01T09:00:00Z",
+                "from_reference_generation": "16e78f6a1282320367b4e6507ad828fc71bdb38ad06e0e0a7d384026f4414e19",
+                "to_reference_generation": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c",
+                "history": [
+                  {
+                    "from_reference_generation": "16e78f6a1282320367b4e6507ad828fc71bdb38ad06e0e0a7d384026f4414e19",
+                    "to_reference_generation": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c",
+                    "archived_at": "2026-10-01T09:00:00Z"
+                  }
+                ],
+                "reference": {
+                  "model": "cfde-inc-v2",
+                  "anchors": [
+                    {
+                      "source_id": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                      "mechanism_id": "dapper:Mechanism.MyhahXB55tDUS667sJzeJZ40BeeQBWOR",
+                      "factor_id": "CADinT2D::Factor1",
+                      "trait": "Coronary artery disease in type 2 diabetes (CAD in T2D)",
+                      "kpn_trait_id": null,
+                      "label": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+                      "name": "CADinT2D mechanism Factor1",
+                      "origin": "manual",
+                      "archived_reference_factor_id": "96d0fe43d87b838e172f352529665d602f4d42ec728f75f030207c5358f262f1"
+                    }
+                  ]
+                },
+                "gap": {
+                  "id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+                  "source_id": "dismech:disorders/Coronary_Artery_Disease#discussion:cad_pgsxc_reverse_causation",
+                  "source_revision": "8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd"
+                },
+                "analysis": {
+                  "job_id": "44444444-4444-4444-8444-444444444444",
+                  "request_id": "33333333-3333-4333-8333-333333333333",
+                  "evidence_package_sha256": "9a55d126679291a95fa3d35f544915610134075eaf110f62f77ec8ee870b6ae2",
+                  "account_id": null,
+                  "outcome_id": "66666666-6666-4666-8666-666666666666"
+                }
+              }
+            }
+          ],
+          "page": {
+            "next_cursor": null,
+            "has_more": false,
+            "snapshot_id": "illustrative-contract-snapshot"
+          }
         }
       }
     }
   },
-  "curl": "curl -X GET 'https://api.reveal.example.org/v1/analysis-outcomes?limit=20' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
+  "curl": "curl -X GET 'https://api.reveal.example.org/v1/analysis-outcomes?reference_state=all&limit=20' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
 }

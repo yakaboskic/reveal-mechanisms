@@ -39,7 +39,7 @@ export interface paths {
         put?: never;
         /**
          * Create a draft
-         * @description Create editable selection state. Empty body creates a null source gap, empty anchors/dismissals, cfde-inc-v2 and both initial KGs. A selected gap is resolved from exact source identity/revision. No client question or linked DisMech list is accepted. Saving does not collect evidence or run an agent.
+         * @description Create editable selection state. Empty body creates a null source gap, empty anchors/dismissals, the active reference model (cfde-inc-v2 until a reference reload) and both initial KGs. A selected gap is resolved from exact source identity/revision. No client question or linked DisMech list is accepted. Saving does not collect evidence or run an agent. New or changed EAGGL anchors must come from the active reference generation (409 REFERENCE_GENERATION_SUPERSEDED) and wait while a reference reload is in progress (503 REFERENCE_RELOAD_IN_PROGRESS). Unchanged current anchors and gap-only edits are not blocked.
          */
         post: operations["createDraft"];
         delete?: never;
@@ -71,7 +71,7 @@ export interface paths {
         head?: never;
         /**
          * Autosave a draft
-         * @description Rename or replace composer using expected_version. Omitted fields are preserved. The server increments the version only on commit. Stale revisions return 409 with current_version. Server derives ownership; unknown owner/provenance fields are rejected.
+         * @description Rename or replace composer using expected_version. Omitted fields are preserved. The server increments the version only on commit. Stale revisions return 409 with current_version. Server derives ownership; unknown owner/provenance fields are rejected. New or changed EAGGL anchors must come from the active reference generation (409 REFERENCE_GENERATION_SUPERSEDED) and wait while a reference reload is in progress (503 REFERENCE_RELOAD_IN_PROGRESS). Unchanged current anchors and gap-only edits are not blocked.
          */
         patch: operations["updateDraft"];
         trace?: never;
@@ -105,7 +105,7 @@ export interface paths {
         };
         /**
          * Inspect a submitted question
-         * @description Returns the exact saved composer, DAPPER inquiry, actor snapshot and originating draft revision.
+         * @description Returns the exact saved composer, DAPPER inquiry, actor snapshot and originating draft revision. A request frozen on a superseded reference generation carries archive.
          */
         get: operations["getResearchRequest"];
         put?: never;
@@ -145,7 +145,7 @@ export interface paths {
         };
         /**
          * Browse knowledge gaps
-         * @description Browse imported DisMech gaps ordered by distinct scientific-account count descending. Public scope (default) counts only explicitly published snapshots across users; workspace scope requires a session and counts owned saved accounts. Equal-count gaps shuffle on each new browse; a server seed in the signed continuation cursor preserves tie order across pages. Exact gap digests only: no text matching, attempts, paragraph jobs or implicit source-revision rollup. Invalid supplied credentials are rejected even for public reads. Filters apply before pagination; count or corpus changes expire cursors.
+         * @description Browse imported DisMech gaps ordered by distinct scientific-account count descending. Public scope (default) counts only explicitly published snapshots across users; workspace scope requires a session and counts owned saved accounts. Equal-count gaps shuffle on each new browse; a server seed in the signed continuation cursor preserves tie order across pages. Exact gap digests only: no text matching, attempts, paragraph jobs or implicit source-revision rollup. Invalid supplied credentials are rejected even for public reads. Filters apply before pagination; count or corpus changes expire cursors. Counts include current accounts only: accounts archived by a reference reload stay listed but are not counted.
          */
         get: operations["listKnowledgeGaps"];
         put?: never;
@@ -185,7 +185,7 @@ export interface paths {
         };
         /**
          * Search DisMech mechanisms or EAGGL factors
-         * @description Search mechanisms independently of gap lookup. Initial EAGGL retrieval uses existing label embeddings joined to the configured completed exact-trait/factor-number CFDE mapping run. Return selectable mapped records with DAPPER Mechanism, catalog File and native cfde-inc-v2 anchor; exclude unmatched source factors from selectable results. Label/gene agreement is not required. Retain source-hit, embedding and mapping provenance server-side; a full new CFDE embedding corpus is not a prerequisite.
+         * @description Search mechanisms independently of gap lookup. Initial EAGGL retrieval uses existing label embeddings joined to the configured completed exact-trait/factor-number CFDE mapping run. Return selectable mapped records with DAPPER Mechanism, catalog File and native cfde-inc-v2 anchor; exclude unmatched source factors from selectable results. Label/gene agreement is not required. Retain source-hit, embedding and mapping provenance server-side; a full new CFDE embedding corpus is not a prerequisite. Results come from the active reference generation: after a reference reload, eaggl-capped-v1 KPN factors replace the mapped cfde-inc-v2 factors.
          */
         get: operations["searchMechanisms"];
         put?: never;
@@ -205,7 +205,7 @@ export interface paths {
         };
         /**
          * Inspect a mechanism or factor record
-         * @description URL-encode the entire opaque source ID, including slashes, hashes and colons. The required source_revision prevents draft restoration from silently using changed source content.
+         * @description URL-encode the entire opaque source ID, including slashes, hashes and colons. The required source_revision prevents draft restoration from silently using changed source content. After a reference reload, the id of a factor from a superseded generation returns 410 REFERENCE_GENERATION_SUPERSEDED with the frozen archived_reference_factor (null when none was captured). Deployments that never reloaded reference data do not return 410. The kpn_factor example is from an illustrative eaggl-capped-v1 generation.
          */
         get: operations["getMechanism"];
         put?: never;
@@ -227,7 +227,7 @@ export interface paths {
         put?: never;
         /**
          * Suggest five EAGGL anchors total
-         * @description Resolve linked DisMech context server-side from source_gap. Search existing EAGGL label embeddings and join the configured completed exact-trait/factor-number CFDE crosswalk before the top-five cutoff. Rank mapped factors by maximum per-mechanism cosine, deduplicate full native identity, stable ID tie-break, at most five total excluding manual anchors and dismissals. Return fewer if needed; no silent refill on removal. With no linked mechanisms use the exact gap text/subquery and require user anchor selection. Ignore label/gene differences for routing; pin mapping/source/embedding runs in server-owned selection provenance.
+         * @description Resolve linked DisMech context server-side from source_gap. Search existing EAGGL label embeddings and join the configured completed exact-trait/factor-number CFDE crosswalk before the top-five cutoff. Rank mapped factors by maximum per-mechanism cosine, deduplicate full native identity, stable ID tie-break, at most five total excluding manual anchors and dismissals. Return fewer if needed; no silent refill on removal. With no linked mechanisms use the exact gap text/subquery and require user anchor selection. Ignore label/gene differences for routing; pin mapping/source/embedding runs in server-owned selection provenance. Suggestions come from the active reference generation; manual anchors from a superseded generation return 409 REFERENCE_GENERATION_SUPERSEDED.
          */
         post: operations["suggestMechanisms"];
         delete?: never;
@@ -251,7 +251,7 @@ export interface paths {
         put?: never;
         /**
          * Start an analysis or paragraph job
-         * @description Replaces analysis-runs and account-specific paragraph-run creation. kind=analysis freezes draft/version, creates a research request and enqueues atomically. kind=paragraph uses an already saved account. Trusted backend supplies attribution, model/harness configuration and dates. Paid execution is asynchronous; 202 does not imply a successful scientific result. Idempotent replay returns the original job and never starts another paid attempt. Analysis submission requires an exact imported DisMech gap and nonempty resolved CFDE anchors. Freeze the saved source/mapping-run bindings and native IDs with the request; later mapping imports do not retarget historical jobs. Label/gene disagreement does not reject a mapped anchor. Persist each accepted account with an outbox record that automatically schedules its default paragraph job, unique by account payload, citation pins and paragraph settings. Analysis completion does not wait for paragraph success. Manual paragraph jobs support retries or alternate focus/settings.
+         * @description Replaces analysis-runs and account-specific paragraph-run creation. kind=analysis freezes draft/version, creates a research request and enqueues atomically. kind=paragraph uses an already saved account. Trusted backend supplies attribution, model/harness configuration and dates. Paid execution is asynchronous; 202 does not imply a successful scientific result. Idempotent replay returns the original job and never starts another paid attempt. Analysis submission requires an exact imported DisMech gap and nonempty resolved CFDE anchors. Freeze the saved source/mapping-run bindings and native IDs with the request; later mapping imports do not retarget historical jobs. Label/gene disagreement does not reject a mapped anchor. Persist each accepted account with an outbox record that automatically schedules its default paragraph job, unique by account payload, citation pins and paragraph settings. Analysis completion does not wait for paragraph success. Manual paragraph jobs support retries or alternate focus/settings. Analysis anchors must belong to the active reference generation (409 REFERENCE_GENERATION_SUPERSEDED: start a new analysis on the gap with current factors), and analysis submission waits while a reference reload is in progress (503 REFERENCE_RELOAD_IN_PROGRESS). Paragraph jobs, including on archived accounts, are not affected.
          */
         post: operations["createJob"];
         delete?: never;
@@ -329,7 +329,7 @@ export interface paths {
         };
         /**
          * Inspect a scientific account
-         * @description Returns exact DAPPER records, schema pin, payload checksums and provenance document. Scientific IDs never redirect to a newer revision. Select payload_sha256 to recover an exact historical observation; otherwise the server returns its designated current observation and checksum. Unhashable locator changes can share a scientific ID. Access is enforced independently of citation metadata. Upstream closure follows scientific references and provenance inputs only, max_depth 0..5 and max_nodes 1..250 (default 5/250). An opaque cursor continues the same owner/filter/payload observation; missing or bounded references are reported explicitly. Unauthorized references are omitted without revealing private identifiers. A valid owner retains private access. Without owner access, only an active explicit publication snapshot authorizes this scientific resource, exact cited revisions and reachable source artifacts. Invalid supplied credentials fail even on public reads. Unpublication revokes snapshot access; job/draft/request routes remain private.
+         * @description Returns exact DAPPER records, schema pin, payload checksums and provenance document. Scientific IDs never redirect to a newer revision. Select payload_sha256 to recover an exact historical observation; otherwise the server returns its designated current observation and checksum. Unhashable locator changes can share a scientific ID. Access is enforced independently of citation metadata. Upstream closure follows scientific references and provenance inputs only, max_depth 0..5 and max_nodes 1..250 (default 5/250). An opaque cursor continues the same owner/filter/payload observation; missing or bounded references are reported explicitly. Unauthorized references are omitted without revealing private identifiers. A valid owner retains private access. Without owner access, only an active explicit publication snapshot authorizes this scientific resource, exact cited revisions and reachable source artifacts. Invalid supplied credentials fail even on public reads. Unpublication revokes snapshot access; job/draft/request routes remain private. An account built on a superseded reference generation carries archive (public copies null its job and request ids); it stays readable, downloadable and publishable, and paragraph jobs still run.
          */
         get: operations["getAccount"];
         put?: never;
@@ -491,7 +491,7 @@ export interface paths {
         put?: never;
         /**
          * Retry independent review on saved output
-         * @description Owner-only, idempotent retry for REVIEW_UNAVAILABLE or REVIEW_BUDGET_EXCEEDED. Require the latest job event ID and a checksum-verified completed authoring capture. Requeue the same job with a new validation attempt; preserve original evidence, authoring model, artifacts and activity. Never launch the research agent. Scientific rejection, incomplete capture and active or successful jobs cannot use this route. Current configured review budget applies to each explicit retry. Normal account acceptance and paragraph generation follow a passing review.
+         * @description Owner-only, idempotent retry for REVIEW_UNAVAILABLE or REVIEW_BUDGET_EXCEEDED. Require the latest job event ID and a checksum-verified completed authoring capture. Requeue the same job with a new validation attempt; preserve original evidence, authoring model, artifacts and activity. Never launch the research agent. Scientific rejection, incomplete capture and active or successful jobs cannot use this route. Current configured review budget applies to each explicit retry. Normal account acceptance and paragraph generation follow a passing review. An analysis frozen on a superseded reference generation cannot retry review (409 REFERENCE_GENERATION_SUPERSEDED: start a new analysis on the gap with current factors). Analysis review retry waits while a reference reload is in progress (503 REFERENCE_RELOAD_IN_PROGRESS).
          */
         post: operations["retryJobReview"];
         delete?: never;
@@ -509,7 +509,7 @@ export interface paths {
         };
         /**
          * List your scientific accounts
-         * @description Owner-scoped, newest first then account ID; deduplicate repeated deliveries by digest. Filter by exact gap_id. No private records from other users with the same gap. Closing remarks provide the summary; paragraph status is independent.
+         * @description Owner-scoped, newest first then account ID; deduplicate repeated deliveries by digest. Filter by exact gap_id. No private records from other users with the same gap. Closing remarks provide the summary; paragraph status is independent. reference_state filters current and archived work; the default all lists current items first.
          */
         get: operations["listAccounts"];
         put?: never;
@@ -529,7 +529,7 @@ export interface paths {
         };
         /**
          * List visible scientific accounts for a knowledge gap
-         * @description Accepted accounts for the exact DAPPER KnowledgeGap identity, newest first then account ID, deduplicated by scientific-account digest. Public scope (default) lists explicitly published snapshots across owners and omits private job IDs. Workspace scope requires a valid session and lists only its saved accounts. Invalid supplied sessions are rejected for either scope. Source-revision checks validate the selected observation; changed gap digests never merge. Attribution remains the original request actor. Each account ID links to its existing scientific endpoint, whose public reads are restricted to its published snapshot.
+         * @description Accepted accounts for the exact DAPPER KnowledgeGap identity, newest first then account ID, deduplicated by scientific-account digest. Public scope (default) lists explicitly published snapshots across owners and omits private job IDs. Workspace scope requires a valid session and lists only its saved accounts. Invalid supplied sessions are rejected for either scope. Source-revision checks validate the selected observation; changed gap digests never merge. Attribution remains the original request actor. Each account ID links to its existing scientific endpoint, whose public reads are restricted to its published snapshot. reference_state filters current and archived work; the default all lists current items first.
          */
         get: operations["listKnowledgeGapAccounts"];
         put?: never;
@@ -573,7 +573,7 @@ export interface paths {
         };
         /**
          * List saved workspace explorations
-         * @description Session-required, newest-first summaries of all completed insufficient-evidence explorations owned by this workspace, private or published, across every knowledge gap. Includes previously saved records without a new run or publication. Operational failures are not scientific exploration outcomes. Other owners are excluded, even for published records. Detail and provenance are loaded only when opened.
+         * @description Session-required, newest-first summaries of all completed insufficient-evidence explorations owned by this workspace, private or published, across every knowledge gap. Includes previously saved records without a new run or publication. Operational failures are not scientific exploration outcomes. Other owners are excluded, even for published records. Detail and provenance are loaded only when opened. reference_state filters current and archived work; the default all lists current items first.
          */
         get: operations["listAnalysisOutcomes"];
         put?: never;
@@ -593,7 +593,7 @@ export interface paths {
         };
         /**
          * Read an explored analysis outcome
-         * @description A durable scoped insufficient-evidence exploration, separate from ScientificAccounts and excluded from their popularity counts. Captured author reasons are not independently validated scientific findings. Private by default; explicit publication shares only this frozen scope, original attribution and captured source evidence. Job logs, requests, runtime/ledger contents and the complete private package remain private. Invalid supplied credentials never downgrade to public.
+         * @description A durable scoped insufficient-evidence exploration, separate from ScientificAccounts and excluded from their popularity counts. Captured author reasons are not independently validated scientific findings. Private by default; explicit publication shares only this frozen scope, original attribution and captured source evidence. Job logs, requests, runtime/ledger contents and the complete private package remain private. Invalid supplied credentials never downgrade to public. An outcome built on a superseded reference generation carries archive (outside provenance) and stays readable and publishable.
          */
         get: operations["getAnalysisOutcome"];
         put?: never;
@@ -633,7 +633,7 @@ export interface paths {
         };
         /**
          * List explored analysis outcomes for an exact gap
-         * @description Newest-first compact summaries for this exact gap. Public scope defaults to explicitly published outcome snapshots; workspace scope requires a session. Scientific-account counts and ranking remain unchanged. Detail/provenance is fetched only when an outcome is opened.
+         * @description Newest-first compact summaries for this exact gap. Public scope defaults to explicitly published outcome snapshots; workspace scope requires a session. Scientific-account counts and ranking remain unchanged. Detail/provenance is fetched only when an outcome is opened. reference_state filters current and archived work; the default all lists current items first.
          */
         get: operations["listKnowledgeGapOutcomes"];
         put?: never;
@@ -744,6 +744,26 @@ export interface paths {
          * @description Return content and download metadata in JSON. Markdown includes linked references; rich-text returns sanitized clipboard HTML plus plain text; LaTeX uses cite commands and references.bib. BibTeX contains every distinct exact target/revision cited by the paragraph. These numbered-reference exports do not claim APA/MLA styling. Fixture links are local-preview URLs; runtime must render authorized canonical resolver URLs. A valid owner retains private access. Without owner access, only an active explicit publication snapshot authorizes this scientific resource, exact cited revisions and reachable source artifacts. Invalid supplied credentials fail even on public reads. Unpublication revokes snapshot access; job/draft/request routes remain private.
          */
         get: operations["exportParagraph"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/reference-factors/{archive_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Inspect a factor frozen for archived work
+         * @description Public reference data. Returns the immutable snapshot of an EAGGL factor that archived work referenced: identity, model, trait, label, DAPPER Mechanism, source metadata, top genes and top gene sets. Snapshots are captured before a reference reload and never purged, so archived accounts and outcomes keep rendering after their generation is retired. archive_id is archive.reference.anchors[].archived_reference_factor_id. Unknown or malformed ids return 404. The example is illustrative: captured catalog and interactive loadings stand in for the EAGGL metadata and top-50 lists.
+         */
+        get: operations["getArchivedReferenceFactor"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2963,7 +2983,7 @@ export interface components {
             object: components["schemas"]["DapperMechanism"];
             disease_label: string;
         };
-        /** @description An EAGGL factor is a DAPPER Mechanism, with exact native CFDE identity/model and a separate File for captured catalog bytes. Initial retrieval joins existing EAGGL label embeddings through the populated exact-trait/factor-number crosswalk, ignoring label/gene differences. Return the resolved native CFDE source_id and anchor; cfde_anchor.label may carry the friendly EAGGL display label without changing the scientific object. Preserve source hit, embedding and mapping runs in server-owned selection/request provenance. */
+        /** @description An EAGGL factor is a DAPPER Mechanism, with exact native CFDE identity/model and a separate File for captured catalog bytes. Initial retrieval joins existing EAGGL label embeddings through the populated exact-trait/factor-number crosswalk, ignoring label/gene differences. Return the resolved native CFDE source_id and anchor; cfde_anchor.label may carry the friendly EAGGL display label without changing the scientific object. Preserve source hit, embedding and mapping runs in server-owned selection/request provenance. Each deployment serves the factors of one active reference generation. In an eaggl-capped-v1 generation, source_id is factor:kpn:{NNNNNNN}:eaggl-capped-v1:{FactorN}, the record adds reference_generation_id and kpn_trait, cfde_anchor.label is the EAGGL factor label, and catalog_file identifies the canonical factor metadata bytes. Legacy cfde-inc-v2 records omit both fields. */
         EagglFactor: {
             /**
              * @description discriminator enum property added by openapi-typescript
@@ -2976,9 +2996,15 @@ export interface components {
             object_class: "Mechanism";
             object: components["schemas"]["DapperMechanism"];
             cfde_anchor: components["schemas"]["CfdeAnchor"];
-            /** @constant */
-            model: "cfde-inc-v2";
+            /**
+             * @description EAGGL reference model: cfde-inc-v2 (legacy CFDE-linked factors) or eaggl-capped-v1 (KPN reference generations).
+             * @enum {string}
+             */
+            model: "cfde-inc-v2" | "eaggl-capped-v1";
             catalog_file: components["schemas"]["DapperFile"];
+            /** @description Reference generation id: 64 lowercase hex characters. */
+            reference_generation_id?: string;
+            kpn_trait?: components["schemas"]["KpnTrait"] | null;
         };
         MechanismRecord: components["schemas"]["DismechMechanism"] | components["schemas"]["EagglFactor"];
         /** @description Mutable source selection and EAGGL anchors. An empty draft may have null source_gap/zero anchors. Analysis requires an exact source-selected DisMech gap and at least one current-model EAGGL anchor. Linked DisMech context is server-owned, not editable input. */
@@ -2987,8 +3013,11 @@ export interface components {
             eaggl_anchors: components["schemas"]["Selection"][];
             dismissed_source_ids: string[];
             mechanism_subquery: string;
-            /** @constant */
-            model: "cfde-inc-v2";
+            /**
+             * @description EAGGL reference model: cfde-inc-v2 (legacy CFDE-linked factors) or eaggl-capped-v1 (KPN reference generations).
+             * @enum {string}
+             */
+            model: "cfde-inc-v2" | "eaggl-capped-v1";
             selected_kgs: ("biomarkerkg" | "prokn")[];
         };
         DraftCreate: {
@@ -3072,6 +3101,7 @@ export interface components {
             /** Format: date-time */
             submitted_at: string;
             linked_dismech_context: components["schemas"]["SourceRef"][];
+            archive?: components["schemas"]["ReferenceArchive"];
         };
         GapSource: {
             /** @enum {string} */
@@ -3140,8 +3170,11 @@ export interface components {
             subquery: string;
             /** @enum {string} */
             mode: "semantic" | "hybrid";
-            /** @constant */
-            model: "cfde-inc-v2";
+            /**
+             * @description EAGGL reference model: cfde-inc-v2 (legacy CFDE-linked factors) or eaggl-capped-v1 (KPN reference generations).
+             * @enum {string}
+             */
+            model: "cfde-inc-v2" | "eaggl-capped-v1";
             source_gap: components["schemas"]["SelectedGap"];
         };
         Suggestion: {
@@ -3339,6 +3372,7 @@ export interface components {
             research_statement: components["schemas"]["ParagraphState"];
             publication?: components["schemas"]["PublicationState"];
             coverage: components["schemas"]["TraversalCoverage"];
+            archive?: components["schemas"]["ReferenceArchive"];
         };
         ClaimResult: {
             /** @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values. */
@@ -3404,6 +3438,8 @@ export interface components {
                 pointer: string;
                 message: string;
             }[];
+            /** @description Only on 410 REFERENCE_GENERATION_SUPERSEDED from a mechanism read: the frozen factor, or null when none was captured. */
+            archived_reference_factor?: components["schemas"]["ArchivedReferenceFactor"] | null;
         };
         /** @description Render the saved paragraph's entire pinned citation set together. No mutable text or latest-revision substitution is accepted. Does not launch an agent or change Paragraph identity. */
         CitationRenderInput: {
@@ -3646,6 +3682,7 @@ export interface components {
             provenance: components["schemas"]["OutcomeProvenance"];
             job_id: string | null;
             publication: components["schemas"]["PublicationState"];
+            archive?: components["schemas"]["ReferenceArchive"];
         };
         AnalysisOutcomeSummary: {
             /** Format: uuid */
@@ -3659,6 +3696,7 @@ export interface components {
             created_at: string;
             attribution: components["schemas"]["AttributionSnapshot"] | null;
             publication: components["schemas"]["PublicationState"];
+            archive?: components["schemas"]["ReferenceArchive"];
         };
         AnalysisOutcomeList: {
             items: components["schemas"]["AnalysisOutcomeSummary"][];
@@ -3674,6 +3712,7 @@ export interface components {
             job_id: string | null;
             research_statement: components["schemas"]["ParagraphState"];
             attribution?: components["schemas"]["AttributionSnapshot"] | null;
+            archive?: components["schemas"]["ReferenceArchive"];
         };
         AccountList: {
             items: components["schemas"]["AccountSummary"][];
@@ -6635,6 +6674,112 @@ export interface components {
             citation_targets: components["schemas"]["CitationTarget"][];
             warnings: string[];
         };
+        /** @description KPN trait (kpn-data-models portal_id) of a factor in an eaggl-capped-v1 reference generation. legacy_phenotype_id is the EAGGL/portal phenotype code. */
+        KpnTrait: {
+            id: string;
+            name: string;
+            legacy_phenotype_id: string;
+            trait_group: string | null;
+            trait_type: string | null;
+        };
+        /** @description An original EAGGL anchor of archived work, frozen at archive time. trait, label and name are display text (trait is the phenotype shown with the anchor, else its phenotype code); fields that could not be recovered are null. Resolve the frozen factor at /v1/reference-factors/{archived_reference_factor_id}. */
+        ReferenceArchiveAnchor: {
+            source_id: string;
+            mechanism_id: string | null;
+            factor_id: string | null;
+            trait: string | null;
+            kpn_trait_id: string | null;
+            label: string | null;
+            name: string | null;
+            origin: string | null;
+            archived_reference_factor_id: string;
+        };
+        /** @description Outdated-reference stamp on work built on a superseded reference generation. The work keeps every record and stays readable, downloadable and publishable, and paragraph jobs still run; re-analysis and review retry are blocked; start a new analysis on the same gap with current factors instead. reference holds the original anchors. Public copies null analysis.job_id and analysis.request_id. A later reload advances to_reference_generation and appends to history. Absent on current work and in deployments that never reloaded reference data. */
+        ReferenceArchive: {
+            /** @constant */
+            status: "archived";
+            /** @constant */
+            reason: "reference_generation_superseded";
+            /** Format: date-time */
+            archived_at: string;
+            /** @description Reference generation id: 64 lowercase hex characters. */
+            from_reference_generation: string;
+            /** @description Reference generation id: 64 lowercase hex characters. */
+            to_reference_generation: string;
+            history: {
+                /** @description Reference generation id: 64 lowercase hex characters. */
+                from_reference_generation: string;
+                /** @description Reference generation id: 64 lowercase hex characters. */
+                to_reference_generation: string;
+                /** Format: date-time */
+                archived_at: string;
+            }[];
+            reference: {
+                /**
+                 * @description EAGGL reference model: cfde-inc-v2 (legacy CFDE-linked factors) or eaggl-capped-v1 (KPN reference generations).
+                 * @enum {string}
+                 */
+                model: "cfde-inc-v2" | "eaggl-capped-v1";
+                anchors: components["schemas"]["ReferenceArchiveAnchor"][];
+            };
+            gap: {
+                /** @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values. */
+                id: string;
+                source_id: string | null;
+                source_revision: string | null;
+            } | null;
+            analysis: {
+                job_id: string | null;
+                request_id: string | null;
+                evidence_package_sha256: string | null;
+                account_id: string | null;
+                outcome_id: string | null;
+            };
+        };
+        /** @description Immutable snapshot of an EAGGL factor referenced by archived work, kept after its reference generation is purged. Public reference data. metadata is the source factor metadata; top_genes (by loading) and top_gene_sets (by rank) hold at most 50 entries each. Legacy cfde-inc-v2 snapshots have a null kpn_trait_id and null gene-set loadings. mechanism.id is the DAPPER Mechanism the catalog served, or null when it could not be minted. */
+        ArchivedReferenceFactor: {
+            /** @constant */
+            format: "reveal.archived-reference-factor/1";
+            archive_id: string;
+            /** @description Reference generation id: 64 lowercase hex characters. */
+            generation_id: string;
+            /**
+             * @description EAGGL reference model: cfde-inc-v2 (legacy CFDE-linked factors) or eaggl-capped-v1 (KPN reference generations).
+             * @enum {string}
+             */
+            model: "cfde-inc-v2" | "eaggl-capped-v1";
+            source_id: string;
+            factor_id: string;
+            trait: string;
+            kpn_trait_id: string | null;
+            label: string;
+            mechanism: {
+                id: string | null;
+                name: string;
+                description: string;
+            };
+            metadata: {
+                [key: string]: unknown;
+            };
+            top_genes: {
+                symbol: string;
+                loading: number;
+            }[];
+            top_gene_sets: {
+                rank: number;
+                gene_set_id: string | null;
+                name: string;
+                library: string | null;
+                collection_id: string | null;
+                source_key: string | null;
+                joint_loading: number | null;
+                marginal_loading: number | null;
+                score: number | null;
+            }[];
+            generation_manifest_sha256: string;
+            /** Format: date-time */
+            captured_at: string;
+        };
         JobBudgetFailure: {
             /** @enum {string} */
             scope: "authoring" | "review";
@@ -6822,6 +6967,15 @@ export interface operations {
                 headers: {
                     /** @example 30 */
                     "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Reference Reload In Progress */
+            503: {
+                headers: {
                     [name: string]: unknown;
                 };
                 content: {
@@ -7049,6 +7203,15 @@ export interface operations {
                 headers: {
                     /** @example 30 */
                     "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Reference Reload In Progress */
+            503: {
+                headers: {
                     [name: string]: unknown;
                 };
                 content: {
@@ -7422,8 +7585,11 @@ export interface operations {
                 mode?: "lexical" | "fuzzy" | "semantic" | "hybrid";
                 /** @example dismech */
                 source?: "dismech" | "eaggl" | "all";
-                /** @example cfde-inc-v2 */
-                model?: "cfde-inc-v2";
+                /**
+                 * @description EAGGL reference model. Results always come from the active reference generation (cfde-inc-v2 until a reference reload, eaggl-capped-v1 after one); this value only scopes the pagination cursor.
+                 * @example cfde-inc-v2
+                 */
+                model?: "cfde-inc-v2" | "eaggl-capped-v1";
                 /** @example 20 */
                 limit?: number;
                 /**
@@ -7542,6 +7708,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description Reference Generation Superseded */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description Rate Limited */
             429: {
                 headers: {
@@ -7590,6 +7765,15 @@ export interface operations {
             };
             /** @description Not Found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Reference Generation Superseded */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -8660,6 +8844,15 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            /** @description Reference Reload In Progress */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     listAccounts: {
@@ -8670,6 +8863,11 @@ export interface operations {
                  * @example dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk
                  */
                 gap_id?: string;
+                /**
+                 * @description Filter by reference state: current work, archived work built on a superseded reference generation (it carries archive), or all (default) with current items first, each group in the usual order. Deployments that never reloaded reference data have no archived items.
+                 * @example all
+                 */
+                reference_state?: "current" | "archived" | "all";
                 /** @example 20 */
                 limit?: number;
                 /**
@@ -8733,6 +8931,11 @@ export interface operations {
                 source_revision?: string;
                 /** @example public */
                 scope?: "public" | "workspace";
+                /**
+                 * @description Filter by reference state: current work, archived work built on a superseded reference generation (it carries archive), or all (default) with current items first, each group in the usual order. Deployments that never reloaded reference data have no archived items.
+                 * @example all
+                 */
+                reference_state?: "current" | "archived" | "all";
                 /** @example 20 */
                 limit?: number;
                 /**
@@ -8976,6 +9179,11 @@ export interface operations {
     listAnalysisOutcomes: {
         parameters: {
             query?: {
+                /**
+                 * @description Filter by reference state: current work, archived work built on a superseded reference generation (it carries archive), or all (default) with current items first, each group in the usual order. Deployments that never reloaded reference data have no archived items.
+                 * @example all
+                 */
+                reference_state?: "current" | "archived" | "all";
                 /** @example 20 */
                 limit?: number;
                 /**
@@ -9147,6 +9355,11 @@ export interface operations {
                 scope?: "public" | "workspace";
                 /** @example 8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd */
                 source_revision?: string;
+                /**
+                 * @description Filter by reference state: current work, archived work built on a superseded reference generation (it carries archive), or all (default) with current items first, each group in the usual order. Deployments that never reloaded reference data have no archived items.
+                 * @example all
+                 */
+                reference_state?: "current" | "archived" | "all";
                 /** @example 20 */
                 limit?: number;
                 /**
@@ -9679,6 +9892,51 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate Limited */
+            429: {
+                headers: {
+                    /** @example 30 */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getArchivedReferenceFactor: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @example 96d0fe43d87b838e172f352529665d602f4d42ec728f75f030207c5358f262f1 */
+                archive_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArchivedReferenceFactor"];
                 };
             };
             /** @description Not Found */

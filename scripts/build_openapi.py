@@ -752,6 +752,8 @@ def main():
         op['x-codeSamples'].append({'lang': 'Shell', 'label': case, 'source': ex['curl']})
         EXCHANGES.append(ex)
     extra_exchange('getJob', 'paragraph', path={'job_id': PARAGRAPH_JOB_ID}, value=examples['paragraph_complete'])
+    extra_exchange('getMechanism', 'kpn_factor', path={'source_id': examples['kpn_factor']['source_id']},
+                   query={'source_revision': examples['kpn_factor']['source_revision']}, response_name='kpn_factor')
     for fmt, media, name in [('bibtex', 'application/x-bibtex', 'bibtex'), ('biblatex', 'application/x-biblatex', 'biblatex'),
             ('csl-json', 'application/vnd.citationstyles.csl+json', 'csl_json'), ('apa', 'text/plain', 'illustrative_apa'), ('mla', 'text/plain', 'illustrative_mla')]:
         extra_exchange('getCitation', fmt, query={'format': fmt}, media=media, response_name=name)
@@ -782,6 +784,7 @@ def main():
             'evidence_package': 'reveal.evidence-package/0.2-draft; bundled from schema/evidence-package.schema.json',
             'agent_release_lock': '../services/backend/agent-runtime/dapper-release.json',
             'gateway_contract': '../docs/gateway-contract.md',
+            'reference_generations': 'Each deployment serves one active EAGGL/CFDE reference generation (model cfde-inc-v2 or eaggl-capped-v1). Work built on a superseded generation carries archive: it stays readable, downloadable and publishable but cannot be re-analysed. See ../docs/reference-reload.md.',
             'wire_identity': 'Compact dapper:Class.digest IDs; absolute external entity URIs. Source aliases remain opaque and exact.'}}
     write_json(OUT / 'openapi.json', spec)
     (OUT / 'openapi.yaml').write_text(yaml.safe_dump(spec, sort_keys=False, allow_unicode=True))

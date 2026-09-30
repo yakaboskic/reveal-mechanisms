@@ -1,5 +1,5 @@
 {
-  "openapi_sha256": "61aa74ceb1e98512869a200db220993d9e8daaab32558d781215afe23ee6b30c",
+  "openapi_sha256": "7b318840c3ae2257959e406ef681b5b55ce032baeae62d63c6126223ab41905f",
   "steps": [
     {
       "id": "gap",
@@ -31,12 +31,14 @@
       "cases": [
         "suggestMechanisms.dismech_context",
         "searchMechanisms.request",
-        "getMechanism.request"
+        "getMechanism.request",
+        "getMechanism.kpn_factor"
       ],
       "rules": [
         "Search existing EAGGL label embeddings; join the populated exact-trait/factor-number CFDE crosswalk before selecting five. Ignore label/gene differences.",
-        "Five total, maximum cosine across linked mechanisms, deterministic native-ID deduplication; fewer if needed. At least one resolved cfde-inc-v2 anchor is required.",
-        "Existing ranked GeneSet links resolve through aliases to DAPPER objects. Missing summary links do not disable a mapped factor."
+        "Five total, maximum cosine across linked mechanisms, deterministic native-ID deduplication; fewer if needed. At least one resolved anchor of the active reference model is required.",
+        "Existing ranked GeneSet links resolve through aliases to DAPPER objects. Missing summary links do not disable a mapped factor.",
+        "After a reference reload, anchors come from the active eaggl-capped-v1 generation; superseded anchors return 409 on write and 410 on read."
       ]
     },
     {
@@ -115,10 +117,12 @@
         "downloadArtifact.request",
         "getAccountPublication.request",
         "updateAccountPublication.publish",
-        "updateAccountPublication.unpublish"
+        "updateAccountPublication.unpublish",
+        "getArchivedReferenceFactor.request"
       ],
       "rules": [
         "Conclusions and Research statement are divider tabs.",
+        "An account built on a superseded reference generation carries archive: show its original anchors from the frozen reference factors and offer a new analysis on the gap with current factors.",
         "Claims open inline; no auto-opened first claim. Dedicated claim page has Assessment, Proposition, Evidence and Provenance tabs.",
         "Partial provenance and unavailable downloads remain explicit.",
         "Accounts remain private until the owner publishes a frozen snapshot with an optimistic version and idempotency key. Later accepted statements require an explicit publication update; unpublishing revokes public access. Public readers cannot access job telemetry or research writes."
@@ -290,6 +294,6 @@
       ]
     }
   ],
-  "operation_count": 43,
-  "exchange_count": 56
+  "operation_count": 44,
+  "exchange_count": 58
 }

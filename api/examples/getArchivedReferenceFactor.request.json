@@ -1,0 +1,107 @@
+{
+  "operation_id": "getArchivedReferenceFactor",
+  "case": "request",
+  "method": "GET",
+  "path_template": "/v1/reference-factors/{archive_id}",
+  "request": {
+    "url": "https://api.reveal.example.org/v1/reference-factors/96d0fe43d87b838e172f352529665d602f4d42ec728f75f030207c5358f262f1",
+    "path": {
+      "archive_id": "96d0fe43d87b838e172f352529665d602f4d42ec728f75f030207c5358f262f1"
+    },
+    "query": {},
+    "headers": {
+      "Accept": "application/json"
+    },
+    "body": null
+  },
+  "responses": {
+    "200": {
+      "content_type": "application/json",
+      "examples": {
+        "legacy_factor": {
+          "format": "reveal.archived-reference-factor/1",
+          "generation_id": "16e78f6a1282320367b4e6507ad828fc71bdb38ad06e0e0a7d384026f4414e19",
+          "model": "cfde-inc-v2",
+          "source_id": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+          "factor_id": "CADinT2D::Factor1",
+          "trait": "CADinT2D",
+          "kpn_trait_id": null,
+          "label": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+          "mechanism": {
+            "id": "dapper:Mechanism.MyhahXB55tDUS667sJzeJZ40BeeQBWOR",
+            "name": "CADinT2D mechanism Factor1",
+            "description": "EAGGL mechanism factor:portal:CADinT2D:cfde-inc-v2:Factor1. Source label: AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn."
+          },
+          "metadata": {
+            "node_id": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+            "node_type": "factor",
+            "node_key": "Factor1",
+            "label": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+            "subtitle": "Coronary artery disease in type 2 diabetes (CAD in T2D) (Factor1)"
+          },
+          "top_genes": [
+            {
+              "symbol": "SHH",
+              "loading": 0.5042
+            },
+            {
+              "symbol": "TCF7L2",
+              "loading": 0.3813
+            },
+            {
+              "symbol": "SIX2",
+              "loading": 0.3377
+            },
+            {
+              "symbol": "GLI3",
+              "loading": 0.3245
+            },
+            {
+              "symbol": "FGF13",
+              "loading": 0.2899
+            }
+          ],
+          "top_gene_sets": [
+            {
+              "rank": 1,
+              "gene_set_id": "dapper:GeneSet.I1UZhVhKU-YDerPLIxtnZOGlTXNAlrgD",
+              "name": "AMP AD / all brain / AMP AD MAYO TCX Diagnosis.AOD AD-CONTROL ALL dn | GTEx / brain / GTEx aging Brain 20-29 60-69 dn",
+              "library": null,
+              "collection_id": null,
+              "source_key": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+              "joint_loading": null,
+              "marginal_loading": null,
+              "score": null
+            },
+            {
+              "rank": 2,
+              "gene_set_id": "dapper:GeneSet.vz9FgYhauWzJN2g7y69RtjsfhQgQhVHV",
+              "name": "AMP AD / all brain / AMP AD MAYO TCX Diagnosis AD-OTHER ALL dn | GTEx / brain / GTEx aging Brain 20-29 60-69 dn",
+              "library": null,
+              "collection_id": null,
+              "source_key": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis_AD-OTHER_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+              "joint_loading": null,
+              "marginal_loading": null,
+              "score": null
+            },
+            {
+              "rank": 3,
+              "gene_set_id": "dapper:GeneSet.zQ8X81n_J-Fuv0zNRp1iQQXqIzuAOzGP",
+              "name": "PsychENCODE / all signatures / PsychENCODE geneM16",
+              "library": "PsychENCODE",
+              "collection_id": null,
+              "source_key": "PsychENCODE__all_signatures__PsychENCODE_geneM16",
+              "joint_loading": null,
+              "marginal_loading": null,
+              "score": null
+            }
+          ],
+          "generation_manifest_sha256": "92ec1f0f03a84d5cbb8ee3ad036b38cc0e77b7ccbd2ff6653089d867a3df6e03",
+          "archive_id": "96d0fe43d87b838e172f352529665d602f4d42ec728f75f030207c5358f262f1",
+          "captured_at": "2026-10-01T08:30:00Z"
+        }
+      }
+    }
+  },
+  "curl": "curl -X GET https://api.reveal.example.org/v1/reference-factors/96d0fe43d87b838e172f352529665d602f4d42ec728f75f030207c5358f262f1 -H 'Accept: application/json'"
+}
