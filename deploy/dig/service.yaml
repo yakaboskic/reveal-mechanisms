@@ -89,6 +89,7 @@ qa:
   on_demand_base: 1
   env:
     REVEAL_APPLICATION_TABLE_PREFIX: reveal_workflow_qa
+    REVEAL_MAX_ACTIVE_JOBS: '10'
     REVEAL_JOB_NAMESPACE: reveal-workflow-qa
     REVEAL_VECTOR_ENVIRONMENT: qa
     REVEAL_NOTIFICATION_NAMESPACE: reveal-qa

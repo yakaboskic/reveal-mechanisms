@@ -87,6 +87,10 @@ def test_platform_qa_isolates_authoritative_state_and_callbacks():
     assert config['env']['REVEAL_MAX_SCRATCH_STEPS'] == '2'
     assert config['env']['REVEAL_WORKSPACE_MAX_BYTES'] == '268435456'
     assert config['qa']['env']['REVEAL_APPLICATION_TABLE_PREFIX']!='reveal'
+    assert config['qa']['env']['REVEAL_MAX_ACTIVE_JOBS']=='10'
+    assert 'REVEAL_MAX_ACTIVE_JOBS' not in config['env']
+    assert 'REVEAL_MAX_ACTIVE_JOBS' not in config['prod'].get('env',{})
+    assert config['env']['REVEAL_MAX_ACTIVE_BOXES']=='2'
     assert config['qa']['env']['REVEAL_S3_PREFIX']=='qa/'
     assert 'api-qa.' in config['qa']['env']['REVEAL_WORKFLOW_URL']
     required = {'REVEAL_MYSQL_PASSWORD', 'REVEAL_GATEWAY_SECRET', 'REVEAL_GATEWAY_SERVICE_TOKEN',

@@ -1,5 +1,8 @@
 # Login and researcher identity
 
+The trusted dk application can use the [shared QA gateway credentials](application-gateway.md)
+to resolve its users and sign the same short-lived API assertions as our frontend server.
+
 Direct API clients can use an [operator-issued workspace API key](api-keys.md)
 for drafts, jobs, results and event streams. Keys resolve an existing principal
 and retain its ownership, expiry and quotas. The backend stores a hash/owner pair;

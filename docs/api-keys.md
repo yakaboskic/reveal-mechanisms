@@ -1,5 +1,9 @@
 # API keys for colleague access
 
+The dk application integration uses the [trusted gateway credentials](application-gateway.md)
+and registered-user sessions. The individual workspace-key mechanism below remains
+available but is not needed for that integration.
+
 An operator can issue an opaque `rvl_` key for one existing workspace. It uses the
 same ownership, idempotency, quota and expiry checks as a browser session. It can
 create and edit drafts, submit jobs, read results and consume progress events.
