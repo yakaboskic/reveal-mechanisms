@@ -6,7 +6,7 @@ The supported target is the HTTP-only service described in [durable-workflow-run
 
 The latest QA release uses source `649e54f837145e8112d07acf3a0dc77ded122d95` and platform revision `31bcfb51a9ca0230c5e0cb76f24fa91a49fee402`, deployed by [QA run 36697127927](https://github.com/broadinstitute/dig-service-platform/actions/runs/36697127927). The dk integration uses the [existing trusted gateway flow](application-gateway.md), with shared QA signing/service credentials delivered privately. Registered workspaces persist without a daily analysis cap. QA permits ten outstanding jobs per workspace while Box/scratch execution stays at two; production settings are unchanged. No additional application-key authentication layer was introduced.
 
-The main frontend is live as a protected Vercel **Preview** at [reveal-mechanisms-qa.vercel.app](https://reveal-mechanisms-qa.vercel.app), connected to `https://api-qa.hugeampkpnbi.org/api/reveal`. Visitors need the privately shared access link; its token must not be committed or copied into documentation. Deployment `dpl_6VMUbYaFcuG8zQgatwhe8NKhhZKm` is ready and the QA alias is assigned. All 16 settings were uploaded to the Preview environment only, with `NEXTAUTH_URL=https://reveal-mechanisms-qa.vercel.app` and artifact redirects restricted to `https://cyaka-reveal-data.s3.us-east-1.amazonaws.com/qa/`. Production settings and alias were not changed. All 71 frontend tests and typecheck passed. Sixteen hosted checks passed for sessions, drafts, authenticated SSE and reconnect replay; these checks launched no paid job.
+The main frontend is live as a public Vercel **Preview** at [reveal-mechanisms-qa.vercel.app](https://reveal-mechanisms-qa.vercel.app), connected to `https://api-qa.hugeampkpnbi.org/api/reveal`. The QA alias has a deployment-protection exception, so visitors can use the plain URL without a Vercel login or share token. Project-wide deployment protection and application workspace authorization remain enabled. Deployment `dpl_6VMUbYaFcuG8zQgatwhe8NKhhZKm` is ready and the QA alias is assigned. All 16 settings were uploaded to the Preview environment only, with `NEXTAUTH_URL=https://reveal-mechanisms-qa.vercel.app` and artifact redirects restricted to `https://cyaka-reveal-data.s3.us-east-1.amazonaws.com/qa/`. Production settings and alias were not changed. All 71 frontend tests and typecheck passed. Sixteen hosted checks passed for sessions, drafts, authenticated SSE and reconnect replay; these checks launched no paid job.
 
 QA OAuth callbacks must be registered in the existing provider applications while retaining their other callbacks:
 
@@ -29,7 +29,7 @@ After the Broad Upstash credential rotation, [QA replacement run 36702863162](ht
 
 | Component | Current deployment target |
 | --- | --- |
-| Frontend | Vercel project `reveal-mechanisms`; protected QA Preview live, production pending |
+| Frontend | Vercel project `reveal-mechanisms`; public QA Preview live, production pending |
 | Backend | One HTTP Fargate service under `/api/reveal/*`; no worker or dispatcher service |
 | Execution delivery | Managed Upstash Workflow/QStash signed callbacks |
 | Notifications | Managed Redis REST streaming Pub/Sub; Aurora event replay |
