@@ -1,5 +1,9 @@
 # API keys for colleague access
 
+The dk application integration uses the [trusted gateway credentials](application-gateway.md)
+and registered-user sessions. The individual workspace-key mechanism below remains
+available but is not needed for that integration.
+
 An operator can issue an opaque `rvl_` key for one existing workspace. It uses the
 same ownership, idempotency, quota and expiry checks as a browser session. It can
 create and edit drafts, submit jobs, read results and consume progress events.
@@ -8,8 +12,9 @@ callbacks. The backend stores only the key's SHA-256 hash and workspace UUID in
 environment configuration; research records never contain the raw key.
 
 The initial QA handoff creates a separate anonymous workspace. It expires after
-30 days and retains the configured anonymous allowance (currently five analyses
-per day and two active jobs). Its exact expiry appears in the handoff file and
+30 days and retains the configured anonymous daily allowance (five analyses
+per day). QA permits ten outstanding jobs per workspace; the default for other
+environments remains two. Its exact expiry appears in the handoff file and
 `GET /v1/me`. Publishing results publicly still requires a registered owner.
 
 ## Use the key
