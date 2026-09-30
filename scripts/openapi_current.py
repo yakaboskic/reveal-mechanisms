@@ -136,9 +136,10 @@ def schemas(b):
         ('id','outcome','summary','knowledge_gap','anchors','created_at','attribution','publication')}))
     b.add('AnalysisOutcomeList',obj({'items':array(ref('AnalysisOutcomeSummary')),'page':ref('Page')}))
     b.add('AccountSummary',obj({'account':ref('DapperScientificAccount'),'knowledge_gap':ref('DapperKnowledgeGap'),
-        'claim_count':{'type':'integer','minimum':1},'created_at':time,'job_id':null(uuid),'research_statement':ref('ParagraphState')}))
+        'claim_count':{'type':'integer','minimum':1},'created_at':time,'job_id':null(uuid),'research_statement':ref('ParagraphState'),
+        'publication':ref('PublicationState')}))
     S['AccountSummary']['properties']['attribution']=null(ref('AttributionSnapshot'))
-    S['AccountSummary']['description']='One accessible accepted scientific account, deduplicated by its DAPPER identity. Optional attribution is the immutable original request actor, not the current workspace owner; null denotes unavailable historical attribution. Title and brief synthesis are account.name and account.closing_remarks.'
+    S['AccountSummary']['description']='One accessible accepted scientific account, deduplicated by its DAPPER identity. Publication reports the current owner publication state; public discovery uses can_manage=false. Optional attribution is the immutable original request actor, not the current workspace owner; null denotes unavailable historical attribution. Title and brief synthesis are account.name and account.closing_remarks.'
     b.add('AccountList',obj({'items':array(ref('AccountSummary')),'page':ref('Page')}))
     b.add('ExplorationInput',obj({'source_gap':ref('SelectedGap'),'draft_id':null(uuid)},['source_gap'],
         description='Records a visit under the authenticated principal. Exact source revision is required; optional draft must belong to that principal and selected gap.'))
@@ -275,17 +276,18 @@ def endpoints(b,f,e):
         o['parameters'] += [b.parameter('max_depth','query',{'type':'integer','minimum':0,'maximum':5,'default':5},5),
             b.parameter('max_nodes','query',{'type':'integer','minimum':1,'maximum':250,'default':250},250),
             b.parameter('cursor','query',string(),'opaque-authorized-continuation')]
+    private_publication={'visibility':'private','version':0,'published_at':None,'updated_at':None,'can_manage':True,'has_unpublished_changes':False}
+    public_publication={'visibility':'public','version':1,'published_at':b.NOW,'updated_at':b.NOW,'can_manage':True,'has_unpublished_changes':False}
+    workspace_query=b.parameter('q','query',string(maxLength=200,default='',description='Case-insensitive literal search over the entire authorized saved collection before pagination. Whitespace is normalized; every query word must match. Cursors are bound to the normalized query.'),'mechanism')
     account={'account':f['account'],'knowledge_gap':f['gap'],'claim_count':len(f['account_document']['claims']),
-        'created_at':b.NOW,'job_id':b.JOB_ID,'research_statement':e['account']['research_statement']}
+        'created_at':b.NOW,'job_id':b.JOB_ID,'research_statement':e['account']['research_statement'],'publication':private_publication}
     b.operation('/v1/accounts','get','listAccounts','Scientific content','List your scientific accounts',
-        'Owner-scoped, newest first then account ID; deduplicate repeated deliveries by digest. Filter by exact gap_id. No private records from other users with the same gap. Closing remarks provide the summary; paragraph status is independent.',
-        'AccountList',{'owned':{'items':[account],'page':e['page']}},parameters=[b.parameter('gap_id','query',did('KnowledgeGap'),f['gap']['id'])]+b.page_parameters(),errors=('400','401','429'))
+        'Owner-scoped, newest first then account ID; deduplicate repeated deliveries by digest. Filter by exact gap_id. Optional q searches account ID, title and closing remarks, knowledge-gap ID/name/text and original attribution display name across all saved summaries before pagination. No private records from other users with the same gap. Closing remarks provide the summary; paragraph status is independent. Publication is current mutable workspace state, separate from immutable scientific content.',
+        'AccountList',{'owned':{'items':[account],'page':e['page']}},parameters=[b.parameter('gap_id','query',did('KnowledgeGap'),f['gap']['id']),deepcopy(workspace_query)]+b.page_parameters(),errors=('400','401','409','422','429'))
     b.operation('/v1/knowledge-gaps/{gap_id}/accounts','get','listKnowledgeGapAccounts','Knowledge gaps','List visible scientific accounts for a knowledge gap',
         'Accepted accounts for the exact DAPPER KnowledgeGap identity, newest first then account ID, deduplicated by scientific-account digest. Public scope (default) lists explicitly published snapshots across owners and omits private job IDs. Workspace scope requires a valid session and lists only its saved accounts. Invalid supplied sessions are rejected for either scope. Source-revision checks validate the selected observation; changed gap digests never merge. Attribution remains the original request actor. Each account ID links to its existing scientific endpoint, whose public reads are restricted to its published snapshot.',
         'AccountList',{'owned':{'items':[dict(account,attribution=e['research_request']['attribution'])],'page':e['page']},'no_visible_accounts':{'items':[],'page':e['page']}},
         parameters=[b.parameter('gap_id','path',did('KnowledgeGap'),f['gap']['id'],True),b.parameter('source_revision','query',string(pattern='^[a-f0-9]{64}$'),e['composer']['source_gap']['source_revision']),b.parameter('scope','query',enum('public','workspace',default='public'),'public')]+b.page_parameters(),public=True,errors=('400','401','404','409','429'))
-    private_publication={'visibility':'private','version':0,'published_at':None,'updated_at':None,'can_manage':True,'has_unpublished_changes':False}
-    public_publication={'visibility':'public','version':1,'published_at':b.NOW,'updated_at':b.NOW,'can_manage':True,'has_unpublished_changes':False}
     b.operation('/v1/accounts/{dapper_id}/publication','get','getAccountPublication','Scientific content','Inspect account publication',
         'Owner receives mutable publication controls even while private. Other readers receive only an active public publication with can_manage=false. Publishing is separate from scientific identity and frozen citation metadata; old citation access labels describe that exact historical metadata revision.',
         'PublicationState',{'private_owner':private_publication,'public_reader':dict(public_publication,can_manage=False)},
@@ -311,9 +313,9 @@ def endpoints(b,f,e):
     outcome_summary={key:public_outcome[key] for key in ('id','outcome','summary','knowledge_gap','anchors','created_at','attribution','publication')}
     description='A durable scoped insufficient-evidence exploration, separate from ScientificAccounts and excluded from their popularity counts. Captured author reasons are not independently validated scientific findings. Private by default; explicit publication shares only this frozen scope, original attribution and captured source evidence. Job logs, requests, runtime/ledger contents and the complete private package remain private. Invalid supplied credentials never downgrade to public.'
     b.operation('/v1/analysis-outcomes','get','listAnalysisOutcomes','Personal workspace','List saved workspace explorations',
-        'Session-required, newest-first summaries of all completed insufficient-evidence explorations owned by this workspace, private or published, across every knowledge gap. Includes previously saved records without a new run or publication. Operational failures are not scientific exploration outcomes. Other owners are excluded, even for published records. Detail and provenance are loaded only when opened.',
+        'Session-required, newest-first summaries of all completed insufficient-evidence explorations owned by this workspace, private or published, across every knowledge gap. Optional q searches outcome ID/summary, knowledge-gap ID/name/text, anchor names/traits/identifiers and original attribution display name across all saved summaries before pagination. Includes previously saved records without a new run or publication. Operational failures are not scientific exploration outcomes. Other owners are excluded, even for published records. Detail and provenance are loaded only when opened.',
         'AnalysisOutcomeList',{'saved':{'items':[dict(outcome_summary,publication=private_publication)],'page':e['page']},'empty':{'items':[],'page':e['page']}},
-        parameters=b.page_parameters(),errors=('401','409','429'))
+        parameters=[deepcopy(workspace_query)]+b.page_parameters(),errors=('401','409','422','429'))
     b.operation('/v1/analysis-outcomes/{outcome_id}','get','getAnalysisOutcome','Scientific content','Read an explored analysis outcome',description,
         'AnalysisOutcome',{'private_owner':outcome,'public_reader':public_outcome},parameters=[b.parameter('outcome_id','path',uuid,outcome_id,True)],public=True,errors=('401','404','429'))
     b.operation('/v1/jobs/{job_id}/outcome','get','getJobAnalysisOutcome','Jobs','Find the saved scoped outcome for an owned job',

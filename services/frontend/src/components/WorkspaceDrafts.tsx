@@ -21,7 +21,7 @@ export function WorkspaceGapRow({ item, drafts, activity, refresh }: {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const retry = useRef<{ binding: string; key: string } | null>(null);
-  const sorted = [...drafts].sort((a, b) => b.updated_at.localeCompare(a.updated_at) || b.id.localeCompare(a.id));
+  const sorted = drafts.filter(activity.isDraftVisible).sort((a, b) => b.updated_at.localeCompare(a.updated_at) || b.id.localeCompare(a.id));
   const selected = sorted.find(draft => draft.id === selectedId)
     || sorted.find(draft => activity.activeDrafts.has(draft.id))
     || sorted.find(draft => draft.id === item.draft_id) || sorted[0];
@@ -65,7 +65,7 @@ export function WorkspaceGapRow({ item, drafts, activity, refresh }: {
       {item.scientific_accounts.count > 0 && <Link href="/workspace?tab=accounts">{item.scientific_accounts.count} scientific {item.scientific_accounts.count === 1 ? "account" : "accounts"}</Link>}
     </div>
     <details className="workspace-draft-panel">
-      <summary><span className="workspace-draft-caret" aria-hidden="true">›</span>Drafts ({drafts.length})</summary>
+      <summary><span className="workspace-draft-caret" aria-hidden="true">›</span>Drafts ({sorted.length})</summary>
     <div className="workspace-drafts">
       {selected ? <>
         <label className="sr-only" htmlFor={`${id}-draft`}>Drafts</label>
@@ -75,14 +75,15 @@ export function WorkspaceGapRow({ item, drafts, activity, refresh }: {
         <Link className="workspace-open-draft" href={href}>{running ? "View run" : "Open draft"}<span aria-hidden="true">→</span></Link>
         <button type="button" disabled={busy} onClick={() => start("rename")}>Rename</button>
         <button type="button" disabled={busy || running} title={running ? "Wait for this draft’s research to finish before deleting it." : undefined} onClick={() => start("delete")}>Delete</button>
-      </> : <span className="workspace-no-drafts">No drafts yet</span>}
+      </> : <span className="workspace-no-drafts">{drafts.length ? "No unfinished drafts" : "No drafts yet"}</span>}
       <button type="button" className="workspace-new-draft" disabled={busy} onClick={() => start("create")}>+ New draft</button>
     </div>
-    {(selected || job) && <div className="workspace-item-meta workspace-draft-detail">
-      {selected && <><span>{selected.composer.eaggl_anchors.length} mechanism {selected.composer.eaggl_anchors.length === 1 ? "anchor" : "anchors"}</span><time dateTime={selected.updated_at}>Updated {shortDate(selected.updated_at)}</time></>}
-      {job && <Link href={activity.href(job)}>{job.status === "insufficient_evidence" ? "Exploration saved" : `Research ${job.status.replaceAll("_", " ")}`}</Link>}
+    {selected && <div className="workspace-item-meta workspace-draft-detail">
+      <span>{selected.composer.eaggl_anchors.length} mechanism {selected.composer.eaggl_anchors.length === 1 ? "anchor" : "anchors"}</span><time dateTime={selected.updated_at}>Updated {shortDate(selected.updated_at)}</time>
+      {job && running && <Link href={activity.href(job)}>Research {job.status.replaceAll("_", " ")}</Link>}
     </div>}
     </details>
+    {job && (!selected || !running) && <div className="workspace-item-meta workspace-draft-detail"><Link href={activity.href(job)}>{job.status === "insufficient_evidence" ? "View saved exploration" : `${running ? "View research" : "View finished research"} · ${job.status.replaceAll("_", " ")}`}</Link></div>}
     {error && !action && <p className="error" role="alert">{error}</p>}
     <dialog ref={dialog} className="auth-dialog workspace-draft-dialog" aria-labelledby={`${id}-title`} onCancel={event => { if (busy) event.preventDefault(); else setAction(null); }} onClose={() => { if (!busy) setAction(null); }}>
       {action && <form onSubmit={event => { event.preventDefault(); void submit(); }}>

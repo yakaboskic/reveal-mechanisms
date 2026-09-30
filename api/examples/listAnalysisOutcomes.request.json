@@ -4,9 +4,10 @@
   "method": "GET",
   "path_template": "/v1/analysis-outcomes",
   "request": {
-    "url": "https://api.reveal.example.org/v1/analysis-outcomes?limit=20",
+    "url": "https://api.reveal.example.org/v1/analysis-outcomes?q=mechanism&limit=20",
     "path": {},
     "query": {
+      "q": "mechanism",
       "limit": 20
     },
     "headers": {
@@ -81,5 +82,5 @@
       }
     }
   },
-  "curl": "curl -X GET 'https://api.reveal.example.org/v1/analysis-outcomes?limit=20' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
+  "curl": "curl -X GET 'https://api.reveal.example.org/v1/analysis-outcomes?q=mechanism&limit=20' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
 }

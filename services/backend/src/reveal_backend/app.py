@@ -613,11 +613,13 @@ async def record_exploration(request:Request):
         tx.put('exploration',digest([user,gap['object']['id']]),user,row); return row
 
 @app.get('/v1/accounts')
-def accounts(request:Request,limit:int=20,cursor:str|None=None,gap_id:str|None=None):
+def accounts(request:Request,limit:int=20,cursor:str|None=None,gap_id:str|None=None,q:str=Query('',max_length=200)):
+    from .workspace_search import normalize, filter_summaries
+    query=normalize(q)
     with repo.read_transaction() as tx:
         user=principal(tx,request.headers.get('authorization'))['user_id']
         items=[item for item in visible_accounts(tx,user,attribution=True) if not gap_id or item['account']['question']==gap_id]
-        return page(items,user,limit,cursor,digest(['accounts',gap_id]))
+        return page(filter_summaries(items,query,'account'),user,limit,cursor,digest(['accounts',gap_id,query]))
 
 @app.get('/v1/accounts/{dapper_id}/publication')
 def account_publication(dapper_id:str,request:Request):
@@ -640,11 +642,13 @@ async def update_publication(dapper_id:str,request:Request):
     return await asyncio.to_thread(save)
 
 @app.get('/v1/analysis-outcomes')
-def workspace_outcomes(request:Request,limit:int=20,cursor:str|None=None):
+def workspace_outcomes(request:Request,limit:int=20,cursor:str|None=None,q:str=Query('',max_length=200)):
+    from .workspace_search import normalize, filter_summaries
+    query=normalize(q)
     with repo.read_transaction() as tx:
         user=principal(tx,request.headers.get('authorization'))['user_id']
         items=analysis_outcomes.listing(tx,owner=user,scope='workspace')
-    return page(items,user,limit,cursor,'workspace-outcomes')
+    return page(filter_summaries(items,query,'outcome'),user,limit,cursor,digest(['workspace-outcomes',query]))
 
 @app.get('/v1/jobs/{job_id}/outcome')
 def job_outcome(job_id:str,request:Request):

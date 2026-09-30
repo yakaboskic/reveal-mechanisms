@@ -29,6 +29,9 @@ export class RevalidationCache<K extends string, T> {
     }
     this.emit();
   }
+  invalidateWhere(matches: (key: K) => boolean) {
+    this.invalidate([...this.entries.keys()].filter(matches));
+  }
   revalidate(scope: string | null, key: K, force = false, mode: LoadMode = "refresh"): Promise<void> {
     if (!scope || scope !== this.scope) return Promise.resolve();
     let entry = this.entries.get(key);

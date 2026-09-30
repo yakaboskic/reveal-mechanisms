@@ -1,11 +1,11 @@
 "use client";
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { RevalidationCache } from "@/lib/revalidation-cache";
-import { loadWorkspaceData, workspaceTabs, type WorkspaceData, type WorkspaceTab } from "@/lib/workspace-data";
+import { loadWorkspaceData, workspaceTabs, workspaceKey, workspaceKeyParts, type WorkspaceData, type WorkspaceTab, type WorkspaceKey } from "@/lib/workspace-data";
 import { onWorkspaceChange, invalidateWorkspace, affectedWorkspaceTabs, connectWorkspaceEvents, type WorkspaceConnection } from "@/lib/workspace-events";
 import { terminal, type Schema } from "@/lib/client";
 
-type Store = RevalidationCache<WorkspaceTab, WorkspaceData>;
+type Store = RevalidationCache<WorkspaceKey, WorkspaceData>;
 type IdentityCheck = () => Promise<Schema<"Me"> | null>;
 const Context = createContext<{ cache: Store; scope: string | null; checkIdentity: IdentityCheck; connection: WorkspaceConnection } | null>(null);
 const serverVersion = () => 0;
@@ -22,7 +22,7 @@ export function WorkspaceCacheProvider({ scope, children, checkIdentity }: { sco
       for (const key of affectedWorkspaceTabs(event)) keys.add(key);
       if (queued) return;
       queued = true;
-      queueMicrotask(() => { queued = false; if (active && keys.size) cache.invalidate([...keys]); keys.clear(); });
+      queueMicrotask(() => { queued = false; if (active && keys.size) cache.invalidateWhere(key => keys.has(workspaceKeyParts(key).tab)); keys.clear(); });
     });
     return () => { active = false; remove(); };
   }, [cache]);
@@ -42,24 +42,25 @@ export function WorkspaceCacheProvider({ scope, children, checkIdentity }: { sco
   return <Context.Provider value={{ cache, scope, checkIdentity, connection }}>{children}</Context.Provider>;
 }
 
-export function useWorkspaceData(tab: WorkspaceTab) {
+export function useWorkspaceData(tab: WorkspaceTab, query = "") {
   const store = useContext(Context);
   if (!store) throw new Error("Workspace cache requires the session provider.");
   const { cache, scope, checkIdentity, connection } = store;
   useSyncExternalStore(cache.subscribe, cache.getVersion, serverVersion);
-  const snapshot = cache.read(scope, tab);
+  const key = workspaceKey(tab, query);
+  const snapshot = cache.read(scope, key);
   useEffect(() => {
-    if (!snapshot.error) void cache.revalidate(scope, tab);
-  }, [cache, scope, tab, snapshot.stale, snapshot.loading, snapshot.error]);
+    if (!snapshot.error) void cache.revalidate(scope, key);
+  }, [cache, scope, key, snapshot.stale, snapshot.loading, snapshot.error]);
   useEffect(() => {
     const refresh = () => {
       if (document.visibilityState === "hidden") return;
-      void checkIdentity().then(identity => { if (identity && scope?.startsWith(identity.user_id + ":")) void cache.revalidate(scope, tab); });
+      void checkIdentity().then(identity => { if (identity && scope?.startsWith(identity.user_id + ":")) void cache.revalidate(scope, key); });
     };
     window.addEventListener("focus", refresh); window.addEventListener("online", refresh);
     document.addEventListener("visibilitychange", refresh);
     return () => { window.removeEventListener("focus", refresh); window.removeEventListener("online", refresh); document.removeEventListener("visibilitychange", refresh); };
-  }, [cache, scope, tab, checkIdentity]);
+  }, [cache, scope, key, checkIdentity]);
   const observed = useRef(new Map<string, string>());
   useEffect(() => { observed.current.clear(); }, [scope]);
   useEffect(() => {
@@ -73,5 +74,5 @@ export function useWorkspaceData(tab: WorkspaceTab) {
     const data = cache.read(scope, key).data;
     if (data) counts[key] = `${(key === "gaps" ? data.gaps : key === "accounts" ? data.accounts : data.outcomes).length}${data.cursor ? "+" : ""}`;
   }
-  return { ...snapshot, counts, connection, refresh: () => cache.revalidate(scope, tab, true), loadMore: () => cache.revalidate(scope, tab, true, "append") };
+  return { ...snapshot, counts, connection, refresh: () => cache.revalidate(scope, key, true), loadMore: () => cache.revalidate(scope, key, true, "append") };
 }

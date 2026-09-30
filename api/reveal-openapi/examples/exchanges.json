@@ -7527,10 +7527,11 @@
     "method": "GET",
     "path_template": "/v1/accounts",
     "request": {
-      "url": "https://api.reveal.example.org/v1/accounts?gap_id=dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk&limit=20",
+      "url": "https://api.reveal.example.org/v1/accounts?gap_id=dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk&q=mechanism&limit=20",
       "path": {},
       "query": {
         "gap_id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+        "q": "mechanism",
         "limit": 20
       },
       "headers": {
@@ -7595,6 +7596,14 @@
                   "status": "succeeded",
                   "job_id": "55555555-5555-4555-8555-555555555555",
                   "paragraph_id": "dapper:Paragraph.uSYa1LdXNPuwlSgsCz3oZ7IfrVoztroD"
+                },
+                "publication": {
+                  "visibility": "private",
+                  "version": 0,
+                  "published_at": null,
+                  "updated_at": null,
+                  "can_manage": true,
+                  "has_unpublished_changes": false
                 }
               }
             ],
@@ -7607,7 +7616,7 @@
         }
       }
     },
-    "curl": "curl -X GET 'https://api.reveal.example.org/v1/accounts?gap_id=dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk&limit=20' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
+    "curl": "curl -X GET 'https://api.reveal.example.org/v1/accounts?gap_id=dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk&q=mechanism&limit=20' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
   },
   {
     "operation_id": "listKnowledgeGapAccounts",
@@ -7685,6 +7694,14 @@
                   "status": "succeeded",
                   "job_id": "55555555-5555-4555-8555-555555555555",
                   "paragraph_id": "dapper:Paragraph.uSYa1LdXNPuwlSgsCz3oZ7IfrVoztroD"
+                },
+                "publication": {
+                  "visibility": "private",
+                  "version": 0,
+                  "published_at": null,
+                  "updated_at": null,
+                  "can_manage": true,
+                  "has_unpublished_changes": false
                 },
                 "attribution": {
                   "user_id": "11111111-1111-4111-8111-111111111111",
@@ -7857,9 +7874,10 @@
     "method": "GET",
     "path_template": "/v1/analysis-outcomes",
     "request": {
-      "url": "https://api.reveal.example.org/v1/analysis-outcomes?limit=20",
+      "url": "https://api.reveal.example.org/v1/analysis-outcomes?q=mechanism&limit=20",
       "path": {},
       "query": {
+        "q": "mechanism",
         "limit": 20
       },
       "headers": {
@@ -7934,7 +7952,7 @@
         }
       }
     },
-    "curl": "curl -X GET 'https://api.reveal.example.org/v1/analysis-outcomes?limit=20' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
+    "curl": "curl -X GET 'https://api.reveal.example.org/v1/analysis-outcomes?q=mechanism&limit=20' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
   },
   {
     "operation_id": "getAnalysisOutcome",

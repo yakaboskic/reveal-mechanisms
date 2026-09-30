@@ -25,6 +25,13 @@ export function workspaceRuns(jobs: Schema<"Job">[], requests: Schema<"ResearchR
     if (gap) byGap.set(gap, [...(byGap.get(gap) || []), job]);
   }
   for (const runs of [...byGap.values(), ...byDraft.values()]) runs.sort((a, b) => Number(terminal(a.status)) - Number(terminal(b.status)) || b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id));
+  const isDraftVisible = (draft: Schema<"Draft">) => {
+    // A saved edit is new work; completing an older frozen version does not
+    // finish it. Keep active retries visible even if a prior run has finished.
+    if (activeDrafts.has(draft.id)) return true;
+    return !(byDraft.get(draft.id) || []).some(job =>
+      terminal(job.status) && frozen.get(job.research_request_id!)?.source_draft_version === draft.version);
+  };
   const href = (job: Schema<"Job">, fallback: string | null = null) => {
     const request = frozen.get(job.research_request_id!);
     const draft = request?.source_draft_id || fallback;
@@ -33,5 +40,5 @@ export function workspaceRuns(jobs: Schema<"Job">[], requests: Schema<"ResearchR
     else if (request?.composer.source_gap) query.set("gap", request.composer.source_gap.id);
     return `/?${query}`;
   };
-  return { activeDrafts, byGap, byDraft, href };
+  return { activeDrafts, byGap, byDraft, isDraftVisible, href };
 }

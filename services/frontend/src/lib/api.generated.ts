@@ -509,7 +509,7 @@ export interface paths {
         };
         /**
          * List your scientific accounts
-         * @description Owner-scoped, newest first then account ID; deduplicate repeated deliveries by digest. Filter by exact gap_id. No private records from other users with the same gap. Closing remarks provide the summary; paragraph status is independent.
+         * @description Owner-scoped, newest first then account ID; deduplicate repeated deliveries by digest. Filter by exact gap_id. Optional q searches account ID, title and closing remarks, knowledge-gap ID/name/text and original attribution display name across all saved summaries before pagination. No private records from other users with the same gap. Closing remarks provide the summary; paragraph status is independent. Publication is current mutable workspace state, separate from immutable scientific content.
          */
         get: operations["listAccounts"];
         put?: never;
@@ -573,7 +573,7 @@ export interface paths {
         };
         /**
          * List saved workspace explorations
-         * @description Session-required, newest-first summaries of all completed insufficient-evidence explorations owned by this workspace, private or published, across every knowledge gap. Includes previously saved records without a new run or publication. Operational failures are not scientific exploration outcomes. Other owners are excluded, even for published records. Detail and provenance are loaded only when opened.
+         * @description Session-required, newest-first summaries of all completed insufficient-evidence explorations owned by this workspace, private or published, across every knowledge gap. Optional q searches outcome ID/summary, knowledge-gap ID/name/text, anchor names/traits/identifiers and original attribution display name across all saved summaries before pagination. Includes previously saved records without a new run or publication. Operational failures are not scientific exploration outcomes. Other owners are excluded, even for published records. Detail and provenance are loaded only when opened.
          */
         get: operations["listAnalysisOutcomes"];
         put?: never;
@@ -3664,7 +3664,7 @@ export interface components {
             items: components["schemas"]["AnalysisOutcomeSummary"][];
             page: components["schemas"]["Page"];
         };
-        /** @description One accessible accepted scientific account, deduplicated by its DAPPER identity. Optional attribution is the immutable original request actor, not the current workspace owner; null denotes unavailable historical attribution. Title and brief synthesis are account.name and account.closing_remarks. */
+        /** @description One accessible accepted scientific account, deduplicated by its DAPPER identity. Publication reports the current owner publication state; public discovery uses can_manage=false. Optional attribution is the immutable original request actor, not the current workspace owner; null denotes unavailable historical attribution. Title and brief synthesis are account.name and account.closing_remarks. */
         AccountSummary: {
             account: components["schemas"]["DapperScientificAccount"];
             knowledge_gap: components["schemas"]["DapperKnowledgeGap"];
@@ -3673,6 +3673,7 @@ export interface components {
             created_at: string;
             job_id: string | null;
             research_statement: components["schemas"]["ParagraphState"];
+            publication: components["schemas"]["PublicationState"];
             attribution?: components["schemas"]["AttributionSnapshot"] | null;
         };
         AccountList: {
@@ -8670,6 +8671,11 @@ export interface operations {
                  * @example dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk
                  */
                 gap_id?: string;
+                /**
+                 * @description Case-insensitive literal search over the entire authorized saved collection before pagination. Whitespace is normalized; every query word must match. Cursors are bound to the normalized query.
+                 * @example mechanism
+                 */
+                q?: string;
                 /** @example 20 */
                 limit?: number;
                 /**
@@ -8706,6 +8712,24 @@ export interface operations {
             };
             /** @description Authentication Required */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Version Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid Input */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -8976,6 +9000,11 @@ export interface operations {
     listAnalysisOutcomes: {
         parameters: {
             query?: {
+                /**
+                 * @description Case-insensitive literal search over the entire authorized saved collection before pagination. Whitespace is normalized; every query word must match. Cursors are bound to the normalized query.
+                 * @example mechanism
+                 */
+                q?: string;
                 /** @example 20 */
                 limit?: number;
                 /**
@@ -9012,6 +9041,15 @@ export interface operations {
             };
             /** @description Version Conflict */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid Input */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

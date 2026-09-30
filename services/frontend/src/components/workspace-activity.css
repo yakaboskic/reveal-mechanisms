@@ -15,6 +15,18 @@
 .workspace-dashboard .workspace-tabs button[aria-selected=true]{color:#365a8a;border-bottom-color:#6084b7}
 .workspace-dashboard .workspace-tabs button:hover{color:#365a8a}
 .workspace-dashboard .workspace-tabs button span{color:#70829a;font-size:12px;font-variant-numeric:tabular-nums}
+.workspace-dashboard .workspace-search{padding:20px 0 18px;border-bottom:1px solid #e5eaf1}
+.workspace-search label{display:block;margin-bottom:8px;font-size:12px;color:#526782}
+.workspace-search-controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.workspace-search-controls input{flex:1 1 240px;min-width:0;min-height:42px;border:1px solid #ccd8e7;border-radius:8px;padding:9px 12px;background:#fff;font:inherit;font-size:13px;line-height:1.6;color:#263f61}
+.workspace-search-controls input::placeholder{color:#69798e}
+.workspace-search-controls button{min-height:42px;padding:9px 16px;border:1px solid #cbd9ec;border-radius:8px;background:#edf3fc;color:#355d8e;font-size:13px}
+.workspace-search-controls .workspace-search-clear{border-color:transparent;background:transparent;color:#526782;padding-inline:8px}
+.workspace-search>p{margin:10px 0 0;font-size:12px;color:#60738d;overflow-wrap:anywhere}
+.workspace-dashboard .workspace-visibility{display:inline-flex;align-items:center;gap:6px;padding:3px 8px;border-radius:5px;font-size:11px;line-height:1.6;font-weight:600;white-space:nowrap;background:#edf0f5;color:#505f75}
+.workspace-dashboard .workspace-visibility.is-published{background:#e5f3ec;color:#246345}
+.workspace-dashboard .workspace-visibility.is-private{background:#edf0f5;color:#505f75}
+.workspace-dashboard .workspace-unpublished{font-size:11px;color:#7a5b29}
 .workspace-dashboard .workspace-gap-row,.workspace-dashboard .workspace-account-row{padding:25px 0;border-bottom:1px solid #edf0f5}
 .workspace-dashboard .workspace-item-title{display:block;font-size:15px;line-height:1.75;font-weight:450;color:#405571;max-width:80ch;overflow-wrap:anywhere}
 .workspace-dashboard .workspace-item-title:hover{color:#2563eb}

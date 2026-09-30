@@ -877,7 +877,7 @@ paths:
                           about_entities:
                           - http://purl.obolibrary.org/obo/MONDO_0021661
                           id: dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk
-                      attribution: &id041
+                      attribution: &id042
                         user_id: 11111111-1111-4111-8111-111111111111
                         person_id: dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he
                         display_name: Example Researcher
@@ -4416,7 +4416,7 @@ paths:
                       status: succeeded
                       job_id: 55555555-5555-4555-8555-555555555555
                       paragraph_id: dapper:Paragraph.uSYa1LdXNPuwlSgsCz3oZ7IfrVoztroD
-                    publication: &id042
+                    publication: &id041
                       visibility: private
                       version: 0
                       published_at: null
@@ -6919,9 +6919,12 @@ paths:
       - Scientific content
       summary: List your scientific accounts
       description: Owner-scoped, newest first then account ID; deduplicate repeated
-        deliveries by digest. Filter by exact gap_id. No private records from other
-        users with the same gap. Closing remarks provide the summary; paragraph status
-        is independent.
+        deliveries by digest. Filter by exact gap_id. Optional q searches account
+        ID, title and closing remarks, knowledge-gap ID/name/text and original attribution
+        display name across all saved summaries before pagination. No private records
+        from other users with the same gap. Closing remarks provide the summary; paragraph
+        status is independent. Publication is current mutable workspace state, separate
+        from immutable scientific content.
       parameters:
       - name: gap_id
         in: query
@@ -6934,6 +6937,20 @@ paths:
         example: dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk
         description: Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode
           path values.
+      - name: q
+        in: query
+        required: false
+        schema:
+          type: string
+          description: Case-insensitive literal search over the entire authorized
+            saved collection before pagination. Whitespace is normalized; every query
+            word must match. Cursors are bound to the normalized query.
+          maxLength: 200
+          default: ''
+        example: mechanism
+        description: Case-insensitive literal search over the entire authorized saved
+          collection before pagination. Whitespace is normalized; every query word
+          must match. Cursors are bound to the normalized query.
       - name: limit
         in: query
         required: false
@@ -6971,6 +6988,7 @@ paths:
                       created_at: '2026-09-24T16:00:00Z'
                       job_id: 44444444-4444-4444-8444-444444444444
                       research_statement: *id040
+                      publication: *id041
                     page: *id009
           headers:
             X-Request-ID:
@@ -6998,6 +7016,26 @@ paths:
                 authentication_required:
                   summary: Authentication required
                   value: *id001
+        '409':
+          description: Version Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                version_conflict:
+                  summary: Version conflict
+                  value: *id006
+        '422':
+          description: Invalid Input
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                invalid_input:
+                  summary: Invalid input
+                  value: *id007
         '429':
           description: Rate Limited
           content:
@@ -7019,7 +7057,7 @@ paths:
       x-codeSamples:
       - lang: Shell
         label: request
-        source: 'curl -X GET ''https://api.reveal.example.org/v1/accounts?gap_id=dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk&limit=20''
+        source: 'curl -X GET ''https://api.reveal.example.org/v1/accounts?gap_id=dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk&q=mechanism&limit=20''
           -H ''Authorization: Bearer <api-key-or-gateway-assertion>'' -H ''Accept:
           application/json'''
   /v1/knowledge-gaps/{gap_id}/accounts:
@@ -7105,7 +7143,8 @@ paths:
                       created_at: '2026-09-24T16:00:00Z'
                       job_id: 44444444-4444-4444-8444-444444444444
                       research_statement: *id040
-                      attribution: *id041
+                      publication: *id041
+                      attribution: *id042
                     page: *id009
                 no_visible_accounts:
                   summary: No visible accounts
@@ -7214,7 +7253,7 @@ paths:
               examples:
                 private_owner:
                   summary: Private owner
-                  value: *id042
+                  value: *id041
                 public_reader:
                   summary: Public reader
                   value:
@@ -7468,10 +7507,27 @@ paths:
       summary: List saved workspace explorations
       description: Session-required, newest-first summaries of all completed insufficient-evidence
         explorations owned by this workspace, private or published, across every knowledge
-        gap. Includes previously saved records without a new run or publication. Operational
-        failures are not scientific exploration outcomes. Other owners are excluded,
-        even for published records. Detail and provenance are loaded only when opened.
+        gap. Optional q searches outcome ID/summary, knowledge-gap ID/name/text, anchor
+        names/traits/identifiers and original attribution display name across all
+        saved summaries before pagination. Includes previously saved records without
+        a new run or publication. Operational failures are not scientific exploration
+        outcomes. Other owners are excluded, even for published records. Detail and
+        provenance are loaded only when opened.
       parameters:
+      - name: q
+        in: query
+        required: false
+        schema:
+          type: string
+          description: Case-insensitive literal search over the entire authorized
+            saved collection before pagination. Whitespace is normalized; every query
+            word must match. Cursors are bound to the normalized query.
+          maxLength: 200
+          default: ''
+        example: mechanism
+        description: Case-insensitive literal search over the entire authorized saved
+          collection before pagination. Whitespace is normalized; every query word
+          must match. Cursors are bound to the normalized query.
       - name: limit
         in: query
         required: false
@@ -7515,8 +7571,8 @@ paths:
                         trait: null
                         origin: manual
                       created_at: '2026-09-24T16:00:00Z'
-                      attribution: *id041
-                      publication: *id042
+                      attribution: *id042
+                      publication: *id041
                     page: *id009
                 empty:
                   summary: Empty
@@ -7549,6 +7605,16 @@ paths:
                 version_conflict:
                   summary: Version conflict
                   value: *id006
+        '422':
+          description: Invalid Input
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                invalid_input:
+                  summary: Invalid input
+                  value: *id007
         '429':
           description: Rate Limited
           content:
@@ -7570,7 +7636,7 @@ paths:
       x-codeSamples:
       - lang: Shell
         label: request
-        source: 'curl -X GET ''https://api.reveal.example.org/v1/analysis-outcomes?limit=20''
+        source: 'curl -X GET ''https://api.reveal.example.org/v1/analysis-outcomes?q=mechanism&limit=20''
           -H ''Authorization: Bearer <api-key-or-gateway-assertion>'' -H ''Accept:
           application/json'''
   /v1/analysis-outcomes/{outcome_id}:
@@ -7627,12 +7693,12 @@ paths:
                     anchors: *id043
                     selected_kgs: *id044
                     created_at: '2026-09-24T16:00:00Z'
-                    attribution: *id041
+                    attribution: *id042
                     scope_note: A scoped exploration report, not a ScientificAccount
                       or globally established negative finding.
                     record_format: structured
                     job_id: 44444444-4444-4444-8444-444444444444
-                    publication: *id042
+                    publication: *id041
                     provenance: &id049
                       evidence_package_sha256: 9a55d126679291a95fa3d35f544915610134075eaf110f62f77ec8ee870b6ae2
                       outcome_sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
@@ -7666,7 +7732,7 @@ paths:
                     anchors: *id043
                     selected_kgs: *id044
                     created_at: '2026-09-24T16:00:00Z'
-                    attribution: *id041
+                    attribution: *id042
                     scope_note: A scoped exploration report, not a ScientificAccount
                       or globally established negative finding.
                     record_format: structured
@@ -7887,7 +7953,7 @@ paths:
                       knowledge_gap: *id011
                       anchors: *id043
                       created_at: '2026-09-24T16:00:00Z'
-                      attribution: *id041
+                      attribution: *id042
                       publication: *id051
                     page: *id009
                 empty:
@@ -7987,7 +8053,7 @@ paths:
               examples:
                 private_owner:
                   summary: Private owner
-                  value: *id042
+                  value: *id041
                 public_reader:
                   summary: Public reader
                   value:
@@ -20805,6 +20871,8 @@ components:
           - type: 'null'
         research_statement:
           $ref: '#/components/schemas/ParagraphState'
+        publication:
+          $ref: '#/components/schemas/PublicationState'
         attribution:
           anyOf:
           - $ref: '#/components/schemas/AttributionSnapshot'
@@ -20816,11 +20884,13 @@ components:
       - created_at
       - job_id
       - research_statement
+      - publication
       additionalProperties: false
       description: One accessible accepted scientific account, deduplicated by its
-        DAPPER identity. Optional attribution is the immutable original request actor,
-        not the current workspace owner; null denotes unavailable historical attribution.
-        Title and brief synthesis are account.name and account.closing_remarks.
+        DAPPER identity. Publication reports the current owner publication state;
+        public discovery uses can_manage=false. Optional attribution is the immutable
+        original request actor, not the current workspace owner; null denotes unavailable
+        historical attribution. Title and brief synthesis are account.name and account.closing_remarks.
     AccountList:
       type: object
       properties:
