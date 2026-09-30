@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import AsyncMock, Mock, patch
 
 from reveal_backend import jobs, workflow_state as state, durable_review
-from reveal_backend.repository import Repository, digest
+from reveal_backend.repository import Repository, Transaction, digest
 from reveal_backend.workflow_execution import WorkflowExecution
 from reveal_backend.workflow_routes import dispatch_pending, reconcile_stale, mount_workflow
 from reveal_backend.box_adapter import BoxTransportError
@@ -186,6 +186,42 @@ class WorkflowTests(unittest.IsolatedAsyncioTestCase):
         with self.repo.read_transaction() as tx:
             self.assertEqual(tx.get('job',job['id'])['owner'],'new-owner')
             self.assertEqual(tx.list('event')[0]['owner'],'new-owner')
+
+    async def test_observation_batch_replay_and_duplicate_events_are_atomic_with_cursor(self):
+        job, payload = self.new()
+        _, execution, _ = state.acquire(self.repo, payload, 0)
+        engine = WorkflowExecution(self.repo, storage=self.store)
+        event = ('agent_message', {'remote_stream_id': 'stream', 'remote_sequence': 1, 'message': 'First'})
+        events = [event, event, ('agent_message', {
+            'remote_stream_id': 'stream', 'remote_sequence': 2, 'message': 'Second'})]
+        handle = {'box_id': 'box', 'cursor': 2}
+        engine.observe_commit(payload, execution['fence'], handle, events)
+        engine.observe_commit(payload, execution['fence'], handle, events)
+        with self.repo.read_transaction() as tx:
+            self.assertEqual(len(tx.list('remote_event')), 2)
+            self.assertEqual(len(tx.list('event')), 3)  # queued plus two remote events
+            self.assertEqual(tx.get('job', job['id'])['data']['last_event_id'], '3')
+            self.assertEqual(tx.get('execution', job['id'])['data']['box']['cursor'], 2)
+            self.assertEqual(tx.get('queue', job['id'])['data']['remote_handle']['cursor'], 2)
+        original = Transaction.update_existing
+        def fail_cursor(tx, kind, *args, **kwargs):
+            if kind == 'queue': raise OSError('Cursor commit failed after event inserts')
+            return original(tx, kind, *args, **kwargs)
+        later = [('agent_message', {'remote_stream_id': 'stream', 'remote_sequence': 3, 'message': 'Third'})]
+        with patch.object(Transaction, 'update_existing', fail_cursor):
+            with self.assertRaises(OSError):
+                engine.observe_commit(payload, execution['fence'], {**handle, 'cursor': 3}, later)
+        with self.repo.read_transaction() as tx:
+            self.assertEqual(len(tx.list('remote_event')), 2)
+            self.assertEqual(len(tx.list('event')), 3)
+            self.assertEqual(tx.get('job', job['id'])['data']['last_event_id'], '3')
+            self.assertEqual(tx.get('execution', job['id'])['data']['box']['cursor'], 2)
+            self.assertEqual(tx.get('queue', job['id'])['data']['remote_handle']['cursor'], 2)
+        engine.observe_commit(payload, execution['fence'], {**handle, 'cursor': 3}, later)
+        with self.repo.read_transaction() as tx:
+            self.assertEqual(len(tx.list('remote_event')), 3)
+            self.assertEqual(len(tx.list('event')), 4)
+            self.assertEqual(tx.get('queue', job['id'])['data']['remote_handle']['cursor'], 3)
 
     async def test_environment_namespace_is_checked_against_service_configuration(self):
         _,payload=self.new()

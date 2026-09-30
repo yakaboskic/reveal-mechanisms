@@ -69,19 +69,29 @@ class WorkflowExecution:
 
     def observe_commit(self, payload, token, handle, events):
         """Acknowledge remote cursor and deduplicated public events atomically."""
+        deliveries = [digest([payload['job_id'], detail['remote_stream_id'], detail['remote_sequence']])
+                      for _, detail in events]
         with self.repository.transaction() as tx:
             owner, execution = state.owned(tx, payload, token)
             current = tx.get('job', payload['job_id'])['data']; current['owner_user_id'] = owner
-            for kind, detail in events:
-                delivery = digest([payload['job_id'], detail['remote_stream_id'], detail['remote_sequence']])
-                if tx.get('remote_event', delivery): continue
-                tx.put('remote_event', delivery, owner, {'job_id': payload['job_id'], 'sequence': detail['remote_sequence']})
+            seen = set(tx.get_many('remote_event', list(dict.fromkeys(deliveries))))
+            records = []; changed = False
+            for (kind, detail), delivery in zip(events, deliveries):
+                if delivery in seen: continue
+                seen.add(delivery)
+                records.append(('remote_event', delivery, owner,
+                                {'job_id': payload['job_id'], 'sequence': detail['remote_sequence']}))
                 mapped = public_activity(current, kind, detail)
-                if mapped: jobs.event(tx, current, *mapped)
+                if mapped:
+                    item = jobs.event_record(current, *mapped)
+                    records.append(('event', payload['job_id']+':'+item['id'].zfill(12), owner, item))
+                    changed = True
+            tx.insert_many(records)
+            if changed: tx.update_existing('job', payload['job_id'], owner, current)
             execution['box'] = handle
-            tx.put('execution', payload['job_id'], owner, execution)
+            tx.update_existing('execution', payload['job_id'], owner, execution)
             queue = tx.get('queue', payload['job_id'])['data']; queue['remote_handle'] = handle
-            tx.put('queue', payload['job_id'], owner, queue)
+            tx.update_existing('queue', payload['job_id'], owner, queue)
 
     async def step(self, payload, index):
         job, execution, replay = await asyncio.to_thread(state.acquire, self.repository, payload, index)
