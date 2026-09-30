@@ -49,7 +49,9 @@ def public_activity(job,kind,payload):
             # A provider result ends authoring, not the job. Output still needs
             # durable capture and independent validation before acceptance.
             job['stage']='collecting_output'
-            detail=activity('preparation','started','harness')
+            # This is a completion notice, not the start of a timed capture
+            # operation. The job remains running in its collection stage.
+            detail=activity('preparation','failed' if payload.get('status')=='failed' else 'completed','harness')
     elif kind in ('agent_message','message'):
         detail=activity('agent_message','started','harness',
             **({'message_delta':True} if payload.get('delta') is True else {}))

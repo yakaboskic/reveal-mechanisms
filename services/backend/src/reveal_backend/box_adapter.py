@@ -2,6 +2,7 @@
 from __future__ import annotations
 import asyncio
 import base64
+import gzip
 import hashlib
 import io
 import json
@@ -229,13 +230,16 @@ def make_bundle(project_root: Path, request: ExecutionRequest):
     else:
         raise BoxConfigurationError('Unsupported execution kind')
     result = io.BytesIO()
-    with tarfile.open(fileobj=result, mode='w:gz') as archive:
-        for name, content in files.items():
-            if len(content) > 8_000_000:
-                raise BoxConfigurationError('Input artifact exceeds limit')
-            info = tarfile.TarInfo(name)
-            info.size, info.mode, info.mtime = len(content), 0o644, 0
-            archive.addfile(info, io.BytesIO(content))
+    # The bootstrap sentinel identifies exact bundle bytes. Wall-clock gzip
+    # metadata must not make a retry of identical frozen input look different.
+    with gzip.GzipFile(fileobj=result, mode='wb', filename='', mtime=0) as compressed:
+        with tarfile.open(fileobj=compressed, mode='w') as archive:
+            for name, content in files.items():
+                if len(content) > 8_000_000:
+                    raise BoxConfigurationError('Input artifact exceeds limit')
+                info = tarfile.TarInfo(name)
+                info.size, info.mode, info.mtime = len(content), 0o644, 0
+                archive.addfile(info, io.BytesIO(content))
     if result.tell() > 25_000_000:
         raise BoxConfigurationError('Input bundle exceeds limit')
     return result.getvalue()
@@ -264,13 +268,17 @@ class BoxExecutionAdapter:
                    '-B', '-m', REMOTE_MODULE, action, *[str(x) for x in args]]
         return await self.command(box, shlex.join(command))
 
-    async def prepare(self, box, request, bundle):
+    def request_config(self, request):
         config = {'job_id': request.job_id, 'attempt': request.attempt, 'kind': request.kind,
                   'selected_graphs': list(request.selected_graphs), 'timeout_seconds': request.timeout_seconds,
                   'max_budget_usd': request.max_budget_usd, 'max_turns': request.max_turns,
                   'model': self.environ.get('REVEAL_CLAUDE_MODEL', MODEL), 'claude_version': CLAUDE_VERSION,
                   'input_sha256': hashlib.sha256(request.input_path.read_bytes()).hexdigest()}
         config['validation_feedback'] = list(request.validation_feedback)
+        return config
+
+    async def prepare(self, box, request, bundle):
+        config = self.request_config(request)
         # Persist a trusted bootstrap identity before narrowing network egress.
         # A lost policy-update response must not rerun apt/pip/npm behind the
         # now-restricted firewall. The root-owned sentinel binds the exact
@@ -286,29 +294,38 @@ class BoxExecutionAdapter:
         await box.files.write(path='/tmp/reveal-bundle.tgz', content=base64.b64encode(bundle).decode(), encoding='base64')
         await box.files.write(path='/tmp/reveal-request.json', content=json.dumps(config))
         # Setup is a trusted static command; no model-authored shell or credentials.
-        bootstrap = '''set -eu
+        bootstrap = self.bootstrap_script(config['claude_version'])
+        await box.files.write(path='/tmp/reveal-bootstrap.sh', content=bootstrap)
+        await self.command(box, 'sh /tmp/reveal-bootstrap.sh')
+        await self.finish_prepare(box, fingerprint)
+
+    @staticmethod
+    def bootstrap_script(claude_version, *, unpack=True):
+        if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', claude_version):
+            raise BoxConfigurationError('Invalid frozen Claude runtime version')
+        return '''set -eu
 sudo mkdir -p /reveal/state
-sudo tar -xzf /tmp/reveal-bundle.tgz -C /reveal
+''' + ('''sudo tar -xzf /tmp/reveal-bundle.tgz -C /reveal
 sudo mv /tmp/reveal-request.json /reveal/request.json
-id reveal-agent >/dev/null 2>&1 || sudo useradd --create-home --uid 1999 --shell /usr/sbin/nologin reveal-agent
+''' if unpack else '') + '''id reveal-agent >/dev/null 2>&1 || sudo useradd --create-home --uid 1999 --shell /usr/sbin/nologin reveal-agent
 sudo apt-get update -qq
 sudo apt-get install -y -qq python3-venv
 sudo python3 -m venv /reveal/venv
 sudo /reveal/venv/bin/pip -q install PyYAML==6.0.2 linkml==1.11.1 rdflib==7.6.0
 sudo mkdir -p /reveal/claude
-sudo npm install --prefix /reveal/claude --no-audit --no-fund @anthropic-ai/claude-code@''' + CLAUDE_VERSION + '''
+sudo npm install --prefix /reveal/claude --no-audit --no-fund @anthropic-ai/claude-code@''' + claude_version + '''
 sudo chmod 755 /reveal
 sudo chmod 755 /reveal/state
 sudo /reveal/claude/node_modules/.bin/claude --version
 '''
-        await box.files.write(path='/tmp/reveal-bootstrap.sh', content=bootstrap)
-        await self.command(box, 'sh /tmp/reveal-bootstrap.sh')
+
+    async def finish_prepare(self, box, fingerprint):
         # Secret only uses structured SDK file input, then root-only protection before launch.
         await box.files.write(path='/tmp/reveal-credential.json', content=json.dumps({'ANTHROPIC_API_KEY': self.environ['ANTHROPIC_API_KEY']}))
         await self.command(box, 'sudo mv /tmp/reveal-credential.json /reveal/credentials.json && sudo chown root:root /reveal/credentials.json && sudo chmod 600 /reveal/credentials.json')
         await self.command(box, "sudo -n sh -c " + shlex.quote("printf '%s' " + fingerprint + " > /reveal/state/bootstrap-ready && chmod 600 /reveal/state/bootstrap-ready"))
         # After installation only Anthropic and the fixed evidence service are reachable.
-        await box.update_network_policy(policy)
+        await box.update_network_policy({'mode': 'custom', 'allowed_domains': ['api.anthropic.com', 'apps.okn.us', 'github.com']})
         # DAPPER clone is intentionally fresh and requires github.com after policy tightening.
 
     async def execute(self, request, emit, cancelled, checkpoint):

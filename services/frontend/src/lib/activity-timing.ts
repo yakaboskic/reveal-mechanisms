@@ -36,7 +36,12 @@ export function timedActivitySections(events: Schema<"JobEvent">[], job: Schema<
 export function operationalStep(row: ActivityRow, followingRows: ActivityRow[], section: { state: StepState; end: number | null }, now: number) {
   const event = row.event;
   const next = followingRows.find(item => !["agent_message", "tool_call", "tool_result"].includes(item.event.detail?.kind || ""));
-  const explicit = event.detail?.state;
+  // Older saved agent-completion notices started the collection stage with a
+  // "started" detail. They mark authoring's end, not capture's start. Actual
+  // capture operations are worker events and retain their elapsed timers.
+  const legacyCompletion = event.stage === "collecting_output" && event.detail?.kind === "preparation" &&
+    event.detail.source === "harness" && event.detail.state === "started";
+  const explicit = legacyCompletion ? "completed" : event.detail?.state;
   const state: StepState = explicit === "failed" ? "failed" : explicit === "unavailable" ? "unavailable" : explicit === "completed" || next ? "completed" : section.state;
   const end = next ? timestamp(next.event.occurred_at) : state === "working" ? now : section.end;
   // A point-in-time completion notice without a recorded start has no duration.

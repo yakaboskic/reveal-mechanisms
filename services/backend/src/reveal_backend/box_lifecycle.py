@@ -32,8 +32,16 @@ class BoxLifecycle(BoxExecutionAdapter):
         box = await self.connect(handle)
         try:
             await self.prepare(box, request, make_bundle(self.project_root, request))
-            return dict(handle, phase='prepared', timings={**handle.get('timings', {}), 'prepared_at': time.time()})
+            return dict(handle, phase='prepared', capture_protocol='s3-v1', timings={**handle.get('timings', {}), 'prepared_at': time.time()})
         finally: await box.aclose()
+
+    def freeze_bootstrap(self, request, storage):
+        from .direct_bootstrap import freeze_bootstrap
+        return freeze_bootstrap(self, request, storage)
+
+    async def prepare_from_store(self, descriptor, handle, storage):
+        from .direct_bootstrap import prepare_from_store
+        return await prepare_from_store(self, descriptor, handle, storage)
 
     async def launch_once(self, handle):
         box = await self.connect(handle)
@@ -60,6 +68,10 @@ class BoxLifecycle(BoxExecutionAdapter):
             updated['phase'] = 'terminal'
             updated['timings'] = {**handle.get('timings', {}), 'terminal_at': time.time()}
         return updated, events, complete
+
+    async def capture_to_store(self, binding, handle, storage, workspace_ref):
+        from .direct_capture import capture_to_store
+        return await capture_to_store(self, binding, handle, storage, workspace_ref)
 
     async def capture_once(self, request, handle):
         if handle.get('state', {}).get('status') not in TERMINAL_STATUSES:

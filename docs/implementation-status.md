@@ -15,11 +15,45 @@ The local Workflow pilot runs Next.js and FastAPI in Docker at **http://localhos
 
 ## Validation and limits
 
+The direct-transfer implementation adds direct Box/S3 transfers, independent
+signed cleanup and review steps that update only their checkpoint JSON and
+immutable manifest. Initial preparation still builds and validates the input
+bundle in API scratch, then atomically saves its S3 reference and frozen settings
+before Box allocation. New bootstrap steps download that exact version directly
+into Box, with no API checkpoint restore or temporary directory. Old descriptors
+keep their existing bootstrap path. Direct capture and review call/tool steps
+also use no temporary directory; the API streams captured objects for hash,
+credential and ledger validation. Initial preparation, validation, review
+initialization and acceptance still use bounded file-based scratch. No workspace
+cache was added. Cleanup survives main-workflow completion and generation
+changes, retaining remote capacity until deletion is acknowledged; rollback
+must drain its durable obligations or keep the cleanup consumer available.
+
+A read-only benchmark restored a saved 244-file, 9,347,440-byte checkpoint in
+74.173 seconds serially and 16.570 seconds with four bounded downloads (4.48×),
+with no model calls or Redis commands. This single cold-restore comparison does
+not measure full job latency. Progress labels also stop attributing collection
+time to the completed authoring notice. The backend passed 807 tests (8 skipped,
+303 subtests); the frontend passed all 70 tests and typecheck. A live synthetic
+probe captured 244 files in 38.013 seconds and retried in 39.021 seconds with
+exactly the same object versions. Independent cleanup and duplicate receipt
+replay passed; a fresh status request confirmed the Box was deleted with HTTP
+404, even though its metadata remains available. A separate live synthetic Box
+downloaded its exact input bundle directly from S3 with API download, restore
+and temporary directories disabled in the probe. Setup including installation
+took 26.267 seconds; the original-handle lost-acknowledgment retry took 1.020
+seconds. Remote checksum, fingerprint and subsequent deletion checks passed.
+Both local images are healthy, and running transfer modules match the tested source. These
+optimizations are not deployed to QA or production and have no verified paid
+scientific run. See the
+[runtime guide](durable-workflow-runtime.md#direct-transfers-and-capture-optimizations)
+for protocol, rollback and benchmark details.
+
 Historical live browser → RDS → Box/Claude → account/paragraph journeys, recovery checks and provider costs are in [validation report](validation-report.md). Local S3 and Redis failure drills used an isolated verification namespace; disruptive probes are refused on shared application tables. Handoff checks are recorded separately so packaging tests are not mistaken for paid scientific runs.
 
 A pre-refactor validation failure was caused by trusted assembly adding a mechanism named only in prose. Assembly now follows schema-declared references. Replaying that saved candidate passed structural/source validation with no findings; the failed job was preserved and independent review was not rerun. This does not mean the old job became accepted.
 
-The current managed Workflow pilot completed one Box authoring attempt, captured its output in S3 and confirmed Box deletion. Independent review acknowledged 31 calls, then retained an unresolved final-call reservation; the original response status was not recorded. Free token-count checks independently reproduced rejection of the old final-decision schema and acceptance of its correction, which passed 82 focused tests. The original job remains `REVIEW_UNAVAILABLE`, accepted no account and dispatched no paragraph. Its captured account hash was verified through a private operator S3 download; the scientific artifact API returns 404 until acceptance. No paid retry or reauthoring was performed, so scientific acceptance after the fix remains unverified.
+The first managed Workflow pilot completed one Box authoring attempt, captured its output in S3 and confirmed Box deletion. Independent review acknowledged 31 calls, then retained an unresolved final-call reservation; the original response status was not recorded. Free token-count checks independently reproduced rejection of the old final-decision schema and acceptance of its correction, which passed 82 focused tests. The original job remains `REVIEW_UNAVAILABLE`, accepted no account and dispatched no paragraph. Its captured account hash was verified through a private operator S3 download; the scientific artifact API returns 404 until acceptance. No paid retry or reauthoring was performed, so scientific acceptance after the fix remains unverified.
 
 The default semantic path uses verified Upstash Vector snapshots and bounded candidate retrieval, with exact scoring and frozen provenance. It does not load full embedding matrices at API startup or silently fall back to NumPy. The old preload measurements remain in [database/evidence performance](database-and-evidence-performance.md). Current test counts and live local provider/browser probes are recorded in the [runtime verification status](durable-workflow-runtime.md#verification-status); those checks do not establish cloud or scientific-run acceptance.
 

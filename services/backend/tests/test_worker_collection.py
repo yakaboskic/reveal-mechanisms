@@ -54,7 +54,18 @@ class WorkerCollectionTests(unittest.TestCase):
                     self.assertEqual(job['stage'], 'collecting_output')
                     self.assertEqual(job['status'], status)
                     self.assertEqual(mapped[1], 'Claude finished its work.')
-                    self.assertEqual(mapped[2]['state'], 'started')
+                    self.assertEqual(mapped[2]['state'], 'completed')
+                    self.assertIsNone(mapped[2]['duration_ms'])
+
+    def test_failed_agent_notice_has_no_forward_timer_or_terminal_job_claim(self):
+        job = {'kind': 'analysis', 'stage': 'authoring_account', 'status': 'running', 'warnings': []}
+        mapped = public_activity(job, 'agent_completed', {
+            'status': 'failed', 'message': 'Claude stopped with an error.',
+        })
+        self.assertEqual(job['stage'], 'collecting_output')
+        self.assertEqual(job['status'], 'running')
+        self.assertEqual(mapped[2]['state'], 'failed')
+        self.assertIsNone(mapped[2]['duration_ms'])
 
     def test_completion_replay_cannot_duplicate_handoff_or_regress_validation(self):
         completion = ('agent_completed', {
@@ -81,7 +92,7 @@ class WorkerCollectionTests(unittest.TestCase):
         self.assertEqual(sum(row['message'] == prose[1]['text'] for row in rows), 1)
         handoff = next(row for row in rows if row['message'] == completion[1]['message'])
         self.assertEqual(handoff['stage'], 'collecting_output')
-        self.assertEqual(handoff['detail']['state'], 'started')
+        self.assertEqual(handoff['detail']['state'], 'completed')
 
     def exercise_capture(self, checkpoint_phases, *, mismatch=False):
         snapshots = []

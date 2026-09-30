@@ -1,9 +1,11 @@
 """Bounded research execution operations for Workflow v1.
 
-Each invocation restores immutable storage into unique scratch, performs one
-phase, saves its checkpoint, and returns. Waiting on Box holds no local task.
+Each invocation performs one bounded phase and saves its immutable checkpoint.
+Only file-based validation/preparation restores scratch. Waiting on Box holds
+no local task.
 """
 import asyncio
+from contextlib import nullcontext
 from copy import deepcopy
 import json
 import os
@@ -115,11 +117,25 @@ class WorkflowExecution:
             return job, queue, execution
 
     def checkpoint(self, payload, token, root, **updates):
-        evidence_package = updates.pop('evidence_package', None)
         reference = self.store().snapshot(root)
+        return self.commit_checkpoint(payload, token, reference, **updates)
+
+    def commit_checkpoint(self, payload, token, reference, **updates):
+        """Publish immutable storage and its cleanup obligation atomically."""
+        evidence_package = updates.pop('evidence_package', None)
+        cleanup_capture = updates.pop('cleanup_capture', None)
         with self.repository.transaction() as tx:
             owner, execution = state.owned(tx, payload, token)
+            if cleanup_capture:
+                require((execution.get('box') or {}).get('box_id') == updates['box']['box_id'],
+                        'Capture cannot replace its assigned Box')
             execution.update(updates, workspace=reference, updated_at=now())
+            if cleanup_capture:
+                identity = state.enqueue_cleanup(tx, owner, execution, reference, updates['box'], cleanup_capture)
+                execution.update(cleanup_id=identity, capture_sha256=cleanup_capture)
+                if updates.get('review_capture'):
+                    updates['review_capture'] = {**updates['review_capture'], 'cleanup_id': identity}
+                    execution['review_capture'] = updates['review_capture']
             tx.put('execution', payload['job_id'], owner, execution)
             if evidence_package is not None:
                 tx.put('evidence', payload['job_id'], owner, {'job_id': payload['job_id'],
@@ -176,12 +192,17 @@ class WorkflowExecution:
                 return await run_sync(state.complete, self.repository, payload, token, next_phase=execution['phase'], sleep=10)
             # Even an acknowledgment lost after outcome commit must replay the
             # authoritative outcome rather than attempting scientific work twice.
-            if job['status'] in jobs.TERMINAL and not execution.get('capacity_reserved'):
+            if job['status'] in jobs.TERMINAL and (not execution.get('capacity_reserved')
+                    or await run_sync(state.capture_handed_off, self.repository, payload)):
                 return await run_sync(state.complete, self.repository, payload, token, next_phase='complete', done=True)
-            with tempfile.TemporaryDirectory(prefix='reveal-step-') as temporary:
-                root = Path(temporary)
+            scratch = state.needs_scratch(execution)
+            with tempfile.TemporaryDirectory(prefix='reveal-step-') if scratch else nullcontext(None) as temporary:
+                root = Path(temporary) if temporary is not None else None
                 async with asyncio.timeout(int(setting('REVEAL_WORKFLOW_STEP_TIMEOUT_SECONDS', '360'))):
-                    if execution.get('workspace') and state.needs_scratch(execution):
+                    if execution['phase'] == 'validate':
+                        await run_sync(self.activity, payload, token, 'stage',
+                            {'stage':'validating','message':'Restoring saved evidence for validation.'})
+                    if execution.get('workspace') and scratch:
                         await self.restore_workspace(execution['workspace'], root)
                     result = await self.operate(payload, token, job, execution, root)
                 return await run_sync(state.complete, self.repository, payload, token, **result)
@@ -202,9 +223,10 @@ class WorkflowExecution:
             failure = review_failure(exc) if isinstance(exc, ScientificReviewUnavailable) else {
                 'code': 'EVIDENCE_PREPARATION_FAILED' if execution['phase'] == 'prepare' else 'VALIDATION_FAILED',
                 'message': 'The workflow phase could not be completed. Saved output and source captures are preserved.', 'retryable': True}
-            # Never terminalize a paid execution whose remote cleanup is unresolved.
+            # Uncaptured remote work cannot be orphaned. A committed cleanup
+            # obligation owns deletion independently of the scientific outcome.
             _, _, latest = await run_sync(self.context, payload)
-            if latest.get('capacity_reserved'):
+            if latest.get('capacity_reserved') and not await run_sync(state.capture_handed_off, self.repository, payload):
                 await run_sync(state.release, self.repository, payload, token, recovery=True, reason=type(exc).__name__)
                 raise
             await run_sync(jobs.finish, self.repository, payload['job_id'], token, 'failed', failure=failure)
@@ -214,6 +236,9 @@ class WorkflowExecution:
         job, queue, execution = await run_sync(self.context, payload)
         phase = execution['phase']; box = execution.get('box')
         if job['status'] in ('cancel_requested', 'cancelled'):
+            if execution.get('capture_complete') and await run_sync(state.capture_handed_off, self.repository, payload):
+                if job['status'] != 'cancelled': await run_sync(jobs.finish, self.repository, job['id'], token, 'cancelled')
+                return {'next_phase': 'complete', 'done': True}
             if not box and not execution.get('creation_intent'):
                 if job['status'] != 'cancelled': await run_sync(jobs.finish, self.repository, job['id'], token, 'cancelled')
                 return {'next_phase': 'complete', 'done': True}
@@ -227,7 +252,7 @@ class WorkflowExecution:
                 await run_sync(jobs.finish, self.repository, job['id'], token, 'cancelled')
                 return {'next_phase': 'complete', 'done': True}
         if job['kind'] == 'deployment_probe': return await self.probe(payload, token, job, queue, execution, root)
-        if phase == 'prepare': return await self.prepare(payload, token, job, queue, root)
+        if phase == 'prepare': return await self.prepare(payload, token, job, queue, execution, root)
         adapter = self.box_adapter(queue)
         if phase == 'create':
             if box: return {'next_phase': 'bootstrap'}
@@ -247,8 +272,9 @@ class WorkflowExecution:
             return {'next_phase': 'complete', 'done': True}
         if phase == 'launch':
             if box['phase'] == 'running': return {'next_phase': 'observe', 'sleep': 5}
+            frozen = self.bootstrap_config(job, execution, queue['dispatch_input']) if queue.get('dispatch_input', {}).get('bootstrap') else None
             await run_sync(state.save, self.repository, payload, token, launch_intent=True,
-                                    deadline=time.time() + int(setting('REVEAL_AGENT_TIMEOUT_SECONDS', '900')) + 420)
+                                    deadline=time.time() + (frozen['timeout_seconds'] if frozen else int(setting('REVEAL_AGENT_TIMEOUT_SECONDS', '900'))) + 420)
             handle = await adapter.launch_once(box)
             await run_sync(self.observe_commit, payload, token, handle, [])
             return {'next_phase': 'observe', 'sleep': 5}
@@ -257,18 +283,55 @@ class WorkflowExecution:
             handle, events, terminal = await adapter.inspect_once(box)
             await run_sync(self.observe_commit, payload, token, handle, events)
             return {'next_phase': 'capture' if terminal else 'observe', 'sleep': 0 if terminal else 5}
+        if phase == 'capture' and box.get('capture_protocol') == 's3-v1':
+            if execution.get('capture_complete'):
+                return {'next_phase':'validate' if await run_sync(state.capture_handed_off,self.repository,payload) else 'cleanup'}
+            await run_sync(self.activity,payload,token,'stage',
+                {'stage':'collecting_output','message':'Capturing completed output and evidence.'})
+            descriptor=queue['dispatch_input']
+            require(isinstance(descriptor.get('selected_graphs'),list),'Direct capture requires its frozen graph selection')
+            binding={'job_id':job['id'],'attempt':execution['authoring_attempt'],
+                'kind':'research' if job['kind']=='analysis' else 'paragraph','box_id':box['box_id'],
+                'selected_graphs':descriptor['selected_graphs'],'input_sha256':descriptor['sha256']}
+            captured=await adapter.capture_to_store(binding,box,self.store(),execution['workspace'])
+            handle=captured['box']; capture_sha256=captured['capture_sha256']
+            source={'attempt':execution['authoring_attempt'],'box_id':handle['box_id'],'capture_sha256':capture_sha256}
+            await run_sync(self.commit_checkpoint,payload,token,captured['workspace'],box=handle,capture_complete=True,
+                cleanup_capture=capture_sha256,
+                **({'review_capture':source} if handle['state']['status']=='succeeded' else {}))
+            return {'next_phase':'validate'}
+        if phase in ('review_call','review_tools') and execution['workspace'].get('store') == 's3':
+            return await self.review_from_store(payload,token,execution)
+        if phase == 'bootstrap' and state.stored_bootstrap(execution):
+            descriptor = queue['dispatch_input']
+            require(descriptor == execution['dispatch_input'], 'Bootstrap dispatch checkpoint differs from execution')
+            self.bootstrap_config(job, execution, descriptor)
+            if box['phase'] == 'prepared': return {'next_phase': 'launch'}
+            handle = await adapter.prepare_from_store(descriptor['bootstrap'], box, self.store())
+            require(handle.get('phase') == 'prepared' and all(handle.get(key) == box.get(key)
+                for key in ('box_id', 'job_id', 'attempt')), 'Bootstrap cannot replace its assigned Box')
+            await run_sync(self.commit_checkpoint, payload, token, execution['workspace'], box=handle)
+            return {'next_phase': 'launch'}
         request, inputs = self.request(job, queue, execution, root)
         if phase == 'bootstrap':
             if box['phase'] == 'prepared': return {'next_phase': 'launch'}
             handle = await adapter.prepare_once(request, box)
-            await run_sync(self.checkpoint, payload, token, root, box=handle)
+            await run_sync(self.checkpoint, payload, token, root, box=handle,
+                dispatch_input={**queue['dispatch_input'],'selected_graphs':list(request.selected_graphs)})
             return {'next_phase': 'launch'}
         if phase == 'capture':
-            if execution.get('capture_complete'): return {'next_phase': 'cleanup'}
-            await run_sync(self.activity, payload, token, 'stage', {'stage': 'collecting_output', 'message': 'Saving completed output and captured evidence to durable storage.'})
+            if execution.get('capture_complete'):
+                return {'next_phase': 'validate' if await run_sync(state.capture_handed_off, self.repository, payload) else 'cleanup'}
+            await run_sync(self.activity, payload, token, 'stage', {'stage': 'collecting_output', 'message': 'Capturing completed output and evidence.'})
             handle = await adapter.capture_once(request, box)
-            await run_sync(self.checkpoint, payload, token, root, box=handle, capture_complete=True)
-            return {'next_phase': 'cleanup'}
+            marker = read_capture_marker(request, handle)
+            require(marker, 'Capture checkpoint is missing')
+            capture_sha256 = sha256((request.output_dir / CAPTURE_MARKER).read_bytes())
+            source = {'attempt': request.attempt, 'box_id': handle['box_id'], 'capture_sha256': capture_sha256}
+            await run_sync(self.checkpoint, payload, token, root, box=handle, capture_complete=True,
+                cleanup_capture=capture_sha256,
+                **({'review_capture': source} if marker['state']['status'] == 'succeeded' else {}))
+            return {'next_phase': 'validate'}
         if phase == 'cleanup':
             require(execution.get('capture_complete') or execution.get('abandoned'), 'Cannot delete the sole complete output')
             handle = await adapter.delete_once(box)
@@ -293,18 +356,37 @@ class WorkflowExecution:
     def box_adapter(self, queue):
         return self.adapter or BoxLifecycle(ROOT, environ={**os.environ, 'REVEAL_CLAUDE_MODEL': queue.get('dispatch_input', {}).get('model', 'claude-sonnet-4-6')})
 
+    def bootstrap_config(self, job, execution, descriptor):
+        bootstrap = descriptor['bootstrap']
+        require(state.stored_bootstrap({'dispatch_input': descriptor}) and isinstance(bootstrap.get('config'), dict),
+                'Unknown frozen bootstrap configuration')
+        config = bootstrap['config']
+        expected = {'job_id': job['id'], 'attempt': execution['authoring_attempt'],
+            'kind': 'research' if job['kind'] == 'analysis' else 'paragraph',
+            'selected_graphs': descriptor['selected_graphs'], 'input_sha256': descriptor['sha256'],
+            'model': descriptor['model']}
+        require(all(config.get(key) == value for key, value in expected.items()),
+                'Frozen bootstrap configuration differs from its dispatch binding')
+        if execution.get('box'):
+            require(all(execution['box'].get(key) == expected[key] for key in ('job_id', 'attempt')),
+                    'Frozen bootstrap configuration differs from its assigned Box')
+        return config
+
     def request(self, job, queue, execution, root):
         path, inputs = restore_dispatch_input(root, queue['dispatch_input'])
         selected = tuple(inputs['external_evidence']['selected_graphs']) if job['kind'] == 'analysis' else ()
         attempt = execution['authoring_attempt']
+        frozen = self.bootstrap_config(job, execution, queue['dispatch_input']) if queue['dispatch_input'].get('bootstrap') else None
+        if frozen: require(tuple(frozen['selected_graphs']) == selected, 'Frozen bootstrap graph selection differs from input')
         request = ExecutionRequest(job_id=job['id'], attempt=attempt, kind='research' if job['kind'] == 'analysis' else 'paragraph',
             input_path=path, output_dir=root/f'attempt-{attempt}'/'output', selected_graphs=selected,
-            timeout_seconds=int(setting('REVEAL_AGENT_TIMEOUT_SECONDS', '900')),
-            max_budget_usd=float(setting('REVEAL_AGENT_MAX_BUDGET_USD', '3')),
-            max_turns=int(setting('REVEAL_AGENT_MAX_TURNS', '100')), remote_handle=execution.get('box'))
+            timeout_seconds=frozen['timeout_seconds'] if frozen else int(setting('REVEAL_AGENT_TIMEOUT_SECONDS', '900')),
+            max_budget_usd=frozen['max_budget_usd'] if frozen else float(setting('REVEAL_AGENT_MAX_BUDGET_USD', '3')),
+            max_turns=frozen['max_turns'] if frozen else int(setting('REVEAL_AGENT_MAX_TURNS', '100')),
+            validation_feedback=tuple(frozen['validation_feedback']) if frozen else (), remote_handle=execution.get('box'))
         return request, inputs
 
-    async def prepare(self, payload, token, job, queue, root):
+    async def prepare(self, payload, token, job, queue, execution, root):
         if queue.get('dispatch_input'):
             restore_dispatch_input(root, queue['dispatch_input'])
             return {'next_phase': 'create'}
@@ -324,7 +406,13 @@ class WorkflowExecution:
             package = {'format': 'reveal.paragraph-input/1', 'account_document': source['result']['document'], 'account_id': job['input_account_id'], 'allowed_citations': allowed}
             path = root/'paragraph-input.json'; path.write_bytes(canonical_json(package))
         snapshot = {'path': str(path.relative_to(root)), 'sha256': sha256(path.read_bytes()), 'mode': mode,
-                    'model': setting('REVEAL_CLAUDE_MODEL', 'claude-sonnet-4-6'), 'kind': job['kind']}
+                    'model': setting('REVEAL_CLAUDE_MODEL', 'claude-sonnet-4-6'), 'kind': job['kind'],
+                    'selected_graphs':list(package['external_evidence']['selected_graphs']) if job['kind']=='analysis' else []}
+        prepared_queue = {**queue, 'dispatch_input': snapshot}
+        request, _ = self.request(job, prepared_queue, execution, root)
+        snapshot['bootstrap'] = await run_sync(self.box_adapter(prepared_queue).freeze_bootstrap, request, self.store())
+        require(state.stored_bootstrap({'dispatch_input': snapshot}), 'Bootstrap bundle must have an immutable S3 reference')
+        self.bootstrap_config(job, execution, snapshot)
         await run_sync(self.checkpoint, payload, token, root, dispatch_input=snapshot, evidence_package=package if job['kind'] == 'analysis' else None)
         with self.repository.transaction() as tx:
             owner, _ = state.owned(tx, payload, token)
@@ -334,10 +422,8 @@ class WorkflowExecution:
         return {'next_phase': 'create'}
 
     async def validate(self, payload, token, job, queue, execution, root, request, inputs):
+        marker = await run_sync(self.verified_capture, payload, execution, request)
         if execution.get('validated_paths'): return {'next_phase': 'review_init'}
-        require(execution['cleanup_complete'] and execution.get('capture_complete', bool(queue.get('review_source'))), 'Validation requires durable captured output and acknowledged cleanup')
-        marker = read_capture_marker(request, execution['box'])
-        require(marker and marker['cleanup_complete'], 'Capture cleanup checkpoint is missing')
         result = captured_result(request, execution['box'], marker)
         await run_sync(self.activity, payload, token, 'stage', {'stage': 'validating', 'message': 'Checking source fidelity, identities and captured provenance.'})
         if result.status not in ('succeeded', 'insufficient_evidence'):
@@ -380,6 +466,22 @@ class WorkflowExecution:
             await run_sync(checkpoint, review)
             return {'next_phase': 'review_call'}
         review = decode((root/execution['review_checkpoint']).read_bytes())
+        return await self.advance_review(execution,review,checkpoint)
+
+    async def review_from_store(self,payload,token,execution):
+        """Review checkpoints already contain frozen inputs and evidence."""
+        path=execution['review_checkpoint']; reference=execution['workspace']
+        review=decode(await run_sync(self.store().read_workspace_file,reference,path))
+        def checkpoint(value):
+            nonlocal reference
+            updated=self.store().replace_workspace_files(reference,{path:canonical_json(value)})
+            self.commit_checkpoint(payload,token,updated,review_checkpoint=path)
+            reference=updated
+        return await self.advance_review(execution,review,checkpoint)
+
+    async def advance_review(self,execution,review,checkpoint):
+        from . import durable_review
+        index=execution['review_index']
         if execution['phase'] == 'review_call':
             await run_sync(durable_review.call_one, review, setting('ANTHROPIC_API_KEY'), checkpoint)
             return {'next_phase': 'review_tools'}
@@ -392,7 +494,7 @@ class WorkflowExecution:
         return {'next_phase': 'commit'}
 
     async def commit(self, payload, token, job, queue, execution, root, request, inputs):
-        require(execution['cleanup_complete'], 'Final acceptance requires acknowledged cleanup')
+        marker = await run_sync(self.verified_capture, payload, execution, request)
         engine = self
         class AcceptanceWorker(Worker):
             def save_workspace(self, _job, _token, _root):
@@ -401,13 +503,14 @@ class WorkflowExecution:
         if not await worker.begin_persistence(job, token, 'Saving the independently validated research outcome.'):
             return {'next_phase': 'complete', 'done': True}
         directory = root/'validated'; directory.mkdir(exist_ok=True)
-        marker = read_capture_marker(request, execution['box']); result = captured_result(request, execution['box'], marker)
+        result = captured_result(request, execution['box'], marker)
         if job['kind'] == 'analysis':
             frozen, binding = await run_sync(read_preparation_inputs, self.repository, job)
             if execution.get('outcome'):
                 from .analysis_outcomes import prepare
                 prepared = await run_sync(prepare, job, frozen, binding, request.input_path, result,
-                    attempt=request.attempt, mode='box', expected_model=queue['dispatch_input']['model'])
+                    attempt=request.attempt, mode='box', expected_model=queue['dispatch_input']['model'],
+                    capture_sha256=execution.get('capture_sha256') if execution.get('cleanup_id') else None)
                 await run_sync(worker.accept_outcome, job, token, prepared)
             else:
                 accepted = [(decode((root/path).read_bytes()), decode((directory/f'report-{index}.json').read_bytes()), root/path)
@@ -418,6 +521,30 @@ class WorkflowExecution:
         current, _, _ = await run_sync(self.context, payload)
         if current['status'] == 'cancel_requested': await run_sync(jobs.finish, self.repository, job['id'], token, 'cancelled')
         return {'next_phase': 'complete', 'done': True}
+
+    def verified_capture(self, payload, execution, request):
+        require(execution.get('capture_complete'), 'Validation requires durable captured output')
+        marker = read_capture_marker(request, execution['box'])
+        require(marker, 'Capture checkpoint is missing')
+        if execution.get('cleanup_id'):
+            require(sha256((request.output_dir / CAPTURE_MARKER).read_bytes()) == execution.get('capture_sha256')
+                    and state.capture_handed_off(self.repository, payload), 'Durable cleanup capture binding differs')
+        else:
+            require(execution['cleanup_complete'] and marker['cleanup_complete'], 'Capture cleanup checkpoint is missing')
+        return marker
+
+    async def cleanup(self, payload):
+        """Independent, restartable deletion; no workspace restore or main fence."""
+        intent = await run_sync(state.acquire_cleanup, self.repository, payload)
+        if intent['status'] == 'deleted': return {'deleted': True}
+        try:
+            async with asyncio.timeout(90):
+                handle = await self.box_adapter({}).delete_once(intent['box'])
+            await run_sync(state.finish_cleanup, self.repository, payload, intent['token'], handle)
+        except Exception as exc:
+            await run_sync(state.finish_cleanup, self.repository, payload, intent['token'], error=type(exc).__name__)
+            raise
+        return {'deleted': True}
 
     async def probe(self, payload, token, job, queue, execution, root):
         """No paid services: prove replacement during a durable wait and restore."""

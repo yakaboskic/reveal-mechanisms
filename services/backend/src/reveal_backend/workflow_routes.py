@@ -17,6 +17,7 @@ from .workflow_execution import WorkflowExecution
 PATH = '/internal/workflows/research-v1'
 CONTROL_PATH = '/internal/workflows/control-v1'
 RECONCILE_PATH = '/internal/workflows/reconcile-v1'
+CLEANUP_PATH = '/internal/workflows/cleanup-v1'
 log = logging.getLogger('reveal.workflow')
 
 
@@ -99,6 +100,47 @@ async def dispatch_pending(repository, limit=25, *, qstash=None, job_id=None):
         except Exception as exc:
             failed += 1; log.warning('Workflow cancellation delivery remains pending: %s', type(exc).__name__)
     return {'delivered': delivered, 'failed': failed}
+
+
+def cleanup_pending(repository, limit, identity=None):
+    with repository.read_transaction() as tx:
+        expr = "json_extract(payload,'$.namespace')" if tx.sqlite else "JSON_UNQUOTE(JSON_EXTRACT(payload,'$.namespace'))"
+        due = "json_extract(payload,'$.next_attempt_at')" if tx.sqlite else "JSON_UNQUOTE(JSON_EXTRACT(payload,'$.next_attempt_at'))"
+        lease = "json_extract(payload,'$.lease_until')" if tx.sqlite else "NULLIF(JSON_UNQUOTE(JSON_EXTRACT(payload,'$.lease_until')),'null')"
+        sql = ('SELECT id,payload FROM reveal_records WHERE kind=%s AND '+expr+'=%s AND '+due+'<=%s'
+               + ' AND ('+lease+' IS NULL OR '+lease+'<=%s)')
+        args = ['workflow_cleanup', jobs.namespace(), now(), now()]
+        if identity: sql += ' AND id=%s'; args.append(identity)
+        rows = tx.execute(sql+' ORDER BY updated_at,id LIMIT %s', (*args, min(limit,100))).fetchall()
+    return [(row[0], json.loads(row[1])) for row in rows]
+
+
+def cleanup_published(repository, identity, observed):
+    with repository.transaction() as tx:
+        row = tx.get('workflow_cleanup', identity)
+        if row and row['data']['dispatch_generation'] == observed['dispatch_generation']:
+            value = row['data']; value.update(dispatch_generation=value['dispatch_generation']+1,
+                published_at=now(), next_attempt_at=state.after(300))
+            tx.put('workflow_cleanup', identity, row['owner'], value)
+
+
+async def dispatch_cleanup(repository, identity=None, *, qstash=None, limit=25):
+    delivered = failed = 0
+    if jobs.transport() != 'workflow': return {'delivered':0,'failed':0}
+    url = config().removesuffix(PATH) + CLEANUP_PATH
+    for key, intent in await asyncio.to_thread(cleanup_pending, repository, limit, identity):
+        if (intent.get('lease_until') or '') > now(): continue
+        try:
+            async with asyncio.timeout(15):
+                await (qstash or client()).message.publish_json(url=url,
+                    body={'cleanup_id':key,'namespace':intent['namespace']}, retries=5,
+                    deduplication_id=digest(['cleanup',key,intent['dispatch_generation']]))
+            await asyncio.to_thread(cleanup_published, repository, key, intent)
+            delivered += 1
+        except Exception as exc:
+            failed += 1
+            log.warning('Box cleanup delivery remains pending: %s', type(exc).__name__)
+    return {'delivered':delivered,'failed':failed}
 
 
 def acknowledge_dispatch(repository, identity, intent):
@@ -199,6 +241,9 @@ def mount_workflow(app, repository):
         for _ in range(5000):
             current_index = index
             result = await context.run('phase-' + str(index), lambda: engine.step(payload, current_index))
+            if result.get('cleanup_id'):
+                cleanup_id = result['cleanup_id']
+                await context.run('dispatch-cleanup-' + str(index), lambda: dispatch_cleanup(repository, cleanup_id))
             if result['done']:
                 await context.run('dispatch-followups', lambda: dispatch_pending(repository))
                 return
@@ -208,12 +253,15 @@ def mount_workflow(app, repository):
 
     async def authorized(request):
         body = (await request.body()).decode()
-        suffix = CONTROL_PATH if request.url.path.endswith(CONTROL_PATH) else RECONCILE_PATH
+        suffix = next((path for path in (CONTROL_PATH, RECONCILE_PATH, CLEANUP_PATH) if request.url.path.endswith(path)), None)
+        if suffix is None: return None
         try:
             receiver.verify(signature=request.headers.get('upstash-signature', ''), body=body,
                             url=url.removesuffix(PATH) + suffix)
         except Exception: return None
-        try: return json.loads(body or '{}')
+        try:
+            value = json.loads(body or '{}')
+            return value if isinstance(value, dict) else None
         except ValueError: return None
 
     @app.post(CONTROL_PATH, include_in_schema=False)
@@ -229,9 +277,18 @@ def mount_workflow(app, repository):
         if payload is None: return JSONResponse({'error': 'Invalid workflow signature'}, status_code=401)
         recovered = await asyncio.to_thread(reconcile_stale, repository)
         delivery = await dispatch_pending(repository)
+        cleanup = await dispatch_cleanup(repository)
         from .vector_workflow import dispatch_pending as dispatch_vectors
         vector_delivery = await dispatch_vectors(repository)
         from .workspace_events import reconcile_notifications
         notifications = await asyncio.to_thread(reconcile_notifications, repository)
-        return {'recovered': recovered, **delivery, 'vector_delivery': vector_delivery, 'notifications': notifications}
+        return {'recovered': recovered, **delivery, 'cleanup':cleanup, 'vector_delivery': vector_delivery, 'notifications': notifications}
+
+    @app.post(CLEANUP_PATH, include_in_schema=False)
+    async def cleanup(request: Request):
+        payload = await authorized(request)
+        if payload is None: return JSONResponse({'error':'Invalid workflow signature'}, status_code=401)
+        try: return await engine.cleanup(payload)
+        except state.StaleExecution: return {'stale':True}
+        except state.StepBusy: return JSONResponse({'busy':True},status_code=503)
     return engine

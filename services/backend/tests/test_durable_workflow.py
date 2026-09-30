@@ -188,7 +188,15 @@ class WorkflowTests(unittest.IsolatedAsyncioTestCase):
             queue = tx.get('queue', job['id'])['data']; queue['dispatch_input'] = {
                 'path': 'input.json', 'sha256': __import__('hashlib').sha256(b'{}').hexdigest()}
             tx.put('queue', job['id'], 'owner', queue)
-        adapter = Mock(); adapter.capture_once = AsyncMock(return_value={'box_id': 'box-1', 'phase': 'captured'})
+        async def captured(request, handle):
+            from reveal_backend.box_adapter import CAPTURE_MARKER, capture_binding, atomic_capture_marker
+            request.output_dir.mkdir(parents=True, exist_ok=True)
+            (request.output_dir/'runtime.json').write_bytes(b'{}')
+            atomic_capture_marker(request.output_dir/CAPTURE_MARKER, {'format':'reveal.box-capture/1',
+                'binding':capture_binding(request,handle),'state':{'status':'succeeded'},'cleanup_complete':False,
+                'files':{'runtime.json':{'sha256':__import__('hashlib').sha256(b'{}').hexdigest(),'size_bytes':2}}})
+            return {'box_id':'box-1','phase':'captured'}
+        adapter = Mock(); adapter.capture_once = AsyncMock(side_effect=captured)
         adapter.delete_once = AsyncMock(); self.store.fail = True
         with self.assertRaises(OSError): await WorkflowExecution(self.repo, storage=self.store, adapter=adapter).step(payload, 0)
         adapter.delete_once.assert_not_awaited()

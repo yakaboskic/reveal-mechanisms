@@ -48,6 +48,76 @@ candidate retrieval. Upstash Redis provides Pub/Sub wakeups only.
   is a compare-and-swap registry update. Semantic outages return an explicit
   availability error. There is no automatic local-matrix fallback.
 
+## Direct transfers and capture optimizations
+
+The direct transfer, parallel restore and independent cleanup changes passed
+807 backend tests (8 skipped, 303 subtests), plus all 70 frontend tests and
+typecheck. Both local images are running with healthy API/frontend responses;
+the running transfer modules match the tested source hashes. QA and the queued production release still use
+the older revisions recorded below. No paid scientific run has verified these
+optimizations.
+
+Initial preparation still uses local scratch to collect and validate evidence.
+It builds the existing allowlisted input/harness bundle once, stores that bundle
+in immutable S3, and atomically commits its reference, exact execution settings
+and fingerprint before Box allocation. New bootstrap steps let a trusted Box
+helper download that exact S3 version using a short-lived signed GET, verify its
+size, checksum and fingerprint, and safely unpack it. The API does not restore
+the checkpoint or create a bootstrap temporary directory. Saved settings survive
+environment changes; the trusted completion marker makes bootstrap retries
+idempotent. Older descriptors retain their existing restore-and-bootstrap path.
+Focused tests and independent review cover lost acknowledgments, cancellation,
+invalid evidence and storage failures before allocation, binding checks and the
+legacy fallback. A live synthetic Box downloaded and verified its bundle with
+API downloads, workspace restores and temporary directories disabled in the
+probe. Initial setup, including dependency installation, took 26.267 seconds;
+replaying the original created handle after a simulated lost acknowledgment
+took 1.020 seconds. The remote input checksum and bootstrap fingerprint matched,
+and the Box was deleted and verified through its status endpoint. No model calls
+or Redis commands were made.
+
+Newly prepared Boxes upload completed output and evidence directly to the exact
+S3 bucket using short-lived presigned PUT URLs bound to object checksum and
+length. The API streams the uploaded objects to verify hashes, credential
+absence and the trusted ledger, then commits the immutable capture reference.
+It does not materialize a capture workspace. Existing Box handles retain their
+previous capture protocol; initial evidence preparation remains in the API.
+
+A live synthetic probe captured 244 files in 38.013 seconds, then repeated the
+capture in 39.021 seconds with exactly the same immutable object versions.
+Independent cleanup persisted its deletion receipt, and a duplicate delivery
+replayed that receipt. A fresh Box status request confirmed HTTP 404 with
+"Box has been deleted"; the provider still retains the deleted Box's metadata.
+This verifies the transfer and cleanup protocol, not scientific acceptance.
+
+The capture transaction also records a durable `workflow_cleanup` obligation.
+Signed `/internal/workflows/cleanup-v1` deliveries delete the recorded Box
+independently of the main workflow's generation or terminal state. Validation
+can proceed after verified capture. Deletion is idempotent, failed deliveries
+remain recoverable, and the allocation stays counted against remote capacity
+until deletion or a confirmed provider 404 is acknowledged. No Redis reads or
+in-process background task are needed to keep cleanup alive.
+
+Review calls and tool processing read and replace only the saved review JSON
+and immutable workspace manifest. These steps and direct capture create no
+temporary directory. Initial preparation, validation, review initialization and
+final acceptance still use bounded file-based scratch where their validators
+require files; legacy bootstrap also keeps its existing scratch path.
+Their S3 restores use four parallel downloads
+with bounded buffered bytes and cancellation draining. This adds no workspace
+cache and no Redis reads.
+
+A read-only comparison of one cold restore per setting used an actual checkpoint
+containing 244 files and 9,347,440 bytes: serial download took 74.173 seconds;
+four downloads took 16.570 seconds, a 4.48× improvement. All files were verified,
+with no model calls or Redis commands. This is one checkpoint measurement, not
+an end-to-end job speedup; the report is
+`.runtime/workflow/parallel-restore-benchmark.json`.
+
+Progress now distinguishes completed authoring from ongoing collection: the
+authoring completion notice no longer inherits a growing forward timer, and
+validation is announced before restoring its saved evidence.
+
 ## Local pilot
 
 Supply the root `.env` credentials from `.env.example`; never expose provider
@@ -100,8 +170,8 @@ prefix and Vector environment. Production uses the existing application records.
 The release renderer emits only the HTTP service; it no longer emits a background
 worker stack. Production remains subject to the platform's environment gate.
 
-Scratch-heavy phases share an RDS concurrency limit of two across preparation,
-capture and review. Local and cloud containers use `TMPDIR=/work`, a 1 GiB work
+File-based phases share an RDS scratch concurrency limit of two. Local and cloud
+containers use `TMPDIR=/work`, a 1 GiB work
 tmpfs and a 256 MiB checkpoint limit. Restore participates in the bounded step
 deadline; cancellation drains the restore thread before deleting its directory.
 REVEAL requests a 300-second target-group drain and a 120-second process stop
@@ -134,6 +204,11 @@ its runs finish. Roll back future routing independently from existing workflow
 recovery and Vector snapshot activation; never let a legacy worker claim an
 in-progress workflow job.
 
+After deploying independent cleanup, rollback must either drain all pending
+`workflow_cleanup` obligations or retain the signed cleanup consumer and its
+reconciliation dispatch. A terminal scientific job does not prove its Box has
+been deleted or release an outstanding cleanup reservation.
+
 ## Verification status
 
 Tests and live probes are recorded in the ignored `.runtime/workflow` directory.
@@ -150,8 +225,9 @@ minimum recall@10 and top-result agreement of 1.0, and maximum cosine error
 20,588 context bindings; 2,281 unmapped factor bindings are archived separately
 in immutable S3. The real browser gateway delivered create/rename/delete events
 to two tabs, with zero collection requests over 40 seconds idle and no browser
-errors. The backend suite passed 690 tests (8 skipped, 299 subtests), and the
-frontend passed typecheck and all 69 tests. Focused resource/cancellation checks
+errors. Before the capture optimizations above, the backend suite passed 690
+tests (8 skipped, 299 subtests), and the frontend passed typecheck and all 69
+tests. Focused resource/cancellation checks
 passed 40 tests, and QA configuration guards passed 30 tests. These counts are
 test results; scientific-run and cloud acceptance are recorded separately.
 
@@ -191,7 +267,7 @@ awaiting the existing required reviewer `sagehen03`. All 16 prepared frontend se
 to Vercel as sensitive production variables with explicit user authorization.
 Frontend deployment awaits production backend readiness.
 
-The scientific pilot completed one authoring attempt, durable capture and Box
+The first scientific pilot completed one authoring attempt, durable capture and Box
 cleanup. After 31 acknowledged reviewer calls, its final response was not
 acknowledged; the original HTTP status was not retained. Independent free
 token-count requests reproduced rejection of the old final-decision tool schema

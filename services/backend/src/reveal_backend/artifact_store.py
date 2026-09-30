@@ -23,6 +23,8 @@ from .runtime_config import setting
 VERIFIED_PUT_CACHE_SIZE = 4096
 SNAPSHOT_CONCURRENCY = 4
 SNAPSHOT_PENDING_BYTES = 16 * 1024 * 1024
+RESTORE_CONCURRENCY = 4
+RESTORE_PENDING_BYTES = 16 * 1024 * 1024
 
 
 class StorageUnavailable(RuntimeError):
@@ -170,6 +172,76 @@ class S3Store:
         except Exception as exc:
             raise StorageUnavailable('Artifact download is unavailable') from exc
 
+    @staticmethod
+    def workspace_path(name):
+        if (not isinstance(name, str) or not name or PurePosixPath(name).is_absolute()
+                or any(part in ('', '.', '..') for part in name.split('/')) or '\\' in name):
+            raise StorageUnavailable('Unsafe workspace manifest path')
+        return name
+
+    def workspace_manifest(self, ref):
+        """Validate immutable file references without materializing a workspace."""
+        try:
+            manifest = json.loads(self.get(ref))
+        except (ValueError, TypeError) as exc:
+            raise StorageUnavailable('Invalid workspace manifest') from exc
+        if (not isinstance(manifest, dict) or manifest.get('format') != 'reveal.workspace/1'
+                or not isinstance(manifest.get('files'), list)):
+            raise StorageUnavailable('Invalid workspace manifest')
+        seen, total = set(), 0
+        for item in manifest['files']:
+            if not isinstance(item, dict) or not isinstance(item.get('storage'), dict):
+                raise StorageUnavailable('Invalid workspace file reference')
+            name = self.workspace_path(item.get('path'))
+            if name in seen or len(seen) >= 10000:
+                raise StorageUnavailable('Unsafe workspace manifest path')
+            self.validate(item['storage'])
+            seen.add(name)
+            total += item['storage']['size_bytes']
+            if total > int(setting('REVEAL_WORKSPACE_MAX_BYTES', str(256 * 1024 * 1024))):
+                raise StorageUnavailable('Restored workspace exceeds its limit')
+        if any(str(parent) in seen for name in seen for parent in PurePosixPath(name).parents if str(parent) != '.'):
+            raise StorageUnavailable('Workspace file conflicts with a parent path')
+        return manifest
+
+    def read_workspace_file(self, ref, name):
+        """Read one exact checkpoint object, without downloading its siblings."""
+        name = self.workspace_path(name)
+        for item in self.workspace_manifest(ref)['files']:
+            if item['path'] == name:
+                return self.get(item['storage'])
+        raise StorageUnavailable('Workspace file is missing')
+
+    def replace_workspace_files(self, ref, updates):
+        """Commit changed objects and a manifest while retaining existing versions."""
+        manifest = self.workspace_manifest(ref)
+        files = {item['path']: item['storage'] for item in manifest['files']}
+        if not isinstance(updates, dict):
+            raise StorageUnavailable('Invalid workspace file updates')
+        sizes = {name: value['size_bytes'] for name, value in files.items()}
+        for name, data in updates.items():
+            self.workspace_path(name)
+            if not isinstance(data, bytes) or len(data) > self.maximum:
+                raise StorageUnavailable('Artifact exceeds the configured size limit')
+            sizes[name] = len(data)
+        if (len(sizes) > 10000 or sum(sizes.values()) >
+                int(setting('REVEAL_WORKSPACE_MAX_BYTES', str(256 * 1024 * 1024)))):
+            raise StorageUnavailable('Checkpoint exceeds the workspace limit')
+        if any(str(parent) in sizes for name in sizes for parent in PurePosixPath(name).parents if str(parent) != '.'):
+            raise StorageUnavailable('Workspace file conflicts with a parent path')
+        changed = False
+        for name, data in updates.items():
+            previous = files.get(name)
+            if previous and previous['size_bytes'] == len(data) and previous['sha256'] == checksum(data):
+                continue
+            files[name] = self.put(data)
+            changed = True
+        if not changed:
+            return ref
+        updated = {'format': 'reveal.workspace/1',
+                   'files': [{'path': name, 'storage': files[name]} for name in sorted(files)]}
+        return self.put(json.dumps(updated, sort_keys=True, separators=(',', ':')).encode(), 'application/json')
+
     def snapshot(self, root):
         root = Path(root).resolve()
         files = []
@@ -216,36 +288,56 @@ class S3Store:
             if cancelled and cancelled(): raise StorageUnavailable('Workspace restore cancelled before further writes')
         check_cancelled()
         root = Path(root).resolve()
-        manifest = json.loads(self.get(ref))
+        manifest = self.workspace_manifest(ref)
         check_cancelled()
-        if manifest.get('format') != 'reveal.workspace/1' or not isinstance(manifest.get('files'), list):
-            raise StorageUnavailable('Invalid workspace manifest')
-        seen, total, targets = set(), 0, []
+        targets = []
         for item in manifest['files']:
             name = item['path']
-            relative = PurePosixPath(name)
             target = root / name
-            if (not name or name in seen or len(seen) >= 10000 or relative.is_absolute()
-                    or any(part in ('', '.', '..') for part in name.split('/')) or '\\' in name
-                    or not target.resolve().is_relative_to(root) or target.is_symlink()):
+            if not target.resolve().is_relative_to(root) or target.is_symlink():
                 raise StorageUnavailable('Unsafe workspace manifest path')
-            self.validate(item['storage'])
-            seen.add(name)
-            total += item['storage']['size_bytes']
-            if total > int(setting('REVEAL_WORKSPACE_MAX_BYTES', str(256 * 1024 * 1024))):
-                raise StorageUnavailable('Restored workspace exceeds its limit')
             targets.append((target, item['storage']))
-        for target, storage in targets:
+        pending = deque()
+        pending_bytes = 0
+
+        def download(storage):
+            check_cancelled()
+            return self.get(storage)
+
+        def finish_one():
+            nonlocal pending_bytes
+            target, future, size = pending.popleft()
+            data = future.result()
             check_cancelled()
             target.parent.mkdir(parents=True, exist_ok=True)
             temporary = target.with_name('.restore-' + uuid4().hex)
             try:
-                data = self.get(storage)
-                check_cancelled()
                 temporary.write_bytes(data)
+                check_cancelled()
                 temporary.replace(target)
             finally:
                 temporary.unlink(missing_ok=True)
+            pending_bytes -= size
+
+        # Download immutable, checksum-verified bytes in a bounded window. Only
+        # this coordinating thread writes files, and pool shutdown drains every
+        # in-flight response before callers can remove the scratch directory.
+        # An object larger than the byte window is downloaded alone.
+        with ThreadPoolExecutor(max_workers=RESTORE_CONCURRENCY) as pool:
+            try:
+                for target, storage in targets:
+                    check_cancelled()
+                    size = storage['size_bytes']
+                    while pending and (len(pending) >= RESTORE_CONCURRENCY or pending_bytes + size > RESTORE_PENDING_BYTES):
+                        finish_one()
+                    check_cancelled()
+                    pending.append((target, pool.submit(download, storage), size))
+                    pending_bytes += size
+                while pending:
+                    finish_one()
+            finally:
+                for _, future, _ in pending:
+                    future.cancel()
 
 
 @lru_cache(maxsize=8)

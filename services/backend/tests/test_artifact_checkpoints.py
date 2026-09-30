@@ -212,3 +212,167 @@ def test_snapshot_limits_and_changed_file_fail_before_manifest(tmp_path, monkeyp
     with pytest.raises(StorageUnavailable, match='changed during capture'):
         storage.snapshot(tmp_path)
     assert not storage.client.calls
+
+
+@pytest.mark.parametrize(('window', 'expected_pending'), [(100, 4), (6, 1), (2, 1)])
+def test_restore_bounds_downloads_and_bytes_and_preserves_exact_files(tmp_path, monkeypatch, window, expected_pending):
+    monkeypatch.setattr(artifact_store, 'RESTORE_PENDING_BYTES', window)
+    source, target = tmp_path / 'source', tmp_path / 'target'
+    source.mkdir()
+    for index in range(9):
+        (source / f'{index}.txt').write_bytes(str(index).encode() * 4)
+    storage = S3Store('reveal-test-artifacts', client=CountingS3())
+    reference = storage.snapshot(source)
+    original_get = storage.get
+    lock, filled, release = threading.Lock(), threading.Event(), threading.Event()
+    observed = {'active': 0, 'peak': 0, 'started': 0}
+
+    def blocked_get(ref):
+        if ref == reference:
+            return original_get(ref)
+        with lock:
+            observed['active'] += 1
+            observed['started'] += 1
+            observed['peak'] = max(observed['peak'], observed['active'])
+            if observed['active'] == expected_pending:
+                filled.set()
+        try:
+            assert release.wait(5)
+            return original_get(ref)
+        finally:
+            with lock:
+                observed['active'] -= 1
+
+    monkeypatch.setattr(storage, 'get', blocked_get)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        restore = pool.submit(storage.restore, reference, target)
+        try:
+            assert filled.wait(3), 'Restore did not fill its allowed download window'
+            assert observed['started'] == expected_pending
+            assert not target.exists(), 'Download threads must not write the workspace'
+        finally:
+            release.set()
+        restore.result(timeout=5)
+    assert observed['peak'] == expected_pending
+    assert [p.read_bytes() for p in sorted(target.iterdir())] == [str(i).encode() * 4 for i in range(9)]
+
+
+@pytest.mark.parametrize('failure', ['cancel', 'checksum'])
+def test_restore_failure_drains_downloads_and_never_writes_unverified_bytes(tmp_path, monkeypatch, failure):
+    source, target = tmp_path / 'source', tmp_path / 'target'
+    source.mkdir()
+    for index in range(8):
+        (source / f'{index}.txt').write_bytes(str(index).encode())
+    storage = S3Store('reveal-test-artifacts', client=CountingS3())
+    reference = storage.snapshot(source)
+    manifest = json.loads(storage.get(reference))
+    first = manifest['files'][0]['storage']
+    original_get = storage.get
+    lock = threading.Lock()
+    filled, release_first, release_others, cancelling = (threading.Event() for _ in range(4))
+    observed = {'active': 0, 'started': 0}
+
+    def blocked_get(ref):
+        if ref == reference:
+            return original_get(ref)
+        with lock:
+            observed['active'] += 1
+            observed['started'] += 1
+            if observed['active'] == 4:
+                filled.set()
+        try:
+            assert (release_first if ref == first else release_others).wait(5)
+            if failure == 'checksum' and ref == first:
+                raise StorageUnavailable('Artifact checksum mismatch')
+            return original_get(ref)
+        finally:
+            with lock:
+                observed['active'] -= 1
+
+    monkeypatch.setattr(storage, 'get', blocked_get)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        restored = pool.submit(storage.restore, reference, target, cancelled=cancelling.is_set)
+        try:
+            assert filled.wait(3)
+            if failure == 'cancel':
+                cancelling.set()
+            release_first.set()
+            # Other responses remain live: restore must not return and permit
+            # its caller to release scratch while these requests still run.
+            with pytest.raises(TimeoutError):
+                restored.result(timeout=0.05)
+        finally:
+            release_first.set()
+            release_others.set()
+        with pytest.raises(StorageUnavailable, match='cancelled|checksum'):
+            restored.result(timeout=5)
+    assert observed == {'active': 0, 'started': 4}
+    assert not target.exists()
+
+
+def test_restore_preflights_all_paths_before_parallel_downloads(tmp_path, monkeypatch):
+    storage = S3Store('reveal-test-artifacts', client=CountingS3())
+    artifact = storage.put(b'data')
+    ref = storage.put(json.dumps({'format': 'reveal.workspace/1', 'files': [
+        {'path': 'safe.txt', 'storage': artifact}, {'path': '../escape', 'storage': artifact},
+    ]}).encode())
+    original_get = storage.get
+    reads = []
+    def recorded_get(value):
+        reads.append(value)
+        return original_get(value)
+    monkeypatch.setattr(storage, 'get', recorded_get)
+    with pytest.raises(StorageUnavailable, match='Unsafe'):
+        storage.restore(ref, tmp_path / 'restore')
+    assert reads == [ref]
+
+
+def test_metadata_checkpoint_reads_only_requested_file_and_retains_sibling_versions(tmp_path, monkeypatch):
+    storage = S3Store('reveal-test-artifacts', client=CountingS3())
+    (tmp_path / 'evidence.txt').write_bytes(b'frozen evidence')
+    (tmp_path / 'review.json').write_bytes(b'{"turn":1}')
+    original = storage.snapshot(tmp_path)
+    before = {item['path']: item['storage'] for item in storage.workspace_manifest(original)['files']}
+    get = storage.get
+    reads = []
+    def observed_get(ref):
+        reads.append(ref)
+        return get(ref)
+    monkeypatch.setattr(storage, 'get', observed_get)
+    assert storage.read_workspace_file(original, 'review.json') == b'{"turn":1}'
+    assert reads == [original, before['review.json']]
+    reads.clear()
+    replacement = storage.replace_workspace_files(original, {'review.json': b'{"turn":2}'})
+    assert reads == [original]  # No existing artifact body was downloaded.
+    after = {item['path']: item['storage'] for item in storage.workspace_manifest(replacement)['files']}
+    assert after['evidence.txt'] == before['evidence.txt']
+    assert after['review.json'] != before['review.json']
+    assert storage.read_workspace_file(original, 'review.json') == b'{"turn":1}'
+    assert storage.read_workspace_file(replacement, 'review.json') == b'{"turn":2}'
+    calls = list(storage.client.calls)
+    assert storage.replace_workspace_files(replacement, {'review.json': b'{"turn":2}'}) == replacement
+    assert storage.client.calls == calls
+
+
+@pytest.mark.parametrize('updates', [{'../escape': b'x'}, {'review.json/child': b'x'}, {'large': b'x' * 100}])
+def test_metadata_checkpoint_preflights_all_updates_before_upload(tmp_path, monkeypatch, updates):
+    storage = S3Store('reveal-test-artifacts', client=CountingS3())
+    (tmp_path / 'review.json').write_bytes(b'{}')
+    original = storage.snapshot(tmp_path)
+    calls = list(storage.client.calls)
+    monkeypatch.setenv('REVEAL_WORKSPACE_MAX_BYTES', '32')
+    with pytest.raises(StorageUnavailable):
+        storage.replace_workspace_files(original, {'new.json': b'{}', **updates})
+    assert storage.client.calls == calls
+
+
+def test_metadata_checkpoint_failure_leaves_original_readable(tmp_path):
+    storage = S3Store('reveal-test-artifacts', client=CountingS3())
+    (tmp_path / 'review.json').write_bytes(b'original')
+    original = storage.snapshot(tmp_path)
+    storage.client.fail_writes = 1
+    with pytest.raises(StorageUnavailable):
+        storage.replace_workspace_files(original, {'review.json': b'changed'})
+    assert storage.read_workspace_file(original, 'review.json') == b'original'
+    replacement = storage.replace_workspace_files(original, {'review.json': b'changed'})
+    assert storage.read_workspace_file(replacement, 'review.json') == b'changed'
