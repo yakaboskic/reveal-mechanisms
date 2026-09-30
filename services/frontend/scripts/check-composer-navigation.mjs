@@ -93,10 +93,6 @@ async function harness(name, snapshot, mobile = false, deleted = false) {
 }
 async function home(h) {
   await h.page.goto(origin);
-  await h.page.waitForFunction(() => {
-    const value = JSON.parse(sessionStorage.getItem('reveal:composer') || 'null');
-    return value && value.job === null && value.composer.source_gap === null;
-  });
   await h.page.getByRole('combobox', { name: 'Search DisMech knowledge gaps' }).waitFor();
   assert.equal(await h.page.getByRole('region', { name: 'Research activity', exact: true }).count(), 0);
   assert.equal(await h.page.locator('.selected-question').count(), 0);
@@ -158,12 +154,30 @@ try {
     await h.finish();
   }
   {
-    const h = await harness('unsubmitted-draft-refresh', saved(null));
-    await h.page.goto(origin);
+    const h = await harness('bare-home-ignores-unsubmitted-draft', saved(null));
+    await home(h);
+    await h.page.reload();
+    await h.page.getByRole('combobox', { name: 'Search DisMech knowledge gaps' }).waitFor();
+    assert.equal(h.requests.filter(r => /\/drafts\//.test(r.path)).length, 0);
+    await h.finish();
+  }
+  {
+    const h = await harness('explicit-unsubmitted-draft-refresh', saved(null));
+    await h.page.goto(`${origin}/?draft=${draftId}`);
     await h.page.getByRole('button', { name: 'Search for a different knowledge gap', exact: true }).waitFor();
     await h.page.reload();
     await h.page.getByRole('button', { name: 'Search for a different knowledge gap', exact: true }).waitFor();
     await draftOnly(h);
+    await h.finish();
+  }
+  {
+    const h = await harness('same-component-draft-to-home', saved(null));
+    await h.page.goto(`${origin}/?draft=${draftId}`);
+    await h.page.getByRole('navigation', { name: 'Draft navigation' }).waitFor();
+    await h.page.evaluate(() => window.history.pushState(null, '', '/'));
+    await h.page.getByRole('combobox', { name: 'Search DisMech knowledge gaps' }).waitFor();
+    assert.equal(await h.page.locator('.selected-question').count(), 0);
+    assert.equal(await h.page.getByRole('navigation', { name: 'Draft navigation' }).count(), 0);
     await h.finish();
   }
   {

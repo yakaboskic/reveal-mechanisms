@@ -1,0 +1,14 @@
+.vote-control{display:inline-flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0}
+.vote-buttons{display:inline-flex;align-items:center;gap:2px;border:1px solid #dbe3ee;border-radius:8px;background:#fff;color:#526b8b;flex-shrink:0}
+.vote-buttons button{display:inline-flex;align-items:center;justify-content:center;width:36px;height:34px;border-radius:6px;padding:0;color:inherit}
+.vote-buttons button:hover{background:#edf3fb;color:#2e5d99}
+.vote-buttons button.is-selected{background:#e2edff;color:#25569a}
+.vote-score{min-width:26px;text-align:center;font-size:12px;font-weight:600;font-variant-numeric:tabular-nums}
+.vote-error{margin:0;font-size:11px;color:#974c3d;max-width:44ch;line-height:1.6}
+.vote-error button{font-size:inherit;text-decoration:underline;padding:3px}
+.vote-control .auth-dialog p{font-size:13px;color:#60718a;line-height:1.7}
+.vote-control.is-compact .vote-buttons button{width:32px;height:30px}
+.vote-control.is-vertical .vote-buttons{flex-direction:column;gap:1px;border:0;border-radius:0;background:transparent}
+.vote-control.is-vertical .vote-score{line-height:22px}
+.vote-control.is-vertical .vote-buttons svg{width:18px;height:18px}
+.vote-control.is-vertical .vote-buttons button:focus-visible{outline-offset:-2px}

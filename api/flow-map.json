@@ -1,5 +1,5 @@
 {
-  "openapi_sha256": "9c031d152f66b12e7e5d7fecb5841ae13f90d910894ecddcdcaaf4a64366745f",
+  "openapi_sha256": "a274bb435588ac90314789daa6b4bd6f656ed4ffe7f3f4b60d6ea793c4b6c660",
   "steps": [
     {
       "id": "gap",
@@ -288,8 +288,31 @@
         "Redis Pub/Sub wakes authorized RDS replay after commit; there are no periodic workspace list refreshes.",
         "Reconnect with the signed cursor. Reload authorized collections only when an explicit resync is required."
       ]
+    },
+    {
+      "id": "votes",
+      "title": "Vote on a gap or public scientific account",
+      "route": "GET/POST /v1/knowledge-gaps/{gap_id}/vote; GET/POST /v1/accounts/{account_id}/vote",
+      "action": "Read public totals and let a signed-in user upvote, downvote or clear their own choice.",
+      "incoming": "A canonical gap or currently public account ID; registered session and Idempotency-Key for writes.",
+      "outgoing": "VoteState with upvotes, downvotes, net score and the current registered viewer\u2019s vote.",
+      "cases": [
+        "getGapVote.request",
+        "setGapVote.upvote",
+        "setGapVote.downvote",
+        "setGapVote.clear",
+        "getAccountVote.request",
+        "setAccountVote.upvote",
+        "setAccountVote.downvote",
+        "setAccountVote.clear"
+      ],
+      "rules": [
+        "Each registered user has one mutable choice per canonical target. Anonymous readers see totals only.",
+        "Private account votes are unavailable; independently published copies share the same canonical account totals.",
+        "Gap browsing can rank by net votes; committed changes invalidate catalog views through existing events."
+      ]
     }
   ],
-  "operation_count": 43,
-  "exchange_count": 56
+  "operation_count": 47,
+  "exchange_count": 64
 }

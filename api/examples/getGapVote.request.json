@@ -1,0 +1,37 @@
+{
+  "operation_id": "getGapVote",
+  "case": "request",
+  "method": "GET",
+  "path_template": "/v1/knowledge-gaps/{gap_id}/vote",
+  "request": {
+    "url": "https://api.reveal.example.org/v1/knowledge-gaps/dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk/vote",
+    "path": {
+      "gap_id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk"
+    },
+    "query": {},
+    "headers": {
+      "Accept": "application/json"
+    },
+    "body": null
+  },
+  "responses": {
+    "200": {
+      "content_type": "application/json",
+      "examples": {
+        "public": {
+          "upvotes": 2,
+          "downvotes": 1,
+          "score": 1,
+          "user_vote": null
+        },
+        "registered": {
+          "upvotes": 2,
+          "downvotes": 1,
+          "score": 1,
+          "user_vote": 1
+        }
+      }
+    }
+  },
+  "curl": "curl -X GET https://api.reveal.example.org/v1/knowledge-gaps/dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk/vote -H 'Accept: application/json'"
+}

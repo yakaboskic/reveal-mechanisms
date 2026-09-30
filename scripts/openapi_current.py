@@ -80,8 +80,13 @@ def schemas(b):
     b.add('AccountCount',obj({'count':{'type':'integer','minimum':0},'scope':enum('public_exact_gap','owner_exact_gap'),
         'as_of':time,'ranking':enum('curated','recent_account_count','account_count'),'window_days':null({'type':'integer','minimum':1})},
         description='Distinct accessible saved account digests linked to this exact gap digest; no implicit cross-revision rollup or private-count leakage.'))
-    S['GapRecord']['properties'].update(source_detail=ref('GapSourceDetail'),scientific_accounts=ref('AccountCount'))
-    S['GapRecord']['required']+=['source_detail','scientific_accounts']
+    b.add('VoteState',obj({'upvotes':{'type':'integer','minimum':0},'downvotes':{'type':'integer','minimum':0},
+        'score':{'type':'integer'},'user_vote':null({'type':'integer','enum':[-1,0,1]})},
+        description='Public totals for one canonical scientific identity. Score equals upvotes minus downvotes. user_vote is null for anonymous/unauthenticated readers, otherwise -1, 0 (no vote), or 1 for the registered current user. No voter identities are exposed.'))
+    b.add('VoteInput',obj({'vote':{'type':'integer','enum':[-1,0,1]}},
+        description='Set your one vote: 1 upvotes, -1 downvotes, 0 clears it. Registered sign-in and Idempotency-Key are required; repeated choices do not accumulate votes.'))
+    S['GapRecord']['properties'].update(source_detail=ref('GapSourceDetail'),scientific_accounts=ref('AccountCount'),votes=ref('VoteState'))
+    S['GapRecord']['required']+=['source_detail','scientific_accounts','votes']
     S['ResearchRequest']['properties']['question_id']=did('KnowledgeGap')
     S['ResearchRequest']['properties']['linked_dismech_context']=array(ref('SourceRef'))
     S['ResearchRequest']['required'].append('linked_dismech_context')
@@ -137,7 +142,7 @@ def schemas(b):
     b.add('AnalysisOutcomeList',obj({'items':array(ref('AnalysisOutcomeSummary')),'page':ref('Page')}))
     b.add('AccountSummary',obj({'account':ref('DapperScientificAccount'),'knowledge_gap':ref('DapperKnowledgeGap'),
         'claim_count':{'type':'integer','minimum':1},'created_at':time,'job_id':null(uuid),'research_statement':ref('ParagraphState'),
-        'publication':ref('PublicationState')}))
+        'publication':ref('PublicationState'),'votes':null(ref('VoteState'))}))
     S['AccountSummary']['properties']['attribution']=null(ref('AttributionSnapshot'))
     S['AccountSummary']['description']='One accessible accepted scientific account, deduplicated by its DAPPER identity. Publication reports the current owner publication state; public discovery uses can_manage=false. Optional attribution is the immutable original request actor, not the current workspace owner; null denotes unavailable historical attribution. Title and brief synthesis are account.name and account.closing_remarks.'
     b.add('AccountList',obj({'items':array(ref('AccountSummary')),'page':ref('Page')}))
@@ -179,6 +184,7 @@ def examples(b, f, e):
     e['gap']['source_detail']={'source_file':f['gap_source']['source_file'],'source_pointer':f['gap_source']['source_pointer'],
         'payload_sha256':b.sha(f['gap_source']['raw']),'raw':f['gap_source']['raw']}
     e['gap']['scientific_accounts']={'count':0,'scope':'public_exact_gap','as_of':b.NOW,'ranking':'curated','window_days':None}
+    e['gap']['votes']={'upvotes':0,'downvotes':0,'score':0,'user_vote':None}
     e['mechanism_search']['search'] = deepcopy(e['mechanism_search']['search'])
     e['mechanism_search']['search'].update(query='Endothelial dysfunction', mode='semantic', score_aggregation=None)
     e['gap_search']['search'].update(query='CAD genetic risk',mode='fuzzy',embedding_model=None,embedding_revision=None,score_aggregation=None)
@@ -243,6 +249,8 @@ def endpoints(b,f,e):
             if p['name']=='disease_id':p['example']='MONDO:0021661'
     op('/v1/knowledge-gaps/search')['description']='Fuzzy lookup of imported DisMech gaps by default. Query text is not an authored inquiry or permission to launch research. Other explicit modes require their configured index and return 503 if unavailable. Rankings are retrieval signals. Example uses the exact CAD gap from the HTML study.'
     op('/v1/knowledge-gaps')['description']='Browse imported DisMech gaps ordered by distinct scientific-account count descending. Public scope (default) counts only explicitly published snapshots across users; workspace scope requires a session and counts owned saved accounts. Equal-count gaps shuffle on each new browse; a server seed in the signed continuation cursor preserves tie order across pages. Exact gap digests only: no text matching, attempts, paragraph jobs or implicit source-revision rollup. Invalid supplied credentials are rejected even for public reads. Filters apply before pagination; count or corpus changes expire cursors.'
+    op('/v1/knowledge-gaps')['description']+=' sort=votes orders by net gap vote score, then account count, then the same seeded tie order. sort=accounts is the default. Vote changes, sort changes and registered-viewer changes expire cursors. Account votes do not contribute to gap vote totals.'
+    op('/v1/knowledge-gaps')['parameters'].append(b.parameter('sort','query',enum('accounts','votes',default='accounts'),'accounts'))
     op('/v1/knowledge-gaps/search')['description']+=' Account counts use the same optional-session visibility rules as gap browsing; relevance order remains unchanged.'
     op('/v1/knowledge-gaps/{gap_id}')['description']+=' Account counts use the same optional-session visibility rules as gap browsing.'
     for path in ['/v1/knowledge-gaps','/v1/knowledge-gaps/search','/v1/knowledge-gaps/{gap_id}']:
@@ -280,7 +288,7 @@ def endpoints(b,f,e):
     public_publication={'visibility':'public','version':1,'published_at':b.NOW,'updated_at':b.NOW,'can_manage':True,'has_unpublished_changes':False}
     workspace_query=b.parameter('q','query',string(maxLength=200,default='',description='Case-insensitive literal search over the entire authorized saved collection before pagination. Whitespace is normalized; every query word must match. Cursors are bound to the normalized query.'),'mechanism')
     account={'account':f['account'],'knowledge_gap':f['gap'],'claim_count':len(f['account_document']['claims']),
-        'created_at':b.NOW,'job_id':b.JOB_ID,'research_statement':e['account']['research_statement'],'publication':private_publication}
+        'created_at':b.NOW,'job_id':b.JOB_ID,'research_statement':e['account']['research_statement'],'publication':private_publication,'votes':None}
     b.operation('/v1/accounts','get','listAccounts','Scientific content','List your scientific accounts',
         'Owner-scoped, newest first then account ID; deduplicate repeated deliveries by digest. Filter by exact gap_id. Optional q searches account ID, title and closing remarks, knowledge-gap ID/name/text and original attribution display name across all saved summaries before pagination. No private records from other users with the same gap. Closing remarks provide the summary; paragraph status is independent. Publication is current mutable workspace state, separate from immutable scientific content.',
         'AccountList',{'owned':{'items':[account],'page':e['page']}},parameters=[b.parameter('gap_id','query',did('KnowledgeGap'),f['gap']['id']),deepcopy(workspace_query)]+b.page_parameters(),errors=('400','401','409','422','429'))
@@ -297,6 +305,21 @@ def endpoints(b,f,e):
         'PublicationState',{'published':public_publication,'unpublished':dict(private_publication,version=2,updated_at=b.NOW)},
         parameters=[b.parameter('dapper_id','path',did('ScientificAccount'),f['account']['id'],True)],request_schema='PublicationInput',
         request_examples={'publish':{'visibility':'public','expected_version':0},'unpublish':{'visibility':'private','expected_version':1}},idempotent=True,errors=('400','401','403','404','409','422','429'))
+    for kind,path,param,identity in [('Gap','/v1/knowledge-gaps/{gap_id}/vote','gap_id',f['gap']['id']),
+                                   ('Account','/v1/accounts/{account_id}/vote','account_id',f['account']['id'])]:
+        description=('Votes are keyed to the canonical imported KnowledgeGap identity.' if kind=='Gap' else
+            'Votes are keyed to one canonical ScientificAccount identity and its exact KnowledgeGap, shared across independent publications of the same account. Only an active public snapshot permits reading or voting; private and missing accounts both return404, including to their owners. Unpublication hides retained votes until an independent publication remains or the account is published again.')
+        parameters=[b.parameter(param,'path',did('KnowledgeGap' if kind=='Gap' else 'ScientificAccount'),identity,True)]
+        b.operation(path,'get','get'+kind+'Vote','Knowledge gaps' if kind=='Gap' else 'Scientific content','Read '+kind.lower()+' votes',
+            description+' Public and anonymous readers receive totals with user_vote=null. Registered readers receive their current vote; invalid supplied credentials are rejected.',
+            'VoteState',{'public':{'upvotes':2,'downvotes':1,'score':1,'user_vote':None},
+                         'registered':{'upvotes':2,'downvotes':1,'score':1,'user_vote':1}},
+            parameters=parameters,public=True,errors=('401','404','429'))
+        b.operation(path,'post','set'+kind+'Vote','Knowledge gaps' if kind=='Gap' else 'Scientific content','Set your '+kind.lower()+' vote',
+            description+' Registered sign-in is required. One mutable vote per user: set up/down or clear. Concurrent writes serialize with aggregate updates; idempotent retries do not reapply an older vote. Eligibility and current session are checked again before replay. Commit wakes existing event subscribers without Redis polling.',
+            'VoteState',{'upvoted':{'upvotes':1,'downvotes':0,'score':1,'user_vote':1}},
+            parameters=deepcopy(parameters),request_schema='VoteInput',request_examples={'upvote':{'vote':1},'downvote':{'vote':-1},'clear':{'vote':0}},
+            idempotent=True,errors=('400','401','403','404','409','422','429'))
     outcome_id='66666666-6666-4666-8666-666666666666'
     outcome={'id':outcome_id,'outcome':'insufficient_evidence','summary':'The captured investigation did not support an accepted scientific account.',
         'reason':'This illustrative scoped investigation lacked evidence connecting the selected mechanism to the selected question.',

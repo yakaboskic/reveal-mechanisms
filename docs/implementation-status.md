@@ -1,10 +1,13 @@
-# Implementation status — September 30, 2026
+# Implementation status — October 1, 2026
 
-The local Workflow pilot runs Next.js and FastAPI in Docker at **http://localhost:3100**, with managed Upstash Redis Pub/Sub and Vector, QStash delivery, isolated Aurora/RDS application tables and versioned S3 storage. See the [runtime guide](durable-workflow-runtime.md) and [API walkthrough](api-quickstart.md). The [legacy colleague handoff](../README.local.md) remains available at port 3000 during migration.
+The local Workflow pilot runs Next.js and FastAPI in Docker at **http://localhost:3000**, with managed Upstash Redis Pub/Sub and Vector, QStash delivery, isolated Aurora/RDS application tables and versioned S3 storage. See the [runtime guide](durable-workflow-runtime.md) and [API walkthrough](api-quickstart.md). The [legacy colleague handoff](../README.local.md) remains documented; its frontend must be stopped while the Workflow frontend uses port 3000.
 
 ## Implemented
 
 - DisMech gap discovery, trending indicators, source detail and EAGGL/CFDE suggestions using stored embeddings.
+- Read-only knowledge-gap pages with collapsed DisMech context, attached nodes, experiments and source evidence; separate Info links preserve question selection for starting an analysis. Related accounts and explorations load only when expanded.
+- Registered researcher up/down votes on gaps and published accounts, idempotent changes, private ballot isolation and account/vote sorting. Public totals update through existing events; no Redis polling.
+- Authoring guidance builds coherent accounts from distinct supported propositions rather than preferring one Claim. Evidence requirements and budgets are unchanged; single-Claim and insufficient-evidence outcomes remain valid.
 - Anonymous and registered sessions, Google/ORCID integrations, durable identities, owner-scoped drafts/history, publication and workspace recovery. Local Google identity recovery preserves the original broad-email account; a new cloud callback still needs provider configuration.
 - RDS dispatch intent, signed Workflow callbacks, namespace-scoped concurrency controls, fencing, checkpoint recovery and graceful shutdown. Redis Pub/Sub wakes authorized SSE replay and workspace invalidations without Redis polling.
 - Versioned S3 artifacts, checksum verification, authorized downloads and bounded RAM scratch across Workflow phases.

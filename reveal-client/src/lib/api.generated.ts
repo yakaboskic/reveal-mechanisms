@@ -145,7 +145,7 @@ export interface paths {
         };
         /**
          * Browse knowledge gaps
-         * @description Browse imported DisMech gaps ordered by distinct scientific-account count descending. Public scope (default) counts only explicitly published snapshots across users; workspace scope requires a session and counts owned saved accounts. Equal-count gaps shuffle on each new browse; a server seed in the signed continuation cursor preserves tie order across pages. Exact gap digests only: no text matching, attempts, paragraph jobs or implicit source-revision rollup. Invalid supplied credentials are rejected even for public reads. Filters apply before pagination; count or corpus changes expire cursors.
+         * @description Browse imported DisMech gaps ordered by distinct scientific-account count descending. Public scope (default) counts only explicitly published snapshots across users; workspace scope requires a session and counts owned saved accounts. Equal-count gaps shuffle on each new browse; a server seed in the signed continuation cursor preserves tie order across pages. Exact gap digests only: no text matching, attempts, paragraph jobs or implicit source-revision rollup. Invalid supplied credentials are rejected even for public reads. Filters apply before pagination; count or corpus changes expire cursors. sort=votes orders by net gap vote score, then account count, then the same seeded tie order. sort=accounts is the default. Vote changes, sort changes and registered-viewer changes expire cursors. Account votes do not contribute to gap vote totals.
          */
         get: operations["listKnowledgeGaps"];
         put?: never;
@@ -558,6 +558,54 @@ export interface paths {
          * @description Explicit owner-only choice. Publishing or updating a public snapshot requires a registered signed-in session; anonymous owners receive 403 SIGN_IN_REQUIRED, including on idempotent retries. Owners may unpublish an existing snapshot with either session kind. Publishing freezes the complete accepted account provenance and current accepted paragraph, exact citation revisions and only reachable source artifacts. Future paragraphs remain private until an explicit update. Unpublishing revokes this snapshot immediately; identical content independently published elsewhere stays public. No job logs, draft, queue, request or unrelated owner artifacts are published. Immutable scientific IDs, citations and original authorship do not change.
          */
         post: operations["updateAccountPublication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/knowledge-gaps/{gap_id}/vote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read gap votes
+         * @description Votes are keyed to the canonical imported KnowledgeGap identity. Public and anonymous readers receive totals with user_vote=null. Registered readers receive their current vote; invalid supplied credentials are rejected.
+         */
+        get: operations["getGapVote"];
+        put?: never;
+        /**
+         * Set your gap vote
+         * @description Votes are keyed to the canonical imported KnowledgeGap identity. Registered sign-in is required. One mutable vote per user: set up/down or clear. Concurrent writes serialize with aggregate updates; idempotent retries do not reapply an older vote. Eligibility and current session are checked again before replay. Commit wakes existing event subscribers without Redis polling.
+         */
+        post: operations["setGapVote"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/accounts/{account_id}/vote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read account votes
+         * @description Votes are keyed to one canonical ScientificAccount identity and its exact KnowledgeGap, shared across independent publications of the same account. Only an active public snapshot permits reading or voting; private and missing accounts both return404, including to their owners. Unpublication hides retained votes until an independent publication remains or the account is published again. Public and anonymous readers receive totals with user_vote=null. Registered readers receive their current vote; invalid supplied credentials are rejected.
+         */
+        get: operations["getAccountVote"];
+        put?: never;
+        /**
+         * Set your account vote
+         * @description Votes are keyed to one canonical ScientificAccount identity and its exact KnowledgeGap, shared across independent publications of the same account. Only an active public snapshot permits reading or voting; private and missing accounts both return404, including to their owners. Unpublication hides retained votes until an independent publication remains or the account is published again. Registered sign-in is required. One mutable vote per user: set up/down or clear. Concurrent writes serialize with aggregate updates; idempotent retries do not reapply an older vote. Eligibility and current session are checked again before replay. Commit wakes existing event subscribers without Redis polling.
+         */
+        post: operations["setAccountVote"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3098,6 +3146,7 @@ export interface components {
             attachments: components["schemas"]["Attachment"][];
             source_detail: components["schemas"]["GapSourceDetail"];
             scientific_accounts: components["schemas"]["AccountCount"];
+            votes: components["schemas"]["VoteState"];
         };
         /** @description Retrieval relevance, not biological support or probability. Compare values only within the same metric/configuration. */
         Rank: {
@@ -3522,6 +3571,18 @@ export interface components {
             ranking: "curated" | "recent_account_count" | "account_count";
             window_days: number | null;
         };
+        /** @description Public totals for one canonical scientific identity. Score equals upvotes minus downvotes. user_vote is null for anonymous/unauthenticated readers, otherwise -1, 0 (no vote), or 1 for the registered current user. No voter identities are exposed. */
+        VoteState: {
+            upvotes: number;
+            downvotes: number;
+            score: number;
+            user_vote: (-1 | 0 | 1) | null;
+        };
+        /** @description Set your one vote: 1 upvotes, -1 downvotes, 0 clears it. Registered sign-in and Idempotency-Key are required; repeated choices do not accumulate votes. */
+        VoteInput: {
+            /** @enum {integer} */
+            vote: -1 | 0 | 1;
+        };
         /** @description Observable activity only; never private reasoning or secrets. Missing metrics stay null. Explicit call states drive UI completion; narrative arrival is not tool completion. Large outputs use artifact references. */
         ActivityDetail: {
             /** @enum {string} */
@@ -3674,6 +3735,7 @@ export interface components {
             job_id: string | null;
             research_statement: components["schemas"]["ParagraphState"];
             publication: components["schemas"]["PublicationState"];
+            votes: components["schemas"]["VoteState"] | null;
             attribution?: components["schemas"]["AttributionSnapshot"] | null;
         };
         AccountList: {
@@ -7292,6 +7354,8 @@ export interface operations {
                  * @example opaque-next-page
                  */
                 cursor?: string;
+                /** @example accounts */
+                sort?: "accounts" | "votes";
                 /** @example public */
                 scope?: "public" | "workspace";
             };
@@ -8928,6 +8992,326 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PublicationState"];
+                };
+            };
+            /** @description Invalid Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sign In Required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Version Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid Input */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate Limited */
+            429: {
+                headers: {
+                    /** @example 30 */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getGapVote: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values.
+                 * @example dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk
+                 */
+                gap_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VoteState"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate Limited */
+            429: {
+                headers: {
+                    /** @example 30 */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    setGapVote: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description Unique per caller and operation for at least 7 days. Same key and same canonical body replay the original accepted response; changed body returns 409 IDEMPOTENCY_CONFLICT. Compare idempotency before draft-version checks on retries.
+                 * @example 66666666-6666-4666-8666-666666666666
+                 */
+                "Idempotency-Key": string;
+            };
+            path: {
+                /**
+                 * @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values.
+                 * @example dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk
+                 */
+                gap_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VoteInput"];
+            };
+        };
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VoteState"];
+                };
+            };
+            /** @description Invalid Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sign In Required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Version Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid Input */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate Limited */
+            429: {
+                headers: {
+                    /** @example 30 */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getAccountVote: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values.
+                 * @example dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd
+                 */
+                account_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VoteState"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate Limited */
+            429: {
+                headers: {
+                    /** @example 30 */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    setAccountVote: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description Unique per caller and operation for at least 7 days. Same key and same canonical body replay the original accepted response; changed body returns 409 IDEMPOTENCY_CONFLICT. Compare idempotency before draft-version checks on retries.
+                 * @example 66666666-6666-4666-8666-666666666666
+                 */
+                "Idempotency-Key": string;
+            };
+            path: {
+                /**
+                 * @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values.
+                 * @example dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd
+                 */
+                account_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VoteInput"];
+            };
+        };
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VoteState"];
                 };
             };
             /** @description Invalid Request */

@@ -32,6 +32,14 @@ For EVERY Claim, judge whether its assessment of its Proposition is supported
 by the cited observations and the assessment's explicit uncertainty. A Claim
 may assess a plausible hypothesis weakly; its Proposition need not be proven.
 Distinguish direct observations from inference and explicitly proposed tests.
+Assess each distinct proposition separately, including when Claims share a source
+File. Several compatible, scoped Claims can jointly form a useful explanation;
+do not require them to collapse into one overarching Claim. Shared sources are
+not independent corroboration, and account ordering alone establishes no causal
+or logical relationship. Check any asserted connection between Claims against
+their actual evidence and scope. A compound Claim must not hide an unsupported
+assertion behind a supported one. Neither a single Claim nor multiple Claims is
+inherently better: apply the same evidence standard without a claim-count quota.
 Reject invented mechanisms, entities, scores, papers, assertions or experiments
 reported as completed. A factor label/loading, gene-set membership or statistical
 association alone does not establish a causal mechanism, direction, interaction,

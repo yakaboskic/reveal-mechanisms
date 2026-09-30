@@ -21,7 +21,7 @@ from local_deployment import ROOT, env_file, read_env, storage_config
 RUNTIME = ROOT / '.runtime/workflow'
 
 
-def prepare(*, scheduler='local', api_port=18001, frontend_port=3100, callback_url=None):
+def prepare(*, scheduler='local', api_port=18001, frontend_port=3000, callback_url=None):
     if not 1024 <= api_port <= 65535 or not 1024 <= frontend_port <= 65535 or api_port == frontend_port:
         raise ValueError('Use distinct unprivileged ports')
     source = {k:v for k,v in dotenv_values(ROOT / '.env', interpolate=False).items() if v is not None}
@@ -114,7 +114,7 @@ def main():
     parser.add_argument('--scheduler', choices=('local','managed'), default='local')
     parser.add_argument('--build', action='store_true')
     parser.add_argument('--api-port',type=int,default=18001)
-    parser.add_argument('--frontend-port',type=int,default=3100)
+    parser.add_argument('--frontend-port',type=int,default=3000)
     parser.add_argument('--callback-url',help='Public versioned callback URL when using managed QStash through a local tunnel')
     args=parser.parse_args()
     if args.action in ('prepare','up'):

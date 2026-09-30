@@ -687,6 +687,12 @@
                     "as_of": "2026-09-24T16:00:00Z",
                     "ranking": "curated",
                     "window_days": null
+                  },
+                  "votes": {
+                    "upvotes": 0,
+                    "downvotes": 0,
+                    "score": 0,
+                    "user_vote": null
                   }
                 },
                 "ranking": {
@@ -739,7 +745,7 @@
     "method": "GET",
     "path_template": "/v1/knowledge-gaps",
     "request": {
-      "url": "https://api.reveal.example.org/v1/knowledge-gaps?kind=KNOWLEDGE_GAP&status=OPEN&source=dismech&disease_id=MONDO%3A0021661&limit=20&scope=public",
+      "url": "https://api.reveal.example.org/v1/knowledge-gaps?kind=KNOWLEDGE_GAP&status=OPEN&source=dismech&disease_id=MONDO%3A0021661&limit=20&sort=accounts&scope=public",
       "path": {},
       "query": {
         "kind": "KNOWLEDGE_GAP",
@@ -747,6 +753,7 @@
         "source": "dismech",
         "disease_id": "MONDO:0021661",
         "limit": 20,
+        "sort": "accounts",
         "scope": "public"
       },
       "headers": {
@@ -852,6 +859,12 @@
                   "as_of": "2026-09-24T16:00:00Z",
                   "ranking": "curated",
                   "window_days": null
+                },
+                "votes": {
+                  "upvotes": 0,
+                  "downvotes": 0,
+                  "score": 0,
+                  "user_vote": null
                 }
               }
             ],
@@ -864,7 +877,7 @@
         }
       }
     },
-    "curl": "curl -X GET 'https://api.reveal.example.org/v1/knowledge-gaps?kind=KNOWLEDGE_GAP&status=OPEN&source=dismech&disease_id=MONDO%3A0021661&limit=20&scope=public' -H 'Accept: application/json'"
+    "curl": "curl -X GET 'https://api.reveal.example.org/v1/knowledge-gaps?kind=KNOWLEDGE_GAP&status=OPEN&source=dismech&disease_id=MONDO%3A0021661&limit=20&sort=accounts&scope=public' -H 'Accept: application/json'"
   },
   {
     "operation_id": "getKnowledgeGap",
@@ -981,6 +994,12 @@
               "as_of": "2026-09-24T16:00:00Z",
               "ranking": "curated",
               "window_days": null
+            },
+            "votes": {
+              "upvotes": 0,
+              "downvotes": 0,
+              "score": 0,
+              "user_vote": null
             }
           }
         }
@@ -7604,7 +7623,8 @@
                   "updated_at": null,
                   "can_manage": true,
                   "has_unpublished_changes": false
-                }
+                },
+                "votes": null
               }
             ],
             "page": {
@@ -7703,6 +7723,7 @@
                   "can_manage": true,
                   "has_unpublished_changes": false
                 },
+                "votes": null,
                 "attribution": {
                   "user_id": "11111111-1111-4111-8111-111111111111",
                   "person_id": "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he",
@@ -7867,6 +7888,296 @@
       }
     },
     "curl": "curl -X POST https://api.reveal.example.org/v1/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/publication -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"expected_version\":1,\"visibility\":\"private\"}'"
+  },
+  {
+    "operation_id": "getGapVote",
+    "case": "request",
+    "method": "GET",
+    "path_template": "/v1/knowledge-gaps/{gap_id}/vote",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/knowledge-gaps/dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk/vote",
+      "path": {
+        "gap_id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk"
+      },
+      "query": {},
+      "headers": {
+        "Accept": "application/json"
+      },
+      "body": null
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/json",
+        "examples": {
+          "public": {
+            "upvotes": 2,
+            "downvotes": 1,
+            "score": 1,
+            "user_vote": null
+          },
+          "registered": {
+            "upvotes": 2,
+            "downvotes": 1,
+            "score": 1,
+            "user_vote": 1
+          }
+        }
+      }
+    },
+    "curl": "curl -X GET https://api.reveal.example.org/v1/knowledge-gaps/dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk/vote -H 'Accept: application/json'"
+  },
+  {
+    "operation_id": "setGapVote",
+    "case": "upvote",
+    "method": "POST",
+    "path_template": "/v1/knowledge-gaps/{gap_id}/vote",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/knowledge-gaps/dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk/vote",
+      "path": {
+        "gap_id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk"
+      },
+      "query": {},
+      "headers": {
+        "Idempotency-Key": "66666666-6666-4666-8666-666666666666",
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      },
+      "body": {
+        "vote": 1
+      }
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/json",
+        "examples": {
+          "upvoted": {
+            "upvotes": 1,
+            "downvotes": 0,
+            "score": 1,
+            "user_vote": 1
+          }
+        }
+      }
+    },
+    "curl": "curl -X POST https://api.reveal.example.org/v1/knowledge-gaps/dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk/vote -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"vote\":1}'"
+  },
+  {
+    "operation_id": "setGapVote",
+    "case": "downvote",
+    "method": "POST",
+    "path_template": "/v1/knowledge-gaps/{gap_id}/vote",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/knowledge-gaps/dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk/vote",
+      "path": {
+        "gap_id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk"
+      },
+      "query": {},
+      "headers": {
+        "Idempotency-Key": "66666666-6666-4666-8666-666666666666",
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      },
+      "body": {
+        "vote": -1
+      }
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/json",
+        "examples": {
+          "upvoted": {
+            "upvotes": 1,
+            "downvotes": 0,
+            "score": 1,
+            "user_vote": 1
+          }
+        }
+      }
+    },
+    "curl": "curl -X POST https://api.reveal.example.org/v1/knowledge-gaps/dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk/vote -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"vote\":-1}'"
+  },
+  {
+    "operation_id": "setGapVote",
+    "case": "clear",
+    "method": "POST",
+    "path_template": "/v1/knowledge-gaps/{gap_id}/vote",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/knowledge-gaps/dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk/vote",
+      "path": {
+        "gap_id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk"
+      },
+      "query": {},
+      "headers": {
+        "Idempotency-Key": "66666666-6666-4666-8666-666666666666",
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      },
+      "body": {
+        "vote": 0
+      }
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/json",
+        "examples": {
+          "upvoted": {
+            "upvotes": 1,
+            "downvotes": 0,
+            "score": 1,
+            "user_vote": 1
+          }
+        }
+      }
+    },
+    "curl": "curl -X POST https://api.reveal.example.org/v1/knowledge-gaps/dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk/vote -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"vote\":0}'"
+  },
+  {
+    "operation_id": "getAccountVote",
+    "case": "request",
+    "method": "GET",
+    "path_template": "/v1/accounts/{account_id}/vote",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/vote",
+      "path": {
+        "account_id": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd"
+      },
+      "query": {},
+      "headers": {
+        "Accept": "application/json"
+      },
+      "body": null
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/json",
+        "examples": {
+          "public": {
+            "upvotes": 2,
+            "downvotes": 1,
+            "score": 1,
+            "user_vote": null
+          },
+          "registered": {
+            "upvotes": 2,
+            "downvotes": 1,
+            "score": 1,
+            "user_vote": 1
+          }
+        }
+      }
+    },
+    "curl": "curl -X GET https://api.reveal.example.org/v1/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/vote -H 'Accept: application/json'"
+  },
+  {
+    "operation_id": "setAccountVote",
+    "case": "upvote",
+    "method": "POST",
+    "path_template": "/v1/accounts/{account_id}/vote",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/vote",
+      "path": {
+        "account_id": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd"
+      },
+      "query": {},
+      "headers": {
+        "Idempotency-Key": "66666666-6666-4666-8666-666666666666",
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      },
+      "body": {
+        "vote": 1
+      }
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/json",
+        "examples": {
+          "upvoted": {
+            "upvotes": 1,
+            "downvotes": 0,
+            "score": 1,
+            "user_vote": 1
+          }
+        }
+      }
+    },
+    "curl": "curl -X POST https://api.reveal.example.org/v1/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/vote -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"vote\":1}'"
+  },
+  {
+    "operation_id": "setAccountVote",
+    "case": "downvote",
+    "method": "POST",
+    "path_template": "/v1/accounts/{account_id}/vote",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/vote",
+      "path": {
+        "account_id": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd"
+      },
+      "query": {},
+      "headers": {
+        "Idempotency-Key": "66666666-6666-4666-8666-666666666666",
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      },
+      "body": {
+        "vote": -1
+      }
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/json",
+        "examples": {
+          "upvoted": {
+            "upvotes": 1,
+            "downvotes": 0,
+            "score": 1,
+            "user_vote": 1
+          }
+        }
+      }
+    },
+    "curl": "curl -X POST https://api.reveal.example.org/v1/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/vote -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"vote\":-1}'"
+  },
+  {
+    "operation_id": "setAccountVote",
+    "case": "clear",
+    "method": "POST",
+    "path_template": "/v1/accounts/{account_id}/vote",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/vote",
+      "path": {
+        "account_id": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd"
+      },
+      "query": {},
+      "headers": {
+        "Idempotency-Key": "66666666-6666-4666-8666-666666666666",
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      },
+      "body": {
+        "vote": 0
+      }
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/json",
+        "examples": {
+          "upvoted": {
+            "upvotes": 1,
+            "downvotes": 0,
+            "score": 1,
+            "user_vote": 1
+          }
+        }
+      }
+    },
+    "curl": "curl -X POST https://api.reveal.example.org/v1/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/vote -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"vote\":0}'"
   },
   {
     "operation_id": "listAnalysisOutcomes",

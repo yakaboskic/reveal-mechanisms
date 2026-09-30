@@ -10,7 +10,7 @@ export function invalidateWorkspace(event?: WorkspaceEvent) { for (const listene
 export function resetWorkspaceCache() { for (const listener of listeners) listener(true); }
 
 export function changesWorkspace(method: string, path: string) {
-  return ["POST", "PATCH", "DELETE"].includes(method) && /\/v1\/(?:drafts(?:\/[^/]+)?|jobs(?:\/[^/]+\/(?:cancel|retry-review))?|me\/explorations|accounts\/[^/]+\/publication|analysis-outcomes\/[^/]+\/publication)$/.test(path);
+  return ["POST", "PATCH", "DELETE"].includes(method) && /\/v1\/(?:drafts(?:\/[^/]+)?|jobs(?:\/[^/]+\/(?:cancel|retry-review))?|me\/explorations|accounts\/[^/]+\/(?:publication|vote)|knowledge-gaps\/[^/]+\/vote|analysis-outcomes\/[^/]+\/publication)$/.test(path);
 }
 
 export function affectedWorkspaceTabs(event?: WorkspaceEvent): ("gaps" | "accounts" | "explorations")[] {

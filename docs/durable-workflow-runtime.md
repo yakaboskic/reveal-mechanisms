@@ -141,12 +141,18 @@ Then prepare and run the pilot:
 .venv/bin/python scripts/durable_deployment.py up --build
 ```
 
-The pilot uses `http://localhost:3100`, API port `18001`, application tables
+The pilot uses `http://localhost:3000`, API port `18001`, application tables
 `reveal_workflow_local_*`, job namespace `reveal-workflow-local`, and Vector
 environment `local`. It does not overwrite existing users, accounts, jobs or
 publications in `reveal_*`. Only API and frontend containers run. The local
 QStash server schedules requests separately; the actual managed Redis and Vector
 services are used.
+
+Stop the older legacy frontend before starting this stack if it already occupies
+port `3000`. Local OAuth callback URLs are
+`http://localhost:3000/api/auth/callback/google` and
+`http://localhost:3000/api/auth/callback/orcid`. If choosing another port with
+`--frontend-port`, register matching callback URLs with the providers.
 
 For managed QStash against a local HTTPS tunnel, configure the public
 `REVEAL_WORKFLOW_URL` and use `--scheduler managed`. The tunnel is a development

@@ -26,6 +26,7 @@ COLLECTIONS = {
     'outcome_publication': ['explorations', 'gaps'],
     'principal': ['identity'], 'grant': ['accounts', 'gaps', 'explorations'],
     'vector_active': ['catalog', 'gaps', 'accounts'],
+    'vote': ['gaps', 'accounts'],
 }
 TYPES = {'draft':'draft.changed', 'exploration':'exploration.updated', 'job':'job.updated',
     'account':'scientific_account.updated', 'account_membership':'scientific_account.updated',
@@ -57,7 +58,7 @@ def track(tx, kind, identity, owner, data, old=None, operation='upsert', revisio
         tx.workspace_changes[(audience, kind, identity)] = {'event_type':TYPES.get(kind, 'workspace.changed'),
             'entity_id':entity_id, 'entity_revision':revision, 'operation':operation if audience == owner else 'remove',
             'collections':COLLECTIONS[kind]}
-    if kind in ('publication', 'outcome_publication', 'vector_active'):
+    if kind in ('publication', 'outcome_publication', 'vector_active', 'vote'):
         # Public notifications contain no owner or private scientific identifiers.
         tx.workspace_changes[('public', 'catalog', 'catalog')] = {'event_type':'catalog.updated',
             'entity_id':'catalog', 'entity_revision':revision, 'operation':'invalidate',

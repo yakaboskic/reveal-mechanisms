@@ -4,7 +4,7 @@
   "method": "GET",
   "path_template": "/v1/knowledge-gaps",
   "request": {
-    "url": "https://api.reveal.example.org/v1/knowledge-gaps?kind=KNOWLEDGE_GAP&status=OPEN&source=dismech&disease_id=MONDO%3A0021661&limit=20&scope=public",
+    "url": "https://api.reveal.example.org/v1/knowledge-gaps?kind=KNOWLEDGE_GAP&status=OPEN&source=dismech&disease_id=MONDO%3A0021661&limit=20&sort=accounts&scope=public",
     "path": {},
     "query": {
       "kind": "KNOWLEDGE_GAP",
@@ -12,6 +12,7 @@
       "source": "dismech",
       "disease_id": "MONDO:0021661",
       "limit": 20,
+      "sort": "accounts",
       "scope": "public"
     },
     "headers": {
@@ -117,6 +118,12 @@
                 "as_of": "2026-09-24T16:00:00Z",
                 "ranking": "curated",
                 "window_days": null
+              },
+              "votes": {
+                "upvotes": 0,
+                "downvotes": 0,
+                "score": 0,
+                "user_vote": null
               }
             }
           ],
@@ -129,5 +136,5 @@
       }
     }
   },
-  "curl": "curl -X GET 'https://api.reveal.example.org/v1/knowledge-gaps?kind=KNOWLEDGE_GAP&status=OPEN&source=dismech&disease_id=MONDO%3A0021661&limit=20&scope=public' -H 'Accept: application/json'"
+  "curl": "curl -X GET 'https://api.reveal.example.org/v1/knowledge-gaps?kind=KNOWLEDGE_GAP&status=OPEN&source=dismech&disease_id=MONDO%3A0021661&limit=20&sort=accounts&scope=public' -H 'Accept: application/json'"
 }

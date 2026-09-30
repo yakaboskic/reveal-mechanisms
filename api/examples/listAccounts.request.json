@@ -81,7 +81,8 @@
                 "updated_at": null,
                 "can_manage": true,
                 "has_unpublished_changes": false
-              }
+              },
+              "votes": null
             }
           ],
           "page": {

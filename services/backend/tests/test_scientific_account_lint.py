@@ -101,6 +101,46 @@ p.write_text(json.dumps(doc))
         self.assertFalse(final['valid'])
         self.assertIn('final-identity', {f['check'] for f in final['findings']})
 
+    def test_distinct_claims_share_source_without_collapsing_assessments(self):
+        # Real captured CFDE rows support separate scoped involvement drafts.
+        # This checks structure/source fidelity, not biological acceptance.
+        document = deepcopy(self.draft)
+        source = self.package['source_artifacts']['gene-factor-50fbafcddac8.attempt-1.body']
+        rows = decode((self.package_path.parent / source['path']).read_bytes())['data'][:2]
+        document['propositions'], document['claims'], document['evidence_items'] = [], [], []
+        for index, row in enumerate(rows):
+            proposition, claim, evidence = (deepcopy(self.draft[group][0])
+                for group in ('propositions', 'claims', 'evidence_items'))
+            proposition.update(id=f'urn:test:proposition-{index}', subject_entity='urn:cfde:gene:'+row['gene'],
+                statement=f"{row['gene']} is a candidate for involvement in the selected mechanism within the retained trait model.")
+            claim.update(id=f'urn:test:claim-{index}', proposition=proposition['id'],
+                has_evidence=[f'urn:test:evidence-{index}'],
+                statement=f"The retained loading for {row['gene']} motivates a scoped involvement hypothesis; causal direction is unresolved.")
+            evidence.update(id=f'urn:test:evidence-{index}', target_proposition=proposition['id'],
+                context=f'Captured gene-factor source row `/data/{index}`.', snippet=json.dumps(row),
+                explanation=f"{row['gene']}'s observed loading informs this scoped hypothesis, without establishing regulatory direction.")
+            for group, node in (('propositions', proposition), ('claims', claim), ('evidence_items', evidence)):
+                document[group].append(node)
+        account = document['scientific_accounts'][0]
+        account.update(component_claims=[claim['id'] for claim in document['claims']],
+            context='Two distinct involvement assessments in a shared trait model address candidate selection; neither establishes the causal direction in the selected question.',
+            closing_remarks='The separate involvement assessments identify candidates within the retained model. Their causal roles remain unresolved.')
+        self.assertTrue(self.lint(document, mode='draft')['valid'])
+        path = self.root / 'multi-claim.json'; path.write_bytes(canonical_json(document)); self.mint(path)
+        minted = decode(path.read_bytes())
+        self.assertTrue(self.lint(minted)['valid'])
+        self.assertEqual(minted['scientific_accounts'][0]['component_claims'], [claim['id'] for claim in minted['claims']])
+        self.assertEqual(len({claim['proposition'] for claim in minted['claims']}), 2)
+        self.assertEqual(minted['evidence_items'][0]['was_derived_from'], minted['evidence_items'][1]['was_derived_from'])
+        # A valid first Claim cannot cover a second Claim's missing lineage or
+        # a shared EvidenceItem targeting the wrong Proposition.
+        for defect in ('target', 'lineage'):
+            broken = deepcopy(document)
+            if defect == 'target': broken['claims'][1]['has_evidence'] = [broken['evidence_items'][0]['id']]
+            else: broken['evidence_items'][1].pop('was_derived_from')
+            findings = {item['check'] for item in self.lint(broken, mode='draft')['findings']}
+            self.assertIn('evidence-target' if defect == 'target' else 'cfde-ancestry', findings)
+
     def test_assembly_does_not_turn_prose_mentions_into_orphan_nodes(self):
         from reveal_backend import acceptance
         document=deepcopy(self.draft)

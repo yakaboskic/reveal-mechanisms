@@ -430,7 +430,7 @@ paths:
                     dismissed_source_ids: []
                     mechanism_subquery: CADinT2D
                     model: cfde-inc-v2
-                    selected_kgs: &id044
+                    selected_kgs: &id045
                     - biomarkerkg
                     - prokn
       x-codeSamples:
@@ -1246,6 +1246,11 @@ paths:
                           as_of: '2026-09-24T16:00:00Z'
                           ranking: curated
                           window_days: null
+                        votes:
+                          upvotes: 0
+                          downvotes: 0
+                          score: 0
+                          user_vote: null
                       ranking:
                         value: 0.8
                         metric: fuzzy_similarity
@@ -1346,7 +1351,10 @@ paths:
         in the signed continuation cursor preserves tie order across pages. Exact
         gap digests only: no text matching, attempts, paragraph jobs or implicit source-revision
         rollup. Invalid supplied credentials are rejected even for public reads. Filters
-        apply before pagination; count or corpus changes expire cursors.'
+        apply before pagination; count or corpus changes expire cursors. sort=votes
+        orders by net gap vote score, then account count, then the same seeded tie
+        order. sort=accounts is the default. Vote changes, sort changes and registered-viewer
+        changes expire cursors. Account votes do not contribute to gap vote totals.'
       parameters:
       - name: kind
         in: query
@@ -1407,6 +1415,17 @@ paths:
         example: opaque-next-page
         description: Omit for the first page. A returned next_cursor is opaque; the
           example is illustrative and cannot be used against a live service.
+      - name: sort
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - accounts
+          - votes
+          default: accounts
+        example: accounts
+        description: ''
       - name: scope
         in: query
         required: false
@@ -1480,7 +1499,7 @@ paths:
       x-codeSamples:
       - lang: Shell
         label: request
-        source: 'curl -X GET ''https://api.reveal.example.org/v1/knowledge-gaps?kind=KNOWLEDGE_GAP&status=OPEN&source=dismech&disease_id=MONDO%3A0021661&limit=20&scope=public''
+        source: 'curl -X GET ''https://api.reveal.example.org/v1/knowledge-gaps?kind=KNOWLEDGE_GAP&status=OPEN&source=dismech&disease_id=MONDO%3A0021661&limit=20&sort=accounts&scope=public''
           -H ''Accept: application/json'''
   /v1/knowledge-gaps/{gap_id}:
     get:
@@ -6989,6 +7008,7 @@ paths:
                       job_id: 44444444-4444-4444-8444-444444444444
                       research_statement: *id040
                       publication: *id041
+                      votes: null
                     page: *id009
           headers:
             X-Request-ID:
@@ -7144,6 +7164,7 @@ paths:
                       job_id: 44444444-4444-4444-8444-444444444444
                       research_statement: *id040
                       publication: *id041
+                      votes: null
                       attribution: *id042
                     page: *id009
                 no_visible_accounts:
@@ -7362,7 +7383,7 @@ paths:
               examples:
                 published:
                   summary: Published
-                  value: &id052
+                  value: &id053
                     visibility: public
                     version: 1
                     published_at: '2026-09-24T16:00:00Z'
@@ -7413,7 +7434,7 @@ paths:
               examples:
                 sign_in_required:
                   summary: Sign in required
-                  value: &id053
+                  value: &id043
                     type: urn:reveal:problem:sign-in-required
                     title: Sign In Required
                     status: 403
@@ -7499,6 +7520,545 @@ paths:
           -H ''Idempotency-Key: 66666666-6666-4666-8666-666666666666'' -H ''Authorization:
           Bearer <api-key-or-gateway-assertion>'' -H ''Content-Type: application/json''
           -H ''Accept: application/json'' --data-raw ''{"expected_version":1,"visibility":"private"}'''
+  /v1/knowledge-gaps/{gap_id}/vote:
+    get:
+      operationId: getGapVote
+      tags:
+      - Knowledge gaps
+      summary: Read gap votes
+      description: Votes are keyed to the canonical imported KnowledgeGap identity.
+        Public and anonymous readers receive totals with user_vote=null. Registered
+        readers receive their current vote; invalid supplied credentials are rejected.
+      parameters:
+      - name: gap_id
+        in: path
+        required: true
+        schema:
+          type: string
+          description: Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode
+            path values.
+          pattern: ^dapper:KnowledgeGap\.[A-Za-z0-9_-]{32}$
+        example: dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk
+        description: Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode
+          path values.
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoteState'
+              examples:
+                public:
+                  summary: Public
+                  value:
+                    upvotes: 2
+                    downvotes: 1
+                    score: 1
+                    user_vote: null
+                registered:
+                  summary: Registered
+                  value:
+                    upvotes: 2
+                    downvotes: 1
+                    score: 1
+                    user_vote: 1
+          headers:
+            X-Request-ID:
+              description: Correlation ID for this HTTP request.
+              schema:
+                type: string
+                format: uuid
+        '401':
+          description: Authentication Required
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                authentication_required:
+                  summary: Authentication required
+                  value: *id001
+        '404':
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                not_found:
+                  summary: Not found
+                  value: *id005
+        '429':
+          description: Rate Limited
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                rate_limited:
+                  summary: Rate limited
+                  value: *id002
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+                minimum: 1
+              example: 30
+      security:
+      - {}
+      - ApplicationBearer: []
+      x-codeSamples:
+      - lang: Shell
+        label: request
+        source: 'curl -X GET https://api.reveal.example.org/v1/knowledge-gaps/dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk/vote
+          -H ''Accept: application/json'''
+    post:
+      operationId: setGapVote
+      tags:
+      - Knowledge gaps
+      summary: Set your gap vote
+      description: 'Votes are keyed to the canonical imported KnowledgeGap identity.
+        Registered sign-in is required. One mutable vote per user: set up/down or
+        clear. Concurrent writes serialize with aggregate updates; idempotent retries
+        do not reapply an older vote. Eligibility and current session are checked
+        again before replay. Commit wakes existing event subscribers without Redis
+        polling.'
+      parameters:
+      - name: gap_id
+        in: path
+        required: true
+        schema:
+          type: string
+          description: Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode
+            path values.
+          pattern: ^dapper:KnowledgeGap\.[A-Za-z0-9_-]{32}$
+        example: dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk
+        description: Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode
+          path values.
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 128
+        example: 66666666-6666-4666-8666-666666666666
+        description: Unique per caller and operation for at least 7 days. Same key
+          and same canonical body replay the original accepted response; changed body
+          returns 409 IDEMPOTENCY_CONFLICT. Compare idempotency before draft-version
+          checks on retries.
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoteState'
+              examples:
+                upvoted:
+                  summary: Upvoted
+                  value:
+                    upvotes: 1
+                    downvotes: 0
+                    score: 1
+                    user_vote: 1
+          headers:
+            X-Request-ID:
+              description: Correlation ID for this HTTP request.
+              schema:
+                type: string
+                format: uuid
+        '400':
+          description: Invalid Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                invalid_request:
+                  summary: Invalid request
+                  value: *id004
+        '401':
+          description: Authentication Required
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                authentication_required:
+                  summary: Authentication required
+                  value: *id001
+        '403':
+          description: Sign In Required
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                sign_in_required:
+                  summary: Sign in required
+                  value: *id043
+        '404':
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                not_found:
+                  summary: Not found
+                  value: *id005
+        '409':
+          description: Version Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                version_conflict:
+                  summary: Version conflict
+                  value: *id006
+        '422':
+          description: Invalid Input
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                invalid_input:
+                  summary: Invalid input
+                  value: *id007
+        '429':
+          description: Rate Limited
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                rate_limited:
+                  summary: Rate limited
+                  value: *id002
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+                minimum: 1
+              example: 30
+      security:
+      - ApplicationBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VoteInput'
+            examples:
+              upvote:
+                summary: Upvote
+                value:
+                  vote: 1
+              downvote:
+                summary: Downvote
+                value:
+                  vote: -1
+              clear:
+                summary: Clear
+                value:
+                  vote: 0
+      x-codeSamples:
+      - lang: Shell
+        label: upvote
+        source: 'curl -X POST https://api.reveal.example.org/v1/knowledge-gaps/dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk/vote
+          -H ''Idempotency-Key: 66666666-6666-4666-8666-666666666666'' -H ''Authorization:
+          Bearer <api-key-or-gateway-assertion>'' -H ''Content-Type: application/json''
+          -H ''Accept: application/json'' --data-raw ''{"vote":1}'''
+      - lang: Shell
+        label: downvote
+        source: 'curl -X POST https://api.reveal.example.org/v1/knowledge-gaps/dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk/vote
+          -H ''Idempotency-Key: 66666666-6666-4666-8666-666666666666'' -H ''Authorization:
+          Bearer <api-key-or-gateway-assertion>'' -H ''Content-Type: application/json''
+          -H ''Accept: application/json'' --data-raw ''{"vote":-1}'''
+      - lang: Shell
+        label: clear
+        source: 'curl -X POST https://api.reveal.example.org/v1/knowledge-gaps/dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk/vote
+          -H ''Idempotency-Key: 66666666-6666-4666-8666-666666666666'' -H ''Authorization:
+          Bearer <api-key-or-gateway-assertion>'' -H ''Content-Type: application/json''
+          -H ''Accept: application/json'' --data-raw ''{"vote":0}'''
+  /v1/accounts/{account_id}/vote:
+    get:
+      operationId: getAccountVote
+      tags:
+      - Scientific content
+      summary: Read account votes
+      description: Votes are keyed to one canonical ScientificAccount identity and
+        its exact KnowledgeGap, shared across independent publications of the same
+        account. Only an active public snapshot permits reading or voting; private
+        and missing accounts both return404, including to their owners. Unpublication
+        hides retained votes until an independent publication remains or the account
+        is published again. Public and anonymous readers receive totals with user_vote=null.
+        Registered readers receive their current vote; invalid supplied credentials
+        are rejected.
+      parameters:
+      - name: account_id
+        in: path
+        required: true
+        schema:
+          type: string
+          description: Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode
+            path values.
+          pattern: ^dapper:ScientificAccount\.[A-Za-z0-9_-]{32}$
+        example: dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd
+        description: Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode
+          path values.
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoteState'
+              examples:
+                public:
+                  summary: Public
+                  value:
+                    upvotes: 2
+                    downvotes: 1
+                    score: 1
+                    user_vote: null
+                registered:
+                  summary: Registered
+                  value:
+                    upvotes: 2
+                    downvotes: 1
+                    score: 1
+                    user_vote: 1
+          headers:
+            X-Request-ID:
+              description: Correlation ID for this HTTP request.
+              schema:
+                type: string
+                format: uuid
+        '401':
+          description: Authentication Required
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                authentication_required:
+                  summary: Authentication required
+                  value: *id001
+        '404':
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                not_found:
+                  summary: Not found
+                  value: *id005
+        '429':
+          description: Rate Limited
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                rate_limited:
+                  summary: Rate limited
+                  value: *id002
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+                minimum: 1
+              example: 30
+      security:
+      - {}
+      - ApplicationBearer: []
+      x-codeSamples:
+      - lang: Shell
+        label: request
+        source: 'curl -X GET https://api.reveal.example.org/v1/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/vote
+          -H ''Accept: application/json'''
+    post:
+      operationId: setAccountVote
+      tags:
+      - Scientific content
+      summary: Set your account vote
+      description: 'Votes are keyed to one canonical ScientificAccount identity and
+        its exact KnowledgeGap, shared across independent publications of the same
+        account. Only an active public snapshot permits reading or voting; private
+        and missing accounts both return404, including to their owners. Unpublication
+        hides retained votes until an independent publication remains or the account
+        is published again. Registered sign-in is required. One mutable vote per user:
+        set up/down or clear. Concurrent writes serialize with aggregate updates;
+        idempotent retries do not reapply an older vote. Eligibility and current session
+        are checked again before replay. Commit wakes existing event subscribers without
+        Redis polling.'
+      parameters:
+      - name: account_id
+        in: path
+        required: true
+        schema:
+          type: string
+          description: Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode
+            path values.
+          pattern: ^dapper:ScientificAccount\.[A-Za-z0-9_-]{32}$
+        example: dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd
+        description: Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode
+          path values.
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 128
+        example: 66666666-6666-4666-8666-666666666666
+        description: Unique per caller and operation for at least 7 days. Same key
+          and same canonical body replay the original accepted response; changed body
+          returns 409 IDEMPOTENCY_CONFLICT. Compare idempotency before draft-version
+          checks on retries.
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoteState'
+              examples:
+                upvoted:
+                  summary: Upvoted
+                  value:
+                    upvotes: 1
+                    downvotes: 0
+                    score: 1
+                    user_vote: 1
+          headers:
+            X-Request-ID:
+              description: Correlation ID for this HTTP request.
+              schema:
+                type: string
+                format: uuid
+        '400':
+          description: Invalid Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                invalid_request:
+                  summary: Invalid request
+                  value: *id004
+        '401':
+          description: Authentication Required
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                authentication_required:
+                  summary: Authentication required
+                  value: *id001
+        '403':
+          description: Sign In Required
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                sign_in_required:
+                  summary: Sign in required
+                  value: *id043
+        '404':
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                not_found:
+                  summary: Not found
+                  value: *id005
+        '409':
+          description: Version Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                version_conflict:
+                  summary: Version conflict
+                  value: *id006
+        '422':
+          description: Invalid Input
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                invalid_input:
+                  summary: Invalid input
+                  value: *id007
+        '429':
+          description: Rate Limited
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                rate_limited:
+                  summary: Rate limited
+                  value: *id002
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+                minimum: 1
+              example: 30
+      security:
+      - ApplicationBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VoteInput'
+            examples:
+              upvote:
+                summary: Upvote
+                value:
+                  vote: 1
+              downvote:
+                summary: Downvote
+                value:
+                  vote: -1
+              clear:
+                summary: Clear
+                value:
+                  vote: 0
+      x-codeSamples:
+      - lang: Shell
+        label: upvote
+        source: 'curl -X POST https://api.reveal.example.org/v1/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/vote
+          -H ''Idempotency-Key: 66666666-6666-4666-8666-666666666666'' -H ''Authorization:
+          Bearer <api-key-or-gateway-assertion>'' -H ''Content-Type: application/json''
+          -H ''Accept: application/json'' --data-raw ''{"vote":1}'''
+      - lang: Shell
+        label: downvote
+        source: 'curl -X POST https://api.reveal.example.org/v1/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/vote
+          -H ''Idempotency-Key: 66666666-6666-4666-8666-666666666666'' -H ''Authorization:
+          Bearer <api-key-or-gateway-assertion>'' -H ''Content-Type: application/json''
+          -H ''Accept: application/json'' --data-raw ''{"vote":-1}'''
+      - lang: Shell
+        label: clear
+        source: 'curl -X POST https://api.reveal.example.org/v1/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/vote
+          -H ''Idempotency-Key: 66666666-6666-4666-8666-666666666666'' -H ''Authorization:
+          Bearer <api-key-or-gateway-assertion>'' -H ''Content-Type: application/json''
+          -H ''Accept: application/json'' --data-raw ''{"vote":0}'''
   /v1/analysis-outcomes:
     get:
       operationId: listAnalysisOutcomes
@@ -7564,7 +8124,7 @@ paths:
                       summary: The captured investigation did not support an accepted
                         scientific account.
                       knowledge_gap: *id011
-                      anchors: &id043
+                      anchors: &id044
                       - source_id: factor:portal:CADinT2D:cfde-inc-v2:Factor1
                         mechanism_id: dapper:Mechanism.MyhahXB55tDUS667sJzeJZ40BeeQBWOR
                         name: factor:portal:CADinT2D:cfde-inc-v2:Factor1
@@ -7671,27 +8231,27 @@ paths:
               examples:
                 private_owner:
                   summary: Private owner
-                  value: &id050
+                  value: &id051
                     id: 66666666-6666-4666-8666-666666666666
                     outcome: insufficient_evidence
                     summary: The captured investigation did not support an accepted
                       scientific account.
                     reason: This illustrative scoped investigation lacked evidence
                       connecting the selected mechanism to the selected question.
-                    explored_topics: &id045
+                    explored_topics: &id046
                     - The selected question and captured mechanism evidence.
-                    missing_evidence: &id046
+                    missing_evidence: &id047
                     - Evidence connecting the mechanism to this question.
-                    limitations: &id047
+                    limitations: &id048
                     - This scoped result does not establish that a relationship is
                       globally absent.
-                    next_steps: &id048
+                    next_steps: &id049
                     - Review additional directly relevant studies before repeating
                       this investigation.
                     knowledge_gap: *id011
                     source_gap: *id016
-                    anchors: *id043
-                    selected_kgs: *id044
+                    anchors: *id044
+                    selected_kgs: *id045
                     created_at: '2026-09-24T16:00:00Z'
                     attribution: *id042
                     scope_note: A scoped exploration report, not a ScientificAccount
@@ -7699,7 +8259,7 @@ paths:
                     record_format: structured
                     job_id: 44444444-4444-4444-8444-444444444444
                     publication: *id041
-                    provenance: &id049
+                    provenance: &id050
                       evidence_package_sha256: 9a55d126679291a95fa3d35f544915610134075eaf110f62f77ec8ee870b6ae2
                       outcome_sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
                       runtime_sha256: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
@@ -7723,28 +8283,28 @@ paths:
                       scientific account.
                     reason: This illustrative scoped investigation lacked evidence
                       connecting the selected mechanism to the selected question.
-                    explored_topics: *id045
-                    missing_evidence: *id046
-                    limitations: *id047
-                    next_steps: *id048
+                    explored_topics: *id046
+                    missing_evidence: *id047
+                    limitations: *id048
+                    next_steps: *id049
                     knowledge_gap: *id011
                     source_gap: *id016
-                    anchors: *id043
-                    selected_kgs: *id044
+                    anchors: *id044
+                    selected_kgs: *id045
                     created_at: '2026-09-24T16:00:00Z'
                     attribution: *id042
                     scope_note: A scoped exploration report, not a ScientificAccount
                       or globally established negative finding.
                     record_format: structured
                     job_id: null
-                    publication: &id051
+                    publication: &id052
                       visibility: public
                       version: 1
                       published_at: '2026-09-24T16:00:00Z'
                       updated_at: '2026-09-24T16:00:00Z'
                       can_manage: false
                       has_unpublished_changes: false
-                    provenance: *id049
+                    provenance: *id050
           headers:
             X-Request-ID:
               description: Correlation ID for this HTTP request.
@@ -7823,7 +8383,7 @@ paths:
               examples:
                 owner:
                   summary: Owner
-                  value: *id050
+                  value: *id051
           headers:
             X-Request-ID:
               description: Correlation ID for this HTTP request.
@@ -7951,10 +8511,10 @@ paths:
                       summary: The captured investigation did not support an accepted
                         scientific account.
                       knowledge_gap: *id011
-                      anchors: *id043
+                      anchors: *id044
                       created_at: '2026-09-24T16:00:00Z'
                       attribution: *id042
-                      publication: *id051
+                      publication: *id052
                     page: *id009
                 empty:
                   summary: Empty
@@ -8156,7 +8716,7 @@ paths:
               examples:
                 published:
                   summary: Published
-                  value: *id052
+                  value: *id053
                 unpublished:
                   summary: Unpublished
                   value:
@@ -8201,7 +8761,7 @@ paths:
               examples:
                 sign_in_required:
                   summary: Sign in required
-                  value: *id053
+                  value: *id043
         '404':
           description: Not Found
           content:
@@ -18954,12 +19514,15 @@ components:
           $ref: '#/components/schemas/GapSourceDetail'
         scientific_accounts:
           $ref: '#/components/schemas/AccountCount'
+        votes:
+          $ref: '#/components/schemas/VoteState'
       required:
       - object
       - source
       - attachments
       - source_detail
       - scientific_accounts
+      - votes
       additionalProperties: false
     Rank:
       type: object
@@ -20364,6 +20927,50 @@ components:
       additionalProperties: false
       description: Distinct accessible saved account digests linked to this exact
         gap digest; no implicit cross-revision rollup or private-count leakage.
+    VoteState:
+      type: object
+      properties:
+        upvotes:
+          type: integer
+          minimum: 0
+        downvotes:
+          type: integer
+          minimum: 0
+        score:
+          type: integer
+        user_vote:
+          anyOf:
+          - type: integer
+            enum:
+            - -1
+            - 0
+            - 1
+          - type: 'null'
+      required:
+      - upvotes
+      - downvotes
+      - score
+      - user_vote
+      additionalProperties: false
+      description: Public totals for one canonical scientific identity. Score equals
+        upvotes minus downvotes. user_vote is null for anonymous/unauthenticated readers,
+        otherwise -1, 0 (no vote), or 1 for the registered current user. No voter
+        identities are exposed.
+    VoteInput:
+      type: object
+      properties:
+        vote:
+          type: integer
+          enum:
+          - -1
+          - 0
+          - 1
+      required:
+      - vote
+      additionalProperties: false
+      description: 'Set your one vote: 1 upvotes, -1 downvotes, 0 clears it. Registered
+        sign-in and Idempotency-Key are required; repeated choices do not accumulate
+        votes.'
     ActivityDetail:
       type: object
       properties:
@@ -20873,6 +21480,10 @@ components:
           $ref: '#/components/schemas/ParagraphState'
         publication:
           $ref: '#/components/schemas/PublicationState'
+        votes:
+          anyOf:
+          - $ref: '#/components/schemas/VoteState'
+          - type: 'null'
         attribution:
           anyOf:
           - $ref: '#/components/schemas/AttributionSnapshot'
@@ -20885,6 +21496,7 @@ components:
       - job_id
       - research_statement
       - publication
+      - votes
       additionalProperties: false
       description: One accessible accepted scientific account, deduplicated by its
         DAPPER identity. Publication reports the current owner publication state;
