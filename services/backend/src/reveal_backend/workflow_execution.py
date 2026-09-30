@@ -96,7 +96,7 @@ class WorkflowExecution:
                 return await asyncio.to_thread(state.complete, self.repository, payload, token, next_phase='complete', done=True)
             with tempfile.TemporaryDirectory(prefix='reveal-step-') as temporary:
                 root = Path(temporary)
-                if execution.get('workspace'):
+                if execution.get('workspace') and execution['phase'] not in ('observe', 'launch'):
                     await asyncio.to_thread(self.store().restore, execution['workspace'], root)
                 async with asyncio.timeout(int(setting('REVEAL_WORKFLOW_STEP_TIMEOUT_SECONDS', '360'))):
                     result = await self.operate(payload, token, job, execution, root)
@@ -143,8 +143,20 @@ class WorkflowExecution:
                 return {'next_phase': 'complete', 'done': True}
         if job['kind'] == 'deployment_probe': return await self.probe(payload, token, job, queue, execution, root)
         if phase == 'prepare': return await self.prepare(payload, token, job, queue, root)
-        request, inputs = self.request(job, queue, execution, root)
         adapter = self.box_adapter(queue)
+        if phase == 'launch':
+            if box['phase'] == 'running': return {'next_phase': 'observe', 'sleep': 5}
+            await asyncio.to_thread(state.save, self.repository, payload, token, launch_intent=True,
+                                    deadline=time.time() + int(setting('REVEAL_AGENT_TIMEOUT_SECONDS', '900')) + 420)
+            handle = await adapter.launch_once(box)
+            await asyncio.to_thread(self.observe_commit, payload, token, handle, [])
+            return {'next_phase': 'observe', 'sleep': 5}
+        if phase == 'observe':
+            if time.time() > execution.get('deadline', float('inf')): await adapter.cancel_once(box)
+            handle, events, terminal = await adapter.inspect_once(box)
+            await asyncio.to_thread(self.observe_commit, payload, token, handle, events)
+            return {'next_phase': 'capture' if terminal else 'observe', 'sleep': 0 if terminal else 5}
+        request, inputs = self.request(job, queue, execution, root)
         if phase == 'create':
             if box: return {'next_phase': 'bootstrap'}
             if execution.get('creation_intent') and not box:
@@ -159,18 +171,6 @@ class WorkflowExecution:
             handle = await adapter.prepare_once(request, box)
             await asyncio.to_thread(self.checkpoint, payload, token, root, box=handle)
             return {'next_phase': 'launch'}
-        if phase == 'launch':
-            if box['phase'] == 'running': return {'next_phase': 'observe', 'sleep': 5}
-            await asyncio.to_thread(state.save, self.repository, payload, token, launch_intent=True,
-                                    deadline=time.time() + request.timeout_seconds + 420)
-            handle = await adapter.launch_once(box)
-            await asyncio.to_thread(self.checkpoint, payload, token, root, box=handle)
-            return {'next_phase': 'observe', 'sleep': 5}
-        if phase == 'observe':
-            if time.time() > execution.get('deadline', float('inf')): await adapter.cancel_once(box)
-            handle, events, terminal = await adapter.inspect_once(box)
-            await asyncio.to_thread(self.observe_commit, payload, token, handle, events)
-            return {'next_phase': 'capture' if terminal else 'observe', 'sleep': 0 if terminal else 5}
         if phase == 'capture':
             if execution.get('capture_complete'): return {'next_phase': 'cleanup'}
             await asyncio.to_thread(self.activity, payload, token, 'stage', {'stage': 'collecting_output', 'message': 'Saving completed output and captured evidence to durable storage.'})

@@ -127,7 +127,10 @@ The active local Vector snapshot passed all 24 frozen reference queries with
 minimum recall@10 and top-result agreement of 1.0, and maximum cosine error
 `3.4934e-7`. Its verified inventory contains 1,756 mapped factor aliases and
 20,588 context bindings; 2,281 unmapped factor bindings are archived separately
-in immutable S3. Browser, scientific-run, and cloud acceptance are still pending.
+in immutable S3. The real browser gateway delivered create/rename/delete events
+to two tabs, with zero collection requests over 40 seconds idle and no browser
+errors. The backend suite passed 650 tests (8 skipped), and the frontend passed
+typecheck and all 69 tests. Scientific-run and cloud acceptance are still pending.
 
 Provider references: [FastAPI integration](https://upstash.com/docs/workflow/quickstarts/fastapi),
 [QStash regions](https://upstash.com/docs/qstash/howto/multi-region),

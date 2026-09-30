@@ -241,6 +241,23 @@ class WorkflowTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(execution['cleanup_complete']); self.assertTrue(execution['capture_complete'])
         self.assertFalse(execution['capacity_reserved'])
 
+    async def test_observe_and_launch_only_use_rds_handle_without_restoring_s3(self):
+        for phase in ('launch','observe'):
+            job,payload=self.new('paragraph')
+            workspace={'sha256':'must-remain-original'}
+            handle={'box_id':'same-box','phase':'prepared' if phase=='launch' else 'running','cursor':0}
+            with self.repo.transaction() as tx:
+                execution=tx.get('execution',job['id'])['data']; execution.update(phase=phase,workspace=workspace,box=handle,capacity_reserved=True)
+                tx.put('execution',job['id'],'owner',execution)
+            adapter=Mock(); adapter.launch_once=AsyncMock(return_value={**handle,'phase':'running'})
+            adapter.inspect_once=AsyncMock(return_value=({**handle,'phase':'running'},[],False))
+            storage=Mock(); storage.restore.side_effect=AssertionError('No S3 reads for status or launch')
+            storage.snapshot.side_effect=AssertionError('Handle updates must not replace original workspace')
+            result=await WorkflowExecution(self.repo,storage=storage,adapter=adapter).step(payload,0)
+            self.assertEqual(result['phase'],'observe')
+            self.assertEqual(self.execution(payload)['workspace'],workspace)
+            storage.restore.assert_not_called(); storage.snapshot.assert_not_called()
+
     async def test_unsigned_workflow_control_and_reconcile_rejected(self):
         from fastapi import FastAPI
         from httpx import AsyncClient, ASGITransport
