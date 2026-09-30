@@ -26,6 +26,28 @@ ROUNDTRIP_ATOL = 2e-6
 ROUNDTRIP_RTOL = 2e-5
 MAX_CANDIDATES = 1000
 MAX_FETCH_ALIASES = 4096
+NAMESPACE_RE = re.compile(r'[a-zA-Z0-9_-]{1,128}')
+
+# Reference-generation snapshots (docs/reference-reload.md §6) keep this manifest
+# format with deterministic source vector ids (id_scheme) and two more corpus kinds.
+# Each kind is a manifest list, an import-batch key prefix and one Upstash namespace.
+ID_SCHEME = 'source-id-v1'
+KINDS = ('factors', 'contexts', 'gene_sets', 'collections')
+REFERENCE_KINDS = KINDS[2:]
+NAMESPACE_KEYS = {'factors': 'factor_namespace', 'contexts': 'context_namespace',
+                  'gene_sets': 'gene_set_namespace', 'collections': 'collection_namespace'}
+REFERENCE_SOURCE_KINDS = {'gene_sets': 'cfde_gene_set', 'collections': 'cfde_collection'}
+
+
+def snapshot_kinds(snapshot):
+    """Corpus kinds of a snapshot: factors and contexts always, gene sets/collections when present."""
+    return ['factors', 'contexts'] + [kind for kind in REFERENCE_KINDS if kind in snapshot or NAMESPACE_KEYS[kind] in snapshot]
+
+
+def batch_kind(key):
+    kind = str(key).split(':', 1)[0]
+    if kind not in NAMESPACE_KEYS: raise ValueError('Unknown import batch')
+    return kind
 
 
 class VectorUnavailable(RuntimeError):
@@ -87,7 +109,10 @@ def embedding_space(run, context_config):
 
 
 def metadata(snapshot, row):
-    return {**row['binding'], 'snapshot_id': snapshot['snapshot_id'], 'embedding_space': snapshot['embedding_space'],
+    # CFDE gene-set/collection vectors belong to their own recorded embedding space.
+    space = (snapshot['gene_set_embedding_space'] if row['binding'].get('source_kind') in REFERENCE_SOURCE_KINDS.values()
+             else snapshot['embedding_space'])
+    return {**row['binding'], 'snapshot_id': snapshot['snapshot_id'], 'embedding_space': space,
             'original_vector_sha256': row['original_vector_sha256']}
 
 
@@ -126,9 +151,18 @@ class UpstashFactorIndex:
         if (snapshot.get('status') != 'complete' or snapshot.get('policy_version') != POLICY_VERSION
                 or snapshot.get('embedding_space') != embedding_space(self.run, snapshot['context_config'])):
             raise VectorUnavailable('Vector snapshot is incomplete or incompatible')
-        for key in ('factor_namespace', 'context_namespace'):
-            if not re.fullmatch(r'[a-zA-Z0-9_-]{1,128}', snapshot.get(key, '')):
+        self.kinds = snapshot_kinds(snapshot)
+        for kind in self.kinds:
+            namespace = snapshot.get(NAMESPACE_KEYS[kind], '')
+            if not isinstance(namespace, str) or not NAMESPACE_RE.fullmatch(namespace):
                 raise VectorUnavailable('An explicit Vector snapshot namespace is required')
+        if 'id_scheme' in snapshot or len(self.kinds) > 2:
+            # A reference-generation snapshot carries all four corpora in distinct namespaces.
+            namespaces = {snapshot[NAMESPACE_KEYS[kind]] for kind in self.kinds}
+            valid = (snapshot.get('id_scheme') == ID_SCHEME and self.kinds == list(KINDS) and len(namespaces) == len(KINDS)
+                     and all(re.fullmatch('[a-f0-9]{64}', str(snapshot.get(key) or '')) for key in ('reference_generation_id', 'gene_set_embedding_space'))
+                     and all(snapshot.get(kind) and len({row['id'] for row in snapshot[kind]}) == len(snapshot[kind]) for kind in REFERENCE_KINDS))
+            if not valid: raise VectorUnavailable('Vector snapshot reference corpus is incomplete or incompatible')
         self.client = client if client is not None else client_from_environment()
         self.factors = [row['binding'] for row in snapshot['factors']]
         self.by_id = {row['binding']['factor_id']: row for row in snapshot['factors']}
@@ -153,9 +187,9 @@ class UpstashFactorIndex:
             if value(info, 'dimension') != self.run['dimensions'] or str(value(info, 'similarity_function')).upper() != 'COSINE':
                 raise VectorUnavailable('Vector index dimensions or metric are incompatible')
             namespaces = value(info, 'namespaces', {})
-            for kind in ('factor', 'context'):
-                record = namespaces.get(self.snapshot[kind + '_namespace'])
-                expected = len(self.snapshot['factors' if kind == 'factor' else 'contexts'])
+            for kind in self.kinds:
+                record = namespaces.get(self.snapshot[NAMESPACE_KEYS[kind]])
+                expected = len(self.snapshot[kind])
                 if record is None or value(record, 'vector_count') != expected or value(record, 'pending_vector_count', 0):
                     raise VectorUnavailable('Vector namespace coverage is not ready')
         except VectorUnavailable:
@@ -245,7 +279,9 @@ class UpstashFactorIndex:
         except Exception as error: raise VectorUnavailable('Upstash Vector candidate retrieval is unavailable') from error
 
     def provenance(self):
-        return {key: self.snapshot[key] for key in ('snapshot_id', 'embedding_space', 'factor_namespace', 'context_namespace', 'policy_version', 'export_ref')} | {
+        # Legacy snapshots keep their exact provenance; source-id snapshots name their generation.
+        generation = {key: self.snapshot[key] for key in ('id_scheme', 'reference_generation_id')} if 'id_scheme' in self.snapshot else {}
+        return {key: self.snapshot[key] for key in ('snapshot_id', 'embedding_space', 'factor_namespace', 'context_namespace', 'policy_version', 'export_ref')} | generation | {
             'provider': 'upstash-vector', 'metric': 'COSINE', 'score_conversion': '2 * provider_score - 1',
             'score_conversion_version': 1, 'aggregation': 'maximum_per_context_over_all_native_aliases',
             'candidate_limit': self.candidate_limit, 'mapping_run_id': self.snapshot.get('mapping_run'),

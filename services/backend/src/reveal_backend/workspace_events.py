@@ -58,9 +58,13 @@ def track(tx, kind, identity, owner, data, old=None, operation='upsert', revisio
             'entity_id':entity_id, 'entity_revision':revision, 'operation':operation if audience == owner else 'remove',
             'collections':COLLECTIONS[kind]}
     if kind in ('publication', 'outcome_publication', 'vector_active'):
-        # Public notifications contain no owner or private scientific identifiers.
+        # Public notifications contain no owner or private scientific identifiers. A vector_active
+        # change (a reference cutover) is named 'reference' so open composers recheck their anchors
+        # only then, not on every publish.
+        prior = tx.workspace_changes.get(('public', 'catalog', 'catalog')) or {}
+        reference = kind == 'vector_active' or prior.get('entity_id') == 'reference'
         tx.workspace_changes[('public', 'catalog', 'catalog')] = {'event_type':'catalog.updated',
-            'entity_id':'catalog', 'entity_revision':revision, 'operation':'invalidate',
+            'entity_id':'reference' if reference else 'catalog', 'entity_revision':revision, 'operation':'invalidate',
             'collections':['catalog', 'accounts', 'gaps', 'explorations']}
 
 

@@ -6,6 +6,11 @@ its count. Explicit public snapshots are projected separately by publication.py.
 from collections import Counter
 from copy import deepcopy
 
+from .auth import Problem
+from .reference_generation import is_archived
+
+REFERENCE_STATES = ('current', 'archived', 'all')
+
 
 def visible_accounts(tx, owner, *, attribution=False):
     if not owner:
@@ -43,8 +48,21 @@ def visible_accounts(tx, owner, *, attribution=False):
     return items
 
 
+def by_reference_state(items, state='all'):
+    """Filter listed summaries by archive state; `all` lists current work first.
+
+    Archived work (built on a superseded reference generation) is never hidden
+    by default. The sort is stable, so each group keeps its existing order.
+    """
+    if state not in REFERENCE_STATES:
+        raise Problem(422, 'INVALID_QUERY', 'Choose current, archived or all for reference_state.')
+    if state == 'all': return sorted(items, key=is_archived)
+    return [item for item in items if is_archived(item) == (state == 'archived')]
+
+
 def counts_by_gap(accounts):
-    return Counter(item['account']['question'] for item in accounts)
+    # Gap ranking counts current work only; archived accounts are listed, not counted.
+    return Counter(item['account']['question'] for item in accounts if not is_archived(item))
 
 
 def counted_gap(gap, counts, owner, observed_at):

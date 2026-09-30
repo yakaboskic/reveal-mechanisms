@@ -467,3 +467,202 @@ model EagglCfdeGeneSetLink {
   @@index([gene_set_import_id, resolved_alias_sha256], map: "cfde_gene_set_link_alias")
   @@map("eaggl_cfde_gene_set_links")
 }
+
+// Migration 008: versioned reference generations (docs/reference-reload.md). Every
+// table except embedding_spaces, vector_bindings and archived_reference_factors is
+// scoped by generation_id; archived_reference_factors is never purged.
+model ReferenceGeneration {
+  generation_id             String                  @id @db.Char(64)
+  kind                      String                  @db.VarChar(32)
+  model                     String                  @db.VarChar(64)
+  status                    String                  @db.VarChar(16)
+  eaggl_import_id           String?                 @db.Char(64)
+  eaggl_embedding_run_id    String?                 @db.Char(64)
+  dismech_import_id         String?                 @db.Char(64)
+  legacy_mapping_run_id     String?                 @db.Char(64)
+  legacy_gene_set_import_id String?                 @db.Char(64)
+  manifest                  Json
+  cold_export_ref           Json?
+  created_at                DateTime                @default(now()) @db.Timestamp(0)
+  updated_at                DateTime                @default(now()) @db.Timestamp(0)
+  kpn_traits                KpnTrait[]
+  cfde_gene_set_collections CfdeGeneSetCollection[]
+  reference_vectors         ReferenceVector[]
+
+  @@unique([legacy_mapping_run_id], map: "reference_generation_legacy_mapping")
+  @@index([status], map: "reference_generation_status")
+  @@map("reference_generations")
+}
+
+model KpnTrait {
+  generation_id         String              @db.Char(64)
+  kpn_trait_id          String              @db.VarChar(32)
+  legacy_phenotype_id   String              @db.VarChar(191)
+  phenotype_name        String              @db.Text
+  gwas_source_category  String              @db.VarChar(32)
+  trait_group           String?             @db.VarChar(64)
+  legacy_trait_group    String?             @db.VarChar(64)
+  trait_type            String?             @db.VarChar(32)
+  description           String?             @db.Text
+  is_dichotomous        Int?                @db.TinyInt
+  is_complex            Int?                @db.TinyInt
+  n_factors             Int                 @db.UnsignedInt
+  metadata              Json
+  reference_generations ReferenceGeneration @relation(fields: [generation_id], references: [generation_id], onDelete: NoAction, onUpdate: NoAction, map: "kpn_trait_generation_fk")
+  reference_factors     ReferenceFactor[]
+
+  @@id([generation_id, kpn_trait_id])
+  @@unique([generation_id, legacy_phenotype_id], map: "kpn_trait_legacy")
+  @@map("kpn_traits")
+}
+
+model ReferenceFactor {
+  generation_id               String                    @db.Char(64)
+  factor_key                  String                    @db.VarChar(64)
+  public_id                   String                    @db.VarChar(128)
+  eaggl_factor_id             String                    @db.VarChar(255)
+  kpn_trait_id                String                    @db.VarChar(32)
+  factor_number               Int                       @db.UnsignedInt
+  label                       String                    @db.Text
+  eaggl_import_id             String?                   @db.Char(64)
+  input_sha256                String                    @db.Char(64)
+  source_revision             String                    @db.Char(64)
+  metadata                    Json
+  kpn_traits                  KpnTrait                  @relation(fields: [generation_id, kpn_trait_id], references: [generation_id, kpn_trait_id], onDelete: NoAction, onUpdate: NoAction, map: "reference_factor_trait_fk")
+  factor_gene_set_projections FactorGeneSetProjection[]
+
+  @@id([generation_id, factor_key])
+  @@unique([generation_id, public_id], map: "reference_factor_public")
+  @@unique([generation_id, eaggl_factor_id], map: "reference_factor_eaggl")
+  @@index([generation_id, kpn_trait_id], map: "reference_factor_trait")
+  @@map("reference_factors")
+}
+
+// Collection-level metadata only; member gene sets live in cfde_gene_sets.
+model CfdeGeneSetCollection {
+  generation_id         String              @db.Char(64)
+  collection_id         String              @db.VarChar(64)
+  cfde_label            String              @db.VarChar(128)
+  library               String              @db.VarChar(64)
+  n_sets                Int                 @db.UnsignedInt
+  payload               Json
+  reference_generations ReferenceGeneration @relation(fields: [generation_id], references: [generation_id], onDelete: NoAction, onUpdate: NoAction, map: "cfde_collection_generation_fk")
+  cfde_gene_sets        CfdeGeneSet[]
+
+  @@id([generation_id, collection_id])
+  @@unique([generation_id, cfde_label], map: "cfde_collection_label")
+  @@map("cfde_gene_set_collections")
+}
+
+model CfdeGeneSet {
+  generation_id               String                    @db.Char(64)
+  gene_set_id                 String                    @db.VarChar(64)
+  collection_id               String                    @db.VarChar(64)
+  gene_set_name               String                    @db.Text
+  library                     String                    @db.VarChar(64)
+  n_genes                     Int                       @db.UnsignedInt
+  n_genes_in_eaggl_universe   Int                       @db.UnsignedInt
+  legacy_source_key           String?                   @db.Text
+  metadata                    Json
+  cfde_gene_set_collections   CfdeGeneSetCollection     @relation(fields: [generation_id, collection_id], references: [generation_id, collection_id], onDelete: NoAction, onUpdate: NoAction, map: "cfde_gene_set_collection_fk")
+  factor_gene_set_projections FactorGeneSetProjection[]
+
+  @@id([generation_id, gene_set_id])
+  @@index([generation_id, collection_id], map: "cfde_gene_set_collection")
+  @@map("cfde_gene_sets")
+}
+
+// Per-trait projections retained where the gene set ranks <= 50 by joint or marginal loading.
+model FactorGeneSetProjection {
+  generation_id         String          @db.Char(64)
+  scope                 String          @db.VarChar(16)
+  factor_key            String          @db.VarChar(64)
+  gene_set_id           String          @db.VarChar(64)
+  joint_loading         Float
+  marginal_loading      Float
+  joint_loading_text    String          @db.VarChar(32)
+  marginal_loading_text String          @db.VarChar(32)
+  joint_rank            Int             @db.UnsignedInt
+  marginal_rank         Int             @db.UnsignedInt
+  is_joint_top_factor   Int             @db.TinyInt
+  reference_factors     ReferenceFactor @relation(fields: [generation_id, factor_key], references: [generation_id, factor_key], onDelete: NoAction, onUpdate: NoAction, map: "projection_factor_fk")
+  cfde_gene_sets        CfdeGeneSet     @relation(fields: [generation_id, gene_set_id], references: [generation_id, gene_set_id], onDelete: NoAction, onUpdate: NoAction, map: "projection_gene_set_fk")
+
+  @@id([generation_id, scope, factor_key, gene_set_id])
+  @@index([generation_id, factor_key], map: "projection_factor_fk")
+  @@index([generation_id, gene_set_id], map: "projection_gene_set")
+  @@index([generation_id, scope, factor_key, joint_rank], map: "projection_factor_joint")
+  @@map("factor_gene_set_projections")
+}
+
+// Vectors are comparable only within one embedding space. Never purged.
+model EmbeddingSpace {
+  space_id           String            @id @db.Char(64)
+  model              String            @db.VarChar(255)
+  model_revision     String            @db.VarChar(255)
+  provider           String            @db.VarChar(64)
+  service_url_sha256 String?           @db.Char(64)
+  dimensions         Int               @db.UnsignedInt
+  metric             String            @db.VarChar(16)
+  normalization      String            @db.VarChar(32)
+  calibration        Json
+  created_at         DateTime          @default(now()) @db.Timestamp(0)
+  reference_vectors  ReferenceVector[]
+
+  @@map("embedding_spaces")
+}
+
+// CFDE gene-set and collection vectors: little-endian float32, dimensions from embedding_spaces.
+model ReferenceVector {
+  generation_id         String              @db.Char(64)
+  source_kind           String              @db.VarChar(32)
+  source_id             String              @db.VarChar(64)
+  space_id              String              @db.Char(64)
+  input_sha256          String              @db.Char(64)
+  input_text            String              @db.Text
+  vector                Bytes               @db.MediumBlob
+  vector_sha256         String              @db.Char(64)
+  reference_generations ReferenceGeneration @relation(fields: [generation_id], references: [generation_id], onDelete: NoAction, onUpdate: NoAction, map: "reference_vector_generation_fk")
+  embedding_spaces      EmbeddingSpace      @relation(fields: [space_id], references: [space_id], onDelete: NoAction, onUpdate: NoAction, map: "reference_vector_space_fk")
+
+  @@id([generation_id, source_kind, source_id])
+  @@index([space_id], map: "reference_vector_space_fk")
+  @@map("reference_vectors")
+}
+
+// MySQL <-> Upstash id map for every uploaded vector, per environment and snapshot.
+model VectorBinding {
+  environment      String @db.VarChar(25)
+  namespace        String @db.VarChar(128)
+  vector_id        String @db.VarChar(255)
+  snapshot_id      String @db.Char(64)
+  generation_id    String @db.Char(64)
+  source_kind      String @db.VarChar(32)
+  source_id        String @db.Text
+  source_id_sha256 String @db.Char(64)
+  vector_sha256    String @db.Char(64)
+
+  @@id([environment, namespace, vector_id])
+  @@unique([environment, snapshot_id, source_kind, source_id_sha256], map: "vector_binding_source")
+  @@index([generation_id], map: "vector_binding_generation")
+  @@map("vector_bindings")
+}
+
+// Frozen factor snapshots referenced by archived user work. Never purged.
+model ArchivedReferenceFactor {
+  archive_id       String   @id @db.Char(64)
+  generation_id    String   @db.Char(64)
+  source_id        String   @db.Text
+  source_id_sha256 String   @db.Char(64)
+  model            String   @db.VarChar(64)
+  factor_id        String   @db.VarChar(255)
+  trait            String   @db.VarChar(255)
+  kpn_trait_id     String?  @db.VarChar(32)
+  label            String   @db.Text
+  snapshot         Json
+  snapshot_sha256  String   @db.Char(64)
+  captured_at      DateTime @default(now()) @db.Timestamp(0)
+
+  @@unique([generation_id, source_id_sha256], map: "archived_factor_source")
+  @@map("archived_reference_factors")
+}

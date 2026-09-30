@@ -78,6 +78,10 @@ def freeze(tx, owner, account_id):
             citations[(target, revision)] = deepcopy(get(tx, owner, target, revision))
     summary = deepcopy(summaries[0]); summary['job_id'] = None
     summary['research_statement'] = {'status': 'succeeded' if paragraph_id else 'not_requested', 'job_id': None, 'paragraph_id': paragraph_id}
+    if summary.get('archive'):
+        # Archived work stays publishable; public copies never name private jobs/requests.
+        from .reference_generation import public_stamp
+        summary['archive'] = public_stamp(summary['archive'])
     return {'account_id': account_id, 'paragraph_id': paragraph_id, 'document': document,
         'citation_metadata': list(citations.values()), 'artifacts': artifacts, 'artifact_records': captured, 'summary': summary}
 

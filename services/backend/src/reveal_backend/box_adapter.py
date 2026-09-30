@@ -27,6 +27,17 @@ CAPTURE_MARKER = '.box-capture-complete.json'
 TERMINAL_STATUSES = ('succeeded', 'failed', 'cancelled', 'insufficient_evidence')
 
 
+def dispatchable_capture(package):
+    """Complete evidence capture, or a KPN (eaggl-capped-v1) package whose only capture blockers are the
+    trait-level PIGEAN phenotype queries its MySQL reference generation cannot answer."""
+    readiness = package.get('readiness') or {}
+    if readiness.get('input_capture_complete') is True: return True
+    from .reference_evidence import TRAIT_CAPTURE_BLOCKER
+    blockers = readiness.get('capture_blockers') or []
+    return (bool(blockers) and (package.get('pigean') or {}).get('model') == 'eaggl-capped-v1'
+            and all(isinstance(blocker, str) and TRAIT_CAPTURE_BLOCKER.fullmatch(blocker) for blocker in blockers))
+
+
 class BoxConfigurationError(ValueError):
     pass
 
@@ -154,7 +165,7 @@ def make_bundle(project_root: Path, request: ExecutionRequest):
         from jsonschema.validators import validator_for
         schema = json.loads((project_root / 'schema/evidence-package.schema.json').read_text())
         validator_for(schema)(schema, format_checker=FormatChecker()).validate(value)
-        if value.get('readiness', {}).get('input_capture_complete') is not True:
+        if not dispatchable_capture(value):
             raise BoxConfigurationError('Evidence capture is incomplete; paid execution is disabled')
         if set(value['external_evidence']['selected_graphs']) != set(request.selected_graphs):
             raise BoxConfigurationError('Selected graphs do not match the frozen evidence package')

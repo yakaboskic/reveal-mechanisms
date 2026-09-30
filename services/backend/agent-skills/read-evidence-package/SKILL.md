@@ -30,6 +30,8 @@ Use the package's declared prefix and identity policy. Native source aliases are
 
 Keep `factor_value`, trait `combined`/`log_bf`/`prior`, set `beta`/`beta_uncorrected`, interactive normalized ranking and semantic cosine distinct. Preserve source precision; no shared confidence scale is established. Repeated endpoints/projections or overlapping `result_key` values are not independent corroboration. Labels and co-loadings do not establish membership, function or causal direction.
 
+Packages for `eaggl-capped-v1` anchors (KPN reference generations) are captured from MySQL: `gene_set:` candidates bind an alias GeneSet that `was_derived_from` the exact CFDE GeneSet when `membership_status` is `loaded`; the trait-scope PIGEAN phenotype queries are not captured (`readiness.capture_blockers` lists `bioindex:trait:…:not_captured`: a capture limitation, not "no association"), so there is no gene→trait or set→trait evidence, and the trait observations ascertained via a selected factor have empty `reported_metrics` (which is not zero); `factor_trait_direct` links a factor to its own KPN trait; and `factor_factor_shared_genes` scores loading overlap, not correlation. See the [evidence package reference](../../../../docs/evidence-package.md#reference-generation-kpn-packages).
+
 ## Distinguish reading scope from evidence coverage
 
 An unread page or deferred record is still present evidence; it is not an omitted observation. Interpret the original collection's `status`, `query_status` and package `coverage` together:

@@ -91,6 +91,18 @@ class WorkspaceEventsTests(unittest.TestCase):
         self.assertNotIn('private-account-id',json.dumps(public))
         self.assertNotIn('secret-key',json.dumps(public))
 
+    def test_only_a_reference_cutover_names_its_public_catalog_event(self):
+        # Open composers recheck their anchors on `reference` catalog events only, never on publishes.
+        with self.repo.transaction() as tx:
+            tx.put('publication','p1','alice',{'account_id':'a1','visibility':'public'})
+        _, replay, cursor, _ = self.replay('bob')
+        self.assertEqual([item['entity_id'] for item in replay if item['scope']=='public'],['catalog'])
+        with self.repo.transaction() as tx:
+            tx.put('vector_active','local','catalog',{'snapshot_id':'s2'})
+            tx.put('outcome_publication','o1','alice',{'visibility':'public'})
+        public = [item for item in self.replay('bob',positions=cursor)[1] if item['scope']=='public']
+        self.assertEqual([(item['entity_id'],item['collections']) for item in public],[('reference',['catalog','accounts','gaps','explorations'])])
+
     def test_detailed_job_events_wake_job_stream_without_workspace_invalidation(self):
         with self.repo.transaction() as tx: job = jobs.enqueue(tx,'alice','analysis')
         before = self.replay()[2]
