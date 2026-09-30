@@ -193,3 +193,21 @@ def test_asset_tampering_is_rejected_without_leaving_output(asset_sources, tmp_p
     with pytest.raises((ValueError, RuntimeError)):
         assets.prepare(output, root=root, dapper=dapper, dismech=dismech, ca=ca)
     assert not output.exists()
+
+
+def test_invalid_fresh_ca_fails_before_any_git_asset_work(asset_sources, tmp_path, monkeypatch):
+    root, _, _, _ = asset_sources
+    commands = []
+    def download_bad_ca(*command):
+        commands.append(command)
+        assert command[0] == 'curl', 'CA validation must happen before any Git work'
+        Path(command[-1]).write_text('unreviewed certificate bundle')
+    def forbid_clone(*args, **kwargs):
+        pytest.fail('Invalid CA must prevent cloning DAPPER')
+    monkeypatch.setattr(assets, 'run', download_bad_ca)
+    monkeypatch.setattr(assets, 'clone_release', forbid_clone)
+    output = tmp_path / 'assets'
+    with pytest.raises(RuntimeError, match='RDS CA differs'):
+        assets.prepare(output, root=root)
+    assert len(commands) == 1 and commands[0][0] == 'curl'
+    assert not output.exists()

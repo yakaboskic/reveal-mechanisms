@@ -13,9 +13,10 @@ from local_sources import ROOT, DISMECH, RDS_CA, clone_release, verify_release
 from local_deployment import prepare_dismech
 
 
-# Official global-bundle.pem reviewed with the existing deployment CA. A trust
-# store rotation must be reviewed and this pin updated before builds proceed.
-RDS_CA_SHA256 = 'e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3'
+# AWS global bundle reviewed 2026-09-30: all 108 prior certificates retained;
+# three me-west-1 roots added. Verified with hostname-checked Aurora TLS 1.3.
+# Future trust store rotations must be reviewed before this pin is updated.
+RDS_CA_SHA256 = 'fe45bbebf92ad3e27a583bbb2ddd1553c521ed4d49af5514dc0a40372ea5395c'
 
 
 def run(*command):
@@ -36,6 +37,14 @@ def prepare(output, *, root=ROOT, dapper=None, dismech=None, ca=None):
     root, output = Path(root).resolve(), Path(output).absolute()
     output.mkdir(parents=True, exist_ok=False)
     try:
+        # Verify the changing public trust bundle before slower Git asset work.
+        target = output / 'rds-ca.pem'
+        if ca is None:
+            run('curl', '--fail', '--silent', '--show-error', '--location', '--proto', '=https',
+                '--tlsv1.2', RDS_CA, '--output', target)
+        else:
+            shutil.copyfile(ca, target)
+        validate_ca(target)
         lock_path = root / 'services/backend/agent-runtime/dapper-release.json'
         lock = json.loads(lock_path.read_text())
         if dapper is None:
@@ -60,13 +69,6 @@ def prepare(output, *, root=ROOT, dapper=None, dismech=None, ca=None):
                 run('git', '-C', source, 'fetch', '--filter=blob:none', '--depth', '1', 'origin', commit)
                 run('git', '-C', source, 'checkout', '--detach', 'FETCH_HEAD')
             prepare_dismech(source, index, output / 'dismech')
-        target = output / 'rds-ca.pem'
-        if ca is None:
-            run('curl', '--fail', '--silent', '--show-error', '--location', '--proto', '=https',
-                '--tlsv1.2', RDS_CA, '--output', target)
-        else:
-            shutil.copyfile(ca, target)
-        validate_ca(target)
         return {'dapper': release, 'dismech_commit': commit, 'rds_ca_sha256': RDS_CA_SHA256}
     except BaseException:
         shutil.rmtree(output)
