@@ -83,9 +83,8 @@ function AccountList({ gap, scope, onCount }: { gap: Schema<"GapRecord">; scope:
           onChange={votes => setListing(previous => previous?.binding === binding ? { ...previous, items: previous.items.map(row => row.account.id === item.account.id ? { ...row, votes } : row) } : previous)} /></div>}
         <div className="gap-account-body">
         <div className="gap-account-meta"><span>{item.attribution && "Proposed by "}<strong title={item.attribution?.user_id}>{author(item)}</strong></span>{date && <time dateTime={item.created_at}>{date}</time>}</div>
-        <h3><Link href={href}>{item.account.name || "Scientific account"}</Link></h3>
-        {item.account.closing_remarks && <p className="gap-account-synthesis">{item.account.closing_remarks}</p>}
-        <div className="gap-account-footer"><span>{item.claim_count} claim{item.claim_count === 1 ? "" : "s"}</span><Link href={href}>View scientific account <span aria-hidden="true">↗</span></Link></div>
+        <p className="gap-account-summary"><Link href={href}>{item.account.closing_remarks?.trim() || item.account.context?.trim() || item.account.name || "View saved account"}</Link></p>
+        <div className="gap-account-footer"><span>{item.claim_count} claim{item.claim_count === 1 ? "" : "s"}</span></div>
         </div>
       </article>;
     })}

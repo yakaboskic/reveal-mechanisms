@@ -28,3 +28,8 @@
 .gap-accounts-more:hover{background:#f4f7fa}.gap-accounts-empty{margin:0;padding:20px 0;border-top:1px solid #e4e9ef;color:#718091;font-size:14px;line-height:1.7}
 .gap-accounts .loading-surface{margin:12px 0}
 @media(max-width:600px){.gap-accounts{margin-top:28px}.gap-accounts-heading{gap:12px}.gap-account-meta{align-items:flex-start;gap:6px;flex-direction:column}.gap-account-card{padding:18px 0}.gap-account-card h3{font-size:20px}.gap-account-synthesis{-webkit-line-clamp:5}.gap-account-footer{gap:10px;flex-wrap:wrap}}
+
+.gap-account-summary{margin:12px 0 16px;font-size:14px;line-height:1.75;color:#5f6e7d}
+.gap-account-summary a{color:inherit;text-decoration:none}
+.gap-account-summary a:hover{color:#426fa0;text-decoration:underline;text-underline-offset:3px}
+.gap-account-summary a:focus-visible{outline:2px solid #7999c2;outline-offset:3px;border-radius:3px}

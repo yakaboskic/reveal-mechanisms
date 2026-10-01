@@ -105,6 +105,7 @@
 .research-references li{padding-left:7px;margin:0 0 20px;scroll-margin:30px;border-radius:5px}
 .account-study .research-references li p{font-size:13px;line-height:1.8;color:#66778f;margin:0 0 4px}
 .reference-title{color:#46668f;font:inherit}
+.reference-id{color:#73839a;font-size:11px;overflow-wrap:anywhere}
 .reference-meta{font-size:11px;line-height:1.7;color:#73839a}
 .formatted-reference summary{font-size:11px;padding:6px 0;color:#8291a6}
 .account-study .formatted-reference p{font-size:12px!important;color:#74849b!important}

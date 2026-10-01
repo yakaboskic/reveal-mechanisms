@@ -10,6 +10,7 @@ import { AccountPublication } from "./AccountPublication";
 import { useIdentity } from "./Session";
 import { paragraphStateFromJob } from "@/lib/paragraph-state";
 import { sourceDownloadPath } from "@/lib/source-download";
+import { CitationReference } from "./CitationReference";
 import "./scientific.css";
 
 type Document = Schema<"DapperDocument">;
@@ -206,7 +207,7 @@ export function ParagraphView({ state: savedState, accountId, onRefresh, canMana
       const metadata = result?.citation_metadata.find(item => item.target_id === reference.target_id && item.metadata_revision === reference.citation_metadata_revision);
       const href = reference.target_id.startsWith("dapper:Claim.") ? claimHref(reference.target_id, accountId) : objectHref(reference.target_id);
       const byline = metadata?.byline.map(person => person.display_name || [person.given_name, person.family_name].filter(Boolean).join(" ")).filter(Boolean).join("; ");
-      return <li key={`${reference.target_id}-${reference.citation_metadata_revision}`} id={`reference-${index + 1}`} tabIndex={-1}><p>{byline && <span>{byline}{metadata?.issued_date ? ` (${metadata.issued_date.slice(0, 4)})` : ""}. </span>}<Link className="reference-title" href={href} aria-label="Inspect cited record">{metadata?.title || reference.text}</Link></p><div className="reference-meta">{metadata ? `DAPPER ${metadata.target_class} · ${metadata.issued_date || "Date unavailable"} · ` : ""}Metadata revision {reference.citation_metadata_revision}</div><details className="formatted-reference"><summary>Formatted reference</summary><p>{reference.text}</p></details></li>;
+      return <li key={`${reference.target_id}-${reference.citation_metadata_revision}`} id={`reference-${index + 1}`} tabIndex={-1}><p>{byline && <span>{byline}{metadata?.issued_date ? ` (${metadata.issued_date.slice(0, 4)})` : ""}. </span>}<CitationReference title={metadata?.title || reference.text} href={href} targetId={reference.target_id} /></p><div className="reference-meta">{metadata ? `DAPPER ${metadata.target_class} · ${metadata.issued_date || "Date unavailable"} · ` : ""}Metadata revision {reference.citation_metadata_revision}</div><details className="formatted-reference"><summary>Formatted reference</summary><p>{reference.text}</p></details></li>;
     })}</ol></section><details className="paragraph-technical technical-disclosure"><summary>Paragraph record and citation metadata</summary><p className="idline">{paragraph.id}</p><Link href={objectHref(paragraph.id)}>Inspect paragraph record</Link><pre className="scientific-json">{JSON.stringify({ paragraph, citation_metadata: result?.citation_metadata, rendering_manifest: citations?.rendering_manifest, schema: result?.schema }, null, 2)}</pre></details></>}
     {canManage && jobId && <ParagraphActivity key={jobId} jobId={jobId} accountId={accountId} initial={snapshot} onJob={updateJob} deferred={state.status === "succeeded"} />}
     {error && (paragraph || state.status !== "succeeded") && <p role="alert" className="error">{error}</p>}
