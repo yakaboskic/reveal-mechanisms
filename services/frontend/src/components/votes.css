@@ -1,8 +1,9 @@
 .vote-control{display:inline-flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0}
 .vote-buttons{display:inline-flex;align-items:center;gap:2px;border:1px solid #dbe3ee;border-radius:8px;background:#fff;color:#526b8b;flex-shrink:0}
-.vote-buttons button{display:inline-flex;align-items:center;justify-content:center;width:36px;height:34px;border-radius:6px;padding:0;color:inherit}
-.vote-buttons button:hover{background:#edf3fb;color:#2e5d99}
-.vote-buttons button.is-selected{background:#e2edff;color:#25569a}
+.vote-buttons button{display:inline-flex;align-items:center;justify-content:center;width:36px;height:34px;border-radius:6px;padding:0;background:transparent;color:inherit}
+.vote-buttons button:hover{background:transparent;color:#2e5d99}
+.vote-buttons button.vote-up.is-selected{color:#2f7d57}
+.vote-buttons button.vote-down.is-selected{color:#b24d4d}
 .vote-score{min-width:26px;text-align:center;font-size:12px;font-weight:600;font-variant-numeric:tabular-nums}
 .vote-error{margin:0;font-size:11px;color:#974c3d;max-width:44ch;line-height:1.6}
 .vote-error button{font-size:inherit;text-decoration:underline;padding:3px}
