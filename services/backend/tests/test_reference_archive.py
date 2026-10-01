@@ -175,7 +175,9 @@ class ClassificationTests(unittest.TestCase):
                      'outcome_summary', 'outcome_publication', 'request'):
             self.assertEqual(archive.classify(kind), 'archive')
         for kind in ('request_binding', 'evidence', 'exploration', 'workspace_event', 'workspace_cursor', 'object', 'grant', 'citation',
-                     'principal', 'identity', 'citation_actor', 'reference_active', 'idempotency'):
+                     'principal', 'identity', 'citation_actor', 'reference_active', 'idempotency',
+                     # Written by votes.py on main: ballots (owner = voter) and tallies (owner = system), keyed by gap or account.
+                     'vote', 'vote_total'):
             self.assertEqual(archive.classify(kind), 'keep')
         self.assertEqual((archive.classify('draft'), archive.classify('draft_binding'), archive.classify('job')),
                          ('drop_anchored_draft', 'drop_anchored_draft', 'cancel_nonterminal'))
@@ -260,7 +262,12 @@ class CutoverTests(Repo):
         self.r1, self.j1 = self.submit(owner, self.anchored, [LEGACY_ANCHOR], display=False, result={'kind': 'analysis',
             'account_ids': [self.account_id], 'paragraph_job_ids': [], 'evidence_package_sha256': '7' * 64})
         self.account(owner, self.j1['id'], 'a', [LEGACY_ANCHOR])
-        self.r2, self.j2 = self.submit(owner, self.anchored, [LEGACY_ANCHOR], status='insufficient_evidence')
+        # Community votes (votes.py on main) on the published account: kept untouched, never stamped.
+        self.put('vote_total', digest(['account', self.account_id]), 'system', {'target_kind': 'account', 'target_id': self.account_id,
+                 'gap_id': GAP['id'], 'upvotes': 1, 'downvotes': 0})
+        self.put('vote', digest([self.other, 'account', self.account_id]), self.other, {'target_kind': 'account',
+                 'target_id': self.account_id, 'gap_id': GAP['id'], 'vote': 1, 'updated_at': T1})
+        self.r2, self.j2 =self.submit(owner, self.anchored, [LEGACY_ANCHOR], status='insufficient_evidence')
         self.outcome_id = self.outcome(owner, self.j2['id'], [LEGACY_ANCHOR])
         self.r3, self.j3 = self.submit(owner, self.anchored, [LEGACY_ANCHOR], status='queued', collected=False)
         self.r4, self.j4 = self.submit(owner, self.anchored, [LEGACY_ANCHOR], status='running', collected=True)
@@ -286,6 +293,7 @@ class CutoverTests(Repo):
         self.assertEqual(self.all_rows(), before)
         self.assertTrue(plan['ok']); self.assertEqual(plan['unknown_kinds'], []); self.assertTrue(plan['legacy_mode'])
         self.assertEqual(plan['counts_by_kind']['request'], 4); self.assertEqual(plan['actions']['draft'], 'drop_anchored_draft')
+        self.assertEqual((plan['actions']['vote'], plan['actions']['vote_total']), ('keep', 'keep'))
         self.assertEqual({item['id'] for item in plan['archive_candidates']['account']},
                          {digest([self.owner, self.account_id]), digest([self.owner, self.orphan_id])})
         self.assertEqual(len(plan['archive_candidates']['request']), 4)
@@ -365,7 +373,7 @@ class CutoverTests(Repo):
         self.assertEqual({(item['kind'], item['reason'], item['archived']) for item in report['unresolved']},
                          {('account', 'job_missing', True), ('account_membership', 'job_missing', True)})
         # Kept kinds are untouched; the unpublished publication has no summary to stamp.
-        for kind in ('job', 'queue', 'event', 'evidence', 'principal', 'analysis_outcome_by_job', 'exploration'):
+        for kind in ('job', 'queue', 'event', 'evidence', 'principal', 'analysis_outcome_by_job', 'exploration', 'vote', 'vote_total'):
             self.assertEqual({k: v for k, v in self.all_rows().items() if k[0] == kind}, {k: v for k, v in before.items() if k[0] == kind}, kind)
         self.assertEqual(self.get('publication', digest([self.other, 'x']))['version'], 1)
         self.assertEqual(report['counts'], {'account': 2, 'account_membership': 2, 'analysis_outcome': 1, 'outcome_publication': 1,

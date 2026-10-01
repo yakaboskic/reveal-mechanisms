@@ -78,7 +78,7 @@ raw/  out/  log/                    inputs / LAP outputs / run logs (git-ignored
 | all factors | `global_project_cmd` (eaggl), `global_relabel_cmd` |
 | collect | `collect_projections_cmd` (fan-in over all 711 traits) |
 | audit portal | `portal_build_db_cmd` (fan-in over all 711 traits) → `portal_export_audit_cmd`, `portal_build_html_cmd` |
-| reload, project (additive) | `db_build_cmd` → `db_embed_cmd` → `db_load_cmd` → `db_capture_cmd` |
+| reload, project | `db_build_cmd` → `db_embed_cmd` → `db_load_cmd` (additive) → `db_capture_cmd` (writes to live prefix records) |
 | reload, per target | `db_snapshot_cmd` → `db_plan_cmd` → `db_apply_cmd` (needs a hand-made approval) → `db_verify_cmd` |
 | reload, purge | `db_purge_plan_cmd` (fan-in over every target's verify) → `db_purge_cmd` (needs a hand-made approval) |
 
@@ -129,13 +129,14 @@ lap_run --only-cmd '^(prep_|collection_)' --bsub
 #    Full run: per-trait + all-factor projections, relabel, collect. Takes >24 h because of the
 #    all-factor job, so start it detached from the terminal.
 lap_run --only '^(2hrG|T2D|Ap-LM)$' --only-cmd '^trait_' --bsub
-nohup setsid perl /humgen/diabetes/users/chase/lap/trunk/bin/run.pl --meta config/cfde_projection.meta --bsub \
+nohup setsid perl /humgen/diabetes/users/chase/lap/trunk/bin/run.pl --meta config/cfde_projection.meta --bsub --skip-cmd '^db_' \
     > log/run_full.$(date +%Y%m%d_%H%M%S).txt 2>&1 < /dev/null &
 ```
 
-A full run continues into the reload stage when the projection is done: the additive `db_` steps and the
-per-target plans run on the submit host, and the run stops at "plans ready". Add `--skip-cmd '^db_'` to
-stop after the projection instead.
+Without `--skip-cmd '^db_'`, a full run continues into the reload stage when the projection is done and runs
+every ready `db_` command on the submit host, `db_capture_cmd` included, which writes into the live records of
+every allow-listed app prefix. Until the cutover round, add `--skip-cmd '^db_'` to every plain run and start
+`db_` commands only by name ([Reference reload](#reference-reload-db_-stage)).
 
 **Cluster behaviour**
 - `max_sge_batch=1` turns off UGER job arrays. LAP otherwise bundles every ready command into one array with `-tc 1000`, and `max_jobs` counts an array as a single job. With arrays off, `max_jobs=50` caps the running tasks.
@@ -149,7 +150,9 @@ stop after the projection instead.
 ```
 
 The backend venv runs them too (`../services/backend/.venv/bin/python`). `test_reload_stage.py` also checks
-that the committed meta files match the reload allow-list, so regenerate them after editing it.
+that the committed meta files match the reload allow-list, so regenerate them after editing it, and that every
+flag a `db_` command passes exists in the backend CLI (it builds the CLI's parser with the backend venv; nothing
+connects anywhere).
 
 **Checking the all-factor run against the per-trait runs.** The marginal loadings must match exactly. The joint loadings are summarised by their correlation.
 
@@ -253,16 +256,17 @@ authentication, so keep it behind the tunnel. The database is opened immutable; 
 ## Reference reload (`db_` stage)
 
 The contract is `../docs/reference-reload.md` (§7 is the CLI, §10 this stage). Every `db_` command is a
-`local cmd`: it runs `python -m reveal_backend.reference_reload` from the backend venv on the host that runs
-LAP, even under `--bsub`. Each command prints one JSON result, which is saved as its LAP output only when
+`local cmd`: run.pl itself runs `python -m reveal_backend.reference_reload` from the backend venv on the submit
+host, even under `--bsub`. `--bsub` therefore gains nothing for these steps; run LAP in tmux instead, so a dropped
+SSH session does not stop it. Each command prints one JSON result, which is saved as its LAP output only when
 the command succeeds.
 
 | scope | command | output (under `out/projects/<project>/reload/`) | effect |
 |---|---|---|---|
 | project | `db_build_cmd` | `<project>.db_build.json`, `bundles/<generation_id>/` | Pure files. Refuses unless every trait passed QC. |
-| project | `db_embed_cmd` | `<project>.db_embed.json`, `bundles/<generation_id>/vectors/` | Converts the CFDE snapshot vectors (`$cfde_embeddings_dir`) after a calibration probe through `EMBEDDING_SERVICE_URL`. |
-| project | `db_load_cmd` | `<project>.db_load.json` | **Additive.** Migration 008, the legacy generation, the new generation (complete, not active). |
-| project | `db_capture_cmd` | `<project>.db_capture.json` | **Additive.** Freezes every factor that user work in any target references, backfills `anchor_display`, cold-exports the superseded generation. |
+| project | `db_embed_cmd` | `<project>.db_embed.json`, `bundles/<generation_id>/vectors/` | Converts the CFDE snapshot vectors (`$cfde_embeddings_dir`) after a calibration probe through the embedding service, recording the pinned EAGGL embedding run's config (`reload_embedding_*`) as their space. |
+| project | `db_load_cmd` | `<project>.db_load.json` | **Additive.** Migration 008, the legacy generation, the new generation (complete, not active). Reuses the pinned EAGGL import and embedding run and adds no `eaggl_*` or `dismech_*` rows. |
+| project | `db_capture_cmd` | `<project>.db_capture.json` | **Writes to live prefix records.** Freezes every factor that user work in any target references, writes `anchor_display` backfills into the records of every allow-listed prefix (prod and QA included), cold-exports the superseded generation. Cutover round only. |
 | target | `db_snapshot_cmd` | `targets/<t>/<t>.db_snapshot.json` | Uploads and verifies the target's Upstash namespaces. Not activated. |
 | target | `db_plan_cmd` | `targets/<t>/<t>.plan.json`, `<t>.db_plan.json` | Read-only plan. Deletes any earlier `<t>.approval.json`. |
 | target | `db_apply_cmd` | `targets/<t>/<t>.db_apply.json`, `targets/<t>/backups/` | **Protected cutover.** Runs only once `<t>.approval.json` exists. |
@@ -271,14 +275,39 @@ the command succeeds.
 | project | `db_purge_cmd` | `<project>.db_purge.json` | **Protected purge** of the retired generation. Runs only once `<project>.purge.approval.json` exists. |
 
 No LAP command writes an approval file. Only the interactive `approve` subcommand does, after showing the
-plan and taking a typed `<target>:<sha12>` confirmation. An unattended run therefore stops at "plans ready".
+plan and taking a typed `<target>:<sha12>` confirmation. An unattended run therefore stops at "plans ready",
+but only after `db_capture_cmd` and the snapshots have run.
+
+**Source pins.** The deployed QA and prod backends share the scientific database
+`cyaka_reveal_mechanisms` with this stage (QA runs `ec88469` and prod `54b9a2c` as of this round). They never
+read the migration-008 tables, and they pin only the mapping run: their `/readyz` returns 503 unless there is
+exactly one complete DisMech import and exactly one complete embedding run of the pinned EAGGL import. A load
+must therefore never add `eaggl_*` or `dismech_*` rows. The cfg's CONFIGURATION section pins what they serve:
+
+| cfg key | value | passed as |
+|---|---|---|
+| `reload_mapping_run_id` | `272cfa19…` | `REVEAL_MAPPING_RUN_ID` (every `db_` command) |
+| `reload_eaggl_embedding_run_id` | `d4c03009…` | `REVEAL_EMBEDDING_RUN_ID` (every `db_` command); `load --eaggl-embedding-run-id` |
+| `reload_dismech_import_id` | `4062563d…` | `REVEAL_DISMECH_IMPORT_ID` (every `db_` command) |
+| `reload_eaggl_import_id` | `a548ad80…` (`legacy-711-trait-capped-union`, 4,037 factors) | `load --eaggl-import-id` |
+| `reload_embedding_model`, `_model_revision`, `_provider`, `_service_url` | the EAGGL embedding run's config (`../data/eaggl/2026-09-25/embedding-generation.json`) | `embed --model --model-revision --provider --service-url` |
+
+The CLI loads `.env` without overriding the shell, so these exports win. The pins are config defaults, not
+proof: `preflight` reads the live database and blocks unless they select exactly one complete source each.
+`load` refuses a bundle whose embedding space differs from the pinned EAGGL embedding run's config.
 
 **Before the first run**
 - The repo-root `.env` (0600, git-ignored) holds the secrets and settings: `REVEAL_MYSQL_*`,
-  `UPSTASH_VECTOR_*`, `EMBEDDING_*` and `REVEAL_S3_*`. The CLI loads it itself; the cfg and meta hold none.
-  Without `REVEAL_S3_BUCKET` the cold export is written locally, and the purge refuses it while a
-  production target is allow-listed.
-- Export `AWS_PROFILE` (S3 cold export, Aurora snapshot). `mysqldump` must be on `PATH` (or set
+  `UPSTASH_VECTOR_*`, `EMBEDDING_*`, `REVEAL_ARTIFACT_STORE` and `REVEAL_S3_*`. The CLI loads it itself; the
+  cfg and meta hold none.
+- `REVEAL_MYSQL_CA_FILE` must point at the AWS RDS global CA bundle
+  (`https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem`). The reviewed sha256 pin is
+  `RDS_CA_SHA256` in `scripts/platform_assets.py` on main; `sha256sum` of the file must print it.
+- S3 is used only with `REVEAL_ARTIFACT_STORE=s3` (plus `REVEAL_S3_BUCKET`); `REVEAL_S3_BUCKET` alone does not
+  switch it. Without it the cold export is written locally, and the purge refuses a local export while a
+  production target is allow-listed. `snapshot` needs `REVEAL_ARTIFACT_STORE=s3` and
+  `UPSTASH_VECTOR_WRITE_TOKEN`.
+- Export `AWS_PROFILE` (S3, Aurora snapshot). `mysqldump` must be on `PATH` (or set
   `REVEAL_MYSQLDUMP`).
 - The commands set `REVEAL_APPLICATION_TABLE_PREFIX` and `REVEAL_VECTOR_ENVIRONMENT` from the
   `reload_target` instance and unset them for project-level steps. A shell value never selects a target.
@@ -292,15 +321,91 @@ plan and taking a typed `<target>:<sha12>` confirmation. An unattended run there
   credentials), the Aurora snapshot (or the cluster to snapshot) and the verified Vector snapshot. A missing
   client or snapshot therefore refuses before any job is cancelled.
 
-**Runbook** (from this directory)
+**Shell helpers.** Start tmux first and define them inside it, from this directory. `reload` runs the CLI
+with the same pins the `db_` commands export.
 
 ```bash
+tmux new -s reload    # the db_ commands run inside run.pl on this host; tmux keeps them alive
 alias lap_run='perl /humgen/diabetes/users/chase/lap/trunk/bin/run.pl --meta config/cfde_projection.meta'
-reload() { ../services/backend/.venv/bin/python -m reveal_backend.reference_reload "$@"; }
-sha() { python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["plan_sha256"])' "$1"; }
+pin() { sed -n "s/^$1=//p" config/cfde_projection.cfg; }
+reload() {
+    env -u REVEAL_APPLICATION_TABLE_PREFIX -u REVEAL_VECTOR_ENVIRONMENT \
+        REVEAL_MAPPING_RUN_ID=$(pin reload_mapping_run_id) REVEAL_EMBEDDING_RUN_ID=$(pin reload_eaggl_embedding_run_id) \
+        REVEAL_DISMECH_IMPORT_ID=$(pin reload_dismech_import_id) \
+        ../services/backend/.venv/bin/python -m reveal_backend.reference_reload "$@"
+}
+eaggl_pins() { echo --eaggl-import-id $(pin reload_eaggl_import_id) --eaggl-embedding-run-id $(pin reload_eaggl_embedding_run_id); }
+field() { python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))[sys.argv[2]])' "$1" "$2"; }
 R=out/projects/eaggl_capped__cfde_2026_09_28/reload
+P=$R/eaggl_capped__cfde_2026_09_28
+```
 
-# 1. Additive project steps, then every target's snapshot and plan. Stops at "plans ready".
+**Load round (this round): load the generation, change nothing an app reads**
+
+```bash
+# 0. Create the reload directories (out/projects/<project>/reload/ and one per target), once.
+lap_run --mkdir
+
+# 1. Before: read-only server, grants, lock, reference tables, prefixes, eaggl_*/dismech_* inventory and
+#    the pinned sources. It must print ok: true; read its warnings.
+reload preflight $(eaggl_pins) --check-embedding-service --out $R/preflight.before.json
+
+# 2. Bundle and CFDE vectors (files only; embed calls the embedding service for its calibration probe).
+lap_run --only-cmd '^db_(build|embed)_cmd$'
+
+# 3. Load dry run by hand, with the pins. Read the JSON: no `refused`, `embedding_space_matches_run` true,
+#    `eaggl` names the pinned import and embedding run, `expected` holds the bundle counts.
+B=$(field $P.db_build.json bundle)
+reload load --bundle $B $(eaggl_pins)
+
+# 4. The load itself: additive, the new generation is complete and active nowhere.
+lap_run --only-cmd '^db_load_cmd$'
+
+# 5. After: the same checks, compared with step 1. Only new migration-008 tables and rows may appear; a changed
+#    row count of a source table (eaggl_*/dismech_* imports and runs, gene_set_imports), a changed served source
+#    or any other new or removed table is a blocker.
+reload preflight --bundle $B $(eaggl_pins) --compare $R/preflight.before.json --out $R/preflight.after.json
+reload status
+```
+
+Stop there. Until the cutover round, never run `lap_run --only-cmd '^db_'`, and never run a plain `lap_run`
+without `--skip-cmd '^db_'`. Either continues into `db_capture_cmd`, whose `capture --apply` writes
+`anchor_display` backfills into the live records of every allow-listed prefix, prod and QA included, and then
+into the per-target snapshots.
+
+**Rolling back the load.** `abandon` removes a KPN generation that never served (status `loading`, `failed`
+or `complete`): its rows child-first, its embedding space when no other generation uses it, then its
+`reference_generations` row. It is valid only before any capture or snapshot. It refuses once an allow-listed
+prefix is active on the generation or once `vector_bindings` or `archived_reference_factors` hold rows of it, and
+it never undoes what capture or snapshot wrote elsewhere (prefix records, the cold export, Upstash namespaces).
+`--apply` is interactive: it holds the reload lock and asks for the first 12 characters of the id.
+
+```bash
+G=$(field $P.db_build.json generation_id)    # the load's id; a failed load leaves only $P.db_load.json.part
+reload abandon --generation $G               # dry run: what it would delete
+reload abandon --generation $G --apply       # type the first 12 characters of $G when asked
+rm -f $P.db_load.json $P.db_load.json.part   # so LAP loads again later
+```
+
+Add `--drop-empty-schema` to then drop the migration-008 tables, returning the schema to its state before the
+first load. It drops them only when nothing but legacy registrations remains in them and no allow-listed prefix
+holds reload records (`reference_active`, `reference_control`, `reference_reload`, `reference_archive_run`); the
+dry run lists what it would drop. The deployed apps do not read those tables, so neither form affects them.
+
+**Cutover round (later)**
+
+This round writes to app state, so it has its own preconditions:
+- Run it from the merged code on main.
+- Deploy the merged code to a target's prefix before applying it. Older code returns 503 for semantic search
+  against a KPN snapshot.
+- Back up every allow-listed prefix's records first: `db_capture_cmd` (`capture --apply`) writes
+  `anchor_display` backfills into all of them, prod and QA included, before any approval is asked for.
+- Set `REVEAL_ARTIFACT_STORE=s3` and `UPSTASH_VECTOR_WRITE_TOKEN` for the snapshots.
+
+```bash
+sha() { field "$1" plan_sha256; }
+
+# 1. Capture, then every target's snapshot and plan. Stops at "plans ready".
 lap_run --only-cmd '^db_'
 reload status
 
@@ -321,7 +426,6 @@ unset REVEAL_RELOAD_PRODUCTION_APPROVAL
 
 # 5. Once every target has verified, that run also wrote the purge plan. The allow-list has a production
 #    target, so the purge needs the production flags too.
-P=$R/eaggl_capped__cfde_2026_09_28
 export REVEAL_RELOAD_PRODUCTION_APPROVAL=$(sha $P.purge_plan.json)
 reload approve --allow-production --plan $P.purge_plan.json --out $P.purge.approval.json
 lap_run --only-cmd '^db_'
@@ -333,6 +437,8 @@ reload status
   target.
 - `approve` refuses plans with blockers. `apply` and `purge-retired` refuse before changing anything on
   plan drift, a changed allow-list entry, or an approval of a different plan.
+- After any capture or snapshot, do not use `abandon`. A generation that no target activates is never
+  served, so leaving its plan unapproved is enough.
 
 **When a step fails.** A failed or refused step leaves its JSON result (with `refused` or `ok: false`) in
 `<output>.part` and in the LAP log, plus LAP's `.error` marker. Fix the cause, delete the marker, and
@@ -347,13 +453,14 @@ rerun. If `apply` fails after closing the reload gate, it reopens the gate and w
 **Re-planning a target.** Delete `targets/<t>/<t>.db_plan.json` and rerun LAP. The new plan deletes the
 old approval, so approve it again. LAP also re-plans on its own when anything upstream is rebuilt.
 
-**The next reload** (after the projection is regenerated). Follow the same runbook. The default
-`reload_from_generation` meta key, `active`, makes `db_capture_cmd` run `capture --from active`: the CLI
-resolves the one generation every allow-listed target serves now (the legacy `cfde-inc-v2` generation that
-`db_load_cmd` registers while targets are in legacy mode), freezes and cold-exports it, and refuses when
-targets serve different generations (finish or roll back the previous rollout first). To pin it instead,
-rerun `build_meta_yaml.py` with `--reload-from-generation <generation id>` (or `legacy`) and regenerate the
-`.meta`. The rebuilt chain writes new plans, which delete the old approvals.
+**The next reload** (after the projection is regenerated). Follow the same two rounds. First check that the
+`reload_*` pins still name what the deployed apps serve (`preflight` blocks otherwise) and update them in the cfg
+if they changed. The default `reload_from_generation` meta key, `active`, makes `db_capture_cmd` run
+`capture --from active`: the CLI resolves the one generation every allow-listed target serves now (the legacy
+`cfde-inc-v2` generation that `db_load_cmd` registers while targets are in legacy mode), freezes and
+cold-exports it, and refuses when targets serve different generations (finish or roll back the previous rollout
+first). To pin it instead, rerun `build_meta_yaml.py` with `--reload-from-generation <generation id>` (or
+`legacy`) and regenerate the `.meta`. The rebuilt chain writes new plans, which delete the old approvals.
 
 ## Environment and versions
 

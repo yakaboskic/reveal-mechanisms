@@ -1,8 +1,9 @@
 """Tests for the reference-reload (db_) stage: build_meta_yaml.py's reload_target instances and the cfg commands.
 
 The cfg checks encode LAP rules that a `--check` dry run does not flag: a bare `$dir_key` keeps its @instance
-placeholder in command text, approval files must never be produced by a command, and every db_ command writes its
-JSON result only on success. Run with:
+placeholder in command text, approval files must never be produced by a command, every db_ command writes its
+JSON result only on success and exports the served source pins, and every flag it passes exists in the backend CLI.
+Run with:
   /humgen/diabetes2/users/chase/projects/reveal-mechanisms/services/backend/.venv/bin/python -B -m unittest discover -s lap/scripts/tests
 """
 
@@ -21,6 +22,7 @@ from projection_workflow import WorkflowError  # noqa: E402
 CFG = os.path.join(bm.LAP_DIR, "config", "cfde_projection.cfg")
 META_YAML = os.path.join(bm.LAP_DIR, "config", "cfde_projection.meta.yaml")
 META = os.path.join(bm.LAP_DIR, "config", "cfde_projection.meta")
+README = os.path.join(bm.LAP_DIR, "README.md")
 LAP_COMMON_CFG = "/humgen/diabetes/users/chase/lap/trunk/config/common.cfg"
 DB_CMDS = {  # cmd key -> (class level, JSON result file key)
     "db_build_cmd": ("project", "db_build_file"), "db_embed_cmd": ("project", "db_embed_file"),
@@ -31,6 +33,25 @@ DB_CMDS = {  # cmd key -> (class level, JSON result file key)
 }
 META_KEYS = {"reveal_repo_dir", "cfde_embeddings_dir", "reload_from_generation", "base_dir", "unix_out_dir", "log_dir",
              "raw_dir", "eaggl_share_dir", "cfde_snapshot", "cfde_dir", "kpn_dir", "lap_home", "web_out_dir", "default_umask"}
+# The sources the deployed QA and prod apps serve from the shared database (preflight confirms them live).
+SOURCE_PINS = {
+    "reload_mapping_run_id": "272cfa19d093257863d7e7134776229dbc9b9b018d974e6b311285686833ec31",
+    "reload_dismech_import_id": "4062563df48bbc8aa418b7add0af083115184e70c1d909e66ab70d505087e395",
+    "reload_eaggl_import_id": "a548ad801c11551de74f04a4cb2ecce65e776a443d2730a01ec6e17d89a6f1bc",
+    "reload_eaggl_embedding_run_id": "d4c0300978778453c847c7c3447a316e55b1b0cfe469c647f148ecc1a77f57d7",
+    "reload_embedding_model": "pritamdeka/BioBERT-mnli-snli-scinli-scitail-mednli-stsb",
+    "reload_embedding_model_revision": "unspecified",
+    "reload_embedding_provider": "huggingface",
+    "reload_embedding_service_url": "https://embedding-service-27386110942.us-east1.run.app",
+}
+PIN_ENV = {"REVEAL_MAPPING_RUN_ID": "reload_mapping_run_id", "REVEAL_EMBEDDING_RUN_ID": "reload_eaggl_embedding_run_id",
+           "REVEAL_DISMECH_IMPORT_ID": "reload_dismech_import_id"}
+CLI_FLAGS = {  # cmd key -> the pinned flags it must pass
+    "db_embed_cmd": {"--model": "reload_embedding_model", "--model-revision": "reload_embedding_model_revision",
+                     "--provider": "reload_embedding_provider", "--service-url": "reload_embedding_service_url"},
+    "db_load_cmd": {"--eaggl-import-id": "reload_eaggl_import_id", "--eaggl-embedding-run-id": "reload_eaggl_embedding_run_id"},
+}
+BACKEND_PYTHON = os.path.join(bm.REPO_DIR, "services", "backend", ".venv", "bin", "python")
 
 
 def read_cfg(path=CFG):
@@ -226,6 +247,72 @@ class ReloadCfgTest(unittest.TestCase):
             self.assertIn(runner, self.cmds[key][1], key)
         self.assertFalse(re.search(r"(PASSWORD|TOKEN|SECRET|API_KEY)\s*=", read(CFG)), "secrets belong in .env")
 
+    def test_source_pins_are_the_served_ids(self):
+        for key, value in SOURCE_PINS.items():
+            self.assertEqual(self.decl[key], ([], value, ""), key)
+        # The committed load records of the served EAGGL embedding run and mapping run agree with the pins.
+        with open(os.path.join(bm.REPO_DIR, "data", "eaggl", "2026-09-25", "embedding-generation.json")) as fh:
+            run = json.load(fh)
+        self.assertEqual((run["import_id"], run["run_id"]),
+                         (SOURCE_PINS["reload_eaggl_import_id"], SOURCE_PINS["reload_eaggl_embedding_run_id"]))
+        for field in ("model", "model_revision", "provider", "service_url"):
+            self.assertEqual(run["config"][field], SOURCE_PINS["reload_embedding_" + field], field)
+        with open(os.path.join(bm.REPO_DIR, "data", "eaggl-cfde-mapping", "2026-09-25", "database-load.json")) as fh:
+            self.assertEqual(json.load(fh)["run_id"], SOURCE_PINS["reload_mapping_run_id"])
+
+    def test_both_runners_export_the_source_pins(self):
+        pins = {name: SOURCE_PINS[key] for name, key in PIN_ENV.items()}
+        target_env = {"REVEAL_APPLICATION_TABLE_PREFIX": "!{prop::reload_target:app_prefix}",
+                      "REVEAL_VECTOR_ENVIRONMENT": "!{prop::reload_target:vector_env}"}
+        expected = {"reveal_project_cmd": (["REVEAL_APPLICATION_TABLE_PREFIX", "REVEAL_VECTOR_ENVIRONMENT"], pins),
+                    "reveal_target_cmd": ([], dict(target_env, **pins))}
+        for key, (unset_expected, assigned_expected) in expected.items():
+            with self.subTest(runner=key):
+                words = self.expand("$" + key).split()
+                self.assertEqual(words[0], "env")
+                rest, unset, assigned = words[1:], [], {}
+                while rest[0] == "-u":  # env [-u NAME]... [NAME=VALUE]... COMMAND
+                    unset.append(rest[1])
+                    rest = rest[2:]
+                while "=" in rest[0]:
+                    name, _, value = rest[0].partition("=")
+                    assigned[name] = value
+                    rest = rest[1:]
+                self.assertEqual((unset, assigned), (unset_expected, assigned_expected))
+                self.assertEqual(rest[:4], ["<reveal_repo_dir>/services/backend/.venv/bin/python", "-B", "-m",
+                                            "reveal_backend.reference_reload"])
+
+    def test_embed_and_load_pass_the_pinned_sources(self):
+        for key, flags in CLI_FLAGS.items():
+            value = self.cmds[key][1]
+            for flag, pin in flags.items():
+                with self.subTest(cmd=key, flag=flag):
+                    self.assertIn(" %s $%s " % (flag, pin), value)
+                    self.assertEqual(value.count(" %s " % flag), 1)
+
+    def test_every_flag_a_db_command_passes_exists_in_the_cli(self):
+        if not os.path.isfile(BACKEND_PYTHON):
+            self.skipTest("backend venv missing: %s" % BACKEND_PYTHON)
+        # Only builds the argparse parser: nothing loads .env or connects anywhere.
+        code = ("import argparse, json\n"
+                "from reveal_backend.reference_reload import parser\n"
+                "sub = next(a for a in parser()._actions if isinstance(a, argparse._SubParsersAction))\n"
+                "print(json.dumps({name: sorted(o for a in p._actions for o in a.option_strings)"
+                " for name, p in sub.choices.items()}))\n")
+        env = dict(os.environ, PYTHONPATH=os.path.join(bm.REPO_DIR, "services", "backend", "src"), PYTHONDONTWRITEBYTECODE="1")
+        out = subprocess.run([BACKEND_PYTHON, "-B", "-c", code], capture_output=True, text=True, env=env, timeout=120)
+        self.assertEqual(out.returncode, 0, out.stderr[-2000:])
+        options = json.loads(out.stdout)
+        for key in DB_CMDS:
+            with self.subTest(cmd=key):
+                value = self.cmds[key][1]
+                match = re.search(r"\$reveal_(?:project|target)_cmd ([a-z-]+)", value)
+                command, text = match.group(1), self.expand(value[match.end():])
+                self.assertIn(command, options)
+                flags = set(re.findall(r"(?<![\w-])--[a-z][a-z0-9-]*", text))
+                self.assertTrue(flags)
+                self.assertEqual(sorted(flags - set(options[command])), [])
+
     def test_json_getter_prints_one_field(self):
         getter = self.decl["reload_json_get"][1].replace("$reveal_python", sys.executable)
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as fh:
@@ -262,6 +349,15 @@ class ReloadCfgTest(unittest.TestCase):
                 result = subprocess.run(["bash", "-c", shell], capture_output=True, text=True)
                 self.assertEqual((result.returncode == 0, os.path.exists(out)), (exists, exists))
             self.assertTrue(os.path.exists(out + ".part"))
+
+    def test_readme_rollback_takes_the_generation_from_the_build_result(self):
+        # A failed or refused load leaves only db_load_file.part (no generation_id): the build result always has the
+        # id, and it is the id load uses.
+        self.assertEqual((self.decl["db_build_file"][1], self.decl["db_load_file"][1]), ("@project.db_build.json", "@project.db_load.json"))
+        block = re.search(r"\*\*Rolling back the load\.\*\*.*?```bash\n(.*?)```", read(README), re.S).group(1)
+        self.assertIn("G=$(field $P.db_build.json generation_id)", block)
+        self.assertNotIn("db_load.json generation_id", block)
+        self.assertIn("rm -f $P.db_load.json $P.db_load.json.part", block)
 
 
 class GeneratedMetaTest(unittest.TestCase):

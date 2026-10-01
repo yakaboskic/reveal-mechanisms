@@ -5,6 +5,7 @@ records are SQLite repositories, and reference_archive / Upstash / RDS / mysqldu
 """
 import csv
 import gzip
+import hashlib
 import io
 import json
 import re
@@ -17,6 +18,7 @@ import pytest
 from reveal_backend import redis_notifications
 from reveal_backend import reference_generation as rg
 from reveal_backend import reference_reload as rr
+from reveal_backend.embedding_client import DEFAULT_SERVICE_URL
 from reveal_backend.repository import Repository, digest
 from reveal_backend.vector_ingestion import VectorRegistry
 
@@ -308,30 +310,63 @@ def built_bundle(tmp_path):
     return bundle, built['generation_id']
 
 
-def load_db(bundle, *, eaggl=True):
+def run_row(**changes):
+    """(config, dimensions) of the served EAGGL embedding run; None drops a key. Matches built_bundle's space."""
+    config = {'import_id': 'e' * 64, 'model': 'm', 'model_revision': 'unspecified', 'provider': 'huggingface',
+              'service_url': DEFAULT_SERVICE_URL.rstrip('/') + '/', 'template': 'factor-label-v1', **changes}
+    return json.dumps({key: value for key, value in config.items() if value is not None}), 8
+
+
+def mysql_json(text):
+    """A JSON column as MySQL returns it: keys reordered (length first) and spaced."""
+    value = json.loads(text)
+    return json.dumps(dict(sorted(value.items(), key=lambda item: (len(item[0]), item[0]))), separators=(', ', ': '))
+
+
+def sha(data): return hashlib.sha256(data).hexdigest()
+
+
+def load_db(bundle, *, eaggl=True, run=None):
     factors = list(rr.read_jsonl(bundle / 'reference_factors.jsonl.gz'))
-    inserted = {}
+    inserted, stored = {}, {}
     def many(sql, rows):
-        table = re.match(r'MANY INSERT INTO (\w+)', sql)
-        if table: inserted[table[1]] = inserted.get(table[1], 0) + len(rows)
+        table = re.match(r'MANY INSERT INTO (\w+) \((.+?)\) VALUES', sql)
+        if table:
+            inserted[table[1]] = inserted.get(table[1], 0) + len(rows)
+            stored.setdefault(table[1], []).extend(dict(zip(table[2].split(','), row)) for row in rows)
     def insert_generation(sql, params):
         db.generations[params[0]] = generation(params[0], params[1], 'loading', model=params[2], manifest=json.loads(params[6]))
         return 1
     def count(sql, params):
         table = re.search(r'FROM (\w+) WHERE generation_id', sql)[1]
         return [(inserted.get(table, 0),)]
+    def bad_vectors(sql, params):
+        return [(sum(len(r['vector']) != params[1] or sha(r['vector']) != r['vector_sha256'] or sha(r['input_text'].encode()) != r['input_sha256']
+                     for r in stored.get('reference_vectors', [])),)]
+    def per_factor(sql, params):
+        counts = {}
+        for r in stored.get('factor_gene_set_projections', []): counts[r['factor_key']] = counts.get(r['factor_key'], 0) + 1
+        return sorted(counts.items())
+    def sample(sql, params):
+        key, columns, table = re.match(r'SELECT (\w+),(\S+) FROM (\w+) WHERE', sql).groups()
+        return [(r[key], *(mysql_json(r[c]) if c == 'metadata' else r[c] for c in columns.split(','))) for r in stored.get(table, []) if r[key] in params[1:]]
     db = FakeDB(rules=[
         (r'^MANY ', many),
         (r'FROM eaggl_cfde_link_runs', [('a' * 64, 'e' * 64, '2' * 64)]),
         (r'FROM eaggl_embedding_runs WHERE import_id', [('f' * 64,)]),
+        (r'FROM eaggl_embedding_runs WHERE run_id', lambda sql, params: [run or run_row()] if params[0] == 'f' * 64 else []),
         (r'FROM dismech_imports', [('1' * 64,)]),
         (r'FROM eaggl_imports WHERE', [('e' * 64, 'complete', rr.DEFAULT_EAGGL_SOURCE_VERSION)] if eaggl else []),
         (r'SELECT factor_id,input_sha256 FROM eaggl_factors', [(f['eaggl_factor_id'], f['input_sha256']) for f in factors]),
         (r'SELECT input_sha256 FROM eaggl_name_embeddings', [(f['input_sha256'],) for f in factors]),
         (r'^INSERT INTO reference_generations', insert_generation),
         (r'LEFT JOIN kpn_traits', [(0,)]),
+        (r'LENGTH\(vector\)', bad_vectors),
+        (r'^SELECT factor_key,COUNT\(\*\) FROM factor_gene_set_projections', per_factor),
+        (r'^SELECT \w+,\S+ FROM (cfde_gene_sets|reference_factors) WHERE generation_id=%s AND \w+ IN', sample),
         (r'SELECT COUNT\(\*\) FROM \w+ WHERE generation_id=%s', count),
         (r'^SHOW WARNINGS', [])])
+    db.stored, db.sample, db.per_factor = stored, sample, per_factor
     return db
 
 
@@ -340,12 +375,22 @@ def test_load_dry_run_writes_nothing_and_apply_inserts_generation(tmp_path):
     db = load_db(bundle)
     services = fake_services(tmp_path, connect=lambda: db)
     dry = rr.load_bundle(services, bundle, apply=False)
-    assert dry['eaggl']['eaggl_import_id'] == 'e' * 64 and dry['expected']['reference_vectors'] == 5
-    assert not [sql for sql, _ in db.log if re.match(r'(INSERT|UPDATE|DELETE|CREATE)', sql)] and db.commits == 0
+    assert dry['eaggl']['eaggl_import_id'] == 'e' * 64 and dry['expected']['reference_vectors'] == 5 and dry['embedding_space_matches_run'] is True
+    assert not [sql for sql, _ in db.log if re.match(r'(INSERT|UPDATE|DELETE|CREATE|SET SESSION)', sql)] and db.commits == 0
     result = rr.load_bundle(services, bundle, apply=True)
     assert result['status'] == 'complete' and result['counts'] == {'kpn_traits': 2, 'reference_factors': 3, 'cfde_collections': 2,
                                                                   'cfde_gene_sets': 3, 'projections': 9, 'reference_vectors': 5}
     assert result['legacy_generation_id'] == LEGACY and db.statements(r'^CREATE TABLE IF NOT EXISTS reference_generations')
+    assert result['embedding_space_matches_run'] is True
+    # MySQL JSON reorders keys: the sampled rows still read back equal as parsed values.
+    assert result['readback'] == {'vectors_checked': True, 'projection_factors': 3, 'sampled': {'cfde_gene_sets': 3, 'reference_factors': 3}}
+    readback = db.statements(r'LENGTH\(vector\)')[0]
+    assert readback[1] == (gen, 32) and 'LOWER(SHA2(vector,256))<>vector_sha256' in readback[0] and 'LOWER(SHA2(input_text,256))<>input_sha256' in readback[0]
+    # Strict mode right after the migration, before the lock and every insert.
+    log = [sql for sql, _ in db.log]
+    strict = log.index("SET SESSION sql_mode = CONCAT_WS(',', NULLIF(@@SESSION.sql_mode, ''), 'STRICT_ALL_TABLES')")
+    assert max(i for i, sql in enumerate(log) if sql.startswith('CREATE TABLE')) < strict < log.index('SELECT GET_LOCK(%s,%s)')
+    assert strict < min(i for i, sql in enumerate(log) if sql.startswith('INSERT'))
     order = [re.match(r'INSERT INTO (\w+)', sql)[1] for sql, _ in db.log if re.match(r'INSERT INTO \w+ \(', sql)]
     assert order == ['kpn_traits', 'reference_factors', 'cfde_gene_set_collections', 'cfde_gene_sets', 'factor_gene_set_projections', 'reference_vectors']
     assert db.generations[gen]['status'] == 'complete' and db.generations[gen]['model'] == rg.KPN_MODEL
@@ -358,14 +403,551 @@ def test_load_dry_run_writes_nothing_and_apply_inserts_generation(tmp_path):
 def test_load_requires_complete_eaggl_import_and_never_marks_complete_on_count_mismatch(tmp_path):
     bundle, gen = built_bundle(tmp_path)
     db = load_db(bundle, eaggl=False)
-    with pytest.raises(rr.Refused, match='import_eaggl_factors.py'):
+    with pytest.raises(rr.Refused, match='import_eaggl_factors.py') as refused:  # unpinned: the instructions, and the warning
         rr.load_bundle(fake_services(tmp_path, connect=lambda: db), bundle, apply=True)
-    assert gen not in db.generations
+    assert str(refused.value).endswith(rr.EAGGL_STOP)
+    assert gen not in db.generations and not db.statements(r'^(CREATE|SET SESSION|INSERT)|GET_LOCK')  # refused before any write
     db = load_db(bundle)
     db.rules.insert(0, (r'SELECT COUNT\(\*\) FROM reference_vectors WHERE generation_id', [(4,)]))
     with pytest.raises(rr.Refused, match='differ from the bundle'):
         rr.load_bundle(fake_services(tmp_path, connect=lambda: db), bundle, apply=True)
     assert db.generations[gen]['status'] == 'failed'
+
+
+def test_pinned_eaggl_refusals_say_stop_and_never_suggest_reimporting(tmp_path):
+    bundle, gen = built_bundle(tmp_path)
+    factors = list(rr.read_jsonl(bundle / 'reference_factors.jsonl.gz'))
+    def refusal(db, environ=None, **pins):
+        with pytest.raises(rr.Refused) as refused:
+            rr.eaggl_source(fake_services(tmp_path, environ={**ENV, **(environ or {})}), db, factors, **pins)
+        message = str(refused.value)
+        assert message.endswith(rr.EAGGL_STOP)
+        return message
+    assert 'import_eaggl_factors.py' in refusal(load_db(bundle, eaggl=False))
+    pinned = [refusal(load_db(bundle, eaggl=False), import_id='e' * 64),
+              refusal(load_db(bundle, eaggl=False), environ={'REVEAL_EMBEDDING_RUN_ID': 'f' * 64})]
+    db = load_db(bundle)
+    db.rules.insert(0, (r'SELECT factor_id,input_sha256 FROM eaggl_factors', [(factors[0]['eaggl_factor_id'], 'x' * 64)]))
+    pinned.append(refusal(db, run_id='f' * 64))
+    assert pinned[-1].startswith("Stop: the pinned EAGGL import eeeeeeeeeeee does not carry this bundle's factors/labels (3 differ")
+    pinned.append(refusal(load_db(bundle), run_id='9' * 64))  # the pinned run is not a complete run of the import
+    db = load_db(bundle)
+    db.rules.insert(0, (r'SELECT input_sha256 FROM eaggl_name_embeddings', []))
+    pinned.append(refusal(db, environ={'REVEAL_EMBEDDING_RUN_ID': 'f' * 64}))
+    assert all(message.startswith('Stop: ') and 'import_eaggl_factors.py' not in message for message in pinned), pinned
+    assert 'lacks 3 factor label vectors' in pinned[-1]
+    with pytest.raises(rr.Refused, match='Stop: .* not one'):
+        rr.load_bundle(fake_services(tmp_path, connect=lambda: load_db(bundle)), bundle, apply=False, eaggl_embedding_run_id='9' * 64)
+
+
+@pytest.mark.parametrize('apply', [False, True])
+def test_load_refuses_before_any_write_unless_register_legacy_selects_the_same_source(tmp_path, apply):
+    bundle, gen = built_bundle(tmp_path)
+    # The served mapping run uses another EAGGL import than the one pinned by argument.
+    db = load_db(bundle)
+    db.rules.insert(0, (r'FROM eaggl_cfde_link_runs', [('a' * 64, '8' * 64, '2' * 64)]))
+    with pytest.raises(rr.Refused, match=r'^Stop: the served mapping run aaaaaaaaaaaa uses EAGGL import 888888888888 and embedding run ffffffffffff '
+                                         r'\(REVEAL_EMBEDDING_RUN_ID\), not the selected import eeeeeeeeeeee and run ffffffffffff'):
+        rr.load_bundle(fake_services(tmp_path, connect=lambda: db), bundle, apply=apply, eaggl_import_id='e' * 64)
+    assert gen not in db.generations and not db.statements(r'^(CREATE|INSERT|UPDATE|DELETE|SET SESSION)|GET_LOCK')
+    # A stale REVEAL_EMBEDDING_RUN_ID while the argument names the served run.
+    db = load_db(bundle)
+    services = fake_services(tmp_path, connect=lambda: db, environ={**ENV, 'REVEAL_EMBEDDING_RUN_ID': '7' * 64})
+    with pytest.raises(rr.Refused, match=r'pin REVEAL_EMBEDDING_RUN_ID'):
+        rr.load_bundle(services, bundle, apply=apply, eaggl_embedding_run_id='f' * 64)
+    assert gen not in db.generations and not db.statements(r'^(CREATE|INSERT|UPDATE|DELETE|SET SESSION)|GET_LOCK')
+
+
+@pytest.mark.parametrize('apply', [False, True])
+def test_load_refuses_a_bundle_embedded_outside_the_served_run_space(tmp_path, apply):
+    bundle, gen = built_bundle(tmp_path)
+    other = 'https://embedding-service.example.run.app'
+    for run, differ in ((run_row(model='pritamdeka/BioBERT', service_url=other + '/'), "['model', 'service_url_sha256']"),
+                        (run_row(model_revision='abc123', provider='openai'), "['model_revision', 'provider']"),
+                        ((run_row()[0], 768), "['dimensions']")):
+        db = load_db(bundle, run=run)
+        with pytest.raises(rr.Refused, match=re.escape(f'differs from EAGGL embedding run ffffffffffff in {differ}')) as refused:
+            rr.load_bundle(fake_services(tmp_path, connect=lambda: db), bundle, apply=apply)
+        config = json.loads(run[0])
+        # The run's own settings, and the URL itself (not a secret), to re-embed with.
+        assert (f"--model {config['model']} --model-revision {config.get('model_revision', 'unspecified')} "
+                f"--provider {config.get('provider', 'huggingface')} --service-url {config['service_url'].rstrip('/')}") in str(refused.value)
+        assert f'Move {bundle}/vectors aside' in str(refused.value)
+        assert gen not in db.generations and not db.statements(r'^(CREATE|INSERT|UPDATE|DELETE|SET SESSION)|GET_LOCK')
+    # A config that omits the revision and provider means embed_capture's defaults; it matches.
+    db = load_db(bundle, run=run_row(model_revision=None, provider=None))
+    result = rr.load_bundle(fake_services(tmp_path, connect=lambda: db), bundle, apply=apply)
+    assert result['embedding_space_matches_run'] is True and result.get('status', 'complete') == 'complete'
+
+
+@pytest.mark.parametrize('tamper, message', [
+    ('vectors', r'1 reference vectors differ from their length or checksums'),
+    ('projections', r"projection counts differ for 1 factors, e\.g\. \['KPN\.TRAIT:0000398::Factor1'\]"),
+    ('label', r'1 sampled reference_factors rows differ'),
+    ('metadata', r'1 sampled cfde_gene_sets rows differ'),
+    ('missing', r'1 sampled cfde_gene_sets rows differ')])
+def test_load_readback_failure_marks_the_generation_failed(tmp_path, tamper, message):
+    bundle, gen = built_bundle(tmp_path)
+    db = load_db(bundle)
+    if tamper == 'vectors':
+        db.rules.insert(0, (r'LENGTH\(vector\)', [(1,)]))
+    elif tamper == 'projections':
+        db.rules.insert(0, (r'^SELECT factor_key,COUNT', lambda sql, p: [(key, n + (key == f'{KPN_A}::Factor1')) for key, n in db.per_factor(sql, p)]))
+    elif tamper == 'label':
+        db.rules.insert(0, (r'FROM reference_factors WHERE generation_id=%s AND factor_key IN',
+                            lambda sql, p: [(row[0], row[1], row[2] + ('!' if i == 1 else ''), *row[3:]) for i, row in enumerate(db.sample(sql, p))]))
+    elif tamper == 'metadata':
+        db.rules.insert(0, (r'FROM cfde_gene_sets WHERE generation_id=%s AND gene_set_id IN',
+                            lambda sql, p: [(*row[:2], json.dumps({**json.loads(row[2]), 'partition': 'other'}) if i == 0 else row[2])
+                                            for i, row in enumerate(db.sample(sql, p))]))
+    else:
+        db.rules.insert(0, (r'FROM cfde_gene_sets WHERE generation_id=%s AND gene_set_id IN', lambda sql, p: db.sample(sql, p)[1:]))
+    with pytest.raises(rr.Refused, match='Read-back: ' + message):
+        rr.load_bundle(fake_services(tmp_path, connect=lambda: db), bundle, apply=True)
+    assert db.generations[gen]['status'] == 'failed' and ('ROLLBACK', ()) in db.log
+    assert all(params[0] != 'complete' for _, params in db.statements(r'^UPDATE reference_generations SET status=%s'))
+
+
+# --------------------------------------------------------------------------------------
+# preflight
+
+
+SERVED_RUN, CONTEXT_RUN, DISMECH = 'f' * 64, '3' * 64, '1' * 64
+GRANT_ROWS = ['GRANT USAGE ON *.* TO `cyaka`@`%`',
+              'GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, REFERENCES, INDEX, ALTER ON `cyaka\\_reveal\\_mechanisms`.* TO `cyaka`@`%`']
+SOURCE_COUNTS = {'eaggl_imports': 3, 'eaggl_embedding_runs': 2, 'eaggl_cfde_link_runs': 1, 'dismech_imports': 1, 'dismech_embedding_runs': 1,
+                 'gene_set_imports': 1}
+
+
+def preflight_db(**changes):
+    """Scripted shared database in the served state; `db.state` drives every answer."""
+    state = {'cipher': 'TLS_AES_256_GCM_SHA384', 'innodb_read_only': 0, 'read_only': 0, 'grants': list(GRANT_ROWS), 'roles': 'NONE', 'role_grants': None,
+             'lock_free': 1,
+             'tables': {**SOURCE_COUNTS, 'eaggl_factors': 9000, 'eaggl_gene_loadings': 2500000, 'dismech_discussions': 40, f'{PREFIX}_records': 10,
+                        f'{PREFIX}_transaction_lock': 1, 'reveal_records': 900, 'reveal_transaction_lock': 1},
+             'counts': dict(SOURCE_COUNTS), 'mapping': [('a' * 64, 'e' * 64, '2' * 64)],
+             'imports': [('e' * 64, 'complete', rr.DEFAULT_EAGGL_SOURCE_VERSION)], 'runs': [(SERVED_RUN,)], 'run': run_row(),
+             'dismech': [(DISMECH,)], 'context': [(CONTEXT_RUN, DISMECH, 'complete')]}
+    state.update(changes)
+    table = lambda sql: re.search(r'FROM (\w+)', sql)[1]
+    def role_grants(sql, params):  # SHOW GRANTS ... USING <active roles>; None: the server cannot expand them
+        if state['role_grants'] is None: raise RuntimeError('ERROR 3530: role is not granted')
+        return [(grant,) for grant in state['role_grants']]
+    db = FakeDB(rules=[
+        (r"^SHOW SESSION STATUS LIKE 'Ssl_cipher'", lambda sql, p: [('Ssl_cipher', state['cipher'])]),
+        (r'^SELECT VERSION\(\),@@GLOBAL.innodb_read_only,@@GLOBAL.read_only,@@GLOBAL.sql_mode,@@SESSION.sql_mode,@@SESSION.max_allowed_packet$',
+         lambda sql, p: [('8.0.32', state['innodb_read_only'], state['read_only'], 'STRICT_TRANS_TABLES', 'STRICT_TRANS_TABLES,NO_ZERO_DATE', 67108864)]),
+        (r"^SHOW GLOBAL VARIABLES LIKE 'aurora_version'$", [('aurora_version', '3.05.2')]),
+        (r'^SELECT 1$', [(1,)]),
+        (r'^SELECT CURRENT_ROLE\(\)$', lambda sql, p: [(state['roles'],)]),
+        (r'^SHOW GRANTS FOR CURRENT_USER$', lambda sql, p: [(grant,) for grant in state['grants']]),
+        (r'^SHOW GRANTS FOR CURRENT_USER USING ', role_grants),
+        (r'^SELECT IS_FREE_LOCK\(%s\)$', lambda sql, p: [(state['lock_free'],)] if p == (rr.LOCK_NAME,) else []),
+        (r'^SELECT TABLE_NAME,TABLE_ROWS FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE\(\)', lambda sql, p: sorted(state['tables'].items())),
+        (r'^SELECT COUNT\(\*\) FROM (\w+)$', lambda sql, p: [(state['counts'].get(table(sql), 0),)]),
+        (r'^SELECT COUNT\(\*\) FROM eaggl_factors WHERE import_id=%s$', [(4037,)]),
+        (r'^SELECT COUNT\(\*\) FROM eaggl_gene_loadings WHERE import_id=%s$', [(2553330,)]),
+        (r'FROM eaggl_cfde_link_runs', lambda sql, p: state['mapping']),
+        (r'FROM eaggl_imports WHERE', lambda sql, p: state['imports']),
+        (r'FROM eaggl_embedding_runs WHERE import_id', lambda sql, p: state['runs']),
+        (r'FROM eaggl_embedding_runs WHERE run_id', lambda sql, p: [state['run']] if (p[0],) in state['runs'] else []),
+        (r'FROM dismech_imports', lambda sql, p: state['dismech']),
+        (r'FROM dismech_embedding_runs WHERE eaggl_embedding_run_id=%s', lambda sql, p: state['context'] if p == (SERVED_RUN,) else [])])
+    db.state = state
+    return db
+
+
+def test_preflight_is_read_only_and_reports_the_served_sources(tmp_path, capsys):
+    db = preflight_db()
+    services = fake_services(tmp_path, connect=lambda: db)
+    result = rr.preflight(services, out=tmp_path / 'preflight.json')
+    log = [sql for sql, _ in db.log]
+    assert log[:2] == ['SET SESSION TRANSACTION READ ONLY', 'START TRANSACTION READ ONLY'] and log[-1] == 'ROLLBACK'
+    assert all(re.match(r'(SELECT|SHOW) ', sql) for sql in log[2:-1]) and db.commits == 0
+    assert not db.statements(r'\b(INSERT|UPDATE|DELETE|CREATE|DROP|ALTER|GET_LOCK|RELEASE_LOCK)\b')
+    assert result['ok'] is True and result['blockers'] == [] and result['warnings'] == []
+    server = result['server']
+    assert {key: server[key] for key in ('version', 'aurora_version', 'innodb_read_only', 'read_only', 'max_allowed_packet', 'tls_cipher_present')} == {
+        'version': '8.0.32', 'aurora_version': '3.05.2', 'innodb_read_only': False, 'read_only': False, 'max_allowed_packet': 67108864, 'tls_cipher_present': True}
+    assert server['sql_mode_session'] == 'STRICT_TRANS_TABLES,NO_ZERO_DATE' and server['round_trip_ms'] >= 0 and len(db.statements(r'^SELECT 1$')) == 10
+    assert result['grants'] == dict.fromkeys(rr.GRANTS, True) and db.statements(r'^SELECT CURRENT_ROLE\(\)$') and not db.statements('USING')
+    assert result['lock_free'] is True and result['reference_tables'] == dict.fromkeys(rr.REFERENCE_TABLES, False)
+    assert result['prefixes'] == [{'target': 'prod', 'prefix': 'reveal', 'records_table': True, 'lock_table': True},
+                                  {'target': 'rehearsal', 'prefix': PREFIX, 'records_table': True, 'lock_table': True}]
+    assert result['inventory'] == {'approx_rows': db.state['tables'], 'exact': SOURCE_COUNTS}
+    sources = result['sources']
+    assert sources['mapping_runs'] == {'complete': ['a' * 64], 'selected': 'a' * 64, 'eaggl_import_id': 'e' * 64, 'gene_set_import_id': '2' * 64,
+                                       'embedding_runs': [SERVED_RUN]}
+    assert sources['eaggl'] == {'imports': ['e' * 64], 'import_id': 'e' * 64, 'source_version': rr.DEFAULT_EAGGL_SOURCE_VERSION, 'status': 'complete',
+                                'factors': 4037, 'loadings': 2553330, 'embedding_runs': [SERVED_RUN], 'selected_run': SERVED_RUN,
+                                'run_config': {'model': 'm', 'model_revision': 'unspecified', 'provider': 'huggingface',
+                                               'service_url': DEFAULT_SERVICE_URL.rstrip('/'), 'dimensions': 8}}
+    assert sources['dismech'] == {'complete': [DISMECH], 'selected': DISMECH, 'selected_context_run': CONTEXT_RUN,
+                                  'context_runs': [{'run_id': CONTEXT_RUN, 'dismech_import_id': DISMECH, 'status': 'complete'}]}
+    assert result['embedding_service'] == 'not checked' and 'bundle' not in result and 'compare' not in result
+    text = json.dumps(result)  # no secrets, user or host names
+    assert not any(secret in text for secret in ('`cyaka`@', 'cyaka@', 'secret-pw', ENV['REVEAL_MYSQL_HOST'], HOST))
+    assert rr.read_json(tmp_path / 'preflight.json') == result
+    assert rr.main(['preflight'], services=services) == 0
+    assert json.loads(capsys.readouterr().out)['command'] == 'preflight'
+
+
+BROKEN = {
+    'no TLS': ({'cipher': ''}, 'The connection has no TLS cipher'),
+    'reader': ({'innodb_read_only': 1}, 'The server is read-only'),
+    'read_only': ({'read_only': 1}, 'The server is read-only'),
+    'grants': ({'grants': ['GRANT SELECT, INSERT, UPDATE ON `cyaka_reveal_mechanisms`.* TO `cyaka`@`%`']},
+               "Missing grants on cyaka_reveal_mechanisms: ['delete', 'create', 'drop', 'references']"),
+    # load --apply marks the generation complete (or failed) with UPDATE; migration 008's foreign keys need REFERENCES.
+    'no update': ({'grants': ['GRANT SELECT, INSERT, DELETE, CREATE, DROP, REFERENCES ON `cyaka_reveal_mechanisms`.* TO `cyaka`@`%`']},
+                  "Missing grants on cyaka_reveal_mechanisms: ['update']"),
+    'no references': ({'grants': ['GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, INDEX, ALTER ON `cyaka_reveal_mechanisms`.* TO `cyaka`@`%`']},
+                      "Missing grants on cyaka_reveal_mechanisms: ['references']"),
+    'table grant': ({'grants': ['GRANT ALL PRIVILEGES ON `cyaka_reveal_mechanisms`.`reveal_records` TO `cyaka`@`%`']}, 'Missing grants'),
+    'other database': ({'grants': ['GRANT ALL PRIVILEGES ON `cyaka_other`.* TO `cyaka`@`%`']}, 'Missing grants'),
+    'lock': ({'lock_free': 0}, 'Another reference reload holds the global lock'),
+    'mapping runs': ({'mapping': [('a' * 64, 'e' * 64, '2' * 64), ('9' * 64, 'e' * 64, '2' * 64)]}, 'Not exactly one selected complete EAGGL mapping run'),
+    'no mapping run': ({'mapping': []}, 'Not exactly one selected complete EAGGL mapping run'),
+    'no EAGGL import': ({'imports': []}, 'EAGGL import not found or not complete'),
+    'mapping import': ({'imports': [('8' * 64, 'complete', rr.DEFAULT_EAGGL_SOURCE_VERSION)]},
+                       'The served mapping run uses EAGGL import eeeeeeeeeeee, not the selected 888888888888'),
+    'two EAGGL imports': ({'imports': [('e' * 64, 'complete', 'v'), ('8' * 64, 'complete', 'v')]}, 'EAGGL import not found or not complete'),
+    'embedding runs': ({'runs': [(SERVED_RUN,), ('9' * 64,)]}, 'Not exactly one selected complete EAGGL embedding run'),
+    'DisMech imports': ({'dismech': [(DISMECH,), ('4' * 64,)]}, 'Not exactly one selected complete DisMech import'),
+    'no context run': ({'context': [(CONTEXT_RUN, DISMECH, 'failed')]}, 'Not exactly one complete DisMech context run'),
+    'context runs': ({'context': [(CONTEXT_RUN, DISMECH, 'complete'), ('7' * 64, DISMECH, 'complete')]}, 'Not exactly one complete DisMech context run'),
+    'foreign context run': ({'context': [(CONTEXT_RUN, '4' * 64, 'complete')]}, 'Not exactly one complete DisMech context run')}
+
+
+@pytest.mark.parametrize('case', sorted(BROKEN))
+def test_preflight_reports_a_blocker_for_each_broken_invariant(tmp_path, case, capsys):
+    changes, blocker = BROKEN[case]
+    db = preflight_db(**changes)
+    services = fake_services(tmp_path, connect=lambda: db)
+    result = rr.preflight(services)
+    assert result['ok'] is False and any(item.startswith(blocker) for item in result['blockers']), result['blockers']
+    assert rr.main(['preflight'], services=services) == 1 and json.loads(capsys.readouterr().out)['ok'] is False
+    assert not db.statements(r'\b(INSERT|UPDATE|DELETE|CREATE|DROP|GET_LOCK)\b')
+
+
+def test_preflight_pins_grants_and_missing_prefix_tables(tmp_path):
+    # An explicit pin selects among several runs; ALL PRIVILEGES on *.* or a matching wildcard grants everything.
+    db = preflight_db(runs=[(SERVED_RUN,), ('9' * 64,)], grants=['GRANT ALL PRIVILEGES ON *.* TO `admin`@`%`'])
+    result = rr.preflight(fake_services(tmp_path, connect=lambda: db), eaggl_embedding_run_id=SERVED_RUN)
+    assert result['sources']['eaggl']['selected_run'] == SERVED_RUN and all(result['grants'].values())
+    assert any('deployed readiness needs exactly one' in item for item in result['blockers'])  # still two complete runs
+    assert rr.parse_grants([('GRANT ALL ON `cyaka\\_%`.* TO `cyaka`@`%`',)], 'cyaka_reveal_mechanisms')['drop'] is True
+    assert rr.parse_grants([('GRANT DROP ON `cyakaXreveal\\_mechanisms`.* TO `c`@`%`',)], 'cyaka_reveal_mechanisms')['drop'] is False
+    assert rr.parse_grants([('GRANT DROP ON `cyaka_reveal_mechanisms`.* TO `c`@`%`',)], 'cyakaXreveal_mechanisms')['drop'] is True  # _ is a wildcard
+    # The mapping pin and the DisMech pin are honoured like register_legacy and select_dismech_import.
+    db = preflight_db(mapping=[('a' * 64, 'e' * 64, '2' * 64), ('9' * 64, '8' * 64, '2' * 64)], dismech=[(DISMECH,), ('4' * 64,)])
+    services = fake_services(tmp_path, connect=lambda: db, environ={**ENV, 'REVEAL_MAPPING_RUN_ID': 'a' * 64, 'REVEAL_DISMECH_IMPORT_ID': DISMECH})
+    result = rr.preflight(services)
+    assert result['sources']['mapping_runs']['selected'] == 'a' * 64 and result['sources']['dismech']['selected'] == DISMECH
+    assert [item for item in result['blockers']] == [
+        f"Not exactly one selected complete DisMech import (deployed readiness needs exactly one); complete: {[DISMECH, '4' * 64]}"]
+    # A missing records or lock table of an allow-listed target is a warning, not a blocker.
+    db = preflight_db()
+    del db.state['tables']['reveal_transaction_lock']
+    result = rr.preflight(fake_services(tmp_path, connect=lambda: db))
+    assert result['ok'] is True and result['warnings'] == ['prod: reveal_transaction_lock does not exist']
+    assert result['prefixes'][0] == {'target': 'prod', 'prefix': 'reveal', 'records_table': True, 'lock_table': False}
+
+
+def test_preflight_counts_the_privileges_of_active_roles(tmp_path):
+    roles = ['GRANT USAGE ON *.* TO `cyaka`@`%`', 'GRANT `reveal_rw`@`%`,`audit`@`%` TO `cyaka`@`%`']
+    # Without USING, MySQL 8 lists the roles granted, not what they allow: on their own they hold nothing.
+    assert not any(rr.parse_grants([(row,) for row in roles], 'cyaka_reveal_mechanisms').values())
+    db = preflight_db(grants=roles, roles='`reveal_rw`@`%`,`audit`@`%`', role_grants=roles + GRANT_ROWS[1:])
+    result = rr.preflight(fake_services(tmp_path, connect=lambda: db))
+    assert result['ok'] is True and result['grants'] == dict.fromkeys(rr.GRANTS, True) and result['warnings'] == []
+    assert [sql for sql, _ in db.statements('^SHOW GRANTS')] == ['SHOW GRANTS FOR CURRENT_USER USING `reveal_rw`@`%`,`audit`@`%`']
+    assert 'reveal_rw' not in json.dumps(result)  # no account or role names
+    # Roles that are granted but not active in a new session give load nothing either.
+    db = preflight_db(grants=roles, role_grants=roles + GRANT_ROWS[1:])
+    result = rr.preflight(fake_services(tmp_path, connect=lambda: db))
+    assert result['blockers'] == [f'Missing grants on cyaka_reveal_mechanisms: {list(rr.REQUIRED_GRANTS)}'] and not db.statements('USING')
+    # Active roles the server will not expand: only the direct grants count (fails closed), with a warning.
+    db = preflight_db(grants=roles, roles='`reveal_rw`@`%`', role_grants=None)
+    result = rr.preflight(fake_services(tmp_path, connect=lambda: db))
+    assert result['warnings'] == ['The privileges of 1 active roles could not be read (RuntimeError); only direct grants count']
+    assert result['blockers'] == [f'Missing grants on cyaka_reveal_mechanisms: {list(rr.REQUIRED_GRANTS)}']
+
+
+def test_preflight_blocks_unless_the_arguments_select_what_register_legacy_will(tmp_path):
+    # register_legacy takes the mapping run's EAGGL import and only REVEAL_EMBEDDING_RUN_ID, never the arguments.
+    def blockers(db, environ=None, **pins):
+        return rr.preflight(fake_services(tmp_path, connect=lambda: db, environ={**ENV, **(environ or {})}), **pins)['blockers']
+    db = preflight_db(imports=[('8' * 64, 'complete', 'v')])
+    assert blockers(db, eaggl_import_id='8' * 64) == ['The served mapping run uses EAGGL import eeeeeeeeeeee, not the selected 888888888888']
+    # A stale REVEAL_EMBEDDING_RUN_ID beside the right --eaggl-embedding-run-id.
+    stale = blockers(preflight_db(), {'REVEAL_EMBEDDING_RUN_ID': '7' * 64}, eaggl_embedding_run_id=SERVED_RUN)
+    assert stale == ["Not exactly one complete EAGGL embedding run of the served mapping run's import eeeeeeeeeeee selected by "
+                     'REVEAL_EMBEDDING_RUN_ID (load registers the legacy generation with it): []']
+    # Two complete runs, the argument and the environment pinning different ones.
+    split = blockers(preflight_db(runs=[(SERVED_RUN,), ('9' * 64,)]), {'REVEAL_EMBEDDING_RUN_ID': '9' * 64}, eaggl_embedding_run_id=SERVED_RUN)
+    assert split[-1] == "The selected EAGGL embedding run ffffffffffff (--eaggl-embedding-run-id) is not REVEAL_EMBEDDING_RUN_ID's 999999999999: pin both to the served run"
+    assert blockers(preflight_db(), {'REVEAL_EMBEDDING_RUN_ID': SERVED_RUN}, eaggl_embedding_run_id=SERVED_RUN, eaggl_import_id='e' * 64) == []
+
+
+def test_preflight_selects_the_context_run_as_vector_ingestion_does(tmp_path):
+    def dismech(context, environ=None):
+        result = rr.preflight(fake_services(tmp_path, connect=lambda: preflight_db(context=context), environ={**ENV, **(environ or {})}))
+        return result['sources']['dismech']['selected_context_run'], result['blockers']
+    # A complete run of another DisMech import is not a candidate.
+    assert dismech([(CONTEXT_RUN, DISMECH, 'complete'), ('4' * 64, '4' * 64, 'complete')]) == (CONTEXT_RUN, [])
+    # Several complete runs of the selected import: REVEAL_DISMECH_EMBEDDING_RUN_ID chooses one, as ingestion does.
+    several = [(CONTEXT_RUN, DISMECH, 'complete'), ('7' * 64, DISMECH, 'complete')]
+    run, blocked = dismech(several)
+    assert run is None and blocked[0].startswith('Not exactly one complete DisMech context run') and 'REVEAL_DISMECH_EMBEDDING_RUN_ID' in blocked[0]
+    assert dismech(several, {'REVEAL_DISMECH_EMBEDDING_RUN_ID': '7' * 64}) == ('7' * 64, [])
+    run, blocked = dismech(several, {'REVEAL_DISMECH_EMBEDDING_RUN_ID': '6' * 64})
+    assert run is None and len(blocked) == 1
+
+
+def test_preflight_compare_flags_schema_and_source_changes_but_not_row_estimates(tmp_path):
+    db = preflight_db()
+    services = fake_services(tmp_path, connect=lambda: db)
+    baseline = tmp_path / 'baseline.json'
+    rr.preflight(services, out=baseline)
+    def compare(**changes):
+        db.state.update(changes)
+        return rr.preflight(services, compare=baseline)
+    # Live traffic moves estimates; migration 008 adds only its own tables, whose rows are not sources.
+    tables = dict(db.state['tables'], reveal_records=1400, reference_generations=2, embedding_spaces=1)
+    result = compare(tables=tables, counts={**SOURCE_COUNTS, 'reference_generations': 2, 'embedding_spaces': 1})
+    assert result['ok'] is True, result['blockers']
+    assert result['compare'] == {'baseline_checked_at': '2026-09-30T12:00:00Z', 'new_tables': ['embedding_spaces', 'reference_generations'],
+                                 'removed_tables': [], 'source_count_changes': {}, 'source_changes': {},
+                                 'approx_row_changes': {'reveal_records': [900, 1400]}}
+    assert result['inventory']['exact'] == {**SOURCE_COUNTS, 'reference_generations': 2, 'embedding_spaces': 1}
+    assert result['reference_tables']['reference_generations'] is True
+    result = compare(tables={**tables, 'eaggl_extra': 0})
+    assert result['blockers'] == ['New table eaggl_extra is not a migration-008 table']
+    result = compare(tables={key: value for key, value in tables.items() if key != 'dismech_discussions'})
+    assert result['blockers'] == ['Table dismech_discussions was removed'] and result['compare']['removed_tables'] == ['dismech_discussions']
+    result = compare(tables=tables, counts={**SOURCE_COUNTS, 'eaggl_embedding_runs': 3})
+    assert result['blockers'] == ['eaggl_embedding_runs changed from 2 to 3 rows'] and result['compare']['source_count_changes'] == {'eaggl_embedding_runs': [2, 3]}
+    result = compare(counts=dict(SOURCE_COUNTS), context=[(CONTEXT_RUN, DISMECH, 'complete'), ('7' * 64, DISMECH, 'failed')])
+    assert result['blockers'] == ['Served source dismech changed'] and set(result['compare']['source_changes']) == {'dismech'}
+    assert result['compare']['source_changes']['dismech']['after']['context_runs'][1]['run_id'] == '7' * 64
+    rr.write_json(tmp_path / 'other.json', {'format': 'x'})
+    with pytest.raises(rr.Refused, match='not a preflight result'): rr.preflight(services, compare=tmp_path / 'other.json')
+
+
+def test_preflight_probes_the_embedding_service_with_the_run_settings(tmp_path):
+    db, calls = preflight_db(), []
+    def embed(texts, **options): calls.append((texts, options)); return np.zeros((1, 8), dtype=np.float32)
+    services = fake_services(tmp_path, connect=lambda: db, embed=embed)
+    result = rr.preflight(services, check_embedding_service=True)
+    assert result['ok'] is True and result['embedding_service'] == {'reachable': True, 'dimensions': 8}
+    assert calls == [(['reveal reload preflight probe'], {'model': 'm', 'service_url': DEFAULT_SERVICE_URL.rstrip('/'), 'provider': 'huggingface',
+                                                          'batch_size': 1, 'max_workers': 1, 'max_retries': 1, 'timeout': 60})]
+    assert db.log[-1] == ('ROLLBACK', ())  # the probe runs after the read-only transaction ends
+    services.embed = lambda texts, **options: np.zeros((1, 4))
+    assert rr.preflight(services, check_embedding_service=True)['blockers'] == ['The embedding service returns 4 dimensions; the EAGGL run has 8']
+    def down(texts, **options): raise ConnectionError('service unavailable')
+    services.embed = down
+    result = rr.preflight(services, check_embedding_service=True)
+    assert result['embedding_service'] == {'reachable': False, 'error': 'ConnectionError: service unavailable'}
+    assert result['blockers'] == [f'Embedding service {DEFAULT_SERVICE_URL.rstrip("/")} failed (ConnectionError)']
+
+
+def test_preflight_checks_a_bundle_against_the_eaggl_source(tmp_path):
+    bundle, gen = built_bundle(tmp_path)
+    factors = list(rr.read_jsonl(bundle / 'reference_factors.jsonl.gz'))
+    db = preflight_db()
+    db.rules[:0] = [(r'SELECT factor_id,input_sha256 FROM eaggl_factors', [(f['eaggl_factor_id'], f['input_sha256']) for f in factors]),
+                    (r'SELECT input_sha256 FROM eaggl_name_embeddings', [(f['input_sha256'],) for f in factors])]
+    services = fake_services(tmp_path, connect=lambda: db)
+    result = rr.preflight(services, bundle=bundle)
+    assert result['ok'] is True and result['bundle'] == {
+        'generation_id': gen, 'vectors': True, 'ok': True, 'embedding_space_matches_run': True,
+        'eaggl': {'eaggl_import_id': 'e' * 64, 'eaggl_embedding_run_id': SERVED_RUN, 'source_version': rr.DEFAULT_EAGGL_SOURCE_VERSION}}
+    assert not db.statements(r'\b(INSERT|UPDATE|DELETE|CREATE|DROP|GET_LOCK)\b')
+    db.state['run'] = run_row(model='pritamdeka/BioBERT')
+    result = rr.preflight(services, bundle=bundle)
+    assert result['bundle']['ok'] is False and "in ['model']" in result['bundle']['refused']
+    assert len(result['blockers']) == 1 and result['blockers'][0].startswith("Bundle: The bundle's embedding space differs")
+    db.state['run'] = run_row()
+    db.rules.insert(0, (r'SELECT input_sha256 FROM eaggl_name_embeddings', []))
+    result = rr.preflight(services, bundle=bundle, eaggl_embedding_run_id=SERVED_RUN)
+    assert result['blockers'][0].startswith('Bundle: Stop: the pinned EAGGL embedding run') and 'import_eaggl_factors.py' not in result['blockers'][0]
+
+
+# --------------------------------------------------------------------------------------
+# abandon
+
+
+SPACE = '5' * 64
+GENERATION_ROWS = dict(zip(rr.GENERATION_TABLES, (5, 9, 3, 2, 3, 2)))
+
+
+def abandon_services(tmp_path, *, status='failed', bindings=0, archived=0, shared=0, other_rows=None):
+    """Cutover fixture whose GEN is an abandonable KPN generation with rows in every generation table."""
+    tmp_path.mkdir(exist_ok=True)
+    services, db, archive, repo = cutover_services(tmp_path)
+    db.generations[GEN].update(status=status, manifest={'counts': {}, 'vectors': {'space_id': SPACE}})
+    rows = {**GENERATION_ROWS, 'embedding_spaces': 1, **(other_rows or {})}
+    def delete(sql, params):
+        table = re.match(r'DELETE FROM (\w+)', sql)[1]
+        if table == 'reference_generations': return int(db.generations.pop(params[0], None) is not None)
+        count, rows[table] = rows.get(table, 0), 0
+        return count
+    count = lambda sql, p: [(rows.get(re.search(r'FROM (\w+)', sql)[1], 0),)]
+    db.rules[:0] = [
+        (r'^DELETE FROM', delete),
+        (r'^SELECT COUNT\(\*\) FROM vector_bindings WHERE generation_id=%s$', [(bindings,)]),
+        (r'^SELECT COUNT\(\*\) FROM archived_reference_factors WHERE generation_id=%s$', [(archived,)]),
+        (r'^SELECT COUNT\(\*\) FROM reference_vectors WHERE space_id=%s', lambda sql, p: [(shared,)]),
+        (r'^SELECT COUNT\(\*\) FROM \w+ WHERE generation_id=%s$', count),
+        (r'^SELECT COUNT\(\*\) FROM reference_generations WHERE kind<>%s$', lambda sql, p: [(sum(g['kind'] != p[0] for g in db.generations.values()),)]),
+        (r'^SELECT COUNT\(\*\) FROM \w+$', count)]
+    return services, db, repo
+
+
+def confirm(services, phrase=GEN[:12]):
+    services.interactive = lambda: True
+    services.input = lambda prompt: phrase
+
+
+def writes(db): return db.statements(r'^(INSERT|UPDATE|DELETE|DROP|CREATE)|GET_LOCK')
+
+
+def test_abandon_dry_run_reports_and_writes_nothing(tmp_path, capsys):
+    services, db, repo = abandon_services(tmp_path)
+    result = rr.abandon_generation(services, GEN, apply=False, drop_empty_schema=True)
+    assert result['ok'] is True and result['refusals'] == [] and result['rows'] == GENERATION_ROWS and (result['kind'], result['status']) == (rg.KPN_KIND, 'failed')
+    assert result['embedding_space'] == {'space_id': SPACE, 'delete': True}
+    assert result['drop_schema'] == {'would_drop': list(rr.REFERENCE_TABLES), 'reasons': []}  # only the legacy registration would remain
+    assert not writes(db) and db.commits == 0
+    assert rr.main(['abandon', '--generation', GEN], services=services) == 0 and json.loads(capsys.readouterr().out)['command'] == 'abandon'
+    # Another generation's vectors still use the space: it is kept.
+    services, db, repo = abandon_services(tmp_path / 'shared', shared=4)
+    assert rr.abandon_generation(services, GEN, apply=False)['embedding_space'] == {'space_id': SPACE, 'delete': False}
+    # A refused dry run reports why (and exits 1) without writing.
+    services, db, repo = abandon_services(tmp_path / 'bound', bindings=7)
+    result = rr.abandon_generation(services, GEN, apply=False, drop_empty_schema=True)
+    assert result['ok'] is False and result['refusals'] == ['vector_bindings holds 7 rows of this generation']
+    assert result['drop_schema']['would_drop'] == [] and 'reference_vectors holds 5 rows' in result['drop_schema']['reasons']
+    assert rr.main(['abandon', '--generation', GEN], services=services) == 1 and not writes(db)
+
+
+@pytest.mark.parametrize('case', ['not interactive', 'wrong confirmation', 'active', 'bindings', 'archived', 'legacy', 'superseded', 'unknown'])
+def test_abandon_apply_refuses_unless_confirmed_unreferenced_and_kpn(tmp_path, case):
+    options = {'bindings': {'bindings': 2}, 'archived': {'archived': 1}, 'superseded': {'status': 'superseded'}}.get(case, {})
+    services, db, repo = abandon_services(tmp_path, **options)
+    confirm(services, 'b' * 11 + 'c' if case == 'wrong confirmation' else GEN[:12])
+    if case == 'not interactive': services.interactive = lambda: False
+    if case == 'active':
+        with services.repository('reveal').transaction() as tx: rg.write_active(tx, GEN, rg.KPN_MODEL, expected_previous=None)
+    generation_id = {'legacy': LEGACY, 'unknown': '9' * 64}.get(case, GEN)
+    expected = {'not interactive': 'interactive', 'wrong confirmation': 'Confirmation did not match; nothing was deleted',
+                'active': 'reveal serves this generation', 'bindings': 'vector_bindings holds 2 rows', 'archived': 'archived_reference_factors holds 1 rows',
+                'legacy': f'generation kind is {rg.LEGACY_KIND}, not {rg.KPN_KIND}', 'superseded': 'generation is superseded',
+                'unknown': 'Unknown reference generation'}[case]
+    with pytest.raises(rr.Refused, match=re.escape(expected)): rr.abandon_generation(services, generation_id, apply=True)
+    assert not db.statements(r'^(DELETE|DROP)') and GEN in db.generations and LEGACY in db.generations
+    locks, releases = db.statements('GET_LOCK'), db.statements('RELEASE_LOCK')
+    assert len(locks) == len(releases) == (0 if case == 'not interactive' else 1)
+
+
+def test_abandon_apply_deletes_child_first_then_space_then_generation(tmp_path):
+    services, db, repo = abandon_services(tmp_path)
+    confirm(services)
+    result = rr.abandon_generation(services, GEN, apply=True)
+    assert result['ok'] is True and result['deleted'] == {**GENERATION_ROWS, 'embedding_spaces': 1, 'reference_generations': 1}
+    deletes = [(re.match(r'DELETE FROM (\w+)', sql)[1], sql, params) for sql, params in db.log if sql.startswith('DELETE FROM')]
+    assert [table for table, _, _ in deletes] == [*rr.GENERATION_TABLES, 'embedding_spaces', 'reference_generations']
+    assert all(sql.endswith('WHERE generation_id=%s LIMIT 10000') and params == (GEN,) for table, sql, params in deletes[:6])
+    assert deletes[6][1:] == (rr.ABANDON_DELETES['embedding_spaces'], (SPACE, SPACE)) and 'NOT EXISTS (SELECT 1 FROM reference_vectors' in deletes[6][1]
+    assert deletes[7][1:] == (rr.ABANDON_DELETES['reference_generations'], (GEN, rg.KPN_KIND, 'loading', 'failed', 'complete'))
+    assert GEN not in db.generations and LEGACY in db.generations and 'drop_schema' not in result
+    log = [sql for sql, _ in db.log]
+    assert log.index('SELECT GET_LOCK(%s,%s)') < log.index(deletes[0][1]) and log[-1] == 'SELECT RELEASE_LOCK(%s)'
+    # A space another generation still uses is kept.
+    services, db, repo = abandon_services(tmp_path / 'shared', shared=4, status='complete')
+    confirm(services)
+    assert rr.abandon_generation(services, GEN, apply=True)['deleted']['embedding_spaces'] == 0
+    assert not db.statements('^DELETE FROM embedding_spaces') and GEN not in db.generations
+    # The single-row path serves only these two protected tables; delete_batches still refuses both.
+    for table in ('dismech_imports', 'archived_reference_factors', 'kpn_traits'):
+        with pytest.raises(rr.Refused, match='protected'): rr.delete_abandoned_row(FakeDB(), table, GEN)
+    for table in ('embedding_spaces', 'reference_generations'):
+        with pytest.raises(rr.Refused, match='protected'): rr.delete_batches(FakeDB(), table, '1=1')
+
+
+@pytest.mark.parametrize('table', ['vector_bindings', 'archived_reference_factors'])
+def test_abandon_rechecks_rows_written_while_the_prompt_waits(tmp_path, table):
+    services, db, repo = abandon_services(tmp_path, status='complete')
+    # REPEATABLE READ: until the transaction ends, every read sees the view of its first read.
+    live, view = {table: 0}, {table: 0}
+    db.rules.insert(0, (rf'^SELECT COUNT\(\*\) FROM {table} WHERE generation_id=%s$', lambda sql, p: [(view[table],)]))
+    rollback = db.rollback
+    def end(): view.update(live); rollback()
+    db.rollback = end
+    confirm(services)
+    def typed(prompt): live[table] = 4; return GEN[:12]  # a snapshot or capture commits rows meanwhile
+    services.input = typed
+    with pytest.raises(rr.Refused, match=f'{table} holds 4 rows of this generation'): rr.abandon_generation(services, GEN, apply=True)
+    assert not db.statements(r'^(DELETE|DROP)') and GEN in db.generations and db.statements('RELEASE_LOCK')
+
+
+def test_snapshot_and_capture_apply_hold_the_reload_lock(tmp_path):
+    services, db, archive, repo = cutover_services(tmp_path)
+    services.module('vector_ingestion').record_vector_bindings = lambda connection, state: db.log.append(('BINDINGS', ())) or 3
+    target = rr.select_target(services, 'rehearsal')
+    dry = rr.snapshot_generation(services, target, GEN, apply=False)
+    assert dry['snapshot_id'] == NEW_SNAPSHOT and dry['bindings'] is None and not db.statements('GET_LOCK')
+    assert rr.snapshot_generation(services, target, GEN, apply=True)['bindings'] == 3
+    assert rr.capture_generation(services, LEGACY, [PREFIX], apply=True, dapper=None)['written'] == 1
+    log = [sql for sql, _ in db.log]
+    locks = [i for i, sql in enumerate(log) if sql.startswith('SELECT GET_LOCK')]
+    releases = [i for i, sql in enumerate(log) if sql.startswith('SELECT RELEASE_LOCK')]
+    assert len(locks) == len(releases) == 2 and locks[0] < log.index('BINDINGS') < releases[0] < locks[1]
+    reads = [i for i, sql in enumerate(log) if 'FROM reference_generations WHERE generation_id=%s' in sql]
+    assert all(any(lock < i < release for i in reads) for lock, release in zip(locks, releases))  # the generation is read under the lock
+    # While abandon (or any reload) holds the lock, neither writes; apply holds it itself and passes locked=True.
+    db.rules.insert(0, (r'^SELECT GET_LOCK', [(0,)]))
+    db.log.clear(); archive.calls.clear()
+    with pytest.raises(rr.Refused, match='global lock'): rr.snapshot_generation(services, target, GEN, apply=True)
+    with pytest.raises(rr.Refused, match='global lock'): rr.capture_generation(services, LEGACY, [PREFIX], apply=True, dapper=None)
+    assert ('BINDINGS', ()) not in db.log and not archive.calls and not db.statements('RELEASE_LOCK')
+    assert rr.capture_generation(services, LEGACY, [PREFIX], apply=True, dapper=None, locked=True)['written'] == 1
+    assert len(db.statements('GET_LOCK')) == 2
+
+
+def test_reference_tables_drop_in_foreign_key_order():
+    sql = (rr.ROOT / 'schema/migrations/008_reference_generation.sql').read_text()
+    tables = {name: set(re.findall(r'REFERENCES (\w+)\(', body)) for name, body in re.findall(r'CREATE TABLE IF NOT EXISTS (\w+) \((.*?)\) ENGINE', sql, re.S)}
+    assert set(rr.REFERENCE_TABLES) == set(tables) and len(rr.REFERENCE_TABLES) == 10
+    for position, table in enumerate(rr.REFERENCE_TABLES):  # every table a foreign key names is dropped later
+        assert all(rr.REFERENCE_TABLES.index(parent) > position for parent in tables[table] - {table}), table
+    assert set(rr.GENERATION_TABLES) < set(rr.REFERENCE_TABLES)
+
+
+def test_abandon_drop_empty_schema_drops_in_order_only_when_empty(tmp_path, capsys):
+    services, db, repo = abandon_services(tmp_path / 'archived', other_rows={'archived_reference_factors': 2})
+    confirm(services)
+    result = rr.abandon_generation(services, GEN, apply=True, drop_empty_schema=True)
+    assert result['deleted']['reference_generations'] == 1 and result['ok'] is False
+    assert result['drop_schema'] == {'dropped': [], 'reasons': ['archived_reference_factors holds 2 rows']} and not db.statements('^DROP')
+    services, db, repo = abandon_services(tmp_path / 'gate')
+    with repo.transaction() as tx: rg.set_gate(tx, False, reason='operator')  # a prefix has used the reload
+    confirm(services)
+    result = rr.abandon_generation(services, GEN, apply=True, drop_empty_schema=True)
+    assert result['drop_schema'] == {'dropped': [], 'reasons': [f"{PREFIX}_records holds reload records {{'{rg.CONTROL_KIND}': 1}}"]}
+    assert not db.statements('^DROP')
+    services, db, repo = abandon_services(tmp_path / 'empty')
+    confirm(services)
+    assert rr.main(['abandon', '--generation', GEN, '--drop-empty-schema', '--apply'], services=services) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result['drop_schema'] == {'dropped': list(rr.REFERENCE_TABLES), 'reasons': []}
+    drops = [sql for sql, _ in db.log if sql.startswith('DROP')]
+    assert drops == [f'DROP TABLE {table}' for table in rr.REFERENCE_TABLES]
+    log = [sql for sql, _ in db.log]
+    assert log.index('DELETE FROM reference_generations WHERE generation_id=%s AND kind=%s AND status IN (%s,%s,%s) LIMIT 1') < log.index(drops[0])
+    assert log.index(drops[-1]) < log.index('SELECT RELEASE_LOCK(%s)')
 
 
 # --------------------------------------------------------------------------------------

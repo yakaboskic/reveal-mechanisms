@@ -54,6 +54,9 @@ KIND_ACTIONS: dict[str, str] = {
         'workspace_event', 'workspace_cursor',
         # Identities.
         'principal', 'identity', 'transfer', 'citation_actor',
+        # Community ballots and their public tallies (votes.py), keyed by gap or published account id and never
+        # by a factor: they stay valid across generations and are never stamped.
+        'vote', 'vote_total',
         # Infrastructure: workers, durable workflow, vector bookkeeping and the reference pointers.
         'worker_control', 'runtime', 'probe_result', 'workflow_activity', 'workflow_cleanup', 'workflow_cleanup_completed',
         'workflow_control', 'workflow_delivery', 'workflow_dispatch', 'workflow_recovery_audit', 'workflow_step',
