@@ -86,10 +86,15 @@ class Transaction:
         if cursor.rowcount != 1: raise Conflict('Expected existing record')
         track(self, kind, identity, owner, data, old, revision=old['version']+1 if old else 1)
     def list(self, kind, owner=None):
-        sql, args = 'SELECT id,owner_id,version,payload FROM reveal_records WHERE kind=%s', [kind]
+        sql, args = 'SELECT id,owner_id,version,payload,updated_at FROM reveal_records WHERE kind=%s', [kind]
         if owner is not None: sql += ' AND owner_id=%s'; args.append(owner)
+        # MySQL filesort can exhaust its sort buffer on large JSON payloads.
+        # These rows are already fetched in full; sort their references here,
+        # preserving the stored timestamp ordering and ascending ID tie-break.
+        rows = sorted(self.execute(sql, args).fetchall(), key=lambda row: row[0])
+        rows.sort(key=lambda row: row[4], reverse=True)
         return [{'id': r[0], 'owner': r[1], 'version': r[2], 'data': json.loads(r[3])}
-                for r in self.execute(sql + ' ORDER BY updated_at DESC,id', args).fetchall()]
+                for r in rows]
     def put(self, kind, identity, owner, data, expected=None):
         old = self.get(kind, identity)
         if expected is not None and (old is None or old['version'] != expected): raise Conflict('Version conflict')
