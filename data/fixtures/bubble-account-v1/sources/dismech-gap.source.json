@@ -1,0 +1,47 @@
+{
+  "id": "dismech:disorders/Coronary_Artery_Disease#discussion:cad_pgsxc_reverse_causation",
+  "discussion_id": "cad_pgsxc_reverse_causation",
+  "source_file": "kb/disorders/Coronary_Artery_Disease.yaml",
+  "source_pointer": "/discussions/0",
+  "document_id": "dismech:disorders/Coronary_Artery_Disease",
+  "document_name": "Coronary Artery Disease",
+  "disease_term": {
+    "preferred_term": "coronary atherosclerosis",
+    "term": {
+      "id": "MONDO:0021661",
+      "label": "coronary atherosclerosis"
+    }
+  },
+  "source_kind": "disorders",
+  "kind": "KNOWLEDGE_GAP",
+  "status": "OPEN",
+  "is_gap": true,
+  "has_stable_source_id": true,
+  "raw": {
+    "discussion_id": "cad_pgsxc_reverse_causation",
+    "prompt": "Are the CAD PGS×context interactions driven by adverse exposures causally amplifying genetic risk, or are some \"contexts\" actually downstream readouts of incipient disease (reverse causation)?",
+    "kind": "KNOWLEDGE_GAP",
+    "status": "OPEN",
+    "attaches_to": [
+      "pathophysiology#Endothelial Dysfunction",
+      "biochemical#LDL Cholesterol",
+      "biochemical#C-Reactive Protein",
+      "environmental#Smoking"
+    ],
+    "rationale": "Population PGS×context analyses (Nagpal & Gibson 2026, PMID:42443528) are largely unable to establish the causality of specific contexts. dismech separates true environmental exposures (smoking, high-fat diet, sedentary lifestyle) from biochemical readouts (LDL, HDL, C-reactive protein); the biochemical \"contexts\" are prime reverse-causation suspects, since they may be partly downstream of the atherosclerotic process rather than upstream drivers, and behavioural contexts such as reduced physical activity may be rapid responses to incipient angina rather than causes. Distinguishing genuine amplification of genetic effects from reverse causation determines whether the modelled interventions (e.g. lowering cholesterol in high-PGS smokers) would actually reduce risk.",
+    "proposed_experiments": [
+      {
+        "experiment_id": "cad_pgsxc_mr_direction",
+        "name": "Mendelian randomization of exposure-to-CAD direction across PGS strata",
+        "description": "Use bidirectional / multivariable Mendelian randomization to test whether each candidate context (LDL, HDL, C-reactive protein, smoking) causally affects CAD versus being a consequence of subclinical disease, and whether the causal effect estimate scales with polygenic liability as the amplification model predicts.",
+        "decision_criterion": "A context is retained as a causal amplifier if MR supports exposure-to-disease directionality and the exposure-attributable risk difference increases across increasing PGS strata; it is flagged as a reverse-causation suspect otherwise."
+      },
+      {
+        "experiment_id": "cad_pgsxc_prospective_temporal",
+        "name": "Prospective incident-CAD analysis restricted to pre-diagnosis exposure windows",
+        "description": "Restrict exposures to measurements taken well before diagnosis and repeat the PGS×context liability-threshold modelling on incident cases only, to reduce the chance that exposure values reflect behavioural responses to early disease.",
+        "decision_criterion": "Amplification is supported if the PGS×context deviation from additivity persists when only pre-diagnosis exposure windows and incident cases are used."
+      }
+    ]
+  }
+}

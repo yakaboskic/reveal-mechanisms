@@ -2,6 +2,7 @@
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { RevalidationCache } from "@/lib/revalidation-cache";
 import { loadWorkspaceData, workspaceTabs, workspaceKey, workspaceKeyParts, type WorkspaceData, type WorkspaceTab, type WorkspaceKey } from "@/lib/workspace-data";
+import type { ReferenceState } from "@/lib/reference";
 import { onWorkspaceChange, invalidateWorkspace, affectedWorkspaceTabs, connectWorkspaceEvents, type WorkspaceConnection } from "@/lib/workspace-events";
 import { terminal, type Schema } from "@/lib/client";
 
@@ -22,6 +23,7 @@ export function WorkspaceCacheProvider({ scope, children, checkIdentity }: { sco
       for (const key of affectedWorkspaceTabs(event)) keys.add(key);
       if (queued) return;
       queued = true;
+      // Every reference filter and search of an affected tab is invalidated with it.
       queueMicrotask(() => { queued = false; if (active && keys.size) cache.invalidateWhere(key => keys.has(workspaceKeyParts(key).tab)); keys.clear(); });
     });
     return () => { active = false; remove(); };
@@ -42,12 +44,12 @@ export function WorkspaceCacheProvider({ scope, children, checkIdentity }: { sco
   return <Context.Provider value={{ cache, scope, checkIdentity, connection }}>{children}</Context.Provider>;
 }
 
-export function useWorkspaceData(tab: WorkspaceTab, query = "") {
+export function useWorkspaceData(tab: WorkspaceTab, query = "", reference: ReferenceState = "all") {
   const store = useContext(Context);
   if (!store) throw new Error("Workspace cache requires the session provider.");
   const { cache, scope, checkIdentity, connection } = store;
   useSyncExternalStore(cache.subscribe, cache.getVersion, serverVersion);
-  const key = workspaceKey(tab, query);
+  const key = workspaceKey(tab, query, reference);
   const snapshot = cache.read(scope, key);
   useEffect(() => {
     if (!snapshot.error) void cache.revalidate(scope, key);
@@ -70,9 +72,11 @@ export function useWorkspaceData(tab: WorkspaceTab, query = "") {
     if (completed) cache.invalidate();
   }, [cache, snapshot.data?.jobs]);
   const counts: Partial<Record<WorkspaceTab, string>> = {};
-  for (const key of workspaceTabs) {
-    const data = cache.read(scope, key).data;
-    if (data) counts[key] = `${(key === "gaps" ? data.gaps : key === "accounts" ? data.accounts : data.outcomes).length}${data.cursor ? "+" : ""}`;
+  // The selected tab counts its reference-filtered listing (a search reports its own matches); the others count everything loaded.
+  const listed = workspaceKey(tab, "", reference);
+  for (const value of workspaceTabs) {
+    const data = cache.read(scope, value === tab ? listed : value).data;
+    if (data) counts[value] = `${(value === "gaps" ? data.gaps : value === "drafts" ? data.drafts : value === "runs" ? data.jobs.filter(job => job.kind === "analysis") : value === "accounts" ? data.accounts : data.outcomes).length}${data.cursor ? "+" : ""}`;
   }
   return { ...snapshot, counts, connection, refresh: () => cache.revalidate(scope, key, true), loadMore: () => cache.revalidate(scope, key, true, "append") };
 }

@@ -27,6 +27,7 @@ from .dispatch_view import (FILE_INPUT_FILENAME, FILE_INPUT_FORMAT, research_aut
 from .evidence_files import INDEX_PATH, build_evidence_files
 from .box_literature import LiteratureClient
 from .research_outcome import validate_insufficient_outcome
+from .box_upload import MAX_TOTAL, capture_file_limit, source_file
 
 BASE = Path('/reveal')
 STATE = BASE / 'state'
@@ -529,11 +530,15 @@ def collect():
             if not path.is_file():
                 continue
             data = path.read_bytes(); size += len(data)
-            if len(data) > 8_000_000 or size > 40_000_000:
+            if len(data) > capture_file_limit(prefix + '/' + str(path.relative_to(root))) or size > MAX_TOTAL:
                 raise ValueError('Output artifact budget exceeded')
             files[prefix + '/' + str(path.relative_to(root))] = base64.b64encode(data).decode()
-    if (STATE / 'runtime.json').exists():
-        files['runtime.json'] = base64.b64encode((STATE / 'runtime.json').read_bytes()).decode()
+    if (STATE / 'runtime.json').exists() or (STATE / 'runtime.json').is_symlink():
+        source, _ = source_file(STATE, 'runtime.json', runtime_metadata=True)
+        with source: data = source.read(capture_file_limit('runtime.json') + 1)
+        if len(data) > capture_file_limit('runtime.json') or size + len(data) > MAX_TOTAL:
+            raise ValueError('Output artifact budget exceeded')
+        files['runtime.json'] = base64.b64encode(data).decode()
     return {'files': files}
 
 

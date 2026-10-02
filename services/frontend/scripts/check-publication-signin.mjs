@@ -64,17 +64,18 @@ try {
       await page.getByRole('button', { name: 'Move my anonymous work', exact: true }).click();
       await panel.waitFor(); assert.ok(state.reads > before, 'Claim reloads record even when registered user ID stays the same');
     } else {
+      if (kind === 'account') await panel.getByRole('button', { name: 'Publish', exact: true }).click();
       await panel.getByText(`Sign in to publish this ${kind === 'account' ? 'scientific account' : 'exploration'}.`, { exact: false }).waitFor();
-      assert.equal(await panel.getByRole('button', { name: /Publish/ }).count(), 0);
+      assert.equal(await panel.getByRole('button', { name: kind === 'account' ? 'Publish account' : 'Publish exploration', exact: true }).count(), 0);
       assert.equal(state.writes.length, 0);
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
       await page.screenshot({ path: resolve(output, `${kind}-${flow}.png`), fullPage: true });
       await panel.getByRole('button', { name: 'Continue with Google', exact: true }).click();
-      await panel.getByRole('button', { name: kind === 'account' ? 'Publish…' : 'Publish exploration…', exact: true }).waitFor();
+      await panel.getByRole('button', { name: kind === 'account' ? 'Publish' : 'Publish exploration…', exact: true }).waitFor();
       assert.deepEqual(state.signins, [target]); assert.equal(page.url(), target);
     }
     assert.equal(state.writes.length, 0, 'Sign-in or claim does not automatically publish');
-    await panel.getByRole('button', { name: kind === 'account' ? 'Publish…' : 'Publish exploration…', exact: true }).click();
+    await panel.getByRole('button', { name: kind === 'account' ? 'Publish' : 'Publish exploration…', exact: true }).click();
     assert.equal(state.writes.length, 0, 'Opening confirmation does not publish');
     await panel.getByRole('button', { name: kind === 'account' ? 'Publish account' : 'Publish exploration', exact: true }).click();
     await panel.getByRole('button', { name: 'Unpublish', exact: true }).waitFor();

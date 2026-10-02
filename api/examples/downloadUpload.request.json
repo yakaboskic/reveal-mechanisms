@@ -1,0 +1,27 @@
+{
+  "operation_id": "downloadUpload",
+  "case": "request",
+  "method": "GET",
+  "path_template": "/v1/uploads/{upload_id}/download",
+  "request": {
+    "url": "https://api.reveal.example.org/v1/uploads/22222222-2222-4222-8222-222222222222/download",
+    "path": {
+      "upload_id": "22222222-2222-4222-8222-222222222222"
+    },
+    "query": {},
+    "headers": {
+      "Authorization": "Bearer <api-key-or-gateway-assertion>",
+      "Accept": "application/json"
+    },
+    "body": null
+  },
+  "responses": {
+    "200": {
+      "content_type": "application/octet-stream",
+      "examples": {
+        "text": "Hello"
+      }
+    }
+  },
+  "curl": "curl -X GET https://api.reveal.example.org/v1/uploads/22222222-2222-4222-8222-222222222222/download -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
+}

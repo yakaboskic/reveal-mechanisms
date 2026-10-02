@@ -67,7 +67,11 @@ def observation_findings(document, observed):
     for node in nodes.values():
         direct = [observed[source] for source in references(node, 'was_derived_from') if source in observed]
         text = ' '.join(node.get(field, '') for field in ('context', 'source_locator') if isinstance(node.get(field, ''), str))
-        locators = list(dict.fromkeys(re.findall(r'/(?:data|response|content|structuredContent)(?:/[A-Za-z0-9_~.%-]+)*', text)))
+        locators = list(dict.fromkeys(re.findall(r'/(?:data|response|content|structuredContent|segments)(?:/[A-Za-z0-9_~.%-]+)*', text)))
+        if any(isinstance(source,dict) and source.get('format')=='reveal.upload-text/1' for source in direct):
+            if not any(re.fullmatch(r'/segments/(?:0|[1-9][0-9]*)(?:/text)?\.?', path) for path in locators):
+                findings.append(finding('source-locator',node['id'],
+                    'Uploaded evidence requires an exact extraction JSON pointer /segments/N and its page, paragraph or line locator.'))
         values = []
         for locator in locators:
             matches = []
@@ -143,6 +147,12 @@ def source_findings(document, package, package_path, ledger_path=None):
         require(sha256(data) == artifact['sha256'], 'Captured source checksum changed')
         if artifact.get('format') == 'json':
             observed[artifact['dapper_file_id']] = decode(data)
+    # The verified extraction represents the original document too; citing the
+    # PDF/DOCX File directly must not bypass the exact segment/snippet checks.
+    for upload in package.get('user_inputs',{}).get('uploads',[]):
+        derived=observed[upload['extraction_file_id']]
+        require(derived.get('original_sha256')==upload['sha256'],'Upload extraction lost its original checksum')
+        observed[upload['original_file_id']]=derived
     captured = ledger_sources(ledger_path)
     trusted = {node['id'] for group in package['dapper_context'] for node in records(package['dapper_context'], group) if 'id' in node}
     findings = new_file_findings(document, trusted, captured)

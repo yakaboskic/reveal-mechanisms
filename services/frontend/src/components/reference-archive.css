@@ -1,0 +1,35 @@
+/* Outdated EAGGL reference: a quiet amber note inside the slate and blue reading palette. */
+.reference-badge{display:inline-flex;align-items:center;flex:none;width:fit-content;padding:2px 9px;border:1px solid #eadcb4;border-radius:20px;background:#fbf5e4;color:#7d6331;font-size:11px;font-weight:400;line-height:1.6;letter-spacing:.01em;white-space:nowrap}
+.reference-filter{display:flex;flex-wrap:wrap;gap:5px;margin:14px 0 4px}
+.reference-filter button{font-size:12px;color:#64748d;border:1px solid transparent;border-radius:14px;padding:6px 10px;min-height:34px}
+.reference-filter button:hover{background:#f7f9fc}
+.reference-filter button[aria-pressed=true]{color:#3565ae;background:#f0f5ff;border-color:#e1e9f9}
+.reference-archive{margin:0 0 28px;padding:18px 20px;border:1px solid #ece2c4;border-radius:12px;background:#fffcf4;color:#5c5238;text-align:left;overflow-wrap:anywhere}
+.reference-archive.is-compact{margin:18px 0 0;padding:15px 17px}
+.reference-archive-heading{display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px}
+.reference-archive .reference-archive-heading h2{margin:0;font-size:15px;font-weight:500;line-height:1.5;letter-spacing:-.2px;color:#5b4a22}
+.reference-archive>p{margin:10px 0 0;max-width:80ch;font-size:13px;line-height:1.75;color:#6d6143}
+.reference-archive-anchors{margin-top:12px;border-top:1px solid #efe6cc}
+.reference-archive-anchors>summary{color:#6d5c30}
+.reference-archive-anchors>div{display:grid;gap:6px;padding-bottom:4px}
+.reference-anchor{border:1px solid #efe6cc;border-radius:9px;background:#fff}
+.reference-anchor>summary{display:flex;align-items:center;gap:10px;padding:9px 12px;list-style:none;color:#55739d;font-size:12px}
+.reference-anchor>summary::-webkit-details-marker{display:none}
+.reference-anchor>summary span{margin-left:0;color:inherit}
+.reference-anchor>summary::after{content:'›';margin-left:auto;font-size:16px;line-height:1;color:#9aa8bb;transition:transform .15s}
+.reference-anchor[open]>summary::after{transform:rotate(90deg)}
+.reference-anchor .mechanism-label{flex:1}
+.reference-anchor .mechanism-name{white-space:normal}
+.reference-anchor-body{padding:2px 12px 12px;font-size:12px;line-height:1.7;color:#607386}
+.reference-anchor-body dl{margin:4px 0 10px}
+.reference-anchor-body dl>div{display:grid;grid-template-columns:minmax(90px,120px) minmax(0,1fr);gap:12px;padding:4px 0}
+.reference-anchor-body dt{color:#8291a6}
+.reference-anchor-body dd{margin:0;min-width:0;color:#536b89}
+.reference-anchor-body ol{margin:0;padding-left:18px}
+.reference-anchor-body a{display:inline-flex;align-items:center;gap:6px;min-height:32px;font-size:12px;color:#47769c}
+.reference-anchor-error{margin:8px 0;font-size:12px;line-height:1.7;color:#974c3d}
+.reference-anchor-error button{color:#8f3f30;text-decoration:underline;padding:4px 8px}
+.reference-archive-actions{display:flex;align-items:center;flex-wrap:wrap;gap:10px 16px;margin-top:14px}
+.reference-new-analysis{display:inline-flex;align-items:center;gap:10px;min-height:38px;padding:8px 13px;border:1px solid #d7e3f3;border-radius:7px;background:#f5f8fd;color:#426da9;font-size:12px;text-align:left}
+.reference-new-analysis:hover:not(:disabled){background:#edf3fc}
+@media(max-width:600px){.reference-archive{padding:16px}.reference-anchor-body dl>div{grid-template-columns:1fr;gap:2px}}

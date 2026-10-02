@@ -1,7 +1,7 @@
 flowchart TB
   G["1. Select DisMech gap<br/>GET /v1/knowledge-gaps/search<br/>200 KnowledgeGap + context"]
   M["2. Attach mechanisms<br/>POST /v1/mechanisms/suggest<br/>200 five EAGGL candidates total"]
-  D["3. Save draft<br/>POST /v1/drafts; PATCH /v1/drafts/{id}<br/>201/200 Draft + version"]
+  D["3. Edit or explicitly save<br/>POST /v1/drafts; PATCH /v1/drafts/{id}<br/>201/200 Draft + version"]
   A["4. Submit analysis<br/>POST /v1/jobs · kind=analysis<br/>202 Job + research_request_id"]
   J["5. Follow analysis<br/>GET /v1/jobs/{id}; GET /events<br/>200 Job / events; result.account_ids"]
   S["6. Inspect account + claims<br/>GET /v1/accounts/{id}; /claims/{id}<br/>200 DAPPER document + provenance"]
@@ -9,6 +9,7 @@ flowchart TB
   Q["8. Follow paragraph job<br/>GET /v1/jobs/{id}<br/>200 Job; result.paragraph_id"]
   T["9. Read paragraph<br/>GET /v1/paragraphs/{id}<br/>200 Paragraph + pinned citations"]
   C["10. Copy/export paragraph + citations<br/>POST /v1/citations/render; GET /v1/citations/{id}<br/>200 bibliography / citation export"]
+  U["Private documents<br/>POST /v1/uploads → direct S3 upload<br/>POST /v1/uploads/{id}/complete"] -. verified originals + extracted text .-> D
   G --> M --> D --> A --> J
   J -->|accepted accounts| S
   J -->|automatic outbox fan-out| P --> Q
@@ -20,7 +21,7 @@ flowchart TB
   A -. 422 no EAGGL anchor .-> M
   X["Cancel either job<br/>POST /v1/jobs/{id}/cancel<br/>200 current Job"] -. best effort .-> J
   X -. best effort .-> Q
-  F["Show insufficient evidence / failed / cancelled<br/>Keep draft and inspect diagnostics"]
+  F["Show insufficient evidence / failed / cancelled<br/>Inspect saved inputs and diagnostics"]
   J -->|other terminal state| F
   Q -->|failed or cancelled| F
   W["Worker behind the analysis job<br/>CFDE connections ×4 with frozen anchors → contextual edges<br/>bounded evidence → Claude Code + selected Proto-OKN<br/>validate/mint/save DAPPER accounts"]

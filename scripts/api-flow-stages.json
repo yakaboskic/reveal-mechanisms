@@ -30,21 +30,23 @@
       "cases": [
         "suggestMechanisms.dismech_context",
         "searchMechanisms.request",
-        "getMechanism.request"
+        "getMechanism.request",
+        "getMechanism.kpn_factor"
       ],
       "rules": [
         "Search existing EAGGL label embeddings; join the populated exact-trait/factor-number CFDE crosswalk before selecting five. Ignore label/gene differences.",
-        "Five total, maximum cosine across linked mechanisms, deterministic native-ID deduplication; fewer if needed. At least one resolved cfde-inc-v2 anchor is required.",
-        "Existing ranked GeneSet links resolve through aliases to DAPPER objects. Missing summary links do not disable a mapped factor."
+        "Five total, maximum cosine across linked mechanisms, deterministic native-ID deduplication; fewer if needed. At least one resolved anchor of the active reference model is required.",
+        "Existing ranked GeneSet links resolve through aliases to DAPPER objects. Missing summary links do not disable a mapped factor.",
+        "After a reference reload, anchors come from the active eaggl-capped-v1 generation; superseded anchors return 409 on write and 410 on read."
       ]
     },
     {
       "id": "draft",
-      "title": "Continue and save",
+      "title": "Edit or explicitly save a named draft",
       "route": "POST /v1/drafts; PATCH /v1/drafts/{id}; DELETE /v1/drafts/{id}",
-      "action": "Choose ORCID, Google or anonymous at submit; preserve selection and autosave.",
-      "incoming": "Trusted session, Composer, expected_version and Idempotency-Key.",
-      "outgoing": "Owned Draft with confirmed revision.",
+      "action": "Open a temporary gap editor; hold edits locally until explicit Save or submission.",
+      "incoming": "Trusted session, Composer including private researcher text and ready upload IDs, expected_version and Idempotency-Key.",
+      "outgoing": "Owned temporary or saved Draft with confirmed revision and lifecycle.",
       "cases": [
         "createDraft.question_and_anchor",
         "updateDraft.save_revision_two",
@@ -52,28 +54,28 @@
         "deleteDraft.delete_saved_draft"
       ],
       "rules": [
-        "Local edits before session; no credentials stored in research data.",
-        "Composer accepts no free-text inquiry or editable linked DisMech list.",
-        "Workspace groups named drafts by knowledge gap. Rename and delete use optimistic versions; active research prevents deletion. Deleting editable state preserves frozen research and results."
+        "Temporary editors expire after 24 hours and do not appear in Saved Drafts. Legacy drafts remain saved.",
+        "Save supplies a name and promotes the editor. Researcher direction, context and hypotheses remain distinct from the canonical DisMech question.",
+        "Rename and delete use optimistic versions. Deleting editable state preserves frozen requests, active runs and results."
       ]
     },
     {
       "id": "analysis",
-      "title": "Submit saved gap analysis",
+      "title": "Submit the current gap analysis",
       "route": "POST /v1/jobs",
-      "action": "Freeze the confirmed draft and queue analysis.",
+      "action": "Freeze the current editor snapshot and queue analysis; unsaved edits do not overwrite the saved draft.",
       "incoming": "AnalysisJobInput: kind=analysis, draft ID/version, bounded budgets.",
       "outgoing": "202 Job and immutable ResearchRequest.",
       "cases": [
         "createJob.analysis"
       ],
       "rules": [
-        "Freeze saved source/mapping runs and resolved native CFDE IDs; later mapping updates do not retarget this request.",
-        "Question collapses upward with chips retained."
+        "Freeze source/mapping runs, native CFDE IDs, researcher text and exact original/extraction storage references.",
+        "Later edits, upload removal or draft deletion do not change the submitted request."
       ],
       "worker": [
         "Resolve frozen DisMech context; four same-seed CFDE connections plus contextual edges and BioIndex queries.",
-        "Build, validate and freeze evidence package with exact source artifacts.",
+        "Build, validate and freeze the evidence package with exact source artifacts and supplied documents for the agent and independent reviewer.",
         "Fresh verified DAPPER clone, Claude Code in Box, selected Proto-OKN tools.",
         "Trusted assembly, minting, final lint plus grounding/ledger/ownership checks."
       ]
@@ -114,10 +116,12 @@
         "downloadArtifact.request",
         "getAccountPublication.request",
         "updateAccountPublication.publish",
-        "updateAccountPublication.unpublish"
+        "updateAccountPublication.unpublish",
+        "getArchivedReferenceFactor.request"
       ],
       "rules": [
         "Conclusions and Research statement are divider tabs.",
+        "An account built on a superseded reference generation carries archive: show its original anchors from the frozen reference factors and offer a new analysis on the gap with current factors.",
         "Claims open inline; no auto-opened first claim. Dedicated claim page has Assessment, Proposition, Evidence and Provenance tabs.",
         "Partial provenance and unavailable downloads remain explicit.",
         "Accounts remain private until the owner publishes a frozen snapshot with an optimistic version and idempotency key. Later accepted statements require an explicit publication update; unpublishing revokes public access. Public readers cannot access job telemetry or research writes."
@@ -126,7 +130,7 @@
     {
       "id": "paragraph-job",
       "title": "Generate the cited statement automatically",
-      "route": "Worker outbox → kind=paragraph job",
+      "route": "Worker outbox \u2192 kind=paragraph job",
       "action": "Each accepted account independently queues a paragraph; explicit endpoint supports retry/alternate focus.",
       "incoming": "Saved account payload, citation revisions, settings and skill version.",
       "outgoing": "Paragraph Job; account remains usable independently.",
@@ -294,7 +298,7 @@
       "route": "GET/POST /v1/knowledge-gaps/{gap_id}/vote; GET/POST /v1/accounts/{account_id}/vote",
       "action": "Read public totals and let a signed-in user upvote, downvote or clear their own choice.",
       "incoming": "A canonical gap or currently public account ID; registered session and Idempotency-Key for writes.",
-      "outgoing": "VoteState with upvotes, downvotes, net score and the current registered viewer’s vote.",
+      "outgoing": "VoteState with upvotes, downvotes, net score and the current registered viewer\u2019s vote.",
       "cases": [
         "getGapVote.request",
         "setGapVote.upvote",
@@ -309,6 +313,45 @@
         "Each registered user has one mutable choice per canonical target. Anonymous readers see totals only.",
         "Private account votes are unavailable; independently published copies share the same canonical account totals.",
         "Gap browsing can rank by net votes; committed changes invalidate catalog views through existing events."
+      ]
+    },
+    {
+      "id": "leaderboard",
+      "title": "Inspect public community contributions",
+      "route": "GET /v1/leaderboard; GET /v1/leaderboard/{view}/{entry_id}/records",
+      "action": "Rank the complete public population and inspect the exact records behind each measure.",
+      "incoming": "Researcher, account or dataset view; view-specific ranking; all or supporting evidence; signed continuation cursor.",
+      "outgoing": "Shared ranks, raw measures, score components, public eligibility counts, methodology and paginated public records.",
+      "cases": ["getLeaderboard.request", "getLeaderboardRecords.request"],
+      "rules": [
+        "Only active frozen publications count. Private work and demo/test fixtures contribute nothing.",
+        "Original registered attribution earns researcher credit; conflicting attribution remains uncredited. Researcher recognition excludes own ballots.",
+        "Explicit evidence paths establish dataset use. Supporting concerns the claim proposition, not scientific endorsement.",
+        "Publication and vote changes expire cursors. Responses are never cached."
+      ]
+    },
+    {
+      "id": "uploads",
+      "title": "Attach private research documents",
+      "route": "POST /v1/uploads; GET /v1/uploads/{id}; POST /v1/uploads/{id}/complete",
+      "action": "Upload exact bytes directly to a short-lived S3 staging destination, then verify and retain original plus extracted text.",
+      "incoming": "Owned draft, filename, media type, byte size, SHA-256 and initiation idempotency key.",
+      "outgoing": "Owner-scoped upload metadata and transfer ticket; completion returns pinned original/extraction storage references.",
+      "cases": [
+        "createUpload.example",
+        "listUploads.request",
+        "getUpload.request",
+        "removeUpload.request",
+        "completeUpload.request",
+        "uploadLocalContent.example",
+        "downloadUpload.request"
+      ],
+      "rules": [
+        "Retry initiation refreshes transfer credentials and returns current metadata. Ready files can be reused by same-owner editor clones.",
+        "Select up to five files, 8 MB per file, 16 MB total and 1 MB extracted JSON. Replacement staging has a separate bounded allowance.",
+        "Saved/frozen references prevent removal. Temporary metadata expires; shared immutable blobs are retained.",
+        "User hypotheses are unverified context. Supplied evidence requires exact source locators and retains the existing CFDE requirements.",
+        "Results based on private researcher inputs cannot be published until a deliberate disclosure workflow exists."
       ]
     }
   ]

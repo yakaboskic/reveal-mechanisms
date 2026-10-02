@@ -50,9 +50,10 @@
 .prototype-composer .chip-add{width:34px;min-height:34px;border:1px dashed #d8e0eb;border-radius:8px;color:#8695ab;background:#fff;font-size:18px}
 .prototype-composer .anchor-required{font-size:11px;color:#8d6c40;margin:10px 0 0}
 .prototype-composer .context-disclosures{margin-top:18px;padding-top:5px}
-.prototype-composer .context-disclosures>details{border-top:1px solid #eef1f6;padding:0;margin-top:6px}
+.prototype-composer .context-disclosures>details{border-top:1px solid #eef1f6;padding:0;margin:0}
 .prototype-composer .context-disclosures>details:first-child{border-top:0}
-.prototype-composer .context-disclosures>details>summary{display:flex;align-items:center;gap:8px;list-style:none;min-height:42px;padding:9px 0;color:#697c98;font-size:12px}
+.prototype-composer .context-disclosures>details>summary,
+.prototype-composer .additional-context>summary{display:flex;align-items:center;gap:8px;list-style:none;min-height:48px;padding:12px 0;color:#697c98;font-size:12px;line-height:1.6}
 .prototype-composer .context-disclosures>details>summary::-webkit-details-marker{display:none}
 .prototype-composer .context-disclosures>details>summary::after{content:'›';font-size:18px;line-height:1;color:#8a9bb0;margin-left:auto;transition:transform .15s}
 .prototype-composer .context-disclosures>details[open]>summary::after{transform:rotate(90deg)}
@@ -68,9 +69,6 @@
 .prototype-composer .linked-mechanism small{font-size:11px}
 .prototype-composer .linked-mechanism>span:first-child{min-width:0;overflow-wrap:anywhere}
 .prototype-composer .submit-row{margin-top:22px;display:flex;justify-content:flex-end;border:0;padding:0}
-.prototype-composer .research-result-options{max-width:66ch;margin:20px 0 0;color:#697c98;font-size:12px;line-height:1.7}
-.prototype-composer .research-result-options strong{font-weight:550;color:#526783}
-.prototype-composer .research-result-options+.submit-row{margin-top:12px}
 .prototype-composer .gap-submit{display:inline-flex;align-items:center;gap:10px;min-height:44px;padding:0 0 0 10px;border-radius:24px;font-size:13px;color:#496488}
 .prototype-composer .gap-submit .send{width:36px;height:36px}
 .prototype-composer .gap-submit:hover:not(:disabled){color:#2563eb}

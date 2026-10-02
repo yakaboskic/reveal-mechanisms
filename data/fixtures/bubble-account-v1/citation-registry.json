@@ -1,0 +1,631 @@
+[
+  {
+    "access_level": "private",
+    "byline": [],
+    "canonical_url": "http://localhost:3000/id/dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+    "citation_profile_version": "reveal-citation-v1",
+    "dapper_identity_profile": "DAPPER-ID-1",
+    "dapper_schema_version": "c0cfce549baded068aa9e82f81a1400025614b51",
+    "date_provenance": {
+      "first_minted_at": {
+        "source_ref": "urn:example:reveal:contract-fixture"
+      },
+      "imported_at": {
+        "source_ref": "urn:example:reveal:contract-fixture"
+      }
+    },
+    "first_minted_at": "2026-09-24T16:00:00Z",
+    "generated_at": null,
+    "imported_at": "2026-09-24T16:00:00Z",
+    "issued_basis": "first_minted_at",
+    "issued_date": "2026-09-24",
+    "language": "en",
+    "metadata_checksum": "32a35dbd805b8bfaaca42fe1e87a5f40d022b041fdf380f5dc9bba9c5ca425b2",
+    "metadata_revision": 1,
+    "object_payload_ref": "http://localhost:3000/api/backend/v1/objects/dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+    "origin": "imported",
+    "original_issued_date": null,
+    "publication_state": "unpublished",
+    "published_at": null,
+    "publisher": null,
+    "repository": "REVEAL canonical UI fixtures — unpublished and scientifically unreviewed",
+    "target_class": "KnowledgeGap",
+    "target_id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+    "title": "Are the CAD PGS×context interactions driven by adverse exposures causally amplifying genetic risk, or are some \"contexts\" actually downstream readouts of incipient disease (reverse causation)?",
+    "title_derivation": {
+      "method": "inquiry_text",
+      "source": {
+        "source_ref": "urn:example:cad-account-design"
+      },
+      "version": "1"
+    }
+  },
+  {
+    "access_level": "private",
+    "byline": [
+      {
+        "agent_id": "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he",
+        "family_name": "Example",
+        "given_name": "Design",
+        "kind": "person",
+        "roles": [
+          "agent_operator"
+        ],
+        "source": {
+          "source_ref": "urn:example:cad-account-design"
+        }
+      }
+    ],
+    "canonical_url": "http://localhost:3000/id/dapper:Claim.iN6K2Rz0XKMnROZLUNLuhZhz0id5wK0h",
+    "citation_profile_version": "reveal-citation-v1",
+    "dapper_identity_profile": "DAPPER-ID-1",
+    "dapper_schema_version": "c0cfce549baded068aa9e82f81a1400025614b51",
+    "date_provenance": {
+      "first_minted_at": {
+        "source_ref": "urn:example:reveal:contract-fixture"
+      }
+    },
+    "first_minted_at": "2026-09-24T16:00:00Z",
+    "generated_at": null,
+    "issued_basis": "first_minted_at",
+    "issued_date": "2026-09-24",
+    "language": "en",
+    "metadata_checksum": "e8d4a018c00d5ad91da019fd39029c69f36b98ce157d2295e9fc22d9f3860900",
+    "metadata_revision": 1,
+    "object_payload_ref": "http://localhost:3000/api/backend/v1/objects/dapper:Claim.iN6K2Rz0XKMnROZLUNLuhZhz0id5wK0h",
+    "origin": "native",
+    "publication_state": "unpublished",
+    "published_at": null,
+    "publisher": null,
+    "repository": "REVEAL canonical UI fixtures — unpublished and scientifically unreviewed",
+    "target_class": "Claim",
+    "target_id": "dapper:Claim.iN6K2Rz0XKMnROZLUNLuhZhz0id5wK0h",
+    "title": "The EAGGL result supports SHH involvement in this mechanism through its reported loading of 0.5042 under cfde-inc-v2.",
+    "title_derivation": {
+      "method": "assessment_statement",
+      "source": {
+        "source_ref": "urn:example:cad-account-design"
+      },
+      "version": "1"
+    }
+  },
+  {
+    "access_level": "private",
+    "byline": [
+      {
+        "agent_id": "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he",
+        "family_name": "Example",
+        "given_name": "Design",
+        "kind": "person",
+        "roles": [
+          "agent_operator"
+        ],
+        "source": {
+          "source_ref": "urn:example:cad-account-design"
+        }
+      }
+    ],
+    "canonical_url": "http://localhost:3000/id/dapper:Claim.eaeEY0LpLXwNmk3-Rr9s-YEiUokDLfO6",
+    "citation_profile_version": "reveal-citation-v1",
+    "dapper_identity_profile": "DAPPER-ID-1",
+    "dapper_schema_version": "c0cfce549baded068aa9e82f81a1400025614b51",
+    "date_provenance": {
+      "first_minted_at": {
+        "source_ref": "urn:example:reveal:contract-fixture"
+      }
+    },
+    "first_minted_at": "2026-09-24T16:00:00Z",
+    "generated_at": null,
+    "issued_basis": "first_minted_at",
+    "issued_date": "2026-09-24",
+    "language": "en",
+    "metadata_checksum": "c4b5674d60e7cddc9df2102e41fbc607f7491555abd19eea7c6063ef6814fc8d",
+    "metadata_revision": 1,
+    "object_payload_ref": "http://localhost:3000/api/backend/v1/objects/dapper:Claim.eaeEY0LpLXwNmk3-Rr9s-YEiUokDLfO6",
+    "origin": "native",
+    "publication_state": "unpublished",
+    "published_at": null,
+    "publisher": null,
+    "repository": "REVEAL canonical UI fixtures — unpublished and scientifically unreviewed",
+    "target_class": "Claim",
+    "target_id": "dapper:Claim.eaeEY0LpLXwNmk3-Rr9s-YEiUokDLfO6",
+    "title": "The EAGGL result supports GLI3 involvement in this mechanism through its reported loading of 0.3245 under cfde-inc-v2.",
+    "title_derivation": {
+      "method": "assessment_statement",
+      "source": {
+        "source_ref": "urn:example:cad-account-design"
+      },
+      "version": "1"
+    }
+  },
+  {
+    "access_level": "private",
+    "byline": [
+      {
+        "agent_id": "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he",
+        "family_name": "Example",
+        "given_name": "Design",
+        "kind": "person",
+        "roles": [
+          "agent_operator"
+        ],
+        "source": {
+          "source_ref": "urn:example:cad-account-design"
+        }
+      }
+    ],
+    "canonical_url": "http://localhost:3000/id/dapper:Claim.0Tdjx1Ry7AC5sP50HIlUfKb-cwpgY-3u",
+    "citation_profile_version": "reveal-citation-v1",
+    "dapper_identity_profile": "DAPPER-ID-1",
+    "dapper_schema_version": "c0cfce549baded068aa9e82f81a1400025614b51",
+    "date_provenance": {
+      "first_minted_at": {
+        "source_ref": "urn:example:reveal:contract-fixture"
+      }
+    },
+    "first_minted_at": "2026-09-24T16:00:00Z",
+    "generated_at": null,
+    "issued_basis": "first_minted_at",
+    "issued_date": "2026-09-24",
+    "language": "en",
+    "metadata_checksum": "e8f337d717cab94ad207641256ad52b04f1eaa593c62ae4636a3f7f3a2660041",
+    "metadata_revision": 1,
+    "object_payload_ref": "http://localhost:3000/api/backend/v1/objects/dapper:Claim.0Tdjx1Ry7AC5sP50HIlUfKb-cwpgY-3u",
+    "origin": "native",
+    "publication_state": "unpublished",
+    "published_at": null,
+    "publisher": null,
+    "repository": "REVEAL canonical UI fixtures — unpublished and scientifically unreviewed",
+    "target_class": "Claim",
+    "target_id": "dapper:Claim.0Tdjx1Ry7AC5sP50HIlUfKb-cwpgY-3u",
+    "title": "The EAGGL result supports TCF7L2 involvement in this mechanism through its reported loading of 0.3813 under cfde-inc-v2.",
+    "title_derivation": {
+      "method": "assessment_statement",
+      "source": {
+        "source_ref": "urn:example:cad-account-design"
+      },
+      "version": "1"
+    }
+  },
+  {
+    "access_level": "private",
+    "byline": [
+      {
+        "agent_id": "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he",
+        "family_name": "Example",
+        "given_name": "Design",
+        "kind": "person",
+        "roles": [
+          "agent_operator"
+        ],
+        "source": {
+          "source_ref": "urn:example:cad-account-design"
+        }
+      }
+    ],
+    "canonical_url": "http://localhost:3000/id/dapper:Claim.Yi6Uhd9aRwVHLlLSoc4TxEMo0VWswD0a",
+    "citation_profile_version": "reveal-citation-v1",
+    "dapper_identity_profile": "DAPPER-ID-1",
+    "dapper_schema_version": "c0cfce549baded068aa9e82f81a1400025614b51",
+    "date_provenance": {
+      "first_minted_at": {
+        "source_ref": "urn:example:reveal:contract-fixture"
+      }
+    },
+    "first_minted_at": "2026-09-24T16:00:00Z",
+    "generated_at": null,
+    "issued_basis": "first_minted_at",
+    "issued_date": "2026-09-24",
+    "language": "en",
+    "metadata_checksum": "d671435d869dfd2620da2910dc258267813e58efaca439501fc0aaef3e82192f",
+    "metadata_revision": 1,
+    "object_payload_ref": "http://localhost:3000/api/backend/v1/objects/dapper:Claim.Yi6Uhd9aRwVHLlLSoc4TxEMo0VWswD0a",
+    "origin": "native",
+    "publication_state": "unpublished",
+    "published_at": null,
+    "publisher": null,
+    "repository": "REVEAL canonical UI fixtures — unpublished and scientifically unreviewed",
+    "target_class": "Claim",
+    "target_id": "dapper:Claim.Yi6Uhd9aRwVHLlLSoc4TxEMo0VWswD0a",
+    "title": "The EAGGL result supports involvement of the AMP AD / GTEx brain-aging set, with a loading of 1.0 on mechanism Factor1.",
+    "title_derivation": {
+      "method": "assessment_statement",
+      "source": {
+        "source_ref": "urn:example:cad-account-design"
+      },
+      "version": "1"
+    }
+  },
+  {
+    "access_level": "private",
+    "byline": [
+      {
+        "agent_id": "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he",
+        "family_name": "Example",
+        "given_name": "Design",
+        "kind": "person",
+        "roles": [
+          "agent_operator"
+        ],
+        "source": {
+          "source_ref": "urn:example:cad-account-design"
+        }
+      }
+    ],
+    "canonical_url": "http://localhost:3000/id/dapper:Claim.fUp7z48VwrXH5oueNfh7D4nNhQMNtC3C",
+    "citation_profile_version": "reveal-citation-v1",
+    "dapper_identity_profile": "DAPPER-ID-1",
+    "dapper_schema_version": "c0cfce549baded068aa9e82f81a1400025614b51",
+    "date_provenance": {
+      "first_minted_at": {
+        "source_ref": "urn:example:reveal:contract-fixture"
+      }
+    },
+    "first_minted_at": "2026-09-24T16:00:00Z",
+    "generated_at": null,
+    "issued_basis": "first_minted_at",
+    "issued_date": "2026-09-24",
+    "language": "en",
+    "metadata_checksum": "31bd9de94ce5a9e2d50597aadf557064ed0a3256ff1fc1d21c21eacf3659ab1f",
+    "metadata_revision": 1,
+    "object_payload_ref": "http://localhost:3000/api/backend/v1/objects/dapper:Claim.fUp7z48VwrXH5oueNfh7D4nNhQMNtC3C",
+    "origin": "native",
+    "publication_state": "unpublished",
+    "published_at": null,
+    "publisher": null,
+    "repository": "REVEAL canonical UI fixtures — unpublished and scientifically unreviewed",
+    "target_class": "Claim",
+    "target_id": "dapper:Claim.fUp7z48VwrXH5oueNfh7D4nNhQMNtC3C",
+    "title": "The EAGGL result supports involvement of the PsychENCODE geneM16 set, with a loading of 0.4518 on mechanism Factor1.",
+    "title_derivation": {
+      "method": "assessment_statement",
+      "source": {
+        "source_ref": "urn:example:cad-account-design"
+      },
+      "version": "1"
+    }
+  },
+  {
+    "access_level": "private",
+    "byline": [
+      {
+        "agent_id": "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he",
+        "family_name": "Example",
+        "given_name": "Design",
+        "kind": "person",
+        "roles": [
+          "agent_operator"
+        ],
+        "source": {
+          "source_ref": "urn:example:cad-account-design"
+        }
+      }
+    ],
+    "canonical_url": "http://localhost:3000/id/dapper:Claim.8uwyJZx7pdEoZ9Vw7Xu726ukdLf2FwyW",
+    "citation_profile_version": "reveal-citation-v1",
+    "dapper_identity_profile": "DAPPER-ID-1",
+    "dapper_schema_version": "c0cfce549baded068aa9e82f81a1400025614b51",
+    "date_provenance": {
+      "first_minted_at": {
+        "source_ref": "urn:example:reveal:contract-fixture"
+      }
+    },
+    "first_minted_at": "2026-09-24T16:00:00Z",
+    "generated_at": null,
+    "issued_basis": "first_minted_at",
+    "issued_date": "2026-09-24",
+    "language": "en",
+    "metadata_checksum": "004c6b302d548d41f410a3e5885355a538a0ea14cdc3c3a8cd6942bcc7ece8ea",
+    "metadata_revision": 1,
+    "object_payload_ref": "http://localhost:3000/api/backend/v1/objects/dapper:Claim.8uwyJZx7pdEoZ9Vw7Xu726ukdLf2FwyW",
+    "origin": "native",
+    "publication_state": "unpublished",
+    "published_at": null,
+    "publisher": null,
+    "repository": "REVEAL canonical UI fixtures — unpublished and scientifically unreviewed",
+    "target_class": "Claim",
+    "target_id": "dapper:Claim.8uwyJZx7pdEoZ9Vw7Xu726ukdLf2FwyW",
+    "title": "PIGEAN supports SHH trait-level involvement with a combined relevance score of 3.86; this is distinct from its mechanism loading.",
+    "title_derivation": {
+      "method": "assessment_statement",
+      "source": {
+        "source_ref": "urn:example:cad-account-design"
+      },
+      "version": "1"
+    }
+  },
+  {
+    "access_level": "private",
+    "byline": [
+      {
+        "agent_id": "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he",
+        "family_name": "Example",
+        "given_name": "Design",
+        "kind": "person",
+        "roles": [
+          "agent_operator"
+        ],
+        "source": {
+          "source_ref": "urn:example:cad-account-design"
+        }
+      }
+    ],
+    "canonical_url": "http://localhost:3000/id/dapper:Claim.YMgLIul-wf8vntqWIY_enxh56yTZx9pI",
+    "citation_profile_version": "reveal-citation-v1",
+    "dapper_identity_profile": "DAPPER-ID-1",
+    "dapper_schema_version": "c0cfce549baded068aa9e82f81a1400025614b51",
+    "date_provenance": {
+      "first_minted_at": {
+        "source_ref": "urn:example:reveal:contract-fixture"
+      }
+    },
+    "first_minted_at": "2026-09-24T16:00:00Z",
+    "generated_at": null,
+    "issued_basis": "first_minted_at",
+    "issued_date": "2026-09-24",
+    "language": "en",
+    "metadata_checksum": "a437666f7c4ab0d5bb05d6b23d62052999d1433ad85c5f5656f0e63582726ffd",
+    "metadata_revision": 1,
+    "object_payload_ref": "http://localhost:3000/api/backend/v1/objects/dapper:Claim.YMgLIul-wf8vntqWIY_enxh56yTZx9pI",
+    "origin": "native",
+    "publication_state": "unpublished",
+    "published_at": null,
+    "publisher": null,
+    "repository": "REVEAL canonical UI fixtures — unpublished and scientifically unreviewed",
+    "target_class": "Claim",
+    "target_id": "dapper:Claim.YMgLIul-wf8vntqWIY_enxh56yTZx9pI",
+    "title": "PIGEAN supports GLI3 trait-level involvement with a combined relevance score of 1.98; this is distinct from its mechanism loading.",
+    "title_derivation": {
+      "method": "assessment_statement",
+      "source": {
+        "source_ref": "urn:example:cad-account-design"
+      },
+      "version": "1"
+    }
+  },
+  {
+    "access_level": "private",
+    "byline": [
+      {
+        "agent_id": "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he",
+        "family_name": "Example",
+        "given_name": "Design",
+        "kind": "person",
+        "roles": [
+          "agent_operator"
+        ],
+        "source": {
+          "source_ref": "urn:example:cad-account-design"
+        }
+      }
+    ],
+    "canonical_url": "http://localhost:3000/id/dapper:Claim.YwrSSe0OE5Uq62PD1t_vvDHAcNeJn8ol",
+    "citation_profile_version": "reveal-citation-v1",
+    "dapper_identity_profile": "DAPPER-ID-1",
+    "dapper_schema_version": "c0cfce549baded068aa9e82f81a1400025614b51",
+    "date_provenance": {
+      "first_minted_at": {
+        "source_ref": "urn:example:reveal:contract-fixture"
+      }
+    },
+    "first_minted_at": "2026-09-24T16:00:00Z",
+    "generated_at": null,
+    "issued_basis": "first_minted_at",
+    "issued_date": "2026-09-24",
+    "language": "en",
+    "metadata_checksum": "20c9b7c197b4d4588c9d8140fdb3edc7f3389fa0b92971978814798b6ff44efc",
+    "metadata_revision": 1,
+    "object_payload_ref": "http://localhost:3000/api/backend/v1/objects/dapper:Claim.YwrSSe0OE5Uq62PD1t_vvDHAcNeJn8ol",
+    "origin": "native",
+    "publication_state": "unpublished",
+    "published_at": null,
+    "publisher": null,
+    "repository": "REVEAL canonical UI fixtures — unpublished and scientifically unreviewed",
+    "target_class": "Claim",
+    "target_id": "dapper:Claim.YwrSSe0OE5Uq62PD1t_vvDHAcNeJn8ol",
+    "title": "PIGEAN supports TCF7L2 trait-level involvement with a combined relevance score of 2.42; this is distinct from its mechanism loading.",
+    "title_derivation": {
+      "method": "assessment_statement",
+      "source": {
+        "source_ref": "urn:example:cad-account-design"
+      },
+      "version": "1"
+    }
+  },
+  {
+    "access_level": "private",
+    "byline": [
+      {
+        "agent_id": "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he",
+        "family_name": "Example",
+        "given_name": "Design",
+        "kind": "person",
+        "roles": [
+          "agent_operator"
+        ],
+        "source": {
+          "source_ref": "urn:example:cad-account-design"
+        }
+      }
+    ],
+    "canonical_url": "http://localhost:3000/id/dapper:Claim.0wzE-AEqZ1fcgl2B0ZoYHZ7YiQBbR3lE",
+    "citation_profile_version": "reveal-citation-v1",
+    "dapper_identity_profile": "DAPPER-ID-1",
+    "dapper_schema_version": "c0cfce549baded068aa9e82f81a1400025614b51",
+    "date_provenance": {
+      "first_minted_at": {
+        "source_ref": "urn:example:reveal:contract-fixture"
+      }
+    },
+    "first_minted_at": "2026-09-24T16:00:00Z",
+    "generated_at": null,
+    "issued_basis": "first_minted_at",
+    "issued_date": "2026-09-24",
+    "language": "en",
+    "metadata_checksum": "0007614760a9aa5f287d657a75a90f17e689b241f6ded71f44adc6c2b64fbcba",
+    "metadata_revision": 1,
+    "object_payload_ref": "http://localhost:3000/api/backend/v1/objects/dapper:Claim.0wzE-AEqZ1fcgl2B0ZoYHZ7YiQBbR3lE",
+    "origin": "native",
+    "publication_state": "unpublished",
+    "published_at": null,
+    "publisher": null,
+    "repository": "REVEAL canonical UI fixtures — unpublished and scientifically unreviewed",
+    "target_class": "Claim",
+    "target_id": "dapper:Claim.0wzE-AEqZ1fcgl2B0ZoYHZ7YiQBbR3lE",
+    "title": "PIGEAN supports trait-level involvement of the AMP AD / GTEx brain-aging set, with beta=0.115 and beta_uncorrected=0.119.",
+    "title_derivation": {
+      "method": "assessment_statement",
+      "source": {
+        "source_ref": "urn:example:cad-account-design"
+      },
+      "version": "1"
+    }
+  },
+  {
+    "access_level": "private",
+    "byline": [
+      {
+        "agent_id": "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he",
+        "family_name": "Example",
+        "given_name": "Design",
+        "kind": "person",
+        "roles": [
+          "agent_operator"
+        ],
+        "source": {
+          "source_ref": "urn:example:cad-account-design"
+        }
+      }
+    ],
+    "canonical_url": "http://localhost:3000/id/dapper:Claim.JXS6Wb_N1ZXOvGvsPoW0UiQdTb_2j2d9",
+    "citation_profile_version": "reveal-citation-v1",
+    "dapper_identity_profile": "DAPPER-ID-1",
+    "dapper_schema_version": "c0cfce549baded068aa9e82f81a1400025614b51",
+    "date_provenance": {
+      "first_minted_at": {
+        "source_ref": "urn:example:reveal:contract-fixture"
+      }
+    },
+    "first_minted_at": "2026-09-24T16:00:00Z",
+    "generated_at": null,
+    "issued_basis": "first_minted_at",
+    "issued_date": "2026-09-24",
+    "language": "en",
+    "metadata_checksum": "cfeea1188ec7b9ecd6b87abf6885d8e9a6dc1b4922f9c08eaec8f4ae1c8e8959",
+    "metadata_revision": 1,
+    "object_payload_ref": "http://localhost:3000/api/backend/v1/objects/dapper:Claim.JXS6Wb_N1ZXOvGvsPoW0UiQdTb_2j2d9",
+    "origin": "native",
+    "publication_state": "unpublished",
+    "published_at": null,
+    "publisher": null,
+    "repository": "REVEAL canonical UI fixtures — unpublished and scientifically unreviewed",
+    "target_class": "Claim",
+    "target_id": "dapper:Claim.JXS6Wb_N1ZXOvGvsPoW0UiQdTb_2j2d9",
+    "title": "PIGEAN supports trait-level involvement of the PsychENCODE geneM16 set, with beta=0.00729 and beta_uncorrected=0.0586.",
+    "title_derivation": {
+      "method": "assessment_statement",
+      "source": {
+        "source_ref": "urn:example:cad-account-design"
+      },
+      "version": "1"
+    }
+  },
+  {
+    "access_level": "private",
+    "byline": [
+      {
+        "agent_id": "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he",
+        "family_name": "Example",
+        "given_name": "Design",
+        "kind": "person",
+        "roles": [
+          "agent_operator"
+        ],
+        "source": {
+          "source_ref": "urn:example:cad-account-design"
+        }
+      }
+    ],
+    "canonical_url": "http://localhost:3000/id/dapper:Claim.N5EVC_d0CV0e76th1zsyX3wHf1Bw16VZ",
+    "citation_profile_version": "reveal-citation-v1",
+    "dapper_identity_profile": "DAPPER-ID-1",
+    "dapper_schema_version": "c0cfce549baded068aa9e82f81a1400025614b51",
+    "date_provenance": {
+      "first_minted_at": {
+        "source_ref": "urn:example:reveal:contract-fixture"
+      }
+    },
+    "first_minted_at": "2026-09-24T16:00:00Z",
+    "generated_at": null,
+    "issued_basis": "first_minted_at",
+    "issued_date": "2026-09-24",
+    "language": "en",
+    "metadata_checksum": "224df5bf1344a1e394061278a90d14da92813ff0d7b733e44544dcda34f2117c",
+    "metadata_revision": 1,
+    "object_payload_ref": "http://localhost:3000/api/backend/v1/objects/dapper:Claim.N5EVC_d0CV0e76th1zsyX3wHf1Bw16VZ",
+    "origin": "native",
+    "publication_state": "unpublished",
+    "published_at": null,
+    "publisher": null,
+    "repository": "REVEAL canonical UI fixtures — unpublished and scientifically unreviewed",
+    "target_class": "Claim",
+    "target_id": "dapper:Claim.N5EVC_d0CV0e76th1zsyX3wHf1Bw16VZ",
+    "title": "For this illustrative scenario, a mock ProKN assertion supports SHH membership in the AMP AD / GTEx brain-aging set. The membership is unverified.",
+    "title_derivation": {
+      "method": "assessment_statement",
+      "source": {
+        "source_ref": "urn:example:cad-account-design"
+      },
+      "version": "1"
+    }
+  },
+  {
+    "access_level": "private",
+    "byline": [
+      {
+        "agent_id": "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he",
+        "family_name": "Example",
+        "given_name": "Design",
+        "kind": "person",
+        "roles": [
+          "agent_operator"
+        ],
+        "source": {
+          "source_ref": "urn:example:cad-account-design"
+        }
+      }
+    ],
+    "canonical_url": "http://localhost:3000/id/dapper:Claim.GseJ6JHI0scMFrE5_I-x9ZC4etecmMT0",
+    "citation_profile_version": "reveal-citation-v1",
+    "dapper_identity_profile": "DAPPER-ID-1",
+    "dapper_schema_version": "c0cfce549baded068aa9e82f81a1400025614b51",
+    "date_provenance": {
+      "first_minted_at": {
+        "source_ref": "urn:example:reveal:contract-fixture"
+      }
+    },
+    "first_minted_at": "2026-09-24T16:00:00Z",
+    "generated_at": null,
+    "issued_basis": "first_minted_at",
+    "issued_date": "2026-09-24",
+    "language": "en",
+    "metadata_checksum": "e6104e1b983fd188da115d458689b2ec795097894fe8d899a61edb277fa07580",
+    "metadata_revision": 1,
+    "object_payload_ref": "http://localhost:3000/api/backend/v1/objects/dapper:Claim.GseJ6JHI0scMFrE5_I-x9ZC4etecmMT0",
+    "origin": "native",
+    "publication_state": "unpublished",
+    "published_at": null,
+    "publisher": null,
+    "repository": "REVEAL canonical UI fixtures — unpublished and scientifically unreviewed",
+    "target_class": "Claim",
+    "target_id": "dapper:Claim.GseJ6JHI0scMFrE5_I-x9ZC4etecmMT0",
+    "title": "For this illustrative scenario, a mock BiomarkerKG assertion supports TCF7L2 membership in the PsychENCODE geneM16 set. The membership is unverified.",
+    "title_derivation": {
+      "method": "assessment_statement",
+      "source": {
+        "source_ref": "urn:example:cad-account-design"
+      },
+      "version": "1"
+    }
+  }
+]

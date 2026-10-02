@@ -97,6 +97,18 @@ class AccountDiscoveryTests(unittest.TestCase):
         self.assertEqual([item['scientific_accounts']['count'] for item in public['items']], [0, 0, 0])
         self.assertEqual(self.get('/v1/knowledge-gaps/' + b['object']['id'] + '/accounts')['items'], [])
 
+    def test_archived_accounts_are_counted_apart_and_never_rank(self):
+        from reveal_backend.account_discovery import counted_gap, counts_by_gap
+        from reveal_backend.reference_generation import ARCHIVE_STATUS
+        a, b, _ = self.gaps
+        summary = lambda gap, archived=False: {'account': {'question': gap['object']['id']},
+                                               **({'archive': {'status': ARCHIVE_STATUS}} if archived else {})}
+        counts = counts_by_gap([summary(a), summary(a, True), summary(a, True), summary(b, True)])
+        first, second = (counted_gap(gap, counts, '', 'now')['scientific_accounts'] for gap in (a, b))
+        self.assertEqual((first['count'], first['archived_count']), (1, 2))
+        self.assertEqual((second['count'], second['archived_count']), (0, 1))
+        self.assertNotIn('archived_count', counted_gap(self.gaps[2], counts, '', 'now')['scientific_accounts'])
+
     def test_search_relevance_order_is_unchanged_but_counts_and_exact_gap_update(self):
         gap = self.gaps[1]; self.accepted(self.owner, gap, 'd')
         result = self.get(self.search_path, self.owner)

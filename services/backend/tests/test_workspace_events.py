@@ -91,6 +91,20 @@ class WorkspaceEventsTests(unittest.TestCase):
         self.assertNotIn('private-account-id',json.dumps(public))
         self.assertNotIn('secret-key',json.dumps(public))
 
+    def test_only_a_reference_cutover_names_its_public_catalog_event(self):
+        # Open composers recheck their anchors on `reference` catalog events only, never on publishes or votes;
+        # a publish or vote committed with a cutover keeps the cutover's name.
+        with self.repo.transaction() as tx:
+            tx.put('publication','p1','alice',{'account_id':'a1','visibility':'public'})
+        _, replay, cursor, _ = self.replay('bob')
+        self.assertEqual([item['entity_id'] for item in replay if item['scope']=='public'],['catalog'])
+        with self.repo.transaction() as tx:
+            tx.put('vector_active','local','catalog',{'snapshot_id':'s2'})
+            tx.put('outcome_publication','o1','alice',{'visibility':'public'})
+            tx.put('vote','b1','alice',{'target_kind':'gap','target_id':'g1','gap_id':'g1','vote':1})
+        public = [item for item in self.replay('bob',positions=cursor)[1] if item['scope']=='public']
+        self.assertEqual([(item['entity_id'],item['collections']) for item in public],[('reference',['catalog','accounts','gaps','explorations'])])
+
     def test_vote_commit_pushes_scoped_workspace_and_anonymous_catalog_invalidation(self):
         before_alice, before_bob = self.replay('alice')[2], self.replay('bob')[2]
         ballot = {'target_kind':'account', 'target_id':'scientific-target', 'gap_id':'related-gap', 'vote':1}

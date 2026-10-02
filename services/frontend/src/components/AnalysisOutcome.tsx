@@ -7,6 +7,7 @@ import { sourceDownloadPath } from "@/lib/source-download";
 import { useIdentity } from "./Session";
 import { PublicationSignIn } from "./PublicationSignIn";
 import { LoadingStatus, LoadingSurface } from "./LoadingSurface";
+import { ReferenceArchiveBanner, ReferenceBadge, requestSettings } from "./ReferenceArchive";
 import "./analysis-outcome.css";
 
 export const outcomeHref = (id: string) => `/analyses/${encodeURIComponent(id)}`;
@@ -28,7 +29,7 @@ export function JobOutcome({ jobId }: { jobId: string }) {
   const outcome = record?.binding === binding ? record.value : null;
   if (ready && !me) return null;
   return <section className="outcome-job" aria-label="Saved exploration">
-    {outcome ? <><div className="outcome-status"><span aria-hidden="true">✓</span> Exploration saved</div><h2>No supported scientific account</h2><p className="outcome-preview">{outcome.summary}</p><Link href={outcomeHref(outcome.id)}>View findings and evidence gaps <span aria-hidden="true">↗</span></Link><small>{outcome.publication.visibility === "public" ? "Published against this knowledge gap." : "Private to your workspace. Open the exploration to publish it for other researchers."}</small></> : <LoadingSurface compact title={error ? "The saved exploration could not be opened" : "Opening the exploration record"} description="Retrieving the findings and evidence gaps retained from this analysis." error={error} onRetry={() => setRetry(value => value + 1)} skeleton="none" />}
+    {outcome ? <><div className="outcome-status"><span aria-hidden="true">✓</span> Exploration saved</div><ReferenceBadge archive={outcome.archive} /><h2>No supported scientific account</h2><p className="outcome-preview">{outcome.summary}</p><Link href={outcomeHref(outcome.id)}>View findings and evidence gaps <span aria-hidden="true">↗</span></Link><small>{outcome.publication.visibility === "public" ? "Published against this knowledge gap." : "Private to your workspace. Open the exploration to publish it for other researchers."}</small></> : <LoadingSurface compact title={error ? "The saved exploration could not be opened" : "Opening the exploration record"} description="Retrieving the findings and evidence gaps retained from this analysis." error={error} onRetry={() => setRetry(value => value + 1)} skeleton="none" />}
   </section>;
 }
 
@@ -101,6 +102,8 @@ export function AnalysisOutcomeView({ id }: { id: string }) {
   return <article className="outcome-page">
     <nav><Link href={`/?gap=${encodeURIComponent(outcome.knowledge_gap.id)}`}>← Knowledge gap</Link>{outcome.job_id && outcome.publication.can_manage && <Link href={`/?job=${encodeURIComponent(outcome.job_id)}`}>View private activity</Link>}</nav>
     <header><p className="outcome-status"><span aria-hidden="true">✓</span> Explored · Evidence insufficient</p><h1>{outcome.knowledge_gap.text}</h1><p className="outcome-attribution">Explored by <strong>{outcomeAuthor(outcome)}</strong> on <time dateTime={outcome.created_at}>{new Date(outcome.created_at).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}</time>{outcome.publication.visibility === "public" && <span>Published exploration</span>}</p></header>
+    {/* The anchors below already render from frozen data; the banner adds the reference snapshot. */}
+    {outcome.archive && <ReferenceArchiveBanner archive={outcome.archive} subject="exploration" gapId={outcome.archive.gap?.id || outcome.source_gap.id} settings={requestSettings(outcome.archive, { selected_kgs: outcome.selected_kgs })} anchorsOpen={false} />}
     <section className="outcome-synthesis"><h2>No supported scientific account</h2><p>{outcome.summary}</p><p className="outcome-scope">{outcome.scope_note}</p></section>
     <section className="outcome-anchors" aria-label="Mechanisms explored"><h2>Mechanisms explored</h2><div>{outcome.anchors.map((anchor, index) => <span className="outcome-anchor" key={`${anchor.source_id}:${index}`}><span>{anchor.name}</span>{anchor.trait && <small>{anchor.trait}</small>}</span>)}</div></section>
     <Findings title="What was explored" items={outcome.explored_topics} />

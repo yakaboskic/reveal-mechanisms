@@ -1,4 +1,18 @@
-.account-publication{margin:18px 0 24px;border:1px solid #e1e7ed;border-radius:9px;padding:15px 18px;background:#fbfcfd;font-size:12px;color:#687c91}
-.account-publication-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:20px}.account-publication h2{font-size:13px;margin:0 0 4px;color:#536c86;letter-spacing:0}.account-publication p{margin:0;line-height:1.65;font-size:12px;max-width:80ch}.account-publication button{font-size:12px;min-height:34px;padding:6px 10px;color:#436f9d;flex:none}.account-publication-heading>button{border:1px solid #dce5ee;border-radius:6px;background:#fff}
-.publication-confirmation{margin-top:14px;padding-top:14px;border-top:1px solid #e5ebf0}.publication-confirmation p+p{margin-top:8px}.publication-confirmation>div{display:flex;gap:10px;margin-top:12px}.publication-confirmation .publication-confirm{background:#466f97;color:white;border-radius:6px}.publication-unpublish{display:flex;justify-content:space-between;align-items:center;gap:15px;margin-top:10px}.publication-unpublish button{text-decoration:underline}.account-publication .loading-inline-status{margin-top:10px}.account-publication .error{margin-bottom:0}.account-public-badge{font-size:11px;color:#648077;letter-spacing:.01em;margin:8px 0 18px}
-@media(max-width:600px){.account-publication{padding:14px}.account-publication-heading{flex-direction:column;gap:10px}.publication-unpublish{align-items:flex-start}.publication-confirmation>div{flex-wrap:wrap}}
+.account-publication{display:inline-flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:6px 10px;flex:none;margin:0;color:#60758d;font-size:12px}
+.account-publication-control{min-height:34px;padding:6px 12px;border:1px solid #dce5ee;border-radius:6px;background:#fff;color:#436f9d;white-space:nowrap;font-size:12px}
+.account-publication-control:hover:not(:disabled){background:#f5f8fc;border-color:#b8cadf}
+.account-publication-update{min-height:34px;padding:6px 0;color:#436f9d;white-space:nowrap;font-size:11px}
+.account-publication-update:hover:not(:disabled){text-decoration:underline;text-underline-offset:3px}
+.account-public-badge{flex:none;margin:0;color:#648077;font-size:11px;letter-spacing:.01em}
+.account-publication-dialog{width:min(520px,calc(100vw - 40px));max-height:calc(100dvh - 48px);margin:auto;padding:26px;border:1px solid #dce5ee;border-radius:12px;background:#fff;color:#53677f;box-shadow:0 18px 70px #172d4930;overflow-y:auto;text-align:left}
+.account-publication-dialog::backdrop{background:#172d494d}
+.account-publication-dialog h2{margin:0 0 15px;color:#344d6a;font-size:19px;line-height:1.4;letter-spacing:-.2px}
+.account-publication-dialog p{margin:12px 0;font-size:13px;line-height:1.7}
+.account-publication-dialog .publication-new-statement{padding:10px 12px;border-left:2px solid #b7cce5;background:#f6f9fc;color:#466a93}
+.account-publication-dialog .publication-signin{margin-top:18px;padding-top:10px;border-top:1px solid #e6ebf2}
+.account-publication-dialog .loading-inline-status{margin:16px 0}
+.account-publication-dialog .error{margin:16px 0 0;font-size:12px;line-height:1.6}
+.account-publication-actions{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:10px;margin-top:22px}
+.account-publication-actions button{min-height:38px;padding:8px 13px;border:1px solid #dce5ee;border-radius:6px;background:#fff;color:#436f9d;font-size:12px}
+.account-publication-actions .publication-confirm{border-color:#466f97;background:#466f97;color:#fff}
+@media(max-width:600px){.account-publication-dialog{padding:22px 20px}.account-publication-control{min-height:38px}}

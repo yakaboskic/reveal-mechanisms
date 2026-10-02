@@ -1,0 +1,145 @@
+{
+  "operation_id": "getLeaderboardRecords",
+  "case": "request",
+  "method": "GET",
+  "path_template": "/v1/leaderboard/{view}/{entry_id}/records",
+  "request": {
+    "url": "https://api.reveal.example.org/v1/leaderboard/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/records?metric=votes&evidence=all&limit=20",
+    "path": {
+      "view": "accounts",
+      "entry_id": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd"
+    },
+    "query": {
+      "metric": "votes",
+      "evidence": "all",
+      "limit": 20
+    },
+    "headers": {
+      "Accept": "application/json"
+    },
+    "body": null
+  },
+  "responses": {
+    "200": {
+      "content_type": "application/json",
+      "examples": {
+        "example_account": {
+          "as_of": "2026-09-24T16:00:00Z",
+          "score_version": "public-contribution-v1",
+          "cohort_size": 0,
+          "voting_participants": 0,
+          "exclusions": {
+            "fixture_accounts": 0,
+            "uncredited_accounts": 0,
+            "conflicting_accounts": 0,
+            "invalid_public_accounts": 0,
+            "excluded_evidence_paths": 0,
+            "fixture_explorations": 0,
+            "uncredited_explorations": 0
+          },
+          "definitions": [
+            {
+              "id": "accounts",
+              "label": "Public scientific accounts",
+              "description": "Distinct currently public canonical accounts, excluding demo/test fixtures."
+            }
+          ],
+          "methodology": {
+            "weights": {
+              "accounts": 0.3,
+              "votes": 0.4,
+              "gaps": 0.3
+            },
+            "scope": "Currently public frozen snapshots only; all time.",
+            "score": "Positive metrics use the eligible-cohort midrank percentile; nonpositive metrics receive zero. Weighted 30/40/30. Exact ties share rank.",
+            "own_votes": "Researcher scores exclude their own ballots. Account scores retain canonical totals.",
+            "evidence": "Only explicit evidence interpretations targeting the claim proposition qualify; direction counts can overlap."
+          },
+          "view": "accounts",
+          "id": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
+          "metric": "votes",
+          "evidence": "all",
+          "entry": {
+            "id": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
+            "kind": "account",
+            "label": "Genes and gene programs in a shared CAD-in-T2D mechanism",
+            "rank": 1,
+            "metrics": {
+              "overall_score": 0,
+              "net_votes": 0,
+              "upvotes": 0,
+              "downvotes": 0,
+              "voter_count": 0,
+              "researcher_count": 0,
+              "account_count": 1,
+              "account_gap_count": 1,
+              "explored_gap_count": 1,
+              "claim_count": 12
+            },
+            "components": {
+              "accounts": 0,
+              "votes": 0,
+              "gaps": 0
+            },
+            "orcid": null,
+            "account_id": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
+            "gap_id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+            "gap": {
+              "id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+              "label": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk"
+            },
+            "attribution": null,
+            "directions": {
+              "SUPPORTS": 0,
+              "DISPUTES": 0,
+              "MIXED": 0,
+              "NEUTRAL": 0,
+              "UNKNOWN": 0
+            }
+          },
+          "total": 1,
+          "items": [
+            {
+              "id": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
+              "kind": "account",
+              "label": "Genes and gene programs in a shared CAD-in-T2D mechanism",
+              "url": "/accounts/dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
+              "account_ids": [
+                "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd"
+              ],
+              "claim_ids": [
+                "dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km",
+                "dapper:Claim.Uv7_cT46DdsqZMvk5nh8G48qOIKvhRgc",
+                "dapper:Claim.I2mf6PJ0DPF5_nnbiBjAhgjlUCOiUZZ9",
+                "dapper:Claim.Kd3psmdr4G9AlD0UU1E1Vu6AjpKaQYWE",
+                "dapper:Claim.NBafdtdEE2Uabs-8pZqurv7SoWpg7Yhi",
+                "dapper:Claim.Oe2UZeV7oMY4NsMHyB8h4HJO1FH4nSGF",
+                "dapper:Claim.2idJniYU4zCtCN6puy8XZ2mzo9Mq6c5p",
+                "dapper:Claim.H5icBYm5JLM3_T-b1mMfH65Nc0zMhZzH",
+                "dapper:Claim.xzV_35EYnLl-zy03YbmhfBk_ynNbl7H9",
+                "dapper:Claim.SYqCJXxCVXDpwflRSdZnkVLzGLO_vi_r",
+                "dapper:Claim.x7aCVQ1uTkYKLJo32ZyAGMGZaAGCSvWV",
+                "dapper:Claim.uzqyfwuhf59hSTdravdcr4cTxuitWGx-"
+              ],
+              "evidence_ids": [],
+              "directions": {
+                "SUPPORTS": 0,
+                "DISPUTES": 0,
+                "MIXED": 0,
+                "NEUTRAL": 0,
+                "UNKNOWN": 0
+              },
+              "value": 0
+            }
+          ],
+          "page": {
+            "next_cursor": null,
+            "has_more": false,
+            "snapshot_id": "illustrative-contract-snapshot"
+          }
+        }
+      }
+    }
+  },
+  "curl": "curl -X GET 'https://api.reveal.example.org/v1/leaderboard/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/records?metric=votes&evidence=all&limit=20' -H 'Accept: application/json'"
+}

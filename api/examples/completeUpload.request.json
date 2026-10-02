@@ -1,0 +1,40 @@
+{
+  "operation_id": "completeUpload",
+  "case": "request",
+  "method": "POST",
+  "path_template": "/v1/uploads/{upload_id}/complete",
+  "request": {
+    "url": "https://api.reveal.example.org/v1/uploads/22222222-2222-4222-8222-222222222222/complete",
+    "path": {
+      "upload_id": "22222222-2222-4222-8222-222222222222"
+    },
+    "query": {},
+    "headers": {
+      "Authorization": "Bearer <api-key-or-gateway-assertion>",
+      "Accept": "application/json"
+    },
+    "body": null
+  },
+  "responses": {
+    "200": {
+      "content_type": "application/json",
+      "examples": {
+        "example": {
+          "id": "22222222-2222-4222-8222-222222222222",
+          "draft_id": "22222222-2222-4222-8222-222222222222",
+          "filename": "notes.txt",
+          "media_type": "text/plain",
+          "size_bytes": 5,
+          "sha256": "185f8db32271fe25f561a6fc938b2e264306ec304eda518007d1764826381969",
+          "status": "pending",
+          "created_at": "2026-09-24T16:00:00Z",
+          "expires_at": "2026-10-02T00:00:00Z",
+          "storage": null,
+          "extraction": null,
+          "error": null
+        }
+      }
+    }
+  },
+  "curl": "curl -X POST https://api.reveal.example.org/v1/uploads/22222222-2222-4222-8222-222222222222/complete -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
+}

@@ -101,7 +101,7 @@ async function harness(name, { mobile = false, visitor = false, clock = false, r
   const h = { page, state, result,
     count: () => page.evaluate(() => window.__gapAccountsFixture.calls.length),
     async respond(index, body, status = 200) { await page.evaluate(({ index, body, status }) => { const call = window.__gapAccountsFixture.calls[index]; if (!call || call.settled) throw Error('No pending fixture call'); call.settled = true; call.resolve(new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })); }, { index, body, status }); },
-    async select(index = 0) { const count = await h.count(); await page.locator('.trend').nth(index).click(); await until(async () => await h.count() > count, 'selected-gap account request'); },
+    async select(index = 0) { const count = await h.count(); await page.locator('.trend').nth(index).locator('.trend-open').click(); await until(async () => await h.count() > count, 'selected-gap account request'); },
     async close() { result.requests = state.requests; result.accountRequests = await page.evaluate(() => window.__gapAccountsFixture.calls.map(({ path, sourceRevision, cursor, settled, aborted }) => ({ path, sourceRevision, cursor, settled, aborted }))); result.pageErrors = state.pageErrors; result.consoleErrors = state.consoleErrors; result.unexpected = state.unexpected; await context.close(); },
   };
   await page.goto(origin); await until(async () => await page.locator('.trend').count() === (paging ? 20 : 4), 'ranked first page'); return h;
@@ -121,9 +121,9 @@ async function rankedPagination() {
     assert.equal(await list(h).getByText('Current workspace owner').count(), 0);
     assert.equal(await list(h).getByText('Anonymous researcher', { exact: true }).count(), 1);
     assert.equal(await list(h).locator('.gap-accounts-count').innerText(), '2+');
-    assert.equal(await list(h).locator('h3 a').first().getAttribute('href'), `/accounts/${encodeURIComponent(account(gaps[0], 1).account.id)}?view=conclusions`);
+    assert.equal(await list(h).locator('.gap-account-summary a').first().getAttribute('href'), `/accounts/${encodeURIComponent(account(gaps[0], 1).account.id)}`);
     assert.equal(await list(h).locator('time').first().getAttribute('datetime'), '2026-09-28T09:30:00Z');
-    assert.match(await list(h).locator('.gap-account-synthesis').first().innerText(), /causal direction unresolved/);
+    assert.match(await list(h).locator('.gap-account-summary').first().innerText(), /causal direction unresolved/);
     await list(h).getByRole('button', { name: 'Show more accounts' }).click(); await until(async () => await h.count() === 2, 'next-page request');
     assert.equal(await list(h).locator('.gap-account-card').count(), 2);
     await h.respond(1, { code: 'TEMPORARY_UNAVAILABLE', detail: 'Fixture page temporarily unavailable.' }, 503);
@@ -148,7 +148,7 @@ async function mobileSlow() {
     const animations = await list(h).locator('.loading-surface-pulse i').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).animationName)); assert.ok(animations.every(name => name === 'none'));
     await shot(h, 'slow'); await h.respond(0, { code: 'TEMPORARY_UNAVAILABLE', detail: 'Fixture temporarily unavailable.' }, 503);
     await list(h).getByRole('button', { name: 'Retry' }).click(); await until(async () => await h.count() === 2, 'initial retry');
-    const long = account(gaps[0]); long.account.name = 'An unusually long scientific account title examining several distinct observations and uncertainty'; long.attribution.display_name = 'Researcher with an intentionally lengthy displayed name';
+    const long = account(gaps[0]); long.account.closing_remarks = 'An unusually long scientific account summary examining several distinct observations and uncertainty'; long.attribution.display_name = 'Researcher with an intentionally lengthy displayed name';
     await h.respond(1, { items: [long], page: pageInfo() }); await list(h).locator('.gap-account-card').waitFor();
     h.result.checks.push('8-second patience message; reduced motion', 'Initial error recovers without inventing accounts', await noOverflow(h)); await shot(h, 'loaded');
   } finally { await h.close(); }
@@ -159,11 +159,11 @@ async function deadlineRecovery() {
     await h.select(); await list(h).getByText('Loading scientific accounts', { exact: true }).waitFor();
     await h.page.clock.fastForward(30100);
     await list(h).getByText('The scientific accounts are taking longer than expected to load. Please retry.').waitFor();
-    const late = account(gaps[0]); late.account.name = 'LATE TIMED-OUT ACCOUNT';
+    const late = account(gaps[0]); late.account.closing_remarks = 'LATE TIMED-OUT ACCOUNT';
     await h.respond(0, { items: [late], page: pageInfo() });
     await list(h).getByRole('button', { name: 'Retry' }).click(); await until(async () => await h.count() === 2, 'deadline retry');
     await h.respond(1, { items: [account(gaps[0])], page: pageInfo() }); await list(h).locator('.gap-account-card').waitFor();
-    assert.equal(await list(h).getByText(late.account.name).count(), 0);
+    assert.equal(await list(h).getByText(late.account.closing_remarks).count(), 0);
     h.result.checks.push('30-second request deadline offers Retry, ignores late response and loads a fresh page');
   } finally { await h.close(); }
 }
@@ -232,8 +232,8 @@ async function staleSelection() {
   try {
     await h.select(); await h.page.getByRole('button', { name: 'Search for a different knowledge gap' }).click(); await h.select(1);
     await h.respond(1, { items: [account(gaps[1])], page: pageInfo() }); await list(h).locator('.gap-account-card').waitFor();
-    const old = account(gaps[0]); old.account.name = 'STALE ACCOUNT MUST NEVER APPEAR'; await h.respond(0, { items: [old], page: pageInfo() });
-    assert.equal(await list(h).getByText(old.account.name).count(), 0); assert.equal(await list(h).locator('h3 a').getAttribute('href'), `/accounts/${encodeURIComponent(account(gaps[1]).account.id)}?view=conclusions`);
+    const old = account(gaps[0]); old.account.closing_remarks = 'STALE ACCOUNT MUST NEVER APPEAR'; await h.respond(0, { items: [old], page: pageInfo() });
+    assert.equal(await list(h).getByText(old.account.closing_remarks).count(), 0); assert.equal(await list(h).locator('.gap-account-summary a').getAttribute('href'), `/accounts/${encodeURIComponent(account(gaps[1]).account.id)}`);
     h.result.checks.push('Late previous-gap response ignored after selection changes');
   } finally { await h.close(); }
 }

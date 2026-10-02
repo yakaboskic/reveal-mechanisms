@@ -1,0 +1,43 @@
+# Allow-list for `python -m reveal_backend.reference_reload` (docs/reference-reload.md §7).
+# A reload may only touch an environment listed here, and only when the MySQL database,
+# application table prefix, vector environment and Upstash REST host all match the entry.
+# `production: true` additionally requires --allow-production and
+# REVEAL_RELOAD_PRODUCTION_APPROVAL=<plan sha256> on apply/purge.
+#
+# All four environments share the scientific database (deploy/dig/service.yaml), so
+# purge-retired runs only after every target below has activated and verified the
+# new generation.
+#
+# upstash_host: the host of UPSTASH_VECTOR_REST_URL used by that environment. QA and prod
+# read their Upstash secrets from deploy/dig; confirm the host before their first apply.
+targets:
+  rehearsal:
+    database: cyaka_reveal_mechanisms
+    prefix: reveal_reload_rehearsal
+    vector_environment: rehearsal
+    upstash_host: relevant-mite-29002-us1-vector.upstash.io
+    production: false
+  local:
+    database: cyaka_reveal_mechanisms
+    prefix: reveal_workflow_local
+    vector_environment: local
+    upstash_host: relevant-mite-29002-us1-vector.upstash.io
+    production: false
+  compose:
+    database: cyaka_reveal_mechanisms
+    prefix: reveal_compose
+    vector_environment: local
+    upstash_host: relevant-mite-29002-us1-vector.upstash.io
+    production: false
+  qa:
+    database: cyaka_reveal_mechanisms
+    prefix: reveal_workflow_qa
+    vector_environment: qa
+    upstash_host: relevant-mite-29002-us1-vector.upstash.io
+    production: false
+  prod:
+    database: cyaka_reveal_mechanisms
+    prefix: reveal
+    vector_environment: prod
+    upstash_host: relevant-mite-29002-us1-vector.upstash.io
+    production: true

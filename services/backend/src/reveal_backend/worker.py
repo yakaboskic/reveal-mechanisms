@@ -17,8 +17,9 @@ from .evidence_schema import validate_package_shape, load_generated_schema
 from .evidence_collector import collect_package
 from .evidence_database import geneset_resolver
 from .evidence_budget import fit_input_budget
+from .reference_generation import KPN_MODEL, LEGACY_MODEL, MODELS, generation_of_anchors
 from .repository import Repository, now, uid, digest
-from .runtime_config import ROOT, setting, artifacts_root
+from .runtime_config import ROOT, setting, artifacts_root, mysql_connection
 from . import jobs
 from .artifact_store import s3_enabled, store as artifact_store, retained_file, StorageUnavailable
 
@@ -196,6 +197,32 @@ def enrichment_status(result,selected,mode):
         items.append({'graph':graph,'status':status,'source_claim_ids':[],'detail':detail})
     return items
 
+def collect_reference_package(**kwargs):
+    """KPN-generation collector (reveal_backend.reference_evidence), imported on first use."""
+    from .reference_evidence import collect_reference_package as collect_reference
+    return collect_reference(**kwargs)
+
+def anchor_model(anchors):
+    """Reference model of frozen anchor bindings; legacy bindings carry no model field."""
+    models={anchor.get('model') or LEGACY_MODEL for anchor in anchors}
+    require(len(models)==1 and models <= set(MODELS),'Selected anchors must share one known reference model')
+    return models.pop()
+
+def check_user_inputs(package,frozen):
+    """Recovery must use the same user text and immutable objects as submission."""
+    expected=frozen.get('user_inputs')
+    actual=package.get('user_inputs')
+    if expected is None:
+        require(actual is None,'Unexpected researcher inputs in a historical request')
+        return
+    require(isinstance(actual,dict),'Frozen researcher inputs are missing')
+    for key in ('format','research_direction','context','hypotheses'):
+        require(actual.get(key)==expected.get(key),'Frozen researcher text changed')
+    require(len(actual.get('uploads',[]))==len(expected['uploads']),'Frozen researcher attachments changed')
+    for captured,submitted in zip(actual.get('uploads',[]),expected['uploads']):
+        require({key:captured.get(key) for key in submitted}==submitted,'Frozen researcher attachment changed')
+
+
 def collect(job,frozen,binding,budgets,directory):
     package_path=directory/'package/evidence-package.json'
     if not package_path.exists():
@@ -221,12 +248,20 @@ def collect(job,frozen,binding,budgets,directory):
                 'max_nodes':budgets.get('max_nodes',250),'max_edges':budgets.get('max_edges',1000),
                 'policy':'Configured source retrieval and graph bounds; complete captured evidence is supplied as files for bounded on-demand reads.'}}
         if len(runs)!=1: metadata['semantic_retrieval']['status']='not_computed'
-        built=collect_package(gap_id=frozen['composer']['source_gap']['source_id'],factor_ids=[a['cfde_node_id'] for a in binding['anchors']],
+        sources=dict(gap_id=frozen['composer']['source_gap']['source_id'],factor_ids=[a['cfde_node_id'] for a in binding['anchors']],
             output=directory,dapper=runtime,project_root=ROOT,dismech_source=Path(setting('REVEAL_DISMECH_SOURCE',str(ROOT.parent/'dismech'))),
-            dismech_index=ROOT/'data/dismech-gaps/2026-09-24',geneset_import=ROOT/'data/cfde-genesets/2026-09-24',
-            geneset_resolver=geneset_resolver(binding['anchors'][0]['gene_set_import_id']),
+            dismech_index=ROOT/'data/dismech-gaps/2026-09-24',
             selected_graphs=frozen['composer']['selected_kgs'],max_accounts=budgets.get('max_accounts',3),selection_metadata=metadata,
-            limit=requested_limit,max_nodes=budgets.get('max_nodes',250),max_edges=budgets.get('max_edges',1000))
+            limit=requested_limit,max_nodes=budgets.get('max_nodes',250),max_edges=budgets.get('max_edges',1000),
+            user_inputs=frozen.get('user_inputs'))
+        model=anchor_model(binding['anchors'])
+        if model==KPN_MODEL:
+            # KPN generations capture the same evidence set from the reference tables in MySQL.
+            built=collect_reference_package(**sources,generation_id=generation_of_anchors(binding['anchors']),connection_factory=mysql_connection)
+        else:
+            built=collect_package(**sources,model=model,geneset_import=ROOT/'data/cfde-genesets/2026-09-24',
+                geneset_resolver=geneset_resolver(binding['anchors'][0]['gene_set_import_id']))
+
         package=built.package
     validate_package_shape(package,load_generated_schema(ROOT/'schema/evidence-package.schema.json'))
     gap=next(g for g in package['dapper_context']['knowledge_gaps'] if g['id']==frozen['question_id'])
@@ -234,6 +269,7 @@ def collect(job,frozen,binding,budgets,directory):
     require(package['dismech']['source_revision']['source_sha256']==frozen['composer']['source_gap']['source_revision'],'Collected DisMech revision differs from frozen request')
     require(set(package['selection']['eaggl_mechanism_ids'])=={a['cfde_node_id'] for a in binding['anchors']},'Collector changed native selected anchors')
     require(package['external_evidence']['selected_graphs']==frozen['composer']['selected_kgs'],'Collector changed selected graphs')
+    check_user_inputs(package,frozen)
     return package_path,package
 
 class Worker:
@@ -358,7 +394,9 @@ class Worker:
             if snapshot:
                 require(snapshot['kind']==job['kind'],'Frozen dispatch kind changed')
                 input_path,restored=restore_dispatch_input(root,snapshot)
-                if job['kind']=='analysis': package=restored; selected=tuple(frozen['composer']['selected_kgs'])
+                if job['kind']=='analysis':
+                    package=restored; selected=tuple(frozen['composer']['selected_kgs'])
+                    check_user_inputs(package,frozen)
                 else: paragraph_input=restored; selected=()
             elif job['kind']=='analysis':
                 await emit('stage',{'stage':'preparing_evidence','message':'Collecting the frozen DisMech question and native CFDE mechanism evidence.'})
@@ -535,6 +573,8 @@ class Worker:
             for checksum,source in captured.items():
                 source['retained']=await asyncio.to_thread(retained_file,source['path'],checksum)
         await asyncio.to_thread(self.save_workspace,job,token,artifacts_root()/job['id'])
+        evidence_sha256=sha256(package_path.read_bytes())
+        from .analysis_outcomes import creation_stamp, stamp_gap, stamped
         with self.repository.transaction() as tx:
             pair=jobs.fenced(tx,job['id'],token)
             if not pair or pair[0]['status']=='cancel_requested': return
@@ -564,8 +604,11 @@ class Worker:
                 envelope=object_envelope(doc,identity,metadata,artifact_access); envelope['research_statement']=state
                 summary={'account':account,'knowledge_gap':gap,'claim_count':len(account['component_claims']),'created_at':now(),'job_id':job['id'],'research_statement':state}
                 if not previous:
-                    tx.put('account',digest([owner,identity]),owner,{'result':envelope,'summary':summary})
-                    tx.put('account_membership',digest([owner,identity]),owner,{'account_id':identity,'summary':summary})
+                    # A job that finishes after its reference generation was superseded is born archived.
+                    stamp=creation_stamp(tx,owner,job['research_request_id'],gap=stamp_gap(frozen['composer'].get('source_gap'),frozen.get('question_id')),scientific_document=doc,
+                        analysis={'job_id':job['id'],'request_id':job['research_request_id'],'evidence_package_sha256':evidence_sha256,'account_id':identity})
+                    tx.put('account',digest([owner,identity]),owner,stamped('account',{'result':envelope,'summary':deepcopy(summary)},stamp))
+                    tx.put('account_membership',digest([owner,identity]),owner,stamped('account_membership',{'account_id':identity,'summary':summary},stamp))
                 document_sha=sha256(path.read_bytes())
                 tx.put('scientific_document',digest([owner,document_sha]),owner,{'sha256':document_sha,'document':doc,'job_id':job['id'],'observed_at':now(),
                     'citation_metadata':metadata,'artifact_access':artifact_access})
@@ -583,7 +626,7 @@ class Worker:
                 accounts.append(identity); paragraphs.append(paragraph['id'])
                 manifest_accounts.append({'path':str(path.resolve().relative_to(directory.resolve())),'sha256':sha256(path.read_bytes()),'account_id':identity,'lint_report_sha256':sha256(canonical_json(report))})
             public={'kind':'analysis','request_id':job['research_request_id'],'account_ids':accounts,'enrichment':enrichment_status(result,frozen['composer']['selected_kgs'],mode),
-                'paragraph_job_ids':paragraphs,'evidence_package_sha256':sha256(package_path.read_bytes())}
+                'paragraph_job_ids':paragraphs,'evidence_package_sha256':evidence_sha256}
             current.update(status='succeeded',stage='complete',result=public,completed_at=now())
             jobs.event(tx,current,'result','Gap analysis complete.' if mode=='box' else 'Development simulation complete — not a scientific result.')
             manifest={'format':'reveal.agent-output/1','job_id':job['id'],'attempt':pair[1]['attempt'],'status':'succeeded','input_package_sha256':public['evidence_package_sha256'],

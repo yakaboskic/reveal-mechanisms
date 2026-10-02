@@ -1,6 +1,6 @@
 # Documentation index
 
-Updated September 30, 2026. Start with the [Workflow runtime](durable-workflow-runtime.md) and the [API walkthrough](api-quickstart.md). The [legacy colleague handoff](../README.local.md) remains available during migration. Dated inventories and validation reports describe observations at the stated time. Historical plans are retained for rationale, not as current startup instructions.
+Updated October 1, 2026. Start with the [Workflow runtime](durable-workflow-runtime.md) and the [API walkthrough](api-quickstart.md). The [legacy colleague handoff](../README.local.md) remains available during migration. Dated inventories and validation reports describe observations at the stated time. Historical plans are retained for rationale, not as current startup instructions.
 
 ## Run and develop
 
@@ -24,6 +24,8 @@ Updated September 30, 2026. Start with the [Workflow runtime](durable-workflow-r
 - [Authentication gateway contract](gateway-contract.md)
 - [Account publication and gap discovery](account-publication.md)
 - [Saved explorations and literature search](exploration-outcomes.md)
+- [Explicit draft saving, private uploads, and agent inputs](research-inputs.md)
+- [Canonical scientific account fixture and local seeding](../data/fixtures/bubble-account-v1/README.md)
 - [Admin telemetry](admin-telemetry.md)
 - [Research-agent output and worker acceptance boundary](agent-output-contract.md)
 - [Evidence package for ScientificAccount generation](evidence-package.md)
@@ -37,6 +39,8 @@ Updated September 30, 2026. Start with the [Workflow runtime](durable-workflow-r
 
 ## Deployment and proposed follow-up work
 
+- [Issue #7 UI design plan — explicit drafts, research runs, uploads, and account bubbles](issue-7-ui-design-plan.md)
+- [Community leaderboard — researchers, scientific accounts and dataset reuse](leaderboard-design-plan.md)
 - [DIG service platform deployment](platform-deployment.md)
 - [Historical EC2 deployment plan](deployment-plan.md)
 - [Retained EC2 rollout](cloud-deployment.md)

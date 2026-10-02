@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError, backend, errorMessage, request } from "../lib/api";
 import { followJob, followWorkspace } from "../lib/events";
 import { createMutationKeys } from "../lib/mutations";
-import { emptyComposer, factorSelection, terminal, type AnalysisInput, type Composer, type Draft, type Factor, type Gap, type Job, type JobEvent, type Me, type Schema } from "../lib/types";
+import { emptyComposer, terminal, withFactors, type AnalysisInput, type Composer, type Draft, type Factor, type Gap, type Job, type JobEvent, type Me, type Schema } from "../lib/types";
 
 type PendingSubmission = { body: AnalysisInput; key: string };
 const readable = (value: string) => value.replaceAll("_", " ");
@@ -190,7 +190,7 @@ export default function Home() {
       const value = await api.suggest(next, controller.signal);
       if (controller.signal.aborted || generation !== editorGeneration.current) return;
       setSuggestion(value); setFactors(values => ({ ...values, ...Object.fromEntries(value.automatic_anchors.map(anchor => [anchor.factor.source_id, anchor.factor])) }));
-      if (replaceSelection) setComposer(current => ({ ...current, eaggl_anchors: value.automatic_anchors.slice(0, 1).map(anchor => factorSelection(anchor.factor, value.suggestion_id)) }));
+      if (replaceSelection) setComposer(current => withFactors(current, value.automatic_anchors.slice(0, 1).map(anchor => anchor.factor), value.suggestion_id, true));
     } catch (error) { if (!controller.signal.aborted && generation === editorGeneration.current) setError(errorMessage(error)); }
     finally { if (!controller.signal.aborted) setSuggesting(false); }
   }
@@ -210,7 +210,7 @@ export default function Home() {
     try {
       const value = await mutationKeys.current.run(["save", draft?.id, draft?.version, composer, name], key => api.save(draft, composer, name, key));
       setDraft(value); setComposer(value.composer); setName(value.name || ""); setLocation("draft", value.id); setNotice("Draft saved. You can now start the analysis."); await refresh();
-    } catch (error) { setError(error instanceof ApiError && error.status === 409 ? "This draft changed on the server. Reload the saved draft below to review it before saving again. Your local selections remain visible." : errorMessage(error)); }
+    } catch (error) { setError(error instanceof ApiError && error.status === 409 && error.code !== "REFERENCE_GENERATION_SUPERSEDED" ? "This draft changed on the server. Reload the saved draft below to review it before saving again. Your local selections remain visible." : errorMessage(error)); }
     finally { setBusy(""); }
   }
   async function submit() {
@@ -268,7 +268,7 @@ export default function Home() {
                 <p className="muted small">One anchor is selected by default. Add only the mechanisms you want to investigate.</p>
                 <div className="anchor-list">{Array.from(new Set([...composer.eaggl_anchors.map(value => value.reference.source_id), ...(suggestion?.automatic_anchors.map(value => value.factor.source_id) || [])])).map(sourceId => {
                   const factor = factors[sourceId], selected = composer.eaggl_anchors.some(value => value.reference.source_id === sourceId);
-                  return <label className={selected ? "anchor selected" : "anchor"} key={sourceId}><input type="checkbox" checked={selected} disabled={!mutable || (!selected && composer.eaggl_anchors.length >= 10)} onChange={() => setComposer(current => ({ ...current, eaggl_anchors: selected ? current.eaggl_anchors.filter(value => value.reference.source_id !== sourceId) : factor && suggestion ? [...current.eaggl_anchors, factorSelection(factor, suggestion.suggestion_id)] : current.eaggl_anchors }))} /><span><strong>{factor ? factorTitle(factor) : sourceId}</strong>{factor?.cfde_anchor.subtitle && <small>{factor.cfde_anchor.subtitle}</small>}</span></label>;
+                  return <label className={selected ? "anchor selected" : "anchor"} key={sourceId}><input type="checkbox" checked={selected} disabled={!mutable || (!selected && composer.eaggl_anchors.length >= 10)} onChange={() => setComposer(current => selected ? { ...current, eaggl_anchors: current.eaggl_anchors.filter(value => value.reference.source_id !== sourceId) } : factor && suggestion ? withFactors(current, [factor], suggestion.suggestion_id) : current)} /><span><strong>{factor ? factorTitle(factor) : sourceId}</strong>{factor?.cfde_anchor.subtitle && <small>{factor.cfde_anchor.subtitle}</small>}</span></label>;
                 })}</div>
                 {!composer.eaggl_anchors.length && !suggestion?.automatic_anchors.length && <p className="empty">No anchors selected. Refresh suggestions or try another question.</p>}
                 {!!suggestion?.limitations.length && <details><summary>About these suggestions</summary><ul>{suggestion.limitations.map(value => <li key={value}>{value}</li>)}</ul></details>}

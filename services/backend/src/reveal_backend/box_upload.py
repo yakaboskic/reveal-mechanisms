@@ -19,6 +19,7 @@ import tarfile
 from urllib.parse import parse_qs, unquote, urlsplit
 
 MAX_FILE = 8_000_000
+MAX_RUNTIME = 20_000_000
 MAX_TOTAL = 40_000_000
 MAX_FILES = 10000
 MAX_PLAN = 16_000_000
@@ -35,7 +36,13 @@ def safe_name(name):
         and not PurePosixPath(name).is_absolute() and all(p not in ('', '.', '..') for p in name.split('/')))
 
 
-def source_file(root, relative):
+def capture_file_limit(name):
+    # The trusted runtime manifest retains every derived input path/checksum.
+    # Authored output/runtime.json and ledger/runtime.json remain ordinary files.
+    return MAX_RUNTIME if name == 'runtime.json' else MAX_FILE
+
+
+def source_file(root, relative, *, runtime_metadata=False):
     """Open without following links, including any intermediate directory."""
     if not safe_name(relative): raise ValueError('Unsafe capture path')
     descriptor = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
@@ -46,7 +53,9 @@ def source_file(root, relative):
             os.close(descriptor); descriptor = child
         target = os.open(parts[-1], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=descriptor)
         metadata = os.fstat(target)
-        if not stat.S_ISREG(metadata.st_mode) or metadata.st_size > MAX_FILE:
+        limit = capture_file_limit('runtime.json') if runtime_metadata else MAX_FILE
+        if (not stat.S_ISREG(metadata.st_mode) or metadata.st_size > limit
+                or (runtime_metadata and (relative != 'runtime.json' or metadata.st_uid != os.geteuid() or metadata.st_mode & 0o022))):
             os.close(target); raise ValueError('Capture requires bounded regular files')
         return os.fdopen(target, 'rb'), metadata
     finally:
@@ -87,7 +96,7 @@ def inventory(base, binding):
         if runtime.exists() or runtime.is_symlink(): candidates.append((base / 'state', 'runtime.json', 'runtime.json'))
         for root, relative, name in sorted(candidates, key=lambda value: value[2]):
             if not safe_name(name) or len(entries) >= MAX_FILES: raise ValueError('Invalid capture inventory')
-            source, before = source_file(root, relative)
+            source, before = source_file(root, relative, runtime_metadata=name == 'runtime.json')
             total += before.st_size
             if total > MAX_TOTAL: source.close(); raise ValueError('Capture exceeds byte budget')
             target = temporary / 'files' / name; target.parent.mkdir(parents=True, exist_ok=True)
@@ -120,7 +129,7 @@ def upload_one(root, item, host):
         raise ValueError('Unexpected upload headers')
     if headers['Content-Length'] != str(item['size_bytes']) or headers['If-None-Match'] != '*':
         raise ValueError('Upload constraints changed')
-    source, metadata = source_file(root, item['path'])
+    source, metadata = source_file(root, item['path'], runtime_metadata=item['path'] == 'runtime.json')
     with source:
         digest = hashlib.sha256(); count = 0
         while chunk := source.read(65536): digest.update(chunk); count += len(chunk)

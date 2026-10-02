@@ -49,7 +49,7 @@ async function json(page, path, method = 'GET', body) {
   return result.body;
 }
 async function waitDraft(page, id, name) {
-  await page.waitForFunction(({ id, name }) => [...document.querySelectorAll('.workspace-drafts option')].some(option => option.value === id && option.textContent.includes(name)), { id, name }, { timeout: 25_000 });
+  await page.waitForFunction(({ id, name }) => [...document.querySelectorAll('.workspace-draft-row')].some(option => option.dataset.draftId === id && option.textContent.includes(name)), { id, name }, { timeout: 25_000 });
 }
 try {
   context = await browser.newContext();
@@ -96,17 +96,16 @@ try {
     });
   }
   const [a, b] = tabs;
-  await a.goto(origin + '/workspace', { waitUntil: 'domcontentloaded' });
+  await a.goto(origin + '/workspace?tab=drafts', { waitUntil: 'domcontentloaded' });
   const identity = await json(a, '/api/session/anonymous', 'POST', {});
   assert.equal(identity.principal_kind, 'anonymous');
   const gaps = await json(a, '/api/backend/v1/knowledge-gaps?limit=1');
   const gap = gaps.items[0]; assert.ok(gap?.object?.id, 'A real imported gap is required.');
   const sourceGap = { id: gap.object.id, source_id: gap.source.source_id, source_revision: gap.source.source_revision };
   await json(a, '/api/backend/v1/me/explorations', 'POST', { source_gap: sourceGap });
-  await Promise.all(tabs.map(page => page.goto(origin + '/workspace', { waitUntil: 'domcontentloaded' })));
+  await Promise.all(tabs.map(page => page.goto(origin + '/workspace?tab=drafts', { waitUntil: 'domcontentloaded' })));
   for (const page of tabs) {
     await page.waitForFunction(() => window.__workspaceProof.frames.some(frame => frame.event === 'ready'), null, { timeout: 30_000 });
-    await page.locator('.workspace-gap-row').waitFor({ state: 'visible', timeout: 30_000 });
     await page.locator('#workspace-results[aria-busy="false"]').waitFor({ timeout: 30_000 });
   }
   phase = 'create';
@@ -120,13 +119,12 @@ try {
   await Promise.all(tabs.map(page => waitDraft(page, draft.id, renamed)));
   for (let index = 0; index < tabs.length; index++) {
     const page = tabs[index];
-    await page.locator('.workspace-draft-panel').evaluate(element => { element.open = true; });
     await page.screenshot({ path: resolve(output, `workspace-push-tab-${index + 1}.png`), fullPage: true });
   }
   phase = 'delete';
   await json(a, '/api/backend/v1/drafts/' + draft.id, 'DELETE', { expected_version: draft.version });
   const deletedId = draft.id; draft = null;
-  for (const page of tabs) await page.waitForFunction(id => ![...document.querySelectorAll('.workspace-drafts option')].some(option => option.value === id), deletedId, { timeout: 25_000 });
+  for (const page of tabs) await page.waitForFunction(id => ![...document.querySelectorAll('.workspace-draft-row')].some(option => option.dataset.draftId === id), deletedId, { timeout: 25_000 });
   for (const page of tabs) await page.locator('#workspace-results[aria-busy="false"]').waitFor({ timeout: 30_000 });
   // Allow already-pushed mutation invalidations to finish before the quiet window.
   await new Promise(resolve => setTimeout(resolve, 2_000));

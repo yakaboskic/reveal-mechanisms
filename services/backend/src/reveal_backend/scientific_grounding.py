@@ -114,7 +114,7 @@ def review_evidence(package: dict, ledger_path: Path) -> dict:
     require(ledger.get("format") == "reveal.tool-ledger/1" and ledger.get("complete") is True,
             "Grounding review requires a complete trusted ledger")
     package_view = {key: package[key] for key in (
-        "selection", "dismech", "pigean", "entities", "coverage", "external_evidence"
+        "selection", "dismech", "pigean", "entities", "coverage", "external_evidence", "user_inputs"
     ) if key in package}
     calls, papers = [], []
     for call in ledger["calls"]:

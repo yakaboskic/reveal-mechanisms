@@ -13,19 +13,22 @@ from fastapi import FastAPI, Request, Depends, Query
 from fastapi.responses import JSONResponse, StreamingResponse, Response, RedirectResponse
 from jsonschema import Draft202012Validator
 from .auth import Problem, decode_assertion, owned, require_owned, principal, publication_principal, service_authority
-from .catalog import Catalog
+from .catalog import GENERATION_TTL_SECONDS, Catalog
 from .repository import Repository, now, uid, digest
 from .runtime_config import ROOT, artifacts_root
 from .service_routing import mount_service
 from . import jobs
-from .account_discovery import visible_accounts, counts_by_gap, counted_gap, count_snapshot
+from .account_discovery import visible_accounts, counts_by_gap, counted_gap, count_snapshot, by_reference_state
 from . import publication
 from . import analysis_outcomes
+from . import reference_generation
 from . import votes
+from . import user_inputs
 
 CONTRACT = json.loads((ROOT/'api/openapi.json').read_text())
 GATEWAY = json.loads((ROOT/'schema/gateway.schema.json').read_text())
-repo, catalog = Repository(), Catalog()
+# The catalog polls the active reference generation on its own thread, never inside a request's transaction.
+repo, catalog = Repository(), Catalog(poll_seconds=GENERATION_TTL_SECONDS)
 
 def validate_query(request:Request):
     template=getattr(request.scope.get('route'),'path','')
@@ -51,7 +54,7 @@ async def publication_cache_policy(request: Request, call_next):
     response = await call_next(request)
     path = request.url.path.removeprefix(request.scope.get('root_path', ''))
     if path.startswith(('/v1/accounts', '/v1/claims', '/v1/objects', '/v1/gene-sets',
-            '/v1/paragraphs', '/v1/citations', '/v1/artifacts', '/v1/knowledge-gaps', '/v1/analysis-outcomes')):
+            '/v1/paragraphs', '/v1/citations', '/v1/artifacts', '/v1/knowledge-gaps', '/v1/analysis-outcomes', '/v1/leaderboard')):
         # Visibility is revocable and workspace responses vary by principal.
         response.headers['Cache-Control'] = 'private, no-store'
         vary = [part.strip() for part in response.headers.get('Vary', '').split(',') if part.strip()]
@@ -140,18 +143,63 @@ def fresh_principal(kind, profile=None):
         'person': None, 'workspace_expires_at': (datetime.now(timezone.utc)+timedelta(days=30)).isoformat().replace('+00:00','Z') if kind=='anonymous' else None}
     return me
 
+def current_binding(binding):
+    """A frozen catalog binding belongs to the served reference generation.
+
+    Legacy mode (no active generation) keeps today's behaviour: saved selections retain
+    the exact run bindings first saved with them, so every binding is current. Catalogs
+    without generations (test doubles) accept every binding; in active mode a binding
+    whose generation cannot be derived is never current.
+    """
+    served=getattr(catalog,'reference_generation_id',None)
+    if served is None or not getattr(catalog,'active_generation',None): return True
+    try: return reference_generation.generation_of_binding(binding)==served
+    except reference_generation.ReferenceError: return False
+
+def superseded_source(source_id):
+    """A factor id the active (non-legacy) generation no longer serves."""
+    return bool(getattr(catalog,'active_generation',None) and reference_generation.model_of_source_id(source_id)
+        and source_id not in catalog.factors)
+
+def superseded(detail,status=409,**extra):
+    return Problem(status,'REFERENCE_GENERATION_SUPERSEDED',detail,**extra)
+
+def reload_gate(tx):
+    if reference_generation.read_gate(tx):
+        raise Problem(503,'REFERENCE_RELOAD_IN_PROGRESS','Reference data is being reloaded. Retry shortly.')
+
+def preload_catalog(composer=None):
+    """Cold-load the catalog before a write transaction opens: the cold load reads the active
+    generation through the application pool, which must never nest inside a pooled write
+    transaction. A loaded catalog does no I/O. Failures surface later with their usual precedence."""
+    if composer is not None and not (composer.get('source_gap') or composer.get('eaggl_anchors')): return
+    load=getattr(catalog,'load',None)
+    if not load: return
+    try: load()
+    except Exception: pass
+
 def freeze_draft_bindings(tx,draft_id,owner,composer):
-    """An unchanged selection retains the exact run bindings first saved with it."""
+    """An unchanged selection retains the exact run bindings first saved with it,
+    while its reference generation is still served; otherwise it is re-validated."""
     gap=catalog.selected(composer['source_gap']) if composer['source_gap'] else None
+    if composer['eaggl_anchors'] and hasattr(catalog,'load'): catalog.load()
     previous=tx.get('draft_binding',draft_id)
     previous=previous['data'].get('selections',{}) if previous else {}
-    selections={}
+    selections={}; gate_checked=False
     for selection in composer['eaggl_anchors']:
         reference=selection['reference']; native=reference['source_id']; old=previous.get(native)
-        if old and old['reference']==reference:
+        stale=bool(old) and not current_binding(old['binding'])
+        if old and old['reference']==reference and not stale:
             selections[native]=old
         else:
-            catalog.validate_composer(dict(composer,eaggl_anchors=[selection]))
+            # Anchor writes wait for a reload to finish; unchanged anchors stay editable.
+            if not gate_checked: reload_gate(tx); gate_checked=True
+            try:
+                catalog.validate_composer(dict(composer,eaggl_anchors=[selection]))
+            except Problem as error:
+                if error.status==409 and error.code=='SOURCE_REVISION_CHANGED' and (stale or superseded_source(native)):
+                    raise superseded('This anchor belongs to a superseded reference generation; select current factors.') from None
+                raise
             selections[native]={'reference':reference,'record':catalog.factors[native],'binding':catalog.bindings[native]}
         suggestion=tx.get('suggestion',selection.get('suggestion_id')) if selection.get('suggestion_id') else None
         if suggestion and native in suggestion['data']['hits']:
@@ -333,27 +381,32 @@ def list_gaps(request:Request,limit: int=20,cursor:str|None=None,kind:str|None=N
         (-gap['scientific_accounts']['count'],digest([seed,gap['object']['id']]),gap['source']['source_id'],gap['object']['id']))
     return page(items,viewer or owner,limit,cursor,digest(['gaps',kind,status,disease_id,scope,sort]),snapshot_items=count_snapshot(items),seed=seed)
 
+def listing_scope(parts,reference_state):
+    """Cursor scope; the default `all` keeps the pre-archive scope digest."""
+    return digest(parts if reference_state=='all' else [*parts,reference_state])
+
 @app.get('/v1/knowledge-gaps/{gap_id}/accounts')
-def gap_accounts(gap_id:str,request:Request,limit:int=20,cursor:str|None=None,source_revision:str|None=None,scope:str='public'):
+def gap_accounts(gap_id:str,request:Request,limit:int=20,cursor:str|None=None,source_revision:str|None=None,scope:str='public',reference_state:str='all'):
     gap=catalog.gap(gap_id)
     if source_revision and source_revision!=gap['source']['source_revision']: raise Problem(409,'SOURCE_REVISION_CHANGED','The exact requested source revision is unavailable.')
     owner,accounts=discovery(request,scope,attribution=True)
-    items=[item for item in accounts if item['account']['question']==gap['object']['id']]
+    items=by_reference_state([item for item in accounts if item['account']['question']==gap['object']['id']],reference_state)
     viewer,items=account_votes(request,items)
-    return page(items,viewer or owner,limit,cursor,digest(['gap-accounts',gap['object']['id'],source_revision,scope]))
+    return page(items,viewer or owner,limit,cursor,listing_scope(['gap-accounts',gap['object']['id'],source_revision,scope],reference_state))
 
 @app.get('/v1/knowledge-gaps/{gap_id}/outcomes')
-def gap_outcomes(gap_id:str,request:Request,limit:int=20,cursor:str|None=None,source_revision:str|None=None,scope:str='public'):
+def gap_outcomes(gap_id:str,request:Request,limit:int=20,cursor:str|None=None,source_revision:str|None=None,scope:str='public',reference_state:str='all'):
     if scope not in ('public','workspace'): raise Problem(422,'INVALID_QUERY','Choose public or workspace discovery.')
     gap=catalog.gap(gap_id)
     if source_revision and source_revision!=gap['source']['source_revision']: raise Problem(409,'SOURCE_REVISION_CHANGED','The exact requested source revision is unavailable.')
     with repo.read_transaction() as tx:
         user=optional_identity(tx,request)
         if scope=='workspace' and user is None: raise Problem(401,'SESSION_EXPIRED','A workspace session is required.')
-        items=analysis_outcomes.listing(tx,gap['object']['id'],user,scope)
-    return page(items,user if scope=='workspace' else '',limit,cursor,digest(['gap-outcomes',gap['object']['id'],source_revision,scope]))
+        items=by_reference_state(analysis_outcomes.listing(tx,gap['object']['id'],user,scope),reference_state)
+    return page(items,user if scope=='workspace' else '',limit,cursor,listing_scope(['gap-outcomes',gap['object']['id'],source_revision,scope],reference_state))
 
 def read_vote(kind,identity,request):
+    preload_catalog()
     with repo.read_transaction() as tx:
         viewer=votes.viewer(tx,request.headers.get('authorization'))
         canonical,_=votes.target(tx,catalog,kind,identity)
@@ -362,6 +415,7 @@ def read_vote(kind,identity,request):
 async def write_vote(kind,identity,request):
     body=await request.json(); validate(body,'VoteInput')
     def save():
+        preload_catalog()
         with repo.transaction() as tx:
             user=votes.voter(tx,request.headers.get('authorization'))
             canonical,gap_id=votes.target(tx,catalog,kind,identity)
@@ -422,6 +476,9 @@ async def suggest(request: Request):
 
 def build_suggestions(body):
     validate(body,'SuggestInput'); gap=catalog.selected(body['source_gap'])
+    # Manual anchors must come from the served generation, so a draft never mixes generations.
+    if any(superseded_source(anchor['source_id']) for anchor in body['manual_eaggl_anchors']):
+        raise superseded('A kept anchor belongs to a superseded reference generation; remove it and select current factors.')
     exclude=set(body['dismissed_source_ids']) | {s['source_id'] for s in body['manual_eaggl_anchors']}
     contexts=[(a['target']['source_id'],catalog.mechanisms[a['target']['source_id']]['object']['description']) for a in gap['attachments'] if a['target'] and a['target']['source_id'] in catalog.mechanisms]
     query=body.get('subquery') or ' '.join(text for _,text in contexts) or gap['object']['text']
@@ -440,11 +497,32 @@ def build_suggestions(body):
     return {'suggestion_id':suggestion_id,'automatic_anchors':[{'factor':x['record'],'ranking':x['ranking'],'matched_context_ids':x['contexts']} for x in items],
         'automatic_target_count':5,'search':catalog.provenance(query,body.get('mode','semantic'),True),'limitations':['Retrieval similarity is not evidence of biological support.']}
 
+def archived_factor(source_id):
+    """(superseded, frozen snapshot|None) for a factor id the served generation does not serve.
+
+    Legacy mode has no superseded generation, so unknown ids stay 404 as before.
+    A same-model id with no captured snapshot is simply unknown.
+    """
+    if not superseded_source(source_id): return False,None
+    lookup=getattr(catalog,'archived_for_source',None); archived=lookup(source_id) if lookup else None
+    return bool(archived) or reference_generation.model_of_source_id(source_id)!=getattr(catalog,'model',None),archived
+
+@app.get('/v1/reference-factors/{archive_id}')
+def reference_factor(archive_id:str):
+    """Frozen snapshot of a factor referenced by archived work (public reference data)."""
+    lookup=getattr(catalog,'archived_reference_factor',None)
+    record=lookup(archive_id) if lookup and re.fullmatch('[a-f0-9]{64}',archive_id) else None
+    if not record: raise Problem(404,'NOT_FOUND','The archived reference factor is unavailable.')
+    return record
+
 @app.get('/v1/mechanisms/{source_id:path}')
 def get_mechanism(source_id:str,source_revision:str|None=None):
     catalog.load(); record=catalog.factors.get(source_id) or catalog.mechanisms.get(source_id)
     if not record and source_id.startswith('dismech:'): record=catalog.dismech_catalog().get(source_id)
-    if not record: raise Problem(404,'NOT_FOUND','The mapped mechanism is unavailable.')
+    if not record:
+        gone,archived=archived_factor(source_id)
+        if gone: raise superseded('This factor belongs to a superseded reference generation.',410,archived_reference_factor=archived)
+        raise Problem(404,'NOT_FOUND','The mapped mechanism is unavailable.')
     if source_revision and source_revision!=record['source_revision']: raise Problem(409,'SOURCE_REVISION_CHANGED','The exact requested source revision is unavailable.')
     return record
 
@@ -452,15 +530,26 @@ def get_mechanism(source_id:str,source_revision:str|None=None):
 def list_drafts(request:Request,limit:int=50,cursor:str|None=None):
     with repo.transaction() as tx:
         user=principal(tx,request.headers.get('authorization'))['user_id']
-        return page([dict(r['data'],owner_user_id=user) for r in tx.list('draft',user)],user,limit,cursor,'drafts')
+        user_inputs.cleanup(tx,user)
+        return page([dict(r['data'],owner_user_id=user) for r in tx.list('draft',user) if user_inputs.saved(r['data'])],user,limit,cursor,'drafts')
 
 @app.post('/v1/drafts',status_code=201)
 async def create_draft(request:Request):
-    body=await request.json(); validate(body,'DraftCreate')
+    body=await request.json(); validate(body,'DraftCreate'); preload_catalog(body['composer'])
     with repo.transaction() as tx:
         user=principal(tx,request.headers.get('authorization'))['user_id']
         def create():
             draft={'id':uid(),'owner_user_id':user,'version':1,'composer':body['composer'],'created_at':now(),'updated_at':now()}
+            lifecycle=body.get('lifecycle','saved')
+            draft.update(lifecycle=lifecycle,expires_at=user_inputs.expiration() if lifecycle=='temporary' else None)
+            if body.get('source_draft_id'):
+                source=user_inputs.available(owned(tx,'draft',body['source_draft_id'],user)['data'])
+                if not user_inputs.saved(source): raise Problem(422,'SOURCE_DRAFT_NOT_SAVED','Only a saved draft can supply editor lineage.')
+                source_version=body.get('source_draft_version',source['version'])
+                if source_version>source['version']:
+                    raise Problem(409,'SOURCE_DRAFT_VERSION_CONFLICT','The supplied source draft revision does not exist.',current_version=source['version'])
+                draft.update(source_draft_id=source['id'],source_draft_version=source_version)
+            user_inputs.resolve(tx,user,body['composer'])
             if 'name' in body: draft['name']=body['name'].strip()
             freeze_draft_bindings(tx,draft['id'],user,body['composer'])
             tx.put('draft',draft['id'],user,draft); return draft
@@ -470,20 +559,26 @@ async def create_draft(request:Request):
 def get_draft(draft_id:str,request:Request):
     with repo.transaction() as tx:
         user=principal(tx,request.headers.get('authorization'))['user_id']; row=owned(tx,'draft',draft_id,user)
-        return dict(row['data'],owner_user_id=user)
+        return dict(user_inputs.available(row['data']),owner_user_id=user)
 
 @app.patch('/v1/drafts/{draft_id}')
 async def patch_draft(draft_id:str,request:Request):
     body=await request.json(); validate(body,'DraftPatch')
+    if 'composer' in body: preload_catalog(body['composer'])
     with repo.transaction() as tx:
         user=principal(tx,request.headers.get('authorization'))['user_id']
         def update():
-            row=owned(tx,'draft',draft_id,user); draft=row['data']
+            row=owned(tx,'draft',draft_id,user); draft=user_inputs.available(row['data'])
             if draft['version']!=body['expected_version']: raise Problem(409,'VERSION_CONFLICT','This draft changed in another tab.',current_version=draft['version'])
             if 'composer' in body:
+                user_inputs.resolve(tx,user,body['composer'])
                 freeze_draft_bindings(tx,draft_id,user,body['composer'])
                 draft['composer']=body['composer']
             if 'name' in body: draft['name']=body['name'].strip()
+            if body.get('lifecycle')=='saved':
+                if not draft.get('name'): raise Problem(422,'DRAFT_NAME_REQUIRED','Name the draft before saving it.')
+                draft.update(lifecycle='saved',expires_at=None,saved_at=now())
+            elif not user_inputs.saved(draft): draft['expires_at']=user_inputs.expiration()
             draft.update(version=draft['version']+1,updated_at=now(),owner_user_id=user)
             tx.put('draft',draft_id,user,draft,expected=row['version']); return draft
         return idempotent(tx,user,'draft:'+draft_id,request.headers.get('idempotency-key'),body,update)
@@ -496,12 +591,9 @@ async def delete_draft(draft_id:str,request:Request):
         def remove():
             draft=owned(tx,'draft',draft_id,user)['data']
             if draft['version']!=body['expected_version']: raise Problem(409,'VERSION_CONFLICT','This draft changed in another tab. Refresh before deleting it.',current_version=draft['version'])
-            requests={r['id'] for r in tx.list('request',user) if r['data']['source_draft_id']==draft_id}
-            if any(r['data']['kind']=='analysis' and r['data'].get('research_request_id') in requests and r['data']['status'] not in jobs.TERMINAL for r in tx.list('job',user)):
-                raise Problem(409,'DRAFT_IN_USE','This draft has active research. Wait for it to finish or stop the run before deleting the draft.')
             tx.remove('draft',draft_id); tx.remove('draft_binding',draft_id)
             # Editable state may be removed; submitted evidence and results remain immutable.
-            remaining=[r['data'] for r in tx.list('draft',user)]
+            remaining=[r['data'] for r in tx.list('draft',user) if user_inputs.saved(r['data'])]
             remaining.sort(key=lambda d:(d['updated_at'],d['id']),reverse=True)
             for row in tx.list('exploration',user):
                 exploration=row['data']
@@ -511,6 +603,75 @@ async def delete_draft(draft_id:str,request:Request):
                 tx.put('exploration',row['id'],user,exploration,expected=row['version'])
             return {'id':draft_id,'deleted':True}
         return idempotent(tx,user,'delete-draft:'+draft_id,request.headers.get('idempotency-key'),body,remove)
+
+@app.post('/v1/uploads',status_code=201)
+async def initiate_upload(request:Request):
+    body=await request.json(); validate(body,'UploadCreate')
+    with repo.transaction() as tx:
+        user=principal(tx,request.headers.get('authorization'))['user_id']
+        result=idempotent(tx,user,'uploads',request.headers.get('idempotency-key'),body,lambda:user_inputs.initiate(tx,user,body))
+        current=owned(tx,'upload',result['upload']['id'],user)['data']
+        return {'upload':user_inputs.public_upload(current),'transfer':user_inputs.transfer(current)}
+
+@app.get('/v1/uploads')
+def list_uploads(request:Request,draft_id:str):
+    with repo.read_transaction() as tx:
+        user=principal(tx,request.headers.get('authorization'))['user_id']; owned(tx,'draft',draft_id,user)
+        return {'items':[user_inputs.public_upload(row['data']) for row in tx.list('upload',user)
+            if row['data']['draft_id']==draft_id and row['data']['status']!='removed']}
+
+@app.get('/v1/uploads/{upload_id}')
+def get_upload(upload_id:str,request:Request):
+    with repo.read_transaction() as tx:
+        user=principal(tx,request.headers.get('authorization'))['user_id']
+        return user_inputs.public_upload(owned(tx,'upload',upload_id,user)['data'])
+
+@app.post('/v1/uploads/{upload_id}/content')
+async def upload_content(upload_id:str,request:Request):
+    if user_inputs.s3_enabled(): raise Problem(404,'NOT_FOUND','Local upload transport is disabled.')
+    raw=bytearray()
+    async for part in request.stream():
+        raw.extend(part)
+        if len(raw)>user_inputs.MAX_FILE_BYTES*4//3+100: raise Problem(413,'UPLOAD_TOO_LARGE','Upload exceeds 8 MB.')
+    try: body=json.loads(raw)
+    except ValueError: raise Problem(422,'INVALID_UPLOAD','Invalid upload body.') from None
+    with repo.transaction() as tx:
+        user=principal(tx,request.headers.get('authorization'))['user_id']
+        return user_inputs.stage_local(tx,user,upload_id,body.get('content_base64'))
+
+@app.post('/v1/uploads/{upload_id}/complete')
+async def complete_upload(upload_id:str,request:Request):
+    with repo.read_transaction() as tx:
+        user=principal(tx,request.headers.get('authorization'))['user_id']
+        before=owned(tx,'upload',upload_id,user); value=before['data']
+    failure=None
+    try: completed=await asyncio.to_thread(user_inputs.complete,value)
+    except Problem as error:
+        failure=error; completed={**value,'status':'failed','error':error.detail}
+    with repo.transaction() as tx:
+        row=owned(tx,'upload',upload_id,user)
+        if row['data']['status']=='ready': return user_inputs.public_upload(row['data'])
+        if row['version']!=before['version']: raise Problem(409,'UPLOAD_CHANGED','The upload changed while processing.')
+        tx.put('upload',upload_id,user,completed,expected=before['version'])
+    if failure: raise failure
+    return user_inputs.public_upload(completed)
+
+@app.delete('/v1/uploads/{upload_id}')
+def remove_upload(upload_id:str,request:Request):
+    with repo.transaction() as tx:
+        user=principal(tx,request.headers.get('authorization'))['user_id']; row=owned(tx,'upload',upload_id,user)
+        if user_inputs.referenced(tx,upload_id): raise Problem(409,'UPLOAD_IN_USE','Remove the attachment from saved inputs first. Submitted inputs are retained.')
+        value={**row['data'],'status':'removed'}; tx.put('upload',upload_id,user,value)
+        return user_inputs.public_upload(value)
+
+@app.get('/v1/uploads/{upload_id}/download')
+async def download_upload(upload_id:str,request:Request):
+    with repo.read_transaction() as tx:
+        user=principal(tx,request.headers.get('authorization'))['user_id']; value=owned(tx,'upload',upload_id,user)['data']
+        if value['status']!='ready': raise Problem(404,'NOT_FOUND','Upload is unavailable.')
+    data=await asyncio.to_thread(user_inputs.read,value['storage'])
+    return Response(data,media_type=value['media_type'],headers={'Content-Disposition':"attachment; filename*=UTF-8''"+quote(value['filename'],safe=''),
+        'X-Content-Type-Options':'nosniff','Cache-Control':'private, no-store'})
 
 @app.get('/v1/research-requests')
 def list_requests(request:Request,limit:int=50,cursor:str|None=None):
@@ -544,6 +705,7 @@ async def deliver_workflow_intents(job_id):
         logging.getLogger('reveal.workflow').warning('Dispatch deferred to reconciliation (%s)', type(error).__name__)
 
 def create_job_transaction(body,authorization,idempotency_key):
+    if body.get('kind')=='analysis': preload_catalog()
     with repo.transaction() as tx:
         identity=principal(tx,authorization); user=identity['user_id']
         def create():
@@ -555,19 +717,25 @@ def create_job_transaction(body,authorization,idempotency_key):
                 today=[r for r in tx.list('job',user) if r['data']['kind']=='analysis' and r['data']['created_at']>=cutoff]
                 if len(today)>=int(os.getenv('REVEAL_ANONYMOUS_ANALYSES_PER_DAY','5')): raise Problem(429,'ANONYMOUS_QUOTA_EXCEEDED','This anonymous workspace has reached its daily analysis allowance.')
             if body['kind']=='paragraph':
+                # Research statements need no reference data: allowed on archived accounts and during reloads.
                 account=owned(tx,'account',body['account_id'],user)
                 return jobs.enqueue(tx,user,'paragraph',account_id=body['account_id'],inputs=body)
-            draft=owned(tx,'draft',body['draft_id'],user)['data']
+            reload_gate(tx)
+            draft=user_inputs.available(owned(tx,'draft',body['draft_id'],user)['data'])
             if draft['version']!=body['draft_version']: raise Problem(409,'VERSION_CONFLICT','Save the current draft before submitting.',current_version=draft['version'])
             composer=draft['composer']
             if not composer['source_gap'] or not composer['eaggl_anchors']: raise Problem(422,'ANCHOR_REQUIRED','Select a source question and at least one mechanism anchor.')
             catalog.selected(composer['source_gap'])
             saved=owned(tx,'draft_binding',draft['id'],user)['data']; gap=saved['source_gap']
+            if not all(current_binding(saved['selections'][s['reference']['source_id']]['binding']) for s in composer['eaggl_anchors']):
+                raise superseded('This draft uses factors from a superseded reference generation; start a new analysis on this gap with current factors.')
             contexts=[a['target'] for a in gap['attachments'] if a['target']]
             document={'knowledge_gaps':[gap['object']], 'mechanisms':[saved['selections'][s['reference']['source_id']]['record']['object'] for s in composer['eaggl_anchors']]}
             frozen={'id':uid(),'owner_user_id':user,'source_draft_id':draft['id'],'source_draft_version':draft['version'],'composer':composer,'question_id':gap['object']['id'],
                 'document':document,'attribution':{'user_id':user,'person_id':None,'display_name':identity['display_name'],'orcid':identity['orcid'],'orcid_authenticated':identity['orcid_authenticated'],'observed_at':now(),'principal_kind':identity['principal_kind']},
-                'submitted_at':now(),'linked_dismech_context':contexts}
+                'submitted_at':now(),'linked_dismech_context':contexts,'user_inputs':user_inputs.resolve(tx,user,composer)}
+            if draft.get('source_draft_id'):
+                frozen.update(originating_saved_draft_id=draft['source_draft_id'],originating_saved_draft_version=draft['source_draft_version'])
             tx.put('request',frozen['id'],user,frozen)
             request_binding={'dismech_import_id':saved['dismech_import_id'],'source_gap':gap,
                 'anchors':[saved['selections'][s['reference']['source_id']]['binding'] for s in composer['eaggl_anchors']],
@@ -650,23 +818,64 @@ def explorations(request:Request,limit:int=50,cursor:str|None=None):
 
 @app.post('/v1/me/explorations')
 async def record_exploration(request:Request):
-    body=await request.json(); validate(body,'ExplorationInput'); gap=catalog.selected(body['source_gap'])
-    with repo.transaction() as tx:
-        user=principal(tx,request.headers.get('authorization'))['user_id']
-        if body.get('draft_id'): owned(tx,'draft',body['draft_id'],user)
-        row={'source_gap':body['source_gap'],'knowledge_gap':gap['object'],'last_explored_at':now(),'draft_id':body.get('draft_id'),
-            'scientific_accounts':dict(gap['scientific_accounts'],scope='owner_exact_gap')}
-        tx.put('exploration',digest([user,gap['object']['id']]),user,row); return row
+    body=await request.json(); validate(body,'ExplorationInput')
+    def record():
+        # catalog.selected may reload the catalog after a reference cutover: keep it off the event loop.
+        gap=catalog.selected(body['source_gap'])
+        with repo.transaction() as tx:
+            user=principal(tx,request.headers.get('authorization'))['user_id']
+            if body.get('draft_id'): owned(tx,'draft',body['draft_id'],user)
+            row={'source_gap':body['source_gap'],'knowledge_gap':gap['object'],'last_explored_at':now(),'draft_id':body.get('draft_id'),
+                'scientific_accounts':dict(gap['scientific_accounts'],scope='owner_exact_gap')}
+            tx.put('exploration',digest([user,gap['object']['id']]),user,row); return row
+    return await asyncio.to_thread(record)
 
 @app.get('/v1/accounts')
-def accounts(request:Request,limit:int=20,cursor:str|None=None,gap_id:str|None=None,q:str=Query('',max_length=200)):
+def accounts(request:Request,limit:int=20,cursor:str|None=None,gap_id:str|None=None,q:str=Query('',max_length=200),scope:str='workspace',sort:str='recent',reference_state:str='all'):
     from .workspace_search import normalize, filter_summaries
+    if scope not in ('public','workspace'): raise Problem(422,'INVALID_QUERY','Choose public or workspace discovery.')
+    if sort not in ('recent','votes'): raise Problem(422,'INVALID_QUERY','Choose recent or votes sorting.')
     query=normalize(q)
     with repo.read_transaction() as tx:
-        user=principal(tx,request.headers.get('authorization'))['user_id']
-        items=[item for item in visible_accounts(tx,user,attribution=True) if not gap_id or item['account']['question']==gap_id]
-        items=votes.account_summaries(tx,items,votes.viewer(tx,request.headers.get('authorization')))
-        return page(filter_summaries(items,query,'account'),user,limit,cursor,digest(['accounts',gap_id,query]))
+        user=optional_identity(tx,request)
+        if scope=='workspace' and user is None: raise Problem(401,'SESSION_EXPIRED','Continue with a registered or anonymous session to browse your workspace.')
+        items=publication.public_accounts(tx) if scope=='public' else visible_accounts(tx,user,attribution=True)
+        items=filter_summaries([item for item in items if not gap_id or item['account']['question']==gap_id],query,'account')
+        viewer=votes.viewer(tx,request.headers.get('authorization'))
+        items=votes.account_summaries(tx,items,viewer)
+        # Keep workspace ordering unchanged; public recency is the actual
+        # publication date, with deterministic identity ties across pages.
+        items.sort(key=lambda item:item['account']['id'])
+        items.sort(key=lambda item:(item['publication'].get('published_at') or item['created_at']) if scope=='public' else item['created_at'],reverse=True)
+        if sort=='votes': items.sort(key=lambda item:(item.get('votes') or {}).get('score',0),reverse=True)
+        # Current work leads the default combined list; each reference group
+        # retains the requested vote/recency ordering, before pagination.
+        items=by_reference_state(items,reference_state)
+        return page(items,(viewer or '') if scope=='public' else user,limit,cursor,listing_scope(['accounts',gap_id,query,scope,sort],reference_state))
+
+@app.get('/v1/leaderboard')
+def community_leaderboard(request:Request,view:str='researchers',sort:str|None=None,evidence:str='all',limit:int=20,cursor:str|None=None):
+    from . import leaderboard
+    sort=leaderboard.options(view,sort,evidence)
+    if view!='datasets': evidence='all'
+    with repo.read_transaction() as tx:
+        optional_identity(tx,request)  # Invalid supplied credentials never downgrade to public.
+        projection=leaderboard.build(tx,evidence)
+    items=leaderboard.ranking(projection,view,sort)
+    result=page(items,limit=limit,cursor=cursor,scope=digest(['leaderboard',view,sort,evidence]),snapshot_items=projection['revision'])
+    return {**result,**projection['metadata'],'view':view,'sort':sort,'evidence':evidence}
+
+@app.get('/v1/leaderboard/{view}/{entry_id}/records')
+def leaderboard_records(view:str,entry_id:str,request:Request,metric:str='accounts',evidence:str='all',limit:int=20,cursor:str|None=None):
+    from . import leaderboard
+    leaderboard.options(view,evidence=evidence,metric=metric)
+    if view!='datasets': evidence='all'
+    with repo.read_transaction() as tx:
+        optional_identity(tx,request)
+        projection=leaderboard.build(tx,evidence)
+    entry,items=leaderboard.details(projection,view,entry_id,metric)
+    result=page(items,limit=limit,cursor=cursor,scope=digest(['leaderboard-records',view,entry_id,metric,evidence]),snapshot_items=projection['revision'])
+    return {**result,**projection['metadata'],'view':view,'id':entry_id,'metric':metric,'evidence':evidence,'entry':entry,'total':len(items)}
 
 @app.get('/v1/accounts/{dapper_id}/publication')
 def account_publication(dapper_id:str,request:Request):
@@ -689,13 +898,13 @@ async def update_publication(dapper_id:str,request:Request):
     return await asyncio.to_thread(save)
 
 @app.get('/v1/analysis-outcomes')
-def workspace_outcomes(request:Request,limit:int=20,cursor:str|None=None,q:str=Query('',max_length=200)):
+def workspace_outcomes(request:Request,limit:int=20,cursor:str|None=None,q:str=Query('',max_length=200),reference_state:str='all'):
     from .workspace_search import normalize, filter_summaries
     query=normalize(q)
     with repo.read_transaction() as tx:
         user=principal(tx,request.headers.get('authorization'))['user_id']
-        items=analysis_outcomes.listing(tx,owner=user,scope='workspace')
-    return page(filter_summaries(items,query,'outcome'),user,limit,cursor,digest(['workspace-outcomes',query]))
+        items=by_reference_state(analysis_outcomes.listing(tx,owner=user,scope='workspace'),reference_state)
+    return page(filter_summaries(items,query,'outcome'),user,limit,cursor,listing_scope(['workspace-outcomes',query],reference_state))
 
 @app.get('/v1/jobs/{job_id}/outcome')
 def job_outcome(job_id:str,request:Request):
@@ -747,6 +956,8 @@ def scientific(identity,request,kind='object'):
                 from .acceptance import object_envelope
                 row=object_envelope(snapshot['document'],identity,snapshot['citation_metadata'],snapshot['artifacts'])
                 if kind=='account': row['research_statement']=snapshot['summary']['research_statement']
+        # Outdated-reference state lives beside the immutable result: summary.archive.
+        archive=((snapshot['summary'] if public is not None else row.get('summary')) or {}).get('archive') if kind=='account' else None
         result=row.get('result',row)
         if 'document' not in result: return result
         checksum=request.query_params.get('payload_sha256')
@@ -790,8 +1001,10 @@ def scientific(identity,request,kind='object'):
             return encoded+'.'+hmac.new(secret,encoded.encode(),hashlib.sha256).hexdigest()
         clipped=object_envelope(document,identity,metadata,artifacts,max_depth=depth,max_nodes=maximum,offset=offset,continuation=continuation)
         if 'research_statement' in result: clipped['research_statement']=result['research_statement']
+        if 'fixture_origin' in result: clipped['fixture_origin']=result['fixture_origin']
         if kind=='account': clipped['publication']=publication.state(tx,public['owner'] if public else user,identity,
             can_manage=public is None,record=public if public else publication_record,account_result=result)
+        if archive: clipped['archive']=archive
         return clipped
 
 @app.get('/v1/accounts/{dapper_id}')

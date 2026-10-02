@@ -3,6 +3,42 @@ from copy import deepcopy
 import gzip
 import json
 import shutil
+import sys
+
+OUTCOME_SUMMARY_KEYS = ('id','outcome','summary','knowledge_gap','anchors','created_at','attribution','publication')
+KPN_TRAIT_PATTERN = r'^KPN\.TRAIT:[0-9]{7}$'
+CAPTURED_AT = '2026-10-01T08:30:00Z'  # Explicitly fictional reference-reload capture and cutover times.
+ARCHIVED_AT = '2026-10-01T09:00:00Z'
+# KPN.TRAIT:0000398 Factor1 as copied from the LAP projection eaggl_capped__cfde_2026_09_28
+# (factor_index.tsv, factor_metadata.tsv without its local source path, trait_kpn_map.tsv).
+KPN_EXAMPLE = {'trait': {'id': 'KPN.TRAIT:0000398', 'name': 'Type 2 diabetes (T2D)', 'legacy_phenotype_id': 'T2D',
+                         'trait_group': 'metabolic', 'trait_type': 'phenotype'},
+    'gwas_source_category': 'KPN', 'factor': 'Factor1', 'label': 'Metabolic Dysregulation Indicators',
+    'index': {'global_eaggl_column': 'Factor3357', 'factor_id': 'T2D::Factor1', 'trait': 'T2D', 'kpn_trait_id': 'KPN.TRAIT:0000398',
+              'factor': 'Factor1', 'factor_number': '1', 'factor_label': 'Metabolic Dysregulation Indicators',
+              'n_nonzero_loadings': '633', 'loading_l2': '4.95366', 'loading_variant': 'capped'},
+    'metadata': {'label': 'Metabolic Dysregulation Indicators', 'gene_set_score': '3.06', 'gene_score': '0.154',
+                 'top_genes': 'LEPR,LEP,STAT3,CYP19A1,ALMS1',
+                 'top_gene_sets': 'mp_impaired_glucose_tolerance,mp_increased_circulating_insulin_level,mp_insulin_resistance,mp_increased_body_weight,mp_increased_circulating_glucose_level',
+                 'source_gene_rows': '1265', 'aligned_gene_rows': '1265', 'nonzero_gene_loadings': '1074',
+                 'raw_loading_l1': '72.93184311186471', 'raw_loading_l2': '4.967819929633034'},
+    'lap': {'project': 'eaggl_capped__cfde_2026_09_28', 'pigean_commit': 'ca59661644dc9ead429fc7e59050870ba49b26e8',
+            'projection_scope': 'per_trait', 'kpn_release': 'v0.0.2'}}
+
+
+def reference_helpers(b):
+    """The backend's identifier and archive-stamp helpers, so examples match what it writes."""
+    source = str(b.ROOT / 'services/backend/src')
+    if source not in sys.path: sys.path.insert(0, source)
+    from reveal_backend import reference_archive, reference_generation
+    return reference_generation, reference_archive
+
+
+def summarize_outcome(record):
+    """AnalysisOutcomeSummary of a record, as analysis_outcomes.summary(): archive propagates when present."""
+    item = {key: deepcopy(record[key]) for key in OUTCOME_SUMMARY_KEYS}
+    if record.get('archive'): item['archive'] = deepcopy(record['archive'])
+    return item
 
 
 def fixtures(b, f):
@@ -62,6 +98,38 @@ def schemas(b):
         description='Exact imported DisMech source observation and DAPPER mapping. Resolve and validate server-side. No client-authored question.'))
     props=S['Composer']['properties'];props.pop('inquiry');props.pop('dismech_context');props['source_gap']=null(ref('SelectedGap'))
     S['Composer']['required']=list(props)
+    props.update(research_direction=string(maxLength=6000),context=string(maxLength=20000),
+        hypotheses=string(maxLength=12000),upload_ids=array(uuid,uniqueItems=True,maxItems=5))
+    for kind in ('Draft','DraftCreate'):
+        S[kind]['properties']['lifecycle']=enum('temporary','saved')
+        S[kind]['properties']['source_draft_id']=uuid
+    S['Draft']['properties'].update(expires_at=null(time),saved_at=time,source_draft_version={'type':'integer','minimum':1})
+    S['DraftCreate']['properties']['source_draft_version']={'type':'integer','minimum':1,
+        'description':'Loaded revision of the originating saved draft. Historical revisions up to the current revision are allowed; omitted means current.'}
+    S['DraftCreate']['dependentRequired']={'source_draft_version':['source_draft_id']}
+    S['DraftPatch']['properties']['lifecycle']=enum('saved')
+    b.add('UploadStorage',obj({'store':enum('s3','filesystem'),'bucket':string(),'key':string(),'version_id':string(),
+        'sha256':digest,'size_bytes':{'type':'integer','minimum':0},'content_type':string()},
+        ['store','key','sha256','size_bytes','content_type']))
+    b.add('UploadExtraction',obj({'storage':ref('UploadStorage'),'format':enum('reveal.upload-text/1'),
+        'segment_count':{'type':'integer','minimum':1},'original_sha256':digest}))
+    b.add('Upload',obj({'id':uuid,'draft_id':uuid,'filename':string(),'media_type':string(),
+        'size_bytes':{'type':'integer','minimum':1,'maximum':8000000},'sha256':digest,
+        'status':enum('pending','ready','failed','removed'),'created_at':time,'expires_at':time,
+        'storage':null(ref('UploadStorage')),'extraction':null(ref('UploadExtraction')),'error':null(string())}))
+    b.add('UploadCreate',obj({'draft_id':uuid,'filename':string(minLength=1,maxLength=240),
+        'media_type':string(maxLength=150),'size_bytes':{'type':'integer','minimum':1,'maximum':8000000},'sha256':digest}))
+    b.add('UploadTicket',obj({'upload':ref('Upload'),'transfer':obj({'method':enum('POST'),'url':string(),
+        'fields':{'type':'object','additionalProperties':{'type':'string'}},'encoding':enum('multipart','base64')})}))
+    b.add('UploadList',obj({'items':array(ref('Upload'))}))
+    b.add('UploadContent',obj({'content_base64':string(maxLength=10666676)}))
+    b.add('UserInputs',obj({'format':enum('reveal.user-inputs/1'),'research_direction':string(),'context':string(),
+        'hypotheses':string(),'uploads':array(ref('Upload'),maxItems=5)}))
+    b.add('FixtureOrigin',obj({'kind':enum('canonical_fixture'),'fixture_version':string(),'content_sha256':digest,
+        'scientific_acceptance':enum('not_reviewed')}))
+    S['AccountResult']['properties']['fixture_origin']=ref('FixtureOrigin')
+    S['ResearchRequest']['properties'].update(user_inputs=ref('UserInputs'),originating_saved_draft_id=uuid,
+        originating_saved_draft_version={'type':'integer','minimum':1})
     S['Composer']['description']='Mutable source selection and EAGGL anchors. An empty draft may have null source_gap/zero anchors. Analysis requires an exact source-selected DisMech gap and at least one current-model EAGGL anchor. Linked DisMech context is server-owned, not editable input.'
     for k in ['inquiry','dismech_context']: S['SuggestInput']['properties'].pop(k)
     S['SuggestInput']['properties']['source_gap']=ref('SelectedGap');S['SuggestInput']['required']=list(S['SuggestInput']['properties'])
@@ -78,8 +146,10 @@ def schemas(b):
     b.add('GapSourceDetail',obj({'source_file':string(),'source_pointer':string(),'payload_sha256':digest,'raw':{'type':'object','additionalProperties':True}},
         description='Lossless versioned DisMech discussion sidecar, including evidence/experiments when present. Not hashable KnowledgeGap fields. Hash covers raw canonical JSON.'))
     b.add('AccountCount',obj({'count':{'type':'integer','minimum':0},'scope':enum('public_exact_gap','owner_exact_gap'),
-        'as_of':time,'ranking':enum('curated','recent_account_count','account_count'),'window_days':null({'type':'integer','minimum':1})},
-        description='Distinct accessible saved account digests linked to this exact gap digest; no implicit cross-revision rollup or private-count leakage.'))
+        'as_of':time,'ranking':enum('curated','recent_account_count','account_count'),'window_days':null({'type':'integer','minimum':1}),
+        'archived_count':{'type':'integer','minimum':1,'description':'Accounts in the same scope built on a superseded EAGGL reference generation. Omitted when there are none. Listings with reference_state=all include them; count and ranking do not.'}},
+        required=['count','scope','as_of','ranking','window_days'],
+        description='Distinct accessible saved account digests linked to this exact gap digest; no implicit cross-revision rollup or private-count leakage. count covers current reference work only.'))
     b.add('VoteState',obj({'upvotes':{'type':'integer','minimum':0},'downvotes':{'type':'integer','minimum':0},
         'score':{'type':'integer'},'user_vote':null({'type':'integer','enum':[-1,0,1]})},
         description='Public totals for one canonical scientific identity. Score equals upvotes minus downvotes. user_vote is null for anonymous/unauthenticated readers, otherwise -1, 0 (no vote), or 1 for the registered current user. No voter identities are exposed.'))
@@ -137,15 +207,48 @@ def schemas(b):
         'created_at':time,'attribution':null(ref('AttributionSnapshot')),'scope_note':string(),'record_format':enum('structured','legacy'),
         'provenance':ref('OutcomeProvenance'),'job_id':null(uuid),'publication':ref('PublicationState')},
         description='Immutable application record of one scoped insufficient-evidence investigation, not a ScientificAccount, independently validated scientific claim, or globally established null result. Reasons are captured author reports; coverage and hashes retain their exact scope. Private by default and excluded from scientific-account counts. Public snapshots omit private job identifiers.'))
-    b.add('AnalysisOutcomeSummary',obj({key:deepcopy(S['AnalysisOutcome']['properties'][key]) for key in
-        ('id','outcome','summary','knowledge_gap','anchors','created_at','attribution','publication')}))
+    b.add('AnalysisOutcomeSummary',obj({key:deepcopy(S['AnalysisOutcome']['properties'][key]) for key in OUTCOME_SUMMARY_KEYS}))
     b.add('AnalysisOutcomeList',obj({'items':array(ref('AnalysisOutcomeSummary')),'page':ref('Page')}))
     b.add('AccountSummary',obj({'account':ref('DapperScientificAccount'),'knowledge_gap':ref('DapperKnowledgeGap'),
         'claim_count':{'type':'integer','minimum':1},'created_at':time,'job_id':null(uuid),'research_statement':ref('ParagraphState'),
         'publication':ref('PublicationState'),'votes':null(ref('VoteState'))}))
     S['AccountSummary']['properties']['attribution']=null(ref('AttributionSnapshot'))
+    S['AccountSummary']['properties']['fixture_origin']=ref('FixtureOrigin')
     S['AccountSummary']['description']='One accessible accepted scientific account, deduplicated by its DAPPER identity. Publication reports the current owner publication state; public discovery uses can_manage=false. Optional attribution is the immutable original request actor, not the current workspace owner; null denotes unavailable historical attribution. Title and brief synthesis are account.name and account.closing_remarks.'
     b.add('AccountList',obj({'items':array(ref('AccountSummary')),'page':ref('Page')}))
+    count={'type':'integer','minimum':0}
+    b.add('LeaderboardView',enum('researchers','accounts','datasets'))
+    b.add('LeaderboardSort',enum('overall','accounts','votes','gaps','explored','claims','researchers'))
+    b.add('LeaderboardMetric',enum('accounts','votes','gaps','explored','claims','researchers','files'))
+    b.add('LeaderboardEvidence',enum('all','supporting'))
+    b.add('LeaderboardAttribution',obj({'id':string(pattern='^researcher_[a-f0-9]{64}$'),'label':string(),'orcid':null(string())}))
+    b.add('LeaderboardDirections',obj({key:count for key in ('SUPPORTS','DISPUTES','MIXED','NEUTRAL','UNKNOWN')}))
+    b.add('LeaderboardMetrics',obj({**{key:count for key in ('account_count','upvotes','downvotes','voter_count',
+        'account_gap_count','explored_gap_count','claim_count','researcher_count')},'net_votes':{'type':'integer'},
+        'overall_score':{'type':'number','minimum':0,'maximum':100}}))
+    b.add('LeaderboardEntry',obj({'id':string(),'kind':enum('researcher','account','dataset'),'label':string(),
+        'rank':{'type':'integer','minimum':1},'metrics':ref('LeaderboardMetrics'),
+        'components':obj({key:{'type':'number','minimum':0,'maximum':100} for key in ('accounts','votes','gaps')}),
+        'orcid':null(string()),'account_id':null(string()),'gap_id':null(string()),
+        'gap':null(obj({'id':string(),'label':string()})),'attribution':null(ref('LeaderboardAttribution')),
+        'directions':ref('LeaderboardDirections')}))
+    b.add('LeaderboardMetadata',obj({'as_of':time,'score_version':enum('public-contribution-v1'),
+        'cohort_size':count,'voting_participants':count,'exclusions':obj({key:count for key in
+            ('fixture_accounts','uncredited_accounts','conflicting_accounts','invalid_public_accounts','excluded_evidence_paths','fixture_explorations','uncredited_explorations')}),
+        'definitions':array(obj({'id':string(),'label':string(),'description':string()})),
+        'methodology':obj({'weights':obj({key:{'type':'number'} for key in ('accounts','votes','gaps')}),
+            'scope':string(),'score':string(),'own_votes':string(),'evidence':string()})},
+        description='Only public eligibility/exclusion totals. No counts of private work. Observation time is not a cursor revision. Original actors are represented by opaque public keys; no job, request, private email or voter identity is exposed.'))
+    b.add('LeaderboardList',obj({**deepcopy(S['LeaderboardMetadata']['properties']),
+        'view':ref('LeaderboardView'),'sort':ref('LeaderboardSort'),'evidence':ref('LeaderboardEvidence'),
+        'items':array(ref('LeaderboardEntry')),'page':ref('Page')}))
+    b.add('LeaderboardRecord',obj({'id':string(),'kind':enum('account','gap','claim','researcher','file','exploration'),
+        'label':string(),'url':string(),'account_ids':array(string()),'claim_ids':array(string()),'evidence_ids':array(string()),
+        'directions':ref('LeaderboardDirections'),'value':{'type':'integer'}},
+        description='One distinct counted public unit. For votes, one account record carries its signed net value; summing values reproduces the headline. Other metrics count records. Evidence IDs preserve explicit interpretations, never inferred scientific endorsement.'))
+    b.add('LeaderboardRecords',obj({**deepcopy(S['LeaderboardMetadata']['properties']),
+        'view':ref('LeaderboardView'),'id':string(),'metric':ref('LeaderboardMetric'),'evidence':ref('LeaderboardEvidence'),
+        'entry':ref('LeaderboardEntry'),'total':count,'items':array(ref('LeaderboardRecord')),'page':ref('Page')}))
     b.add('ExplorationInput',obj({'source_gap':ref('SelectedGap'),'draft_id':null(uuid)},['source_gap'],
         description='Records a visit under the authenticated principal. Exact source revision is required; optional draft must belong to that principal and selected gap.'))
     b.add('Exploration',obj({'source_gap':ref('SelectedGap'),'knowledge_gap':ref('DapperKnowledgeGap'),
@@ -171,6 +274,50 @@ def schemas(b):
         'filename':string(),'media_type':string(),'content':string(),'plain_text':null(string()),'required_companions':array(string()),
         'citation_targets':array(ref('CitationTarget')),'warnings':array(string())},
         description='Download content or clipboard HTML/plain text derived from the same immutable Paragraph and pinned citation registry. rich-text HTML is sanitized; canonical resolver links enforce authorization. latex includes cite commands and requires references.bib.'))
+    reference_schemas(b)
+
+
+def reference_schemas(b):
+    """Versioned reference generations and archived work (docs/reference-reload.md §5)."""
+    rg,_=reference_helpers(b)
+    S=b.SCHEMAS; ref=b.ref; obj=b.obj; array=b.array; string=b.string; enum=b.enum; null=b.nullable; did=b.did
+    uuid=string(format='uuid'); digest=string(pattern='^[a-f0-9]{64}$'); time=string(format='date-time')
+    generation=string('Reference generation id: 64 lowercase hex characters.',pattern='^[a-f0-9]{64}$')
+    kpn=string(pattern=KPN_TRAIT_PATTERN); number={'type':'number'}
+    model=lambda:enum(*rg.MODELS,description='EAGGL reference model: cfde-inc-v2 (legacy CFDE-linked factors) or eaggl-capped-v1 (KPN reference generations).')
+    b.add('KpnTrait',obj({'id':kpn,'name':string(),'legacy_phenotype_id':string(),'trait_group':null(string()),'trait_type':null(string())},
+        description='KPN trait (kpn-data-models portal_id) of a factor in an eaggl-capped-v1 reference generation. legacy_phenotype_id is the EAGGL/portal phenotype code.'))
+    S['EagglFactor']['properties'].update(model=model(),reference_generation_id=generation,kpn_trait=null(ref('KpnTrait')))
+    S['EagglFactor']['description']+=' Each deployment serves the factors of one active reference generation. In an eaggl-capped-v1 generation, source_id is factor:kpn:{NNNNNNN}:eaggl-capped-v1:{FactorN}, the record adds reference_generation_id and kpn_trait, cfde_anchor.label is the EAGGL factor label, and catalog_file identifies the canonical factor metadata bytes. Legacy cfde-inc-v2 records omit both fields.'
+    for name in ('Composer','SuggestInput'): S[name]['properties']['model']=model()
+    b.add('ReferenceArchiveAnchor',obj({'source_id':string(pattern='^factor:'),'mechanism_id':null(did('Mechanism')),'factor_id':null(string()),
+        'trait':null(string()),'kpn_trait_id':null(kpn),'label':null(string()),'name':null(string()),'origin':null(string()),
+        'archived_reference_factor_id':digest},
+        description='An original EAGGL anchor of archived work, frozen at archive time. trait, label and name are display text (trait is the phenotype shown with the anchor, else its phenotype code); fields that could not be recovered are null. Resolve the frozen factor at /v1/reference-factors/{archived_reference_factor_id}.'))
+    b.add('ReferenceArchive',obj({'status':{'type':'string','const':'archived'},'reason':{'type':'string','const':'reference_generation_superseded'},
+        'archived_at':time,'from_reference_generation':generation,'to_reference_generation':generation,
+        'history':array(obj({'from_reference_generation':generation,'to_reference_generation':generation,'archived_at':time}),minItems=1),
+        'reference':obj({'model':model(),'anchors':array(ref('ReferenceArchiveAnchor'))}),
+        'gap':null(obj({'id':did('KnowledgeGap'),'source_id':null(string()),'source_revision':null(digest)})),
+        'analysis':obj({'job_id':null(uuid),'request_id':null(uuid),'evidence_package_sha256':null(digest),
+            'account_id':null(did('ScientificAccount')),'outcome_id':null(uuid)})},
+        description='Outdated-reference stamp on work built on a superseded reference generation. The work keeps every record and stays readable, downloadable and publishable, and paragraph jobs still run; re-analysis and review retry are blocked; start a new analysis on the same gap with current factors instead. reference holds the original anchors. Public copies null analysis.job_id and analysis.request_id. A later reload advances to_reference_generation and appends to history. Absent on current work and in deployments that never reloaded reference data.'))
+    for name in ('AccountSummary','AccountResult','AnalysisOutcome','ResearchRequest'):
+        S[name]['properties']['archive']=ref('ReferenceArchive')
+    # The outcome summary is derived from the outcome: optional keys propagate with it.
+    S['AnalysisOutcomeSummary']['properties']['archive']=deepcopy(S['AnalysisOutcome']['properties']['archive'])
+    b.add('ArchivedReferenceFactor',obj({'format':{'type':'string','const':'reveal.archived-reference-factor/1'},'archive_id':digest,
+        'generation_id':generation,'model':model(),'source_id':string(pattern='^factor:'),'factor_id':string(),'trait':string(),
+        'kpn_trait_id':null(kpn),'label':string(),
+        'mechanism':obj({'id':null(did('Mechanism')),'name':string(),'description':string()}),
+        'metadata':{'type':'object','additionalProperties':True},
+        'top_genes':array(obj({'symbol':string(),'loading':number})),
+        'top_gene_sets':array(obj({'rank':{'type':'integer'},'gene_set_id':null(did('GeneSet')),'name':string(),'library':null(string()),
+            'collection_id':null(string()),'source_key':null(string()),'joint_loading':null(number),'marginal_loading':null(number),'score':null(number)})),
+        'generation_manifest_sha256':digest,'captured_at':time},
+        description='Immutable snapshot of an EAGGL factor referenced by archived work, kept after its reference generation is purged. Public reference data. metadata is the source factor metadata; top_genes (by loading) and top_gene_sets (by rank) hold at most 50 entries each. Legacy cfde-inc-v2 snapshots have a null kpn_trait_id and null gene-set loadings. mechanism.id is the DAPPER Mechanism the catalog served, or null when it could not be minted.'))
+    S['Problem']['properties']['archived_reference_factor']={**null(ref('ArchivedReferenceFactor')),
+        'description':'Only on 410 REFERENCE_GENERATION_SUPERSEDED from a mechanism read: the frozen factor, or null when none was captured.'}
 
 
 def examples(b, f, e):
@@ -204,12 +351,94 @@ def examples(b, f, e):
     e['complete']['result'].update(paragraph_job_ids=[b.PARAGRAPH_JOB_ID],evidence_package_sha256=manifest['package_sha256'])
     e['suggestions']['search']['query']='Endothelial dysfunction'
     e['suggestions']['limitations']=['Layout-only similarity scores. These five native CFDE example factors are not measured recommendations for the CAD gap or a demonstration of mapped-subset retrieval. Production defaults use existing EAGGL embeddings joined to the populated exact-trait/factor-number crosswalk.']
+    e['reference']=reference_examples(b,f,e)
     return e
+
+
+def reference_examples(b, f, e):
+    """A cutover from the legacy generation to an illustrative KPN generation, built with the backend's own helpers.
+
+    The legacy generation id is the real one (tracked EAGGL->CFDE mapping run). The KPN generation id
+    is illustrative: no reference_reload build was executed for these fixtures.
+    """
+    rg,archive=reference_helpers(b)
+    run=json.loads((b.ROOT/'data/eaggl-cfde-mapping/2026-09-25/lookup-ad-factor1.json').read_text())
+    manifest={'format':'reveal.reference-generation/1','kind':rg.LEGACY_KIND,'model':rg.LEGACY_MODEL,'legacy_mapping_run_id':run['run_id'],
+        'eaggl_import_id':run['eaggl_import_id'],'legacy_gene_set_import_id':run['gene_set_import_id']}
+    legacy=rg.legacy_generation_id(run['run_id'])
+    current=b.sha({'format':'reveal.reference-generation/1','kind':rg.KPN_KIND,'model':rg.KPN_MODEL,'lap_project':KPN_EXAMPLE['lap']['project'],
+        'kpn_release':KPN_EXAMPLE['lap']['kpn_release'],'note':'Illustrative contract fixture; no reference_reload build was executed.'})
+    # The legacy anchor that the example drafts, requests, accounts and outcomes were built on.
+    record=f['factor_records'][0]; native=record['source_id']; anchor=e['composer']['eaggl_anchors'][0]; parts=native.split(':')
+    binding={'eaggl_factor_id':parts[2]+'::'+parts[4],'mapping_run_id':run['run_id'],'gene_set_import_id':run['gene_set_import_id'],'cfde_node_id':native}
+    request_binding={'anchors':[binding],'anchor_display':{native:{'reference':deepcopy(anchor['reference']),
+        'label':record['cfde_anchor']['label'],'subtitle':record['cfde_anchor']['subtitle']}}}
+    anchors=archive.anchors_for_stamp(request_binding,composer=e['composer'],scientific_document={'mechanisms':[record['object']]},generation_id=legacy)
+    gap={key:e['composer']['source_gap'][key] for key in ('id','source_id','source_revision')}
+    package=e['evidence_package']['package_sha256']
+    def stamp(**analysis):
+        return rg.build_stamp(legacy,current,reference={'model':rg.LEGACY_MODEL,'anchors':deepcopy(anchors)},gap=dict(gap),
+            analysis={'job_id':b.JOB_ID,'request_id':b.REQUEST_ID,'evidence_package_sha256':package,**analysis},at=ARCHIVED_AT)
+    # Frozen snapshot of that anchor, from the captured catalog record and interactive loadings (top five genes/three gene sets).
+    captured=json.loads((b.ROOT/'data/evidence-packages/cad-builder-v1/evidence-package.json').read_text())
+    loadings=captured['pigean']['mechanisms'][native]; entities=captured['entities']['gene_sets']
+    ranked=lambda items,n:sorted(items.items(),key=lambda item:(-item[1]['factor_value'],item[0]))[:n]
+    def gene_set(rank,key):
+        source=key.removeprefix('gene_set:'); segments=source.split('___'); prefixes={s.split('__',1)[0] for s in segments}
+        return {'rank':rank,'gene_set_id':entities[key]['dapper_id'],'name':entities[key]['display_name'],
+            'library':next(iter(prefixes)) if len(prefixes)==1 and all('__' in s for s in segments) else None,
+            'collection_id':None,'source_key':source,'joint_loading':None,'marginal_loading':None,'score':None}
+    catalog=json.loads((b.ROOT/'data/interactive/2026-09-24/catalog-factor-t2d.json').read_text())['response']['items']
+    node=record['object']
+    snapshot={'format':archive.SNAPSHOT_FORMAT,'generation_id':legacy,'model':rg.LEGACY_MODEL,'source_id':native,'factor_id':binding['eaggl_factor_id'],
+        'trait':parts[2],'kpn_trait_id':None,'label':record['cfde_anchor']['label'],
+        'mechanism':{key:node[key] for key in ('id','name','description')},'metadata':next(item for item in catalog if item['node_id']==native),
+        'top_genes':[{'symbol':key.removeprefix('gene:'),'loading':value['factor_value']} for key,value in ranked(loadings['gene_loadings']['items'],5)],
+        'top_gene_sets':[gene_set(rank,key) for rank,(key,_) in enumerate(ranked(loadings['gene_set_loadings']['items'],3),1)],
+        'generation_manifest_sha256':b.sha(manifest)}
+    archived={**snapshot,'archive_id':rg.archive_id(legacy,native),'captured_at':CAPTURED_AT}
+    assert all(item['archived_reference_factor_id']==archived['archive_id'] for item in anchors)
+    # A factor of the KPN generation, minted as catalog.kpn_factors does.
+    trait=KPN_EXAMPLE['trait']; factor=KPN_EXAMPLE['factor']; label=KPN_EXAMPLE['label']; public=rg.public_id(trait['id'],factor)
+    metadata={**KPN_EXAMPLE['index'],**KPN_EXAMPLE['metadata'],'kpn':{'phenotype_name':trait['name'],'trait_group':trait['trait_group'],
+        'trait_type':trait['trait_type'],'gwas_source_category':KPN_EXAMPLE['gwas_source_category']},'lap':KPN_EXAMPLE['lap']}
+    raw=(b.canonical(metadata)+'\n').encode()
+    kpn_factor={'source':'eaggl','source_id':public,'source_revision':b.sha(metadata),'object_class':'Mechanism',
+        'object':b.mint(rg.mechanism_node(public,trait['name'],trait['id'],factor,label),'Mechanism'),
+        'cfde_anchor':{'node_id':public,'node_type':'factor','label':label,'subtitle':trait['name']+' ('+factor+')'},
+        'model':rg.KPN_MODEL,'reference_generation_id':current,'kpn_trait':deepcopy(trait),
+        'catalog_file':b.mint({'filename':'cfde-factor.json','mime_type':'application/json','sha256':b.sha(raw),'size_in_bytes':len(raw)},'File')}
+    return {'legacy':legacy,'current':current,'stamp':stamp,'public_stamp':rg.public_stamp,'archived_factor':archived,'kpn_factor':kpn_factor,
+        'account':stamp(account_id=f['account']['id']),'request':stamp()}
 
 
 def endpoints(b,f,e):
     P=b.PATHS;S=b.SCHEMAS;ref=b.ref;obj=b.obj;array=b.array;string=b.string;enum=b.enum;did=b.did;null=b.nullable
     uuid=string(format='uuid')
+    upload_path=[b.parameter('upload_id','path',uuid,b.DRAFT_ID,True,'Opaque owner-scoped upload identifier.')]
+    sample_upload={'id':b.DRAFT_ID,'draft_id':b.DRAFT_ID,'filename':'notes.txt','media_type':'text/plain',
+        'size_bytes':5,'sha256':'185f8db32271fe25f561a6fc938b2e264306ec304eda518007d1764826381969',
+        'status':'pending','created_at':b.NOW,'expires_at':'2026-10-02T00:00:00Z','storage':None,'extraction':None,'error':None}
+    upload_examples={'Upload':sample_upload,'UploadList':{'items':[sample_upload]},
+        'UploadTicket':{'upload':sample_upload,'transfer':{'method':'POST','url':'/v1/uploads/'+b.DRAFT_ID+'/content','fields':{},'encoding':'base64'}},
+        'UploadCreate':{k:sample_upload[k] for k in ('draft_id','filename','media_type','size_bytes','sha256')},
+        'UploadContent':{'content_base64':'SGVsbG8='}}
+    def upload_operation(path,method,operation,response,request=None,parameters=None):
+        b.operation(path,method,operation,'Drafts',operation,
+            'Owner-scoped private research attachment. Original bytes and extraction are pinned by checksum and immutable version before submission.',
+            response,{'example':upload_examples[response]},request_schema=request,
+            request_examples={'example':upload_examples[request]} if request else None,
+            parameters=parameters,status=201 if operation=='createUpload' else 200)
+    upload_operation('/v1/uploads','post','createUpload','UploadTicket','UploadCreate',[
+        b.parameter('Idempotency-Key','header',string(minLength=1,maxLength=200),b.DRAFT_ID,True,'Stable upload initiation retry key.')])
+    upload_operation('/v1/uploads','get','listUploads','UploadList',parameters=[b.parameter('draft_id','query',uuid,b.DRAFT_ID,True,'Owned editor identifier.')])
+    upload_operation('/v1/uploads/{upload_id}','get','getUpload','Upload',parameters=upload_path)
+    upload_operation('/v1/uploads/{upload_id}','delete','removeUpload','Upload',parameters=upload_path)
+    upload_operation('/v1/uploads/{upload_id}/complete','post','completeUpload','Upload',parameters=upload_path)
+    upload_operation('/v1/uploads/{upload_id}/content','post','uploadLocalContent','Upload','UploadContent',upload_path)
+    upload_operation('/v1/uploads/{upload_id}/download','get','downloadUpload','Upload',parameters=upload_path)
+    P['/v1/uploads/{upload_id}/download']['get']['responses']['200']['content']={'application/octet-stream':{'schema':{'type':'string','format':'binary'},'examples':{'text':{'value':'Hello'}}}}
+    next(ex for ex in b.EXCHANGES if ex['operation_id']=='downloadUpload')['responses']={'200':{'content_type':'application/octet-stream','examples':{'text':'Hello'}}}
     P['/v1/me/workspace/events']={'get':{'operationId':'subscribeWorkspaceEvents','tags':['Research history'],
         'summary':'Subscribe to committed workspace changes',
         'description':'Authenticated SSE backed by durable RDS replay and managed Redis Pub/Sub wakeups. Subscribe before replay. Send Last-Event-ID or after to resume; both must agree if supplied. workspace_change carries WorkspaceEvent. ready, resync_required, connection_degraded and access_revoked are stream control events. Resync explicitly reloads authorized collections. Heartbeats do not read Redis or query application state.',
@@ -284,18 +513,55 @@ def endpoints(b,f,e):
         o['parameters'] += [b.parameter('max_depth','query',{'type':'integer','minimum':0,'maximum':5,'default':5},5),
             b.parameter('max_nodes','query',{'type':'integer','minimum':1,'maximum':250,'default':250},250),
             b.parameter('cursor','query',string(),'opaque-authorized-continuation')]
+    R=e['reference']
+    reference_state=b.parameter('reference_state','query',enum('current','archived','all',default='all'),'all',
+        description='Filter by reference state: current work, archived work built on a superseded reference generation (it carries archive), or all (default) with current items first, each group in the usual order. Deployments that never reloaded reference data have no archived items.')
+    state_note=' reference_state filters current and archived work; the default all lists current items first.'
     private_publication={'visibility':'private','version':0,'published_at':None,'updated_at':None,'can_manage':True,'has_unpublished_changes':False}
     public_publication={'visibility':'public','version':1,'published_at':b.NOW,'updated_at':b.NOW,'can_manage':True,'has_unpublished_changes':False}
     workspace_query=b.parameter('q','query',string(maxLength=200,default='',description='Case-insensitive literal search over the entire authorized saved collection before pagination. Whitespace is normalized; every query word must match. Cursors are bound to the normalized query.'),'mechanism')
     account={'account':f['account'],'knowledge_gap':f['gap'],'claim_count':len(f['account_document']['claims']),
         'created_at':b.NOW,'job_id':b.JOB_ID,'research_statement':e['account']['research_statement'],'publication':private_publication,'votes':None}
-    b.operation('/v1/accounts','get','listAccounts','Scientific content','List your scientific accounts',
-        'Owner-scoped, newest first then account ID; deduplicate repeated deliveries by digest. Filter by exact gap_id. Optional q searches account ID, title and closing remarks, knowledge-gap ID/name/text and original attribution display name across all saved summaries before pagination. No private records from other users with the same gap. Closing remarks provide the summary; paragraph status is independent. Publication is current mutable workspace state, separate from immutable scientific content.',
-        'AccountList',{'owned':{'items':[account],'page':e['page']}},parameters=[b.parameter('gap_id','query',did('KnowledgeGap'),f['gap']['id']),deepcopy(workspace_query)]+b.page_parameters(),errors=('400','401','409','422','429'))
+    b.operation('/v1/accounts','get','listAccounts','Scientific content','Browse or search scientific accounts',
+        'scope=workspace (default) requires a session and lists only owned accounts, newest creation first. scope=public lists only explicitly published frozen snapshots across researchers and omits private job IDs; no session is required, but invalid supplied credentials are rejected. Deduplicate by canonical account digest. Filter by exact gap_id. Optional q searches account ID, title and closing remarks, knowledge-gap ID/name/text and original attribution display name across the entire authorized collection before pagination. sort=recent (default) orders public accounts by publication date; sort=votes orders by net account votes, then recency. Account ID breaks ties. Cursors bind scope, normalized query, sort, reference_state, registered viewer and the current collection/vote snapshot. Closing remarks provide the summary; paragraph status is independent. reference_state filters current and archived work before pagination; default all groups current items first while preserving the selected vote or recency order within each group.',
+        'AccountList',{'owned':{'items':[account],'page':e['page']},'archived':{'items':[dict(account,archive=R['account'])],'page':e['page']}},parameters=[b.parameter('gap_id','query',did('KnowledgeGap'),f['gap']['id']),deepcopy(workspace_query),b.parameter('scope','query',enum('public','workspace',default='workspace'),'workspace'),b.parameter('sort','query',enum('recent','votes',default='recent'),'recent'),reference_state]+b.page_parameters(),public=True,errors=('400','401','409','422','429'))
+    leaderboard_metadata={'as_of':b.NOW,'score_version':'public-contribution-v1','cohort_size':0,'voting_participants':0,
+        'exclusions':{key:0 for key in ('fixture_accounts','uncredited_accounts','conflicting_accounts','invalid_public_accounts','excluded_evidence_paths','fixture_explorations','uncredited_explorations')},
+        'definitions':[{'id':'accounts','label':'Public scientific accounts','description':'Distinct currently public canonical accounts, excluding demo/test fixtures.'}],
+        'methodology':{'weights':{'accounts':.3,'votes':.4,'gaps':.3},'scope':'Currently public frozen snapshots only; all time.',
+            'score':'Positive metrics use the eligible-cohort midrank percentile; nonpositive metrics receive zero. Weighted 30/40/30. Exact ties share rank.',
+            'own_votes':'Researcher scores exclude their own ballots. Account scores retain canonical totals.',
+            'evidence':'Only explicit evidence interpretations targeting the claim proposition qualify; direction counts can overlap.'}}
+    leaderboard_entry={'id':f['account']['id'],'kind':'account','label':f['account'].get('name') or 'Example scientific account','rank':1,
+        'metrics':{**{key:0 for key in ('overall_score','net_votes','upvotes','downvotes','voter_count','researcher_count')},
+            'account_count':1,'account_gap_count':1,'explored_gap_count':1,'claim_count':len(f['account']['component_claims'])},
+        'components':{'accounts':0,'votes':0,'gaps':0},'orcid':None,'account_id':f['account']['id'],'gap_id':f['gap']['id'],
+        'gap':{'id':f['gap']['id'],'label':f['gap'].get('name') or f['gap']['id']},'attribution':None,
+        'directions':{key:0 for key in ('SUPPORTS','DISPUTES','MIXED','NEUTRAL','UNKNOWN')}}
+    leaderboard_description='All-time contribution rankings computed over the complete currently public frozen population before pagination. Original registered actor attribution uses opaque contributor keys; missing/anonymous/conflicting attribution is uncredited. Exclude fixtures before projection, deduplicate canonical accounts, exclude own ballots from researcher recognition, and retain all canonical votes for account ranking. Researchers sort by overall (default), accounts, votes, gaps or explored; accounts sort only by votes; datasets sort by accounts (default), claims, gaps or researchers. evidence=all|supporting affects datasets only. Positive metric percentiles use midrank, weighted 30/40/30; exact score ties share ranks before display rounding. Invalid supplied credentials are rejected. No private metadata, jobs, requests or voter identities are exposed. Cursors bind the whole current projection and query; publication or vote changes expire them. Responses are private, no-store.'
+    b.operation('/v1/leaderboard','get','getLeaderboard','Scientific content','Rank public community contributions',
+        leaderboard_description,'LeaderboardList',{'empty_community':{**leaderboard_metadata,'view':'researchers','sort':'overall','evidence':'all','items':[],'page':e['page']}},
+        parameters=[b.parameter('view','query',enum('researchers','accounts','datasets',default='researchers'),'researchers'),
+            b.parameter('sort','query',deepcopy(S['LeaderboardSort']),'overall'),
+            b.parameter('evidence','query',enum('all','supporting',default='all'),'all')]+b.page_parameters(),
+        public=True,errors=('401','409','422','429','503'))
+    b.operation('/v1/leaderboard/{view}/{entry_id}/records','get','getLeaderboardRecords','Scientific content','Inspect records contributing to a public ranking',
+        'The exact public eligibility and evidence scope used by leaderboard totals. One record per distinct counted unit; votes return one account record with its signed net contribution. Sum vote values to reproduce the headline; other totals equal record count. entry includes context for direct links. Researchers allow accounts/votes/gaps/explored; accounts allow accounts/votes/claims/gaps/researchers; datasets allow accounts/claims/gaps/researchers/files. Revoked and ineligible entries return the same 404. Public keys and canonical scientific IDs only. '+leaderboard_description,
+        'LeaderboardRecords',{'example_account':{**leaderboard_metadata,'view':'accounts','id':f['account']['id'],'metric':'votes','evidence':'all',
+            'entry':leaderboard_entry,'total':1,'items':[{'id':f['account']['id'],'kind':'account','label':leaderboard_entry['label'],
+                'url':'/accounts/'+f['account']['id'],'account_ids':[f['account']['id']],'claim_ids':f['account']['component_claims'],
+                'evidence_ids':[],'directions':leaderboard_entry['directions'],'value':0}],'page':e['page']}},
+        parameters=[b.parameter('view','path',ref('LeaderboardView'),'accounts',True),b.parameter('entry_id','path',string(),f['account']['id'],True),
+            b.parameter('metric','query',enum('accounts','votes','gaps','explored','claims','researchers','files',default='accounts'),'votes'),
+            b.parameter('evidence','query',enum('all','supporting',default='all'),'all')]+b.page_parameters(),
+        public=True,errors=('401','404','409','422','429','503'))
     b.operation('/v1/knowledge-gaps/{gap_id}/accounts','get','listKnowledgeGapAccounts','Knowledge gaps','List visible scientific accounts for a knowledge gap',
-        'Accepted accounts for the exact DAPPER KnowledgeGap identity, newest first then account ID, deduplicated by scientific-account digest. Public scope (default) lists explicitly published snapshots across owners and omits private job IDs. Workspace scope requires a valid session and lists only its saved accounts. Invalid supplied sessions are rejected for either scope. Source-revision checks validate the selected observation; changed gap digests never merge. Attribution remains the original request actor. Each account ID links to its existing scientific endpoint, whose public reads are restricted to its published snapshot.',
-        'AccountList',{'owned':{'items':[dict(account,attribution=e['research_request']['attribution'])],'page':e['page']},'no_visible_accounts':{'items':[],'page':e['page']}},
-        parameters=[b.parameter('gap_id','path',did('KnowledgeGap'),f['gap']['id'],True),b.parameter('source_revision','query',string(pattern='^[a-f0-9]{64}$'),e['composer']['source_gap']['source_revision']),b.parameter('scope','query',enum('public','workspace',default='public'),'public')]+b.page_parameters(),public=True,errors=('400','401','404','409','429'))
+        'Accepted accounts for the exact DAPPER KnowledgeGap identity, newest first then account ID, deduplicated by scientific-account digest. Public scope (default) lists explicitly published snapshots across owners and omits private job IDs. Workspace scope requires a valid session and lists only its saved accounts. Invalid supplied sessions are rejected for either scope. Source-revision checks validate the selected observation; changed gap digests never merge. Attribution remains the original request actor. Each account ID links to its existing scientific endpoint, whose public reads are restricted to its published snapshot.'+state_note,
+        'AccountList',{'owned':{'items':[dict(account,attribution=e['research_request']['attribution'])],'page':e['page']},'no_visible_accounts':{'items':[],'page':e['page']},
+            'archived_published':{'items':[dict(account,attribution=e['research_request']['attribution'],job_id=None,
+                research_statement=dict(account['research_statement'],job_id=None),publication=dict(public_publication,can_manage=False),
+                votes={'upvotes':0,'downvotes':0,'score':0,'user_vote':None},archive=R['public_stamp'](R['account']))],'page':e['page']}},
+        parameters=[b.parameter('gap_id','path',did('KnowledgeGap'),f['gap']['id'],True),b.parameter('source_revision','query',string(pattern='^[a-f0-9]{64}$'),e['composer']['source_gap']['source_revision']),b.parameter('scope','query',enum('public','workspace',default='public'),'public'),reference_state]+b.page_parameters(),public=True,errors=('400','401','404','409','429'))
     b.operation('/v1/accounts/{dapper_id}/publication','get','getAccountPublication','Scientific content','Inspect account publication',
         'Owner receives mutable publication controls even while private. Other readers receive only an active public publication with can_manage=false. Publishing is separate from scientific identity and frozen citation metadata; old citation access labels describe that exact historical metadata revision.',
         'PublicationState',{'private_owner':private_publication,'public_reader':dict(public_publication,can_manage=False)},
@@ -333,22 +599,29 @@ def endpoints(b,f,e):
             'execution_mode':'box','source_bindings':[{'source_id':a['reference']['source_id'],'source_revision':a['reference']['source_revision'],'embedding_run_id':None,'mapping_run_id':None} for a in e['composer']['eaggl_anchors']],
             'coverage':{},'evidence_refs':[],'source_artifacts':[],'graph_queries':[]}}
     public_outcome={**outcome,'job_id':None,'publication':dict(public_publication,can_manage=False)}
-    outcome_summary={key:public_outcome[key] for key in ('id','outcome','summary','knowledge_gap','anchors','created_at','attribution','publication')}
+    outcome_summary=summarize_outcome(public_outcome)
+    outcome_stamp=R['stamp'](outcome_id=outcome_id)
+    archived_outcome={**outcome,'archive':outcome_stamp}
+    archived_public_outcome={**public_outcome,'archive':R['public_stamp'](outcome_stamp)}
     description='A durable scoped insufficient-evidence exploration, separate from ScientificAccounts and excluded from their popularity counts. Captured author reasons are not independently validated scientific findings. Private by default; explicit publication shares only this frozen scope, original attribution and captured source evidence. Job logs, requests, runtime/ledger contents and the complete private package remain private. Invalid supplied credentials never downgrade to public.'
     b.operation('/v1/analysis-outcomes','get','listAnalysisOutcomes','Personal workspace','List saved workspace explorations',
-        'Session-required, newest-first summaries of all completed insufficient-evidence explorations owned by this workspace, private or published, across every knowledge gap. Optional q searches outcome ID/summary, knowledge-gap ID/name/text, anchor names/traits/identifiers and original attribution display name across all saved summaries before pagination. Includes previously saved records without a new run or publication. Operational failures are not scientific exploration outcomes. Other owners are excluded, even for published records. Detail and provenance are loaded only when opened.',
-        'AnalysisOutcomeList',{'saved':{'items':[dict(outcome_summary,publication=private_publication)],'page':e['page']},'empty':{'items':[],'page':e['page']}},
-        parameters=[deepcopy(workspace_query)]+b.page_parameters(),errors=('401','409','422','429'))
-    b.operation('/v1/analysis-outcomes/{outcome_id}','get','getAnalysisOutcome','Scientific content','Read an explored analysis outcome',description,
-        'AnalysisOutcome',{'private_owner':outcome,'public_reader':public_outcome},parameters=[b.parameter('outcome_id','path',uuid,outcome_id,True)],public=True,errors=('401','404','429'))
+        'Session-required, newest-first summaries of all completed insufficient-evidence explorations owned by this workspace, private or published, across every knowledge gap. Optional q searches outcome ID/summary, knowledge-gap ID/name/text, anchor names/traits/identifiers and original attribution display name across all saved summaries before pagination. Includes previously saved records without a new run or publication. Operational failures are not scientific exploration outcomes. Other owners are excluded, even for published records. Detail and provenance are loaded only when opened.'+state_note,
+        'AnalysisOutcomeList',{'saved':{'items':[dict(outcome_summary,publication=private_publication)],'page':e['page']},'empty':{'items':[],'page':e['page']},
+            'archived':{'items':[summarize_outcome(dict(archived_outcome,publication=private_publication))],'page':e['page']}},
+        parameters=[deepcopy(workspace_query),reference_state]+b.page_parameters(),errors=('401','409','422','429'))
+    b.operation('/v1/analysis-outcomes/{outcome_id}','get','getAnalysisOutcome','Scientific content','Read an explored analysis outcome',
+        description+' An outcome built on a superseded reference generation carries archive (outside provenance) and stays readable and publishable.',
+        'AnalysisOutcome',{'private_owner':outcome,'public_reader':public_outcome,'archived_public_reader':archived_public_outcome},
+        parameters=[b.parameter('outcome_id','path',uuid,outcome_id,True)],public=True,errors=('401','404','429'))
     b.operation('/v1/jobs/{job_id}/outcome','get','getJobAnalysisOutcome','Jobs','Find the saved scoped outcome for an owned job',
         'Owner-only lookup of the durable outcome already saved by this analysis job. Returns404 if no record exists; GET never runs research or performs a historical import.',
         'AnalysisOutcome',{'owner':outcome},parameters=[b.parameter('job_id','path',uuid,b.JOB_ID,True)],errors=('401','404','429'))
     b.operation('/v1/knowledge-gaps/{gap_id}/outcomes','get','listKnowledgeGapOutcomes','Knowledge gaps','List explored analysis outcomes for an exact gap',
-        'Newest-first compact summaries for this exact gap. Public scope defaults to explicitly published outcome snapshots; workspace scope requires a session. Scientific-account counts and ranking remain unchanged. Detail/provenance is fetched only when an outcome is opened.',
-        'AnalysisOutcomeList',{'published':{'items':[outcome_summary],'page':e['page']},'empty':{'items':[],'page':e['page']}},
+        'Newest-first compact summaries for this exact gap. Public scope defaults to explicitly published outcome snapshots; workspace scope requires a session. Scientific-account counts and ranking remain unchanged. Detail/provenance is fetched only when an outcome is opened.'+state_note,
+        'AnalysisOutcomeList',{'published':{'items':[outcome_summary],'page':e['page']},'empty':{'items':[],'page':e['page']},
+            'archived_published':{'items':[summarize_outcome(archived_public_outcome)],'page':e['page']}},
         parameters=[b.parameter('gap_id','path',did('KnowledgeGap'),f['gap']['id'],True),b.parameter('scope','query',enum('public','workspace',default='public'),'public'),
-            b.parameter('source_revision','query',string(pattern='^[a-f0-9]{64}$'),e['composer']['source_gap']['source_revision'])]+b.page_parameters(),public=True,errors=('401','404','409','429'))
+            b.parameter('source_revision','query',string(pattern='^[a-f0-9]{64}$'),e['composer']['source_gap']['source_revision']),reference_state]+b.page_parameters(),public=True,errors=('401','404','409','429'))
     b.operation('/v1/analysis-outcomes/{outcome_id}/publication','get','getOutcomePublication','Scientific content','Inspect exploration outcome publication',
         description,'PublicationState',{'private_owner':private_publication,'public_reader':dict(public_publication,can_manage=False)},
         parameters=[b.parameter('outcome_id','path',uuid,outcome_id,True)],public=True,errors=('401','404','429'))
@@ -417,6 +690,7 @@ def endpoints(b,f,e):
         operation['description']+=' A valid owner retains private access. Without owner access, only an active explicit publication snapshot authorizes this scientific resource, exact cited revisions and reachable source artifacts. Invalid supplied credentials fail even on public reads. Unpublication revokes snapshot access; job/draft/request routes remain private.'
     for example in op('/v1/accounts/{dapper_id}')['responses']['200']['content']['application/json']['examples'].values():
         example['value']['publication']=private_publication
+    reference_endpoints(b,f,e)
     # Synchronize exchange request values and curl snippets after amendments.
     from urllib.parse import quote, urlencode
     import shlex
@@ -433,3 +707,57 @@ def endpoints(b,f,e):
         for k,v in request['headers'].items():pieces+=['-H',shlex.quote(k+': '+v)]
         if request['body'] is not None:pieces+=['--data-raw',shlex.quote(b.canonical(request['body']))]
         ex['curl']=' '.join(pieces);o['x-codeSamples'].append({'lang':'Shell','label':ex['case'],'source':ex['curl']})
+
+
+def reference_endpoints(b, f, e):
+    """Reference-generation route, parameters, error codes and examples (docs/reference-reload.md §5)."""
+    P=b.PATHS; R=e['reference']; string=b.string
+    def op(path,method='get'):return P[path][method]
+    def example(path,name,value,method='get',exchange=True):
+        """Add a 200 example to an existing operation and, unless exchange=False, to its request exchange."""
+        op(path,method)['responses']['200']['content']['application/json']['examples'][name]={'summary':name.replace('_',' ').capitalize(),'value':value}
+        for ex in b.EXCHANGES:
+            if exchange and ex['path_template']==path and ex['method']==method.upper() and ex['case']=='request':ex['responses']['200']['examples'][name]=value
+    def problem(path,method,status,code,detail,**extra):
+        o=op(path,method);key=str(status)
+        if key not in o['responses']:
+            o['responses'][key]={'description':code.replace('_',' ').title(),'content':b.content('Problem',{},'application/problem+json')}
+            o['responses']=dict(sorted(o['responses'].items()))
+        o['responses'][key]['content']['application/problem+json']['examples'][code.lower()]={'value':b.problem(status,code,detail,**extra)}
+    def describe(path,method,text,old=None,new=None):
+        o=op(path,method)
+        if old is not None:
+            assert old in o['description'],(path,old);o['description']=o['description'].replace(old,new)
+        o['description']+=text
+    archived=R['archived_factor'];kpn=R['kpn_factor'];reload='Reference data is being reloaded. Retry shortly.'
+    b.operation('/v1/reference-factors/{archive_id}','get','getArchivedReferenceFactor','Mechanisms','Inspect a factor frozen for archived work',
+        'Public reference data. Returns the immutable snapshot of an EAGGL factor that archived work referenced: identity, model, trait, label, DAPPER Mechanism, source metadata, top genes and top gene sets. Snapshots are captured before a reference reload and never purged, so archived accounts and outcomes keep rendering after their generation is retired. archive_id is archive.reference.anchors[].archived_reference_factor_id. Unknown or malformed ids return 404. The example is illustrative: captured catalog and interactive loadings stand in for the EAGGL metadata and top-50 lists.',
+        'ArchivedReferenceFactor',{'legacy_factor':archived},parameters=[b.parameter('archive_id','path',string(pattern='^[a-f0-9]{64}$'),archived['archive_id'],True)],
+        public=True,errors=('404','429'))
+    describe('/v1/mechanisms/{source_id}','get',' After a reference reload, the id of a factor from a superseded generation returns 410 REFERENCE_GENERATION_SUPERSEDED with the frozen archived_reference_factor (null when none was captured). Deployments that never reloaded reference data do not return 410. The kpn_factor example is from an illustrative eaggl-capped-v1 generation.')
+    example('/v1/mechanisms/{source_id}','kpn_factor',kpn,exchange=False)
+    problem('/v1/mechanisms/{source_id}','get',410,'REFERENCE_GENERATION_SUPERSEDED','This factor belongs to a superseded reference generation.',archived_reference_factor=archived)
+    e['kpn_factor']=kpn
+    for p in op('/v1/mechanisms/search')['parameters']:
+        if p['name']=='model':
+            p['schema']=deepcopy(b.SCHEMAS['EagglFactor']['properties']['model'])
+            p['description']='EAGGL reference model. Results always come from the active reference generation (cfde-inc-v2 until a reference reload, eaggl-capped-v1 after one); this value only scopes the pagination cursor.'
+    describe('/v1/mechanisms/search','get',' Results come from the active reference generation: after a reference reload, eaggl-capped-v1 KPN factors replace the mapped cfde-inc-v2 factors.')
+    describe('/v1/mechanisms/suggest','post',' Suggestions come from the active reference generation; manual anchors from a superseded generation return 409 REFERENCE_GENERATION_SUPERSEDED.')
+    problem('/v1/mechanisms/suggest','post',409,'REFERENCE_GENERATION_SUPERSEDED','A kept anchor belongs to a superseded reference generation; remove it and select current factors.')
+    describe('/v1/drafts','post','',old='cfde-inc-v2 and both initial KGs',new='the active reference model (cfde-inc-v2 until a reference reload) and both initial KGs')
+    for path,method in [('/v1/drafts','post'),('/v1/drafts/{draft_id}','patch')]:
+        describe(path,method,' New or changed EAGGL anchors must come from the active reference generation (409 REFERENCE_GENERATION_SUPERSEDED) and wait while a reference reload is in progress (503 REFERENCE_RELOAD_IN_PROGRESS). Unchanged current anchors and gap-only edits are not blocked.')
+        problem(path,method,409,'REFERENCE_GENERATION_SUPERSEDED','This anchor belongs to a superseded reference generation; select current factors.')
+        problem(path,method,503,'REFERENCE_RELOAD_IN_PROGRESS',reload)
+    describe('/v1/jobs','post',' Analysis anchors must belong to the active reference generation (409 REFERENCE_GENERATION_SUPERSEDED: start a new analysis on the gap with current factors), and analysis submission waits while a reference reload is in progress (503 REFERENCE_RELOAD_IN_PROGRESS). Paragraph jobs, including on archived accounts, are not affected.')
+    problem('/v1/jobs','post',409,'REFERENCE_GENERATION_SUPERSEDED','This draft uses factors from a superseded reference generation; start a new analysis on this gap with current factors.')
+    problem('/v1/jobs','post',503,'REFERENCE_RELOAD_IN_PROGRESS',reload)
+    describe('/v1/jobs/{job_id}/retry-review','post',' An analysis frozen on a superseded reference generation cannot retry review (409 REFERENCE_GENERATION_SUPERSEDED: start a new analysis on the gap with current factors). Analysis review retry waits while a reference reload is in progress (503 REFERENCE_RELOAD_IN_PROGRESS).')
+    problem('/v1/jobs/{job_id}/retry-review','post',409,'REFERENCE_GENERATION_SUPERSEDED','This analysis used a superseded reference generation. Start a new analysis on this gap with current factors.')
+    problem('/v1/jobs/{job_id}/retry-review','post',503,'REFERENCE_RELOAD_IN_PROGRESS','Reference data is being reloaded. Retry review shortly.')
+    describe('/v1/accounts/{dapper_id}','get',' An account built on a superseded reference generation carries archive (public copies null its job and request ids); it stays readable, downloadable and publishable, and paragraph jobs still run.')
+    example('/v1/accounts/{dapper_id}','archived',dict(deepcopy(e['account']),archive=R['account']))
+    describe('/v1/research-requests/{request_id}','get',' A request frozen on a superseded reference generation carries archive.')
+    example('/v1/research-requests/{request_id}','archived',dict(deepcopy(e['research_request']),archive=R['request']))
+    describe('/v1/knowledge-gaps','get',' Counts include current accounts only: accounts archived by a reference reload stay listed but are not counted.')

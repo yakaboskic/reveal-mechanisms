@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { allWorkspacePages, workspaceRuns } from "../src/lib/workspace";
+import { allWorkspacePages, draftHref, isSavedDraft, runHref, workspaceRuns } from "../src/lib/workspace";
 import type { Schema } from "../src/lib/client";
 
 test("workspace resolves active drafts and prefers running work over a newer terminal run", () => {
@@ -14,7 +14,7 @@ test("workspace resolves active drafts and prefers running work over a newer ter
     const activity = workspaceRuns(jobs, requests);
     assert.deepEqual([...activity.activeDrafts], ["draft-active"]);
     assert.equal(activity.byGap.get("gap")?.[0].id, "working");
-    assert.equal(activity.href(jobs[1]), "/?job=working&draft=draft-active");
+    assert.equal(activity.href(jobs[1]), "/runs/working");
     jobs[1].status = "failed";
     assert.equal(workspaceRuns(jobs, requests).activeDrafts.size, 0);
   }
@@ -40,8 +40,8 @@ test("draft selection keeps each run separate and deleted drafts link to preserv
   const activity = workspaceRuns(jobs, requests, [{ id: "a" }] as Schema<"Draft">[]);
   assert.equal(activity.byDraft.get("b")?.[0].id, "run-b");
   assert.equal(activity.activeDrafts.has("b"), false);
-  assert.equal(activity.href(jobs[0]), "/?job=run-a&draft=a");
-  assert.equal(activity.href(jobs[1]), "/?job=run-b&gap=gap");
+  assert.equal(activity.href(jobs[0]), "/runs/run-a");
+  assert.equal(activity.href(jobs[1]), "/runs/run-b");
 });
 
 const draftFixture = (version = 2) => ({ id: "draft", version, composer: { source_gap: { id: "gap" } } }) as Schema<"Draft">;
@@ -49,17 +49,17 @@ const requestFixture = (version = 2, id = "request") => ({ id, source_draft_id: 
 const jobFixture = (status: Schema<"Job">["status"], id = "run", request = "request") => ({ id, kind: "analysis", research_request_id: request, status, created_at: "2026-09-29" }) as Schema<"Job">;
 
 for (const status of ["succeeded", "insufficient_evidence", "failed", "cancelled"] as const) {
-  test(`workspace hides the finished ${status} revision without deleting its draft or history`, () => {
+  test(`workspace retains explicitly saved drafts after a ${status} run`, () => {
     const draft = draftFixture(), request = requestFixture(), job = jobFixture(status);
     const drafts = [draft], jobs = [job], requests = [request];
     const activity = workspaceRuns(jobs, requests, drafts);
-    assert.deepEqual(drafts.filter(activity.isDraftVisible), []);
+    assert.deepEqual(drafts.filter(activity.isDraftVisible), [draft]);
     assert.deepEqual(drafts, [draft]);
     assert.deepEqual(jobs, [job]);
     assert.deepEqual(requests, [request]);
     assert.equal(activity.byDraft.get(draft.id)?.[0], job);
     assert.equal(activity.byGap.get("gap")?.[0], job);
-    assert.equal(activity.href(job), "/?job=run&draft=draft");
+    assert.equal(activity.href(job), "/runs/run");
   });
 }
 
@@ -93,10 +93,23 @@ test("workspace keeps unsubmitted drafts and does not infer completion from unre
   assert.equal(workspaceRuns([jobFixture("succeeded")], [other], [draft]).isDraftVisible(draft), true);
 });
 
-test("a finished retry hides only its submitted revision, not another draft for the same gap", () => {
+test("a finished retry preserves both saved drafts for the same gap", () => {
   const draft = draftFixture(), other = { ...draftFixture(), id: "another-draft" };
   const jobs = [jobFixture("failed"), jobFixture("succeeded", "retry", "retry-request")];
   const activity = workspaceRuns(jobs, [requestFixture(), requestFixture(2, "retry-request")], [draft, other]);
-  assert.deepEqual([draft, other].filter(activity.isDraftVisible), [other]);
+  assert.deepEqual([draft, other].filter(activity.isDraftVisible), [draft, other]);
   assert.equal(activity.byDraft.get(draft.id)?.length, 2);
+});
+
+
+test("temporary drafts never appear; legacy saved drafts and distinct routes remain valid", () => {
+  const legacy = draftFixture(), saved = { ...legacy, lifecycle: "saved" as const }, temporary = { ...legacy, lifecycle: "temporary" as const };
+  assert.equal(isSavedDraft(legacy), true);
+  assert.equal(isSavedDraft(saved), true);
+  assert.equal(isSavedDraft(temporary), false);
+  for (const status of ["queued", "running", "succeeded", "failed"] as const) {
+    assert.equal(workspaceRuns([jobFixture(status)], [requestFixture()], [temporary]).isDraftVisible(temporary), false);
+  }
+  assert.equal(draftHref("draft/a"), "/drafts/draft%2Fa");
+  assert.equal(runHref("run/a"), "/runs/run%2Fa");
 });

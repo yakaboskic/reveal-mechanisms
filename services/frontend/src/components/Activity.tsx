@@ -45,7 +45,8 @@ function ActivityEntry({ row, active, now, step, onInspect }: { row: ActivityRow
     {event.detail?.counts && <small>{event.detail.counts.nodes} nodes, {event.detail.counts.edges} edges ({event.detail.counts.scope})</small>}
   </div>;
 }
-export function Activity({ initial, onJob }: { initial: Schema<"Job">; onJob: (job: Schema<"Job">) => void }) {
+/** `archived`: the analysis was frozen on a superseded reference generation, so review cannot be retried. */
+export function Activity({ initial, onJob, archived = false }: { initial: Schema<"Job">; onJob: (job: Schema<"Job">) => void; archived?: boolean }) {
   const paragraph = initial.kind === "paragraph";
   const labels = paragraph ? { ...stageLabels, preparation: "Statement preparation", research: "Writing statement", collection: "Collecting statement", validation: "Checking claims and citations", saving: "Saving statement" } : stageLabels;
   const [job, setJob] = useState(initial);
@@ -155,7 +156,7 @@ export function Activity({ initial, onJob }: { initial: Schema<"Job">; onJob: (j
       if (failure instanceof ApiError && failure.status >= 400 && failure.status < 500) reviewRetryRequest.current = null;
     } finally { reviewRetryRunning.current = false; setRetryingReview(false); }
   };
-  const canRetryReview = job.status === "failed" && job.failure?.retryable && ["REVIEW_UNAVAILABLE", "REVIEW_BUDGET_EXCEEDED"].includes(job.failure.code);
+  const canRetryReview = !archived && job.status === "failed" && job.failure?.retryable && ["REVIEW_UNAVAILABLE", "REVIEW_BUDGET_EXCEEDED"].includes(job.failure.code);
   return <section className={`activity reveal-activity ${active ? "is-running" : "is-terminal"} ${complete ? "is-complete" : ""}`} aria-label={paragraph ? "Statement activity" : "Research activity"}>
     {complete && <button className="complete-disclosure" aria-expanded={expanded} aria-controls={historyId} onClick={() => setExpanded(!expanded)}><span className="completion-check" aria-hidden="true">✓</span>{paragraph ? "Research statement ready" : insufficient ? "Exploration saved · Evidence insufficient" : job.result?.kind === "analysis" && job.result.account_ids.length === 1 ? "Scientific account ready" : "Scientific accounts ready"} <span className="completion-caret" aria-hidden="true">›</span></button>}
     {(!complete || expanded) && <>
@@ -189,6 +190,7 @@ export function Activity({ initial, onJob }: { initial: Schema<"Job">; onJob: (j
     </>}
     {job.failure && <p className="error" role="alert">{job.failure.message === "Claude execution failed: error_max_turns" ? "The agent reached its turn limit before completing the result. No scientific result was accepted. Your draft and activity are saved; retry to start a new analysis." : job.failure.message}</p>}
     {canRetryReview && <div className="review-retry"><button className="text-button" disabled={retryingReview} onClick={() => void retryReview()}>{retryingReview ? "Queueing review…" : "Retry scientific review"}</button><p className="muted">Uses the saved output. The research agent will not run again. Review uses the currently configured review budget.</p></div>}
+    {archived && job.status === "failed" && job.failure?.retryable && ["REVIEW_UNAVAILABLE", "REVIEW_BUDGET_EXCEEDED"].includes(job.failure.code) && <p className="notice">This analysis used an outdated EAGGL reference, so its review can’t be retried. Start a new analysis on this knowledge gap with current factors instead.</p>}
     {reviewRetryError && <p className="error" role="alert">{reviewRetryError}</p>}
     {progress.status === "insufficient_evidence" && (paragraph ? <p className="notice">The saved account did not support a faithful research statement. The account and activity are retained.</p> : <JobOutcome key={job.id} jobId={job.id} />)}
     {error && <div className="error" role="alert">{error} <button onClick={() => { setError(""); setRetry(n => n + 1); }}>Reconnect</button></div>}

@@ -35,6 +35,55 @@ def anchor_display(composer,binding,draft_binding):
     return displays
 
 
+def active_reference_generation(tx):
+    """The prefix's served reference generation, or None in legacy mode.
+
+    Workers never load the catalog: they read the same `reference_active` record
+    (or its REVEAL_REFERENCE_GENERATION_ID pin) that the catalog serves.
+    """
+    pinned=setting('REVEAL_REFERENCE_GENERATION_ID')
+    if pinned: return pinned
+    from .reference_generation import read_active
+    active=read_active(tx)
+    return active['generation_id'] if active else None
+
+
+def stamp_gap(source_gap,gap_id):
+    source_gap=source_gap or {}
+    return {'id':gap_id or source_gap.get('id'),'source_id':source_gap.get('source_id'),'source_revision':source_gap.get('source_revision')}
+
+
+def creation_stamp(tx,owner,request_id,*,gap,analysis,scientific_document=None):
+    """Archive stamp for work written after its request's generation was superseded.
+
+    A job collected before a cutover may finish afterwards; its account/outcome
+    is born archived (docs/reference-reload.md §8). None when current or legacy.
+    """
+    active=active_reference_generation(tx)
+    if not active or not request_id: return None
+    rows=tx.get_records((('request_binding',request_id),('request',request_id)))
+    request_binding,request=[row['data'] if row and row['owner']==owner else {}
+        for row in (rows.get(('request_binding',request_id)),rows.get(('request',request_id)))]
+    anchors=request_binding.get('anchors')
+    if not anchors: return None
+    from . import reference_generation as reference
+    try: generation=reference.generation_of_anchors(anchors)
+    except reference.ReferenceError: return None
+    if generation in (None,active): return None
+    from .reference_archive import anchors_for_stamp
+    # request.document holds the exact catalog Mechanism nodes of the anchors; the composer their origins.
+    frozen=anchors_for_stamp(request_binding,composer=request.get('composer'),
+        scientific_document=request.get('document') or scientific_document,generation_id=generation)
+    model=next((anchor['model'] for anchor in anchors if anchor.get('model')),reference.LEGACY_MODEL)
+    return reference.build_stamp(generation,active,reference={'model':model,'anchors':frozen},gap=gap,analysis=analysis)
+
+
+def stamped(kind,payload,stamp):
+    if not stamp: return payload
+    from .reference_archive import stamp_payload
+    return stamp_payload(kind,payload,stamp)
+
+
 def pointer(value, path):
     require(isinstance(path,str) and (path == '' or path.startswith('/')), 'Invalid outcome evidence pointer')
     if path == '': return value
@@ -145,8 +194,15 @@ def save(tx,job,prepared):
     from .worker import persist_source_artifacts
     persist_source_artifacts(tx,owner,list(prepared['artifacts'].values()))
     identity=uid(); record={**deepcopy(prepared['record']),'id':identity}
-    tx.put('analysis_outcome',identity,owner,{'record':record,'artifacts':prepared['artifacts']})
-    tx.put('outcome_summary',identity,owner,summary(record))
+    request_id=job.get('research_request_id')
+    stamp=creation_stamp(tx,owner,request_id,
+        gap=stamp_gap(record.get('source_gap'),(record.get('knowledge_gap') or {}).get('id')),
+        analysis={'job_id':job['id'],'request_id':request_id,'outcome_id':identity,
+            'evidence_package_sha256':record['provenance']['evidence_package_sha256']})
+    # The stamp sits beside provenance (record.archive); replay compares provenance only.
+    stored=stamped('analysis_outcome',{'record':record,'artifacts':prepared['artifacts']},stamp)
+    tx.put('analysis_outcome',identity,owner,stored)
+    tx.put('outcome_summary',identity,owner,summary(stored['record']))
     tx.put('analysis_outcome_by_job',job['id'],owner,{'id':identity})
     return identity
 
@@ -156,7 +212,9 @@ def result(identity,prepared):
 
 
 def summary(record):
-    return {key:deepcopy(record[key]) for key in ('id','outcome','summary','knowledge_gap','anchors','created_at','attribution')}
+    item={key:deepcopy(record[key]) for key in ('id','outcome','summary','knowledge_gap','anchors','created_at','attribution')}
+    if record.get('archive'): item['archive']=deepcopy(record['archive'])
+    return item
 
 
 def publication_state(row,can_manage=False):
@@ -209,7 +267,12 @@ def change(tx,identity,owner,visibility,expected_version):
     if current['version']!=expected_version: raise Problem(409,'PUBLICATION_VERSION_CONFLICT','Publication changed; refresh before choosing again.',current_version=current['version'])
     stamp=now(); metadata={'visibility':visibility,'version':current['version']+1,'published_at':None,'updated_at':stamp,'snapshot_id':None,'summary':None,'artifact_sha256':[]}
     if visibility=='public':
+        from .user_inputs import prevent_private_publication
+        prevent_private_publication(tx,row['data']['record'].get('job_id'))
         snapshot=deepcopy(row['data']); snapshot['record']['job_id']=None
+        if snapshot['record'].get('archive'):
+            from .reference_generation import public_stamp
+            snapshot['record']['archive']=public_stamp(snapshot['record']['archive'])
         snapshot_id=uid(); tx.put('outcome_snapshot',snapshot_id,owner,snapshot)
         metadata.update(snapshot_id=snapshot_id,published_at=current['published_at'] or stamp,summary=summary(snapshot['record']),artifact_sha256=sorted(snapshot['artifacts']))
     tx.put('outcome_publication',identity,owner,metadata)

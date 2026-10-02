@@ -99,26 +99,23 @@ class ApplicationTests(unittest.TestCase):
         self.assertEqual(self.client.get('/v1/drafts',headers=self.headers(user)).json()['items'],[])
         with self.repo.transaction() as tx: self.assertIsNone(tx.get('draft_binding',draft['id']))
 
-    def test_delete_blocks_active_run_and_preserves_frozen_research_and_results(self):
-        user=self.provision(); draft=self.draft(user); request_id=uid(); account_id=uid(); outcome_id=uid()
-        with self.repo.transaction() as tx:
-            tx.put('request',request_id,user,{'id':request_id,'source_draft_id':draft['id'],'composer':COMPOSER})
-            tx.put('request_binding',request_id,user,{'preserved':'evidence'})
-            tx.put('account',account_id,user,{'preserved':'account'})
-            tx.put('analysis_outcome',outcome_id,user,{'preserved':'exploration'})
-            job=jobs.enqueue(tx,user,'analysis',request_id=request_id)
+    def test_delete_preserves_active_frozen_research_and_results(self):
         for status in ('queued','running','cancel_requested'):
+            user=self.provision(); draft=self.draft(user); request_id=uid(); account_id=uid(); outcome_id=uid()
             with self.repo.transaction() as tx:
+                tx.put('request',request_id,user,{'id':request_id,'source_draft_id':draft['id'],'composer':COMPOSER})
+                tx.put('request_binding',request_id,user,{'preserved':'evidence'})
+                tx.put('account',account_id,user,{'preserved':'account'})
+                tx.put('analysis_outcome',outcome_id,user,{'preserved':'exploration'})
+                job=jobs.enqueue(tx,user,'analysis',request_id=request_id)
                 job['status']=status; tx.put('job',job['id'],user,job)
             result=self.client.request('DELETE','/v1/drafts/'+draft['id'],json={'expected_version':1},headers=self.headers(user))
-            self.assertEqual(result.status_code,409,result.text); self.assertEqual(result.json()['code'],'DRAFT_IN_USE')
-        with self.repo.transaction() as tx:
-            job['status']='succeeded'; tx.put('job',job['id'],user,job)
-        result=self.client.request('DELETE','/v1/drafts/'+draft['id'],json={'expected_version':1},headers=self.headers(user))
-        self.assertEqual(result.status_code,200,result.text)
-        with self.repo.transaction() as tx:
-            for kind,identity in [('request',request_id),('request_binding',request_id),('job',job['id']),('account',account_id),('analysis_outcome',outcome_id)]:
-                self.assertIsNotNone(tx.get(kind,identity),kind)
+            self.assertEqual(result.status_code,200,result.text)
+            self.assertEqual(self.client.get('/v1/research-requests/'+request_id,headers=self.headers(user)).json()['composer'],COMPOSER)
+            with self.repo.transaction() as tx:
+                for kind,identity in [('request',request_id),('request_binding',request_id),('job',job['id']),('account',account_id),('analysis_outcome',outcome_id)]:
+                    self.assertIsNotNone(tx.get(kind,identity),kind)
+                self.assertEqual(tx.get('job',job['id'])['data']['status'],status)
 
     def test_deleted_draft_repoints_gap_then_clears_last_draft_without_removing_gap(self):
         user=self.provision(); first,second=self.draft(user),self.draft(user); gap_id='dapper:KnowledgeGap.'+'g'*32

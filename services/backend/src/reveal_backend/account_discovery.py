@@ -6,6 +6,11 @@ its count. Explicit public snapshots are projected separately by publication.py.
 from collections import Counter
 from copy import deepcopy
 
+from .auth import Problem
+from .reference_generation import is_archived
+
+REFERENCE_STATES = ('current', 'archived', 'all')
+
 
 def visible_accounts(tx, owner, *, attribution=False):
     if not owner:
@@ -31,14 +36,16 @@ def visible_accounts(tx, owner, *, attribution=False):
         from .repository import digest
         from .publication import state
         publications = tx.get_many('publication', [digest([owner, item['account']['id']]) for item in items])
-        jobs = tx.get_many('job', sorted({item['job_id'] for item in items}))
+        # Authored canonical fixtures have explicit origin metadata and no fake
+        # research job. Never mix null and UUID keys when batching discovery.
+        jobs = tx.get_many('job', sorted({item['job_id'] for item in items if item.get('job_id')}))
         request_ids = {row['data'].get('research_request_id') for row in jobs.values() if row['owner'] == owner}
         requests = tx.get_many('request', sorted(identity for identity in request_ids if identity))
         for item in items:
             item['publication'] = state(tx, owner, item['account']['id'], can_manage=True,
                 record=publications.get(digest([owner, item['account']['id']])),
                 account_result={'research_statement': item.get('research_statement', {})})
-            job = jobs.get(item['job_id'])
+            job = jobs.get(item.get('job_id'))
             request = requests.get(job['data'].get('research_request_id')) if job and job['owner'] == owner else None
             # Transfers preserve historical authorship. Current owner/profile is
             # deliberately not used as a substitute for a missing snapshot.
@@ -49,15 +56,36 @@ def visible_accounts(tx, owner, *, attribution=False):
     return items
 
 
+def by_reference_state(items, state='all'):
+    """Filter listed summaries by archive state; `all` lists current work first.
+
+    Archived work (built on a superseded reference generation) is never hidden
+    by default. The sort is stable, so each group keeps its existing order.
+    """
+    if state not in REFERENCE_STATES:
+        raise Problem(422, 'INVALID_QUERY', 'Choose current, archived or all for reference_state.')
+    if state == 'all': return sorted(items, key=is_archived)
+    return [item for item in items if is_archived(item) == (state == 'archived')]
+
+
 def counts_by_gap(accounts):
-    return Counter(item['account']['question'] for item in accounts)
+    """(current, archived) accounts per gap. Gap ranking counts current work only;
+    archived accounts are listed after it and counted apart."""
+    current, archived = Counter(), Counter()
+    for item in accounts:
+        (archived if is_archived(item) else current)[item['account']['question']] += 1
+    return current, archived
 
 
 def counted_gap(gap, counts, owner, observed_at):
+    current, archived = counts
+    identity = gap['object']['id']
     return {**gap, 'scientific_accounts': {
-        'count': counts.get(gap['object']['id'], 0),
+        'count': current.get(identity, 0),
         'scope': 'owner_exact_gap' if owner else 'public_exact_gap',
         'as_of': observed_at, 'ranking': 'account_count', 'window_days': None,
+        # Present only once archived work exists for the gap, so earlier records are unchanged.
+        **({'archived_count': archived[identity]} if archived.get(identity) else {}),
     }}
 
 

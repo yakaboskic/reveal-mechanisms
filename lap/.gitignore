@@ -1,0 +1,4 @@
+# LAP-managed outputs and logs, and the unzipped EAGGL share (large, reproducible inputs).
+out/
+log/
+raw/

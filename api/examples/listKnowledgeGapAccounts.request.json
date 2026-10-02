@@ -4,13 +4,14 @@
   "method": "GET",
   "path_template": "/v1/knowledge-gaps/{gap_id}/accounts",
   "request": {
-    "url": "https://api.reveal.example.org/v1/knowledge-gaps/dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk/accounts?source_revision=8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd&scope=public&limit=20",
+    "url": "https://api.reveal.example.org/v1/knowledge-gaps/dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk/accounts?source_revision=8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd&scope=public&reference_state=all&limit=20",
     "path": {
       "gap_id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk"
     },
     "query": {
       "source_revision": "8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd",
       "scope": "public",
+      "reference_state": "all",
       "limit": 20
     },
     "headers": {
@@ -108,9 +109,135 @@
             "has_more": false,
             "snapshot_id": "illustrative-contract-snapshot"
           }
+        },
+        "archived_published": {
+          "items": [
+            {
+              "account": {
+                "id": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
+                "name": "Genes and gene programs in a shared CAD-in-T2D mechanism",
+                "question": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+                "context": "A CAD-in-T2D evidence slice used to investigate the selected broader CAD gap. This authored design packet combines captured CFDE observations with explicitly illustrative KG membership assertions. No live agent ran.",
+                "component_claims": [
+                  "dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km",
+                  "dapper:Claim.Uv7_cT46DdsqZMvk5nh8G48qOIKvhRgc",
+                  "dapper:Claim.I2mf6PJ0DPF5_nnbiBjAhgjlUCOiUZZ9",
+                  "dapper:Claim.Kd3psmdr4G9AlD0UU1E1Vu6AjpKaQYWE",
+                  "dapper:Claim.NBafdtdEE2Uabs-8pZqurv7SoWpg7Yhi",
+                  "dapper:Claim.Oe2UZeV7oMY4NsMHyB8h4HJO1FH4nSGF",
+                  "dapper:Claim.2idJniYU4zCtCN6puy8XZ2mzo9Mq6c5p",
+                  "dapper:Claim.H5icBYm5JLM3_T-b1mMfH65Nc0zMhZzH",
+                  "dapper:Claim.xzV_35EYnLl-zy03YbmhfBk_ynNbl7H9",
+                  "dapper:Claim.SYqCJXxCVXDpwflRSdZnkVLzGLO_vi_r",
+                  "dapper:Claim.x7aCVQ1uTkYKLJo32ZyAGMGZaAGCSvWV",
+                  "dapper:Claim.uzqyfwuhf59hSTdravdcr4cTxuitWGx-"
+                ],
+                "conclusion_claims": [
+                  "dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km",
+                  "dapper:Claim.Uv7_cT46DdsqZMvk5nh8G48qOIKvhRgc",
+                  "dapper:Claim.I2mf6PJ0DPF5_nnbiBjAhgjlUCOiUZZ9",
+                  "dapper:Claim.Kd3psmdr4G9AlD0UU1E1Vu6AjpKaQYWE",
+                  "dapper:Claim.NBafdtdEE2Uabs-8pZqurv7SoWpg7Yhi"
+                ],
+                "closing_remarks": "SHH, GLI3 and TCF7L2, together with the AMP AD / GTEx and PsychENCODE geneM16 programs, are implicated in the same CAD-in-T2D mechanism by their captured EAGGL loadings. Their PIGEAN trait-level results connect these assessments to CAD in people with type 2 diabetes. The illustrative membership assertions show how genes could be connected to the programs, but those links remain unverified. Together, the assessed relationships prioritize a mechanism for investigating the selected gap. They do not distinguish exposure-driven amplification of genetic risk from downstream readouts or reverse causation; that requires temporal or intervention evidence not present here.",
+                "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+                "was_attributed_to": [
+                  "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+                ]
+              },
+              "knowledge_gap": {
+                "text": "Are the CAD PGS×context interactions driven by adverse exposures causally amplifying genetic risk, or are some \"contexts\" actually downstream readouts of incipient disease (reverse causation)?",
+                "gap_description": "Population PGS×context analyses (Nagpal & Gibson 2026, PMID:42443528) are largely unable to establish the causality of specific contexts. dismech separates true environmental exposures (smoking, high-fat diet, sedentary lifestyle) from biochemical readouts (LDL, HDL, C-reactive protein); the biochemical \"contexts\" are prime reverse-causation suspects, since they may be partly downstream of the atherosclerotic process rather than upstream drivers, and behavioural contexts such as reduced physical activity may be rapid responses to incipient angina rather than causes. Distinguishing genuine amplification of genetic effects from reverse causation determines whether the modelled interventions (e.g. lowering cholesterol in high-PGS smokers) would actually reduce risk.",
+                "gap_kind": "KNOWLEDGE_GAP",
+                "scope": "Coronary Artery Disease",
+                "about_entities": [
+                  "http://purl.obolibrary.org/obo/MONDO_0021661"
+                ],
+                "id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk"
+              },
+              "claim_count": 12,
+              "created_at": "2026-09-24T16:00:00Z",
+              "job_id": null,
+              "research_statement": {
+                "status": "succeeded",
+                "job_id": null,
+                "paragraph_id": "dapper:Paragraph.uSYa1LdXNPuwlSgsCz3oZ7IfrVoztroD"
+              },
+              "publication": {
+                "visibility": "public",
+                "version": 1,
+                "published_at": "2026-09-24T16:00:00Z",
+                "updated_at": "2026-09-24T16:00:00Z",
+                "can_manage": false,
+                "has_unpublished_changes": false
+              },
+              "votes": {
+                "upvotes": 0,
+                "downvotes": 0,
+                "score": 0,
+                "user_vote": null
+              },
+              "attribution": {
+                "user_id": "11111111-1111-4111-8111-111111111111",
+                "person_id": "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he",
+                "display_name": "Example Researcher",
+                "orcid": null,
+                "orcid_authenticated": false,
+                "observed_at": "2026-09-24T16:00:00Z",
+                "principal_kind": "registered"
+              },
+              "archive": {
+                "status": "archived",
+                "reason": "reference_generation_superseded",
+                "archived_at": "2026-10-01T09:00:00Z",
+                "from_reference_generation": "16e78f6a1282320367b4e6507ad828fc71bdb38ad06e0e0a7d384026f4414e19",
+                "to_reference_generation": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c",
+                "history": [
+                  {
+                    "from_reference_generation": "16e78f6a1282320367b4e6507ad828fc71bdb38ad06e0e0a7d384026f4414e19",
+                    "to_reference_generation": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c",
+                    "archived_at": "2026-10-01T09:00:00Z"
+                  }
+                ],
+                "reference": {
+                  "model": "cfde-inc-v2",
+                  "anchors": [
+                    {
+                      "source_id": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                      "mechanism_id": "dapper:Mechanism.MyhahXB55tDUS667sJzeJZ40BeeQBWOR",
+                      "factor_id": "CADinT2D::Factor1",
+                      "trait": "Coronary artery disease in type 2 diabetes (CAD in T2D)",
+                      "kpn_trait_id": null,
+                      "label": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+                      "name": "CADinT2D mechanism Factor1",
+                      "origin": "manual",
+                      "archived_reference_factor_id": "96d0fe43d87b838e172f352529665d602f4d42ec728f75f030207c5358f262f1"
+                    }
+                  ]
+                },
+                "gap": {
+                  "id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+                  "source_id": "dismech:disorders/Coronary_Artery_Disease#discussion:cad_pgsxc_reverse_causation",
+                  "source_revision": "8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd"
+                },
+                "analysis": {
+                  "job_id": null,
+                  "request_id": null,
+                  "evidence_package_sha256": "9a55d126679291a95fa3d35f544915610134075eaf110f62f77ec8ee870b6ae2",
+                  "account_id": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
+                  "outcome_id": null
+                }
+              }
+            }
+          ],
+          "page": {
+            "next_cursor": null,
+            "has_more": false,
+            "snapshot_id": "illustrative-contract-snapshot"
+          }
         }
       }
     }
   },
-  "curl": "curl -X GET 'https://api.reveal.example.org/v1/knowledge-gaps/dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk/accounts?source_revision=8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd&scope=public&limit=20' -H 'Accept: application/json'"
+  "curl": "curl -X GET 'https://api.reveal.example.org/v1/knowledge-gaps/dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk/accounts?source_revision=8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd&scope=public&reference_state=all&limit=20' -H 'Accept: application/json'"
 }

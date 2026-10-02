@@ -11,7 +11,8 @@ import numpy as np
 from . import jobs
 from .repository import Repository, digest, now
 from .vector_ingestion import VectorRegistry, environment, import_batch
-from .vector_retrieval import UpstashFactorIndex, VectorUnavailable, client_from_environment, value, metadata, vector_checksum
+from .vector_retrieval import (NAMESPACE_KEYS, REFERENCE_SOURCE_KINDS, UpstashFactorIndex, VectorUnavailable, client_from_environment, value,
+    metadata, snapshot_kinds, vector_checksum)
 
 PATH = '/internal/workflows/vector-import-v1'
 
@@ -77,26 +78,40 @@ def plan(registry, payload):
         request = tx.get('vector_import_request', payload['snapshot_id'])
     if not request or request['data']['environment'] != environment() or request['data'].get('namespace') != jobs.namespace():
         raise ValueError('No authorized vector import intent')
-    return {'batches': list(snapshot['batches']), 'probes': len(snapshot['quality_probes']),
+    return {'batches': list(snapshot['batches']), 'probes': len(snapshot['quality_probes']), 'kinds': snapshot_kinds(snapshot),
             'activate': request['data']['activate'], 'expected_previous': request['data']['expected_previous']}
+
+
+def inventory_binding(snapshot, kind, record, observed):
+    """Upstash metadata of one inventoried vector matches its manifest row.
+
+    Reference-generation gene-set/collection rows are compact ({id, batch, checksums}),
+    so their full binding was checked by readback at import; here the source, space,
+    snapshot and original checksum must still agree.
+    """
+    if kind not in REFERENCE_SOURCE_KINDS: return observed == metadata(snapshot, record)
+    observed = observed or {}
+    return (observed.get('source_kind') == REFERENCE_SOURCE_KINDS[kind] and observed.get('source_id') == record['id']
+            and observed.get('snapshot_id') == snapshot['snapshot_id'] and observed.get('embedding_space') == snapshot['gene_set_embedding_space']
+            and observed.get('original_vector_sha256') == record['original_vector_sha256'])
 
 
 def inventory_page(registry, identity, kind, cursor='', *, client=None):
     """One bounded inventory page, checkpointed independently of the manifest."""
-    if kind not in ('factors', 'contexts'): raise ValueError('Invalid Vector inventory kind')
     snapshot = registry.get(identity)
+    if kind not in snapshot_kinds(snapshot): raise ValueError('Invalid Vector inventory kind')
     key = digest([identity, kind, cursor])
     with registry.repo.read_transaction() as tx:
         saved = tx.get('vector_inventory', key)
     if saved: return saved['data']['result']
     rows = {row['id']: row for row in snapshot[kind]}
     client = client or client_from_environment(write=True)
-    namespace = snapshot['factor_namespace' if kind == 'factors' else 'context_namespace']
+    namespace = snapshot[NAMESPACE_KEYS[kind]]
     page = client.range(cursor=cursor, limit=200, include_metadata=True, namespace=namespace)
     ids = []
     for row in value(page, 'vectors', []):
         record = rows.get(value(row, 'id'))
-        if record is None or value(row, 'metadata') != metadata(snapshot, record): raise VectorUnavailable('Inventory source binding mismatch')
+        if record is None or not inventory_binding(snapshot, kind, record, value(row, 'metadata')): raise VectorUnavailable('Inventory source binding mismatch')
         ids.append(record['id'])
     if len(set(ids)) != len(ids): raise VectorUnavailable('Duplicate vector inventory entry')
     next_cursor = value(page, 'next_cursor', '')
@@ -140,8 +155,9 @@ def finalize(registry, identity, *, client=None):
     """Aggregate bounded step evidence, confirm ready counts, mark complete."""
     snapshot = registry.get(identity)
     if set(snapshot['verified_batches']) != set(snapshot['batches']): raise ValueError('Missing verified import batches')
+    kinds = snapshot_kinds(snapshot)
     with registry.repo.read_transaction() as tx:
-        for kind in ('factors', 'contexts'):
+        for kind in kinds:
             cursor, seen = '', set()
             while True:
                 row = tx.get('vector_inventory', digest([identity, kind, cursor]))
@@ -159,7 +175,7 @@ def finalize(registry, identity, *, client=None):
         'minimum_recall_at_10': min(row['data']['recall_at_10'] for row in reports),
         'top1_agreement': sum(row['data']['top1_agreement'] for row in reports) / len(reports),
         'maximum_cosine_error': max(row['data']['maximum_cosine_error'] for row in reports),
-        'record_count': {kind: len(snapshot[kind]) for kind in ('factors', 'contexts')}}
+        'record_count': {kind: len(snapshot[kind]) for kind in kinds}}
     registry.complete(identity, report)
     return report
 
@@ -188,7 +204,8 @@ def mount_vector_workflow(app, repository):
         identity = payload['snapshot_id']
         for key in details['batches']:
             await context.run('import-' + key, lambda key=key: asyncio.to_thread(import_batch, registry, identity, key))
-        for kind in ('factors', 'contexts'):
+        # Reference-generation snapshots also inventory their gene-set and collection namespaces.
+        for kind in details.get('kinds', ('factors', 'contexts')):
             cursor = ''
             for page_index in range(1000):
                 result = await context.run('inventory-' + kind + '-' + str(page_index),
