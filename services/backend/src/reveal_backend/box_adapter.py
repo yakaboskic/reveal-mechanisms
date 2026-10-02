@@ -18,6 +18,7 @@ import time
 from .agent_execution import (ExecutionRequest, ExecutionResult, MAX_EMIT_BATCH_BYTES,
                               MAX_EMIT_BATCH_EVENTS, emit_batch_size)
 from .box_mcp import GRAPHS
+from .box_upload import MAX_TOTAL, capture_file_limit
 
 CLAUDE_VERSION = '2.1.282'
 MODEL = 'claude-sonnet-4-6'
@@ -89,7 +90,7 @@ def read_capture_marker(request, handle):
             if relative.is_absolute() or '..' in relative.parts or target.is_symlink() or not target.resolve().is_relative_to(request.output_dir.resolve()):
                 raise ValueError('Capture path escapes attempt')
             raw = target.read_bytes(); total += len(raw)
-            if len(raw) > 8_000_000 or total > 40_000_000 or len(raw) != expected['size_bytes'] or hashlib.sha256(raw).hexdigest() != expected['sha256']:
+            if len(raw) > capture_file_limit(name) or total > MAX_TOTAL or len(raw) != expected['size_bytes'] or hashlib.sha256(raw).hexdigest() != expected['sha256']:
                 raise ValueError('Captured bytes changed')
         return marker
     except (OSError, ValueError, KeyError, TypeError) as exc:
@@ -145,7 +146,7 @@ def make_bundle(project_root: Path, request: ExecutionRequest):
     source = project_root / 'services/backend/src/reveal_backend'
     files = {}
     for name in ('__init__.py', 'evidence_package.py', 'dapper_release.py', 'scientific_account_lint.py', 'source_validation.py',
-                 'box_remote.py', 'box_stream.py', 'box_mcp.py', 'box_literature.py', 'research_outcome.py',
+                 'box_remote.py', 'box_upload.py', 'box_stream.py', 'box_mcp.py', 'box_literature.py', 'research_outcome.py',
                  'dispatch_view.py', 'evidence_files.py', 'public_tool_activity.py'):
         files['bundle/services/backend/src/reveal_backend/' + name] = (source / name).read_bytes()
     relative = ['scripts/lint_scientific_account.py', 'services/backend/agent-runtime/dapper-release.json',
@@ -479,7 +480,7 @@ sudo /reveal/claude/node_modules/.bin/claude --version
                 content = base64.b64decode(encoded, validate=True); total += len(content)
                 if any(self.environ[key].encode() in content for key in ('ANTHROPIC_API_KEY', 'UPSTASH_BOX_API_KEY')):
                     raise BoxTransportError('Credential material detected in an output artifact; capture rejected')
-                if len(content) > 8_000_000 or total > 40_000_000:
+                if len(content) > capture_file_limit(name) or total > MAX_TOTAL:
                     raise BoxTransportError('Remote artifact exceeds capture limit')
                 target = request.output_dir / str(relative)
                 try:

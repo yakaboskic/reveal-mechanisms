@@ -4,6 +4,7 @@ import hashlib
 import json
 import time
 from pathlib import PurePosixPath
+from .box_upload import MAX_TOTAL, capture_file_limit
 from .box_adapter import (BoxExecutionAdapter, BoxTransportError, BoxConfigurationError, required_environment,
     make_bundle, TERMINAL_STATUSES, CAPTURE_MARKER, capture_binding, atomic_capture_marker,
     public_event_batches, verified_box_not_found)
@@ -85,7 +86,7 @@ class BoxLifecycle(BoxExecutionAdapter):
             path = PurePosixPath(name)
             if path.is_absolute() or '..' in path.parts: raise BoxTransportError('Artifact path escapes capture')
             content = base64.b64decode(encoded, validate=True); total += len(content)
-            if len(content) > 8_000_000 or total > 40_000_000: raise BoxTransportError('Capture size exceeds limit')
+            if len(content) > capture_file_limit(name) or total > MAX_TOTAL: raise BoxTransportError('Capture size exceeds limit')
             if any(self.environ[k].encode() in content for k in ('ANTHROPIC_API_KEY', 'UPSTASH_BOX_API_KEY')):
                 raise BoxTransportError('Output contains credential material')
             destination = request.output_dir / str(path); destination.parent.mkdir(parents=True, exist_ok=True)

@@ -84,6 +84,14 @@ absence and the trusted ledger, then commits the immutable capture reference.
 It does not materialize a capture workspace. Existing Box handles retain their
 previous capture protocol; initial evidence preparation remains in the API.
 
+Capture keeps authored output and ledger files within 8,000,000 bytes each. The
+exact trusted `runtime.json` manifest has a separate 20,000,000-byte limit because
+its derived input-view checksums can exceed the authored-file limit. Both paths
+retain the unchanged 40,000,000-byte aggregate capture limit, path checks,
+checksums and credential scans. `output/runtime.json` is an authored file and
+receives no exception. Existing terminal Boxes can retry capture with this
+allowance without changing their bytes, frozen input or authoring attempt.
+
 A live synthetic probe captured 244 files in 38.013 seconds, then repeated the
 capture in 39.021 seconds with exactly the same immutable object versions.
 Independent cleanup persisted its deletion receipt, and a duplicate delivery

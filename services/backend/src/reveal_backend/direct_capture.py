@@ -15,11 +15,9 @@ from urllib.parse import urlsplit
 
 from .artifact_store import StorageUnavailable
 from .box_adapter import CAPTURE_MARKER, BoxTransportError, TERMINAL_STATUSES
+from .box_upload import MAX_TOTAL, MAX_FILES, capture_file_limit
 from .runtime_config import setting
 
-MAX_FILE = 8_000_000
-MAX_TOTAL = 40_000_000
-MAX_FILES = 10000
 MAX_CONTROL = 16_000_000
 CONCURRENCY = 4
 UPLOAD_BATCH = 256
@@ -49,7 +47,7 @@ def validate_inventory(value, binding, state):
         require(valid_path(name) and (name.startswith(('output/', 'ledger/')) or name == 'runtime.json')
             and name not in names, 'Unsafe direct capture path')
         size = item.get('size_bytes'); sha = item.get('sha256')
-        require(type(size) is int and 0 <= size <= MAX_FILE and isinstance(sha, str) and re.fullmatch('[a-f0-9]{64}', sha), 'Invalid direct capture size or checksum')
+        require(type(size) is int and 0 <= size <= capture_file_limit(name) and isinstance(sha, str) and re.fullmatch('[a-f0-9]{64}', sha), 'Invalid direct capture size or checksum')
         total += size; names.add(name)
         require(total <= MAX_TOTAL, 'Direct capture exceeds byte budget')
     require('ledger/manifest.json' in names, 'Direct capture ledger is missing')
