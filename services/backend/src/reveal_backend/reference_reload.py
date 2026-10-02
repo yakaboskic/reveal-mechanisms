@@ -1885,7 +1885,15 @@ def activate(services, repo, target, plan):
 
 
 def apply_plan(services, target, plan_path, approval_path, *, allow_production=False, cancel_active=False, drain_seconds=600,
-               backup_dir=None, backup_snapshot_id=None, create_aurora_snapshot=False, aurora_cluster_id=None, keep_gate=False, poll_seconds=5):
+               backup_dir=None, backup_snapshot_id=None, create_aurora_snapshot=False, skip_aurora_snapshot=False,
+               aurora_cluster_id=None, keep_gate=False, poll_seconds=5):
+    if skip_aurora_snapshot:
+        if (target.get('name') != 'local' or target.get('prefix') != 'reveal_workflow_local'
+                or target.get('vector_environment') != 'local' or target.get('production') is not False):
+            raise Refused('--skip-aurora-snapshot is allowed only for local / reveal_workflow_local (non-production, vector environment local)')
+        if backup_snapshot_id or create_aurora_snapshot:
+            raise Refused('--skip-aurora-snapshot cannot be combined with another Aurora backup option')
+    skipped_aurora = {'status': 'skipped', 'reason': 'explicit_local_only_waiver', 'created': False}
     bind_target(services, target)
     plan, approval = read_plan(plan_path), read_json(approval_path)
     if plan['kind'] != 'apply' or plan['target'] != target: raise Refused('The plan is for a different target or allow-list entry')
@@ -1895,7 +1903,8 @@ def apply_plan(services, target, plan_path, approval_path, *, allow_production=F
     resume = plan.get('resume')
     if not resume:
         if not backup_dir: raise Refused('--backup-dir is required')
-        if not (backup_snapshot_id or create_aurora_snapshot): raise Refused('A backup is required: --backup-snapshot-id or --create-aurora-snapshot')
+        if not (backup_snapshot_id or create_aurora_snapshot or skip_aurora_snapshot):
+            raise Refused('A backup is required: --backup-snapshot-id or --create-aurora-snapshot (local alone may use --skip-aurora-snapshot)')
     fresh = build_plan(services, target, plan['generation_id'])
     if fresh['plan_sha256'] != plan['plan_sha256']:
         changed = sorted(key for key in set(plan) | set(fresh) if key not in ('plan_sha256', 'planned_at', 'observed')
@@ -1911,7 +1920,8 @@ def apply_plan(services, target, plan_path, approval_path, *, allow_production=F
         # Pre-flight what can abort the cutover before the gate closes and jobs are cancelled.
         verified_snapshot(services, repo, target, plan)
         step('preflight', records=mysqldump(services, target, backup_dir, stamp, preflight=True),
-             aurora=aurora_preflight(services, snapshot_id=backup_snapshot_id, create=create_aurora_snapshot, cluster_id=aurora_cluster_id))
+             aurora=dict(skipped_aurora) if skip_aurora_snapshot else aurora_preflight(
+                 services, snapshot_id=backup_snapshot_id, create=create_aurora_snapshot, cluster_id=aurora_cluster_id))
     lock = services.connect()
     locked = gate_closed = False
     try:
@@ -1930,7 +1940,8 @@ def apply_plan(services, target, plan_path, approval_path, *, allow_production=F
         else:
             step('drain', **drain_jobs(services, repo, source, cancel_active=cancel_active, drain_seconds=drain_seconds, poll_seconds=poll_seconds))
             backups = {'records': mysqldump(services, target, backup_dir, stamp),
-                       'aurora': aurora_snapshot(services, sha, stamp, snapshot_id=backup_snapshot_id, create=create_aurora_snapshot, cluster_id=aurora_cluster_id)}
+                       'aurora': dict(skipped_aurora) if skip_aurora_snapshot else aurora_snapshot(
+                           services, sha, stamp, snapshot_id=backup_snapshot_id, create=create_aurora_snapshot, cluster_id=aurora_cluster_id)}
             result['backups'] = backups; step('backups')
             capture = capture_generation(services, source, allow_listed_prefixes(load_targets(services.targets_file)), apply=True, locked=True)
             step('delta_capture', captured=capture['captured'], written=capture['written'], unresolved=len(capture['unresolved']))
@@ -2409,6 +2420,8 @@ def parser():
     c.add_argument('--drain-seconds', type=int, default=600); c.add_argument('--backup-dir', type=Path)
     backup = c.add_mutually_exclusive_group()
     backup.add_argument('--backup-snapshot-id'); backup.add_argument('--create-aurora-snapshot', action='store_true')
+    backup.add_argument('--skip-aurora-snapshot', action='store_true',
+                        help='Explicit local-only waiver: local / reveal_workflow_local; still requires the records dump, typed plan approval and verification')
     c.add_argument('--aurora-cluster-id'); c.add_argument('--keep-gate', action='store_true')
     c = commands.add_parser('verify', help='Read-only post-conditions of one target')
     c.add_argument('--target', required=True); c.add_argument('--generation')
@@ -2464,6 +2477,7 @@ def run(services, args):
         return apply_plan(services, select_target(services, args.target), args.plan, args.approval, allow_production=args.allow_production,
                           cancel_active=args.cancel_active, drain_seconds=args.drain_seconds, backup_dir=args.backup_dir,
                           backup_snapshot_id=args.backup_snapshot_id, create_aurora_snapshot=args.create_aurora_snapshot,
+                          skip_aurora_snapshot=args.skip_aurora_snapshot,
                           aurora_cluster_id=args.aurora_cluster_id, keep_gate=args.keep_gate)
     if command == 'verify':
         target = bind_target(services, select_target(services, args.target))

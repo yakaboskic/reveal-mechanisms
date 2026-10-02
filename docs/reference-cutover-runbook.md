@@ -32,6 +32,7 @@ Two kinds of step do not change any environment's served state: capture's backfi
 
 1. **Rehearsal tables:** **create them empty (§4.1)**, or remove `rehearsal` from `config/reference_reload.targets.yaml`. If you remove it: regenerate the LAP meta (lap/README, Running step 0) and rerun the tests. Capture and every apply crash on the missing tables otherwise.
 2. **Aurora backup:** **one manual cluster snapshot of `aurora-giant-bioindex`, taken once and passed to every apply as `--backup-snapshot-id`**. The alternative is the latest automated snapshot. Do not use `--create-aurora-snapshot`: it keeps the target's gate closed while a snapshot of the whole shared cluster is created, and a missing IAM permission fails only after the gate is closed.
+   **Explicit local-only exception:** when the user authorizes foregoing the Aurora snapshot for local development, `apply --target local` may use `--skip-aurora-snapshot` instead of `--backup-snapshot-id`. This is restricted to `reveal_workflow_local` with vector environment `local`, retains the records dump, terminal approval and every cutover check, and records the waiver in the audit. It does not apply to rehearsal, compose, QA or prod.
 3. **S3 prefix for reload artifacts:** **`local/`**, kept fixed until the purge. Prod already reads `local/`; the cold export and purge validate against this prefix.
 4. **Target order:** **rehearsal → local (headed UI) → compose → QA → prod**, then soak, then purge. To skip `compose`, remove it from the allow-list now (as in item 1): the purge needs every allow-listed target cut over.
 5. **PR timing:** **open the PR `chase/reference-reload` → `main` now; merge it after the local cutover passes**. Then do the QA release from `main` the usual way.
@@ -146,6 +147,8 @@ NS=<namespace> reload apply --target $t --plan $C/plan.$t.json --approval $C/app
   --backup-dir $C/backups/$t --backup-snapshot-id $SNAP --drain-seconds 600 > $C/apply.$t.json
 reload verify --target $t --generation $G > $C/verify.$t.json        # must be ok: true
 ```
+
+For the explicitly authorized local-only exception, replace `--backup-snapshot-id $SNAP` in the apply command with `--skip-aurora-snapshot`; keep `--backup-dir` and the human approval step.
 
 `NS` is that app's notification namespace: `reveal-workflow-local`, `reveal-qa` or `reveal-prod`. It is empty for `rehearsal` and `compose`. Without it, open browser tabs only see the cutover on their next reconnect or reload.
 
