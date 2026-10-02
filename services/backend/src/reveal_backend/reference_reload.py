@@ -25,6 +25,7 @@ from __future__ import annotations
 import argparse
 import base64
 from contextlib import contextmanager
+from concurrent.futures import ThreadPoolExecutor
 import csv
 from datetime import date, datetime
 from decimal import Decimal
@@ -1590,7 +1591,11 @@ def snapshot_generation(services, target, generation_id, *, apply, batch_size=20
         manifest = vi.save_export(manifest, exported)
         registry.register(manifest)
         client = services.vector_client(write=True)
-        for key in manifest['batches']: vi.import_batch(registry, manifest['snapshot_id'], key, client=client)
+        # Keep the reload lock through executor shutdown, including failures.
+        # Consume every result before final verification or binding writes.
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            for _ in pool.map(lambda key: vi.import_batch(registry, manifest['snapshot_id'], key, client=client), manifest['batches']):
+                pass
         report = vi.verify_snapshot(registry, manifest['snapshot_id'], client=client)
         bindings = vi.record_vector_bindings(connection, registry.get(manifest['snapshot_id']))
         return {**summary, 'status': 'complete', 'verification': report, 'bindings': bindings, 'reused': False}
