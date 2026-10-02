@@ -1,0 +1,199 @@
+{
+  "account_id": "dapper:ScientificAccount.05Vs-l6pVZHt9ttebmJqK2VNodZUouTb",
+  "authored_at": "2026-10-01T00:00:00Z",
+  "content_sha256": "83e9b71b365954a3d212c40896232958342693e775e9f1cb6349f990d14043b3",
+  "contents": {
+    "account-envelope.json": "291766e3e7a577f08515cc4d3b93c7cf5934abcf1afe7db3c23559ae4351a8e9",
+    "citation-registry.json": "68b26e7a989e4329df581ba0eb5e688ffcb6e53a80252e9087397ad0a8f0bc63",
+    "presentation.json": "9a2a64bf784eeccc4889c7a55683fe0bd20b9bc2917f016bec7e2ad379100303",
+    "relationships.json": "e861df20cd55ff78934e6de37df3471c022efe052fac4416f4d5247d6fe0dcd2",
+    "scientific-account.json": "1f06c4acf135acf49c5a3f58d089c3906243cb6aef611a0fa2b4a041b233e5f4",
+    "sources/Coronary_Artery_Disease.yaml": "00f2a71dca11fd7d4a8c835ea9e978037dcbef88d3fb050c5e74192db2bd7338",
+    "sources/dismech-gap.source.json": "ed59adee2b7de542f72781a90265088feb79900ad88f83c60bc124ede420d78f",
+    "sources/evidence-inventory.json": "fa1b3350a95ed44914de793d96c9c504d9dc069822c3f13c3b7204e6684b6b7c",
+    "sources/gene-metrics.json": "e676dae04260f521ae7094d321e66d8b610eb121ca0903c129c2fdd82b9bfed6",
+    "sources/gene-set-metrics.json": "43ce6a78941d4bd92912a769d72b2cef96aa7fa6ade7fc28d0486034d60afe02",
+    "sources/illustrative-kg-assertions.json": "9539fb6db89cdc4f3122fa497dfe70c4940f9d0b21bcc17505f90da8770391dc",
+    "sources/pigean-gene-factor.response.json": "3fdf0f2ae3f782824ec7f96687c4a988a88a6ffb0a106b52f4e20464cdf51e30",
+    "sources/pigean-gene-set-factor.response.json": "b4ba6a21f6791c8b80ce8ef471361634ebb8b9f1f4e91e886fe1f05d02e7c1fa"
+  },
+  "counts": {
+    "activities": 4,
+    "claims": 12,
+    "datasets": 4,
+    "evidence_items": 17,
+    "files": 8,
+    "gene_sets": 2,
+    "knowledge_gaps": 1,
+    "mechanisms": 1,
+    "persons": 1,
+    "propositions": 12,
+    "scientific_accounts": 1,
+    "used_edges": 11,
+    "was_derived_from_edges": 6,
+    "was_generated_by_edges": 3
+  },
+  "dapper_release_lock_sha256": "3f07f48396ab893ed0fae8ad0101e0c2ac1bc36161e91cc2525d5ed0aeb0140f",
+  "files": [
+    {
+      "id": "dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ",
+      "origin": "captured",
+      "path": "sources/pigean-gene-factor.response.json",
+      "sha256": "3fdf0f2ae3f782824ec7f96687c4a988a88a6ffb0a106b52f4e20464cdf51e30",
+      "size_bytes": 2945
+    },
+    {
+      "id": "dapper:File.Dt0S38v_sLn5jiOAVXMrMWTrXBLnsn83",
+      "origin": "captured",
+      "path": "sources/pigean-gene-set-factor.response.json",
+      "sha256": "b4ba6a21f6791c8b80ce8ef471361634ebb8b9f1f4e91e886fe1f05d02e7c1fa",
+      "size_bytes": 3785
+    },
+    {
+      "id": "dapper:File.eG0HM7wVGbDLt-99TA-OMnMeKqdIircT",
+      "origin": "captured",
+      "path": "sources/dismech-gap.source.json",
+      "sha256": "ed59adee2b7de542f72781a90265088feb79900ad88f83c60bc124ede420d78f",
+      "size_bytes": 3382
+    },
+    {
+      "id": "dapper:File._FB2fhvDopxDEHgoDgf2Hk4jE0wxilag",
+      "origin": "illustrative",
+      "path": "sources/illustrative-kg-assertions.json",
+      "sha256": "9539fb6db89cdc4f3122fa497dfe70c4940f9d0b21bcc17505f90da8770391dc",
+      "size_bytes": 821
+    },
+    {
+      "id": "dapper:File.v2cEzhI5P_mdYWuY_HyJjvzyNZpzuP96",
+      "origin": "captured",
+      "path": "sources/Coronary_Artery_Disease.yaml",
+      "sha256": "00f2a71dca11fd7d4a8c835ea9e978037dcbef88d3fb050c5e74192db2bd7338",
+      "size_bytes": 97708
+    },
+    {
+      "id": "dapper:File.TLbPNA0MRbI7oUpipACe2r-gRZX8OP6c",
+      "origin": "derived_from_captured",
+      "path": "sources/gene-metrics.json",
+      "sha256": "e676dae04260f521ae7094d321e66d8b610eb121ca0903c129c2fdd82b9bfed6",
+      "size_bytes": 841
+    },
+    {
+      "id": "dapper:File.HGsrMluIk1mo4e0a6aCD0zBcXZa-Y716",
+      "origin": "derived_from_captured",
+      "path": "sources/gene-set-metrics.json",
+      "sha256": "43ce6a78941d4bd92912a769d72b2cef96aa7fa6ade7fc28d0486034d60afe02",
+      "size_bytes": 1421
+    },
+    {
+      "id": "dapper:File.6JYwag_kjbSwZ-eLeKmZxI0EmWd2gcLD",
+      "origin": "mixed_fixture_inventory",
+      "path": "sources/evidence-inventory.json",
+      "sha256": "fa1b3350a95ed44914de793d96c9c504d9dc069822c3f13c3b7204e6684b6b7c",
+      "size_bytes": 4136
+    }
+  ],
+  "fixture_version": "bubble-account-v1",
+  "format": "reveal.canonical-fixture/1",
+  "identities": {
+    "activities": [
+      "dapper:Activity.VM0nxPd0QVsZJ-7qw4WjAvXtEiFMehqx",
+      "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+      "dapper:Activity.nislSNQbz48tvkoAsVkBk8NxJjF7XThC",
+      "dapper:Activity.aqc7zlmMA0hixxB9RRkB_lF9sXTUJWkJ"
+    ],
+    "claims": [
+      "dapper:Claim.iN6K2Rz0XKMnROZLUNLuhZhz0id5wK0h",
+      "dapper:Claim.eaeEY0LpLXwNmk3-Rr9s-YEiUokDLfO6",
+      "dapper:Claim.0Tdjx1Ry7AC5sP50HIlUfKb-cwpgY-3u",
+      "dapper:Claim.Yi6Uhd9aRwVHLlLSoc4TxEMo0VWswD0a",
+      "dapper:Claim.fUp7z48VwrXH5oueNfh7D4nNhQMNtC3C",
+      "dapper:Claim.8uwyJZx7pdEoZ9Vw7Xu726ukdLf2FwyW",
+      "dapper:Claim.YMgLIul-wf8vntqWIY_enxh56yTZx9pI",
+      "dapper:Claim.YwrSSe0OE5Uq62PD1t_vvDHAcNeJn8ol",
+      "dapper:Claim.0wzE-AEqZ1fcgl2B0ZoYHZ7YiQBbR3lE",
+      "dapper:Claim.JXS6Wb_N1ZXOvGvsPoW0UiQdTb_2j2d9",
+      "dapper:Claim.N5EVC_d0CV0e76th1zsyX3wHf1Bw16VZ",
+      "dapper:Claim.GseJ6JHI0scMFrE5_I-x9ZC4etecmMT0"
+    ],
+    "datasets": [
+      "dapper:Dataset.NlxGa58i2Tz0316MDyohMLN_HbOr-FpE",
+      "dapper:Dataset.3C638GAM_39hZy0Alf4cuL_MEwLPwYbZ",
+      "dapper:Dataset.rCYYDnawiURjDtPs-d2yau2n33CVvZsk",
+      "dapper:Dataset.H6YuykNGw3yY2JZYMuqc_VwTyDVGAq3A"
+    ],
+    "evidence_items": [
+      "dapper:EvidenceItem.7GkNnm9yFpVyW1KazI0fgyc3zd6soOEu",
+      "dapper:EvidenceItem.OL2_nAY9jt52xBCVaDgHA-w2wMgG1dTr",
+      "dapper:EvidenceItem.FY72LzsGILxi9FSYp3UC3dJrvRjg4yhV",
+      "dapper:EvidenceItem.zGPBcs9UEKF30hSswAcICslECIjWNGpS",
+      "dapper:EvidenceItem.YuVob9-YBd1uHmFIvdEzvnFZWdWXMCyt",
+      "dapper:EvidenceItem.C3levH7QDaBJE59UP4qgI6BIodhkHWWE",
+      "dapper:EvidenceItem.ZawKNAfvISVoKyK__IPfaHSBi-FTFeO7",
+      "dapper:EvidenceItem.1K7MwHOhXF9rUkapPvYnaR6LCS1jrPbf",
+      "dapper:EvidenceItem.Q8XJ1KhVOb7qfeOnUA9M9TlXs2q46Xfc",
+      "dapper:EvidenceItem.dlZE2kDhY4EqshVinxv10O044-qjOgce",
+      "dapper:EvidenceItem.1Idm3RIE7irCu8aj3Z4jS58QMjvSfMV_",
+      "dapper:EvidenceItem.OOhcXSoHkq_NT2yHZG8A8Fo9nL9ATjf-",
+      "dapper:EvidenceItem.ua2xxfAwRBW_YWAX2lcp0FERgiIj0Y1z",
+      "dapper:EvidenceItem.xo3daB43jQWl3SM_0V_OOhkO0votrOkZ",
+      "dapper:EvidenceItem.CmkML4Zy3RuBW0p4b2DA1O-wZ6AQGLz-",
+      "dapper:EvidenceItem.iSSEZ1l6D1NdV5TB8DOaDm7ZfnRSkgsR",
+      "dapper:EvidenceItem.Bi_6DGIpMXTNt9YXLL-rAWX_u_fmOLNg"
+    ],
+    "files": [
+      "dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ",
+      "dapper:File.Dt0S38v_sLn5jiOAVXMrMWTrXBLnsn83",
+      "dapper:File.eG0HM7wVGbDLt-99TA-OMnMeKqdIircT",
+      "dapper:File._FB2fhvDopxDEHgoDgf2Hk4jE0wxilag",
+      "dapper:File.v2cEzhI5P_mdYWuY_HyJjvzyNZpzuP96",
+      "dapper:File.TLbPNA0MRbI7oUpipACe2r-gRZX8OP6c",
+      "dapper:File.HGsrMluIk1mo4e0a6aCD0zBcXZa-Y716",
+      "dapper:File.6JYwag_kjbSwZ-eLeKmZxI0EmWd2gcLD"
+    ],
+    "gene_sets": [
+      "dapper:GeneSet.I1UZhVhKU-YDerPLIxtnZOGlTXNAlrgD",
+      "dapper:GeneSet.zQ8X81n_J-Fuv0zNRp1iQQXqIzuAOzGP"
+    ],
+    "knowledge_gaps": [
+      "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk"
+    ],
+    "mechanisms": [
+      "dapper:Mechanism.kEJMDzCkDYE94DpWaXrQg-eC4gFGQyuX"
+    ],
+    "persons": [
+      "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+    ],
+    "propositions": [
+      "dapper:Proposition.cjK2Yz-rwiv49w9zH71aodlAHIzbNVqE",
+      "dapper:Proposition.rCjXmKoJQot2L0j-JXULHltjuBgtYhnD",
+      "dapper:Proposition.b06Styo26ZiZC2Sy599Uk98OKhiNgcuy",
+      "dapper:Proposition.yUAm2Mgs3NxOTghFk_4SrqgpYaecOFvL",
+      "dapper:Proposition.YglauZfsf1X5GagFEmSSWB-dwoGljEGz",
+      "dapper:Proposition.3dNz6hkwxQ199hXVaHISAWghx_R6G8og",
+      "dapper:Proposition.6cRd977XvXOzcsRLrJfwthdIHn_iRAOT",
+      "dapper:Proposition.9Ah6tV2FtJ8m_rEHO6e92pmWxAyfU8U_",
+      "dapper:Proposition.NJYh11lXY-LXoFXrJeK7KkfI7r7iQzFT",
+      "dapper:Proposition.JfxEcQLDt9bMiSejgOKxh7G8ylVGAqxI",
+      "dapper:Proposition.9l7Nq6exgMpGL5Z3Tn4Luy62urD9GHT5",
+      "dapper:Proposition.6T-VChVL5ddew5vFiMsuYE8O4_60DfUz"
+    ],
+    "scientific_accounts": [
+      "dapper:ScientificAccount.05Vs-l6pVZHt9ttebmJqK2VNodZUouTb"
+    ],
+    "used_edges": [],
+    "was_derived_from_edges": [],
+    "was_generated_by_edges": []
+  },
+  "scientific_acceptance": "not_reviewed",
+  "selected_gap": {
+    "id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+    "source_id": "dismech:disorders/Coronary_Artery_Disease#discussion:cad_pgsxc_reverse_causation",
+    "source_revision": "00f2a71dca11fd7d4a8c835ea9e978037dcbef88d3fb050c5e74192db2bd7338"
+  },
+  "source_binding": {
+    "discussion_matches_design_capture": true,
+    "source_file": "kb/disorders/Coronary_Artery_Disease.yaml",
+    "source_file_sha256": "00f2a71dca11fd7d4a8c835ea9e978037dcbef88d3fb050c5e74192db2bd7338",
+    "source_pointer": "/discussions/0"
+  }
+}

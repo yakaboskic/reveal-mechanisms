@@ -72,7 +72,7 @@ export function useWorkspaceData(tab: WorkspaceTab, query = "") {
   const counts: Partial<Record<WorkspaceTab, string>> = {};
   for (const key of workspaceTabs) {
     const data = cache.read(scope, key).data;
-    if (data) counts[key] = `${(key === "gaps" ? data.gaps : key === "accounts" ? data.accounts : data.outcomes).length}${data.cursor ? "+" : ""}`;
+    if (data) counts[key] = `${(key === "gaps" ? data.gaps : key === "drafts" ? data.drafts : key === "runs" ? data.jobs.filter(job => job.kind === "analysis") : key === "accounts" ? data.accounts : data.outcomes).length}${data.cursor ? "+" : ""}`;
   }
   return { ...snapshot, counts, connection, refresh: () => cache.revalidate(scope, key, true), loadMore: () => cache.revalidate(scope, key, true, "append") };
 }

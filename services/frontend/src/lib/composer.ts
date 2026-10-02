@@ -1,5 +1,7 @@
 import type { Schema } from "./client";
-export const emptyComposer = (): Schema<"Composer"> => ({ source_gap: null, eaggl_anchors: [], dismissed_source_ids: [], mechanism_subquery: "", model: "cfde-inc-v2", selected_kgs: ["biomarkerkg", "prokn"] });
+export const emptyComposer = (): Schema<"Composer"> => ({ source_gap: null, eaggl_anchors: [], dismissed_source_ids: [], mechanism_subquery: "", model: "cfde-inc-v2", selected_kgs: ["biomarkerkg", "prokn"], research_direction: "", context: "", hypotheses: "", upload_ids: [] });
+export const normalizedComposer = (composer: Schema<"Composer">): Schema<"Composer"> => ({ ...emptyComposer(), ...composer });
+export const composerEqual = (a: Schema<"Composer">, b: Schema<"Composer">) => JSON.stringify(normalizedComposer(a)) === JSON.stringify(normalizedComposer(b));
 export const selectedGap = (gap: Schema<"GapRecord">): Schema<"SelectedGap"> => ({ id: gap.object.id, source_id: gap.source.source_id, source_revision: gap.source.source_revision });
 export const factorSelection = (factor: Schema<"EagglFactor">, origin: "manual" | "automatic", suggestion_id: string | null = null): Schema<"Selection"> => ({ reference: { source: "eaggl", source_id: factor.source_id, source_revision: factor.source_revision, dapper_id: factor.object.id }, origin, suggestion_id });
 export function removeAnchor(composer: Schema<"Composer">, id: string): Schema<"Composer"> {

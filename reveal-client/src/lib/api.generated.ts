@@ -460,6 +460,114 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/uploads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * listUploads
+         * @description Owner-scoped private research attachment. Original bytes and extraction are pinned by checksum and immutable version before submission.
+         */
+        get: operations["listUploads"];
+        put?: never;
+        /**
+         * createUpload
+         * @description Owner-scoped private research attachment. Original bytes and extraction are pinned by checksum and immutable version before submission.
+         */
+        post: operations["createUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/uploads/{upload_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * getUpload
+         * @description Owner-scoped private research attachment. Original bytes and extraction are pinned by checksum and immutable version before submission.
+         */
+        get: operations["getUpload"];
+        put?: never;
+        post?: never;
+        /**
+         * removeUpload
+         * @description Owner-scoped private research attachment. Original bytes and extraction are pinned by checksum and immutable version before submission.
+         */
+        delete: operations["removeUpload"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/uploads/{upload_id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * completeUpload
+         * @description Owner-scoped private research attachment. Original bytes and extraction are pinned by checksum and immutable version before submission.
+         */
+        post: operations["completeUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/uploads/{upload_id}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * uploadLocalContent
+         * @description Owner-scoped private research attachment. Original bytes and extraction are pinned by checksum and immutable version before submission.
+         */
+        post: operations["uploadLocalContent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/uploads/{upload_id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * downloadUpload
+         * @description Owner-scoped private research attachment. Original bytes and extraction are pinned by checksum and immutable version before submission.
+         */
+        get: operations["downloadUpload"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/me/workspace/events": {
         parameters: {
             query?: never;
@@ -508,10 +616,50 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List your scientific accounts
-         * @description Owner-scoped, newest first then account ID; deduplicate repeated deliveries by digest. Filter by exact gap_id. Optional q searches account ID, title and closing remarks, knowledge-gap ID/name/text and original attribution display name across all saved summaries before pagination. No private records from other users with the same gap. Closing remarks provide the summary; paragraph status is independent. Publication is current mutable workspace state, separate from immutable scientific content.
+         * Browse or search scientific accounts
+         * @description scope=workspace (default) requires a session and lists only owned accounts, newest creation first. scope=public lists only explicitly published frozen snapshots across researchers and omits private job IDs; no session is required, but invalid supplied credentials are rejected. Deduplicate by canonical account digest. Filter by exact gap_id. Optional q searches account ID, title and closing remarks, knowledge-gap ID/name/text and original attribution display name across the entire authorized collection before pagination. sort=recent (default) orders public accounts by publication date; sort=votes orders by net account votes, then recency. Account ID breaks ties. Cursors bind scope, normalized query, sort, registered viewer and the current collection/vote snapshot. Closing remarks provide the summary; paragraph status is independent.
          */
         get: operations["listAccounts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/leaderboard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Rank public community contributions
+         * @description All-time contribution rankings computed over the complete currently public frozen population before pagination. Original registered actor attribution uses opaque contributor keys; missing/anonymous/conflicting attribution is uncredited. Exclude fixtures before projection, deduplicate canonical accounts, exclude own ballots from researcher recognition, and retain all canonical votes for account ranking. Researchers sort by overall (default), accounts, votes, gaps or explored; accounts sort only by votes; datasets sort by accounts (default), claims, gaps or researchers. evidence=all|supporting affects datasets only. Positive metric percentiles use midrank, weighted 30/40/30; exact score ties share ranks before display rounding. Invalid supplied credentials are rejected. No private metadata, jobs, requests or voter identities are exposed. Cursors bind the whole current projection and query; publication or vote changes expire them. Responses are private, no-store.
+         */
+        get: operations["getLeaderboard"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/leaderboard/{view}/{entry_id}/records": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Inspect records contributing to a public ranking
+         * @description The exact public eligibility and evidence scope used by leaderboard totals. One record per distinct counted unit; votes return one account record with its signed net contribution. Sum vote values to reproduce the headline; other totals equal record count. entry includes context for direct links. Researchers allow accounts/votes/gaps/explored; accounts allow accounts/votes/claims/gaps/researchers; datasets allow accounts/claims/gaps/researchers/files. Revoked and ineligible entries return the same 404. Public keys and canonical scientific IDs only. All-time contribution rankings computed over the complete currently public frozen population before pagination. Original registered actor attribution uses opaque contributor keys; missing/anonymous/conflicting attribution is uncredited. Exclude fixtures before projection, deduplicate canonical accounts, exclude own ballots from researcher recognition, and retain all canonical votes for account ranking. Researchers sort by overall (default), accounts, votes, gaps or explored; accounts sort only by votes; datasets sort by accounts (default), claims, gaps or researchers. evidence=all|supporting affects datasets only. Positive metric percentiles use midrank, weighted 30/40/30; exact score ties share ranks before display rounding. Invalid supplied credentials are rejected. No private metadata, jobs, requests or voter identities are exposed. Cursors bind the whole current projection and query; publication or vote changes expire them. Responses are private, no-store.
+         */
+        get: operations["getLeaderboardRecords"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3038,16 +3186,28 @@ export interface components {
             /** @constant */
             model: "cfde-inc-v2";
             selected_kgs: ("biomarkerkg" | "prokn")[];
+            research_direction?: string;
+            context?: string;
+            hypotheses?: string;
+            upload_ids?: string[];
         };
         DraftCreate: {
             composer: components["schemas"]["Composer"];
             name?: string;
+            /** @enum {string} */
+            lifecycle?: "temporary" | "saved";
+            /** Format: uuid */
+            source_draft_id?: string;
+            /** @description Loaded revision of the originating saved draft. Historical revisions up to the current revision are allowed; omitted means current. */
+            source_draft_version?: number;
         };
         /** @description Rename or replace the complete composer atomically using compare-and-swap. Omitted fields are preserved. Retry a lost acknowledgment with the same Idempotency-Key. */
         DraftPatch: {
             expected_version: number;
             composer?: components["schemas"]["Composer"];
             name?: string;
+            /** @enum {string} */
+            lifecycle?: "saved";
         };
         Draft: {
             /** Format: uuid */
@@ -3061,6 +3221,14 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
             name?: string;
+            /** @enum {string} */
+            lifecycle?: "temporary" | "saved";
+            /** Format: uuid */
+            source_draft_id?: string;
+            expires_at?: string | null;
+            /** Format: date-time */
+            saved_at?: string;
+            source_draft_version?: number;
         };
         DraftDelete: {
             expected_version: number;
@@ -3119,6 +3287,10 @@ export interface components {
             attribution: components["schemas"]["AttributionSnapshot"];
             /** Format: date-time */
             submitted_at: string;
+            user_inputs?: components["schemas"]["UserInputs"];
+            /** Format: uuid */
+            originating_saved_draft_id?: string;
+            originating_saved_draft_version?: number;
             linked_dismech_context: components["schemas"]["SourceRef"][];
         };
         GapSource: {
@@ -3385,6 +3557,7 @@ export interface components {
             payloads: components["schemas"]["PayloadSnapshot"][];
             citation_metadata: components["schemas"]["CitationMetadata"][];
             artifacts: components["schemas"]["ArtifactAccess"][];
+            fixture_origin?: components["schemas"]["FixtureOrigin"];
             research_statement: components["schemas"]["ParagraphState"];
             publication?: components["schemas"]["PublicationState"];
             coverage: components["schemas"]["TraversalCoverage"];
@@ -3550,6 +3723,85 @@ export interface components {
             id: string;
             source_id: string;
             source_revision: string;
+        };
+        UploadStorage: {
+            /** @enum {string} */
+            store: "s3" | "filesystem";
+            bucket?: string;
+            key: string;
+            version_id?: string;
+            sha256: string;
+            size_bytes: number;
+            content_type: string;
+        };
+        UploadExtraction: {
+            storage: components["schemas"]["UploadStorage"];
+            /** @enum {string} */
+            format: "reveal.upload-text/1";
+            segment_count: number;
+            original_sha256: string;
+        };
+        Upload: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            draft_id: string;
+            filename: string;
+            media_type: string;
+            size_bytes: number;
+            sha256: string;
+            /** @enum {string} */
+            status: "pending" | "ready" | "failed" | "removed";
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            expires_at: string;
+            storage: components["schemas"]["UploadStorage"] | null;
+            extraction: components["schemas"]["UploadExtraction"] | null;
+            error: string | null;
+        };
+        UploadCreate: {
+            /** Format: uuid */
+            draft_id: string;
+            filename: string;
+            media_type: string;
+            size_bytes: number;
+            sha256: string;
+        };
+        UploadTicket: {
+            upload: components["schemas"]["Upload"];
+            transfer: {
+                /** @enum {string} */
+                method: "POST";
+                url: string;
+                fields: {
+                    [key: string]: string;
+                };
+                /** @enum {string} */
+                encoding: "multipart" | "base64";
+            };
+        };
+        UploadList: {
+            items: components["schemas"]["Upload"][];
+        };
+        UploadContent: {
+            content_base64: string;
+        };
+        UserInputs: {
+            /** @enum {string} */
+            format: "reveal.user-inputs/1";
+            research_direction: string;
+            context: string;
+            hypotheses: string;
+            uploads: components["schemas"]["Upload"][];
+        };
+        FixtureOrigin: {
+            /** @enum {string} */
+            kind: "canonical_fixture";
+            fixture_version: string;
+            content_sha256: string;
+            /** @enum {string} */
+            scientific_acceptance: "not_reviewed";
         };
         /** @description Lossless versioned DisMech discussion sidecar, including evidence/experiments when present. Not hashable KnowledgeGap fields. Hash covers raw canonical JSON. */
         GapSourceDetail: {
@@ -3737,9 +3989,190 @@ export interface components {
             publication: components["schemas"]["PublicationState"];
             votes: components["schemas"]["VoteState"] | null;
             attribution?: components["schemas"]["AttributionSnapshot"] | null;
+            fixture_origin?: components["schemas"]["FixtureOrigin"];
         };
         AccountList: {
             items: components["schemas"]["AccountSummary"][];
+            page: components["schemas"]["Page"];
+        };
+        /** @enum {string} */
+        LeaderboardView: "researchers" | "accounts" | "datasets";
+        /** @enum {string} */
+        LeaderboardSort: "overall" | "accounts" | "votes" | "gaps" | "explored" | "claims" | "researchers";
+        /** @enum {string} */
+        LeaderboardMetric: "accounts" | "votes" | "gaps" | "explored" | "claims" | "researchers" | "files";
+        /** @enum {string} */
+        LeaderboardEvidence: "all" | "supporting";
+        LeaderboardAttribution: {
+            id: string;
+            label: string;
+            orcid: string | null;
+        };
+        LeaderboardDirections: {
+            SUPPORTS: number;
+            DISPUTES: number;
+            MIXED: number;
+            NEUTRAL: number;
+            UNKNOWN: number;
+        };
+        LeaderboardMetrics: {
+            account_count: number;
+            upvotes: number;
+            downvotes: number;
+            voter_count: number;
+            account_gap_count: number;
+            explored_gap_count: number;
+            claim_count: number;
+            researcher_count: number;
+            net_votes: number;
+            overall_score: number;
+        };
+        LeaderboardEntry: {
+            id: string;
+            /** @enum {string} */
+            kind: "researcher" | "account" | "dataset";
+            label: string;
+            rank: number;
+            metrics: components["schemas"]["LeaderboardMetrics"];
+            components: {
+                accounts: number;
+                votes: number;
+                gaps: number;
+            };
+            orcid: string | null;
+            account_id: string | null;
+            gap_id: string | null;
+            gap: {
+                id: string;
+                label: string;
+            } | null;
+            attribution: components["schemas"]["LeaderboardAttribution"] | null;
+            directions: components["schemas"]["LeaderboardDirections"];
+        };
+        /** @description Only public eligibility/exclusion totals. No counts of private work. Observation time is not a cursor revision. Original actors are represented by opaque public keys; no job, request, private email or voter identity is exposed. */
+        LeaderboardMetadata: {
+            /** Format: date-time */
+            as_of: string;
+            /** @enum {string} */
+            score_version: "public-contribution-v1";
+            cohort_size: number;
+            voting_participants: number;
+            exclusions: {
+                fixture_accounts: number;
+                uncredited_accounts: number;
+                conflicting_accounts: number;
+                invalid_public_accounts: number;
+                excluded_evidence_paths: number;
+                fixture_explorations: number;
+                uncredited_explorations: number;
+            };
+            definitions: {
+                id: string;
+                label: string;
+                description: string;
+            }[];
+            methodology: {
+                weights: {
+                    accounts: number;
+                    votes: number;
+                    gaps: number;
+                };
+                scope: string;
+                score: string;
+                own_votes: string;
+                evidence: string;
+            };
+        };
+        LeaderboardList: {
+            /** Format: date-time */
+            as_of: string;
+            /** @enum {string} */
+            score_version: "public-contribution-v1";
+            cohort_size: number;
+            voting_participants: number;
+            exclusions: {
+                fixture_accounts: number;
+                uncredited_accounts: number;
+                conflicting_accounts: number;
+                invalid_public_accounts: number;
+                excluded_evidence_paths: number;
+                fixture_explorations: number;
+                uncredited_explorations: number;
+            };
+            definitions: {
+                id: string;
+                label: string;
+                description: string;
+            }[];
+            methodology: {
+                weights: {
+                    accounts: number;
+                    votes: number;
+                    gaps: number;
+                };
+                scope: string;
+                score: string;
+                own_votes: string;
+                evidence: string;
+            };
+            view: components["schemas"]["LeaderboardView"];
+            sort: components["schemas"]["LeaderboardSort"];
+            evidence: components["schemas"]["LeaderboardEvidence"];
+            items: components["schemas"]["LeaderboardEntry"][];
+            page: components["schemas"]["Page"];
+        };
+        /** @description One distinct counted public unit. For votes, one account record carries its signed net value; summing values reproduces the headline. Other metrics count records. Evidence IDs preserve explicit interpretations, never inferred scientific endorsement. */
+        LeaderboardRecord: {
+            id: string;
+            /** @enum {string} */
+            kind: "account" | "gap" | "claim" | "researcher" | "file" | "exploration";
+            label: string;
+            url: string;
+            account_ids: string[];
+            claim_ids: string[];
+            evidence_ids: string[];
+            directions: components["schemas"]["LeaderboardDirections"];
+            value: number;
+        };
+        LeaderboardRecords: {
+            /** Format: date-time */
+            as_of: string;
+            /** @enum {string} */
+            score_version: "public-contribution-v1";
+            cohort_size: number;
+            voting_participants: number;
+            exclusions: {
+                fixture_accounts: number;
+                uncredited_accounts: number;
+                conflicting_accounts: number;
+                invalid_public_accounts: number;
+                excluded_evidence_paths: number;
+                fixture_explorations: number;
+                uncredited_explorations: number;
+            };
+            definitions: {
+                id: string;
+                label: string;
+                description: string;
+            }[];
+            methodology: {
+                weights: {
+                    accounts: number;
+                    votes: number;
+                    gaps: number;
+                };
+                scope: string;
+                score: string;
+                own_votes: string;
+                evidence: string;
+            };
+            view: components["schemas"]["LeaderboardView"];
+            id: string;
+            metric: components["schemas"]["LeaderboardMetric"];
+            evidence: components["schemas"]["LeaderboardEvidence"];
+            entry: components["schemas"]["LeaderboardEntry"];
+            total: number;
+            items: components["schemas"]["LeaderboardRecord"][];
             page: components["schemas"]["Page"];
         };
         /** @description Records a visit under the authenticated principal. Exact source revision is required; optional draft must belong to that principal and selected gap. */
@@ -4456,7 +4889,7 @@ export interface components {
          * @description Serialization of the exact source bytes.
          * @enum {string}
          */
-        PackageEPArtifactFormat: "json" | "yaml" | "text";
+        PackageEPArtifactFormat: "json" | "yaml" | "text" | "binary";
         /**
          * EPAttachedContext
          * @description A linked non-mechanism DisMech item or entire section/document.
@@ -5202,8 +5635,10 @@ export interface components {
             dapper_file_id: string;
             filename: string;
             format: components["schemas"]["PackageEPArtifactFormat"];
+            media_type?: string | null;
             origin?: string | components["schemas"]["PackageEPRepositoryOrigin"] | null;
             path: string;
+            private?: boolean | null;
             sha256: string;
         };
         /**
@@ -5215,8 +5650,10 @@ export interface components {
             dapper_file_id: string;
             filename: string;
             format: components["schemas"]["PackageEPArtifactFormat"];
+            media_type?: string | null;
             origin?: string | components["schemas"]["PackageEPRepositoryOrigin"] | null;
             path: string;
+            private?: boolean | null;
             sha256: string;
         };
         /**
@@ -5305,6 +5742,18 @@ export interface components {
             source_ref: components["schemas"]["PackageEPSourceRef"];
             /** @constant */
             source_scope?: "phenotype_query";
+        };
+        /**
+         * EPUserInputs
+         * @description Private researcher direction and supplied material; hypotheses are not observations.
+         */
+        PackageEPUserInputs: {
+            context: string;
+            /** @constant */
+            format: "reveal.user-inputs/1";
+            hypotheses: string;
+            research_direction: string;
+            uploads: components["schemas"]["PackageEPRawObject"][];
         };
         /**
          * Edge
@@ -5410,6 +5859,7 @@ export interface components {
             source_artifacts: {
                 [key: string]: components["schemas"]["PackageEPSourceArtifact__identifier_optional"];
             };
+            user_inputs?: components["schemas"]["PackageEPUserInputs"] | null;
         };
         /**
          * File
@@ -6676,6 +7126,7 @@ export interface components {
             source_artifacts: {
                 [key: string]: components["schemas"]["PackageEPSourceArtifact__identifier_optional"];
             };
+            user_inputs?: components["schemas"]["PackageEPUserInputs"] | null;
         };
         /** @description Authorized frozen initial input. It excludes later Proto-OKN enrichment. Package bytes/hash must verify; package readiness alone is not worker dispatch authorization. */
         EvidencePackageResult: {
@@ -8576,6 +9027,481 @@ export interface operations {
             };
         };
     };
+    listUploads: {
+        parameters: {
+            query: {
+                /**
+                 * @description Owned editor identifier.
+                 * @example 22222222-2222-4222-8222-222222222222
+                 */
+                draft_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadList"];
+                };
+            };
+            /** @description Invalid Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate Limited */
+            429: {
+                headers: {
+                    /** @example 30 */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    createUpload: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description Stable upload initiation retry key.
+                 * @example 22222222-2222-4222-8222-222222222222
+                 */
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UploadCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful response. */
+            201: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    /**
+                     * @description Relative URL of the created resource.
+                     * @example /v1/drafts/22222222-2222-4222-8222-222222222222
+                     */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadTicket"];
+                };
+            };
+            /** @description Invalid Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate Limited */
+            429: {
+                headers: {
+                    /** @example 30 */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Opaque owner-scoped upload identifier.
+                 * @example 22222222-2222-4222-8222-222222222222
+                 */
+                upload_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Upload"];
+                };
+            };
+            /** @description Invalid Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate Limited */
+            429: {
+                headers: {
+                    /** @example 30 */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    removeUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Opaque owner-scoped upload identifier.
+                 * @example 22222222-2222-4222-8222-222222222222
+                 */
+                upload_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Upload"];
+                };
+            };
+            /** @description Invalid Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate Limited */
+            429: {
+                headers: {
+                    /** @example 30 */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    completeUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Opaque owner-scoped upload identifier.
+                 * @example 22222222-2222-4222-8222-222222222222
+                 */
+                upload_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Upload"];
+                };
+            };
+            /** @description Invalid Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate Limited */
+            429: {
+                headers: {
+                    /** @example 30 */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    uploadLocalContent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Opaque owner-scoped upload identifier.
+                 * @example 22222222-2222-4222-8222-222222222222
+                 */
+                upload_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UploadContent"];
+            };
+        };
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Upload"];
+                };
+            };
+            /** @description Invalid Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate Limited */
+            429: {
+                headers: {
+                    /** @example 30 */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    downloadUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Opaque owner-scoped upload identifier.
+                 * @example 22222222-2222-4222-8222-222222222222
+                 */
+                upload_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            /** @description Invalid Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate Limited */
+            429: {
+                headers: {
+                    /** @example 30 */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     subscribeWorkspaceEvents: {
         parameters: {
             query?: {
@@ -8740,6 +9666,10 @@ export interface operations {
                  * @example mechanism
                  */
                 q?: string;
+                /** @example workspace */
+                scope?: "public" | "workspace";
+                /** @example recent */
+                sort?: "recent" | "votes";
                 /** @example 20 */
                 limit?: number;
                 /**
@@ -8806,6 +9736,184 @@ export interface operations {
                 headers: {
                     /** @example 30 */
                     "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getLeaderboard: {
+        parameters: {
+            query?: {
+                /** @example researchers */
+                view?: "researchers" | "accounts" | "datasets";
+                /** @example overall */
+                sort?: "overall" | "accounts" | "votes" | "gaps" | "explored" | "claims" | "researchers";
+                /** @example all */
+                evidence?: "all" | "supporting";
+                /** @example 20 */
+                limit?: number;
+                /**
+                 * @description Omit for the first page. A returned next_cursor is opaque; the example is illustrative and cannot be used against a live service.
+                 * @example opaque-next-page
+                 */
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeaderboardList"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Version Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid Input */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate Limited */
+            429: {
+                headers: {
+                    /** @example 30 */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dependency Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getLeaderboardRecords: {
+        parameters: {
+            query?: {
+                /** @example votes */
+                metric?: "accounts" | "votes" | "gaps" | "explored" | "claims" | "researchers" | "files";
+                /** @example all */
+                evidence?: "all" | "supporting";
+                /** @example 20 */
+                limit?: number;
+                /**
+                 * @description Omit for the first page. A returned next_cursor is opaque; the example is illustrative and cannot be used against a live service.
+                 * @example opaque-next-page
+                 */
+                cursor?: string;
+            };
+            header?: never;
+            path: {
+                /** @example accounts */
+                view: components["schemas"]["LeaderboardView"];
+                /** @example dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd */
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeaderboardRecords"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Version Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid Input */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate Limited */
+            429: {
+                headers: {
+                    /** @example 30 */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dependency Unavailable */
+            503: {
+                headers: {
                     [name: string]: unknown;
                 };
                 content: {

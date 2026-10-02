@@ -31,14 +31,16 @@ def visible_accounts(tx, owner, *, attribution=False):
         from .repository import digest
         from .publication import state
         publications = tx.get_many('publication', [digest([owner, item['account']['id']]) for item in items])
-        jobs = tx.get_many('job', sorted({item['job_id'] for item in items}))
+        # Authored canonical fixtures have explicit origin metadata and no fake
+        # research job. Never mix null and UUID keys when batching discovery.
+        jobs = tx.get_many('job', sorted({item['job_id'] for item in items if item.get('job_id')}))
         request_ids = {row['data'].get('research_request_id') for row in jobs.values() if row['owner'] == owner}
         requests = tx.get_many('request', sorted(identity for identity in request_ids if identity))
         for item in items:
             item['publication'] = state(tx, owner, item['account']['id'], can_manage=True,
                 record=publications.get(digest([owner, item['account']['id']])),
                 account_result={'research_statement': item.get('research_statement', {})})
-            job = jobs.get(item['job_id'])
+            job = jobs.get(item.get('job_id'))
             request = requests.get(job['data'].get('research_request_id')) if job and job['owner'] == owner else None
             # Transfers preserve historical authorship. Current owner/profile is
             # deliberately not used as a substitute for a missing snapshot.

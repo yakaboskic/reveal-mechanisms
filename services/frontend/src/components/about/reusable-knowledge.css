@@ -1,0 +1,71 @@
+.reusable-knowledge{--reuse-ink:#294962;--reuse-muted:#657b8f;--reuse-line:#d2dde5;color:var(--reuse-ink);margin:28px 0 0;border:1px solid #dce5ec;border-radius:8px;overflow:hidden;background:#fff}
+.reusable-knowledge button{font:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.reusable-knowledge button:focus-visible,.reuse-story-transcript summary:focus-visible{outline:2px solid #356a99;outline-offset:4px}
+.reuse-story-topbar{min-height:57px;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:8px 24px;border-bottom:1px solid #e8edf1;font-size:12px;color:#486478}
+.reuse-story-topbar-description{margin-left:13px;color:#5f7483}
+.reuse-story-topbar button{border:0;background:transparent;color:#56758c;font-size:12px;min-height:40px;padding:4px 0;white-space:nowrap}
+.reuse-story-topbar button:hover{text-decoration:underline;text-underline-offset:4px}
+.reuse-story-stage{height:440px;position:relative;isolation:isolate;background:#fcfdfe}
+.reuse-story-lines{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.reuse-story-lines--compact{display:none}
+.reuse-story-line{fill:none;stroke:#e5ebef;stroke-width:1.2;vector-effect:non-scaling-stroke;stroke-linecap:round;stroke-linejoin:round;transition:stroke 550ms ease,stroke-width 550ms ease}
+.reuse-story-line[data-reached=true]{stroke:#a8bccb}
+.reuse-story-line[data-active=true]{stroke:#477c9f;stroke-width:1.7}
+.reuse-story-line[data-source=true]{stroke-dasharray:3 4}
+.reuse-story-line[data-source=true][data-reached=true]{stroke:#7eaaa5}
+.reuse-story-node{position:absolute;left:var(--node-x);top:var(--node-y);transform:translate(-50%,-50%);width:19%;min-height:82px;display:grid;grid-template-columns:20px 1fr;align-content:center;column-gap:9px;row-gap:5px;padding:12px;border:1px solid #e0e7ed;border-radius:5px;background:#fff;color:#647887;text-align:left;transition:border-color 550ms ease,background-color 550ms ease,color 550ms ease}
+.reuse-story-node>svg{width:20px;height:20px;grid-column:1;grid-row:1/3;align-self:center;color:#7990a2}
+.reuse-story-node-label{grid-column:2;font-size:13px;font-weight:500;line-height:1.4}
+.reuse-story-node-meta{grid-column:2;font-size:10px;font-weight:400;line-height:1.45;color:#5c7181}
+.reuse-story-node[data-reached=true]{border-color:#c4d3df;color:#36556d}
+.reuse-story-node[data-active=true],.reuse-story-node[aria-expanded=true]{border-color:#648ba8;background:#edf4f9;color:#204965}
+.reuse-story-node[data-active=true]>svg,.reuse-story-node[aria-expanded=true]>svg{color:#426f90}
+.reuse-story-node:hover{border-color:#7196b0;color:#234f6f;background:#f5f8fb}
+.reuse-story-node--dataset[data-active=true],.reuse-story-node--file[data-active=true],.reuse-story-node--reuse[data-active=true]{background:#f0f6f4;border-color:#83a7a0;color:#366b65}
+.reuse-story-node--dataset[data-active=true]>svg,.reuse-story-node--file[data-active=true]>svg,.reuse-story-node--reuse[data-active=true]>svg{color:#467f78}
+.reuse-story-node--agent,.reuse-story-node--community{min-height:68px;background:#fcfdfe}
+.reuse-story-controls{padding:0 24px 24px;border-top:1px solid #e8edf1}
+.reuse-story-control-row{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:56px}
+.reuse-story-count{font-size:11px;color:#5f7585;font-variant-numeric:tabular-nums}
+.reuse-story-playback{display:flex;align-items:center;gap:4px}
+.reuse-story-playback button{min-width:36px;min-height:40px;padding:6px 9px;border:0;border-radius:4px;background:transparent;color:#4c6d85;font-size:12px}
+.reuse-story-playback button:nth-child(2){min-width:58px}
+.reuse-story-playback button:hover:not(:disabled){background:#f0f5f8}
+.reuse-story-playback button:disabled{color:#aebbc5;cursor:default}
+.reuse-story-caption{min-height:100px;max-width:880px}
+.reuse-story-caption h3{margin:0 0 8px;font-size:17px;line-height:1.5;font-weight:500;color:#284b67}
+.reuse-story-caption p{margin:0;font-size:14px;line-height:1.8;color:#61768a}
+.reuse-story-progress{display:flex;gap:5px;margin-top:18px}
+.reuse-story-progress span{height:2px;background:#e7edf1;flex:1;transition:background-color 550ms ease}
+.reuse-story-progress span[data-reached=true]{background:#8eaabd}
+.reuse-story-motion-note{font-size:11px;color:#5f7483;margin:14px 0 0}
+.reuse-story-transcript{padding:0 24px;border-top:1px solid #e8edf1;color:#61778a;font-size:13px;line-height:1.8}
+.reuse-story-transcript summary{cursor:pointer;width:fit-content;padding:15px 0;font-size:12px}
+.reuse-story-transcript>ol{padding-left:19px;margin:4px 0 18px;max-width:880px}
+.reuse-story-transcript li{padding:0 0 14px 5px}
+.reuse-story-transcript h4{font-size:13px;font-weight:500;color:#345a75;margin:0 0 4px}
+.reuse-story-transcript p{margin:0}
+.reuse-story-transcript>p{margin:0 0 20px;max-width:880px}
+@media(min-width:621px) and (max-width:900px){
+  .reuse-story-node{display:flex;flex-direction:column;align-items:center;text-align:center;gap:5px;padding:10px 6px;min-height:96px}
+  .reuse-story-node-label{font-size:12px}
+  .reuse-story-node-meta{font-size:9px}
+  .reuse-story-node--agent,.reuse-story-node--community{min-height:82px}
+}
+@media(max-width:620px){
+  .reuse-story-topbar{padding:8px 16px;min-height:52px}
+  .reuse-story-topbar-description{display:none}
+  .reuse-story-stage{height:700px}
+  .reuse-story-lines--wide{display:none}
+  .reuse-story-lines--compact{display:block}
+  .reuse-story-node{left:var(--mobile-x);top:var(--mobile-y);width:40%;min-height:84px;display:flex;flex-direction:column;align-items:center;text-align:center;gap:4px;padding:9px 5px}
+  .reuse-story-node-label{font-size:12px}
+  .reuse-story-node-meta{font-size:9px}
+  .reuse-story-node--agent,.reuse-story-node--community{min-height:78px}
+  .reuse-story-controls{padding:0 16px 20px}
+  .reuse-story-caption{min-height:159px}
+  .reuse-story-caption h3{font-size:16px}
+  .reuse-story-caption p{font-size:13px;line-height:1.75}
+  .reuse-story-transcript{padding:0 16px}
+}
+@media(prefers-reduced-motion:reduce){.reusable-knowledge .reuse-story-node,.reusable-knowledge .reuse-story-line,.reusable-knowledge .reuse-story-progress span{transition:none}}

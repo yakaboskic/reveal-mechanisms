@@ -1,0 +1,245 @@
+{
+  "claim_evidence": {
+    "dapper:Claim.0Tdjx1Ry7AC5sP50HIlUfKb-cwpgY-3u": [
+      "dapper:EvidenceItem.FY72LzsGILxi9FSYp3UC3dJrvRjg4yhV",
+      "dapper:EvidenceItem.iSSEZ1l6D1NdV5TB8DOaDm7ZfnRSkgsR"
+    ],
+    "dapper:Claim.0wzE-AEqZ1fcgl2B0ZoYHZ7YiQBbR3lE": [
+      "dapper:EvidenceItem.Q8XJ1KhVOb7qfeOnUA9M9TlXs2q46Xfc"
+    ],
+    "dapper:Claim.8uwyJZx7pdEoZ9Vw7Xu726ukdLf2FwyW": [
+      "dapper:EvidenceItem.C3levH7QDaBJE59UP4qgI6BIodhkHWWE"
+    ],
+    "dapper:Claim.GseJ6JHI0scMFrE5_I-x9ZC4etecmMT0": [
+      "dapper:EvidenceItem.xo3daB43jQWl3SM_0V_OOhkO0votrOkZ",
+      "dapper:EvidenceItem.CmkML4Zy3RuBW0p4b2DA1O-wZ6AQGLz-"
+    ],
+    "dapper:Claim.JXS6Wb_N1ZXOvGvsPoW0UiQdTb_2j2d9": [
+      "dapper:EvidenceItem.dlZE2kDhY4EqshVinxv10O044-qjOgce"
+    ],
+    "dapper:Claim.N5EVC_d0CV0e76th1zsyX3wHf1Bw16VZ": [
+      "dapper:EvidenceItem.1Idm3RIE7irCu8aj3Z4jS58QMjvSfMV_",
+      "dapper:EvidenceItem.OOhcXSoHkq_NT2yHZG8A8Fo9nL9ATjf-"
+    ],
+    "dapper:Claim.YMgLIul-wf8vntqWIY_enxh56yTZx9pI": [
+      "dapper:EvidenceItem.ZawKNAfvISVoKyK__IPfaHSBi-FTFeO7"
+    ],
+    "dapper:Claim.Yi6Uhd9aRwVHLlLSoc4TxEMo0VWswD0a": [
+      "dapper:EvidenceItem.zGPBcs9UEKF30hSswAcICslECIjWNGpS"
+    ],
+    "dapper:Claim.YwrSSe0OE5Uq62PD1t_vvDHAcNeJn8ol": [
+      "dapper:EvidenceItem.1K7MwHOhXF9rUkapPvYnaR6LCS1jrPbf"
+    ],
+    "dapper:Claim.eaeEY0LpLXwNmk3-Rr9s-YEiUokDLfO6": [
+      "dapper:EvidenceItem.OL2_nAY9jt52xBCVaDgHA-w2wMgG1dTr"
+    ],
+    "dapper:Claim.fUp7z48VwrXH5oueNfh7D4nNhQMNtC3C": [
+      "dapper:EvidenceItem.YuVob9-YBd1uHmFIvdEzvnFZWdWXMCyt"
+    ],
+    "dapper:Claim.iN6K2Rz0XKMnROZLUNLuhZhz0id5wK0h": [
+      "dapper:EvidenceItem.7GkNnm9yFpVyW1KazI0fgyc3zd6soOEu",
+      "dapper:EvidenceItem.ua2xxfAwRBW_YWAX2lcp0FERgiIj0Y1z",
+      "dapper:EvidenceItem.Bi_6DGIpMXTNt9YXLL-rAWX_u_fmOLNg"
+    ]
+  },
+  "dataset_files": {
+    "dapper:Dataset.3C638GAM_39hZy0Alf4cuL_MEwLPwYbZ": [
+      "dapper:File.Dt0S38v_sLn5jiOAVXMrMWTrXBLnsn83",
+      "dapper:File.HGsrMluIk1mo4e0a6aCD0zBcXZa-Y716"
+    ],
+    "dapper:Dataset.H6YuykNGw3yY2JZYMuqc_VwTyDVGAq3A": [
+      "dapper:File._FB2fhvDopxDEHgoDgf2Hk4jE0wxilag",
+      "dapper:File.6JYwag_kjbSwZ-eLeKmZxI0EmWd2gcLD"
+    ],
+    "dapper:Dataset.NlxGa58i2Tz0316MDyohMLN_HbOr-FpE": [
+      "dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ",
+      "dapper:File.TLbPNA0MRbI7oUpipACe2r-gRZX8OP6c"
+    ],
+    "dapper:Dataset.rCYYDnawiURjDtPs-d2yau2n33CVvZsk": [
+      "dapper:File.eG0HM7wVGbDLt-99TA-OMnMeKqdIircT",
+      "dapper:File.v2cEzhI5P_mdYWuY_HyJjvzyNZpzuP96"
+    ]
+  },
+  "evidence_sources": {
+    "dapper:EvidenceItem.1Idm3RIE7irCu8aj3Z4jS58QMjvSfMV_": [
+      "dapper:File._FB2fhvDopxDEHgoDgf2Hk4jE0wxilag",
+      "dapper:Dataset.H6YuykNGw3yY2JZYMuqc_VwTyDVGAq3A"
+    ],
+    "dapper:EvidenceItem.1K7MwHOhXF9rUkapPvYnaR6LCS1jrPbf": [
+      "dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ",
+      "dapper:Dataset.NlxGa58i2Tz0316MDyohMLN_HbOr-FpE"
+    ],
+    "dapper:EvidenceItem.7GkNnm9yFpVyW1KazI0fgyc3zd6soOEu": [
+      "dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ",
+      "dapper:Dataset.NlxGa58i2Tz0316MDyohMLN_HbOr-FpE"
+    ],
+    "dapper:EvidenceItem.Bi_6DGIpMXTNt9YXLL-rAWX_u_fmOLNg": [
+      "dapper:File.eG0HM7wVGbDLt-99TA-OMnMeKqdIircT",
+      "dapper:Dataset.rCYYDnawiURjDtPs-d2yau2n33CVvZsk"
+    ],
+    "dapper:EvidenceItem.C3levH7QDaBJE59UP4qgI6BIodhkHWWE": [
+      "dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ",
+      "dapper:Dataset.NlxGa58i2Tz0316MDyohMLN_HbOr-FpE"
+    ],
+    "dapper:EvidenceItem.CmkML4Zy3RuBW0p4b2DA1O-wZ6AQGLz-": [
+      "dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ",
+      "dapper:File.Dt0S38v_sLn5jiOAVXMrMWTrXBLnsn83",
+      "dapper:Dataset.NlxGa58i2Tz0316MDyohMLN_HbOr-FpE",
+      "dapper:Dataset.3C638GAM_39hZy0Alf4cuL_MEwLPwYbZ"
+    ],
+    "dapper:EvidenceItem.FY72LzsGILxi9FSYp3UC3dJrvRjg4yhV": [
+      "dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ",
+      "dapper:Dataset.NlxGa58i2Tz0316MDyohMLN_HbOr-FpE"
+    ],
+    "dapper:EvidenceItem.OL2_nAY9jt52xBCVaDgHA-w2wMgG1dTr": [
+      "dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ",
+      "dapper:Dataset.NlxGa58i2Tz0316MDyohMLN_HbOr-FpE"
+    ],
+    "dapper:EvidenceItem.OOhcXSoHkq_NT2yHZG8A8Fo9nL9ATjf-": [
+      "dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ",
+      "dapper:File.Dt0S38v_sLn5jiOAVXMrMWTrXBLnsn83",
+      "dapper:Dataset.NlxGa58i2Tz0316MDyohMLN_HbOr-FpE",
+      "dapper:Dataset.3C638GAM_39hZy0Alf4cuL_MEwLPwYbZ"
+    ],
+    "dapper:EvidenceItem.Q8XJ1KhVOb7qfeOnUA9M9TlXs2q46Xfc": [
+      "dapper:File.Dt0S38v_sLn5jiOAVXMrMWTrXBLnsn83",
+      "dapper:Dataset.3C638GAM_39hZy0Alf4cuL_MEwLPwYbZ"
+    ],
+    "dapper:EvidenceItem.YuVob9-YBd1uHmFIvdEzvnFZWdWXMCyt": [
+      "dapper:File.Dt0S38v_sLn5jiOAVXMrMWTrXBLnsn83",
+      "dapper:Dataset.3C638GAM_39hZy0Alf4cuL_MEwLPwYbZ"
+    ],
+    "dapper:EvidenceItem.ZawKNAfvISVoKyK__IPfaHSBi-FTFeO7": [
+      "dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ",
+      "dapper:Dataset.NlxGa58i2Tz0316MDyohMLN_HbOr-FpE"
+    ],
+    "dapper:EvidenceItem.dlZE2kDhY4EqshVinxv10O044-qjOgce": [
+      "dapper:File.Dt0S38v_sLn5jiOAVXMrMWTrXBLnsn83",
+      "dapper:Dataset.3C638GAM_39hZy0Alf4cuL_MEwLPwYbZ"
+    ],
+    "dapper:EvidenceItem.iSSEZ1l6D1NdV5TB8DOaDm7ZfnRSkgsR": [
+      "dapper:File._FB2fhvDopxDEHgoDgf2Hk4jE0wxilag",
+      "dapper:Dataset.H6YuykNGw3yY2JZYMuqc_VwTyDVGAq3A"
+    ],
+    "dapper:EvidenceItem.ua2xxfAwRBW_YWAX2lcp0FERgiIj0Y1z": [
+      "dapper:File._FB2fhvDopxDEHgoDgf2Hk4jE0wxilag",
+      "dapper:Dataset.H6YuykNGw3yY2JZYMuqc_VwTyDVGAq3A"
+    ],
+    "dapper:EvidenceItem.xo3daB43jQWl3SM_0V_OOhkO0votrOkZ": [
+      "dapper:File._FB2fhvDopxDEHgoDgf2Hk4jE0wxilag",
+      "dapper:Dataset.H6YuykNGw3yY2JZYMuqc_VwTyDVGAq3A"
+    ],
+    "dapper:EvidenceItem.zGPBcs9UEKF30hSswAcICslECIjWNGpS": [
+      "dapper:File.Dt0S38v_sLn5jiOAVXMrMWTrXBLnsn83",
+      "dapper:Dataset.3C638GAM_39hZy0Alf4cuL_MEwLPwYbZ"
+    ]
+  },
+  "provenance_edges": {
+    "used_edges": [
+      {
+        "object": "dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ",
+        "predicate": "prov:used",
+        "subject": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz"
+      },
+      {
+        "object": "dapper:File.Dt0S38v_sLn5jiOAVXMrMWTrXBLnsn83",
+        "predicate": "prov:used",
+        "subject": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz"
+      },
+      {
+        "object": "dapper:File.eG0HM7wVGbDLt-99TA-OMnMeKqdIircT",
+        "predicate": "prov:used",
+        "subject": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz"
+      },
+      {
+        "object": "dapper:File._FB2fhvDopxDEHgoDgf2Hk4jE0wxilag",
+        "predicate": "prov:used",
+        "subject": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz"
+      },
+      {
+        "object": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+        "predicate": "prov:used",
+        "subject": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz"
+      },
+      {
+        "object": "dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ",
+        "predicate": "prov:used",
+        "subject": "dapper:Activity.nislSNQbz48tvkoAsVkBk8NxJjF7XThC"
+      },
+      {
+        "object": "dapper:File.Dt0S38v_sLn5jiOAVXMrMWTrXBLnsn83",
+        "predicate": "prov:used",
+        "subject": "dapper:Activity.nislSNQbz48tvkoAsVkBk8NxJjF7XThC"
+      },
+      {
+        "object": "dapper:File.TLbPNA0MRbI7oUpipACe2r-gRZX8OP6c",
+        "predicate": "prov:used",
+        "subject": "dapper:Activity.aqc7zlmMA0hixxB9RRkB_lF9sXTUJWkJ"
+      },
+      {
+        "object": "dapper:File.HGsrMluIk1mo4e0a6aCD0zBcXZa-Y716",
+        "predicate": "prov:used",
+        "subject": "dapper:Activity.aqc7zlmMA0hixxB9RRkB_lF9sXTUJWkJ"
+      },
+      {
+        "object": "dapper:File._FB2fhvDopxDEHgoDgf2Hk4jE0wxilag",
+        "predicate": "prov:used",
+        "subject": "dapper:Activity.aqc7zlmMA0hixxB9RRkB_lF9sXTUJWkJ"
+      },
+      {
+        "object": "dapper:File.6JYwag_kjbSwZ-eLeKmZxI0EmWd2gcLD",
+        "predicate": "prov:used",
+        "subject": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz"
+      }
+    ],
+    "was_derived_from_edges": [
+      {
+        "object": "dapper:File.v2cEzhI5P_mdYWuY_HyJjvzyNZpzuP96",
+        "predicate": "prov:wasDerivedFrom",
+        "subject": "dapper:File.eG0HM7wVGbDLt-99TA-OMnMeKqdIircT"
+      },
+      {
+        "object": "dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ",
+        "predicate": "prov:wasDerivedFrom",
+        "subject": "dapper:File.TLbPNA0MRbI7oUpipACe2r-gRZX8OP6c"
+      },
+      {
+        "object": "dapper:File.Dt0S38v_sLn5jiOAVXMrMWTrXBLnsn83",
+        "predicate": "prov:wasDerivedFrom",
+        "subject": "dapper:File.HGsrMluIk1mo4e0a6aCD0zBcXZa-Y716"
+      },
+      {
+        "object": "dapper:File.TLbPNA0MRbI7oUpipACe2r-gRZX8OP6c",
+        "predicate": "prov:wasDerivedFrom",
+        "subject": "dapper:File.6JYwag_kjbSwZ-eLeKmZxI0EmWd2gcLD"
+      },
+      {
+        "object": "dapper:File.HGsrMluIk1mo4e0a6aCD0zBcXZa-Y716",
+        "predicate": "prov:wasDerivedFrom",
+        "subject": "dapper:File.6JYwag_kjbSwZ-eLeKmZxI0EmWd2gcLD"
+      },
+      {
+        "object": "dapper:File._FB2fhvDopxDEHgoDgf2Hk4jE0wxilag",
+        "predicate": "prov:wasDerivedFrom",
+        "subject": "dapper:File.6JYwag_kjbSwZ-eLeKmZxI0EmWd2gcLD"
+      }
+    ],
+    "was_generated_by_edges": [
+      {
+        "object": "dapper:Activity.nislSNQbz48tvkoAsVkBk8NxJjF7XThC",
+        "predicate": "prov:wasGeneratedBy",
+        "subject": "dapper:File.TLbPNA0MRbI7oUpipACe2r-gRZX8OP6c"
+      },
+      {
+        "object": "dapper:Activity.nislSNQbz48tvkoAsVkBk8NxJjF7XThC",
+        "predicate": "prov:wasGeneratedBy",
+        "subject": "dapper:File.HGsrMluIk1mo4e0a6aCD0zBcXZa-Y716"
+      },
+      {
+        "object": "dapper:Activity.aqc7zlmMA0hixxB9RRkB_lF9sXTUJWkJ",
+        "predicate": "prov:wasGeneratedBy",
+        "subject": "dapper:File.6JYwag_kjbSwZ-eLeKmZxI0EmWd2gcLD"
+      }
+    ]
+  }
+}

@@ -1,5 +1,6 @@
 /** Session-memory notifications. Redis credentials and private data stay on the server. */
 import type { components } from "./api.generated";
+import type { WorkspaceTab } from "./workspace-data";
 export type WorkspaceEvent = components["schemas"]["WorkspaceEvent"];
 export type WorkspaceConnection = "connecting" | "live" | "reconnecting" | "expired";
 const listeners = new Set<(reset: boolean, event?: WorkspaceEvent) => void>();
@@ -10,12 +11,14 @@ export function invalidateWorkspace(event?: WorkspaceEvent) { for (const listene
 export function resetWorkspaceCache() { for (const listener of listeners) listener(true); }
 
 export function changesWorkspace(method: string, path: string) {
-  return ["POST", "PATCH", "DELETE"].includes(method) && /\/v1\/(?:drafts(?:\/[^/]+)?|jobs(?:\/[^/]+\/(?:cancel|retry-review))?|me\/explorations|accounts\/[^/]+\/(?:publication|vote)|knowledge-gaps\/[^/]+\/vote|analysis-outcomes\/[^/]+\/publication)$/.test(path);
+  return ["POST", "PATCH", "DELETE"].includes(method) && /\/v1\/(?:drafts(?:\/[^/]+(?:\/save)?)?|jobs(?:\/[^/]+\/(?:cancel|retry-review))?|me\/explorations|accounts\/[^/]+\/(?:publication|vote)|knowledge-gaps\/[^/]+\/vote|analysis-outcomes\/[^/]+\/publication)$/.test(path);
 }
 
-export function affectedWorkspaceTabs(event?: WorkspaceEvent): ("gaps" | "accounts" | "explorations")[] {
-  if (!event || event.collections.includes("identity") || event.collections.includes("catalog")) return ["gaps", "accounts", "explorations"];
-  return (["gaps", "accounts", "explorations"] as const).filter(tab => event.collections.includes(tab)
+export function affectedWorkspaceTabs(event?: WorkspaceEvent): WorkspaceTab[] {
+  const tabs = ["drafts", "runs", "gaps", "accounts", "explorations"] as const;
+  if (!event || event.collections.includes("identity") || event.collections.includes("catalog")) return [...tabs];
+  return tabs.filter(tab => (tab !== "runs" && event.collections.includes(tab))
+    || (tab === "runs" && event.collections.some(value => ["jobs", "requests"].includes(value)))
     || (tab === "gaps" && event.collections.some(value => ["drafts", "jobs", "requests"].includes(value))));
 }
 

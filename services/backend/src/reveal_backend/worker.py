@@ -196,6 +196,21 @@ def enrichment_status(result,selected,mode):
         items.append({'graph':graph,'status':status,'source_claim_ids':[],'detail':detail})
     return items
 
+def check_user_inputs(package,frozen):
+    """Recovery must use the same user text and immutable objects as submission."""
+    expected=frozen.get('user_inputs')
+    actual=package.get('user_inputs')
+    if expected is None:
+        require(actual is None,'Unexpected researcher inputs in a historical request')
+        return
+    require(isinstance(actual,dict),'Frozen researcher inputs are missing')
+    for key in ('format','research_direction','context','hypotheses'):
+        require(actual.get(key)==expected.get(key),'Frozen researcher text changed')
+    require(len(actual.get('uploads',[]))==len(expected['uploads']),'Frozen researcher attachments changed')
+    for captured,submitted in zip(actual.get('uploads',[]),expected['uploads']):
+        require({key:captured.get(key) for key in submitted}==submitted,'Frozen researcher attachment changed')
+
+
 def collect(job,frozen,binding,budgets,directory):
     package_path=directory/'package/evidence-package.json'
     if not package_path.exists():
@@ -226,7 +241,8 @@ def collect(job,frozen,binding,budgets,directory):
             dismech_index=ROOT/'data/dismech-gaps/2026-09-24',geneset_import=ROOT/'data/cfde-genesets/2026-09-24',
             geneset_resolver=geneset_resolver(binding['anchors'][0]['gene_set_import_id']),
             selected_graphs=frozen['composer']['selected_kgs'],max_accounts=budgets.get('max_accounts',3),selection_metadata=metadata,
-            limit=requested_limit,max_nodes=budgets.get('max_nodes',250),max_edges=budgets.get('max_edges',1000))
+            limit=requested_limit,max_nodes=budgets.get('max_nodes',250),max_edges=budgets.get('max_edges',1000),
+            user_inputs=frozen.get('user_inputs'))
         package=built.package
     validate_package_shape(package,load_generated_schema(ROOT/'schema/evidence-package.schema.json'))
     gap=next(g for g in package['dapper_context']['knowledge_gaps'] if g['id']==frozen['question_id'])
@@ -234,6 +250,7 @@ def collect(job,frozen,binding,budgets,directory):
     require(package['dismech']['source_revision']['source_sha256']==frozen['composer']['source_gap']['source_revision'],'Collected DisMech revision differs from frozen request')
     require(set(package['selection']['eaggl_mechanism_ids'])=={a['cfde_node_id'] for a in binding['anchors']},'Collector changed native selected anchors')
     require(package['external_evidence']['selected_graphs']==frozen['composer']['selected_kgs'],'Collector changed selected graphs')
+    check_user_inputs(package,frozen)
     return package_path,package
 
 class Worker:
@@ -358,7 +375,9 @@ class Worker:
             if snapshot:
                 require(snapshot['kind']==job['kind'],'Frozen dispatch kind changed')
                 input_path,restored=restore_dispatch_input(root,snapshot)
-                if job['kind']=='analysis': package=restored; selected=tuple(frozen['composer']['selected_kgs'])
+                if job['kind']=='analysis':
+                    package=restored; selected=tuple(frozen['composer']['selected_kgs'])
+                    check_user_inputs(package,frozen)
                 else: paragraph_input=restored; selected=()
             elif job['kind']=='analysis':
                 await emit('stage',{'stage':'preparing_evidence','message':'Collecting the frozen DisMech question and native CFDE mechanism evidence.'})

@@ -1,0 +1,70 @@
+{
+  "operation_id": "getLeaderboard",
+  "case": "request",
+  "method": "GET",
+  "path_template": "/v1/leaderboard",
+  "request": {
+    "url": "https://api.reveal.example.org/v1/leaderboard?view=researchers&sort=overall&evidence=all&limit=20",
+    "path": {},
+    "query": {
+      "view": "researchers",
+      "sort": "overall",
+      "evidence": "all",
+      "limit": 20
+    },
+    "headers": {
+      "Accept": "application/json"
+    },
+    "body": null
+  },
+  "responses": {
+    "200": {
+      "content_type": "application/json",
+      "examples": {
+        "empty_community": {
+          "as_of": "2026-09-24T16:00:00Z",
+          "score_version": "public-contribution-v1",
+          "cohort_size": 0,
+          "voting_participants": 0,
+          "exclusions": {
+            "fixture_accounts": 0,
+            "uncredited_accounts": 0,
+            "conflicting_accounts": 0,
+            "invalid_public_accounts": 0,
+            "excluded_evidence_paths": 0,
+            "fixture_explorations": 0,
+            "uncredited_explorations": 0
+          },
+          "definitions": [
+            {
+              "id": "accounts",
+              "label": "Public scientific accounts",
+              "description": "Distinct currently public canonical accounts, excluding demo/test fixtures."
+            }
+          ],
+          "methodology": {
+            "weights": {
+              "accounts": 0.3,
+              "votes": 0.4,
+              "gaps": 0.3
+            },
+            "scope": "Currently public frozen snapshots only; all time.",
+            "score": "Positive metrics use the eligible-cohort midrank percentile; nonpositive metrics receive zero. Weighted 30/40/30. Exact ties share rank.",
+            "own_votes": "Researcher scores exclude their own ballots. Account scores retain canonical totals.",
+            "evidence": "Only explicit evidence interpretations targeting the claim proposition qualify; direction counts can overlap."
+          },
+          "view": "researchers",
+          "sort": "overall",
+          "evidence": "all",
+          "items": [],
+          "page": {
+            "next_cursor": null,
+            "has_more": false,
+            "snapshot_id": "illustrative-contract-snapshot"
+          }
+        }
+      }
+    }
+  },
+  "curl": "curl -X GET 'https://api.reveal.example.org/v1/leaderboard?view=researchers&sort=overall&evidence=all&limit=20' -H 'Accept: application/json'"
+}

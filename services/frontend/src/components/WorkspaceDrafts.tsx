@@ -1,102 +1,111 @@
 "use client";
 import { useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
-import { api, ApiError, messageOf, terminal, type Schema } from "@/lib/client";
+import { api, ApiError, messageOf, type Schema } from "@/lib/client";
 import { emptyComposer } from "@/lib/composer";
-import type { workspaceRuns } from "@/lib/workspace";
+import { draftHref, isSavedDraft, type workspaceRuns } from "@/lib/workspace";
 
 type Draft = Schema<"Draft">;
-type Action = { kind: "create" | "rename" | "delete"; draft?: Draft };
+type Action = "create" | "copy" | "rename" | "delete";
 const draftName = (draft: Draft) => draft.name || `Draft ${draft.id.slice(0, 8)}`;
 const shortDate = (value: string) => new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 
-export function WorkspaceGapRow({ item, drafts, activity, refresh }: {
-  item: Schema<"Exploration">; drafts: Draft[]; activity: ReturnType<typeof workspaceRuns>; refresh: () => Promise<unknown>;
+function DraftActions({ draft, sourceGap, refresh }: {
+  draft?: Draft; sourceGap: Schema<"SelectedGap"> | null; refresh: () => Promise<unknown>;
 }) {
   const id = useId(), dialog = useRef<HTMLDialogElement>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [action, setAction] = useState<Action | null>(null);
-  const [name, setName] = useState("");
-  const [copy, setCopy] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [action, setAction] = useState<Action | null>(null), [name, setName] = useState("");
+  const [busy, setBusy] = useState(false), [error, setError] = useState("");
+  const [created, setCreated] = useState<Draft | null>(null);
   const retry = useRef<{ binding: string; key: string } | null>(null);
-  const sorted = drafts.filter(activity.isDraftVisible).sort((a, b) => b.updated_at.localeCompare(a.updated_at) || b.id.localeCompare(a.id));
-  const selected = sorted.find(draft => draft.id === selectedId)
-    || sorted.find(draft => activity.activeDrafts.has(draft.id))
-    || sorted.find(draft => draft.id === item.draft_id) || sorted[0];
-  const runs = selected ? activity.byDraft.get(selected.id) || [] : activity.byGap.get(item.source_gap.id) || [];
-  const job = runs[0], running = !!job && !terminal(job.status);
-  const href = running ? activity.href(job) : selected ? `/?draft=${selected.id}` : `/?gap=${encodeURIComponent(item.source_gap.id)}`;
-  const start = (kind: Action["kind"]) => {
-    setError(""); retry.current = null; setCopy(!!selected);
-    setName(kind === "create" ? "" : selected ? draftName(selected) : "");
-    setAction({ kind, draft: selected });
+  const start = (next: Action) => {
+    setError(""); retry.current = null;
+    setName(next === "rename" && draft ? draftName(draft) : ""); setAction(next);
   };
   useEffect(() => { if (action) dialog.current?.showModal(); else dialog.current?.close(); }, [action]);
   const submit = async () => {
     if (!action || busy) return;
-    const composer = copy && action.draft ? action.draft.composer : { ...emptyComposer(), source_gap: item.source_gap };
-    const binding = JSON.stringify({ action, name: name.trim(), composer });
+    const composer = action === "copy" && draft ? draft.composer : { ...emptyComposer(), source_gap: sourceGap };
+    const binding = JSON.stringify({ action, draft, name: name.trim(), composer });
     if (retry.current?.binding !== binding) retry.current = { binding, key: crypto.randomUUID() };
     setBusy(true); setError("");
     try {
-      if (action.kind === "create") {
-        const created = await api.createDraft(composer, retry.current.key, name.trim());
-        setSelectedId(created.id);
-      } else if (action.kind === "rename" && action.draft) {
-        const updated = await api.renameDraft(action.draft, name.trim(), retry.current.key);
-        setSelectedId(updated.id);
-      } else if (action.kind === "delete" && action.draft) {
-        await api.deleteDraft(action.draft, retry.current.key); setSelectedId(null);
+      if (action === "create" || action === "copy") {
+        setCreated(await api.createDraft(composer, retry.current.key, name.trim()));
+      } else if (action === "rename" && draft) {
+        await api.renameDraft(draft, name.trim(), retry.current.key);
+      } else if (action === "delete" && draft) {
+        await api.deleteDraft(draft, retry.current.key);
       }
-      setAction(null); retry.current = null;
-      await refresh();
+      setAction(null); retry.current = null; await refresh();
     } catch (failure) {
       setError(messageOf(failure));
       if (failure instanceof ApiError && [404, 409].includes(failure.status)) { setAction(null); await refresh(); }
     } finally { setBusy(false); }
   };
+  return <>
+    <div className="workspace-drafts">
+      {draft ? <>
+        <Link className="workspace-open-draft" href={draftHref(draft.id)}>Open draft <span aria-hidden="true">→</span></Link>
+        <button type="button" disabled={busy} onClick={() => start("copy")}>Copy</button>
+        <button type="button" disabled={busy} onClick={() => start("rename")}>Rename</button>
+        <button type="button" disabled={busy} onClick={() => start("delete")}>Delete</button>
+      </> : <button type="button" disabled={busy} onClick={() => start("create")}>+ New saved draft</button>}
+      {created && <Link href={draftHref(created.id)}>Open “{draftName(created)}” →</Link>}
+    </div>
+    {error && !action && <p className="error" role="alert">{error}</p>}
+    <dialog ref={dialog} className="auth-dialog workspace-draft-dialog" aria-labelledby={`${id}-title`}
+      onCancel={event => { if (busy) event.preventDefault(); else setAction(null); }} onClose={() => { if (!busy) setAction(null); }}>
+      {action && <form onSubmit={event => { event.preventDefault(); void submit(); }}>
+        <h2 id={`${id}-title`}>{action === "delete" ? "Delete saved draft?" : action === "rename" ? "Rename draft" : action === "copy" ? "Save a copy" : "New saved draft"}</h2>
+        {action === "delete" ? <p>Delete “{draftName(draft!)}”? Your research runs and their frozen inputs will remain available.</p> : <>
+          <label htmlFor={`${id}-name`}>Draft name</label>
+          <input id={`${id}-name`} className="field" autoFocus required maxLength={120} value={name} disabled={busy}
+            placeholder="e.g. BMPR2 modifier hypothesis" onChange={event => setName(event.target.value)} />
+          {action === "copy" && <p>Copy the saved research direction, context, hypotheses, document references, and source settings from “{draftName(draft!)}”.</p>}
+        </>}
+        {error && <p className="error" role="alert">{error}</p>}
+        <div className="workspace-draft-actions"><button type="button" disabled={busy} onClick={() => setAction(null)}>Cancel</button>
+          <button type="submit" className={action === "delete" ? "workspace-delete-draft" : "primary"} disabled={busy || (action !== "delete" && !name.trim())}>
+            {busy ? "Saving…" : action === "delete" ? "Delete draft" : action === "rename" ? "Save name" : "Save draft"}
+          </button></div>
+      </form>}
+    </dialog>
+  </>;
+}
+
+export function WorkspaceDraftRow({ draft, refresh }: { draft: Draft; refresh: () => Promise<unknown> }) {
+  const preview = draft.composer.research_direction || draft.composer.context;
+  return <article className="workspace-draft-row workspace-gap-row" data-draft-id={draft.id}>
+    <Link className="workspace-item-title" href={draftHref(draft.id)}>{draftName(draft)}</Link>
+    {preview && <p className="workspace-account-conclusion">{preview}</p>}
+    <div className="workspace-item-meta"><time dateTime={draft.updated_at}>Saved {shortDate(draft.updated_at)}</time>
+      <span>{draft.composer.eaggl_anchors.length} mechanism anchors</span>
+      {!!draft.composer.upload_ids?.length && <span>{draft.composer.upload_ids.length} attached documents</span>}
+      {draft.composer.source_gap && <Link href={`/knowledge-gaps/${encodeURIComponent(draft.composer.source_gap.id)}`}>View knowledge gap</Link>}
+    </div>
+    <DraftActions draft={draft} sourceGap={draft.composer.source_gap} refresh={refresh} />
+  </article>;
+}
+
+export function WorkspaceGapRow({ item, drafts, activity, refresh }: {
+  item: Schema<"Exploration">; drafts: Draft[]; activity: ReturnType<typeof workspaceRuns>; refresh: () => Promise<unknown>;
+}) {
+  const saved = drafts.filter(isSavedDraft), runs = activity.byGap.get(item.source_gap.id) || [];
   return <article className="workspace-gap-row">
-    <Link className="workspace-item-title" href={href}>{item.knowledge_gap.text}</Link>
+    <Link className="workspace-item-title" href={`/knowledge-gaps/${encodeURIComponent(item.source_gap.id)}`}>{item.knowledge_gap.text}</Link>
     <div className="workspace-item-meta">
       {item.knowledge_gap.scope && <span>{item.knowledge_gap.scope}</span>}
       <time dateTime={item.last_explored_at}>Explored {shortDate(item.last_explored_at)}</time>
-      {item.scientific_accounts.count > 0 && <Link href="/workspace?tab=accounts">{item.scientific_accounts.count} scientific {item.scientific_accounts.count === 1 ? "account" : "accounts"}</Link>}
+      <Link href={`/?gap=${encodeURIComponent(item.source_gap.id)}`}>Explore again →</Link>
+      {item.scientific_accounts.count > 0 && <Link href={`/knowledge-gaps/${encodeURIComponent(item.source_gap.id)}`}>{item.scientific_accounts.count} scientific accounts</Link>}
     </div>
-    <details className="workspace-draft-panel">
-      <summary><span className="workspace-draft-caret" aria-hidden="true">›</span>Drafts ({sorted.length})</summary>
-    <div className="workspace-drafts">
-      {selected ? <>
-        <label className="sr-only" htmlFor={`${id}-draft`}>Drafts</label>
-        <select id={`${id}-draft`} value={selected.id} disabled={busy} onChange={event => { setSelectedId(event.target.value); setError(""); }}>
-          {sorted.map(draft => <option key={draft.id} value={draft.id}>{draftName(draft)} · {shortDate(draft.updated_at)}{activity.activeDrafts.has(draft.id) ? " · Research running" : ""}</option>)}
-        </select>
-        <Link className="workspace-open-draft" href={href}>{running ? "View run" : "Open draft"}<span aria-hidden="true">→</span></Link>
-        <button type="button" disabled={busy} onClick={() => start("rename")}>Rename</button>
-        <button type="button" disabled={busy || running} title={running ? "Wait for this draft’s research to finish before deleting it." : undefined} onClick={() => start("delete")}>Delete</button>
-      </> : <span className="workspace-no-drafts">{drafts.length ? "No unfinished drafts" : "No drafts yet"}</span>}
-      <button type="button" className="workspace-new-draft" disabled={busy} onClick={() => start("create")}>+ New draft</button>
-    </div>
-    {selected && <div className="workspace-item-meta workspace-draft-detail">
-      <span>{selected.composer.eaggl_anchors.length} mechanism {selected.composer.eaggl_anchors.length === 1 ? "anchor" : "anchors"}</span><time dateTime={selected.updated_at}>Updated {shortDate(selected.updated_at)}</time>
-      {job && running && <Link href={activity.href(job)}>Research {job.status.replaceAll("_", " ")}</Link>}
+    {!!saved.length && <div className="workspace-item-meta" aria-label="Saved drafts for this gap"><span>Saved drafts</span>
+      {saved.map(draft => <Link key={draft.id} href={draftHref(draft.id)}>{draftName(draft)}</Link>)}
     </div>}
-    </details>
-    {job && (!selected || !running) && <div className="workspace-item-meta workspace-draft-detail"><Link href={activity.href(job)}>{job.status === "insufficient_evidence" ? "View saved exploration" : `${running ? "View research" : "View finished research"} · ${job.status.replaceAll("_", " ")}`}</Link></div>}
-    {error && !action && <p className="error" role="alert">{error}</p>}
-    <dialog ref={dialog} className="auth-dialog workspace-draft-dialog" aria-labelledby={`${id}-title`} onCancel={event => { if (busy) event.preventDefault(); else setAction(null); }} onClose={() => { if (!busy) setAction(null); }}>
-      {action && <form onSubmit={event => { event.preventDefault(); void submit(); }}>
-        <h2 id={`${id}-title`}>{action.kind === "create" ? "New draft" : action.kind === "rename" ? "Rename draft" : "Delete draft?"}</h2>
-        {action.kind === "delete" ? <p>Delete “{draftName(action.draft!)}”? Your research runs, scientific accounts, and saved explorations will remain available.</p> : <>
-          <label htmlFor={`${id}-name`}>Draft name</label>
-          <input id={`${id}-name`} className="field" autoFocus required maxLength={120} value={name} disabled={busy} placeholder="e.g. BMPR2 modifier hypothesis" onChange={event => setName(event.target.value)} />
-          {action.kind === "create" && action.draft && <label className="workspace-copy-draft"><input type="checkbox" checked={copy} disabled={busy} onChange={event => setCopy(event.target.checked)} />Copy anchors and settings from “{draftName(action.draft)}”</label>}
-          {action.kind === "create" && !copy && <p>Start with this knowledge gap and choose new mechanism anchors in the editor.</p>}
-        </>}
-        {error && <p className="error" role="alert">{error}</p>}
-        <div className="workspace-draft-actions"><button type="button" disabled={busy} onClick={() => setAction(null)}>Cancel</button><button type="submit" className={action.kind === "delete" ? "workspace-delete-draft" : "primary"} disabled={busy || (action.kind !== "delete" && !name.trim())}>{busy ? "Saving…" : action.kind === "delete" ? "Delete draft" : action.kind === "create" ? "Create draft" : "Save name"}</button></div>
-      </form>}
-    </dialog>
+    {!!runs.length && <div className="workspace-item-meta" aria-label="Research runs for this gap"><span>Research runs</span>
+      {runs.map(job => <Link key={job.id} href={activity.href(job)}>{job.status.replaceAll("_", " ")} · {shortDate(job.created_at)}</Link>)}
+    </div>}
+    <DraftActions sourceGap={item.source_gap} refresh={refresh} />
   </article>;
 }

@@ -209,6 +209,8 @@ def change(tx,identity,owner,visibility,expected_version):
     if current['version']!=expected_version: raise Problem(409,'PUBLICATION_VERSION_CONFLICT','Publication changed; refresh before choosing again.',current_version=current['version'])
     stamp=now(); metadata={'visibility':visibility,'version':current['version']+1,'published_at':None,'updated_at':stamp,'snapshot_id':None,'summary':None,'artifact_sha256':[]}
     if visibility=='public':
+        from .user_inputs import prevent_private_publication
+        prevent_private_publication(tx,row['data']['record'].get('job_id'))
         snapshot=deepcopy(row['data']); snapshot['record']['job_id']=None
         snapshot_id=uid(); tx.put('outcome_snapshot',snapshot_id,owner,snapshot)
         metadata.update(snapshot_id=snapshot_id,published_at=current['published_at'] or stamp,summary=summary(snapshot['record']),artifact_sha256=sorted(snapshot['artifacts']))

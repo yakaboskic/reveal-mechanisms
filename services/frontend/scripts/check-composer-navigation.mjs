@@ -27,7 +27,7 @@ const composer = {
     source_revision: factor.source_revision, dapper_id: factor.object.id }, origin: 'manual', suggestion_id: null }],
   dismissed_source_ids: [], mechanism_subquery: '', model: 'cfde-inc-v2', selected_kgs: [],
 };
-const draft = { id: draftId, owner_user_id: userId, version: 1, composer, created_at: now, updated_at: now };
+const draft = { id: draftId, owner_user_id: userId, version: 1, name: 'Navigation draft', lifecycle: 'saved', composer, created_at: now, updated_at: now };
 const failedJob = { id: jobId, kind: 'analysis', owner_user_id: userId, status: 'failed', stage: 'authoring_account',
   research_request_id: '44444444-4444-4444-8444-444444444444', input_account_id: null,
   created_at: now, updated_at: now, completed_at: now, result: null,
@@ -68,9 +68,14 @@ async function harness(name, snapshot, mobile = false, deleted = false) {
     if (!path.startsWith('/api/')) return route.continue();
     requests.push({ path, method: request.method() });
     const respond = json => route.fulfill({ status: 200, json });
+    if (path === '/api/backend/v1/mechanisms/suggest') return respond({ ...fixture.suggestions, automatic_anchors: [fixture.suggestions.automatic_anchors[0]] });
+    if (path === '/api/backend/v1/me/explorations') return respond(paging([]));
+    if (path === '/api/backend/v1/drafts' && request.method() === 'POST') return respond({ ...draft, id: '66666666-6666-4666-8666-666666666666', ...request.postDataJSON() });
     if (request.method() !== 'GET') { unexpected.push(`${request.method()} ${path}`); return route.abort(); }
     if (path === '/api/session/status') return respond({ principal: { user_id: userId }, canClaim: false, providers: { google: true, orcid: true } });
     if (path === '/api/backend/v1/me') return respond({ user_id: userId, principal_kind: 'registered', display_name: 'Navigation fixture', person: null, orcid: null, orcid_authenticated: false });
+    if (path.endsWith('/vote')) return respond(gap.votes || { upvotes: 0, downvotes: 0, score: 0, user_vote: null, can_vote: false });
+    if (path === '/api/backend/v1/me/workspace/events') return route.fulfill({ contentType: 'text/event-stream', body: ': fixture heartbeat\n\n' });
     if (path === '/api/backend/v1/knowledge-gaps') return respond(paging([gap]));
     if (path === `/api/backend/v1/knowledge-gaps/${gap.object.id}`) return respond(gap);
     if (/^\/api\/backend\/v1\/knowledge-gaps\/[^/]+\/(accounts|outcomes)$/.test(path)) return respond(paging([]));
@@ -83,7 +88,7 @@ async function harness(name, snapshot, mobile = false, deleted = false) {
     return route.fulfill({ status: 503, json: { detail: 'Unmocked route blocked.' } });
   });
   return { page, requests, async finish() {
-    // Let the one-second autosave debounce expire to catch accidental writes.
+    // Ordinary edits must never resurrect the former one-second autosave.
     await page.waitForTimeout(1200);
     assert.deepEqual(errors, []); assert.deepEqual(unexpected, []);
     await page.screenshot({ path: resolve(output, name + '.png'), fullPage: true });
@@ -100,7 +105,7 @@ async function home(h) {
 async function runLink(h) {
   await h.page.goto(`${origin}/?job=${jobId}&draft=${draftId}`);
   await h.page.getByRole('region', { name: 'Research activity', exact: true }).waitFor();
-  await h.page.getByRole('button', { name: 'Return to question', exact: true }).waitFor();
+  await h.page.getByRole('button', { name: 'Edit these inputs', exact: true }).waitFor();
   await h.page.locator('.selected-question').waitFor();
 }
 async function draftOnly(h) {
@@ -124,18 +129,18 @@ try {
     assert.equal(h.requests.filter(r => r.path.includes('/jobs/')).length, before);
     await runLink(h);
     await h.page.reload();
-    await h.page.getByRole('button', { name: 'Return to question', exact: true }).waitFor();
+    await h.page.getByRole('button', { name: 'Edit these inputs', exact: true }).waitFor();
     await h.finish();
   }
   for (const selector of [`draft=${draftId}`, `gap=${encodeURIComponent(gap.object.id)}`]) {
     const h = await harness(`selection-link-${selector.split('=')[0]}`, saved(failedJob));
     await h.page.goto(`${origin}/?${selector}`);
     await h.page.getByRole('button', { name: 'Search for a different knowledge gap', exact: true }).waitFor();
-    await h.page.waitForFunction(() => JSON.parse(sessionStorage.getItem('reveal:composer') || 'null')?.job === null);
+    await h.page.waitForFunction(() => sessionStorage.getItem('reveal:composer') === null);
     assert.equal(await h.page.getByRole('region', { name: 'Research activity', exact: true }).count(), 0);
     assert.equal(h.requests.filter(r => r.path.includes('/jobs/')).length, 0);
     if (selector.startsWith('draft=')) await draftOnly(h);
-    else await h.page.locator('.gap-scope-selector').waitFor();
+    else await h.page.getByRole('navigation', { name: 'Draft navigation' }).waitFor();
     await h.finish();
   }
   {
@@ -194,11 +199,9 @@ try {
   for (const includeDraft of [true, false]) {
     const h = await harness(`run-after-draft-deletion-${includeDraft ? 'old-link' : 'workspace-link'}`, saved(failedJob), false, true);
     await h.page.goto(`${origin}/?job=${jobId}&${includeDraft ? `draft=${draftId}` : `gap=${encodeURIComponent(gap.object.id)}`}`);
-    await h.page.getByRole('button', { name: 'Return to question', exact: true }).waitFor();
-    await h.page.waitForFunction(() => {
-      const saved = JSON.parse(sessionStorage.getItem('reveal:composer') || 'null');
-      return saved?.draft === null && saved?.composer.eaggl_anchors.length === 1 && saved?.gap;
-    });
+    await h.page.getByRole('button', { name: 'Edit these inputs', exact: true }).waitFor();
+    await h.page.locator('.anchor-chips .chip').waitFor({ state: 'attached' });
+    assert.equal(await h.page.evaluate(() => sessionStorage.getItem('reveal:composer')), null);
     assert.equal(await h.page.locator('.selected-question').textContent(), gap.object.text);
     assert.equal(await h.page.locator('.anchor-chips .chip').count(), 1);
     assert.equal(await h.page.getByText('This draft was deleted.', { exact: true }).count(), 0);

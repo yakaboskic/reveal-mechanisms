@@ -86,8 +86,10 @@ try {
     assert.equal(await menu.getByRole('button', { name: 'Continue with ORCID' }).isDisabled(), true);
     assert.equal(await menu.getByText('Admin telemetry', { exact: true }).count(), 1);
     const box = await menu.boundingBox();
-    assert.ok(box.height < (mobile ? 420 : 390), `Menu with three workspace links stays compact (observed ${box.height}px)`);
-    await menu.getByRole('link', { name: 'Your explorations', exact: true }).waitFor();
+    assert.ok(box.height < (mobile ? 510 : 460), `Menu with five workspace links stays compact (observed ${box.height}px)`);
+    await menu.getByRole('link', { name: 'Saved drafts', exact: true }).waitFor();
+    await menu.getByRole('link', { name: 'Research runs', exact: true }).waitFor();
+    await menu.getByRole('link', { name: 'Explorations', exact: true }).waitFor();
     await h.page.keyboard.press('Escape'); assert.equal(await menu.count(), 0);
     assert.equal(await h.page.getByRole('button', { name: 'Your workspace', exact: true }).evaluate(button => button === document.activeElement), true);
     await h.page.getByRole('button', { name: 'Your workspace', exact: true }).click();
@@ -108,7 +110,7 @@ try {
     await h.page.getByRole('button', { name: 'Your workspace', exact: true }).click();
     await h.page.getByText('Researcher with a long display name for responsive testing', { exact: true }).waitFor();
     assert.equal(await h.page.locator('.workspace-menu .provider-options').count(), 0);
-    await h.page.getByRole('link', { name: 'Your scientific accounts', exact: true }).waitFor();
+    await h.page.getByRole('link', { name: 'Scientific accounts', exact: true }).waitFor();
     await h.finish();
   }
   for (const frozen of [false, true]) {

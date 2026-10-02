@@ -430,7 +430,7 @@ paths:
                     dismissed_source_ids: []
                     mechanism_subquery: CADinT2D
                     model: cfde-inc-v2
-                    selected_kgs: &id045
+                    selected_kgs: &id051
                     - biomarkerkg
                     - prokn
       x-codeSamples:
@@ -877,7 +877,7 @@ paths:
                           about_entities:
                           - http://purl.obolibrary.org/obo/MONDO_0021661
                           id: dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk
-                      attribution: &id042
+                      attribution: &id048
                         user_id: 11111111-1111-4111-8111-111111111111
                         person_id: dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he
                         display_name: Example Researcher
@@ -2276,9 +2276,9 @@ paths:
                         - 55555555-5555-4555-8555-555555555555
                         evidence_package_sha256: 9a55d126679291a95fa3d35f544915610134075eaf110f62f77ec8ee870b6ae2
                       failure: null
-                      warnings: &id037 []
+                      warnings: &id038 []
                       last_event_id: '4'
-                      links: &id038
+                      links: &id039
                         self: /v1/jobs/44444444-4444-4444-8444-444444444444
                         events: /v1/jobs/44444444-4444-4444-8444-444444444444/events
                         cancel: /v1/jobs/44444444-4444-4444-8444-444444444444/cancel
@@ -3740,7 +3740,7 @@ paths:
                         was_attributed_to:
                         - dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he
                       scientific_accounts:
-                      - &id039
+                      - &id040
                         id: dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd
                         name: Genes and gene programs in a shared CAD-in-T2D mechanism
                         question: dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk
@@ -3748,7 +3748,7 @@ paths:
                           selected broader CAD gap. This authored design packet combines
                           captured CFDE observations with explicitly illustrative
                           KG membership assertions. No live agent ran.
-                        component_claims:
+                        component_claims: &id046
                         - dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km
                         - dapper:Claim.Uv7_cT46DdsqZMvk5nh8G48qOIKvhRgc
                         - dapper:Claim.I2mf6PJ0DPF5_nnbiBjAhgjlUCOiUZZ9
@@ -4431,11 +4431,11 @@ paths:
                       complete: true
                       missing_ids: []
                       next_cursor: null
-                    research_statement: &id040
+                    research_statement: &id041
                       status: succeeded
                       job_id: 55555555-5555-4555-8555-555555555555
                       paragraph_id: dapper:Paragraph.uSYa1LdXNPuwlSgsCz3oZ7IfrVoztroD
-                    publication: &id041
+                    publication: &id042
                       visibility: private
                       version: 0
                       published_at: null
@@ -6687,6 +6687,674 @@ paths:
         source: 'curl -X POST https://api.reveal.example.org/v1/citations/render -H
           ''Content-Type: application/json'' -H ''Accept: application/json'' --data-raw
           ''{"locale":"en-US","paragraph_id":"dapper:Paragraph.uSYa1LdXNPuwlSgsCz3oZ7IfrVoztroD","style":"apa"}'''
+  /v1/uploads:
+    post:
+      operationId: createUpload
+      tags:
+      - Drafts
+      summary: createUpload
+      description: Owner-scoped private research attachment. Original bytes and extraction
+        are pinned by checksum and immutable version before submission.
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 200
+        example: 22222222-2222-4222-8222-222222222222
+        description: Stable upload initiation retry key.
+      responses:
+        '201':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadTicket'
+              examples:
+                example:
+                  summary: Example
+                  value:
+                    upload: &id037
+                      id: 22222222-2222-4222-8222-222222222222
+                      draft_id: 22222222-2222-4222-8222-222222222222
+                      filename: notes.txt
+                      media_type: text/plain
+                      size_bytes: 5
+                      sha256: 185f8db32271fe25f561a6fc938b2e264306ec304eda518007d1764826381969
+                      status: pending
+                      created_at: '2026-09-24T16:00:00Z'
+                      expires_at: '2026-10-02T00:00:00Z'
+                      storage: null
+                      extraction: null
+                      error: null
+                    transfer:
+                      method: POST
+                      url: /v1/uploads/22222222-2222-4222-8222-222222222222/content
+                      fields: {}
+                      encoding: base64
+          headers:
+            X-Request-ID:
+              description: Correlation ID for this HTTP request.
+              schema:
+                type: string
+                format: uuid
+            Location:
+              description: Relative URL of the created resource.
+              schema:
+                type: string
+                format: uri-reference
+              example: /v1/drafts/22222222-2222-4222-8222-222222222222
+        '400':
+          description: Invalid Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                invalid_request:
+                  summary: Invalid request
+                  value: *id004
+        '401':
+          description: Authentication Required
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                authentication_required:
+                  summary: Authentication required
+                  value: *id001
+        '404':
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                not_found:
+                  summary: Not found
+                  value: *id005
+        '429':
+          description: Rate Limited
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                rate_limited:
+                  summary: Rate limited
+                  value: *id002
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+                minimum: 1
+              example: 30
+      security:
+      - ApplicationBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UploadCreate'
+            examples:
+              example:
+                summary: Example
+                value:
+                  draft_id: 22222222-2222-4222-8222-222222222222
+                  filename: notes.txt
+                  media_type: text/plain
+                  size_bytes: 5
+                  sha256: 185f8db32271fe25f561a6fc938b2e264306ec304eda518007d1764826381969
+      x-codeSamples:
+      - lang: Shell
+        label: example
+        source: 'curl -X POST https://api.reveal.example.org/v1/uploads -H ''Idempotency-Key:
+          22222222-2222-4222-8222-222222222222'' -H ''Authorization: Bearer <api-key-or-gateway-assertion>''
+          -H ''Content-Type: application/json'' -H ''Accept: application/json'' --data-raw
+          ''{"draft_id":"22222222-2222-4222-8222-222222222222","filename":"notes.txt","media_type":"text/plain","sha256":"185f8db32271fe25f561a6fc938b2e264306ec304eda518007d1764826381969","size_bytes":5}'''
+    get:
+      operationId: listUploads
+      tags:
+      - Drafts
+      summary: listUploads
+      description: Owner-scoped private research attachment. Original bytes and extraction
+        are pinned by checksum and immutable version before submission.
+      parameters:
+      - name: draft_id
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+        example: 22222222-2222-4222-8222-222222222222
+        description: Owned editor identifier.
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadList'
+              examples:
+                example:
+                  summary: Example
+                  value:
+                    items:
+                    - *id037
+          headers:
+            X-Request-ID:
+              description: Correlation ID for this HTTP request.
+              schema:
+                type: string
+                format: uuid
+        '400':
+          description: Invalid Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                invalid_request:
+                  summary: Invalid request
+                  value: *id004
+        '401':
+          description: Authentication Required
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                authentication_required:
+                  summary: Authentication required
+                  value: *id001
+        '404':
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                not_found:
+                  summary: Not found
+                  value: *id005
+        '429':
+          description: Rate Limited
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                rate_limited:
+                  summary: Rate limited
+                  value: *id002
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+                minimum: 1
+              example: 30
+      security:
+      - ApplicationBearer: []
+      x-codeSamples:
+      - lang: Shell
+        label: request
+        source: 'curl -X GET ''https://api.reveal.example.org/v1/uploads?draft_id=22222222-2222-4222-8222-222222222222''
+          -H ''Authorization: Bearer <api-key-or-gateway-assertion>'' -H ''Accept:
+          application/json'''
+  /v1/uploads/{upload_id}:
+    get:
+      operationId: getUpload
+      tags:
+      - Drafts
+      summary: getUpload
+      description: Owner-scoped private research attachment. Original bytes and extraction
+        are pinned by checksum and immutable version before submission.
+      parameters:
+      - name: upload_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        example: 22222222-2222-4222-8222-222222222222
+        description: Opaque owner-scoped upload identifier.
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Upload'
+              examples:
+                example:
+                  summary: Example
+                  value: *id037
+          headers:
+            X-Request-ID:
+              description: Correlation ID for this HTTP request.
+              schema:
+                type: string
+                format: uuid
+        '400':
+          description: Invalid Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                invalid_request:
+                  summary: Invalid request
+                  value: *id004
+        '401':
+          description: Authentication Required
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                authentication_required:
+                  summary: Authentication required
+                  value: *id001
+        '404':
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                not_found:
+                  summary: Not found
+                  value: *id005
+        '429':
+          description: Rate Limited
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                rate_limited:
+                  summary: Rate limited
+                  value: *id002
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+                minimum: 1
+              example: 30
+      security:
+      - ApplicationBearer: []
+      x-codeSamples:
+      - lang: Shell
+        label: request
+        source: 'curl -X GET https://api.reveal.example.org/v1/uploads/22222222-2222-4222-8222-222222222222
+          -H ''Authorization: Bearer <api-key-or-gateway-assertion>'' -H ''Accept:
+          application/json'''
+    delete:
+      operationId: removeUpload
+      tags:
+      - Drafts
+      summary: removeUpload
+      description: Owner-scoped private research attachment. Original bytes and extraction
+        are pinned by checksum and immutable version before submission.
+      parameters:
+      - name: upload_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        example: 22222222-2222-4222-8222-222222222222
+        description: Opaque owner-scoped upload identifier.
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Upload'
+              examples:
+                example:
+                  summary: Example
+                  value: *id037
+          headers:
+            X-Request-ID:
+              description: Correlation ID for this HTTP request.
+              schema:
+                type: string
+                format: uuid
+        '400':
+          description: Invalid Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                invalid_request:
+                  summary: Invalid request
+                  value: *id004
+        '401':
+          description: Authentication Required
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                authentication_required:
+                  summary: Authentication required
+                  value: *id001
+        '404':
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                not_found:
+                  summary: Not found
+                  value: *id005
+        '429':
+          description: Rate Limited
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                rate_limited:
+                  summary: Rate limited
+                  value: *id002
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+                minimum: 1
+              example: 30
+      security:
+      - ApplicationBearer: []
+      x-codeSamples:
+      - lang: Shell
+        label: request
+        source: 'curl -X DELETE https://api.reveal.example.org/v1/uploads/22222222-2222-4222-8222-222222222222
+          -H ''Authorization: Bearer <api-key-or-gateway-assertion>'' -H ''Accept:
+          application/json'''
+  /v1/uploads/{upload_id}/complete:
+    post:
+      operationId: completeUpload
+      tags:
+      - Drafts
+      summary: completeUpload
+      description: Owner-scoped private research attachment. Original bytes and extraction
+        are pinned by checksum and immutable version before submission.
+      parameters:
+      - name: upload_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        example: 22222222-2222-4222-8222-222222222222
+        description: Opaque owner-scoped upload identifier.
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Upload'
+              examples:
+                example:
+                  summary: Example
+                  value: *id037
+          headers:
+            X-Request-ID:
+              description: Correlation ID for this HTTP request.
+              schema:
+                type: string
+                format: uuid
+        '400':
+          description: Invalid Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                invalid_request:
+                  summary: Invalid request
+                  value: *id004
+        '401':
+          description: Authentication Required
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                authentication_required:
+                  summary: Authentication required
+                  value: *id001
+        '404':
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                not_found:
+                  summary: Not found
+                  value: *id005
+        '429':
+          description: Rate Limited
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                rate_limited:
+                  summary: Rate limited
+                  value: *id002
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+                minimum: 1
+              example: 30
+      security:
+      - ApplicationBearer: []
+      x-codeSamples:
+      - lang: Shell
+        label: request
+        source: 'curl -X POST https://api.reveal.example.org/v1/uploads/22222222-2222-4222-8222-222222222222/complete
+          -H ''Authorization: Bearer <api-key-or-gateway-assertion>'' -H ''Accept:
+          application/json'''
+  /v1/uploads/{upload_id}/content:
+    post:
+      operationId: uploadLocalContent
+      tags:
+      - Drafts
+      summary: uploadLocalContent
+      description: Owner-scoped private research attachment. Original bytes and extraction
+        are pinned by checksum and immutable version before submission.
+      parameters:
+      - name: upload_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        example: 22222222-2222-4222-8222-222222222222
+        description: Opaque owner-scoped upload identifier.
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Upload'
+              examples:
+                example:
+                  summary: Example
+                  value: *id037
+          headers:
+            X-Request-ID:
+              description: Correlation ID for this HTTP request.
+              schema:
+                type: string
+                format: uuid
+        '400':
+          description: Invalid Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                invalid_request:
+                  summary: Invalid request
+                  value: *id004
+        '401':
+          description: Authentication Required
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                authentication_required:
+                  summary: Authentication required
+                  value: *id001
+        '404':
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                not_found:
+                  summary: Not found
+                  value: *id005
+        '429':
+          description: Rate Limited
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                rate_limited:
+                  summary: Rate limited
+                  value: *id002
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+                minimum: 1
+              example: 30
+      security:
+      - ApplicationBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UploadContent'
+            examples:
+              example:
+                summary: Example
+                value:
+                  content_base64: SGVsbG8=
+      x-codeSamples:
+      - lang: Shell
+        label: example
+        source: 'curl -X POST https://api.reveal.example.org/v1/uploads/22222222-2222-4222-8222-222222222222/content
+          -H ''Authorization: Bearer <api-key-or-gateway-assertion>'' -H ''Content-Type:
+          application/json'' -H ''Accept: application/json'' --data-raw ''{"content_base64":"SGVsbG8="}'''
+  /v1/uploads/{upload_id}/download:
+    get:
+      operationId: downloadUpload
+      tags:
+      - Drafts
+      summary: downloadUpload
+      description: Owner-scoped private research attachment. Original bytes and extraction
+        are pinned by checksum and immutable version before submission.
+      parameters:
+      - name: upload_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        example: 22222222-2222-4222-8222-222222222222
+        description: Opaque owner-scoped upload identifier.
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+              examples:
+                text:
+                  value: Hello
+          headers:
+            X-Request-ID:
+              description: Correlation ID for this HTTP request.
+              schema:
+                type: string
+                format: uuid
+        '400':
+          description: Invalid Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                invalid_request:
+                  summary: Invalid request
+                  value: *id004
+        '401':
+          description: Authentication Required
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                authentication_required:
+                  summary: Authentication required
+                  value: *id001
+        '404':
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                not_found:
+                  summary: Not found
+                  value: *id005
+        '429':
+          description: Rate Limited
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                rate_limited:
+                  summary: Rate limited
+                  value: *id002
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+                minimum: 1
+              example: 30
+      security:
+      - ApplicationBearer: []
+      x-codeSamples:
+      - lang: Shell
+        label: request
+        source: 'curl -X GET https://api.reveal.example.org/v1/uploads/22222222-2222-4222-8222-222222222222/download
+          -H ''Authorization: Bearer <api-key-or-gateway-assertion>'' -H ''Accept:
+          application/json'''
   /v1/me/workspace/events:
     get:
       operationId: subscribeWorkspaceEvents
@@ -6834,9 +7502,9 @@ paths:
                     completed_at: null
                     result: null
                     failure: null
-                    warnings: *id037
+                    warnings: *id038
                     last_event_id: '2'
-                    links: *id038
+                    links: *id039
           headers:
             X-Request-ID:
               description: Correlation ID for this HTTP request.
@@ -6936,14 +7604,18 @@ paths:
       operationId: listAccounts
       tags:
       - Scientific content
-      summary: List your scientific accounts
-      description: Owner-scoped, newest first then account ID; deduplicate repeated
-        deliveries by digest. Filter by exact gap_id. Optional q searches account
+      summary: Browse or search scientific accounts
+      description: scope=workspace (default) requires a session and lists only owned
+        accounts, newest creation first. scope=public lists only explicitly published
+        frozen snapshots across researchers and omits private job IDs; no session
+        is required, but invalid supplied credentials are rejected. Deduplicate by
+        canonical account digest. Filter by exact gap_id. Optional q searches account
         ID, title and closing remarks, knowledge-gap ID/name/text and original attribution
-        display name across all saved summaries before pagination. No private records
-        from other users with the same gap. Closing remarks provide the summary; paragraph
-        status is independent. Publication is current mutable workspace state, separate
-        from immutable scientific content.
+        display name across the entire authorized collection before pagination. sort=recent
+        (default) orders public accounts by publication date; sort=votes orders by
+        net account votes, then recency. Account ID breaks ties. Cursors bind scope,
+        normalized query, sort, registered viewer and the current collection/vote
+        snapshot. Closing remarks provide the summary; paragraph status is independent.
       parameters:
       - name: gap_id
         in: query
@@ -6970,6 +7642,28 @@ paths:
         description: Case-insensitive literal search over the entire authorized saved
           collection before pagination. Whitespace is normalized; every query word
           must match. Cursors are bound to the normalized query.
+      - name: scope
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - public
+          - workspace
+          default: workspace
+        example: workspace
+        description: ''
+      - name: sort
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - recent
+          - votes
+          default: recent
+        example: recent
+        description: ''
       - name: limit
         in: query
         required: false
@@ -7001,13 +7695,13 @@ paths:
                   summary: Owned
                   value:
                     items:
-                    - account: *id039
+                    - account: *id040
                       knowledge_gap: *id011
                       claim_count: 12
                       created_at: '2026-09-24T16:00:00Z'
                       job_id: 44444444-4444-4444-8444-444444444444
-                      research_statement: *id040
-                      publication: *id041
+                      research_statement: *id041
+                      publication: *id042
                       votes: null
                     page: *id009
           headers:
@@ -7073,13 +7767,441 @@ paths:
                 minimum: 1
               example: 30
       security:
+      - {}
       - ApplicationBearer: []
       x-codeSamples:
       - lang: Shell
         label: request
-        source: 'curl -X GET ''https://api.reveal.example.org/v1/accounts?gap_id=dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk&q=mechanism&limit=20''
-          -H ''Authorization: Bearer <api-key-or-gateway-assertion>'' -H ''Accept:
-          application/json'''
+        source: 'curl -X GET ''https://api.reveal.example.org/v1/accounts?gap_id=dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk&q=mechanism&scope=workspace&sort=recent&limit=20''
+          -H ''Accept: application/json'''
+  /v1/leaderboard:
+    get:
+      operationId: getLeaderboard
+      tags:
+      - Scientific content
+      summary: Rank public community contributions
+      description: All-time contribution rankings computed over the complete currently
+        public frozen population before pagination. Original registered actor attribution
+        uses opaque contributor keys; missing/anonymous/conflicting attribution is
+        uncredited. Exclude fixtures before projection, deduplicate canonical accounts,
+        exclude own ballots from researcher recognition, and retain all canonical
+        votes for account ranking. Researchers sort by overall (default), accounts,
+        votes, gaps or explored; accounts sort only by votes; datasets sort by accounts
+        (default), claims, gaps or researchers. evidence=all|supporting affects datasets
+        only. Positive metric percentiles use midrank, weighted 30/40/30; exact score
+        ties share ranks before display rounding. Invalid supplied credentials are
+        rejected. No private metadata, jobs, requests or voter identities are exposed.
+        Cursors bind the whole current projection and query; publication or vote changes
+        expire them. Responses are private, no-store.
+      parameters:
+      - name: view
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - researchers
+          - accounts
+          - datasets
+          default: researchers
+        example: researchers
+        description: ''
+      - name: sort
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - overall
+          - accounts
+          - votes
+          - gaps
+          - explored
+          - claims
+          - researchers
+        example: overall
+        description: ''
+      - name: evidence
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - all
+          - supporting
+          default: all
+        example: all
+        description: ''
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+        example: 20
+        description: ''
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+          minLength: 1
+        example: opaque-next-page
+        description: Omit for the first page. A returned next_cursor is opaque; the
+          example is illustrative and cannot be used against a live service.
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaderboardList'
+              examples:
+                empty_community:
+                  summary: Empty community
+                  value:
+                    as_of: '2026-09-24T16:00:00Z'
+                    score_version: public-contribution-v1
+                    cohort_size: 0
+                    voting_participants: 0
+                    exclusions: &id043
+                      fixture_accounts: 0
+                      uncredited_accounts: 0
+                      conflicting_accounts: 0
+                      invalid_public_accounts: 0
+                      excluded_evidence_paths: 0
+                      fixture_explorations: 0
+                      uncredited_explorations: 0
+                    definitions: &id044
+                    - id: accounts
+                      label: Public scientific accounts
+                      description: Distinct currently public canonical accounts, excluding
+                        demo/test fixtures.
+                    methodology: &id045
+                      weights:
+                        accounts: 0.3
+                        votes: 0.4
+                        gaps: 0.3
+                      scope: Currently public frozen snapshots only; all time.
+                      score: Positive metrics use the eligible-cohort midrank percentile;
+                        nonpositive metrics receive zero. Weighted 30/40/30. Exact
+                        ties share rank.
+                      own_votes: Researcher scores exclude their own ballots. Account
+                        scores retain canonical totals.
+                      evidence: Only explicit evidence interpretations targeting the
+                        claim proposition qualify; direction counts can overlap.
+                    view: researchers
+                    sort: overall
+                    evidence: all
+                    items: []
+                    page: *id009
+          headers:
+            X-Request-ID:
+              description: Correlation ID for this HTTP request.
+              schema:
+                type: string
+                format: uuid
+        '401':
+          description: Authentication Required
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                authentication_required:
+                  summary: Authentication required
+                  value: *id001
+        '409':
+          description: Version Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                version_conflict:
+                  summary: Version conflict
+                  value: *id006
+        '422':
+          description: Invalid Input
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                invalid_input:
+                  summary: Invalid input
+                  value: *id007
+        '429':
+          description: Rate Limited
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                rate_limited:
+                  summary: Rate limited
+                  value: *id002
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+                minimum: 1
+              example: 30
+        '503':
+          description: Dependency Unavailable
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                dependency_unavailable:
+                  summary: Dependency unavailable
+                  value: *id014
+      security:
+      - {}
+      - ApplicationBearer: []
+      x-codeSamples:
+      - lang: Shell
+        label: request
+        source: 'curl -X GET ''https://api.reveal.example.org/v1/leaderboard?view=researchers&sort=overall&evidence=all&limit=20''
+          -H ''Accept: application/json'''
+  /v1/leaderboard/{view}/{entry_id}/records:
+    get:
+      operationId: getLeaderboardRecords
+      tags:
+      - Scientific content
+      summary: Inspect records contributing to a public ranking
+      description: The exact public eligibility and evidence scope used by leaderboard
+        totals. One record per distinct counted unit; votes return one account record
+        with its signed net contribution. Sum vote values to reproduce the headline;
+        other totals equal record count. entry includes context for direct links.
+        Researchers allow accounts/votes/gaps/explored; accounts allow accounts/votes/claims/gaps/researchers;
+        datasets allow accounts/claims/gaps/researchers/files. Revoked and ineligible
+        entries return the same 404. Public keys and canonical scientific IDs only.
+        All-time contribution rankings computed over the complete currently public
+        frozen population before pagination. Original registered actor attribution
+        uses opaque contributor keys; missing/anonymous/conflicting attribution is
+        uncredited. Exclude fixtures before projection, deduplicate canonical accounts,
+        exclude own ballots from researcher recognition, and retain all canonical
+        votes for account ranking. Researchers sort by overall (default), accounts,
+        votes, gaps or explored; accounts sort only by votes; datasets sort by accounts
+        (default), claims, gaps or researchers. evidence=all|supporting affects datasets
+        only. Positive metric percentiles use midrank, weighted 30/40/30; exact score
+        ties share ranks before display rounding. Invalid supplied credentials are
+        rejected. No private metadata, jobs, requests or voter identities are exposed.
+        Cursors bind the whole current projection and query; publication or vote changes
+        expire them. Responses are private, no-store.
+      parameters:
+      - name: view
+        in: path
+        required: true
+        schema:
+          $ref: '#/components/schemas/LeaderboardView'
+        example: accounts
+        description: ''
+      - name: entry_id
+        in: path
+        required: true
+        schema:
+          type: string
+        example: dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd
+        description: ''
+      - name: metric
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - accounts
+          - votes
+          - gaps
+          - explored
+          - claims
+          - researchers
+          - files
+          default: accounts
+        example: votes
+        description: ''
+      - name: evidence
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - all
+          - supporting
+          default: all
+        example: all
+        description: ''
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+        example: 20
+        description: ''
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+          minLength: 1
+        example: opaque-next-page
+        description: Omit for the first page. A returned next_cursor is opaque; the
+          example is illustrative and cannot be used against a live service.
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaderboardRecords'
+              examples:
+                example_account:
+                  summary: Example account
+                  value:
+                    as_of: '2026-09-24T16:00:00Z'
+                    score_version: public-contribution-v1
+                    cohort_size: 0
+                    voting_participants: 0
+                    exclusions: *id043
+                    definitions: *id044
+                    methodology: *id045
+                    view: accounts
+                    id: dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd
+                    metric: votes
+                    evidence: all
+                    entry:
+                      id: dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd
+                      kind: account
+                      label: Genes and gene programs in a shared CAD-in-T2D mechanism
+                      rank: 1
+                      metrics:
+                        overall_score: 0
+                        net_votes: 0
+                        upvotes: 0
+                        downvotes: 0
+                        voter_count: 0
+                        researcher_count: 0
+                        account_count: 1
+                        account_gap_count: 1
+                        explored_gap_count: 1
+                        claim_count: 12
+                      components:
+                        accounts: 0
+                        votes: 0
+                        gaps: 0
+                      orcid: null
+                      account_id: dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd
+                      gap_id: dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk
+                      gap:
+                        id: dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk
+                        label: dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk
+                      attribution: null
+                      directions: &id047
+                        SUPPORTS: 0
+                        DISPUTES: 0
+                        MIXED: 0
+                        NEUTRAL: 0
+                        UNKNOWN: 0
+                    total: 1
+                    items:
+                    - id: dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd
+                      kind: account
+                      label: Genes and gene programs in a shared CAD-in-T2D mechanism
+                      url: /accounts/dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd
+                      account_ids:
+                      - dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd
+                      claim_ids: *id046
+                      evidence_ids: []
+                      directions: *id047
+                      value: 0
+                    page: *id009
+          headers:
+            X-Request-ID:
+              description: Correlation ID for this HTTP request.
+              schema:
+                type: string
+                format: uuid
+        '401':
+          description: Authentication Required
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                authentication_required:
+                  summary: Authentication required
+                  value: *id001
+        '404':
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                not_found:
+                  summary: Not found
+                  value: *id005
+        '409':
+          description: Version Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                version_conflict:
+                  summary: Version conflict
+                  value: *id006
+        '422':
+          description: Invalid Input
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                invalid_input:
+                  summary: Invalid input
+                  value: *id007
+        '429':
+          description: Rate Limited
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                rate_limited:
+                  summary: Rate limited
+                  value: *id002
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+                minimum: 1
+              example: 30
+        '503':
+          description: Dependency Unavailable
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                dependency_unavailable:
+                  summary: Dependency unavailable
+                  value: *id014
+      security:
+      - {}
+      - ApplicationBearer: []
+      x-codeSamples:
+      - lang: Shell
+        label: request
+        source: 'curl -X GET ''https://api.reveal.example.org/v1/leaderboard/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/records?metric=votes&evidence=all&limit=20''
+          -H ''Accept: application/json'''
   /v1/knowledge-gaps/{gap_id}/accounts:
     get:
       operationId: listKnowledgeGapAccounts
@@ -7157,15 +8279,15 @@ paths:
                   summary: Owned
                   value:
                     items:
-                    - account: *id039
+                    - account: *id040
                       knowledge_gap: *id011
                       claim_count: 12
                       created_at: '2026-09-24T16:00:00Z'
                       job_id: 44444444-4444-4444-8444-444444444444
-                      research_statement: *id040
-                      publication: *id041
+                      research_statement: *id041
+                      publication: *id042
                       votes: null
-                      attribution: *id042
+                      attribution: *id048
                     page: *id009
                 no_visible_accounts:
                   summary: No visible accounts
@@ -7274,7 +8396,7 @@ paths:
               examples:
                 private_owner:
                   summary: Private owner
-                  value: *id041
+                  value: *id042
                 public_reader:
                   summary: Public reader
                   value:
@@ -7383,7 +8505,7 @@ paths:
               examples:
                 published:
                   summary: Published
-                  value: &id053
+                  value: &id059
                     visibility: public
                     version: 1
                     published_at: '2026-09-24T16:00:00Z'
@@ -7434,7 +8556,7 @@ paths:
               examples:
                 sign_in_required:
                   summary: Sign in required
-                  value: &id043
+                  value: &id049
                     type: urn:reveal:problem:sign-in-required
                     title: Sign In Required
                     status: 403
@@ -7698,7 +8820,7 @@ paths:
               examples:
                 sign_in_required:
                   summary: Sign in required
-                  value: *id043
+                  value: *id049
         '404':
           description: Not Found
           content:
@@ -7972,7 +9094,7 @@ paths:
               examples:
                 sign_in_required:
                   summary: Sign in required
-                  value: *id043
+                  value: *id049
         '404':
           description: Not Found
           content:
@@ -8124,15 +9246,15 @@ paths:
                       summary: The captured investigation did not support an accepted
                         scientific account.
                       knowledge_gap: *id011
-                      anchors: &id044
+                      anchors: &id050
                       - source_id: factor:portal:CADinT2D:cfde-inc-v2:Factor1
                         mechanism_id: dapper:Mechanism.MyhahXB55tDUS667sJzeJZ40BeeQBWOR
                         name: factor:portal:CADinT2D:cfde-inc-v2:Factor1
                         trait: null
                         origin: manual
                       created_at: '2026-09-24T16:00:00Z'
-                      attribution: *id042
-                      publication: *id041
+                      attribution: *id048
+                      publication: *id042
                     page: *id009
                 empty:
                   summary: Empty
@@ -8231,35 +9353,35 @@ paths:
               examples:
                 private_owner:
                   summary: Private owner
-                  value: &id051
+                  value: &id057
                     id: 66666666-6666-4666-8666-666666666666
                     outcome: insufficient_evidence
                     summary: The captured investigation did not support an accepted
                       scientific account.
                     reason: This illustrative scoped investigation lacked evidence
                       connecting the selected mechanism to the selected question.
-                    explored_topics: &id046
+                    explored_topics: &id052
                     - The selected question and captured mechanism evidence.
-                    missing_evidence: &id047
+                    missing_evidence: &id053
                     - Evidence connecting the mechanism to this question.
-                    limitations: &id048
+                    limitations: &id054
                     - This scoped result does not establish that a relationship is
                       globally absent.
-                    next_steps: &id049
+                    next_steps: &id055
                     - Review additional directly relevant studies before repeating
                       this investigation.
                     knowledge_gap: *id011
                     source_gap: *id016
-                    anchors: *id044
-                    selected_kgs: *id045
+                    anchors: *id050
+                    selected_kgs: *id051
                     created_at: '2026-09-24T16:00:00Z'
-                    attribution: *id042
+                    attribution: *id048
                     scope_note: A scoped exploration report, not a ScientificAccount
                       or globally established negative finding.
                     record_format: structured
                     job_id: 44444444-4444-4444-8444-444444444444
-                    publication: *id041
-                    provenance: &id050
+                    publication: *id042
+                    provenance: &id056
                       evidence_package_sha256: 9a55d126679291a95fa3d35f544915610134075eaf110f62f77ec8ee870b6ae2
                       outcome_sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
                       runtime_sha256: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
@@ -8283,28 +9405,28 @@ paths:
                       scientific account.
                     reason: This illustrative scoped investigation lacked evidence
                       connecting the selected mechanism to the selected question.
-                    explored_topics: *id046
-                    missing_evidence: *id047
-                    limitations: *id048
-                    next_steps: *id049
+                    explored_topics: *id052
+                    missing_evidence: *id053
+                    limitations: *id054
+                    next_steps: *id055
                     knowledge_gap: *id011
                     source_gap: *id016
-                    anchors: *id044
-                    selected_kgs: *id045
+                    anchors: *id050
+                    selected_kgs: *id051
                     created_at: '2026-09-24T16:00:00Z'
-                    attribution: *id042
+                    attribution: *id048
                     scope_note: A scoped exploration report, not a ScientificAccount
                       or globally established negative finding.
                     record_format: structured
                     job_id: null
-                    publication: &id052
+                    publication: &id058
                       visibility: public
                       version: 1
                       published_at: '2026-09-24T16:00:00Z'
                       updated_at: '2026-09-24T16:00:00Z'
                       can_manage: false
                       has_unpublished_changes: false
-                    provenance: *id050
+                    provenance: *id056
           headers:
             X-Request-ID:
               description: Correlation ID for this HTTP request.
@@ -8383,7 +9505,7 @@ paths:
               examples:
                 owner:
                   summary: Owner
-                  value: *id051
+                  value: *id057
           headers:
             X-Request-ID:
               description: Correlation ID for this HTTP request.
@@ -8511,10 +9633,10 @@ paths:
                       summary: The captured investigation did not support an accepted
                         scientific account.
                       knowledge_gap: *id011
-                      anchors: *id044
+                      anchors: *id050
                       created_at: '2026-09-24T16:00:00Z'
-                      attribution: *id042
-                      publication: *id052
+                      attribution: *id048
+                      publication: *id058
                     page: *id009
                 empty:
                   summary: Empty
@@ -8613,7 +9735,7 @@ paths:
               examples:
                 private_owner:
                   summary: Private owner
-                  value: *id041
+                  value: *id042
                 public_reader:
                   summary: Public reader
                   value:
@@ -8716,7 +9838,7 @@ paths:
               examples:
                 published:
                   summary: Published
-                  value: *id053
+                  value: *id059
                 unpublished:
                   summary: Unpublished
                   value:
@@ -8761,7 +9883,7 @@ paths:
               examples:
                 sign_in_required:
                   summary: Sign in required
-                  value: *id043
+                  value: *id049
         '404':
           description: Not Found
           content:
@@ -8881,7 +10003,7 @@ paths:
                   summary: History
                   value:
                     items:
-                    - &id054
+                    - &id060
                       source_gap: *id016
                       knowledge_gap: *id011
                       last_explored_at: '2026-09-24T16:00:00Z'
@@ -8975,7 +10097,7 @@ paths:
               examples:
                 saved:
                   summary: Saved
-                  value: *id054
+                  value: *id060
           headers:
             X-Request-ID:
               description: Correlation ID for this HTTP request.
@@ -19037,7 +20159,7 @@ components:
         source_id:
           type: string
           minLength: 1
-        source_revision: &id055
+        source_revision: &id061
           type: string
           pattern: ^[a-f0-9]{64}$
         dapper_id:
@@ -19066,7 +20188,7 @@ components:
           - gap_attachment
         suggestion_id:
           anyOf:
-          - &id057
+          - &id064
             type: string
             format: uuid
           - type: 'null'
@@ -19102,7 +20224,7 @@ components:
           type: string
         source_id:
           type: string
-        source_revision: *id055
+        source_revision: *id061
         object_class:
           const: Mechanism
           type: string
@@ -19126,7 +20248,7 @@ components:
           type: string
         source_id:
           type: string
-        source_revision: *id055
+        source_revision: *id061
         object_class:
           type: string
           const: Mechanism
@@ -19198,6 +20320,22 @@ components:
             - prokn
           uniqueItems: true
           maxItems: 2
+        research_direction:
+          type: string
+          maxLength: 6000
+        context:
+          type: string
+          maxLength: 20000
+        hypotheses:
+          type: string
+          maxLength: 12000
+        upload_ids:
+          type: array
+          items: &id062
+            type: string
+            format: uuid
+          uniqueItems: true
+          maxItems: 5
       required:
       - source_gap
       - eaggl_anchors
@@ -19215,14 +20353,28 @@ components:
       properties:
         composer:
           $ref: '#/components/schemas/Composer'
-        name: &id056
+        name: &id063
           type: string
           minLength: 1
           maxLength: 120
           pattern: \S
+        lifecycle:
+          type: string
+          enum:
+          - temporary
+          - saved
+        source_draft_id: *id062
+        source_draft_version:
+          type: integer
+          minimum: 1
+          description: Loaded revision of the originating saved draft. Historical
+            revisions up to the current revision are allowed; omitted means current.
       required:
       - composer
       additionalProperties: false
+      dependentRequired:
+        source_draft_version:
+        - source_draft_id
     DraftPatch:
       type: object
       properties:
@@ -19231,7 +20383,11 @@ components:
           minimum: 1
         composer:
           $ref: '#/components/schemas/Composer'
-        name: *id056
+        name: *id063
+        lifecycle:
+          type: string
+          enum:
+          - saved
       required:
       - expected_version
       additionalProperties: false
@@ -19241,18 +20397,34 @@ components:
     Draft:
       type: object
       properties:
-        id: *id057
-        owner_user_id: *id057
+        id: *id064
+        owner_user_id: *id064
         version:
           type: integer
           minimum: 1
         composer:
           $ref: '#/components/schemas/Composer'
-        created_at: &id058
+        created_at: &id065
           type: string
           format: date-time
-        updated_at: *id058
-        name: *id056
+        updated_at: *id065
+        name: *id063
+        lifecycle:
+          type: string
+          enum:
+          - temporary
+          - saved
+        source_draft_id: *id062
+        expires_at:
+          anyOf:
+          - &id066
+            type: string
+            format: date-time
+          - type: 'null'
+        saved_at: *id066
+        source_draft_version:
+          type: integer
+          minimum: 1
       required:
       - id
       - owner_user_id
@@ -19273,7 +20445,7 @@ components:
     DraftDeletion:
       type: object
       properties:
-        id: *id057
+        id: *id064
         deleted:
           type: boolean
           const: true
@@ -19303,7 +20475,7 @@ components:
     Me:
       type: object
       properties:
-        user_id: *id057
+        user_id: *id064
         display_name:
           anyOf:
           - type: string
@@ -19335,9 +20507,7 @@ components:
           - registered
         workspace_expires_at:
           anyOf:
-          - &id061
-            type: string
-            format: date-time
+          - *id066
           - type: 'null'
       required:
       - user_id
@@ -19355,7 +20525,7 @@ components:
     AttributionSnapshot:
       type: object
       properties:
-        user_id: *id057
+        user_id: *id064
         person_id:
           anyOf:
           - type: string
@@ -19374,7 +20544,7 @@ components:
           - type: 'null'
         orcid_authenticated:
           type: boolean
-        observed_at: *id058
+        observed_at: *id065
         principal_kind:
           type: string
           enum:
@@ -19392,9 +20562,9 @@ components:
     ResearchRequest:
       type: object
       properties:
-        id: *id057
-        owner_user_id: *id057
-        source_draft_id: *id057
+        id: *id064
+        owner_user_id: *id064
+        source_draft_id: *id064
         source_draft_version:
           type: integer
           minimum: 1
@@ -19409,7 +20579,13 @@ components:
           $ref: '#/components/schemas/DapperDocument'
         attribution:
           $ref: '#/components/schemas/AttributionSnapshot'
-        submitted_at: *id058
+        submitted_at: *id065
+        user_inputs:
+          $ref: '#/components/schemas/UserInputs'
+        originating_saved_draft_id: *id062
+        originating_saved_draft_version:
+          type: integer
+          minimum: 1
         linked_dismech_context:
           type: array
           items:
@@ -19438,7 +20614,7 @@ components:
           - dismech
         source_id:
           type: string
-        source_revision: *id055
+        source_revision: *id061
         status:
           anyOf:
           - type: string
@@ -19692,7 +20868,7 @@ components:
     Suggestions:
       type: object
       properties:
-        suggestion_id: *id057
+        suggestion_id: *id064
         automatic_anchors:
           type: array
           items:
@@ -19759,7 +20935,7 @@ components:
         kind:
           const: analysis
           type: string
-        draft_id: *id057
+        draft_id: *id064
         draft_version:
           type: integer
           minimum: 1
@@ -19878,7 +21054,7 @@ components:
         kind:
           const: analysis
           type: string
-        request_id: *id057
+        request_id: *id064
         account_ids:
           type: array
           items:
@@ -19894,11 +21070,9 @@ components:
             $ref: '#/components/schemas/Enrichment'
         paragraph_job_ids:
           type: array
-          items: &id063
-            type: string
-            format: uuid
+          items: *id062
           maxItems: 3
-        evidence_package_sha256: &id062
+        evidence_package_sha256: &id069
           type: string
           pattern: ^[a-f0-9]{64}$
       required:
@@ -19949,14 +21123,14 @@ components:
     Job:
       type: object
       properties:
-        id: *id057
+        id: *id064
         kind:
           type: string
           enum:
           - analysis
           - paragraph
-        owner_user_id: *id057
-        status: &id059
+        owner_user_id: *id064
+        status: &id067
           type: string
           enum:
           - queued
@@ -19966,7 +21140,7 @@ components:
           - succeeded
           - insufficient_evidence
           - failed
-        stage: &id060
+        stage: &id068
           type: string
           enum:
           - queued
@@ -19983,7 +21157,7 @@ components:
           - collecting_output
         research_request_id:
           anyOf:
-          - *id057
+          - *id064
           - type: 'null'
         input_account_id:
           anyOf:
@@ -19992,11 +21166,11 @@ components:
               path values.
             pattern: ^dapper:ScientificAccount\.[A-Za-z0-9_-]{32}$
           - type: 'null'
-        created_at: *id058
-        updated_at: *id058
+        created_at: *id065
+        updated_at: *id065
         completed_at:
           anyOf:
-          - *id058
+          - *id065
           - type: 'null'
         result:
           anyOf:
@@ -20060,7 +21234,7 @@ components:
               const: analysis
         then:
           properties:
-            research_request_id: *id057
+            research_request_id: *id064
             input_account_id:
               type: 'null'
             result:
@@ -20135,7 +21309,7 @@ components:
               - cancelled
         then:
           properties:
-            completed_at: *id058
+            completed_at: *id065
         else:
           properties:
             completed_at:
@@ -20167,8 +21341,8 @@ components:
         id:
           type: string
           pattern: ^[0-9]+$
-        job_id: *id057
-        occurred_at: *id058
+        job_id: *id064
+        occurred_at: *id065
         event_type:
           type: string
           enum:
@@ -20178,8 +21352,8 @@ components:
           - result
           - failure
           - activity
-        status: *id059
-        stage: *id060
+        status: *id067
+        stage: *id068
         message:
           type: string
         result:
@@ -20224,8 +21398,8 @@ components:
     SchemaPin:
       type: object
       properties:
-        schema_sha256: *id055
-        dependency_snapshot_sha256: *id055
+        schema_sha256: *id061
+        dependency_snapshot_sha256: *id061
         identity_profile:
           const: DAPPER-ID-1
           type: string
@@ -20242,7 +21416,7 @@ components:
           description: Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode
             path values.
           pattern: ^dapper:[A-Za-z][A-Za-z0-9]*\.[A-Za-z0-9_-]{32}$
-        payload_sha256: *id055
+        payload_sha256: *id061
       required:
       - object_id
       - payload_sha256
@@ -20259,7 +21433,7 @@ components:
           - type: 'null'
         expires_at:
           anyOf:
-          - *id058
+          - *id065
           - type: 'null'
         availability:
           type: string
@@ -20353,6 +21527,8 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ArtifactAccess'
+        fixture_origin:
+          $ref: '#/components/schemas/FixtureOrigin'
         research_statement:
           $ref: '#/components/schemas/ParagraphState'
         publication:
@@ -20452,7 +21628,7 @@ components:
               node_id:
                 type: string
                 pattern: '^gene_set:'
-              import_id: *id055
+              import_id: *id061
             required:
             - model
             - node_id
@@ -20548,7 +21724,7 @@ components:
           type: string
         detail:
           type: string
-        request_id: *id057
+        request_id: *id064
         retryable:
           type: boolean
         current_version:
@@ -20657,14 +21833,14 @@ components:
               type: string
             processor_version:
               type: string
-            style_sha256: *id055
-            locale_sha256: *id055
+            style_sha256: *id061
+            locale_sha256: *id061
             citation_profile:
               const: reveal-citation-v1
               type: string
             metadata_checksums:
               type: array
-              items: *id055
+              items: *id061
           required:
           - processor
           - processor_version
@@ -20813,7 +21989,7 @@ components:
           enum:
           - workspace
           - public
-        committed_at: *id061
+        committed_at: *id066
         event_type:
           type: string
         entity_id:
@@ -20867,7 +22043,7 @@ components:
         source_id:
           type: string
           pattern: '^dismech:'
-        source_revision: *id062
+        source_revision: *id069
       required:
       - id
       - source_id
@@ -20875,6 +22051,221 @@ components:
       additionalProperties: false
       description: Exact imported DisMech source observation and DAPPER mapping. Resolve
         and validate server-side. No client-authored question.
+    UploadStorage:
+      type: object
+      properties:
+        store:
+          type: string
+          enum:
+          - s3
+          - filesystem
+        bucket:
+          type: string
+        key:
+          type: string
+        version_id:
+          type: string
+        sha256: *id069
+        size_bytes:
+          type: integer
+          minimum: 0
+        content_type:
+          type: string
+      required:
+      - store
+      - key
+      - sha256
+      - size_bytes
+      - content_type
+      additionalProperties: false
+    UploadExtraction:
+      type: object
+      properties:
+        storage:
+          $ref: '#/components/schemas/UploadStorage'
+        format:
+          type: string
+          enum:
+          - reveal.upload-text/1
+        segment_count:
+          type: integer
+          minimum: 1
+        original_sha256: *id069
+      required:
+      - storage
+      - format
+      - segment_count
+      - original_sha256
+      additionalProperties: false
+    Upload:
+      type: object
+      properties:
+        id: *id062
+        draft_id: *id062
+        filename:
+          type: string
+        media_type:
+          type: string
+        size_bytes:
+          type: integer
+          minimum: 1
+          maximum: 8000000
+        sha256: *id069
+        status:
+          type: string
+          enum:
+          - pending
+          - ready
+          - failed
+          - removed
+        created_at: *id066
+        expires_at: *id066
+        storage:
+          anyOf:
+          - $ref: '#/components/schemas/UploadStorage'
+          - type: 'null'
+        extraction:
+          anyOf:
+          - $ref: '#/components/schemas/UploadExtraction'
+          - type: 'null'
+        error:
+          anyOf:
+          - type: string
+          - type: 'null'
+      required:
+      - id
+      - draft_id
+      - filename
+      - media_type
+      - size_bytes
+      - sha256
+      - status
+      - created_at
+      - expires_at
+      - storage
+      - extraction
+      - error
+      additionalProperties: false
+    UploadCreate:
+      type: object
+      properties:
+        draft_id: *id062
+        filename:
+          type: string
+          minLength: 1
+          maxLength: 240
+        media_type:
+          type: string
+          maxLength: 150
+        size_bytes:
+          type: integer
+          minimum: 1
+          maximum: 8000000
+        sha256: *id069
+      required:
+      - draft_id
+      - filename
+      - media_type
+      - size_bytes
+      - sha256
+      additionalProperties: false
+    UploadTicket:
+      type: object
+      properties:
+        upload:
+          $ref: '#/components/schemas/Upload'
+        transfer:
+          type: object
+          properties:
+            method:
+              type: string
+              enum:
+              - POST
+            url:
+              type: string
+            fields:
+              type: object
+              additionalProperties:
+                type: string
+            encoding:
+              type: string
+              enum:
+              - multipart
+              - base64
+          required:
+          - method
+          - url
+          - fields
+          - encoding
+          additionalProperties: false
+      required:
+      - upload
+      - transfer
+      additionalProperties: false
+    UploadList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Upload'
+      required:
+      - items
+      additionalProperties: false
+    UploadContent:
+      type: object
+      properties:
+        content_base64:
+          type: string
+          maxLength: 10666676
+      required:
+      - content_base64
+      additionalProperties: false
+    UserInputs:
+      type: object
+      properties:
+        format:
+          type: string
+          enum:
+          - reveal.user-inputs/1
+        research_direction:
+          type: string
+        context:
+          type: string
+        hypotheses:
+          type: string
+        uploads:
+          type: array
+          items:
+            $ref: '#/components/schemas/Upload'
+          maxItems: 5
+      required:
+      - format
+      - research_direction
+      - context
+      - hypotheses
+      - uploads
+      additionalProperties: false
+    FixtureOrigin:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum:
+          - canonical_fixture
+        fixture_version:
+          type: string
+        content_sha256: *id069
+        scientific_acceptance:
+          type: string
+          enum:
+          - not_reviewed
+      required:
+      - kind
+      - fixture_version
+      - content_sha256
+      - scientific_acceptance
+      additionalProperties: false
     GapSourceDetail:
       type: object
       properties:
@@ -20882,7 +22273,7 @@ components:
           type: string
         source_pointer:
           type: string
-        payload_sha256: *id062
+        payload_sha256: *id069
         raw:
           type: object
           additionalProperties: true
@@ -20906,7 +22297,7 @@ components:
           enum:
           - public_exact_gap
           - owner_exact_gap
-        as_of: *id061
+        as_of: *id066
         ranking:
           type: string
           enum:
@@ -21024,7 +22415,7 @@ components:
           - type: 'null'
         artifact_sha256:
           anyOf:
-          - *id062
+          - *id069
           - type: 'null'
         duration_ms:
           anyOf:
@@ -21048,7 +22439,7 @@ components:
                 minimum: 0
               truncated:
                 type: boolean
-              snapshot_sha256: *id062
+              snapshot_sha256: *id069
             required:
             - scope
             - nodes
@@ -21092,7 +22483,7 @@ components:
           - not_requested
         job_id:
           anyOf:
-          - *id063
+          - *id062
           - type: 'null'
         paragraph_id:
           anyOf:
@@ -21119,11 +22510,11 @@ components:
           minimum: 0
         published_at:
           anyOf:
-          - *id061
+          - *id066
           - type: 'null'
         updated_at:
           anyOf:
-          - *id061
+          - *id066
           - type: 'null'
         can_manage:
           type: boolean
@@ -21168,8 +22559,8 @@ components:
         kind:
           type: string
           const: analysis_outcome
-        outcome_id: *id063
-        evidence_package_sha256: *id062
+        outcome_id: *id062
+        evidence_package_sha256: *id069
       required:
       - kind
       - outcome_id
@@ -21215,7 +22606,7 @@ components:
           - type: integer
             minimum: 1
           - type: 'null'
-        artifact_sha256: *id062
+        artifact_sha256: *id069
         download_url:
           anyOf:
           - type: string
@@ -21231,15 +22622,15 @@ components:
     OutcomeProvenance:
       type: object
       properties:
-        evidence_package_sha256: *id062
-        outcome_sha256: *id062
+        evidence_package_sha256: *id069
+        outcome_sha256: *id069
         runtime_sha256:
           anyOf:
-          - *id062
+          - *id069
           - type: 'null'
         ledger_sha256:
           anyOf:
-          - *id062
+          - *id069
           - type: 'null'
         execution_mode:
           type: string
@@ -21301,8 +22692,8 @@ components:
                 - failed
                 - denied
                 - interrupted
-              request_sha256: *id062
-              response_sha256: *id062
+              request_sha256: *id069
+              response_sha256: *id069
             required:
             - sequence
             - graph
@@ -21325,7 +22716,7 @@ components:
     AnalysisOutcome:
       type: object
       properties:
-        id: *id063
+        id: *id062
         outcome:
           type: string
           enum:
@@ -21365,7 +22756,7 @@ components:
             enum:
             - biomarkerkg
             - prokn
-        created_at: *id061
+        created_at: *id066
         attribution:
           anyOf:
           - $ref: '#/components/schemas/AttributionSnapshot'
@@ -21381,7 +22772,7 @@ components:
           $ref: '#/components/schemas/OutcomeProvenance'
         job_id:
           anyOf:
-          - *id063
+          - *id062
           - type: 'null'
         publication:
           $ref: '#/components/schemas/PublicationState'
@@ -21471,10 +22862,10 @@ components:
         claim_count:
           type: integer
           minimum: 1
-        created_at: *id061
+        created_at: *id066
         job_id:
           anyOf:
-          - *id063
+          - *id062
           - type: 'null'
         research_statement:
           $ref: '#/components/schemas/ParagraphState'
@@ -21488,6 +22879,8 @@ components:
           anyOf:
           - $ref: '#/components/schemas/AttributionSnapshot'
           - type: 'null'
+        fixture_origin:
+          $ref: '#/components/schemas/FixtureOrigin'
       required:
       - account
       - knowledge_gap
@@ -21516,6 +22909,544 @@ components:
       - items
       - page
       additionalProperties: false
+    LeaderboardView:
+      type: string
+      enum:
+      - researchers
+      - accounts
+      - datasets
+    LeaderboardSort:
+      type: string
+      enum:
+      - overall
+      - accounts
+      - votes
+      - gaps
+      - explored
+      - claims
+      - researchers
+    LeaderboardMetric:
+      type: string
+      enum:
+      - accounts
+      - votes
+      - gaps
+      - explored
+      - claims
+      - researchers
+      - files
+    LeaderboardEvidence:
+      type: string
+      enum:
+      - all
+      - supporting
+    LeaderboardAttribution:
+      type: object
+      properties:
+        id:
+          type: string
+          pattern: ^researcher_[a-f0-9]{64}$
+        label:
+          type: string
+        orcid:
+          anyOf:
+          - type: string
+          - type: 'null'
+      required:
+      - id
+      - label
+      - orcid
+      additionalProperties: false
+    LeaderboardDirections:
+      type: object
+      properties:
+        SUPPORTS: &id070
+          type: integer
+          minimum: 0
+        DISPUTES: *id070
+        MIXED: *id070
+        NEUTRAL: *id070
+        UNKNOWN: *id070
+      required:
+      - SUPPORTS
+      - DISPUTES
+      - MIXED
+      - NEUTRAL
+      - UNKNOWN
+      additionalProperties: false
+    LeaderboardMetrics:
+      type: object
+      properties:
+        account_count: *id070
+        upvotes: *id070
+        downvotes: *id070
+        voter_count: *id070
+        account_gap_count: *id070
+        explored_gap_count: *id070
+        claim_count: *id070
+        researcher_count: *id070
+        net_votes:
+          type: integer
+        overall_score:
+          type: number
+          minimum: 0
+          maximum: 100
+      required:
+      - account_count
+      - upvotes
+      - downvotes
+      - voter_count
+      - account_gap_count
+      - explored_gap_count
+      - claim_count
+      - researcher_count
+      - net_votes
+      - overall_score
+      additionalProperties: false
+    LeaderboardEntry:
+      type: object
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+          enum:
+          - researcher
+          - account
+          - dataset
+        label:
+          type: string
+        rank:
+          type: integer
+          minimum: 1
+        metrics:
+          $ref: '#/components/schemas/LeaderboardMetrics'
+        components:
+          type: object
+          properties:
+            accounts:
+              type: number
+              minimum: 0
+              maximum: 100
+            votes:
+              type: number
+              minimum: 0
+              maximum: 100
+            gaps:
+              type: number
+              minimum: 0
+              maximum: 100
+          required:
+          - accounts
+          - votes
+          - gaps
+          additionalProperties: false
+        orcid:
+          anyOf:
+          - type: string
+          - type: 'null'
+        account_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+        gap_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+        gap:
+          anyOf:
+          - type: object
+            properties:
+              id:
+                type: string
+              label:
+                type: string
+            required:
+            - id
+            - label
+            additionalProperties: false
+          - type: 'null'
+        attribution:
+          anyOf:
+          - $ref: '#/components/schemas/LeaderboardAttribution'
+          - type: 'null'
+        directions:
+          $ref: '#/components/schemas/LeaderboardDirections'
+      required:
+      - id
+      - kind
+      - label
+      - rank
+      - metrics
+      - components
+      - orcid
+      - account_id
+      - gap_id
+      - gap
+      - attribution
+      - directions
+      additionalProperties: false
+    LeaderboardMetadata:
+      type: object
+      properties:
+        as_of: *id066
+        score_version:
+          type: string
+          enum:
+          - public-contribution-v1
+        cohort_size: *id070
+        voting_participants: *id070
+        exclusions:
+          type: object
+          properties:
+            fixture_accounts: *id070
+            uncredited_accounts: *id070
+            conflicting_accounts: *id070
+            invalid_public_accounts: *id070
+            excluded_evidence_paths: *id070
+            fixture_explorations: *id070
+            uncredited_explorations: *id070
+          required:
+          - fixture_accounts
+          - uncredited_accounts
+          - conflicting_accounts
+          - invalid_public_accounts
+          - excluded_evidence_paths
+          - fixture_explorations
+          - uncredited_explorations
+          additionalProperties: false
+        definitions:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              label:
+                type: string
+              description:
+                type: string
+            required:
+            - id
+            - label
+            - description
+            additionalProperties: false
+        methodology:
+          type: object
+          properties:
+            weights:
+              type: object
+              properties:
+                accounts:
+                  type: number
+                votes:
+                  type: number
+                gaps:
+                  type: number
+              required:
+              - accounts
+              - votes
+              - gaps
+              additionalProperties: false
+            scope:
+              type: string
+            score:
+              type: string
+            own_votes:
+              type: string
+            evidence:
+              type: string
+          required:
+          - weights
+          - scope
+          - score
+          - own_votes
+          - evidence
+          additionalProperties: false
+      required:
+      - as_of
+      - score_version
+      - cohort_size
+      - voting_participants
+      - exclusions
+      - definitions
+      - methodology
+      additionalProperties: false
+      description: Only public eligibility/exclusion totals. No counts of private
+        work. Observation time is not a cursor revision. Original actors are represented
+        by opaque public keys; no job, request, private email or voter identity is
+        exposed.
+    LeaderboardList:
+      type: object
+      properties:
+        as_of:
+          type: string
+          format: date-time
+        score_version:
+          type: string
+          enum:
+          - public-contribution-v1
+        cohort_size: &id071
+          type: integer
+          minimum: 0
+        voting_participants: *id071
+        exclusions:
+          type: object
+          properties:
+            fixture_accounts: *id071
+            uncredited_accounts: *id071
+            conflicting_accounts: *id071
+            invalid_public_accounts: *id071
+            excluded_evidence_paths: *id071
+            fixture_explorations: *id071
+            uncredited_explorations: *id071
+          required:
+          - fixture_accounts
+          - uncredited_accounts
+          - conflicting_accounts
+          - invalid_public_accounts
+          - excluded_evidence_paths
+          - fixture_explorations
+          - uncredited_explorations
+          additionalProperties: false
+        definitions:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              label:
+                type: string
+              description:
+                type: string
+            required:
+            - id
+            - label
+            - description
+            additionalProperties: false
+        methodology:
+          type: object
+          properties:
+            weights:
+              type: object
+              properties:
+                accounts:
+                  type: number
+                votes:
+                  type: number
+                gaps:
+                  type: number
+              required:
+              - accounts
+              - votes
+              - gaps
+              additionalProperties: false
+            scope:
+              type: string
+            score:
+              type: string
+            own_votes:
+              type: string
+            evidence:
+              type: string
+          required:
+          - weights
+          - scope
+          - score
+          - own_votes
+          - evidence
+          additionalProperties: false
+        view:
+          $ref: '#/components/schemas/LeaderboardView'
+        sort:
+          $ref: '#/components/schemas/LeaderboardSort'
+        evidence:
+          $ref: '#/components/schemas/LeaderboardEvidence'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/LeaderboardEntry'
+        page:
+          $ref: '#/components/schemas/Page'
+      required:
+      - as_of
+      - score_version
+      - cohort_size
+      - voting_participants
+      - exclusions
+      - definitions
+      - methodology
+      - view
+      - sort
+      - evidence
+      - items
+      - page
+      additionalProperties: false
+    LeaderboardRecord:
+      type: object
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+          enum:
+          - account
+          - gap
+          - claim
+          - researcher
+          - file
+          - exploration
+        label:
+          type: string
+        url:
+          type: string
+        account_ids:
+          type: array
+          items:
+            type: string
+        claim_ids:
+          type: array
+          items:
+            type: string
+        evidence_ids:
+          type: array
+          items:
+            type: string
+        directions:
+          $ref: '#/components/schemas/LeaderboardDirections'
+        value:
+          type: integer
+      required:
+      - id
+      - kind
+      - label
+      - url
+      - account_ids
+      - claim_ids
+      - evidence_ids
+      - directions
+      - value
+      additionalProperties: false
+      description: One distinct counted public unit. For votes, one account record
+        carries its signed net value; summing values reproduces the headline. Other
+        metrics count records. Evidence IDs preserve explicit interpretations, never
+        inferred scientific endorsement.
+    LeaderboardRecords:
+      type: object
+      properties:
+        as_of:
+          type: string
+          format: date-time
+        score_version:
+          type: string
+          enum:
+          - public-contribution-v1
+        cohort_size: &id072
+          type: integer
+          minimum: 0
+        voting_participants: *id072
+        exclusions:
+          type: object
+          properties:
+            fixture_accounts: *id072
+            uncredited_accounts: *id072
+            conflicting_accounts: *id072
+            invalid_public_accounts: *id072
+            excluded_evidence_paths: *id072
+            fixture_explorations: *id072
+            uncredited_explorations: *id072
+          required:
+          - fixture_accounts
+          - uncredited_accounts
+          - conflicting_accounts
+          - invalid_public_accounts
+          - excluded_evidence_paths
+          - fixture_explorations
+          - uncredited_explorations
+          additionalProperties: false
+        definitions:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              label:
+                type: string
+              description:
+                type: string
+            required:
+            - id
+            - label
+            - description
+            additionalProperties: false
+        methodology:
+          type: object
+          properties:
+            weights:
+              type: object
+              properties:
+                accounts:
+                  type: number
+                votes:
+                  type: number
+                gaps:
+                  type: number
+              required:
+              - accounts
+              - votes
+              - gaps
+              additionalProperties: false
+            scope:
+              type: string
+            score:
+              type: string
+            own_votes:
+              type: string
+            evidence:
+              type: string
+          required:
+          - weights
+          - scope
+          - score
+          - own_votes
+          - evidence
+          additionalProperties: false
+        view:
+          $ref: '#/components/schemas/LeaderboardView'
+        id:
+          type: string
+        metric:
+          $ref: '#/components/schemas/LeaderboardMetric'
+        evidence:
+          $ref: '#/components/schemas/LeaderboardEvidence'
+        entry:
+          $ref: '#/components/schemas/LeaderboardEntry'
+        total: *id070
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/LeaderboardRecord'
+        page:
+          $ref: '#/components/schemas/Page'
+      required:
+      - as_of
+      - score_version
+      - cohort_size
+      - voting_participants
+      - exclusions
+      - definitions
+      - methodology
+      - view
+      - id
+      - metric
+      - evidence
+      - entry
+      - total
+      - items
+      - page
+      additionalProperties: false
     ExplorationInput:
       type: object
       properties:
@@ -21523,7 +23454,7 @@ components:
           $ref: '#/components/schemas/SelectedGap'
         draft_id:
           anyOf:
-          - *id063
+          - *id062
           - type: 'null'
       required:
       - source_gap
@@ -21538,10 +23469,10 @@ components:
           $ref: '#/components/schemas/SelectedGap'
         knowledge_gap:
           $ref: '#/components/schemas/DapperKnowledgeGap'
-        last_explored_at: *id061
+        last_explored_at: *id066
         draft_id:
           anyOf:
-          - *id063
+          - *id062
           - type: 'null'
         scientific_accounts:
           $ref: '#/components/schemas/AccountCount'
@@ -23393,6 +25324,7 @@ components:
       - json
       - yaml
       - text
+      - binary
       title: EPArtifactFormat
       type: string
     PackageEPAttachedContext:
@@ -25182,14 +27114,22 @@ components:
           type: string
         format:
           $ref: '#/components/schemas/PackageEPArtifactFormat'
+        media_type:
+          type:
+          - string
+          - 'null'
         origin:
           anyOf:
           - type: string
           - $ref: '#/components/schemas/PackageEPRepositoryOrigin'
           - type: 'null'
         path:
-          pattern: ^sources/[0-9a-f]{64}\.(json|yaml|text)$
+          pattern: ^sources/[0-9a-f]{64}\.(json|yaml|text|binary)$
           type: string
+        private:
+          type:
+          - boolean
+          - 'null'
         sha256:
           pattern: ^[0-9a-f]{64}$
           type: string
@@ -25216,14 +27156,22 @@ components:
           type: string
         format:
           $ref: '#/components/schemas/PackageEPArtifactFormat'
+        media_type:
+          type:
+          - string
+          - 'null'
         origin:
           anyOf:
           - type: string
           - $ref: '#/components/schemas/PackageEPRepositoryOrigin'
           - type: 'null'
         path:
-          pattern: ^sources/[0-9a-f]{64}\.(json|yaml|text)$
+          pattern: ^sources/[0-9a-f]{64}\.(json|yaml|text|binary)$
           type: string
+        private:
+          type:
+          - boolean
+          - 'null'
         sha256:
           pattern: ^[0-9a-f]{64}$
           type: string
@@ -25417,6 +27365,32 @@ components:
       - reported_metrics
       - source_ref
       title: EPTraitObservation
+      type: object
+    PackageEPUserInputs:
+      additionalProperties: false
+      description: Private researcher direction and supplied material; hypotheses
+        are not observations.
+      properties:
+        context:
+          type: string
+        format:
+          const: reveal.user-inputs/1
+          type: string
+        hypotheses:
+          type: string
+        research_direction:
+          type: string
+        uploads:
+          items:
+            $ref: '#/components/schemas/PackageEPRawObject'
+          type: array
+      required:
+      - format
+      - research_direction
+      - context
+      - hypotheses
+      - uploads
+      title: EPUserInputs
       type: object
     PackageEdge:
       additionalProperties: false
@@ -25696,6 +27670,10 @@ components:
             $ref: '#/components/schemas/PackageEPSourceArtifact__identifier_optional'
           minProperties: 1
           type: object
+        user_inputs:
+          anyOf:
+          - $ref: '#/components/schemas/PackageEPUserInputs'
+          - type: 'null'
       required:
       - package_version
       - prefixes
@@ -28881,6 +30859,10 @@ components:
             $ref: '#/components/schemas/PackageEPSourceArtifact__identifier_optional'
           minProperties: 1
           type: object
+        user_inputs:
+          anyOf:
+          - $ref: '#/components/schemas/PackageEPUserInputs'
+          - type: 'null'
       required:
       - package_version
       - prefixes
@@ -28904,8 +30886,8 @@ components:
     EvidencePackageResult:
       type: object
       properties:
-        job_id: *id063
-        package_sha256: *id062
+        job_id: *id062
+        package_sha256: *id069
         package:
           $ref: '#/components/schemas/EvidencePackage'
       required:

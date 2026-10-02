@@ -1,0 +1,314 @@
+{
+  "account_id": "dapper:ScientificAccount.05Vs-l6pVZHt9ttebmJqK2VNodZUouTb",
+  "claim_views": {
+    "dapper:Claim.0Tdjx1Ry7AC5sP50HIlUfKb-cwpgY-3u": {
+      "group": "Genes → mechanism",
+      "illustrative": false,
+      "label": "TCF7L2"
+    },
+    "dapper:Claim.0wzE-AEqZ1fcgl2B0ZoYHZ7YiQBbR3lE": {
+      "group": "Gene sets → trait",
+      "illustrative": false,
+      "label": "AMP AD / GTEx brain-aging set"
+    },
+    "dapper:Claim.8uwyJZx7pdEoZ9Vw7Xu726ukdLf2FwyW": {
+      "group": "Genes → trait",
+      "illustrative": false,
+      "label": "SHH"
+    },
+    "dapper:Claim.GseJ6JHI0scMFrE5_I-x9ZC4etecmMT0": {
+      "group": "Genes → gene sets",
+      "illustrative": true,
+      "label": "TCF7L2 → PsychENCODE geneM16 set"
+    },
+    "dapper:Claim.JXS6Wb_N1ZXOvGvsPoW0UiQdTb_2j2d9": {
+      "group": "Gene sets → trait",
+      "illustrative": false,
+      "label": "PsychENCODE geneM16 set"
+    },
+    "dapper:Claim.N5EVC_d0CV0e76th1zsyX3wHf1Bw16VZ": {
+      "group": "Genes → gene sets",
+      "illustrative": true,
+      "label": "SHH → AMP AD / GTEx brain-aging set"
+    },
+    "dapper:Claim.YMgLIul-wf8vntqWIY_enxh56yTZx9pI": {
+      "group": "Genes → trait",
+      "illustrative": false,
+      "label": "GLI3"
+    },
+    "dapper:Claim.Yi6Uhd9aRwVHLlLSoc4TxEMo0VWswD0a": {
+      "group": "Gene sets → mechanism",
+      "illustrative": false,
+      "label": "AMP AD / GTEx brain-aging set"
+    },
+    "dapper:Claim.YwrSSe0OE5Uq62PD1t_vvDHAcNeJn8ol": {
+      "group": "Genes → trait",
+      "illustrative": false,
+      "label": "TCF7L2"
+    },
+    "dapper:Claim.eaeEY0LpLXwNmk3-Rr9s-YEiUokDLfO6": {
+      "group": "Genes → mechanism",
+      "illustrative": false,
+      "label": "GLI3"
+    },
+    "dapper:Claim.fUp7z48VwrXH5oueNfh7D4nNhQMNtC3C": {
+      "group": "Gene sets → mechanism",
+      "illustrative": false,
+      "label": "PsychENCODE geneM16 set"
+    },
+    "dapper:Claim.iN6K2Rz0XKMnROZLUNLuhZhz0id5wK0h": {
+      "group": "Genes → mechanism",
+      "illustrative": false,
+      "label": "SHH"
+    }
+  },
+  "evidence_views": {
+    "dapper:EvidenceItem.1Idm3RIE7irCu8aj3Z4jS58QMjvSfMV_": {
+      "graph": "ProKN",
+      "locator": "illustrative-kg-assertions.json#/assertions/0",
+      "metrics": [],
+      "origin": "illustrative"
+    },
+    "dapper:EvidenceItem.1K7MwHOhXF9rUkapPvYnaR6LCS1jrPbf": {
+      "graph": "CFDE",
+      "locator": "pigean-gene-factor.response.json#/data/1",
+      "metrics": [
+        {
+          "meaning": "Gene–trait relevance score",
+          "metric": "combined",
+          "value": 2.42
+        },
+        {
+          "meaning": "Source-reported log_bf",
+          "metric": "log_bf",
+          "value": 2.33
+        },
+        {
+          "meaning": "Source-reported prior",
+          "metric": "prior",
+          "value": 0.0873
+        }
+      ],
+      "origin": "captured"
+    },
+    "dapper:EvidenceItem.7GkNnm9yFpVyW1KazI0fgyc3zd6soOEu": {
+      "graph": "CFDE",
+      "locator": "pigean-gene-factor.response.json#/data/0",
+      "metrics": [
+        {
+          "meaning": "Mechanism loading",
+          "metric": "factor_value",
+          "value": 0.5042
+        }
+      ],
+      "origin": "captured"
+    },
+    "dapper:EvidenceItem.Bi_6DGIpMXTNt9YXLL-rAWX_u_fmOLNg": {
+      "graph": "DisMech",
+      "locator": "dismech-gap.source.json#/raw/rationale",
+      "metrics": [],
+      "origin": "captured"
+    },
+    "dapper:EvidenceItem.C3levH7QDaBJE59UP4qgI6BIodhkHWWE": {
+      "graph": "CFDE",
+      "locator": "pigean-gene-factor.response.json#/data/0",
+      "metrics": [
+        {
+          "meaning": "Gene–trait relevance score",
+          "metric": "combined",
+          "value": 3.86
+        },
+        {
+          "meaning": "Source-reported log_bf",
+          "metric": "log_bf",
+          "value": 2.14
+        },
+        {
+          "meaning": "Source-reported prior",
+          "metric": "prior",
+          "value": 1.72
+        }
+      ],
+      "origin": "captured"
+    },
+    "dapper:EvidenceItem.CmkML4Zy3RuBW0p4b2DA1O-wZ6AQGLz-": {
+      "graph": "CFDE",
+      "locator": "pigean-gene-factor.response.json and pigean-gene-set-factor.response.json; shared Factor1 neighborhood",
+      "metrics": [],
+      "origin": "captured"
+    },
+    "dapper:EvidenceItem.FY72LzsGILxi9FSYp3UC3dJrvRjg4yhV": {
+      "graph": "CFDE",
+      "locator": "pigean-gene-factor.response.json#/data/1",
+      "metrics": [
+        {
+          "meaning": "Mechanism loading",
+          "metric": "factor_value",
+          "value": 0.3813
+        }
+      ],
+      "origin": "captured"
+    },
+    "dapper:EvidenceItem.OL2_nAY9jt52xBCVaDgHA-w2wMgG1dTr": {
+      "graph": "CFDE",
+      "locator": "pigean-gene-factor.response.json#/data/3",
+      "metrics": [
+        {
+          "meaning": "Mechanism loading",
+          "metric": "factor_value",
+          "value": 0.3245
+        }
+      ],
+      "origin": "captured"
+    },
+    "dapper:EvidenceItem.OOhcXSoHkq_NT2yHZG8A8Fo9nL9ATjf-": {
+      "graph": "CFDE",
+      "locator": "pigean-gene-factor.response.json and pigean-gene-set-factor.response.json; shared Factor1 neighborhood",
+      "metrics": [],
+      "origin": "captured"
+    },
+    "dapper:EvidenceItem.Q8XJ1KhVOb7qfeOnUA9M9TlXs2q46Xfc": {
+      "graph": "CFDE",
+      "locator": "pigean-gene-set-factor.response.json#/data/0",
+      "metrics": [
+        {
+          "meaning": "Gene-set effect estimate",
+          "metric": "beta",
+          "value": 0.115
+        },
+        {
+          "meaning": "Uncorrected effect estimate",
+          "metric": "beta_uncorrected",
+          "value": 0.119
+        }
+      ],
+      "origin": "captured"
+    },
+    "dapper:EvidenceItem.YuVob9-YBd1uHmFIvdEzvnFZWdWXMCyt": {
+      "graph": "CFDE",
+      "locator": "pigean-gene-set-factor.response.json#/data/2",
+      "metrics": [
+        {
+          "meaning": "Mechanism loading",
+          "metric": "factor_value",
+          "value": 0.4518
+        }
+      ],
+      "origin": "captured"
+    },
+    "dapper:EvidenceItem.ZawKNAfvISVoKyK__IPfaHSBi-FTFeO7": {
+      "graph": "CFDE",
+      "locator": "pigean-gene-factor.response.json#/data/3",
+      "metrics": [
+        {
+          "meaning": "Gene–trait relevance score",
+          "metric": "combined",
+          "value": 1.98
+        },
+        {
+          "meaning": "Source-reported log_bf",
+          "metric": "log_bf",
+          "value": 0.474
+        },
+        {
+          "meaning": "Source-reported prior",
+          "metric": "prior",
+          "value": 1.51
+        }
+      ],
+      "origin": "captured"
+    },
+    "dapper:EvidenceItem.dlZE2kDhY4EqshVinxv10O044-qjOgce": {
+      "graph": "CFDE",
+      "locator": "pigean-gene-set-factor.response.json#/data/2",
+      "metrics": [
+        {
+          "meaning": "Gene-set effect estimate",
+          "metric": "beta",
+          "value": 0.00729
+        },
+        {
+          "meaning": "Uncorrected effect estimate",
+          "metric": "beta_uncorrected",
+          "value": 0.0586
+        }
+      ],
+      "origin": "captured"
+    },
+    "dapper:EvidenceItem.iSSEZ1l6D1NdV5TB8DOaDm7ZfnRSkgsR": {
+      "graph": "BiomarkerKG",
+      "locator": "illustrative-kg-assertions.json#/assertions/1",
+      "metrics": [],
+      "origin": "illustrative"
+    },
+    "dapper:EvidenceItem.ua2xxfAwRBW_YWAX2lcp0FERgiIj0Y1z": {
+      "graph": "ProKN",
+      "locator": "illustrative-kg-assertions.json#/assertions/0",
+      "metrics": [],
+      "origin": "illustrative"
+    },
+    "dapper:EvidenceItem.xo3daB43jQWl3SM_0V_OOhkO0votrOkZ": {
+      "graph": "BiomarkerKG",
+      "locator": "illustrative-kg-assertions.json#/assertions/1",
+      "metrics": [],
+      "origin": "illustrative"
+    },
+    "dapper:EvidenceItem.zGPBcs9UEKF30hSswAcICslECIjWNGpS": {
+      "graph": "CFDE",
+      "locator": "pigean-gene-set-factor.response.json#/data/0",
+      "metrics": [
+        {
+          "meaning": "Mechanism loading",
+          "metric": "factor_value",
+          "value": 1.0
+        }
+      ],
+      "origin": "captured"
+    }
+  },
+  "gap_id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+  "gene_set_labels": {
+    "dapper:GeneSet.I1UZhVhKU-YDerPLIxtnZOGlTXNAlrgD": "AMP AD / GTEx brain-aging set",
+    "dapper:GeneSet.zQ8X81n_J-Fuv0zNRp1iQQXqIzuAOzGP": "PsychENCODE geneM16 set"
+  },
+  "mode": "Canonical authored fixture; captured CFDE plus illustrative unreviewed interpretations",
+  "selected_gap": {
+    "id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+    "source_id": "dismech:disorders/Coronary_Artery_Disease#discussion:cad_pgsxc_reverse_causation",
+    "source_revision": "00f2a71dca11fd7d4a8c835ea9e978037dcbef88d3fb050c5e74192db2bd7338"
+  },
+  "source_files": {
+    "dapper:File.6JYwag_kjbSwZ-eLeKmZxI0EmWd2gcLD": {
+      "origin": "mixed_fixture_inventory",
+      "path": "sources/evidence-inventory.json"
+    },
+    "dapper:File.Dt0S38v_sLn5jiOAVXMrMWTrXBLnsn83": {
+      "origin": "captured",
+      "path": "sources/pigean-gene-set-factor.response.json"
+    },
+    "dapper:File.HGsrMluIk1mo4e0a6aCD0zBcXZa-Y716": {
+      "origin": "derived_from_captured",
+      "path": "sources/gene-set-metrics.json"
+    },
+    "dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ": {
+      "origin": "captured",
+      "path": "sources/pigean-gene-factor.response.json"
+    },
+    "dapper:File.TLbPNA0MRbI7oUpipACe2r-gRZX8OP6c": {
+      "origin": "derived_from_captured",
+      "path": "sources/gene-metrics.json"
+    },
+    "dapper:File._FB2fhvDopxDEHgoDgf2Hk4jE0wxilag": {
+      "origin": "illustrative",
+      "path": "sources/illustrative-kg-assertions.json"
+    },
+    "dapper:File.eG0HM7wVGbDLt-99TA-OMnMeKqdIircT": {
+      "origin": "captured",
+      "path": "sources/dismech-gap.source.json"
+    },
+    "dapper:File.v2cEzhI5P_mdYWuY_HyJjvzyNZpzuP96": {
+      "origin": "captured",
+      "path": "sources/Coronary_Artery_Disease.yaml"
+    }
+  }
+}
