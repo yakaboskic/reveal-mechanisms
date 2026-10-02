@@ -246,12 +246,12 @@ export default function Home() {
   return <>
     <header className="site-header"><div className="brand"><span className="brand-mark" aria-hidden="true">R</span><div><h1>REVEAL client</h1><p>Scientific questions, evidence, and live research</p></div></div>
       <div className="connection"><span className={principal ? "connection-dot connected" : "connection-dot"} /><span>{principal ? "QA workspace connected" : checking ? "Checking workspace…" : "QA workspace"}</span>
-        {principal ? <button className="quiet" onClick={disconnect} disabled={!!busy}>Disconnect</button> : <button onClick={connect} disabled={!!busy || checking}>{busy === "connect" ? "Connecting…" : "Connect workspace"}</button>}
+        {principal ? <button onClick={disconnect} disabled={!!busy}>{busy === "disconnect" ? "Disconnecting…" : "Disconnect workspace"}</button> : <span className="connection-status">Disconnected</span>}
       </div></header>
     <main>
       {error && <div className="notice error" role="alert"><span>{error}</span><button className="quiet" onClick={() => setError("")} aria-label="Dismiss error">Dismiss</button></div>}
-      {notice && <p className="notice" role="status">{notice}</p>}
-      {!principal ? <section className="welcome"><h2>A question is the starting point.</h2><p>Connect to the QA research workspace, choose a knowledge gap, and explore it with a genetic mechanism anchor.</p><p>Drafts and results are saved by the REVEAL API. Research continues if you close this page.</p><button onClick={connect} disabled={!!busy || checking}>{checking ? "Checking workspace…" : busy === "connect" ? "Connecting…" : "Connect workspace"}</button><details className="setup-note"><summary>Running this client locally</summary><p>Complete the server setup described in this client’s README, then connect here. Your server handles the workspace session automatically.</p></details></section> : <>
+      {principal && notice && <p className="notice" role="status">{notice}</p>}
+      {!principal ? <section className="welcome"><div className="welcome-lead"><h2>Choose the gap. Ground the claim.</h2><button onClick={connect} disabled={!!busy || checking}>{checking ? "Checking workspace…" : busy === "connect" ? "Connecting…" : "Connect workspace"}</button></div><div className="welcome-cards"><a className="welcome-card" href="#learn-reveal-client" onClick={event => event.preventDefault()}><svg viewBox="0 0 72 56" aria-hidden="true"><path d="M36 12v32M14 16c7 5 15 5 22-2 7 7 15 7 22 2v28c-7 5-15 5-22-2-7 7-15 7-22 2V16z" /></svg><strong>Learn REVEAL client</strong><span>A guide to the workspace, from a knowledge gap to a grounded claim.</span></a><a className="welcome-card" href="#quick-start-demo" onClick={event => event.preventDefault()}><svg viewBox="0 0 72 56" aria-hidden="true"><rect x="14" y="12" width="44" height="32" rx="3" /><path className="card-icon-fill" d="M33 22l12 6-12 6z" /></svg><strong>Watch quick start demo</strong><span>A short walkthrough of connecting and starting an investigation.</span></a></div></section> : <>
         <div className="workspace-toolbar"><span>{principal.display_name || "Research workspace"}</span><div><span className="muted small">{workspaceState || "Connecting workspace updates…"}</span><button className="quiet small" onClick={() => { setWorkspaceAttempt(value => value + 1); void refresh().catch(error => setError(errorMessage(error))); }}>Reconnect updates</button></div></div>
         <div className="workspace-grid">
           <section className="draft-pane" aria-labelledby="draft-heading">
@@ -297,7 +297,7 @@ export default function Home() {
           </section>
         </div>
       </>}
-    </main><footer>REVEAL research API <span>QA environment</span><a href="https://api-qa.hugeampkpnbi.org/api/reveal/docs" target="_blank" rel="noreferrer">API reference</a></footer>
+    </main><footer className="site-footer"><a href="https://api-qa.hugeampkpnbi.org/api/reveal/docs" target="_blank" rel="noreferrer">API reference</a></footer>
   </>;
 }
 
