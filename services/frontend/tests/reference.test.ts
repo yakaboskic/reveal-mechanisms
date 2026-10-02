@@ -3,9 +3,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { api, ApiError, supersededReference, unwrap, type Schema } from "../src/lib/client";
 import { applySuggestions, currentAnalysisComposer, dropOutdatedAnchors, emptyComposer, factorSelection, persistDraft } from "../src/lib/composer";
-import { anchorKey, currentComposer, currentReferenceModel, isArchived, isReferenceReload, legacyReferenceModel, modelOfSourceId, observeFactors, observedReferenceModel, outdatedFromAnchor, outdatedFromFactor, parseReferenceState, referenceProblemMessage, referenceQuery, referenceRechecker, referenceRecheckDelaysMs, referenceReloaded } from "../src/lib/reference";
+import { anchorKey, currentComposer, currentReferenceModel, isArchived, isReferenceReload, legacyReferenceModel, modelOfSourceId, observeFactors, observedReferenceModel, outdatedFromAnchor, outdatedFromFactor, listedAccountCount, parseReferenceState, referenceProblemMessage, referenceQuery, referenceRechecker, referenceRecheckDelaysMs, referenceReloaded } from "../src/lib/reference";
 import { rememberSubmission, restoreSubmission, type SubmissionAttempt } from "../src/lib/submission";
-import { loadWorkspaceData, workspaceKey, workspaceKeys } from "../src/lib/workspace-data";
+import { loadWorkspaceData, workspaceKey, workspaceKeyParts, type WorkspaceKey } from "../src/lib/workspace-data";
 import { affectedWorkspaceTabs } from "../src/lib/workspace-events";
 
 // Every archived shape below is a contract example built by the backend's own stamp helpers.
@@ -148,19 +148,26 @@ test("listing summaries are archived only when stamped", () => {
 });
 
 test("workspace listings cache each reference filter and send it only when filtered", async t => {
-  assert.equal(workspaceKey("accounts"), "accounts"); assert.equal(workspaceKey("accounts", "all"), "accounts");
-  assert.equal(workspaceKey("explorations", "archived"), "explorations:archived"); assert.equal(workspaceKey("gaps", "archived"), "gaps");
-  assert.deepEqual(workspaceKeys(affectedWorkspaceTabs({ collections: ["accounts"] } as never)), ["accounts", "accounts:current", "accounts:archived"]);
-  assert.deepEqual(workspaceKeys(["gaps"]), ["gaps"]);
+  assert.equal(workspaceKey("accounts"), "accounts"); assert.equal(workspaceKey("accounts", "", "all"), "accounts");
+  assert.equal(workspaceKey("explorations", "", "archived"), "explorations:archived"); assert.equal(workspaceKey("gaps", "", "archived"), "gaps");
+  // A workspace search keeps its reference filter: both are part of the cache key.
+  const searched = workspaceKey("accounts", "  BMPR2 ", "current");
+  assert.equal(searched, "accounts:current?BMPR2");
+  assert.deepEqual(workspaceKeyParts(searched), { tab: "accounts", query: "BMPR2", reference: "current" });
+  // A change to a tab invalidates every reference filter and search of it.
+  const affected = new Set(affectedWorkspaceTabs({ collections: ["accounts"] } as never));
+  const cached: WorkspaceKey[] = ["accounts", "accounts:current", "accounts:archived", searched, "explorations:archived", "gaps"];
+  assert.deepEqual(cached.filter(key => affected.has(workspaceKeyParts(key).tab)), ["accounts", "accounts:current", "accounts:archived", searched]);
   const seen: unknown[] = [];
   const page = { next_cursor: null, has_more: false, snapshot_id: "test" };
-  t.mock.method(api, "accounts", async (_cursor?: string, _signal?: AbortSignal, reference?: string) => { seen.push(reference); return { items: archivedAccounts.items, page }; });
-  t.mock.method(api, "outcomes", async (_cursor?: string, _signal?: AbortSignal, reference?: string) => { seen.push(reference); return { items: [], page }; });
+  t.mock.method(api, "accounts", async (_cursor?: string, _signal?: AbortSignal, query?: string, reference?: string) => { seen.push([query, reference]); return { items: archivedAccounts.items, page }; });
+  t.mock.method(api, "outcomes", async (_cursor?: string, _signal?: AbortSignal, query?: string, reference?: string) => { seen.push([query, reference]); return { items: [], page }; });
   const signal = new AbortController().signal;
   const archivedOnly = await loadWorkspaceData("accounts:archived", undefined, "refresh", signal);
   await loadWorkspaceData("accounts", undefined, "refresh", signal);
   await loadWorkspaceData("explorations:current", undefined, "refresh", signal);
-  assert.deepEqual(seen, ["archived", "all", "current"]);
+  await loadWorkspaceData(searched, undefined, "refresh", signal);
+  assert.deepEqual(seen, [[undefined, "archived"], [undefined, "all"], [undefined, "current"], ["BMPR2", "current"]]);
   assert.equal(archivedOnly.accounts.length, archivedAccounts.items.length);
 });
 
@@ -207,4 +214,12 @@ test("a saved draft dropped at a cutover (404) keeps the edits as a new draft", 
   await assert.rejects(persistDraft(client(new ApiError(404, "NOT_FOUND", "gone")), saved, snapshot, key, { current: () => false }), (error: ApiError) => error.status === 404);
   assert.deepEqual(calls, ["patch:dropped-draft", "patch:dropped-draft"]);
   assert.deepEqual(await persistDraft(client(new Error("unused")), null, snapshot, key), { draft: created, replaced: null });
+});
+
+test("a gap's collapsed account count matches the listing its reference filter opens", () => {
+  const before = { count: 2 }, after = { count: 2, archived_count: 3 };
+  assert.deepEqual((["all", "current", "archived"] as const).map(state => listedAccountCount(before, state)), [2, 2, 0]);
+  assert.deepEqual((["all", "current", "archived"] as const).map(state => listedAccountCount(after, state)), [5, 2, 3]);
+  // Straight after a cutover every account is archived: the default listing is not empty.
+  assert.equal(listedAccountCount({ count: 0, archived_count: 3 }, "all"), 3);
 });

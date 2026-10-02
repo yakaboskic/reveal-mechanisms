@@ -302,8 +302,29 @@ Subscribe once per workspace provider and apply committed invalidations.
 - Redis Pub/Sub wakes authorized RDS replay after commit; there are no periodic workspace list refreshes.
 - Reconnect with the signed cursor. Reload authorized collections only when an explicit resync is required.
 
+### Vote on a gap or public scientific account
+
+Read public totals and let a signed-in user upvote, downvote or clear their own choice.
+
+**Request:** A canonical gap or currently public account ID; registered session and Idempotency-Key for writes.
+
+**Response:** VoteState with upvotes, downvotes, net score and the current registered viewer’s vote.
+
+- `GET /v1/knowledge-gaps/{gap_id}/vote` — [request request/response](examples/getGapVote.request.json)
+- `POST /v1/knowledge-gaps/{gap_id}/vote` — [upvote request/response](examples/setGapVote.upvote.json)
+- `POST /v1/knowledge-gaps/{gap_id}/vote` — [downvote request/response](examples/setGapVote.downvote.json)
+- `POST /v1/knowledge-gaps/{gap_id}/vote` — [clear request/response](examples/setGapVote.clear.json)
+- `GET /v1/accounts/{account_id}/vote` — [request request/response](examples/getAccountVote.request.json)
+- `POST /v1/accounts/{account_id}/vote` — [upvote request/response](examples/setAccountVote.upvote.json)
+- `POST /v1/accounts/{account_id}/vote` — [downvote request/response](examples/setAccountVote.downvote.json)
+- `POST /v1/accounts/{account_id}/vote` — [clear request/response](examples/setAccountVote.clear.json)
+
+- Each registered user has one mutable choice per canonical target. Anonymous readers see totals only.
+- Private account votes are unavailable; independently published copies share the same canonical account totals.
+- Gap browsing can rank by net votes; committed changes invalidate catalog views through existing events.
+
 ## Evidence and validation
 
 Requests/responses are taken from the existing validated OpenAPI exchange library. The CADinT2D analysis/paragraph sequence is internally linked. The CAD source-selected gap now frames the request and account. The evidence package is a separate captured input; the authored account is not its validated agent output. Semantic scores and agent outputs remain illustrative fixtures.
 
-The mapping covers 44 operations and all 58 exchanges. OpenAPI SHA-256: `7b318840c3ae2257959e406ef681b5b55ce032baeae62d63c6126223ab41905f`. No endpoints or payloads were changed to build this diagram.
+The mapping covers 48 operations and all 66 exchanges. OpenAPI SHA-256: `50bd94cedab30309420ffd025405ae920d4caa0f393062e3ef170697583eea96`. No endpoints or payloads were changed to build this diagram.

@@ -2238,6 +2238,12 @@
                               "as_of": "2026-09-24T16:00:00Z",
                               "ranking": "curated",
                               "window_days": null
+                            },
+                            "votes": {
+                              "upvotes": 0,
+                              "downvotes": 0,
+                              "score": 0,
+                              "user_vote": null
                             }
                           },
                           "ranking": {
@@ -2424,7 +2430,7 @@
           "Knowledge gaps"
         ],
         "summary": "Browse knowledge gaps",
-        "description": "Browse imported DisMech gaps ordered by distinct scientific-account count descending. Public scope (default) counts only explicitly published snapshots across users; workspace scope requires a session and counts owned saved accounts. Equal-count gaps shuffle on each new browse; a server seed in the signed continuation cursor preserves tie order across pages. Exact gap digests only: no text matching, attempts, paragraph jobs or implicit source-revision rollup. Invalid supplied credentials are rejected even for public reads. Filters apply before pagination; count or corpus changes expire cursors. Counts include current accounts only: accounts archived by a reference reload stay listed but are not counted.",
+        "description": "Browse imported DisMech gaps ordered by distinct scientific-account count descending. Public scope (default) counts only explicitly published snapshots across users; workspace scope requires a session and counts owned saved accounts. Equal-count gaps shuffle on each new browse; a server seed in the signed continuation cursor preserves tie order across pages. Exact gap digests only: no text matching, attempts, paragraph jobs or implicit source-revision rollup. Invalid supplied credentials are rejected even for public reads. Filters apply before pagination; count or corpus changes expire cursors. sort=votes orders by net gap vote score, then account count, then the same seeded tie order. sort=accounts is the default. Vote changes, sort changes and registered-viewer changes expire cursors. Account votes do not contribute to gap vote totals. Counts include current accounts only: accounts archived by a reference reload stay listed but are not counted.",
         "parameters": [
           {
             "name": "kind",
@@ -2502,6 +2508,21 @@
             },
             "example": "opaque-next-page",
             "description": "Omit for the first page. A returned next_cursor is opaque; the example is illustrative and cannot be used against a live service."
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "accounts",
+                "votes"
+              ],
+              "default": "accounts"
+            },
+            "example": "accounts",
+            "description": ""
           },
           {
             "name": "scope",
@@ -2624,6 +2645,12 @@
                             "as_of": "2026-09-24T16:00:00Z",
                             "ranking": "curated",
                             "window_days": null
+                          },
+                          "votes": {
+                            "upvotes": 0,
+                            "downvotes": 0,
+                            "score": 0,
+                            "user_vote": null
                           }
                         }
                       ],
@@ -2739,7 +2766,7 @@
           {
             "lang": "Shell",
             "label": "request",
-            "source": "curl -X GET 'https://api.reveal.example.org/v1/knowledge-gaps?kind=KNOWLEDGE_GAP&status=OPEN&source=dismech&disease_id=MONDO%3A0021661&limit=20&scope=public' -H 'Accept: application/json'"
+            "source": "curl -X GET 'https://api.reveal.example.org/v1/knowledge-gaps?kind=KNOWLEDGE_GAP&status=OPEN&source=dismech&disease_id=MONDO%3A0021661&limit=20&sort=accounts&scope=public' -H 'Accept: application/json'"
           }
         ]
       }
@@ -2895,6 +2922,12 @@
                         "as_of": "2026-09-24T16:00:00Z",
                         "ranking": "curated",
                         "window_days": null
+                      },
+                      "votes": {
+                        "upvotes": 0,
+                        "downvotes": 0,
+                        "score": 0,
+                        "user_vote": null
                       }
                     }
                   }
@@ -14598,7 +14631,7 @@
           "Scientific content"
         ],
         "summary": "List your scientific accounts",
-        "description": "Owner-scoped, newest first then account ID; deduplicate repeated deliveries by digest. Filter by exact gap_id. No private records from other users with the same gap. Closing remarks provide the summary; paragraph status is independent. reference_state filters current and archived work; the default all lists current items first.",
+        "description": "Owner-scoped, newest first then account ID; deduplicate repeated deliveries by digest. Filter by exact gap_id. Optional q searches account ID, title and closing remarks, knowledge-gap ID/name/text and original attribution display name across all saved summaries before pagination. No private records from other users with the same gap. Closing remarks provide the summary; paragraph status is independent. Publication is current mutable workspace state, separate from immutable scientific content. reference_state filters current and archived work; the default all lists current items first.",
         "parameters": [
           {
             "name": "gap_id",
@@ -14611,6 +14644,19 @@
             },
             "example": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
             "description": "Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values."
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Case-insensitive literal search over the entire authorized saved collection before pagination. Whitespace is normalized; every query word must match. Cursors are bound to the normalized query.",
+              "maxLength": 200,
+              "default": ""
+            },
+            "example": "mechanism",
+            "description": "Case-insensitive literal search over the entire authorized saved collection before pagination. Whitespace is normalized; every query word must match. Cursors are bound to the normalized query."
           },
           {
             "name": "reference_state",
@@ -14716,7 +14762,16 @@
                             "status": "succeeded",
                             "job_id": "55555555-5555-4555-8555-555555555555",
                             "paragraph_id": "dapper:Paragraph.uSYa1LdXNPuwlSgsCz3oZ7IfrVoztroD"
-                          }
+                          },
+                          "publication": {
+                            "visibility": "private",
+                            "version": 0,
+                            "published_at": null,
+                            "updated_at": null,
+                            "can_manage": true,
+                            "has_unpublished_changes": false
+                          },
+                          "votes": null
                         }
                       ],
                       "page": {
@@ -14781,6 +14836,15 @@
                             "job_id": "55555555-5555-4555-8555-555555555555",
                             "paragraph_id": "dapper:Paragraph.uSYa1LdXNPuwlSgsCz3oZ7IfrVoztroD"
                           },
+                          "publication": {
+                            "visibility": "private",
+                            "version": 0,
+                            "published_at": null,
+                            "updated_at": null,
+                            "can_manage": true,
+                            "has_unpublished_changes": false
+                          },
+                          "votes": null,
                           "archive": {
                             "status": "archived",
                             "reason": "reference_generation_superseded",
@@ -14893,6 +14957,61 @@
               }
             }
           },
+          "409": {
+            "description": "Version Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "version_conflict": {
+                    "summary": "Version conflict",
+                    "value": {
+                      "type": "urn:reveal:problem:version-conflict",
+                      "title": "Version Conflict",
+                      "status": 409,
+                      "code": "VERSION_CONFLICT",
+                      "detail": "The saved draft has changed. Reload and reconcile before retrying.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false,
+                      "current_version": 3
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid Input",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "invalid_input": {
+                    "summary": "Invalid input",
+                    "value": {
+                      "type": "urn:reveal:problem:invalid-input",
+                      "title": "Invalid Input",
+                      "status": 422,
+                      "code": "INVALID_INPUT",
+                      "detail": "The request does not satisfy the operation contract.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false,
+                      "field_errors": [
+                        {
+                          "pointer": "/inquiry",
+                          "message": "A valid DAPPER inquiry is required."
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
           "429": {
             "description": "Rate Limited",
             "content": {
@@ -14936,7 +15055,7 @@
           {
             "lang": "Shell",
             "label": "request",
-            "source": "curl -X GET 'https://api.reveal.example.org/v1/accounts?gap_id=dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk&reference_state=all&limit=20' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
+            "source": "curl -X GET 'https://api.reveal.example.org/v1/accounts?gap_id=dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk&q=mechanism&reference_state=all&limit=20' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
           }
         ]
       }
@@ -15093,6 +15212,15 @@
                             "job_id": "55555555-5555-4555-8555-555555555555",
                             "paragraph_id": "dapper:Paragraph.uSYa1LdXNPuwlSgsCz3oZ7IfrVoztroD"
                           },
+                          "publication": {
+                            "visibility": "private",
+                            "version": 0,
+                            "published_at": null,
+                            "updated_at": null,
+                            "can_manage": true,
+                            "has_unpublished_changes": false
+                          },
+                          "votes": null,
                           "attribution": {
                             "user_id": "11111111-1111-4111-8111-111111111111",
                             "person_id": "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he",
@@ -15176,6 +15304,20 @@
                             "status": "succeeded",
                             "job_id": null,
                             "paragraph_id": "dapper:Paragraph.uSYa1LdXNPuwlSgsCz3oZ7IfrVoztroD"
+                          },
+                          "publication": {
+                            "visibility": "public",
+                            "version": 1,
+                            "published_at": "2026-09-24T16:00:00Z",
+                            "updated_at": "2026-09-24T16:00:00Z",
+                            "can_manage": false,
+                            "has_unpublished_changes": false
+                          },
+                          "votes": {
+                            "upvotes": 0,
+                            "downvotes": 0,
+                            "score": 0,
+                            "user_vote": null
                           },
                           "attribution": {
                             "user_id": "11111111-1111-4111-8111-111111111111",
@@ -15865,6 +16007,928 @@
         ]
       }
     },
+    "/v1/knowledge-gaps/{gap_id}/vote": {
+      "get": {
+        "operationId": "getGapVote",
+        "tags": [
+          "Knowledge gaps"
+        ],
+        "summary": "Read gap votes",
+        "description": "Votes are keyed to the canonical imported KnowledgeGap identity. Public and anonymous readers receive totals with user_vote=null. Registered readers receive their current vote; invalid supplied credentials are rejected.",
+        "parameters": [
+          {
+            "name": "gap_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values.",
+              "pattern": "^dapper:KnowledgeGap\\.[A-Za-z0-9_-]{32}$"
+            },
+            "example": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+            "description": "Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoteState"
+                },
+                "examples": {
+                  "public": {
+                    "summary": "Public",
+                    "value": {
+                      "upvotes": 2,
+                      "downvotes": 1,
+                      "score": 1,
+                      "user_vote": null
+                    }
+                  },
+                  "registered": {
+                    "summary": "Registered",
+                    "value": {
+                      "upvotes": 2,
+                      "downvotes": 1,
+                      "score": 1,
+                      "user_vote": 1
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "description": "Correlation ID for this HTTP request.",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication Required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "authentication_required": {
+                    "summary": "Authentication required",
+                    "value": {
+                      "type": "urn:reveal:problem:authentication-required",
+                      "title": "Authentication Required",
+                      "status": 401,
+                      "code": "AUTHENTICATION_REQUIRED",
+                      "detail": "A valid trusted-gateway API assertion is required.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "not_found": {
+                    "summary": "Not found",
+                    "value": {
+                      "type": "urn:reveal:problem:not-found",
+                      "title": "Not Found",
+                      "status": 404,
+                      "code": "NOT_FOUND",
+                      "detail": "No accessible record exists for the supplied identifier or exact revision.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate Limited",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "rate_limited": {
+                    "summary": "Rate limited",
+                    "value": {
+                      "type": "urn:reveal:problem:rate-limited",
+                      "title": "Rate Limited",
+                      "status": 429,
+                      "code": "RATE_LIMITED",
+                      "detail": "Retry after the interval in Retry-After.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": true
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "example": 30
+              }
+            }
+          }
+        },
+        "security": [
+          {},
+          {
+            "ApplicationBearer": []
+          }
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "label": "request",
+            "source": "curl -X GET https://api.reveal.example.org/v1/knowledge-gaps/dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk/vote -H 'Accept: application/json'"
+          }
+        ]
+      },
+      "post": {
+        "operationId": "setGapVote",
+        "tags": [
+          "Knowledge gaps"
+        ],
+        "summary": "Set your gap vote",
+        "description": "Votes are keyed to the canonical imported KnowledgeGap identity. Registered sign-in is required. One mutable vote per user: set up/down or clear. Concurrent writes serialize with aggregate updates; idempotent retries do not reapply an older vote. Eligibility and current session are checked again before replay. Commit wakes existing event subscribers without Redis polling.",
+        "parameters": [
+          {
+            "name": "gap_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values.",
+              "pattern": "^dapper:KnowledgeGap\\.[A-Za-z0-9_-]{32}$"
+            },
+            "example": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+            "description": "Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values."
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 8,
+              "maxLength": 128
+            },
+            "example": "66666666-6666-4666-8666-666666666666",
+            "description": "Unique per caller and operation for at least 7 days. Same key and same canonical body replay the original accepted response; changed body returns 409 IDEMPOTENCY_CONFLICT. Compare idempotency before draft-version checks on retries."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoteState"
+                },
+                "examples": {
+                  "upvoted": {
+                    "summary": "Upvoted",
+                    "value": {
+                      "upvotes": 1,
+                      "downvotes": 0,
+                      "score": 1,
+                      "user_vote": 1
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "description": "Correlation ID for this HTTP request.",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "invalid_request": {
+                    "summary": "Invalid request",
+                    "value": {
+                      "type": "urn:reveal:problem:invalid-request",
+                      "title": "Invalid Request",
+                      "status": 400,
+                      "code": "INVALID_REQUEST",
+                      "detail": "A parameter or cursor does not match the requested operation.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication Required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "authentication_required": {
+                    "summary": "Authentication required",
+                    "value": {
+                      "type": "urn:reveal:problem:authentication-required",
+                      "title": "Authentication Required",
+                      "status": 401,
+                      "code": "AUTHENTICATION_REQUIRED",
+                      "detail": "A valid trusted-gateway API assertion is required.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sign In Required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "sign_in_required": {
+                    "summary": "Sign in required",
+                    "value": {
+                      "type": "urn:reveal:problem:sign-in-required",
+                      "title": "Sign In Required",
+                      "status": 403,
+                      "code": "SIGN_IN_REQUIRED",
+                      "detail": "Sign in to publish a scientific account or exploration.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "not_found": {
+                    "summary": "Not found",
+                    "value": {
+                      "type": "urn:reveal:problem:not-found",
+                      "title": "Not Found",
+                      "status": 404,
+                      "code": "NOT_FOUND",
+                      "detail": "No accessible record exists for the supplied identifier or exact revision.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Version Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "version_conflict": {
+                    "summary": "Version conflict",
+                    "value": {
+                      "type": "urn:reveal:problem:version-conflict",
+                      "title": "Version Conflict",
+                      "status": 409,
+                      "code": "VERSION_CONFLICT",
+                      "detail": "The saved draft has changed. Reload and reconcile before retrying.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false,
+                      "current_version": 3
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid Input",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "invalid_input": {
+                    "summary": "Invalid input",
+                    "value": {
+                      "type": "urn:reveal:problem:invalid-input",
+                      "title": "Invalid Input",
+                      "status": 422,
+                      "code": "INVALID_INPUT",
+                      "detail": "The request does not satisfy the operation contract.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false,
+                      "field_errors": [
+                        {
+                          "pointer": "/inquiry",
+                          "message": "A valid DAPPER inquiry is required."
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate Limited",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "rate_limited": {
+                    "summary": "Rate limited",
+                    "value": {
+                      "type": "urn:reveal:problem:rate-limited",
+                      "title": "Rate Limited",
+                      "status": 429,
+                      "code": "RATE_LIMITED",
+                      "detail": "Retry after the interval in Retry-After.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": true
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "example": 30
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApplicationBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VoteInput"
+              },
+              "examples": {
+                "upvote": {
+                  "summary": "Upvote",
+                  "value": {
+                    "vote": 1
+                  }
+                },
+                "downvote": {
+                  "summary": "Downvote",
+                  "value": {
+                    "vote": -1
+                  }
+                },
+                "clear": {
+                  "summary": "Clear",
+                  "value": {
+                    "vote": 0
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "label": "upvote",
+            "source": "curl -X POST https://api.reveal.example.org/v1/knowledge-gaps/dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk/vote -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"vote\":1}'"
+          },
+          {
+            "lang": "Shell",
+            "label": "downvote",
+            "source": "curl -X POST https://api.reveal.example.org/v1/knowledge-gaps/dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk/vote -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"vote\":-1}'"
+          },
+          {
+            "lang": "Shell",
+            "label": "clear",
+            "source": "curl -X POST https://api.reveal.example.org/v1/knowledge-gaps/dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk/vote -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"vote\":0}'"
+          }
+        ]
+      }
+    },
+    "/v1/accounts/{account_id}/vote": {
+      "get": {
+        "operationId": "getAccountVote",
+        "tags": [
+          "Scientific content"
+        ],
+        "summary": "Read account votes",
+        "description": "Votes are keyed to one canonical ScientificAccount identity and its exact KnowledgeGap, shared across independent publications of the same account. Only an active public snapshot permits reading or voting; private and missing accounts both return404, including to their owners. Unpublication hides retained votes until an independent publication remains or the account is published again. Public and anonymous readers receive totals with user_vote=null. Registered readers receive their current vote; invalid supplied credentials are rejected.",
+        "parameters": [
+          {
+            "name": "account_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values.",
+              "pattern": "^dapper:ScientificAccount\\.[A-Za-z0-9_-]{32}$"
+            },
+            "example": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
+            "description": "Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoteState"
+                },
+                "examples": {
+                  "public": {
+                    "summary": "Public",
+                    "value": {
+                      "upvotes": 2,
+                      "downvotes": 1,
+                      "score": 1,
+                      "user_vote": null
+                    }
+                  },
+                  "registered": {
+                    "summary": "Registered",
+                    "value": {
+                      "upvotes": 2,
+                      "downvotes": 1,
+                      "score": 1,
+                      "user_vote": 1
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "description": "Correlation ID for this HTTP request.",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication Required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "authentication_required": {
+                    "summary": "Authentication required",
+                    "value": {
+                      "type": "urn:reveal:problem:authentication-required",
+                      "title": "Authentication Required",
+                      "status": 401,
+                      "code": "AUTHENTICATION_REQUIRED",
+                      "detail": "A valid trusted-gateway API assertion is required.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "not_found": {
+                    "summary": "Not found",
+                    "value": {
+                      "type": "urn:reveal:problem:not-found",
+                      "title": "Not Found",
+                      "status": 404,
+                      "code": "NOT_FOUND",
+                      "detail": "No accessible record exists for the supplied identifier or exact revision.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate Limited",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "rate_limited": {
+                    "summary": "Rate limited",
+                    "value": {
+                      "type": "urn:reveal:problem:rate-limited",
+                      "title": "Rate Limited",
+                      "status": 429,
+                      "code": "RATE_LIMITED",
+                      "detail": "Retry after the interval in Retry-After.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": true
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "example": 30
+              }
+            }
+          }
+        },
+        "security": [
+          {},
+          {
+            "ApplicationBearer": []
+          }
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "label": "request",
+            "source": "curl -X GET https://api.reveal.example.org/v1/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/vote -H 'Accept: application/json'"
+          }
+        ]
+      },
+      "post": {
+        "operationId": "setAccountVote",
+        "tags": [
+          "Scientific content"
+        ],
+        "summary": "Set your account vote",
+        "description": "Votes are keyed to one canonical ScientificAccount identity and its exact KnowledgeGap, shared across independent publications of the same account. Only an active public snapshot permits reading or voting; private and missing accounts both return404, including to their owners. Unpublication hides retained votes until an independent publication remains or the account is published again. Registered sign-in is required. One mutable vote per user: set up/down or clear. Concurrent writes serialize with aggregate updates; idempotent retries do not reapply an older vote. Eligibility and current session are checked again before replay. Commit wakes existing event subscribers without Redis polling.",
+        "parameters": [
+          {
+            "name": "account_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values.",
+              "pattern": "^dapper:ScientificAccount\\.[A-Za-z0-9_-]{32}$"
+            },
+            "example": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
+            "description": "Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values."
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 8,
+              "maxLength": 128
+            },
+            "example": "66666666-6666-4666-8666-666666666666",
+            "description": "Unique per caller and operation for at least 7 days. Same key and same canonical body replay the original accepted response; changed body returns 409 IDEMPOTENCY_CONFLICT. Compare idempotency before draft-version checks on retries."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoteState"
+                },
+                "examples": {
+                  "upvoted": {
+                    "summary": "Upvoted",
+                    "value": {
+                      "upvotes": 1,
+                      "downvotes": 0,
+                      "score": 1,
+                      "user_vote": 1
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "description": "Correlation ID for this HTTP request.",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "invalid_request": {
+                    "summary": "Invalid request",
+                    "value": {
+                      "type": "urn:reveal:problem:invalid-request",
+                      "title": "Invalid Request",
+                      "status": 400,
+                      "code": "INVALID_REQUEST",
+                      "detail": "A parameter or cursor does not match the requested operation.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication Required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "authentication_required": {
+                    "summary": "Authentication required",
+                    "value": {
+                      "type": "urn:reveal:problem:authentication-required",
+                      "title": "Authentication Required",
+                      "status": 401,
+                      "code": "AUTHENTICATION_REQUIRED",
+                      "detail": "A valid trusted-gateway API assertion is required.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Sign In Required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "sign_in_required": {
+                    "summary": "Sign in required",
+                    "value": {
+                      "type": "urn:reveal:problem:sign-in-required",
+                      "title": "Sign In Required",
+                      "status": 403,
+                      "code": "SIGN_IN_REQUIRED",
+                      "detail": "Sign in to publish a scientific account or exploration.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "not_found": {
+                    "summary": "Not found",
+                    "value": {
+                      "type": "urn:reveal:problem:not-found",
+                      "title": "Not Found",
+                      "status": 404,
+                      "code": "NOT_FOUND",
+                      "detail": "No accessible record exists for the supplied identifier or exact revision.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Version Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "version_conflict": {
+                    "summary": "Version conflict",
+                    "value": {
+                      "type": "urn:reveal:problem:version-conflict",
+                      "title": "Version Conflict",
+                      "status": 409,
+                      "code": "VERSION_CONFLICT",
+                      "detail": "The saved draft has changed. Reload and reconcile before retrying.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false,
+                      "current_version": 3
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid Input",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "invalid_input": {
+                    "summary": "Invalid input",
+                    "value": {
+                      "type": "urn:reveal:problem:invalid-input",
+                      "title": "Invalid Input",
+                      "status": 422,
+                      "code": "INVALID_INPUT",
+                      "detail": "The request does not satisfy the operation contract.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false,
+                      "field_errors": [
+                        {
+                          "pointer": "/inquiry",
+                          "message": "A valid DAPPER inquiry is required."
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate Limited",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "rate_limited": {
+                    "summary": "Rate limited",
+                    "value": {
+                      "type": "urn:reveal:problem:rate-limited",
+                      "title": "Rate Limited",
+                      "status": 429,
+                      "code": "RATE_LIMITED",
+                      "detail": "Retry after the interval in Retry-After.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": true
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "example": 30
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApplicationBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VoteInput"
+              },
+              "examples": {
+                "upvote": {
+                  "summary": "Upvote",
+                  "value": {
+                    "vote": 1
+                  }
+                },
+                "downvote": {
+                  "summary": "Downvote",
+                  "value": {
+                    "vote": -1
+                  }
+                },
+                "clear": {
+                  "summary": "Clear",
+                  "value": {
+                    "vote": 0
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "label": "upvote",
+            "source": "curl -X POST https://api.reveal.example.org/v1/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/vote -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"vote\":1}'"
+          },
+          {
+            "lang": "Shell",
+            "label": "downvote",
+            "source": "curl -X POST https://api.reveal.example.org/v1/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/vote -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"vote\":-1}'"
+          },
+          {
+            "lang": "Shell",
+            "label": "clear",
+            "source": "curl -X POST https://api.reveal.example.org/v1/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/vote -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"vote\":0}'"
+          }
+        ]
+      }
+    },
     "/v1/analysis-outcomes": {
       "get": {
         "operationId": "listAnalysisOutcomes",
@@ -15872,8 +16936,21 @@
           "Personal workspace"
         ],
         "summary": "List saved workspace explorations",
-        "description": "Session-required, newest-first summaries of all completed insufficient-evidence explorations owned by this workspace, private or published, across every knowledge gap. Includes previously saved records without a new run or publication. Operational failures are not scientific exploration outcomes. Other owners are excluded, even for published records. Detail and provenance are loaded only when opened. reference_state filters current and archived work; the default all lists current items first.",
+        "description": "Session-required, newest-first summaries of all completed insufficient-evidence explorations owned by this workspace, private or published, across every knowledge gap. Optional q searches outcome ID/summary, knowledge-gap ID/name/text, anchor names/traits/identifiers and original attribution display name across all saved summaries before pagination. Includes previously saved records without a new run or publication. Operational failures are not scientific exploration outcomes. Other owners are excluded, even for published records. Detail and provenance are loaded only when opened. reference_state filters current and archived work; the default all lists current items first.",
         "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Case-insensitive literal search over the entire authorized saved collection before pagination. Whitespace is normalized; every query word must match. Cursors are bound to the normalized query.",
+              "maxLength": 200,
+              "default": ""
+            },
+            "example": "mechanism",
+            "description": "Case-insensitive literal search over the entire authorized saved collection before pagination. Whitespace is normalized; every query word must match. Cursors are bound to the normalized query."
+          },
           {
             "name": "reference_state",
             "in": "query",
@@ -16147,6 +17224,36 @@
               }
             }
           },
+          "422": {
+            "description": "Invalid Input",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "invalid_input": {
+                    "summary": "Invalid input",
+                    "value": {
+                      "type": "urn:reveal:problem:invalid-input",
+                      "title": "Invalid Input",
+                      "status": 422,
+                      "code": "INVALID_INPUT",
+                      "detail": "The request does not satisfy the operation contract.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false,
+                      "field_errors": [
+                        {
+                          "pointer": "/inquiry",
+                          "message": "A valid DAPPER inquiry is required."
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
           "429": {
             "description": "Rate Limited",
             "content": {
@@ -16190,7 +17297,7 @@
           {
             "lang": "Shell",
             "label": "request",
-            "source": "curl -X GET 'https://api.reveal.example.org/v1/analysis-outcomes?reference_state=all&limit=20' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
+            "source": "curl -X GET 'https://api.reveal.example.org/v1/analysis-outcomes?q=mechanism&reference_state=all&limit=20' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
           }
         ]
       }
@@ -31358,6 +32465,9 @@
           },
           "scientific_accounts": {
             "$ref": "#/components/schemas/AccountCount"
+          },
+          "votes": {
+            "$ref": "#/components/schemas/VoteState"
           }
         },
         "required": [
@@ -31365,7 +32475,8 @@
           "source",
           "attachments",
           "source_detail",
-          "scientific_accounts"
+          "scientific_accounts",
+          "votes"
         ],
         "additionalProperties": false
       },
@@ -33475,6 +34586,11 @@
                 "type": "null"
               }
             ]
+          },
+          "archived_count": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Accounts in the same scope built on a superseded EAGGL reference generation. Omitted when there are none. Listings with reference_state=all include them; count and ranking do not."
           }
         },
         "required": [
@@ -33485,7 +34601,64 @@
           "window_days"
         ],
         "additionalProperties": false,
-        "description": "Distinct accessible saved account digests linked to this exact gap digest; no implicit cross-revision rollup or private-count leakage."
+        "description": "Distinct accessible saved account digests linked to this exact gap digest; no implicit cross-revision rollup or private-count leakage. count covers current reference work only."
+      },
+      "VoteState": {
+        "type": "object",
+        "properties": {
+          "upvotes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "downvotes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "score": {
+            "type": "integer"
+          },
+          "user_vote": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "enum": [
+                  -1,
+                  0,
+                  1
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "upvotes",
+          "downvotes",
+          "score",
+          "user_vote"
+        ],
+        "additionalProperties": false,
+        "description": "Public totals for one canonical scientific identity. Score equals upvotes minus downvotes. user_vote is null for anonymous/unauthenticated readers, otherwise -1, 0 (no vote), or 1 for the registered current user. No voter identities are exposed."
+      },
+      "VoteInput": {
+        "type": "object",
+        "properties": {
+          "vote": {
+            "type": "integer",
+            "enum": [
+              -1,
+              0,
+              1
+            ]
+          }
+        },
+        "required": [
+          "vote"
+        ],
+        "additionalProperties": false,
+        "description": "Set your one vote: 1 upvotes, -1 downvotes, 0 clears it. Registered sign-in and Idempotency-Key are required; repeated choices do not accumulate votes."
       },
       "ActivityDetail": {
         "type": "object",
@@ -34289,6 +35462,19 @@
           "research_statement": {
             "$ref": "#/components/schemas/ParagraphState"
           },
+          "publication": {
+            "$ref": "#/components/schemas/PublicationState"
+          },
+          "votes": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VoteState"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "attribution": {
             "anyOf": [
               {
@@ -34309,10 +35495,12 @@
           "claim_count",
           "created_at",
           "job_id",
-          "research_statement"
+          "research_statement",
+          "publication",
+          "votes"
         ],
         "additionalProperties": false,
-        "description": "One accessible accepted scientific account, deduplicated by its DAPPER identity. Optional attribution is the immutable original request actor, not the current workspace owner; null denotes unavailable historical attribution. Title and brief synthesis are account.name and account.closing_remarks."
+        "description": "One accessible accepted scientific account, deduplicated by its DAPPER identity. Publication reports the current owner publication state; public discovery uses can_manage=false. Optional attribution is the immutable original request actor, not the current workspace owner; null denotes unavailable historical attribution. Title and brief synthesis are account.name and account.closing_remarks."
       },
       "AccountList": {
         "type": "object",

@@ -6,7 +6,7 @@ archived, listings filter by reference_state, and superseded factors are 410.
 Legacy mode (no reference_active record) keeps today's behaviour.
 """
 import asyncio
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from copy import deepcopy
 import importlib.util
 import json
@@ -218,25 +218,48 @@ class ReferenceGuardTests(unittest.TestCase):
 
     def test_catalog_loads_before_write_transactions_open(self):
         # A cold catalog load reads reference_active through the application pool: it must never nest
-        # inside a pooled write transaction (draft saves and submits hold the global write lock).
-        depth, loads, transaction = [], [], self.repo.transaction
-        @contextmanager
-        def tracked():
-            depth.append(1)
-            try:
-                with transaction() as tx: yield tx
-            finally: depth.pop()
+        # inside a pooled transaction (draft saves, submits and vote writes hold the global write lock).
+        depth, loads = [], []
+        transaction, read_transaction = self.repo.transaction, self.repo.read_transaction
+        def tracked(opener):
+            @contextmanager
+            def opened(*args, **kwargs):
+                depth.append(1)
+                try:
+                    with opener(*args, **kwargs) as tx: yield tx
+                finally: depth.pop()
+            return opened
+        def tracking():
+            stack = ExitStack()
+            stack.enter_context(patch.object(self.repo, 'transaction', tracked(transaction)))
+            stack.enter_context(patch.object(self.repo, 'read_transaction', tracked(read_transaction)))
+            return stack
         self.catalog.load = lambda: loads.append(bool(depth))
-        with patch.object(self.repo, 'transaction', tracked):
+        with tracking():
             draft = self.create_draft(self.catalog.factors[LEGACY_ID]); first = len(loads)
             patched = self.patch_draft(draft, {'expected_version': 1, 'composer': self.composer(self.catalog.factors[LEGACY_ID], mechanism_subquery='x')})
             self.assertEqual(patched.status_code, 200, patched.text); second = len(loads)
             self.assertEqual(self.submit(patched.json()).status_code, 202)
         self.assertEqual([loads[0], loads[first], loads[second]], [False, False, False])
         loads.clear()
-        with patch.object(self.repo, 'transaction', tracked):  # A rename needs no catalog.
+        with tracking():  # A rename needs no catalog.
             self.assertEqual(self.patch_draft(patched.json(), {'expected_version': 2, 'name': 'Renamed'}).status_code, 200)
         self.assertEqual(loads, [])
+        # Votes resolve their gap through the catalog inside the transaction, so they load it first too.
+        account_id = 'dapper:ScientificAccount.' + 'b' * 32
+        with self.repo.transaction() as tx:
+            tx.put('publication_snapshot', 'snapshot', self.owner, {'account_id': account_id, 'document': {
+                'scientific_accounts': [{'id': account_id, 'question': GAP_ID}]}})
+            tx.put('publication', 'publication', self.owner, {'visibility': 'public', 'snapshot_id': 'snapshot',
+                   'published_at': now(), 'account_id': account_id})
+        for path in ('/v1/knowledge-gaps/' + GAP_ID + '/vote', '/v1/accounts/' + account_id + '/vote'):
+            for method in ('get', 'post'):
+                loads.clear()
+                with tracking():
+                    response = self.client.request(method, path, headers=self.headers(),
+                                                   **({'json': {'vote': 1}} if method == 'post' else {}))
+                self.assertEqual(response.status_code, 200, response.text)
+                self.assertEqual(loads, [False], (method, path))
 
     def test_superseded_draft_submission_is_409_and_reload_gate_is_503(self):
         draft = self.create_draft(self.catalog.factors[LEGACY_ID])
@@ -457,7 +480,11 @@ class ReferenceGuardTests(unittest.TestCase):
         self.assertEqual(listed(), [current, late])  # newest first would put the archived account first
         self.assertEqual(listed('current'), [current]); self.assertEqual(listed('archived'), [late])
         gap = self.client.get('/v1/knowledge-gaps/' + GAP_ID, params={'scope': 'workspace'}, headers=self.headers()).json()
-        self.assertEqual(gap['scientific_accounts']['count'], 1)
+        # Current work alone ranks the gap; archived work is counted apart for the 'all' listing.
+        self.assertEqual((gap['scientific_accounts']['count'], gap['scientific_accounts']['archived_count']), (1, 1))
+        api.validate(gap, 'GapRecord')
+        public_gap = self.client.get('/v1/knowledge-gaps/' + GAP_ID).json()['scientific_accounts']
+        self.assertEqual(public_gap['count'], 0); self.assertNotIn('archived_count', public_gap)
         path = '/v1/knowledge-gaps/' + GAP_ID + '/accounts'
         items = self.client.get(path, params={'scope': 'workspace', 'reference_state': 'archived'}, headers=self.headers()).json()['items']
         self.assertEqual([item['account']['id'] for item in items], [late])
@@ -468,6 +495,8 @@ class ReferenceGuardTests(unittest.TestCase):
             publication.change(tx, self.owner, late, 'public', 0)
         public = self.client.get(path).json()['items']
         self.assertEqual([item['archive'] for item in public], [reference.public_stamp(stamp)])
+        public_gap = self.client.get('/v1/knowledge-gaps/' + GAP_ID).json()['scientific_accounts']
+        self.assertEqual((public_gap['count'], public_gap['archived_count']), (0, 1))
         self.assertIsNone(public[0]['archive']['analysis']['job_id']); self.assertIsNone(public[0]['job_id'])
         self.assertEqual(self.client.get(path, params={'reference_state': 'current'}).json()['items'], [])
 

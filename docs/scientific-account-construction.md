@@ -69,7 +69,9 @@ This step includes both the user's request to examine other **knowledge gaps** a
 
 ### Step 4 — construct and assess a set of scoped propositions
 
-Choose the smallest set of propositions needed to explain the findings and their relevance to the gap. A single proposition is sufficient when it carries the whole supported answer. Several propositions are appropriate when results, biological interpretations, alternatives or limitations require separate assessments.
+Choose the distinct evidence-backed propositions needed to explain the findings and their relevance to the gap. Before drafting, map each candidate's exact sources, scope, uncertainty and contribution to the question. Do not stop at the first defensible assessment when other inspected observations support different useful findings. Split assertions that can differ in evidential support; combine observations that assess the same content instead of duplicating Claims.
+
+Keep related Claims in one account and order them so the reader can follow their contribution to the question, including supported alternatives or conflicts. Explain their relationship in the context and assessments without turning display order into a causal chain. A single proposition is sufficient when it carries the whole supported answer. Several propositions are appropriate when results, biological interpretations or alternatives require separate assessments. There is no count target, no requirement to instantiate every template, and no reason to invent evidence or expand retrieval just to make the account larger.
 
 For each proposition:
 
@@ -81,7 +83,7 @@ For each proposition:
 
 Source result Claims can be included directly as account components when useful, and can also be used as evidence for other Claims. Interpreted Claims can in turn be used as sources for a further assessment, provided support is acyclic and the explanation makes that dependence explicit. Reusing a source does not create an additional independent observation.
 
-Creating a separate source-result Claim is an agent modeling choice, not a mandatory step for every observed value. For simple PIGEAN/EAGGL examples, prefer one biological Claim with artifact-based EvidenceItems. Introduce the extra source assessment when its separate identity, citation, assessment or typed scores serve a purpose.
+Creating a separate source-result Claim is an agent modeling choice, not a mandatory step for every observed value. Each biological Claim can use artifact-based EvidenceItems directly. Introduce an extra source assessment when its separate identity, citation, assessment or typed scores serve a purpose. The small template examples each demonstrate one such assessment; they do not impose a one-Claim default on a complete account.
 
 Write each Claim's statement as a summary of the assessment across its EvidenceItems. It can name the reported loading, score or effect and explain why the evidence bears on the biological Proposition. The source factor identifies the mechanism directly; resolve that identity consistently in Propositions and evidence, retaining model/version and fit details in source provenance. Do not merge distinct mechanism identities or biological scopes merely because their labels match.
 
@@ -208,6 +210,7 @@ Review must establish that:
 - Biological targets follow the intended four template meanings, with source results faithfully retained as evidence with correct identities, metrics and locators.
 - Each EAGGL factor is resolved directly as a mechanism; an interim label never creates an extra factor-to-mechanism inference requirement.
 - Each Claim statement summarizes its evidence-based assessment; shared Propositions across methods have matching entities, meaning and biological scope.
+- Distinct assessments remain separately inspectable within a coherent account; no compound Claim or connecting prose hides an unsupported assertion behind a supported one. Apply the same evidential standard to single- and multi-Claim accounts without a claim-count quota.
 - Evidence targets match the owning Claim's Proposition; shared evidence retains its source identity and is not counted as independent corroboration.
 - Every interpreted scientific assessment has its own evidential explanation. Claim ordering alone is not an argument.
 - Closing remarks contain at most two short synthesis/recommendation sentences, retain decisive uncertainty and leave detailed evidence/provenance in structured account records.

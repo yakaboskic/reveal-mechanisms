@@ -22,6 +22,7 @@ from .account_discovery import visible_accounts, counts_by_gap, counted_gap, cou
 from . import publication
 from . import analysis_outcomes
 from . import reference_generation
+from . import votes
 
 CONTRACT = json.loads((ROOT/'api/openapi.json').read_text())
 GATEWAY = json.loads((ROOT/'schema/gateway.schema.json').read_text())
@@ -341,7 +342,9 @@ def search_gaps(request:Request,q: str='', limit: int=20, mode: str='fuzzy',kind
     items=[x for x in items if x['gap']['object']['id'] in allowed]
     owner,accounts=discovery(request,scope); counts=counts_by_gap(accounts); observed=now()
     items=[{**item,'gap':counted_gap(item['gap'],counts,owner,observed)} for item in items]
-    return {**page(items,owner,limit,cursor,digest([q,mode,kind,status,disease_id,scope]),snapshot_items=count_snapshot(items)),'search':catalog.provenance(q,mode)}
+    viewer,observations=gap_votes(request,[item['gap'] for item in items])
+    items=[{**item,'gap':gap} for item,gap in zip(items,observations)]
+    return {**page(items,viewer or owner,limit,cursor,digest([q,mode,kind,status,disease_id,scope]),snapshot_items=count_snapshot(items)),'search':catalog.provenance(q,mode)}
 
 def optional_identity(tx,request):
     authorization=request.headers.get('authorization')
@@ -355,13 +358,27 @@ def discovery(request,scope='public', *, attribution=False):
         if owner is None: raise Problem(401,'SESSION_EXPIRED','Continue with a registered or anonymous session to browse your workspace.')
         return owner,visible_accounts(tx,owner,attribution=attribution)
 
+def gap_votes(request, items):
+    with repo.read_transaction() as tx:
+        viewer=votes.viewer(tx,request.headers.get('authorization'))
+        values=votes.states(tx,[('gap',item['object']['id']) for item in items],viewer)
+    return viewer,[{**item,'votes':values[('gap',item['object']['id'])]} for item in items]
+
+def account_votes(request, items):
+    with repo.read_transaction() as tx:
+        viewer=votes.viewer(tx,request.headers.get('authorization'))
+        return viewer,votes.account_summaries(tx,items,viewer)
+
 @app.get('/v1/knowledge-gaps')
-def list_gaps(request:Request,limit: int=20,cursor:str|None=None,kind:str|None=None,status:str|None=None,source:str='dismech',disease_id:str|None=None,scope:str='public'):
+def list_gaps(request:Request,limit: int=20,cursor:str|None=None,kind:str|None=None,status:str|None=None,source:str='dismech',disease_id:str|None=None,scope:str='public',sort:str='accounts'):
+    if sort not in ('accounts','votes'): raise Problem(422,'INVALID_QUERY','Choose accounts or votes sorting.')
     catalog.load(); items=filter_gaps([x['gap'] for x in catalog.search_gaps('',len(catalog.gaps))],kind,status,disease_id)
     owner,accounts=discovery(request,scope); counts=counts_by_gap(accounts); observed=now(); seed=browse_seed(cursor)
     items=[counted_gap(gap,counts,owner,observed) for gap in items]
-    items.sort(key=lambda gap:(-gap['scientific_accounts']['count'],digest([seed,gap['object']['id']]),gap['source']['source_id'],gap['object']['id']))
-    return page(items,owner,limit,cursor,digest(['gaps',kind,status,disease_id,scope]),snapshot_items=count_snapshot(items),seed=seed)
+    viewer,items=gap_votes(request,items)
+    items.sort(key=lambda gap:((-gap['votes']['score'],) if sort=='votes' else ())+
+        (-gap['scientific_accounts']['count'],digest([seed,gap['object']['id']]),gap['source']['source_id'],gap['object']['id']))
+    return page(items,viewer or owner,limit,cursor,digest(['gaps',kind,status,disease_id,scope,sort]),snapshot_items=count_snapshot(items),seed=seed)
 
 def listing_scope(parts,reference_state):
     """Cursor scope; the default `all` keeps the pre-archive scope digest."""
@@ -373,7 +390,8 @@ def gap_accounts(gap_id:str,request:Request,limit:int=20,cursor:str|None=None,so
     if source_revision and source_revision!=gap['source']['source_revision']: raise Problem(409,'SOURCE_REVISION_CHANGED','The exact requested source revision is unavailable.')
     owner,accounts=discovery(request,scope,attribution=True)
     items=by_reference_state([item for item in accounts if item['account']['question']==gap['object']['id']],reference_state)
-    return page(items,owner,limit,cursor,listing_scope(['gap-accounts',gap['object']['id'],source_revision,scope],reference_state))
+    viewer,items=account_votes(request,items)
+    return page(items,viewer or owner,limit,cursor,listing_scope(['gap-accounts',gap['object']['id'],source_revision,scope],reference_state))
 
 @app.get('/v1/knowledge-gaps/{gap_id}/outcomes')
 def gap_outcomes(gap_id:str,request:Request,limit:int=20,cursor:str|None=None,source_revision:str|None=None,scope:str='public',reference_state:str='all'):
@@ -386,12 +404,42 @@ def gap_outcomes(gap_id:str,request:Request,limit:int=20,cursor:str|None=None,so
         items=by_reference_state(analysis_outcomes.listing(tx,gap['object']['id'],user,scope),reference_state)
     return page(items,user if scope=='workspace' else '',limit,cursor,listing_scope(['gap-outcomes',gap['object']['id'],source_revision,scope],reference_state))
 
+def read_vote(kind,identity,request):
+    preload_catalog()
+    with repo.read_transaction() as tx:
+        viewer=votes.viewer(tx,request.headers.get('authorization'))
+        canonical,_=votes.target(tx,catalog,kind,identity)
+        return votes.states(tx,[(kind,canonical)],viewer)[(kind,canonical)]
+
+async def write_vote(kind,identity,request):
+    body=await request.json(); validate(body,'VoteInput')
+    def save():
+        preload_catalog()
+        with repo.transaction() as tx:
+            user=votes.voter(tx,request.headers.get('authorization'))
+            canonical,gap_id=votes.target(tx,catalog,kind,identity)
+            return idempotent(tx,user,'vote:'+kind+':'+canonical,request.headers.get('idempotency-key'),body,
+                lambda:votes.change(tx,kind,canonical,gap_id,user,body['vote']))
+    return await asyncio.to_thread(save)
+
+@app.get('/v1/knowledge-gaps/{gap_id}/vote')
+def get_gap_vote(gap_id:str,request:Request): return read_vote('gap',gap_id,request)
+
+@app.post('/v1/knowledge-gaps/{gap_id}/vote')
+async def set_gap_vote(gap_id:str,request:Request): return await write_vote('gap',gap_id,request)
+
+@app.get('/v1/accounts/{account_id}/vote')
+def get_account_vote(account_id:str,request:Request): return read_vote('account',account_id,request)
+
+@app.post('/v1/accounts/{account_id}/vote')
+async def set_account_vote(account_id:str,request:Request): return await write_vote('account',account_id,request)
+
 @app.get('/v1/knowledge-gaps/{gap_id:path}')
 def get_gap(gap_id: str,request:Request,source_revision:str|None=None,scope:str='public'):
     gap=catalog.gap(gap_id)
     if source_revision and source_revision!=gap['source']['source_revision']: raise Problem(409,'SOURCE_REVISION_CHANGED','The exact requested source revision is unavailable.')
     owner,accounts=discovery(request,scope)
-    return counted_gap(gap,counts_by_gap(accounts),owner,now())
+    return gap_votes(request,[counted_gap(gap,counts_by_gap(accounts),owner,now())])[1][0]
 
 @app.get('/v1/mechanisms/search')
 def search_mechanisms(q: str='', mode: str='hybrid', limit: int=20,source:str='all',model:str='cfde-inc-v2',cursor:str|None=None):
@@ -698,11 +746,14 @@ async def record_exploration(request:Request):
     return await asyncio.to_thread(record)
 
 @app.get('/v1/accounts')
-def accounts(request:Request,limit:int=20,cursor:str|None=None,gap_id:str|None=None,reference_state:str='all'):
+def accounts(request:Request,limit:int=20,cursor:str|None=None,gap_id:str|None=None,q:str=Query('',max_length=200),reference_state:str='all'):
+    from .workspace_search import normalize, filter_summaries
+    query=normalize(q)
     with repo.read_transaction() as tx:
         user=principal(tx,request.headers.get('authorization'))['user_id']
         items=by_reference_state([item for item in visible_accounts(tx,user,attribution=True) if not gap_id or item['account']['question']==gap_id],reference_state)
-        return page(items,user,limit,cursor,listing_scope(['accounts',gap_id],reference_state))
+        items=votes.account_summaries(tx,items,votes.viewer(tx,request.headers.get('authorization')))
+        return page(filter_summaries(items,query,'account'),user,limit,cursor,listing_scope(['accounts',gap_id,query],reference_state))
 
 @app.get('/v1/accounts/{dapper_id}/publication')
 def account_publication(dapper_id:str,request:Request):
@@ -725,11 +776,13 @@ async def update_publication(dapper_id:str,request:Request):
     return await asyncio.to_thread(save)
 
 @app.get('/v1/analysis-outcomes')
-def workspace_outcomes(request:Request,limit:int=20,cursor:str|None=None,reference_state:str='all'):
+def workspace_outcomes(request:Request,limit:int=20,cursor:str|None=None,q:str=Query('',max_length=200),reference_state:str='all'):
+    from .workspace_search import normalize, filter_summaries
+    query=normalize(q)
     with repo.read_transaction() as tx:
         user=principal(tx,request.headers.get('authorization'))['user_id']
         items=by_reference_state(analysis_outcomes.listing(tx,owner=user,scope='workspace'),reference_state)
-    return page(items,user,limit,cursor,'workspace-outcomes' if reference_state=='all' else digest(['workspace-outcomes',reference_state]))
+    return page(filter_summaries(items,query,'outcome'),user,limit,cursor,listing_scope(['workspace-outcomes',query],reference_state))
 
 @app.get('/v1/jobs/{job_id}/outcome')
 def job_outcome(job_id:str,request:Request):

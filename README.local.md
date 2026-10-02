@@ -4,7 +4,7 @@ For the new API-only execution stack, use [the durable workflow guide](docs/dura
 and `scripts/durable_deployment.py`. This page retains the existing encrypted
 colleague handoff and legacy worker stack during migration.
 
-This is the retained colleague onboarding guide for the legacy worker stack. It runs in Docker at **http://localhost:3000**: Next.js, FastAPI, Redis, a dispatcher and two workers. It connects to the existing development Aurora/RDS database and real S3 storage. You do not need an EC2 instance, Vercel account, Node installation, local database, or storage emulator. These commands use `deploy/compose.legacy.yaml`; the Workflow pilot runs separately at **http://localhost:3100** with isolated application tables.
+This is the retained colleague onboarding guide for the legacy worker stack. It runs in Docker at **http://localhost:3000**: Next.js, FastAPI, Redis, a dispatcher and two workers. It connects to the existing development Aurora/RDS database and real S3 storage. You do not need an EC2 instance, Vercel account, Node installation, local database, or storage emulator. These commands use `deploy/compose.legacy.yaml`; the current Workflow stack uses **http://localhost:3000** with isolated application tables. Stop the legacy frontend before running the Workflow frontend on that port.
 
 The [DIG platform integration](docs/platform-deployment.md) now deploys an HTTP-only Workflow service. The QA backend is deployed and its public event/replay, retrieval and managed callback checks passed; production and Vercel remain pending. Use this page only for an existing legacy handoff, and the workflow guide for the current runtime.
 

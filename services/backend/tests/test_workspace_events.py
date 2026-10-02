@@ -92,7 +92,8 @@ class WorkspaceEventsTests(unittest.TestCase):
         self.assertNotIn('secret-key',json.dumps(public))
 
     def test_only_a_reference_cutover_names_its_public_catalog_event(self):
-        # Open composers recheck their anchors on `reference` catalog events only, never on publishes.
+        # Open composers recheck their anchors on `reference` catalog events only, never on publishes or votes;
+        # a publish or vote committed with a cutover keeps the cutover's name.
         with self.repo.transaction() as tx:
             tx.put('publication','p1','alice',{'account_id':'a1','visibility':'public'})
         _, replay, cursor, _ = self.replay('bob')
@@ -100,8 +101,41 @@ class WorkspaceEventsTests(unittest.TestCase):
         with self.repo.transaction() as tx:
             tx.put('vector_active','local','catalog',{'snapshot_id':'s2'})
             tx.put('outcome_publication','o1','alice',{'visibility':'public'})
+            tx.put('vote','b1','alice',{'target_kind':'gap','target_id':'g1','gap_id':'g1','vote':1})
         public = [item for item in self.replay('bob',positions=cursor)[1] if item['scope']=='public']
         self.assertEqual([(item['entity_id'],item['collections']) for item in public],[('reference',['catalog','accounts','gaps','explorations'])])
+
+    def test_vote_commit_pushes_scoped_workspace_and_anonymous_catalog_invalidation(self):
+        before_alice, before_bob = self.replay('alice')[2], self.replay('bob')[2]
+        ballot = {'target_kind':'account', 'target_id':'scientific-target', 'gap_id':'related-gap', 'vote':1}
+        with patch.object(notifications, 'publish') as publish:
+            with self.repo.transaction() as tx:
+                tx.put('vote', 'private-ballot', 'alice', ballot)
+                tx.put('vote_total', 'total', 'system', {**ballot, 'upvotes':1, 'downvotes':0})
+        mine = self.replay('alice', before_alice)[1]
+        others = self.replay('bob', before_bob)[1]
+        self.assertEqual([item['event_type'] for item in mine], ['workspace.changed', 'catalog.updated'])
+        self.assertEqual(mine[0]['collections'], ['gaps', 'accounts'])
+        self.assertEqual(len(others), 1)
+        self.assertEqual(others[0]['scope'], 'public')
+        self.assertEqual(others[0]['entity_id'], 'catalog')
+        for private in ('alice', 'scientific-target', 'related-gap', 'private-ballot'):
+            self.assertNotIn(private, json.dumps(others))
+        self.assertEqual(set(publish.call_args.args[0]),
+            {notifications.channel('workspace:alice'), notifications.channel('public')})
+        with patch.object(notifications, 'publish') as duplicate:
+            with self.repo.transaction() as tx: tx.put('vote', 'private-ballot', 'alice', ballot)
+        duplicate.assert_not_called()
+
+    def test_rolled_back_vote_never_changes_public_or_workspace_replay(self):
+        before = self.replay()[2]
+        with patch.object(notifications, 'publish') as publish:
+            with self.assertRaises(RuntimeError):
+                with self.repo.transaction() as tx:
+                    tx.put('vote', 'private-ballot', 'alice', {'target_kind':'gap', 'target_id':'gap', 'gap_id':'gap', 'vote':-1})
+                    raise RuntimeError('rollback')
+        publish.assert_not_called()
+        self.assertEqual(self.replay(positions=before)[1], [])
 
     def test_detailed_job_events_wake_job_stream_without_workspace_invalidation(self):
         with self.repo.transaction() as tx: job = jobs.enqueue(tx,'alice','analysis')

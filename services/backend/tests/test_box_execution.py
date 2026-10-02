@@ -243,6 +243,33 @@ class ResearchPromptTests(unittest.TestCase):
         self.assertIn('future tests, not observed support', prompt)
         self.assertIn('Keep public narration brief', prompt)
 
+    def test_remote_prompt_preserves_distinct_claims_without_a_count_quota(self):
+        # Exercise the prompt actually installed by Box setup, not just a helper.
+        prompt, _ = self.prepared_prompt(('prokn',))
+        self.assertNotIn('Prefer one biological Claim', prompt)
+        self.assertNotIn('one scoped Claim', prompt)
+        self.assertIn('Do not stop after the first supported Claim', prompt)
+        self.assertIn('one compound Claim', prompt)
+        self.assertIn('Keep related Claims together in one ScientificAccount', prompt)
+        self.assertIn('target-matched EvidenceItems', prompt)
+        self.assertIn('without counting them as independent evidence', prompt)
+        self.assertIn('A one-Claim account is appropriate', prompt)
+        self.assertIn('Do not pad', prompt)
+        self.assertIn('Preserve the existing evidence, tool, time and spending bounds', prompt)
+
+    def test_legacy_measured_prompts_remain_byte_compatible(self):
+        # Frozen v1 dispatch measurements bind these historical bytes. New live
+        # instructions must not invalidate a previously prepared legacy input.
+        from reveal_backend.dispatch_view import legacy_research_prompt
+        from hashlib import sha256
+        for graphs, expected in (
+            ((), '408538218ce7e011763a6245484ea3899926c97877692af8018b6d1507ea2e01'),
+            (('prokn',), 'b938c2a7d4a96f7ca3d85a77995375997107a54a34b556df4b923610adeb223f'),
+            (('biomarkerkg', 'prokn'), '9e3f94376fc6cfc1a17b4711dfd7f439ba12944531299ae88ac5ede69c4645e8'),
+        ):
+            with self.subTest(graphs=graphs):
+                self.assertEqual(sha256(legacy_research_prompt(graphs).encode()).hexdigest(), expected)
+
     def test_selected_graph_instructions_match_actual_tool_availability(self):
         for graphs in ((), ('prokn',), ('biomarkerkg',), ('prokn', 'biomarkerkg')):
             with self.subTest(graphs=graphs), tempfile.TemporaryDirectory() as temp:

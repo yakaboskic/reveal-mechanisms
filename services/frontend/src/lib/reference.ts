@@ -28,6 +28,12 @@ export function modelOfSourceId(sourceId?: string | null): ReferenceModel | null
 /** Only the listed states are sent; `all` is the API default and is omitted. */
 export const referenceQuery = (state?: ReferenceState) => state && state !== "all" ? state : undefined;
 export const parseReferenceState = (value?: string | null): ReferenceState => referenceStates.includes(value as ReferenceState) ? value as ReferenceState : "all";
+/** Accounts a gap listing holds under a filter: a gap's count is current work only (it ranks gaps);
+ * archived work is counted apart and omitted when there is none. */
+export function listedAccountCount(counted: Pick<components["schemas"]["AccountCount"], "count" | "archived_count">, reference: ReferenceState) {
+  const archived = counted.archived_count ?? 0;
+  return reference === "current" ? counted.count : reference === "archived" ? archived : counted.count + archived;
+}
 
 /** The model the API last served in this browser; null until a factor record is seen. */
 export function observedReferenceModel(): ReferenceModel | null {

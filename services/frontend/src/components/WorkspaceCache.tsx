@@ -1,7 +1,7 @@
 "use client";
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { RevalidationCache } from "@/lib/revalidation-cache";
-import { loadWorkspaceData, workspaceKey, workspaceKeys, workspaceTabs, type WorkspaceData, type WorkspaceKey, type WorkspaceTab } from "@/lib/workspace-data";
+import { loadWorkspaceData, workspaceTabs, workspaceKey, workspaceKeyParts, type WorkspaceData, type WorkspaceTab, type WorkspaceKey } from "@/lib/workspace-data";
 import type { ReferenceState } from "@/lib/reference";
 import { onWorkspaceChange, invalidateWorkspace, affectedWorkspaceTabs, connectWorkspaceEvents, type WorkspaceConnection } from "@/lib/workspace-events";
 import { terminal, type Schema } from "@/lib/client";
@@ -17,13 +17,14 @@ export function WorkspaceCacheProvider({ scope, children, checkIdentity }: { sco
   const identityCheck = useRef(checkIdentity); identityCheck.current = checkIdentity;
   useLayoutEffect(() => { cache.bind(scope); }, [cache, scope]);
   useEffect(() => {
-    const keys = new Set<WorkspaceKey>(); let queued = false, active = true;
+    const keys = new Set<WorkspaceTab>(); let queued = false, active = true;
     const remove = onWorkspaceChange((reset, event) => {
       if (reset) { cache.bind(null); keys.clear(); return; }
-      for (const key of workspaceKeys(affectedWorkspaceTabs(event))) keys.add(key);
+      for (const key of affectedWorkspaceTabs(event)) keys.add(key);
       if (queued) return;
       queued = true;
-      queueMicrotask(() => { queued = false; if (active && keys.size) cache.invalidate([...keys]); keys.clear(); });
+      // Every reference filter and search of an affected tab is invalidated with it.
+      queueMicrotask(() => { queued = false; if (active && keys.size) cache.invalidateWhere(key => keys.has(workspaceKeyParts(key).tab)); keys.clear(); });
     });
     return () => { active = false; remove(); };
   }, [cache]);
@@ -43,12 +44,12 @@ export function WorkspaceCacheProvider({ scope, children, checkIdentity }: { sco
   return <Context.Provider value={{ cache, scope, checkIdentity, connection }}>{children}</Context.Provider>;
 }
 
-export function useWorkspaceData(tab: WorkspaceTab, reference: ReferenceState = "all") {
+export function useWorkspaceData(tab: WorkspaceTab, query = "", reference: ReferenceState = "all") {
   const store = useContext(Context);
   if (!store) throw new Error("Workspace cache requires the session provider.");
   const { cache, scope, checkIdentity, connection } = store;
   useSyncExternalStore(cache.subscribe, cache.getVersion, serverVersion);
-  const key = workspaceKey(tab, reference);
+  const key = workspaceKey(tab, query, reference);
   const snapshot = cache.read(scope, key);
   useEffect(() => {
     if (!snapshot.error) void cache.revalidate(scope, key);
@@ -71,9 +72,10 @@ export function useWorkspaceData(tab: WorkspaceTab, reference: ReferenceState = 
     if (completed) cache.invalidate();
   }, [cache, snapshot.data?.jobs]);
   const counts: Partial<Record<WorkspaceTab, string>> = {};
-  // The selected tab counts its filtered listing; the others count everything loaded.
+  // The selected tab counts its reference-filtered listing (a search reports its own matches); the others count everything loaded.
+  const listed = workspaceKey(tab, "", reference);
   for (const value of workspaceTabs) {
-    const data = cache.read(scope, value === tab ? key : value).data;
+    const data = cache.read(scope, value === tab ? listed : value).data;
     if (data) counts[value] = `${(value === "gaps" ? data.gaps : value === "accounts" ? data.accounts : data.outcomes).length}${data.cursor ? "+" : ""}`;
   }
   return { ...snapshot, counts, connection, refresh: () => cache.revalidate(scope, key, true), loadMore: () => cache.revalidate(scope, key, true, "append") };

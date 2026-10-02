@@ -113,6 +113,12 @@
             "as_of": "2026-09-24T16:00:00Z",
             "ranking": "curated",
             "window_days": null
+          },
+          "votes": {
+            "upvotes": 0,
+            "downvotes": 0,
+            "score": 0,
+            "user_vote": null
           }
         }
       }

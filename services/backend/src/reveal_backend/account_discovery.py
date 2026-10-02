@@ -33,10 +33,16 @@ def visible_accounts(tx, owner, *, attribution=False):
     items = sorted(unique.values(), key=lambda item: item['account']['id'])
     items.sort(key=lambda item: item['created_at'], reverse=True)
     if attribution and items:
+        from .repository import digest
+        from .publication import state
+        publications = tx.get_many('publication', [digest([owner, item['account']['id']]) for item in items])
         jobs = tx.get_many('job', sorted({item['job_id'] for item in items}))
         request_ids = {row['data'].get('research_request_id') for row in jobs.values() if row['owner'] == owner}
         requests = tx.get_many('request', sorted(identity for identity in request_ids if identity))
         for item in items:
+            item['publication'] = state(tx, owner, item['account']['id'], can_manage=True,
+                record=publications.get(digest([owner, item['account']['id']])),
+                account_result={'research_statement': item.get('research_statement', {})})
             job = jobs.get(item['job_id'])
             request = requests.get(job['data'].get('research_request_id')) if job and job['owner'] == owner else None
             # Transfers preserve historical authorship. Current owner/profile is
@@ -61,15 +67,23 @@ def by_reference_state(items, state='all'):
 
 
 def counts_by_gap(accounts):
-    # Gap ranking counts current work only; archived accounts are listed, not counted.
-    return Counter(item['account']['question'] for item in accounts if not is_archived(item))
+    """(current, archived) accounts per gap. Gap ranking counts current work only;
+    archived accounts are listed after it and counted apart."""
+    current, archived = Counter(), Counter()
+    for item in accounts:
+        (archived if is_archived(item) else current)[item['account']['question']] += 1
+    return current, archived
 
 
 def counted_gap(gap, counts, owner, observed_at):
+    current, archived = counts
+    identity = gap['object']['id']
     return {**gap, 'scientific_accounts': {
-        'count': counts.get(gap['object']['id'], 0),
+        'count': current.get(identity, 0),
         'scope': 'owner_exact_gap' if owner else 'public_exact_gap',
         'as_of': observed_at, 'ranking': 'account_count', 'window_days': None,
+        # Present only once archived work exists for the gap, so earlier records are unchanged.
+        **({'archived_count': archived[identity]} if archived.get(identity) else {}),
     }}
 
 

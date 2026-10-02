@@ -1,13 +1,16 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { api, ApiError, messageOf, supersededReference, terminal, type Schema } from "@/lib/client";
 import { applySuggestions, dropOutdatedAnchors, emptyComposer, factorSelection, persistDraft, removeAnchor, selectedGap } from "@/lib/composer";
 import { ProviderButtons, useIdentity } from "./Session";
 import { Activity } from "./Activity";
 import { AccountPreview, Record } from "./Scientific";
-import { GapBrowser, GapScopeSelector, type GapScope } from "./GapBrowser";
+import { GapBrowser, GapScopeSelector, type GapScope, type GapSort } from "./GapBrowser";
 import { GapAccounts } from "./GapAccounts";
+import { VoteControls } from "./VoteControls";
+import { onCollectionInvalidation } from "@/lib/collection-events";
 import { rememberSubmission, restoreSubmission, type SubmissionAttempt, type SubmissionMethod, type SubmissionStage } from "@/lib/submission";
 import { SubmissionProgress } from "./SubmissionProgress";
 import { LoadingSurface, LoadingStatus } from "./LoadingSurface";
@@ -18,13 +21,47 @@ import { mechanismName, mechanismTrait } from "@/lib/mechanism-display";
 import { anchorKey, currentComposer, isReferenceReload, observedReferenceModel, outdatedFromAnchor, outdatedFromFactor, referenceRechecker, type OutdatedAnchor, type ReferenceArchive } from "@/lib/reference";
 import { ReferenceArchiveBanner } from "./ReferenceArchive";
 import { onWorkspaceChange } from "@/lib/workspace-events";
+import { composerSelection, followsSelection, hasSelection, matchesSavedSelection, questionSelection, selectionKey, selectionUrl, type AdoptedSelection, type ComposerSelection } from "@/lib/composer-navigation";
 
 const storageKey = "reveal:composer";
 type LocalDraft = { composer: Schema<"Composer">; gap: Schema<"GapRecord"> | null; factors: Record<string, Schema<"EagglFactor">>; draft: Schema<"Draft"> | null; owner: string | null; job?: Schema<"Job"> | null; submitKey?: { binding: string; key: string } | null };
+/** Browser recovery data. Throws on an unreadable snapshot so each caller keeps its own recovery policy. */
+function storedDraft(): LocalDraft | null {
+  const stored = JSON.parse(sessionStorage.getItem(storageKey) || "null") as LocalDraft | null;
+  // Anchors kept from a superseded reference model cannot be analysed; discard that snapshot.
+  const composer = stored && currentComposer(stored.composer);
+  if (stored && !composer) sessionStorage.removeItem(storageKey);
+  return stored && composer ? { ...stored, composer } : null;
+}
 export function Composer({ initialJobId, initialDraftId }: { initialJobId?: string; initialDraftId?: string } = {}) {
+  const params = useSearchParams();
+  const selection = composerSelection(params);
+  const navigationKey = selectionKey(selection);
+  const lastNavigation = useRef(navigationKey);
+  // The composer's own switch to a draft replacing one dropped at a reference cutover: the restore
+  // effect skips it once, and saves or a submission begun under the dropped draft carry on.
+  const adopted = useRef<(AdoptedSelection & { restoreSkipped: boolean }) | null>(null);
   const { me, ready, refresh } = useIdentity();
   const [composer, setComposer] = useState(emptyComposer);
   const [gap, setGap] = useState<Schema<"GapRecord"> | null>(null);
+  const selectedGapId = gap?.object.id;
+  const selectedVoteBinding = `${selectedGapId}:${me?.user_id || "visitor"}`;
+  const [selectedVotes, setSelectedVotes] = useState<{ binding: string; value: Schema<"VoteState"> } | null>(null);
+  useEffect(() => {
+    if (!selectedGapId || !ready) return;
+    let active = true, sequence = 0;
+    let controller: AbortController | undefined;
+    const refreshVote = () => {
+      controller?.abort(); controller = new AbortController();
+      const signal = controller.signal, request = ++sequence;
+      void api.gapVote(selectedGapId, signal).then(votes => {
+        if (active && !signal.aborted && request === sequence) setSelectedVotes({ binding: selectedVoteBinding, value: votes });
+      }).catch(() => { /* Keep the last displayed tally; voting reports its own failures. */ });
+    };
+    refreshVote();
+    const unsubscribe = onCollectionInvalidation(["catalog", "gaps"], refreshVote);
+    return () => { active = false; controller?.abort(); unsubscribe(); };
+  }, [selectedGapId, selectedVoteBinding, ready]);
   const [factors, setFactors] = useState<Record<string, Schema<"EagglFactor">>>({});
   // Anchors from a superseded reference generation render from their archive stamp or frozen factor.
   const [outdated, setOutdated] = useState<Record<string, OutdatedAnchor>>({});
@@ -37,6 +74,7 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
   const [jobRestoreError, setJobRestoreError] = useState("");
   const [restoreAttempt, setRestoreAttempt] = useState(0);
   const [gapScope, setGapScope] = useState<GapScope>("public");
+  const [gapSort, setGapSort] = useState<GapSort>("accounts");
   const [query, setQuery] = useState(""); const [searching, setSearching] = useState(false);
   const [results, setResults] = useState<Schema<"GapRecord">[]>([]); const [trending, setTrending] = useState<Schema<"GapRecord">[]>([]);
   const searchBinding = `${gapScope}:${me?.user_id || "visitor"}`;
@@ -72,34 +110,51 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
     return requestKeys.current.get(body)!;
   };
   currentRef.current = composer;
-  useEffect(() => { setDraftView(!!initialDraftId); }, [initialDraftId]);
-  useEffect(() => { mounted.current = true; return () => { mounted.current = false; suggestionRequest.current?.abort(); }; }, []);
+  const navigateSelection = (selected: ComposerSelection, adoptedFrom?: string) => {
+    lastNavigation.current = selectionKey(selected);
+    adopted.current = adoptedFrom ? { from: adoptedFrom, to: lastNavigation.current, restoreSkipped: false } : null;
+    window.history.replaceState(null, "", selectionUrl(new URL(window.location.href), selected));
+    setDraftView(!!selected.draft);
+  };
+  useEffect(() => { mounted.current = true; return () => {
+    mounted.current = false; saveEpoch.current++; restoreEpoch.current++; suggestionRequest.current?.abort();
+  }; }, []);
+  useEffect(() => {
+    if (lastNavigation.current === navigationKey) return;
+    lastNavigation.current = navigationKey; adopted.current = null;
+    // Native history and same-page links can preserve this component instance.
+    // Fence both late reads and autosaves before opening a different selection.
+    saveEpoch.current++; restoreEpoch.current++;
+    suggestionRequest.current?.abort(); suggestionRequest.current = null;
+    draftRef.current = null; currentRef.current = emptyComposer();
+    pendingSubmission.current = null; submissionResumed.current = false;
+    submitKey.current = null; requestKeys.current.clear();
+    setComposer(currentRef.current); setGap(null); setFactors({}); setOutdated({}); setRequestArchive(null); setDraft(null); setJob(null);
+    setDraftView(!!selection.draft); setSubmission(null); setRestoring("");
+    setRetrievingJob(!!selection.job); setJobRestoreError("");
+    setSuggesting(false); setLimitations([]); setError(""); setConflict(false); setAdding(false); setQuery("");
+    try {
+      const local = storedDraft();
+      if (local && matchesSavedSelection(selection, local)) {
+        setComposer(local.composer); currentRef.current = local.composer; setGap(local.gap); setFactors(local.factors);
+        setDraft(local.draft); draftRef.current = local.draft; loadedOwner.current = local.owner; submitKey.current = local.submitKey || null;
+        if (local.job && selection.job === local.job.id) setJob(local.job);
+      }
+    } catch { /* Ignore invalid browser recovery data. Server restoration still runs. */ }
+  }, [navigationKey]);
   useEffect(() => {
     // Fast Refresh replays effects while preserving refs and active promises.
     // Rehydrating then would reset a failed attempt to a spinner without resuming it.
     if (hydrated.current) return;
     hydrated.current = true;
     try {
-      const stored = JSON.parse(sessionStorage.getItem(storageKey) || "null") as LocalDraft | null;
-      // Anchors kept from a superseded reference model cannot be analysed; discard that snapshot.
-      const composer = stored && currentComposer(stored.composer);
-      if (stored && !composer) sessionStorage.removeItem(storageKey);
-      const local = stored && composer ? { ...stored, composer } : null;
-      const params = new URLSearchParams(window.location.search);
-      // A submitted snapshot belongs to its explicit link, not the home page.
-      // Keep refresh recovery for an unsubmitted question and OAuth below.
-      const hasSelectionLink = ["job", "draft", "gap"].some(key => params.get(key));
-      const matchesLink = local && (!local.job || hasSelectionLink) &&
-        (!params.get("job") || params.get("job") === local.job?.id) &&
-        (!params.get("draft") || params.get("draft") === local.draft?.id) &&
-        (!params.get("gap") || params.get("gap") === local.gap?.object.id);
-      if (local && matchesLink) { setComposer(local.composer); setGap(local.gap); setFactors(local.factors); setDraft(local.draft); draftRef.current = local.draft; loadedOwner.current = local.owner; submitKey.current = local.submitKey || null; if (local.job && params.get("job") === local.job.id) setJob(local.job); }
-      if (local?.draft && matchesLink && !hasSelectionLink) setDraftView(true);
+      const local = storedDraft();
+      const selected = composerSelection(new URLSearchParams(window.location.search));
+      if (local && matchesSavedSelection(selected, local)) { setComposer(local.composer); setGap(local.gap); setFactors(local.factors); setDraft(local.draft); draftRef.current = local.draft; loadedOwner.current = local.owner; submitKey.current = local.submitKey || null; if (local.job && selected.job === local.job.id) setJob(local.job); }
     } catch { sessionStorage.removeItem(storageKey); }
     // Explicit workspace links open the requested record. A pending submission
     // may resume only at the unqualified home/OAuth return URL.
-    const params = new URLSearchParams(window.location.search);
-    const pending = ["job", "draft", "gap"].some(key => params.get(key)) ? null : restoreSubmission();
+    const pending = hasSelection(composerSelection(new URLSearchParams(window.location.search))) ? null : restoreSubmission();
     if (pending) {
       pendingSubmission.current = pending;
       setComposer(pending.composer); currentRef.current = pending.composer;
@@ -113,7 +168,8 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
   }, []);
   useEffect(() => { if (ready && !me && gapScope === "workspace") setGapScope("public"); }, [ready, me?.user_id, gapScope]);
   useEffect(() => {
-    if (!booted) return;
+    // Browsing must not erase a retained draft's uncertain submission key.
+    if (!booted || !composer.source_gap) return;
     sessionStorage.setItem(storageKey, JSON.stringify({ composer, gap, factors, draft, owner: me?.user_id || loadedOwner.current, job, submitKey: submitKey.current } satisfies LocalDraft));
   }, [composer, gap, factors, draft, job, booted, me?.user_id]);
   useEffect(() => {
@@ -122,11 +178,16 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
     loadedOwner.current = me.user_id;
   }, [me?.user_id, ready, booted]);
   useEffect(() => {
+    // A replacement draft adopted in place is already held here: restoring it would discard newer edits.
+    // Only the run its own URL change triggers is skipped.
+    const adoption = adopted.current;
+    if (adoption && !adoption.restoreSkipped) { adoption.restoreSkipped = true; if (adoption.to === navigationKey) return; }
     if (!booted || !ready || pendingSubmission.current) return;
     const params = new URLSearchParams(window.location.search);
     const draftId = params.get("draft"); const gapId = params.get("gap"); const jobId = params.get("job");
     let active = true; const epoch = restoreEpoch.current;
-    const canRestore = () => active && !pendingSubmission.current && epoch === restoreEpoch.current;
+    const canRestore = () => active && !pendingSubmission.current && epoch === restoreEpoch.current
+      && navigationKey === selectionKey(composerSelection(new URLSearchParams(window.location.search)));
     const restore = async () => {
       if (jobId && !me) { setRetrievingJob(false); setJob(null); setJobRestoreError("Sign in with the account that started this job to retrieve its status."); return; }
       if (jobId) { setRetrievingJob(true); setJobRestoreError(""); }
@@ -187,7 +248,7 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
       await Promise.allSettled([restoreJob(), restoreSelection()]);
     };
     void restore(); return () => { active = false; setRestoring(""); };
-  }, [booted, ready, me?.user_id, restoreAttempt, initialDraftId, initialJobId]);
+  }, [booted, ready, me?.user_id, restoreAttempt, navigationKey]);
   useEffect(() => {
     if (query.trim()) {
       const controller = new AbortController(); setSearching(true); setResults([]);
@@ -246,23 +307,28 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
   useEffect(() => { if (inspection) inspectionDialog.current?.showModal(); }, [inspection]);
   const save = (snapshot: Schema<"Composer"> = currentRef.current): Promise<Schema<"Draft"> | null> => {
     const epoch = saveEpoch.current;
+    const navigation = lastNavigation.current;
+    const current = () => mounted.current && epoch === saveEpoch.current
+      && followsSelection(navigation, selectionKey(composerSelection(new URLSearchParams(window.location.search))), adopted.current);
     const queued = saveQueue.current.catch(() => null).then(async () => {
-      if (epoch !== saveEpoch.current) return null;
+      if (!current()) return null;
       const previous = draftRef.current;
       if (previous && JSON.stringify(previous.composer) === JSON.stringify(snapshot)) { setSaveState("Saved"); return previous; }
       setSaveState("Saving…");
       try {
         // A draft gone since it was saved (dropped at a reference cutover, or deleted elsewhere) is replaced by a new one.
         const { draft: next, replaced } = await persistDraft(api, previous, snapshot, getKey,
-          { current: () => epoch === saveEpoch.current, gone: () => { draftRef.current = null; setDraft(null); } });
-        if (epoch !== saveEpoch.current) return null;
+          { current, gone: () => { draftRef.current = null; setDraft(null); } });
+        if (!current()) return null;
         draftRef.current = next; setDraft(next); setSaveState("Saved"); setConflict(false);
         if (replaced) {
-          const url = new URL(window.location.href);
-          if (url.searchParams.get("draft") === replaced) { url.searchParams.set("draft", next.id); window.history.replaceState(null, "", url); }
+          // An open link to the dropped draft now opens its replacement, adopted in place without a restore.
+          const selected = composerSelection(new URLSearchParams(window.location.search));
+          if (selected.draft === replaced) navigateSelection({ ...selected, draft: next.id }, selectionKey(selected));
         }
         return next;
       } catch (failure) {
+        if (!current()) return null;
         setSaveState("Save failed — edits retained locally");
         if (failure instanceof ApiError && failure.status === 409 && !supersededReference(failure)) setConflict(true);
         throw failure;
@@ -361,6 +427,9 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
     restoreEpoch.current++;
     pendingSubmission.current = attempt; submissionResumed.current = true;
     rememberSubmission(attempt);
+    // The pending record, rather than an older explicit draft link, owns
+    // reload/OAuth recovery until this exact submission has been acknowledged.
+    navigateSelection(questionSelection());
     setError(""); dialog.current?.close();
     setSubmission({ stage: method === "session" ? "saving" : "signing-in" });
     return attempt;
@@ -368,6 +437,9 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
   async function provision(attempt: SubmissionAttempt, confirmedIdentity = me) {
     if (submissionRunning.current) return;
     submissionRunning.current = true;
+    const navigation = lastNavigation.current;
+    const current = () => mounted.current && pendingSubmission.current === attempt
+      && followsSelection(navigation, selectionKey(composerSelection(new URLSearchParams(window.location.search))), adopted.current);
     setSubmission({ stage: "signing-in" });
     try {
       let identity = confirmedIdentity;
@@ -376,8 +448,10 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
           const response = await fetch("/api/session/anonymous", { method: "POST", headers: { "content-type": "application/json", "Idempotency-Key": attempt.anonymousKey }, body: "{}", signal });
           const value = await response.json(); if (!response.ok) throw new Error(value.detail || "Anonymous continuation is unavailable. Please try again.");
         });
+        if (!current()) return;
         identity = await refresh();
       } else if (!identity) identity = await refresh();
+      if (!current()) return;
       if (attempt.method === "google" || attempt.method === "orcid") {
         if (new URLSearchParams(window.location.search).has("error") || identity?.principal_kind !== "registered") throw new Error("Sign-in was not completed. Try signing in again, or return to your question to choose another option.");
       }
@@ -392,6 +466,7 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
       rememberSubmission(attempt);
       setSubmission({ stage: "saving" });
       const saved = await save(attempt.composer);
+      if (!current()) return;
       if (!saved) throw new Error("Your draft changed while it was being saved. Please try again.");
       attempt.draft = saved; rememberSubmission(attempt);
       const binding = `${saved.id}:${saved.version}`;
@@ -399,18 +474,24 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
       attempt.submitKey = submitKey.current; rememberSubmission(attempt);
       setSubmission({ stage: "submitting" });
       const result = await api.submit({ kind: "analysis", draft_id: saved.id, draft_version: saved.version }, submitKey.current.key);
+      if (!current()) return;
       setJob(result);
-      const url = new URL(window.location.href); url.searchParams.set("draft", saved.id); url.searchParams.set("job", result.id); url.searchParams.delete("error");
-      if (mounted.current) window.history.replaceState(null, "", url);
+      if (mounted.current) navigateSelection({ draft: saved.id, job: result.id, gap: null });
       try { sessionStorage.setItem(storageKey, JSON.stringify({ composer: saved.composer, gap, factors, draft: saved, owner: identity.user_id, job: result, submitKey: submitKey.current } satisfies LocalDraft)); } catch { /* Keep the confirmed job in memory when storage is unavailable. */ }
       pendingSubmission.current = null; rememberSubmission(null); setSubmission(null);
       if (mounted.current) requestAnimationFrame(() => document.getElementById("submitted-question")?.focus());
       // Recording the visit is bookkeeping; it must not delay or block a research job.
       void api.explore({ source_gap: saved.composer.source_gap!, draft_id: saved.id }).catch(() => {});
     } catch (failure) {
-      // Retrying cannot help outdated anchors: return to the question and mark them for replacement.
-      if (supersededReference(failure)) { pendingSubmission.current = null; rememberSubmission(null); setSubmission(null); setError(messageOf(failure)); void verifyAnchors(); }
-      else submissionFailed(failure);
+      if (current()) {
+        // Retrying cannot help outdated anchors: return to the question (as backToQuestion does) and mark them for replacement.
+        if (supersededReference(failure)) {
+          pendingSubmission.current = null; rememberSubmission(null); setSubmission(null); setError(messageOf(failure));
+          navigateSelection(questionSelection(draftRef.current?.id, currentRef.current.source_gap?.id));
+          void verifyAnchors();
+        }
+        else submissionFailed(failure);
+      }
     }
     finally { submissionRunning.current = false; }
   }
@@ -418,10 +499,14 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
   const anonymous = () => { const attempt = beginSubmission("anonymous"); if (attempt) void provision(attempt); };
   const redirectToProvider = async (provider: "google" | "orcid") => {
     if (submissionRunning.current) return;
+    const attempt = pendingSubmission.current;
     submissionRunning.current = true;
     setSubmission({ stage: "signing-in" });
-    try { window.location.assign(await providerRedirect(provider, window.location.origin + "/")); }
-    catch (failure) { submissionFailed(failure); }
+    try {
+      const destination = await providerRedirect(provider, window.location.origin + "/");
+      if (mounted.current && pendingSubmission.current === attempt) window.location.assign(destination);
+    }
+    catch (failure) { if (mounted.current && pendingSubmission.current === attempt) submissionFailed(failure); }
     finally { submissionRunning.current = false; }
   };
   const oauth = (provider: "google" | "orcid") => { if (beginSubmission(provider)) void redirectToProvider(provider); };
@@ -446,17 +531,17 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
     // Returning here after a reload must recover the same job, not create another.
     try { sessionStorage.setItem(storageKey, JSON.stringify({ composer, gap, factors, draft: draftRef.current, owner: loadedOwner.current, job, submitKey: submitKey.current } satisfies LocalDraft)); } catch { /* The binding stays in memory when storage is unavailable. */ }
     pendingSubmission.current = null; rememberSubmission(null); setSubmission(null); setError("");
-    const url = new URL(window.location.href); url.searchParams.delete("error"); window.history.replaceState(null, "", url);
+    navigateSelection(questionSelection(draftRef.current?.id, composer.source_gap?.id));
     requestAnimationFrame(() => document.querySelector<HTMLButtonElement>(".gap-submit")?.focus());
   };
-  const reset = () => { restoreEpoch.current++; setRestoring(""); setRetrievingJob(false); setJobRestoreError(""); setJob(null); submitKey.current = null; const url = new URL(window.location.href); url.searchParams.delete("job"); window.history.replaceState(null, "", url); };
+  const reset = () => { restoreEpoch.current++; setRestoring(""); setRetrievingJob(false); setJobRestoreError(""); setJob(null); submitKey.current = null; navigateSelection(questionSelection(draftRef.current?.id, composer.source_gap?.id)); };
   const accountIds = job?.result?.kind === "analysis" ? job.result.account_ids : [];
   const clearGap = () => {
     setDraftView(false);
     restoreEpoch.current++; setRestoring(""); setRetrievingJob(false); setJobRestoreError("");
     suggestionRequest.current?.abort(); suggestionRequest.current = null; setSuggesting(false); setLimitations([]);
     saveEpoch.current++; setGap(null); setComposer(emptyComposer()); setDraft(null); draftRef.current = null; setError(""); setAdding(false); setQuery(""); setRequestArchive(null); setOutdated({});
-    const url = new URL(window.location.href); ["draft", "gap", "job"].forEach(key => url.searchParams.delete(key)); window.history.replaceState(null, "", url);
+    navigateSelection(questionSelection());
     requestAnimationFrame(() => document.getElementById("gap-search")?.focus());
   };
   const focusResult = () => { setShowResults(true); pendingResultFocus.current = searching; if (!searching) requestAnimationFrame(() => document.querySelector<HTMLButtonElement>("#gap-results-list button")?.focus()); };
@@ -483,6 +568,11 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
       <a className="text-button" href="/">Return to knowledge gaps</a>
     </main>;
   }
+  if (selection.gap && !gap && !job) return <main id="main" className="composer-page prototype-composer">
+    <LoadingSurface title={error ? "Unable to open this knowledge gap" : "Opening knowledge gap"} description="Retrieving the selected question and mechanism anchors." error={error || undefined}
+      onRetry={error ? () => { setError(""); setRestoreAttempt(value => value + 1); } : undefined} />
+    <Link className="text-button" href="/">Return to knowledge gaps</Link>
+  </main>;
   return <main id="main" className={`composer-page prototype-composer ${!gap && discoveryVisible ? "is-gap-browsing" : ""} ${gap ? "has-gap" : ""} ${job ? "has-job" : ""} ${job && terminal(job.status) ? "job-complete" : ""}`}>
     {draft && !job && <nav className="composer-draft-nav" aria-label="Draft navigation"><Link href="/workspace?tab=gaps">← Your drafts</Link><strong>{draft.name || `Draft ${draft.id.slice(0, 8)}`}</strong><span role="status">{saveState}</span></nav>}
     {(retrievingJob || jobRestoreError) && jobStatusSurface}
@@ -490,9 +580,9 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
     {!gap && discoveryVisible && <p className="invitation">Help us close these <a href="https://dismech.monarchinitiative.org/app/discussions/index.html" target="_blank" rel="noopener noreferrer">knowledge gaps</a></p>}
     {(!job || gap) && <section className={`question-shell ${job ? "submitted" : ""}`} aria-label="Knowledge gap and mechanism anchors">
       {!gap ? <div className="gap-input-wrap"><label className="sr-only" htmlFor="gap-search">Search DisMech knowledge gaps</label><input id="gap-search" type="search" role="combobox" aria-autocomplete="list" aria-expanded={!!query.trim() && showResults && !!visibleResults.length} value={query} autoComplete="off" onChange={e => { setQuery(e.target.value); setResults([]); setSearching(!!e.target.value.trim()); pendingResultFocus.current = false; setError(""); setShowResults(true); }} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)} onKeyDown={e => { if ((e.key === "ArrowDown" || e.key === "Enter") && query.trim()) { e.preventDefault(); focusResult(); } if (e.key === "Escape") { setShowResults(false); pendingResultFocus.current = false; } }} placeholder={focused ? "Search DisMech knowledge gaps" : ""} aria-controls="gap-results-list" />{!query && !focused && <span className="idle-question" aria-hidden="true">{example}</span>}<button className="send search-arrow" disabled={!query.trim()} aria-label="Show matching knowledge gaps" title="Show matching knowledge gaps" onClick={focusResult}><span aria-hidden="true">↑</span></button></div> : <>
-        <div className="selected-question-row"><h1 id="submitted-question" tabIndex={job ? -1 : undefined} className="selected-question">{gap.object.text}</h1>{!job && <button className="clear-question" aria-label="Search for a different knowledge gap" onClick={clearGap}>×</button>}</div>
+        <div className={`selected-question-row${!job ? " has-vote" : ""}`}>{!job && <VoteControls key={`${gap.object.id}:${me?.user_id || "visitor"}`} kind="gap" id={gap.object.id} initial={selectedVotes?.binding === selectedVoteBinding ? selectedVotes.value : { ...gap.votes, user_vote: null }} compact vertical onChange={votes => setSelectedVotes({ binding: selectedVoteBinding, value: votes })} />}<h1 id="submitted-question" tabIndex={job ? -1 : undefined} className="selected-question">{gap.object.text}</h1>{!job && <button className="clear-question" aria-label="Search for a different knowledge gap" onClick={clearGap}>×</button>}</div>
         <div className="inline-context">
-          {!job && <><div className="question-meta"><button className="subtle" onClick={() => setInspection({ title: "About this knowledge gap", description: gap.object.gap_description, value: gap })}>About this knowledge gap ↗</button><span>DisMech</span></div><p className="anchor-guidance">Anchor on possible genetic mechanisms to explore evidence for answering this gap.</p><div className="chip-group-label">Mechanism anchors <span>{composer.eaggl_anchors.length}</span>{suggesting && <LoadingStatus>Finding anchors…</LoadingStatus>}{!!limitations.length && <button className="matching-note" onClick={() => setInspection({ title: "About mechanism matching", description: limitations.join(" "), value: { model: composer.model, automatic_anchors: composer.eaggl_anchors.filter(anchor => anchor.origin === "automatic").length } })}>About matching</button>}</div></>}
+          {!job && <><div className="question-meta"><Link className="subtle" href={`/knowledge-gaps/${encodeURIComponent(gap.object.id)}`}>About this knowledge gap ↗</Link><span>DisMech</span></div><p className="anchor-guidance">Anchor on possible genetic mechanisms to explore evidence for answering this gap.</p><div className="chip-group-label">Mechanism anchors <span>{composer.eaggl_anchors.length}</span>{suggesting && <LoadingStatus>Finding anchors…</LoadingStatus>}{!!limitations.length && <button className="matching-note" onClick={() => setInspection({ title: "About mechanism matching", description: limitations.join(" "), value: { model: composer.model, automatic_anchors: composer.eaggl_anchors.filter(anchor => anchor.origin === "automatic").length } })}>About matching</button>}</div></>}
           <div className="anchor-chips" aria-label="Selected mechanism anchors">{composer.eaggl_anchors.map(anchor => <span className="chip" key={anchor.reference.source_id}><button className="label" title={(outdatedAnchor(anchor) ? [anchorName(anchor), outdatedAnchor(anchor)!.trait, "Outdated reference"] : [anchorName(anchor), selectedFactor(anchor.reference.source_id)?.cfde_anchor.subtitle]).filter(Boolean).join(" · ")} onClick={() => inspectAnchor(anchor)}><MechanismLabel factor={selectedFactor(anchor.reference.source_id)} sourceId={anchor.reference.source_id} outdated={outdatedAnchor(anchor)} /></button>{!job && <button className="remove" aria-label={`Remove ${anchorName(anchor)}`} onClick={() => setComposer(current => removeAnchor(current, anchor.reference.source_id))}>×</button>}</span>)}{!job && <button className="chip-add" aria-expanded={adding} aria-controls="factor-picker" aria-label="Add a mechanism anchor" onClick={() => { setAdding(!adding); if (!adding) requestAnimationFrame(() => document.getElementById("mechanism-search")?.focus()); }}>+</button>}</div>
           {!job && <>
             {!!outdatedAnchors.length && <div className="conflict reference-outdated" role="status"><p>{outdatedAnchors.length === 1 ? "One mechanism anchor comes" : `${outdatedAnchors.length} mechanism anchors come`} from an outdated EAGGL reference and can’t be analysed. Replace {outdatedAnchors.length === 1 ? "it" : "them"} with current factors to continue.</p><button disabled={suggesting} onClick={replaceOutdated}>Replace with current factors</button></div>}
@@ -509,10 +599,10 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
         </div>
       </>}
     </section>}
-    {discoveryVisible && <GapScopeSelector scope={gapScope} onChange={scope => { setGapScope(scope); setError(""); }} />}
+    {!gap && discoveryVisible && <GapScopeSelector scope={gapScope} onChange={scope => { setGapScope(scope); setError(""); }} sort={gapSort} onSort={!gap && !query.length ? setGapSort : undefined} />}
     {gap && discoveryVisible && <GapAccounts gap={gap} scope={gapScope} />}
     {!gap && discoveryVisible && !!query.trim() && showResults && <section className="search-results" aria-label="Knowledge gap search results">{searching ? <LoadingSurface key={query.trim()} compact rows={2} title="Searching knowledge gaps" description="Looking for matching questions in DisMech." /> : <p className="result-heading" role="status">{error ? "Search unavailable" : `${visibleResults.length} related knowledge gaps`}</p>}<div id="gap-results-list" role="listbox" aria-label="Matching knowledge gaps">{visibleResults.map((value, index) => <button className="gap-result" role="option" aria-selected="false" key={value.source.source_id} onClick={() => void selectGap(value)} onKeyDown={e => { if (e.key === "Escape") { setShowResults(false); document.getElementById("gap-search")?.focus(); } if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); if (e.key === "ArrowUp" && index === 0) document.getElementById("gap-search")?.focus(); else { const buttons = e.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>("button"); buttons?.[(index + (e.key === "ArrowDown" ? 1 : -1)) % visibleResults.length]?.focus(); } } }}><span>{value.object.text}</span><small>{value.source.disease_label} · {value.source.status || "Status not specified"}</small></button>)}</div>{!searching && !error && !visibleResults.length && <p className="empty">No matching knowledge gaps. Try a disease, gene or mechanism.</p>}</section>}
-    {!gap && discoveryVisible && !query.length && <GapBrowser scope={gapScope} onSelect={value => void selectGap(value)} onRanked={setTrending} />}
+    {!gap && discoveryVisible && !query.length && <GapBrowser scope={gapScope} sort={gapSort} onSelect={value => void selectGap(value)} onRanked={setTrending} />}
     {error && <div className="error" role="alert">{error}</div>}
     {conflict && <div className="conflict"><p>This draft changed in another session. Your edits are retained here.</p><button onClick={async () => { if (!draftRef.current) return; const latest = await api.draft(draftRef.current.id); draftRef.current = latest; setDraft(latest); setComposer(latest.composer); setConflict(false); setError(""); }}>Load saved version</button><button onClick={() => { draftRef.current = null; setDraft(null); setConflict(false); setError(""); void save().catch(e => setError(messageOf(e))); }}>Save my edits as a new draft</button></div>}
     {job && requestArchive && <ReferenceArchiveBanner compact archive={requestArchive} subject="analysis" gapId={requestArchive.gap?.id || composer.source_gap?.id} anchorsOpen={false} settings={async () => ({ selected_kgs: composer.selected_kgs, mechanism_subquery: composer.mechanism_subquery })} />}

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { RevalidationCache, workspaceFreshMs } from "../src/lib/revalidation-cache";
 import { changesWorkspace } from "../src/lib/workspace-events";
-import { loadWorkspaceData } from "../src/lib/workspace-data";
+import { loadWorkspaceData, workspaceKey, workspaceKeyParts, type WorkspaceKey, type WorkspaceData } from "../src/lib/workspace-data";
 import { api, ApiError, type Schema } from "../src/lib/client";
 
 const deferred = <T>() => {
@@ -122,4 +122,47 @@ test("multiple committed events during a fetch retain the newer invalidation unt
   assert.equal(cache.read("owner", "gaps").stale, true);
   next = Promise.resolve(["current"]); await cache.revalidate("owner", "gaps");
   assert.equal(calls, 3); assert.deepEqual(cache.read("owner", "gaps").data, ["current"]);
+});
+
+test("workspace search keeps pagination bound to its query and clearing restores the unfiltered cache", async t => {
+  const calls: { cursor?: string; query?: string }[] = [];
+  t.mock.method(api, "outcomes", async (cursor?: string, _signal?: AbortSignal, query?: string) => {
+    calls.push({ cursor, query });
+    return { items: [{ id: `${query || "all"}-${cursor || "first"}` }], page: { next_cursor: cursor ? null : "next", has_more: !cursor, snapshot_id: "test" } };
+  });
+  const cache = new RevalidationCache<WorkspaceKey, WorkspaceData>(loadWorkspaceData);
+  cache.bind("owner");
+  await cache.revalidate("owner", "explorations");
+  const key = workspaceKey("explorations", "  gene   A?B & C  ");
+  await cache.revalidate("owner", key);
+  await cache.revalidate("owner", key, true, "append");
+  assert.deepEqual(calls, [{ cursor: undefined, query: undefined }, { cursor: undefined, query: "gene A?B & C" }, { cursor: "next", query: "gene A?B & C" }]);
+  assert.deepEqual(cache.read("owner", key).data?.outcomes.map(item => item.id), ["gene A?B & C-first", "gene A?B & C-next"]);
+  await cache.revalidate("owner", workspaceKey("explorations", ""));
+  assert.equal(calls.length, 3);
+  assert.equal(cache.read("owner", "explorations").data?.outcomes[0].id, "all-first");
+});
+
+test("a late search response cannot replace another search's results", async t => {
+  const first = deferred<unknown>();
+  t.mock.method(api, "accounts", async (_cursor?: string, _signal?: AbortSignal, query?: string) => {
+    if (query === "old") await first.promise;
+    return { items: [{ account: { id: query } }], page: { next_cursor: null, has_more: false, snapshot_id: "test" } };
+  });
+  const cache = new RevalidationCache<WorkspaceKey, WorkspaceData>(loadWorkspaceData);
+  cache.bind("owner");
+  const old = workspaceKey("accounts", "old"), current = workspaceKey("accounts", "current");
+  const pending = cache.revalidate("owner", old);
+  await cache.revalidate("owner", current);
+  first.resolve(undefined); await pending;
+  assert.equal(cache.read("owner", current).data?.accounts[0].account.id, "current");
+});
+
+test("publication events invalidate every affected search while unrelated lists stay fresh", async () => {
+  const cache = new RevalidationCache<WorkspaceKey, string[]>(async key => [key]);
+  cache.bind("owner");
+  const keys: WorkspaceKey[] = ["accounts", workspaceKey("accounts", "BMPR2"), workspaceKey("accounts", "MTOR"), "explorations"];
+  await Promise.all(keys.map(key => cache.revalidate("owner", key)));
+  cache.invalidateWhere(key => workspaceKeyParts(key).tab === "accounts");
+  for (const key of keys) assert.equal(cache.read("owner", key).stale, key !== "explorations");
 });

@@ -130,6 +130,7 @@ def public_accounts(tx):
     for row in published(tx):
         summary = deepcopy(row['data']['summary'])
         if summary and summary['account']['id'] not in unique:
+            summary['publication'] = state(tx, row['owner'], summary['account']['id'], record=row)
             unique[summary['account']['id']] = summary
     items = sorted(unique.values(), key=lambda item: item['account']['id'])
     return sorted(items, key=lambda item: item['created_at'], reverse=True)

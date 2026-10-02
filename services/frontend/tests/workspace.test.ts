@@ -43,3 +43,60 @@ test("draft selection keeps each run separate and deleted drafts link to preserv
   assert.equal(activity.href(jobs[0]), "/?job=run-a&draft=a");
   assert.equal(activity.href(jobs[1]), "/?job=run-b&gap=gap");
 });
+
+const draftFixture = (version = 2) => ({ id: "draft", version, composer: { source_gap: { id: "gap" } } }) as Schema<"Draft">;
+const requestFixture = (version = 2, id = "request") => ({ id, source_draft_id: "draft", source_draft_version: version, composer: { source_gap: { id: "gap" } } }) as Schema<"ResearchRequest">;
+const jobFixture = (status: Schema<"Job">["status"], id = "run", request = "request") => ({ id, kind: "analysis", research_request_id: request, status, created_at: "2026-09-29" }) as Schema<"Job">;
+
+for (const status of ["succeeded", "insufficient_evidence", "failed", "cancelled"] as const) {
+  test(`workspace hides the finished ${status} revision without deleting its draft or history`, () => {
+    const draft = draftFixture(), request = requestFixture(), job = jobFixture(status);
+    const drafts = [draft], jobs = [job], requests = [request];
+    const activity = workspaceRuns(jobs, requests, drafts);
+    assert.deepEqual(drafts.filter(activity.isDraftVisible), []);
+    assert.deepEqual(drafts, [draft]);
+    assert.deepEqual(jobs, [job]);
+    assert.deepEqual(requests, [request]);
+    assert.equal(activity.byDraft.get(draft.id)?.[0], job);
+    assert.equal(activity.byGap.get("gap")?.[0], job);
+    assert.equal(activity.href(job), "/?job=run&draft=draft");
+  });
+}
+
+test("workspace keeps a newly edited revision visible after every terminal outcome", () => {
+  const draft = draftFixture(3);
+  for (const status of ["succeeded", "insufficient_evidence", "failed", "cancelled"] as const) {
+    const activity = workspaceRuns([jobFixture(status)], [requestFixture(2)], [draft]);
+    assert.equal(activity.isDraftVisible(draft), true, status);
+  }
+});
+
+test("workspace keeps queued, running and cancelling retries visible despite an older finished run", () => {
+  const draft = draftFixture();
+  for (const status of ["queued", "running", "cancel_requested"] as const) {
+    const retry = jobFixture(status, "retry", "retry-request");
+    for (const retryVersion of [1, 2]) {
+      const activity = workspaceRuns([jobFixture("succeeded"), retry], [requestFixture(), requestFixture(retryVersion, "retry-request")], [draft]);
+      assert.equal(activity.isDraftVisible(draft), true, `${status} version ${retryVersion}`);
+      assert.equal(activity.byDraft.get(draft.id)?.[0], retry);
+    }
+  }
+});
+
+test("workspace keeps unsubmitted drafts and does not infer completion from unrelated or missing requests", () => {
+  const draft = draftFixture();
+  assert.equal(workspaceRuns([], [], [draft]).isDraftVisible(draft), true);
+  const paragraph = { ...jobFixture("succeeded"), kind: "paragraph" } as Schema<"Job">;
+  assert.equal(workspaceRuns([paragraph], [requestFixture()], [draft]).isDraftVisible(draft), true);
+  assert.equal(workspaceRuns([jobFixture("succeeded")], [], [draft]).isDraftVisible(draft), true);
+  const other = { ...requestFixture(), source_draft_id: "other-draft" };
+  assert.equal(workspaceRuns([jobFixture("succeeded")], [other], [draft]).isDraftVisible(draft), true);
+});
+
+test("a finished retry hides only its submitted revision, not another draft for the same gap", () => {
+  const draft = draftFixture(), other = { ...draftFixture(), id: "another-draft" };
+  const jobs = [jobFixture("failed"), jobFixture("succeeded", "retry", "retry-request")];
+  const activity = workspaceRuns(jobs, [requestFixture(), requestFixture(2, "retry-request")], [draft, other]);
+  assert.deepEqual([draft, other].filter(activity.isDraftVisible), [other]);
+  assert.equal(activity.byDraft.get(draft.id)?.length, 2);
+});

@@ -51,7 +51,7 @@ async function executable() {
 const { chromium } = await playwright();
 const browser = await chromium.launch({ headless: true, executablePath: await executable() });
 const report = { scope: 'Mocked browser/API regression only; no real authentication, database writes, or model calls.', status: 'running', scenarios: [] };
-async function harness(name, snapshot, mobile = false, deleted = false) {
+async function harness(name, snapshot, mobile = false, deleted = false, writes = null) {
   const context = await browser.newContext({ viewport: mobile ? { width: 390, height: 844 } : { width: 1280, height: 900 }, reducedMotion: 'reduce', serviceWorkers: 'block' });
   const page = await context.newPage(); page.setDefaultTimeout(10000);
   const requests = [], errors = [], unexpected = [];
@@ -68,7 +68,11 @@ async function harness(name, snapshot, mobile = false, deleted = false) {
     if (!path.startsWith('/api/')) return route.continue();
     requests.push({ path, method: request.method() });
     const respond = json => route.fulfill({ status: 200, json });
+    // A scenario may answer the writes it expects; any other write is unexpected.
+    if (request.method() !== 'GET' && writes && await writes(route, request, path)) return;
     if (request.method() !== 'GET') { unexpected.push(`${request.method()} ${path}`); return route.abort(); }
+    if (path === '/api/backend/v1/me/workspace/events') return route.fulfill({ contentType: 'text/event-stream', body: '' });
+    if (/^\/api\/backend\/v1\/knowledge-gaps\/[^/]+\/vote$/.test(path)) return respond({ upvotes: 0, downvotes: 0, score: 0, user_vote: 0 });
     if (path === '/api/session/status') return respond({ principal: { user_id: userId }, canClaim: false, providers: { google: true, orcid: true } });
     if (path === '/api/backend/v1/me') return respond({ user_id: userId, principal_kind: 'registered', display_name: 'Navigation fixture', person: null, orcid: null, orcid_authenticated: false });
     if (path === '/api/backend/v1/knowledge-gaps') return respond(paging([gap]));
@@ -93,10 +97,6 @@ async function harness(name, snapshot, mobile = false, deleted = false) {
 }
 async function home(h) {
   await h.page.goto(origin);
-  await h.page.waitForFunction(() => {
-    const value = JSON.parse(sessionStorage.getItem('reveal:composer') || 'null');
-    return value && value.job === null && value.composer.source_gap === null;
-  });
   await h.page.getByRole('combobox', { name: 'Search DisMech knowledge gaps' }).waitFor();
   assert.equal(await h.page.getByRole('region', { name: 'Research activity', exact: true }).count(), 0);
   assert.equal(await h.page.locator('.selected-question').count(), 0);
@@ -158,12 +158,30 @@ try {
     await h.finish();
   }
   {
-    const h = await harness('unsubmitted-draft-refresh', saved(null));
-    await h.page.goto(origin);
+    const h = await harness('bare-home-ignores-unsubmitted-draft', saved(null));
+    await home(h);
+    await h.page.reload();
+    await h.page.getByRole('combobox', { name: 'Search DisMech knowledge gaps' }).waitFor();
+    assert.equal(h.requests.filter(r => /\/drafts\//.test(r.path)).length, 0);
+    await h.finish();
+  }
+  {
+    const h = await harness('explicit-unsubmitted-draft-refresh', saved(null));
+    await h.page.goto(`${origin}/?draft=${draftId}`);
     await h.page.getByRole('button', { name: 'Search for a different knowledge gap', exact: true }).waitFor();
     await h.page.reload();
     await h.page.getByRole('button', { name: 'Search for a different knowledge gap', exact: true }).waitFor();
     await draftOnly(h);
+    await h.finish();
+  }
+  {
+    const h = await harness('same-component-draft-to-home', saved(null));
+    await h.page.goto(`${origin}/?draft=${draftId}`);
+    await h.page.getByRole('navigation', { name: 'Draft navigation' }).waitFor();
+    await h.page.evaluate(() => window.history.pushState(null, '', '/'));
+    await h.page.getByRole('combobox', { name: 'Search DisMech knowledge gaps' }).waitFor();
+    assert.equal(await h.page.locator('.selected-question').count(), 0);
+    assert.equal(await h.page.getByRole('navigation', { name: 'Draft navigation' }).count(), 0);
     await h.finish();
   }
   {
@@ -189,6 +207,46 @@ try {
     assert.equal(await h.page.locator('.anchor-chips .chip').count(), 1);
     assert.equal(await h.page.getByText('This draft was deleted.', { exact: true }).count(), 0);
     assert.ok(h.requests.some(request => request.path.includes('/research-requests/')));
+    await h.finish();
+  }
+  {
+    // A reference cutover dropped the open draft: the next save creates a replacement, which is
+    // adopted in place. No restore of it may discard an edit made while it was being created.
+    const replacementId = '55555555-5555-4555-8555-555555555555';
+    const created = [], patched = [];
+    let release; const held = new Promise(resolve => { release = resolve; });
+    const h = await harness('cutover-dropped-draft-adopted', null, false, false, async (route, request, path) => {
+      const body = request.postDataJSON();
+      if (request.method() === 'PATCH' && path === `/api/backend/v1/drafts/${draftId}`) {
+        await route.fulfill({ status: 404, json: { code: 'NOT_FOUND', detail: 'This draft was deleted.' } }); return true;
+      }
+      if (request.method() === 'POST' && path === '/api/backend/v1/drafts') {
+        created.push(body.composer); await held;
+        await route.fulfill({ status: 201, json: { ...draft, id: replacementId, composer: body.composer } }); return true;
+      }
+      if (request.method() === 'PATCH' && path === `/api/backend/v1/drafts/${replacementId}`) {
+        patched.push(body.composer);
+        await route.fulfill({ status: 200, json: { ...draft, id: replacementId, version: body.expected_version + 1, composer: body.composer } }); return true;
+      }
+      return false;
+    });
+    await h.page.goto(`${origin}/?draft=${draftId}`);
+    await h.page.getByRole('navigation', { name: 'Draft navigation' }).waitFor();
+    await h.page.getByText('Additional knowledge graphs', { exact: true }).click();
+    const posted = h.page.waitForRequest(request => request.method() === 'POST' && new URL(request.url()).pathname === '/api/backend/v1/drafts');
+    await h.page.getByRole('checkbox', { name: 'BiomarkerKG', exact: true }).check();
+    await posted;
+    // Edit while the replacement is being created: this autosave queues behind the held POST.
+    await h.page.getByRole('checkbox', { name: 'ProKN', exact: true }).check();
+    await h.page.waitForTimeout(1200);
+    release();
+    await h.page.waitForURL(url => new URL(url).searchParams.get('draft') === replacementId);
+    for (let attempt = 0; attempt < 50 && !patched.some(item => item.selected_kgs.includes('prokn')); attempt++) await h.page.waitForTimeout(100);
+    assert.deepEqual(created.map(item => item.selected_kgs), [['biomarkerkg']]);
+    assert.deepEqual(patched.at(-1)?.selected_kgs, ['biomarkerkg', 'prokn']);
+    assert.equal(h.requests.filter(r => r.method === 'GET' && r.path === `/api/backend/v1/drafts/${replacementId}`).length, 0);
+    assert.equal(await h.page.getByRole('checkbox', { name: 'ProKN', exact: true }).isChecked(), true);
+    assert.equal(await h.page.getByText('Restoring your saved question').count(), 0);
     await h.finish();
   }
   report.status = 'passed';

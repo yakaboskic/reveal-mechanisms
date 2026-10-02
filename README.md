@@ -24,7 +24,7 @@ runs automatically on the frontend server; manual token generation is unnecessar
 ## Run the backend and original frontend locally
 
 For the durable workflow pilot, follow [the workflow runtime guide](docs/durable-workflow-runtime.md).
-It runs the API and frontend at `http://localhost:3100`, with managed Upstash
+It runs the frontend at `http://localhost:3000` and API at port `18001`, with managed Upstash
 Redis Pub/Sub and Vector, isolated application tables, and QStash delivery.
 `scripts/durable_deployment.py up --build` starts the prepared pilot.
 The older colleague handoff below remains an explicit legacy development option.

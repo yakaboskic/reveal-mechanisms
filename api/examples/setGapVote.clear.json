@@ -1,0 +1,36 @@
+{
+  "operation_id": "setGapVote",
+  "case": "clear",
+  "method": "POST",
+  "path_template": "/v1/knowledge-gaps/{gap_id}/vote",
+  "request": {
+    "url": "https://api.reveal.example.org/v1/knowledge-gaps/dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk/vote",
+    "path": {
+      "gap_id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk"
+    },
+    "query": {},
+    "headers": {
+      "Idempotency-Key": "66666666-6666-4666-8666-666666666666",
+      "Authorization": "Bearer <api-key-or-gateway-assertion>",
+      "Content-Type": "application/json",
+      "Accept": "application/json"
+    },
+    "body": {
+      "vote": 0
+    }
+  },
+  "responses": {
+    "200": {
+      "content_type": "application/json",
+      "examples": {
+        "upvoted": {
+          "upvotes": 1,
+          "downvotes": 0,
+          "score": 1,
+          "user_vote": 1
+        }
+      }
+    }
+  },
+  "curl": "curl -X POST https://api.reveal.example.org/v1/knowledge-gaps/dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk/vote -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"vote\":0}'"
+}
