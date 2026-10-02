@@ -24,7 +24,7 @@ const report = { scope: 'Mocked UI only. Publication, authentication, all accoun
 async function harness(name, { owner = false, signed = false, mobile = false, clock = false, existing = false, canClaim = false } = {}) {
   const context = await browser.newContext({ viewport: mobile ? { width: 390, height: 844 } : { width: 1280, height: 980 }, serviceWorkers: 'block' });
   const page = await context.newPage(); page.setDefaultTimeout(12000); if (clock) await page.clock.install();
-  const state = { user: owner ? ownerId : signed ? otherId : null, publication: publication(owner && !existing ? 'private' : 'public', existing ? 3 : 0, owner), requests: [], unexpected: [], errors: [], console: [], holdAccount: false, held: [], canClaim };
+  const state = { user: owner ? ownerId : signed ? otherId : null, publication: { ...publication(owner && !existing ? 'private' : 'public', existing ? 3 : 0, owner), has_unpublished_changes: existing }, requests: [], unexpected: [], errors: [], console: [], holdAccount: false, held: [], canClaim };
   page.on('pageerror', error => state.errors.push(error.message)); page.on('console', value => { if (value.type() === 'error') state.console.push(value.text()); });
   await context.addInitScript(() => {
     const original = fetch.bind(window); window.__publicationFixture = { calls: [] };
@@ -94,16 +94,25 @@ async function publicRead() {
 async function publicationLifecycle() {
   const h = await harness('owner-publication-lifecycle', { owner: true, clock: true });
   try {
-    const panel = h.page.locator('.account-publication'); await panel.getByText('Private account', { exact: true }).waitFor(); assert.equal(await h.count(), 0);
-    await panel.getByRole('button', { name: 'Publish…', exact: true }).click(); await panel.getByText(/publicly viewable and downloadable/).waitFor(); await panel.getByText(/Job activity and workspace drafts stay private/).waitFor();
+    const panel = h.page.locator('.account-publication'); const publish = panel.getByRole('button', { name: 'Publish', exact: true });
+    await publish.waitFor(); assert.equal(await h.count(), 0);
+    await publish.click(); await h.page.getByRole('dialog', { name: 'Publish account?', exact: true }).waitFor();
+    await h.page.keyboard.press('Escape'); assert.equal(await h.page.getByRole('dialog').count(), 0);
+    assert.equal(await publish.evaluate(button => button === document.activeElement), true); assert.equal(await h.count(), 0);
+    await panel.getByRole('button', { name: 'Publish', exact: true }).click(); await panel.getByText(/publicly viewable and downloadable/).waitFor(); await panel.getByText(/Job activity and workspace drafts stay private/).waitFor();
     await panel.getByRole('button', { name: 'Publish account', exact: true }).click(); await until(async () => await h.count() === 1, 'publication request');
-    assert.ok(await panel.getByRole('button', { name: 'Publish account', exact: true }).isDisabled());
+    assert.ok(await panel.locator('.publication-confirm').isDisabled());
+    await h.page.keyboard.press('Escape'); assert.equal(await h.page.getByRole('dialog').count(), 1, 'Pending mutation keeps the dialog open');
     await h.page.clock.fastForward(30100); await panel.getByRole('button', { name: 'Retry', exact: true }).waitFor();
     const publicState = publication('public', 1); await h.respond(0, publicState);
     await panel.getByRole('button', { name: 'Retry', exact: true }).click(); await until(async () => await h.count() === 2, 'same mutation retry'); await h.respond(1, publicState);
-    await panel.getByText('Published account', { exact: true }).waitFor();
+    await panel.getByRole('button', { name: 'Unpublish', exact: true }).waitFor();
+    assert.equal(await h.page.getByRole('dialog').count(), 0);
     const calls = await h.page.evaluate(() => window.__publicationFixture.calls.map(({ body, key }) => ({ body, key }))); assert.deepEqual(calls[0], calls[1]);
-    await panel.getByRole('button', { name: 'Unpublish', exact: true }).click(); await until(async () => await h.count() === 3, 'unpublish'); await h.respond(2, publication('private', 2)); await panel.getByText('Private account', { exact: true }).waitFor();
+    await panel.getByRole('button', { name: 'Unpublish', exact: true }).click();
+    await h.page.getByRole('dialog', { name: 'Unpublish account?', exact: true }).waitFor(); assert.equal(await h.count(), 2);
+    await panel.getByRole('button', { name: 'Unpublish account', exact: true }).click();
+    await until(async () => await h.count() === 3, 'unpublish'); await h.respond(2, publication('private', 2)); await publish.waitFor();
     h.result.checks.push('No automatic publication; explicit snapshot disclosure precedes publishing', '30-second unknown response retries identical body/key; no duplicate click', 'Unpublish uses current version and restores private status');
   } finally { await h.close(); }
 }

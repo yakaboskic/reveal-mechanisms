@@ -8,7 +8,7 @@ The ten numbered steps are the main path. Login, saved history, cancellation and
 flowchart TB
   G["1. Select DisMech gap<br/>GET /v1/knowledge-gaps/search<br/>200 KnowledgeGap + context"]
   M["2. Attach mechanisms<br/>POST /v1/mechanisms/suggest<br/>200 five EAGGL candidates total"]
-  D["3. Save draft<br/>POST /v1/drafts; PATCH /v1/drafts/{id}<br/>201/200 Draft + version"]
+  D["3. Edit or explicitly save<br/>POST /v1/drafts; PATCH /v1/drafts/{id}<br/>201/200 Draft + version"]
   A["4. Submit analysis<br/>POST /v1/jobs · kind=analysis<br/>202 Job + research_request_id"]
   J["5. Follow analysis<br/>GET /v1/jobs/{id}; GET /events<br/>200 Job / events; result.account_ids"]
   S["6. Inspect account + claims<br/>GET /v1/accounts/{id}; /claims/{id}<br/>200 DAPPER document + provenance"]
@@ -16,6 +16,7 @@ flowchart TB
   Q["8. Follow paragraph job<br/>GET /v1/jobs/{id}<br/>200 Job; result.paragraph_id"]
   T["9. Read paragraph<br/>GET /v1/paragraphs/{id}<br/>200 Paragraph + pinned citations"]
   C["10. Copy/export paragraph + citations<br/>POST /v1/citations/render; GET /v1/citations/{id}<br/>200 bibliography / citation export"]
+  U["Private documents<br/>POST /v1/uploads → direct S3 upload<br/>POST /v1/uploads/{id}/complete"] -. verified originals + extracted text .-> D
   G --> M --> D --> A --> J
   J -->|accepted accounts| S
   J -->|automatic outbox fan-out| P --> Q
@@ -27,7 +28,7 @@ flowchart TB
   A -. 422 no EAGGL anchor .-> M
   X["Cancel either job<br/>POST /v1/jobs/{id}/cancel<br/>200 current Job"] -. best effort .-> J
   X -. best effort .-> Q
-  F["Show insufficient evidence / failed / cancelled<br/>Keep draft and inspect diagnostics"]
+  F["Show insufficient evidence / failed / cancelled<br/>Inspect saved inputs and diagnostics"]
   J -->|other terminal state| F
   Q -->|failed or cancelled| F
   W["Worker behind the analysis job<br/>CFDE connections ×4 with frozen anchors → contextual edges<br/>bounded evidence → Claude Code + selected Proto-OKN<br/>validate/mint/save DAPPER accounts"]
@@ -76,26 +77,26 @@ Review up to five mapped EAGGL mechanism chips; edit anchors, not linked DisMech
 - Existing ranked GeneSet links resolve through aliases to DAPPER objects. Missing summary links do not disable a mapped factor.
 - After a reference reload, anchors come from the active eaggl-capped-v1 generation; superseded anchors return 409 on write and 410 on read.
 
-### 3. Continue and save
+### 3. Edit or explicitly save a named draft
 
-Choose ORCID, Google or anonymous at submit; preserve selection and autosave.
+Open a temporary gap editor; hold edits locally until explicit Save or submission.
 
-**Request:** Trusted session, Composer, expected_version and Idempotency-Key.
+**Request:** Trusted session, Composer including private researcher text and ready upload IDs, expected_version and Idempotency-Key.
 
-**Response:** Owned Draft with confirmed revision.
+**Response:** Owned temporary or saved Draft with confirmed revision and lifecycle.
 
 - `POST /v1/drafts` — [question and anchor request/response](examples/createDraft.question_and_anchor.json)
 - `PATCH /v1/drafts/{draft_id}` — [save revision two request/response](examples/updateDraft.save_revision_two.json)
 - `GET /v1/drafts/{draft_id}` — [request request/response](examples/getDraft.request.json)
 - `DELETE /v1/drafts/{draft_id}` — [delete saved draft request/response](examples/deleteDraft.delete_saved_draft.json)
 
-- Local edits before session; no credentials stored in research data.
-- Composer accepts no free-text inquiry or editable linked DisMech list.
-- Workspace groups named drafts by knowledge gap. Rename and delete use optimistic versions; active research prevents deletion. Deleting editable state preserves frozen research and results.
+- Temporary editors expire after 24 hours and do not appear in Saved Drafts. Legacy drafts remain saved.
+- Save supplies a name and promotes the editor. Researcher direction, context and hypotheses remain distinct from the canonical DisMech question.
+- Rename and delete use optimistic versions. Deleting editable state preserves frozen requests, active runs and results.
 
-### 4. Submit saved gap analysis
+### 4. Submit the current gap analysis
 
-Freeze the confirmed draft and queue analysis.
+Freeze the current editor snapshot and queue analysis; unsaved edits do not overwrite the saved draft.
 
 **Request:** AnalysisJobInput: kind=analysis, draft ID/version, bounded budgets.
 
@@ -103,13 +104,13 @@ Freeze the confirmed draft and queue analysis.
 
 - `POST /v1/jobs` — [analysis request/response](examples/createJob.analysis.json)
 
-- Freeze saved source/mapping runs and resolved native CFDE IDs; later mapping updates do not retarget this request.
-- Question collapses upward with chips retained.
+- Freeze source/mapping runs, native CFDE IDs, researcher text and exact original/extraction storage references.
+- Later edits, upload removal or draft deletion do not change the submitted request.
 
 **Worker processing behind the job:**
 
 - Resolve frozen DisMech context; four same-seed CFDE connections plus contextual edges and BioIndex queries.
-- Build, validate and freeze evidence package with exact source artifacts.
+- Build, validate and freeze the evidence package with exact source artifacts and supplied documents for the agent and independent reviewer.
 - Fresh verified DAPPER clone, Claude Code in Box, selected Proto-OKN tools.
 - Trusted assembly, minting, final lint plus grounding/ledger/ownership checks.
 
@@ -323,8 +324,46 @@ Read public totals and let a signed-in user upvote, downvote or clear their own 
 - Private account votes are unavailable; independently published copies share the same canonical account totals.
 - Gap browsing can rank by net votes; committed changes invalidate catalog views through existing events.
 
+### Inspect public community contributions
+
+Rank the complete public population and inspect the exact records behind each measure.
+
+**Request:** Researcher, account or dataset view; view-specific ranking; all or supporting evidence; signed continuation cursor.
+
+**Response:** Shared ranks, raw measures, score components, public eligibility counts, methodology and paginated public records.
+
+- `GET /v1/leaderboard` — [request request/response](examples/getLeaderboard.request.json)
+- `GET /v1/leaderboard/{view}/{entry_id}/records` — [request request/response](examples/getLeaderboardRecords.request.json)
+
+- Only active frozen publications count. Private work and demo/test fixtures contribute nothing.
+- Original registered attribution earns researcher credit; conflicting attribution remains uncredited. Researcher recognition excludes own ballots.
+- Explicit evidence paths establish dataset use. Supporting concerns the claim proposition, not scientific endorsement.
+- Publication and vote changes expire cursors. Responses are never cached.
+
+### Attach private research documents
+
+Upload exact bytes directly to a short-lived S3 staging destination, then verify and retain original plus extracted text.
+
+**Request:** Owned draft, filename, media type, byte size, SHA-256 and initiation idempotency key.
+
+**Response:** Owner-scoped upload metadata and transfer ticket; completion returns pinned original/extraction storage references.
+
+- `POST /v1/uploads` — [example request/response](examples/createUpload.example.json)
+- `GET /v1/uploads` — [request request/response](examples/listUploads.request.json)
+- `GET /v1/uploads/{upload_id}` — [request request/response](examples/getUpload.request.json)
+- `DELETE /v1/uploads/{upload_id}` — [request request/response](examples/removeUpload.request.json)
+- `POST /v1/uploads/{upload_id}/complete` — [request request/response](examples/completeUpload.request.json)
+- `POST /v1/uploads/{upload_id}/content` — [example request/response](examples/uploadLocalContent.example.json)
+- `GET /v1/uploads/{upload_id}/download` — [request request/response](examples/downloadUpload.request.json)
+
+- Retry initiation refreshes transfer credentials and returns current metadata. Ready files can be reused by same-owner editor clones.
+- Select up to five files, 8 MB per file, 16 MB total and 1 MB extracted JSON. Replacement staging has a separate bounded allowance.
+- Saved/frozen references prevent removal. Temporary metadata expires; shared immutable blobs are retained.
+- User hypotheses are unverified context. Supplied evidence requires exact source locators and retains the existing CFDE requirements.
+- Results based on private researcher inputs cannot be published until a deliberate disclosure workflow exists.
+
 ## Evidence and validation
 
 Requests/responses are taken from the existing validated OpenAPI exchange library. The CADinT2D analysis/paragraph sequence is internally linked. The CAD source-selected gap now frames the request and account. The evidence package is a separate captured input; the authored account is not its validated agent output. Semantic scores and agent outputs remain illustrative fixtures.
 
-The mapping covers 48 operations and all 66 exchanges. OpenAPI SHA-256: `50bd94cedab30309420ffd025405ae920d4caa0f393062e3ef170697583eea96`. No endpoints or payloads were changed to build this diagram.
+The mapping covers 57 operations and all 75 exchanges. OpenAPI SHA-256: `1a05e6bf54cee6a15f46010d7985ce36236c2bd90582babf45f764fc37275619`. No endpoints or payloads were changed to build this diagram.

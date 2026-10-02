@@ -37,6 +37,8 @@ def freeze(tx, owner, account_id):
     from .acceptance import object_envelope
     from .account_discovery import visible_accounts
     data = owned(tx, 'account', account_id, owner)['data']; result = data['result']
+    from .user_inputs import prevent_private_publication
+    prevent_private_publication(tx, data.get('summary',{}).get('job_id'))
     summaries = [item for item in visible_accounts(tx, owner, attribution=True) if item['account']['id'] == account_id]
     if len(summaries) != 1: raise Problem(409, 'ACCOUNT_NOT_ACCEPTED', 'Only a saved accepted scientific account can be published.')
     inputs = [(account_id, result)]

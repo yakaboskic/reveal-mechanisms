@@ -76,7 +76,7 @@ export function useWorkspaceData(tab: WorkspaceTab, query = "", reference: Refer
   const listed = workspaceKey(tab, "", reference);
   for (const value of workspaceTabs) {
     const data = cache.read(scope, value === tab ? listed : value).data;
-    if (data) counts[value] = `${(value === "gaps" ? data.gaps : value === "accounts" ? data.accounts : data.outcomes).length}${data.cursor ? "+" : ""}`;
+    if (data) counts[value] = `${(value === "gaps" ? data.gaps : value === "drafts" ? data.drafts : value === "runs" ? data.jobs.filter(job => job.kind === "analysis") : value === "accounts" ? data.accounts : data.outcomes).length}${data.cursor ? "+" : ""}`;
   }
   return { ...snapshot, counts, connection, refresh: () => cache.revalidate(scope, key, true), loadMore: () => cache.revalidate(scope, key, true, "append") };
 }

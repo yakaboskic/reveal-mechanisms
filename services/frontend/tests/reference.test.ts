@@ -2,9 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { api, ApiError, supersededReference, unwrap, type Schema } from "../src/lib/client";
-import { applySuggestions, currentAnalysisComposer, dropOutdatedAnchors, emptyComposer, factorSelection, persistDraft } from "../src/lib/composer";
+import { applySuggestions, archivedResearchInputs, createSubmissionDraft, currentAnalysisComposer, dropOutdatedAnchors, emptyComposer, factorSelection, persistDraft } from "../src/lib/composer";
 import { anchorKey, currentComposer, currentReferenceModel, isArchived, isReferenceReload, legacyReferenceModel, modelOfSourceId, observeFactors, observedReferenceModel, outdatedFromAnchor, outdatedFromFactor, listedAccountCount, parseReferenceState, referenceProblemMessage, referenceQuery, referenceRechecker, referenceRecheckDelaysMs, referenceReloaded } from "../src/lib/reference";
-import { rememberSubmission, restoreSubmission, type SubmissionAttempt } from "../src/lib/submission";
+import { rememberSubmission, restoreSubmission, submissionActionDisabled, type SubmissionAttempt } from "../src/lib/submission";
 import { loadWorkspaceData, workspaceKey, workspaceKeyParts, type WorkspaceKey } from "../src/lib/workspace-data";
 import { affectedWorkspaceTabs } from "../src/lib/workspace-events";
 
@@ -65,7 +65,7 @@ test("stored composers from a superseded model are discarded unless they only ho
   assert.equal(currentComposer(current), current);
 });
 
-test("a pending submission kept across a reload is dropped instead of resubmitted", t => {
+test("a stale unsubmitted snapshot is discarded but an uncertain submission keeps its exact receipt", t => {
   withStorage(t);
   const attempt = (composer: Schema<"Composer">): SubmissionAttempt => ({ method: "session", question: "q", gap: null, composer, draft: null, owner: "user", anonymousKey: "key", requestKeys: [], submitKey: null });
   observeFactors([legacyFactor]);
@@ -74,6 +74,9 @@ test("a pending submission kept across a reload is dropped instead of resubmitte
   observeFactors([kpnFactor]);
   assert.equal(restoreSubmission(), null);
   assert.equal(sessionStorage.getItem("reveal:submission"), null);
+  const uncertain = { ...attempt(composerWith(legacyFactor)), submitKey: { binding: "saved-draft:3", key: "same-paid-submission" }, draft: { id: "saved-draft", version: 3, composer: composerWith(legacyFactor) } as Schema<"Draft"> };
+  rememberSubmission(uncertain);
+  assert.deepEqual(restoreSubmission(), uncertain);
   rememberSubmission(attempt(composerWith(kpnFactor)));
   assert.ok(restoreSubmission());
 });
@@ -83,7 +86,7 @@ test("suggestions and manual selections carry the model the API served", () => {
   assert.equal(legacy.model, "cfde-inc-v2");
   const kpn = applySuggestions({ ...emptyComposer(), model: "cfde-inc-v2" }, { ...suggestions, automatic_anchors: [{ ...suggestions.automatic_anchors[0], factor: kpnFactor }] });
   assert.equal(kpn.model, "eaggl-capped-v1"); assert.equal(kpn.eaggl_anchors[0].reference.source_id, kpnFactor.source_id);
-  // Key order is unchanged, so the autosave comparison still detects no-op snapshots.
+  // Key order is unchanged, so explicit Save comparison still detects no-op snapshots.
   assert.deepEqual(Object.keys(kpn), Object.keys(emptyComposer()));
   assert.deepEqual(applySuggestions(legacy, { ...suggestions, automatic_anchors: [] }).model, legacy.model);
 });
@@ -99,8 +102,10 @@ test("replacing outdated anchors keeps current ones and does not dismiss the old
 
 test("a new analysis copies the gap, inquiry and knowledge graphs with no anchors", t => {
   withStorage(t); observeFactors([kpnFactor]);
-  const composer = currentAnalysisComposer(archivedOutcome.source_gap, { selected_kgs: ["prokn"], mechanism_subquery: "insulin secretion" });
-  assert.deepEqual(composer, { source_gap: archivedOutcome.source_gap, eaggl_anchors: [], dismissed_source_ids: [], mechanism_subquery: "insulin secretion", model: "eaggl-capped-v1", selected_kgs: ["prokn"] });
+  const inputs = { selected_kgs: ["prokn"] as const, mechanism_subquery: "insulin secretion", research_direction: "Prior direction", context: "Researcher context", hypotheses: "A testable hypothesis", upload_ids: ["ready-upload"] };
+  const composer = currentAnalysisComposer(archivedOutcome.source_gap, { ...inputs, selected_kgs: [...inputs.selected_kgs] });
+  assert.deepEqual(composer, { source_gap: archivedOutcome.source_gap, eaggl_anchors: [], dismissed_source_ids: [], model: "eaggl-capped-v1", ...inputs });
+  assert.notEqual(composer.upload_ids, inputs.upload_ids);
   assert.notEqual(composer.source_gap, archivedOutcome.source_gap);
   assert.deepEqual(currentAnalysisComposer(archivedOutcome.source_gap).selected_kgs, ["biomarkerkg", "prokn"]);
 });
@@ -222,4 +227,81 @@ test("a gap's collapsed account count matches the listing its reference filter o
   assert.deepEqual((["all", "current", "archived"] as const).map(state => listedAccountCount(after, state)), [5, 2, 3]);
   // Straight after a cutover every account is archived: the default listing is not empty.
   assert.equal(listedAccountCount({ count: 0, archived_count: 3 }, "all"), 3);
+});
+
+
+test("explicit named Save preserves its name, inputs and recovery key when a dropped draft is replaced", async () => {
+  const snapshot = { ...emptyComposer(), source_gap: archivedOutcome.source_gap, context: "Keep my reasoning", upload_ids: ["ready-upload"] };
+  const old = { id: "gone", version: 2, name: "My inquiry", lifecycle: "saved", composer: snapshot } as Schema<"Draft">;
+  const next = { ...old, id: "replacement", version: 1 };
+  const gone = new ApiError(404, "NOT_FOUND", "Gone");
+  const attempts: { draft: string | null; key: string }[] = [];
+  const keys = new Map<string, string>();
+  const key = (body: string) => { if (!keys.has(body)) keys.set(body, `key-${keys.size}`); return keys.get(body)!; };
+  let createCalls = 0;
+  const client = {
+    draft: async () => { throw gone; },
+    saveDraft: async () => { throw gone; },
+    createDraft: async (value: Schema<"Composer">, _key: string, name?: string) => {
+      createCalls++; assert.equal(name, "My inquiry"); assert.deepEqual(value, snapshot);
+      if (createCalls === 1) throw new Error("Response lost");
+      return next;
+    },
+  };
+  const attempting = (draft: Schema<"Draft"> | null, key: string) => attempts.push({ draft: draft?.id || null, key });
+  await assert.rejects(persistDraft(client, old, snapshot, key, { name: "My inquiry", attempting }), /Response lost/);
+  assert.equal(attempts.at(-1)?.draft, null);
+  const createKey = attempts.at(-1)!.key;
+  await persistDraft(client, null, snapshot, key, { name: "My inquiry", attempting });
+  assert.equal(attempts.at(-1)?.key, createKey);
+  assert.equal(createCalls, 2);
+  assert.notEqual(attempts[0].key, createKey);
+  await assert.rejects(persistDraft({ ...client, draft: async () => old }, old, snapshot, key, { name: "My inquiry" }), error => error === gone);
+  assert.equal(createCalls, 2);
+});
+
+test("submission only drops lineage after confirming that the source draft is gone", async () => {
+  const snapshot = { ...emptyComposer(), source_gap: archivedOutcome.source_gap, context: "Unsaved run context", upload_ids: ["ready-upload"] };
+  const saved = { id: "saved", version: 2, lifecycle: "saved", composer: snapshot } as Schema<"Draft">;
+  const working = { ...saved, id: "working", lifecycle: "temporary" as const };
+  const missing = new ApiError(404, "NOT_FOUND", "Missing resource");
+  const calls: [string, string | undefined][] = [];
+  const createWorkingDraft = async (value: Schema<"Composer">, key: string, sourceId?: string) => {
+    calls.push([key, sourceId]); assert.deepEqual(value, snapshot);
+    if (sourceId) throw missing;
+    return working;
+  };
+  const client = { draft: async () => { throw missing; }, createWorkingDraft };
+  assert.equal(await createSubmissionDraft(client, snapshot, "submit-key", saved.id, saved.version), working);
+  assert.deepEqual(calls, [["submit-key", saved.id], ["submit-key:without-source", undefined]]);
+  calls.length = 0;
+  await assert.rejects(createSubmissionDraft({ ...client, draft: async () => saved }, snapshot, "missing-upload", saved.id, saved.version), error => error === missing);
+  assert.deepEqual(calls, [["missing-upload", saved.id]]);
+  await assert.rejects(createSubmissionDraft(client, snapshot, "navigated-away", saved.id, saved.version, () => false), error => error === missing);
+  assert.equal(calls.length, 2);
+});
+
+
+test("an uncertain dispatch can be reconciled after current anchor and upload validation becomes invalid", () => {
+  // Lost response, then a reference cutover and attachment refresh: the locked editor
+  // cannot satisfy new-run validation, but its recorded dispatch still needs reconciliation.
+  const afterCutover = { ready: true, busy: false, newInputsValid: false };
+  assert.equal(submissionActionDisabled({ ...afterCutover, uncertain: true }), false);
+  assert.equal(submissionActionDisabled({ ...afterCutover, uncertain: false }), true);
+  assert.equal(submissionActionDisabled({ ...afterCutover, uncertain: true, ready: false }), true);
+  assert.equal(submissionActionDisabled({ ...afterCutover, uncertain: true, busy: true }), true);
+});
+
+test("archived owner input reads fail visibly and preserve full input context after retry", async () => {
+  const fallback = { selected_kgs: ["prokn"] as ["prokn"] };
+  const unavailable = new Error("Frozen request is temporarily unavailable");
+  const read = async () => { throw unavailable; };
+  await assert.rejects(archivedResearchInputs("owned-request", read, fallback), error => error === unavailable);
+  const composer = { ...emptyComposer(), mechanism_subquery: "Mechanism inquiry", research_direction: "Direction", context: "Private researcher context", hypotheses: "Hypothesis", upload_ids: ["uploaded-document"] };
+  const restored = await archivedResearchInputs("owned-request", async id => {
+    assert.equal(id, "owned-request"); return { composer } as Schema<"ResearchRequest">;
+  }, fallback);
+  assert.deepEqual(restored, { ...fallback, mechanism_subquery: composer.mechanism_subquery, research_direction: composer.research_direction,
+    context: composer.context, hypotheses: composer.hypotheses, upload_ids: composer.upload_ids });
+  assert.deepEqual(await archivedResearchInputs(null, () => assert.fail("Public archive must not read private inputs"), fallback), fallback);
 });

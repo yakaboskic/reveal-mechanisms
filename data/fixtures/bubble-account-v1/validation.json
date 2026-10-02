@@ -1,0 +1,39 @@
+{
+  "counts": {
+    "edges": 20,
+    "errors": 0,
+    "nodes": 63,
+    "raw_sources": 28,
+    "warnings": 1
+  },
+  "dapper_release": {
+    "checked_files": 34,
+    "commit": "c0cfce549baded068aa9e82f81a1400025614b51",
+    "lock_sha256": "3f07f48396ab893ed0fae8ad0101e0c2ac1bc36161e91cc2525d5ed0aeb0140f",
+    "repository": "https://github.com/broadinstitute/dapper.git",
+    "tag": "0.2.0-a1"
+  },
+  "document_sha256": "1f06c4acf135acf49c5a3f58d089c3906243cb6aef611a0fa2b4a041b233e5f4",
+  "evidence_package_sha256": null,
+  "findings": [
+    {
+      "check": "activity-inputs",
+      "message": "Activity 'CFDE GeneSet catalog encoding' declares no inputs",
+      "severity": "warning",
+      "where": "dapper:Activity.VM0nxPd0QVsZJ-7qw4WjAvXtEiFMehqx",
+      "why": "Add `used_edges` naming what it consumed, or confirm it is a genuine raw-data producer."
+    }
+  ],
+  "mode": "profile-only",
+  "profile": "scientific-account",
+  "remaining_acceptance_checks": [
+    "trusted attribution and job ownership",
+    "external-evidence ledger and tool policy",
+    "scientific support and synthesis review"
+  ],
+  "report_version": "reveal.account-lint/1",
+  "scientific_grounding_evaluated": false,
+  "scope": "Pinned DAPPER structural/identity/reference validation only; not scientific acceptance.",
+  "strict": false,
+  "valid": true
+}

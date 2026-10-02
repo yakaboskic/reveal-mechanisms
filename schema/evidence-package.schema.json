@@ -2127,7 +2127,8 @@
       "enum": [
         "json",
         "yaml",
-        "text"
+        "text",
+        "binary"
       ],
       "title": "EPArtifactFormat",
       "type": "string"
@@ -4592,6 +4593,12 @@
         "format": {
           "$ref": "#/$defs/EPArtifactFormat"
         },
+        "media_type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "origin": {
           "anyOf": [
             {
@@ -4606,8 +4613,14 @@
           ]
         },
         "path": {
-          "pattern": "^sources/[0-9a-f]{64}\\.(json|yaml|text)$",
+          "pattern": "^sources/[0-9a-f]{64}\\.(json|yaml|text|binary)$",
           "type": "string"
+        },
+        "private": {
+          "type": [
+            "boolean",
+            "null"
+          ]
         },
         "sha256": {
           "pattern": "^[0-9a-f]{64}$",
@@ -4642,6 +4655,12 @@
         "format": {
           "$ref": "#/$defs/EPArtifactFormat"
         },
+        "media_type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "origin": {
           "anyOf": [
             {
@@ -4656,8 +4675,14 @@
           ]
         },
         "path": {
-          "pattern": "^sources/[0-9a-f]{64}\\.(json|yaml|text)$",
+          "pattern": "^sources/[0-9a-f]{64}\\.(json|yaml|text|binary)$",
           "type": "string"
+        },
+        "private": {
+          "type": [
+            "boolean",
+            "null"
+          ]
         },
         "sha256": {
           "pattern": "^[0-9a-f]{64}$",
@@ -4926,6 +4951,40 @@
         "source_ref"
       ],
       "title": "EPTraitObservation",
+      "type": "object"
+    },
+    "EPUserInputs": {
+      "additionalProperties": false,
+      "description": "Private researcher direction and supplied material; hypotheses are not observations.",
+      "properties": {
+        "context": {
+          "type": "string"
+        },
+        "format": {
+          "const": "reveal.user-inputs/1",
+          "type": "string"
+        },
+        "hypotheses": {
+          "type": "string"
+        },
+        "research_direction": {
+          "type": "string"
+        },
+        "uploads": {
+          "items": {
+            "$ref": "#/$defs/EPRawObject"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "format",
+        "research_direction",
+        "context",
+        "hypotheses",
+        "uploads"
+      ],
+      "title": "EPUserInputs",
       "type": "object"
     },
     "Edge": {
@@ -5284,6 +5343,16 @@
           },
           "minProperties": 1,
           "type": "object"
+        },
+        "user_inputs": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EPUserInputs"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
@@ -9274,6 +9343,16 @@
       },
       "minProperties": 1,
       "type": "object"
+    },
+    "user_inputs": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/EPUserInputs"
+        },
+        {
+          "type": "null"
+        }
+      ]
     }
   },
   "required": [

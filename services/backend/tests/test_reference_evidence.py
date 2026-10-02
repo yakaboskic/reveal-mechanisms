@@ -1,11 +1,13 @@
 """KPN reference evidence from MySQL is accepted by the unchanged builder, schema and worker checks."""
 from copy import deepcopy
 import gzip
+import io
 import json
 from pathlib import Path
 import re
 import shutil
 import sqlite3
+import tarfile
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -232,6 +234,117 @@ class ReferenceEvidenceTests(unittest.TestCase):
         self.assertEqual(package['external_evidence']['selected_graphs'], ['biomarkerkg'])
         self.assertEqual(set(package['coverage']['queries'].values()), {'ok'})
         self.assertEqual(len(package['coverage']['bioindex_queries']), 2)  # factor scope, gene and gene set; no trait-scope query
+
+    def supplied_inputs(self):
+        from reveal_backend import user_inputs
+        data = b'First observation\nSecond observation'
+        extracted = user_inputs.parse_document(data, 'notes.txt')
+        directory = self.root / 'user-inputs'; directory.mkdir(exist_ok=True)
+
+        def retain(raw, media):
+            path = directory / sha256(raw); path.write_bytes(raw)
+            return {'store': 'filesystem', 'key': str(path), 'sha256': sha256(raw), 'size_bytes': len(raw), 'content_type': media}
+
+        original = retain(data, 'text/plain'); extraction = retain(canonical_json(extracted), 'application/json')
+        return {'format': 'reveal.user-inputs/1', 'research_direction': 'Test the temporal direction',
+                'context': 'Private preliminary observations', 'hypotheses': 'Exposure precedes the disease',
+                'uploads': [{'id': 'test-notes', 'filename': 'notes.txt', 'media_type': 'text/plain',
+                             'size_bytes': len(data), 'sha256': sha256(data), 'storage': original,
+                             'extraction': {'storage': extraction, 'format': extracted['format'],
+                                            'original_sha256': sha256(data), 'segment_count': len(extracted['segments'])}}]}
+
+    def test_private_inputs_reach_kpn_package_replay_and_bundle(self):
+        from reveal_backend.agent_execution import ExecutionRequest
+        from reveal_backend.box_adapter import make_bundle
+        from reveal_backend.evidence_files import build_evidence_files
+        from reveal_backend.scientific_grounding import review_evidence
+        from reveal_backend.scientific_review_reader import EvidenceReader
+        supplied = self.supplied_inputs(); frozen = deepcopy(supplied)
+        with patch('reveal_backend.user_inputs.artifacts_root', return_value=self.root):
+            built = self.collect('private-inputs', [ANCHOR], user_inputs=supplied)
+        self.assertEqual(supplied, frozen)  # the frozen request cannot acquire capture metadata
+        package = built.package; validate_package_shape(package, SCHEMA)
+        self.assertEqual(package['pigean']['model'], KPN_MODEL)
+        upload = package['user_inputs']['uploads'][0]
+        self.assertEqual(upload['content']['segments'][0], {'locator': 'line:1', 'text': 'First observation'})
+        for field, storage in [('original_artifact_id', frozen['uploads'][0]['storage']),
+                               ('extraction_artifact_id', frozen['uploads'][0]['extraction']['storage'])]:
+            source = package['source_artifacts'][upload[field]]
+            self.assertTrue(source['private'])
+            self.assertEqual(source['sha256'], storage['sha256'])
+            self.assertEqual(built.files[source['path']], Path(storage['key']).read_bytes())
+        spec, blobs = load_build_input(self.root / 'private-inputs/build-input.json', self.root / 'private-inputs')
+        self.assertEqual(build_package(spec, blobs, self.runtime).files, built.files)
+        request = ExecutionRequest(job_id='private-kpn-test', attempt=1, kind='research',
+            input_path=self.root / 'private-inputs/package/evidence-package.json', output_dir=self.root / 'bundle-output',
+            selected_graphs=tuple(package['external_evidence']['selected_graphs']))
+        with tarfile.open(fileobj=io.BytesIO(make_bundle(ROOT, request)), mode='r:gz') as bundle:
+            for field in ('original_artifact_id', 'extraction_artifact_id'):
+                source = package['source_artifacts'][upload[field]]
+                self.assertEqual(sha256(bundle.extractfile('input/' + source['path']).read()), source['sha256'])
+        reading = build_evidence_files(request.input_path.read_bytes())
+        self.assertIn('user_inputs', json.loads(reading['input/evidence-index.json'])['sections'])
+        ledger = self.root / 'private-inputs/ledger.json'
+        ledger.write_bytes(canonical_json({'format': 'reveal.tool-ledger/1', 'complete': True, 'calls': []}))
+        reviewer = EvidenceReader(review_evidence(package, ledger))
+        self.assertEqual(reviewer.read('/package/user_inputs/uploads/0/content/segments/0')['value']['text'], 'First observation')
+
+    def test_worker_kpn_forwards_frozen_inputs_and_checks_recovery(self):
+        from reveal_backend import worker
+        package = self.built().package
+        gap = next(g for g in package['dapper_context']['knowledge_gaps'] if g['id'] == GAP_DAPPER_ID)
+        frozen = {'question_id': GAP_DAPPER_ID, 'user_inputs': self.supplied_inputs(), 'composer': {
+            'source_gap': {'source_id': GAP, 'source_revision': package['dismech']['source_revision']['source_sha256']},
+            'eaggl_anchors': [{'reference': {'source_id': ANCHOR}, 'origin': 'user_supplied'}],
+            'dismissed_source_ids': [], 'selected_kgs': ['biomarkerkg']}}
+        binding = {'source_gap': {'object': gap}, 'anchors': [{'cfde_node_id': ANCHOR, 'model': KPN_MODEL,
+                                                              'reference_generation_id': GENERATION}]}
+        captured = []
+
+        def collect_reference(**kwargs):
+            captured.append(kwargs)
+            return reference.collect_reference_package(**{**kwargs, 'dismech_index': self.index,
+                'dismech_source': self.source, 'connection_factory': lambda: SQLiteMySQL(self.database)})
+
+        directory = self.root / 'worker-private-inputs'
+        with patch.object(worker, 'collect_reference_package', side_effect=collect_reference), \
+                patch.object(worker, 'collect_package', side_effect=AssertionError('KPN must not use the legacy collector')), \
+                patch.object(worker, 'DapperRuntime', return_value=self.runtime), \
+                patch('reveal_backend.user_inputs.artifacts_root', return_value=self.root):
+            path, collected = worker.collect({}, frozen, binding, {'candidates_per_type': 20}, directory)
+        self.assertEqual(captured[0]['user_inputs'], frozen['user_inputs'])
+        self.assertEqual(captured[0]['generation_id'], GENERATION)
+        self.assertEqual(collected['user_inputs']['context'], frozen['user_inputs']['context'])
+        with patch.object(worker, 'collect_reference_package', side_effect=AssertionError('Recovery must use its capture')), \
+                patch('reveal_backend.user_inputs.read', side_effect=AssertionError('Recovery must not reread mutable storage')):
+            self.assertEqual(worker.collect({}, frozen, binding, {}, directory), (path, collected))
+            modified = deepcopy(frozen); modified['user_inputs']['context'] = 'Replacement text'
+            with self.assertRaisesRegex(EvidenceBuildError, 'researcher text changed'):
+                worker.collect({}, modified, binding, {}, directory)
+            modified = deepcopy(frozen); modified['user_inputs']['uploads'][0]['storage']['sha256'] = 'b' * 64
+            with self.assertRaisesRegex(EvidenceBuildError, 'researcher attachment changed'):
+                worker.collect({}, modified, binding, {}, directory)
+            historical = deepcopy(frozen); historical.pop('user_inputs')
+            with self.assertRaisesRegex(EvidenceBuildError, 'Unexpected researcher inputs'):
+                worker.collect({}, historical, binding, {}, directory)
+
+    def test_kpn_request_with_private_inputs_cannot_be_published(self):
+        from reveal_backend import publication
+        from reveal_backend.auth import Problem
+        from reveal_backend.repository import Repository, digest
+        repository = Repository(str(self.root / 'private-publication.sqlite')); repository.migrate()
+        owner, account = 'private-owner', 'dapper:ScientificAccount.private-inputs-test'
+        with repository.transaction() as tx:
+            tx.put('request', 'private-request', owner, {'user_inputs': self.supplied_inputs()})
+            tx.put('request_binding', 'private-request', owner, {'anchors': [{'model': KPN_MODEL,
+                'reference_generation_id': GENERATION, 'cfde_node_id': ANCHOR}]})
+            tx.put('job', 'private-job', owner, {'research_request_id': 'private-request'})
+            tx.put('account', digest([owner, account]), owner, {'result': {}, 'summary': {'job_id': 'private-job'}})
+            with self.assertRaises(Problem) as error:
+                publication.change(tx, owner, account, 'public', 0)
+            self.assertEqual(error.exception.code, 'PRIVATE_RESEARCH_INPUTS')
+            self.assertEqual(tx.list('publication'), [])
+            self.assertEqual(tx.list('publication_snapshot'), [])
 
     def test_reads_are_select_only_and_close_the_connection(self):
         self.collect('read-only', [ANCHOR])

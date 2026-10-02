@@ -1,0 +1,1968 @@
+{
+  "artifacts": [
+    {
+      "availability": "not_available",
+      "download_url": null,
+      "expires_at": null,
+      "file": {
+        "description": "Original CFDE response bytes captured September 25, 2026; not a new retrieval.",
+        "filename": "pigean-gene-factor.response.json",
+        "id": "dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ",
+        "location": "data/fixtures/bubble-account-v1/sources/pigean-gene-factor.response.json",
+        "mime_type": "application/json",
+        "sha256": "3fdf0f2ae3f782824ec7f96687c4a988a88a6ffb0a106b52f4e20464cdf51e30",
+        "size_in_bytes": 2945
+      },
+      "verification": "source_reported"
+    },
+    {
+      "availability": "not_available",
+      "download_url": null,
+      "expires_at": null,
+      "file": {
+        "description": "Original CFDE response bytes captured September 25, 2026; not a new retrieval.",
+        "filename": "pigean-gene-set-factor.response.json",
+        "id": "dapper:File.Dt0S38v_sLn5jiOAVXMrMWTrXBLnsn83",
+        "location": "data/fixtures/bubble-account-v1/sources/pigean-gene-set-factor.response.json",
+        "mime_type": "application/json",
+        "sha256": "b4ba6a21f6791c8b80ce8ef471361634ebb8b9f1f4e91e886fe1f05d02e7c1fa",
+        "size_in_bytes": 3785
+      },
+      "verification": "source_reported"
+    },
+    {
+      "availability": "not_available",
+      "download_url": null,
+      "expires_at": null,
+      "file": {
+        "description": "Frozen DisMech source discussion; its exact question frames this example.",
+        "filename": "dismech-gap.source.json",
+        "id": "dapper:File.eG0HM7wVGbDLt-99TA-OMnMeKqdIircT",
+        "location": "data/fixtures/bubble-account-v1/sources/dismech-gap.source.json",
+        "mime_type": "application/json",
+        "sha256": "ed59adee2b7de542f72781a90265088feb79900ad88f83c60bc124ede420d78f",
+        "size_in_bytes": 3382
+      },
+      "verification": "source_reported"
+    },
+    {
+      "availability": "not_available",
+      "download_url": null,
+      "expires_at": null,
+      "file": {
+        "description": "Invented assertions for UI design. Not retrieved from ProKN or BiomarkerKG; not verified GeneSet membership.",
+        "filename": "illustrative-kg-assertions.json",
+        "id": "dapper:File._FB2fhvDopxDEHgoDgf2Hk4jE0wxilag",
+        "location": "data/fixtures/bubble-account-v1/sources/illustrative-kg-assertions.json",
+        "mime_type": "application/json",
+        "sha256": "9539fb6db89cdc4f3122fa497dfe70c4940f9d0b21bcc17505f90da8770391dc",
+        "size_in_bytes": 821
+      },
+      "verification": "source_reported"
+    },
+    {
+      "availability": "not_available",
+      "download_url": null,
+      "expires_at": null,
+      "file": {
+        "description": "Exact local imported DisMech source-file revision. Its selected discussion equals the retained CAD design discussion.",
+        "filename": "Coronary_Artery_Disease.yaml",
+        "id": "dapper:File.v2cEzhI5P_mdYWuY_HyJjvzyNZpzuP96",
+        "location": "data/fixtures/bubble-account-v1/sources/Coronary_Artery_Disease.yaml",
+        "mime_type": "application/yaml",
+        "sha256": "00f2a71dca11fd7d4a8c835ea9e978037dcbef88d3fb050c5e74192db2bd7338",
+        "size_in_bytes": 97708
+      },
+      "verification": "source_reported"
+    },
+    {
+      "availability": "not_available",
+      "download_url": null,
+      "expires_at": null,
+      "file": {
+        "description": "Deterministic projection of captured CFDE gene metrics; not a new biological experiment.",
+        "filename": "gene-metrics.json",
+        "id": "dapper:File.TLbPNA0MRbI7oUpipACe2r-gRZX8OP6c",
+        "location": "data/fixtures/bubble-account-v1/sources/gene-metrics.json",
+        "mime_type": "application/json",
+        "sha256": "e676dae04260f521ae7094d321e66d8b610eb121ca0903c129c2fdd82b9bfed6",
+        "size_in_bytes": 841
+      },
+      "verification": "source_reported"
+    },
+    {
+      "availability": "not_available",
+      "download_url": null,
+      "expires_at": null,
+      "file": {
+        "description": "Deterministic projection of captured CFDE gene-set metrics; not independent replication.",
+        "filename": "gene-set-metrics.json",
+        "id": "dapper:File.HGsrMluIk1mo4e0a6aCD0zBcXZa-Y716",
+        "location": "data/fixtures/bubble-account-v1/sources/gene-set-metrics.json",
+        "mime_type": "application/json",
+        "sha256": "43ce6a78941d4bd92912a769d72b2cef96aa7fa6ade7fc28d0486034d60afe02",
+        "size_in_bytes": 1421
+      },
+      "verification": "source_reported"
+    },
+    {
+      "availability": "not_available",
+      "download_url": null,
+      "expires_at": null,
+      "file": {
+        "description": "Offline inventory combining captured source locators with explicitly illustrative assertion labels.",
+        "filename": "evidence-inventory.json",
+        "id": "dapper:File.6JYwag_kjbSwZ-eLeKmZxI0EmWd2gcLD",
+        "location": "data/fixtures/bubble-account-v1/sources/evidence-inventory.json",
+        "mime_type": "application/json",
+        "sha256": "fa1b3350a95ed44914de793d96c9c504d9dc069822c3f13c3b7204e6684b6b7c",
+        "size_in_bytes": 4136
+      },
+      "verification": "source_reported"
+    }
+  ],
+  "citation_metadata": [
+    {
+      "access_level": "private",
+      "byline": [],
+      "canonical_url": "http://localhost:3000/id/dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+      "citation_profile_version": "reveal-citation-v1",
+      "dapper_identity_profile": "DAPPER-ID-1",
+      "dapper_schema_version": "c0cfce549baded068aa9e82f81a1400025614b51",
+      "date_provenance": {
+        "first_minted_at": {
+          "source_ref": "urn:example:reveal:contract-fixture"
+        },
+        "imported_at": {
+          "source_ref": "urn:example:reveal:contract-fixture"
+        }
+      },
+      "first_minted_at": "2026-09-24T16:00:00Z",
+      "generated_at": null,
+      "imported_at": "2026-09-24T16:00:00Z",
+      "issued_basis": "first_minted_at",
+      "issued_date": "2026-09-24",
+      "language": "en",
+      "metadata_checksum": "32a35dbd805b8bfaaca42fe1e87a5f40d022b041fdf380f5dc9bba9c5ca425b2",
+      "metadata_revision": 1,
+      "object_payload_ref": "http://localhost:3000/api/backend/v1/objects/dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+      "origin": "imported",
+      "original_issued_date": null,
+      "publication_state": "unpublished",
+      "published_at": null,
+      "publisher": null,
+      "repository": "REVEAL canonical UI fixtures — unpublished and scientifically unreviewed",
+      "target_class": "KnowledgeGap",
+      "target_id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+      "title": "Are the CAD PGS×context interactions driven by adverse exposures causally amplifying genetic risk, or are some \"contexts\" actually downstream readouts of incipient disease (reverse causation)?",
+      "title_derivation": {
+        "method": "inquiry_text",
+        "source": {
+          "source_ref": "urn:example:cad-account-design"
+        },
+        "version": "1"
+      }
+    },
+    {
+      "access_level": "private",
+      "byline": [
+        {
+          "agent_id": "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he",
+          "family_name": "Example",
+          "given_name": "Design",
+          "kind": "person",
+          "roles": [
+            "agent_operator"
+          ],
+          "source": {
+            "source_ref": "urn:example:cad-account-design"
+          }
+        }
+      ],
+      "canonical_url": "http://localhost:3000/id/dapper:Claim.iN6K2Rz0XKMnROZLUNLuhZhz0id5wK0h",
+      "citation_profile_version": "reveal-citation-v1",
+      "dapper_identity_profile": "DAPPER-ID-1",
+      "dapper_schema_version": "c0cfce549baded068aa9e82f81a1400025614b51",
+      "date_provenance": {
+        "first_minted_at": {
+          "source_ref": "urn:example:reveal:contract-fixture"
+        }
+      },
+      "first_minted_at": "2026-09-24T16:00:00Z",
+      "generated_at": null,
+      "issued_basis": "first_minted_at",
+      "issued_date": "2026-09-24",
+      "language": "en",
+      "metadata_checksum": "e8d4a018c00d5ad91da019fd39029c69f36b98ce157d2295e9fc22d9f3860900",
+      "metadata_revision": 1,
+      "object_payload_ref": "http://localhost:3000/api/backend/v1/objects/dapper:Claim.iN6K2Rz0XKMnROZLUNLuhZhz0id5wK0h",
+      "origin": "native",
+      "publication_state": "unpublished",
+      "published_at": null,
+      "publisher": null,
+      "repository": "REVEAL canonical UI fixtures — unpublished and scientifically unreviewed",
+      "target_class": "Claim",
+      "target_id": "dapper:Claim.iN6K2Rz0XKMnROZLUNLuhZhz0id5wK0h",
+      "title": "The EAGGL result supports SHH involvement in this mechanism through its reported loading of 0.5042 under cfde-inc-v2.",
+      "title_derivation": {
+        "method": "assessment_statement",
+        "source": {
+          "source_ref": "urn:example:cad-account-design"
+        },
+        "version": "1"
+      }
+    },
+    {
+      "access_level": "private",
+      "byline": [
+        {
+          "agent_id": "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he",
+          "family_name": "Example",
+          "given_name": "Design",
+          "kind": "person",
+          "roles": [
+            "agent_operator"
+          ],
+          "source": {
+            "source_ref": "urn:example:cad-account-design"
+          }
+        }
+      ],
+      "canonical_url": "http://localhost:3000/id/dapper:Claim.eaeEY0LpLXwNmk3-Rr9s-YEiUokDLfO6",
+      "citation_profile_version": "reveal-citation-v1",
+      "dapper_identity_profile": "DAPPER-ID-1",
+      "dapper_schema_version": "c0cfce549baded068aa9e82f81a1400025614b51",
+      "date_provenance": {
+        "first_minted_at": {
+          "source_ref": "urn:example:reveal:contract-fixture"
+        }
+      },
+      "first_minted_at": "2026-09-24T16:00:00Z",
+      "generated_at": null,
+      "issued_basis": "first_minted_at",
+      "issued_date": "2026-09-24",
+      "language": "en",
+      "metadata_checksum": "c4b5674d60e7cddc9df2102e41fbc607f7491555abd19eea7c6063ef6814fc8d",
+      "metadata_revision": 1,
+      "object_payload_ref": "http://localhost:3000/api/backend/v1/objects/dapper:Claim.eaeEY0LpLXwNmk3-Rr9s-YEiUokDLfO6",
+      "origin": "native",
+      "publication_state": "unpublished",
+      "published_at": null,
+      "publisher": null,
+      "repository": "REVEAL canonical UI fixtures — unpublished and scientifically unreviewed",
+      "target_class": "Claim",
+      "target_id": "dapper:Claim.eaeEY0LpLXwNmk3-Rr9s-YEiUokDLfO6",
+      "title": "The EAGGL result supports GLI3 involvement in this mechanism through its reported loading of 0.3245 under cfde-inc-v2.",
+      "title_derivation": {
+        "method": "assessment_statement",
+        "source": {
+          "source_ref": "urn:example:cad-account-design"
+        },
+        "version": "1"
+      }
+    },
+    {
+      "access_level": "private",
+      "byline": [
+        {
+          "agent_id": "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he",
+          "family_name": "Example",
+          "given_name": "Design",
+          "kind": "person",
+          "roles": [
+            "agent_operator"
+          ],
+          "source": {
+            "source_ref": "urn:example:cad-account-design"
+          }
+        }
+      ],
+      "canonical_url": "http://localhost:3000/id/dapper:Claim.0Tdjx1Ry7AC5sP50HIlUfKb-cwpgY-3u",
+      "citation_profile_version": "reveal-citation-v1",
+      "dapper_identity_profile": "DAPPER-ID-1",
+      "dapper_schema_version": "c0cfce549baded068aa9e82f81a1400025614b51",
+      "date_provenance": {
+        "first_minted_at": {
+          "source_ref": "urn:example:reveal:contract-fixture"
+        }
+      },
+      "first_minted_at": "2026-09-24T16:00:00Z",
+      "generated_at": null,
+      "issued_basis": "first_minted_at",
+      "issued_date": "2026-09-24",
+      "language": "en",
+      "metadata_checksum": "e8f337d717cab94ad207641256ad52b04f1eaa593c62ae4636a3f7f3a2660041",
+      "metadata_revision": 1,
+      "object_payload_ref": "http://localhost:3000/api/backend/v1/objects/dapper:Claim.0Tdjx1Ry7AC5sP50HIlUfKb-cwpgY-3u",
+      "origin": "native",
+      "publication_state": "unpublished",
+      "published_at": null,
+      "publisher": null,
+      "repository": "REVEAL canonical UI fixtures — unpublished and scientifically unreviewed",
+      "target_class": "Claim",
+      "target_id": "dapper:Claim.0Tdjx1Ry7AC5sP50HIlUfKb-cwpgY-3u",
+      "title": "The EAGGL result supports TCF7L2 involvement in this mechanism through its reported loading of 0.3813 under cfde-inc-v2.",
+      "title_derivation": {
+        "method": "assessment_statement",
+        "source": {
+          "source_ref": "urn:example:cad-account-design"
+        },
+        "version": "1"
+      }
+    },
+    {
+      "access_level": "private",
+      "byline": [
+        {
+          "agent_id": "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he",
+          "family_name": "Example",
+          "given_name": "Design",
+          "kind": "person",
+          "roles": [
+            "agent_operator"
+          ],
+          "source": {
+            "source_ref": "urn:example:cad-account-design"
+          }
+        }
+      ],
+      "canonical_url": "http://localhost:3000/id/dapper:Claim.Yi6Uhd9aRwVHLlLSoc4TxEMo0VWswD0a",
+      "citation_profile_version": "reveal-citation-v1",
+      "dapper_identity_profile": "DAPPER-ID-1",
+      "dapper_schema_version": "c0cfce549baded068aa9e82f81a1400025614b51",
+      "date_provenance": {
+        "first_minted_at": {
+          "source_ref": "urn:example:reveal:contract-fixture"
+        }
+      },
+      "first_minted_at": "2026-09-24T16:00:00Z",
+      "generated_at": null,
+      "issued_basis": "first_minted_at",
+      "issued_date": "2026-09-24",
+      "language": "en",
+      "metadata_checksum": "d671435d869dfd2620da2910dc258267813e58efaca439501fc0aaef3e82192f",
+      "metadata_revision": 1,
+      "object_payload_ref": "http://localhost:3000/api/backend/v1/objects/dapper:Claim.Yi6Uhd9aRwVHLlLSoc4TxEMo0VWswD0a",
+      "origin": "native",
+      "publication_state": "unpublished",
+      "published_at": null,
+      "publisher": null,
+      "repository": "REVEAL canonical UI fixtures — unpublished and scientifically unreviewed",
+      "target_class": "Claim",
+      "target_id": "dapper:Claim.Yi6Uhd9aRwVHLlLSoc4TxEMo0VWswD0a",
+      "title": "The EAGGL result supports involvement of the AMP AD / GTEx brain-aging set, with a loading of 1.0 on mechanism Factor1.",
+      "title_derivation": {
+        "method": "assessment_statement",
+        "source": {
+          "source_ref": "urn:example:cad-account-design"
+        },
+        "version": "1"
+      }
+    },
+    {
+      "access_level": "private",
+      "byline": [
+        {
+          "agent_id": "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he",
+          "family_name": "Example",
+          "given_name": "Design",
+          "kind": "person",
+          "roles": [
+            "agent_operator"
+          ],
+          "source": {
+            "source_ref": "urn:example:cad-account-design"
+          }
+        }
+      ],
+      "canonical_url": "http://localhost:3000/id/dapper:Claim.fUp7z48VwrXH5oueNfh7D4nNhQMNtC3C",
+      "citation_profile_version": "reveal-citation-v1",
+      "dapper_identity_profile": "DAPPER-ID-1",
+      "dapper_schema_version": "c0cfce549baded068aa9e82f81a1400025614b51",
+      "date_provenance": {
+        "first_minted_at": {
+          "source_ref": "urn:example:reveal:contract-fixture"
+        }
+      },
+      "first_minted_at": "2026-09-24T16:00:00Z",
+      "generated_at": null,
+      "issued_basis": "first_minted_at",
+      "issued_date": "2026-09-24",
+      "language": "en",
+      "metadata_checksum": "31bd9de94ce5a9e2d50597aadf557064ed0a3256ff1fc1d21c21eacf3659ab1f",
+      "metadata_revision": 1,
+      "object_payload_ref": "http://localhost:3000/api/backend/v1/objects/dapper:Claim.fUp7z48VwrXH5oueNfh7D4nNhQMNtC3C",
+      "origin": "native",
+      "publication_state": "unpublished",
+      "published_at": null,
+      "publisher": null,
+      "repository": "REVEAL canonical UI fixtures — unpublished and scientifically unreviewed",
+      "target_class": "Claim",
+      "target_id": "dapper:Claim.fUp7z48VwrXH5oueNfh7D4nNhQMNtC3C",
+      "title": "The EAGGL result supports involvement of the PsychENCODE geneM16 set, with a loading of 0.4518 on mechanism Factor1.",
+      "title_derivation": {
+        "method": "assessment_statement",
+        "source": {
+          "source_ref": "urn:example:cad-account-design"
+        },
+        "version": "1"
+      }
+    },
+    {
+      "access_level": "private",
+      "byline": [
+        {
+          "agent_id": "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he",
+          "family_name": "Example",
+          "given_name": "Design",
+          "kind": "person",
+          "roles": [
+            "agent_operator"
+          ],
+          "source": {
+            "source_ref": "urn:example:cad-account-design"
+          }
+        }
+      ],
+      "canonical_url": "http://localhost:3000/id/dapper:Claim.8uwyJZx7pdEoZ9Vw7Xu726ukdLf2FwyW",
+      "citation_profile_version": "reveal-citation-v1",
+      "dapper_identity_profile": "DAPPER-ID-1",
+      "dapper_schema_version": "c0cfce549baded068aa9e82f81a1400025614b51",
+      "date_provenance": {
+        "first_minted_at": {
+          "source_ref": "urn:example:reveal:contract-fixture"
+        }
+      },
+      "first_minted_at": "2026-09-24T16:00:00Z",
+      "generated_at": null,
+      "issued_basis": "first_minted_at",
+      "issued_date": "2026-09-24",
+      "language": "en",
+      "metadata_checksum": "004c6b302d548d41f410a3e5885355a538a0ea14cdc3c3a8cd6942bcc7ece8ea",
+      "metadata_revision": 1,
+      "object_payload_ref": "http://localhost:3000/api/backend/v1/objects/dapper:Claim.8uwyJZx7pdEoZ9Vw7Xu726ukdLf2FwyW",
+      "origin": "native",
+      "publication_state": "unpublished",
+      "published_at": null,
+      "publisher": null,
+      "repository": "REVEAL canonical UI fixtures — unpublished and scientifically unreviewed",
+      "target_class": "Claim",
+      "target_id": "dapper:Claim.8uwyJZx7pdEoZ9Vw7Xu726ukdLf2FwyW",
+      "title": "PIGEAN supports SHH trait-level involvement with a combined relevance score of 3.86; this is distinct from its mechanism loading.",
+      "title_derivation": {
+        "method": "assessment_statement",
+        "source": {
+          "source_ref": "urn:example:cad-account-design"
+        },
+        "version": "1"
+      }
+    },
+    {
+      "access_level": "private",
+      "byline": [
+        {
+          "agent_id": "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he",
+          "family_name": "Example",
+          "given_name": "Design",
+          "kind": "person",
+          "roles": [
+            "agent_operator"
+          ],
+          "source": {
+            "source_ref": "urn:example:cad-account-design"
+          }
+        }
+      ],
+      "canonical_url": "http://localhost:3000/id/dapper:Claim.YMgLIul-wf8vntqWIY_enxh56yTZx9pI",
+      "citation_profile_version": "reveal-citation-v1",
+      "dapper_identity_profile": "DAPPER-ID-1",
+      "dapper_schema_version": "c0cfce549baded068aa9e82f81a1400025614b51",
+      "date_provenance": {
+        "first_minted_at": {
+          "source_ref": "urn:example:reveal:contract-fixture"
+        }
+      },
+      "first_minted_at": "2026-09-24T16:00:00Z",
+      "generated_at": null,
+      "issued_basis": "first_minted_at",
+      "issued_date": "2026-09-24",
+      "language": "en",
+      "metadata_checksum": "a437666f7c4ab0d5bb05d6b23d62052999d1433ad85c5f5656f0e63582726ffd",
+      "metadata_revision": 1,
+      "object_payload_ref": "http://localhost:3000/api/backend/v1/objects/dapper:Claim.YMgLIul-wf8vntqWIY_enxh56yTZx9pI",
+      "origin": "native",
+      "publication_state": "unpublished",
+      "published_at": null,
+      "publisher": null,
+      "repository": "REVEAL canonical UI fixtures — unpublished and scientifically unreviewed",
+      "target_class": "Claim",
+      "target_id": "dapper:Claim.YMgLIul-wf8vntqWIY_enxh56yTZx9pI",
+      "title": "PIGEAN supports GLI3 trait-level involvement with a combined relevance score of 1.98; this is distinct from its mechanism loading.",
+      "title_derivation": {
+        "method": "assessment_statement",
+        "source": {
+          "source_ref": "urn:example:cad-account-design"
+        },
+        "version": "1"
+      }
+    },
+    {
+      "access_level": "private",
+      "byline": [
+        {
+          "agent_id": "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he",
+          "family_name": "Example",
+          "given_name": "Design",
+          "kind": "person",
+          "roles": [
+            "agent_operator"
+          ],
+          "source": {
+            "source_ref": "urn:example:cad-account-design"
+          }
+        }
+      ],
+      "canonical_url": "http://localhost:3000/id/dapper:Claim.YwrSSe0OE5Uq62PD1t_vvDHAcNeJn8ol",
+      "citation_profile_version": "reveal-citation-v1",
+      "dapper_identity_profile": "DAPPER-ID-1",
+      "dapper_schema_version": "c0cfce549baded068aa9e82f81a1400025614b51",
+      "date_provenance": {
+        "first_minted_at": {
+          "source_ref": "urn:example:reveal:contract-fixture"
+        }
+      },
+      "first_minted_at": "2026-09-24T16:00:00Z",
+      "generated_at": null,
+      "issued_basis": "first_minted_at",
+      "issued_date": "2026-09-24",
+      "language": "en",
+      "metadata_checksum": "20c9b7c197b4d4588c9d8140fdb3edc7f3389fa0b92971978814798b6ff44efc",
+      "metadata_revision": 1,
+      "object_payload_ref": "http://localhost:3000/api/backend/v1/objects/dapper:Claim.YwrSSe0OE5Uq62PD1t_vvDHAcNeJn8ol",
+      "origin": "native",
+      "publication_state": "unpublished",
+      "published_at": null,
+      "publisher": null,
+      "repository": "REVEAL canonical UI fixtures — unpublished and scientifically unreviewed",
+      "target_class": "Claim",
+      "target_id": "dapper:Claim.YwrSSe0OE5Uq62PD1t_vvDHAcNeJn8ol",
+      "title": "PIGEAN supports TCF7L2 trait-level involvement with a combined relevance score of 2.42; this is distinct from its mechanism loading.",
+      "title_derivation": {
+        "method": "assessment_statement",
+        "source": {
+          "source_ref": "urn:example:cad-account-design"
+        },
+        "version": "1"
+      }
+    },
+    {
+      "access_level": "private",
+      "byline": [
+        {
+          "agent_id": "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he",
+          "family_name": "Example",
+          "given_name": "Design",
+          "kind": "person",
+          "roles": [
+            "agent_operator"
+          ],
+          "source": {
+            "source_ref": "urn:example:cad-account-design"
+          }
+        }
+      ],
+      "canonical_url": "http://localhost:3000/id/dapper:Claim.0wzE-AEqZ1fcgl2B0ZoYHZ7YiQBbR3lE",
+      "citation_profile_version": "reveal-citation-v1",
+      "dapper_identity_profile": "DAPPER-ID-1",
+      "dapper_schema_version": "c0cfce549baded068aa9e82f81a1400025614b51",
+      "date_provenance": {
+        "first_minted_at": {
+          "source_ref": "urn:example:reveal:contract-fixture"
+        }
+      },
+      "first_minted_at": "2026-09-24T16:00:00Z",
+      "generated_at": null,
+      "issued_basis": "first_minted_at",
+      "issued_date": "2026-09-24",
+      "language": "en",
+      "metadata_checksum": "0007614760a9aa5f287d657a75a90f17e689b241f6ded71f44adc6c2b64fbcba",
+      "metadata_revision": 1,
+      "object_payload_ref": "http://localhost:3000/api/backend/v1/objects/dapper:Claim.0wzE-AEqZ1fcgl2B0ZoYHZ7YiQBbR3lE",
+      "origin": "native",
+      "publication_state": "unpublished",
+      "published_at": null,
+      "publisher": null,
+      "repository": "REVEAL canonical UI fixtures — unpublished and scientifically unreviewed",
+      "target_class": "Claim",
+      "target_id": "dapper:Claim.0wzE-AEqZ1fcgl2B0ZoYHZ7YiQBbR3lE",
+      "title": "PIGEAN supports trait-level involvement of the AMP AD / GTEx brain-aging set, with beta=0.115 and beta_uncorrected=0.119.",
+      "title_derivation": {
+        "method": "assessment_statement",
+        "source": {
+          "source_ref": "urn:example:cad-account-design"
+        },
+        "version": "1"
+      }
+    },
+    {
+      "access_level": "private",
+      "byline": [
+        {
+          "agent_id": "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he",
+          "family_name": "Example",
+          "given_name": "Design",
+          "kind": "person",
+          "roles": [
+            "agent_operator"
+          ],
+          "source": {
+            "source_ref": "urn:example:cad-account-design"
+          }
+        }
+      ],
+      "canonical_url": "http://localhost:3000/id/dapper:Claim.JXS6Wb_N1ZXOvGvsPoW0UiQdTb_2j2d9",
+      "citation_profile_version": "reveal-citation-v1",
+      "dapper_identity_profile": "DAPPER-ID-1",
+      "dapper_schema_version": "c0cfce549baded068aa9e82f81a1400025614b51",
+      "date_provenance": {
+        "first_minted_at": {
+          "source_ref": "urn:example:reveal:contract-fixture"
+        }
+      },
+      "first_minted_at": "2026-09-24T16:00:00Z",
+      "generated_at": null,
+      "issued_basis": "first_minted_at",
+      "issued_date": "2026-09-24",
+      "language": "en",
+      "metadata_checksum": "cfeea1188ec7b9ecd6b87abf6885d8e9a6dc1b4922f9c08eaec8f4ae1c8e8959",
+      "metadata_revision": 1,
+      "object_payload_ref": "http://localhost:3000/api/backend/v1/objects/dapper:Claim.JXS6Wb_N1ZXOvGvsPoW0UiQdTb_2j2d9",
+      "origin": "native",
+      "publication_state": "unpublished",
+      "published_at": null,
+      "publisher": null,
+      "repository": "REVEAL canonical UI fixtures — unpublished and scientifically unreviewed",
+      "target_class": "Claim",
+      "target_id": "dapper:Claim.JXS6Wb_N1ZXOvGvsPoW0UiQdTb_2j2d9",
+      "title": "PIGEAN supports trait-level involvement of the PsychENCODE geneM16 set, with beta=0.00729 and beta_uncorrected=0.0586.",
+      "title_derivation": {
+        "method": "assessment_statement",
+        "source": {
+          "source_ref": "urn:example:cad-account-design"
+        },
+        "version": "1"
+      }
+    },
+    {
+      "access_level": "private",
+      "byline": [
+        {
+          "agent_id": "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he",
+          "family_name": "Example",
+          "given_name": "Design",
+          "kind": "person",
+          "roles": [
+            "agent_operator"
+          ],
+          "source": {
+            "source_ref": "urn:example:cad-account-design"
+          }
+        }
+      ],
+      "canonical_url": "http://localhost:3000/id/dapper:Claim.N5EVC_d0CV0e76th1zsyX3wHf1Bw16VZ",
+      "citation_profile_version": "reveal-citation-v1",
+      "dapper_identity_profile": "DAPPER-ID-1",
+      "dapper_schema_version": "c0cfce549baded068aa9e82f81a1400025614b51",
+      "date_provenance": {
+        "first_minted_at": {
+          "source_ref": "urn:example:reveal:contract-fixture"
+        }
+      },
+      "first_minted_at": "2026-09-24T16:00:00Z",
+      "generated_at": null,
+      "issued_basis": "first_minted_at",
+      "issued_date": "2026-09-24",
+      "language": "en",
+      "metadata_checksum": "224df5bf1344a1e394061278a90d14da92813ff0d7b733e44544dcda34f2117c",
+      "metadata_revision": 1,
+      "object_payload_ref": "http://localhost:3000/api/backend/v1/objects/dapper:Claim.N5EVC_d0CV0e76th1zsyX3wHf1Bw16VZ",
+      "origin": "native",
+      "publication_state": "unpublished",
+      "published_at": null,
+      "publisher": null,
+      "repository": "REVEAL canonical UI fixtures — unpublished and scientifically unreviewed",
+      "target_class": "Claim",
+      "target_id": "dapper:Claim.N5EVC_d0CV0e76th1zsyX3wHf1Bw16VZ",
+      "title": "For this illustrative scenario, a mock ProKN assertion supports SHH membership in the AMP AD / GTEx brain-aging set. The membership is unverified.",
+      "title_derivation": {
+        "method": "assessment_statement",
+        "source": {
+          "source_ref": "urn:example:cad-account-design"
+        },
+        "version": "1"
+      }
+    },
+    {
+      "access_level": "private",
+      "byline": [
+        {
+          "agent_id": "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he",
+          "family_name": "Example",
+          "given_name": "Design",
+          "kind": "person",
+          "roles": [
+            "agent_operator"
+          ],
+          "source": {
+            "source_ref": "urn:example:cad-account-design"
+          }
+        }
+      ],
+      "canonical_url": "http://localhost:3000/id/dapper:Claim.GseJ6JHI0scMFrE5_I-x9ZC4etecmMT0",
+      "citation_profile_version": "reveal-citation-v1",
+      "dapper_identity_profile": "DAPPER-ID-1",
+      "dapper_schema_version": "c0cfce549baded068aa9e82f81a1400025614b51",
+      "date_provenance": {
+        "first_minted_at": {
+          "source_ref": "urn:example:reveal:contract-fixture"
+        }
+      },
+      "first_minted_at": "2026-09-24T16:00:00Z",
+      "generated_at": null,
+      "issued_basis": "first_minted_at",
+      "issued_date": "2026-09-24",
+      "language": "en",
+      "metadata_checksum": "e6104e1b983fd188da115d458689b2ec795097894fe8d899a61edb277fa07580",
+      "metadata_revision": 1,
+      "object_payload_ref": "http://localhost:3000/api/backend/v1/objects/dapper:Claim.GseJ6JHI0scMFrE5_I-x9ZC4etecmMT0",
+      "origin": "native",
+      "publication_state": "unpublished",
+      "published_at": null,
+      "publisher": null,
+      "repository": "REVEAL canonical UI fixtures — unpublished and scientifically unreviewed",
+      "target_class": "Claim",
+      "target_id": "dapper:Claim.GseJ6JHI0scMFrE5_I-x9ZC4etecmMT0",
+      "title": "For this illustrative scenario, a mock BiomarkerKG assertion supports TCF7L2 membership in the PsychENCODE geneM16 set. The membership is unverified.",
+      "title_derivation": {
+        "method": "assessment_statement",
+        "source": {
+          "source_ref": "urn:example:cad-account-design"
+        },
+        "version": "1"
+      }
+    }
+  ],
+  "coverage": {
+    "complete": true,
+    "direction": "upstream",
+    "max_depth": 5,
+    "max_nodes": 250,
+    "missing_ids": [],
+    "next_cursor": null
+  },
+  "document": {
+    "activities": [
+      {
+        "activity_type": "CFDEGeneSetCatalogImport",
+        "command": "cfde-geneset-catalog-v1 model=cfde-inc-v2",
+        "description": "Encodes advertised CFDE named gene-set identities; not the original biological gene-set creation activity.",
+        "id": "dapper:Activity.VM0nxPd0QVsZJ-7qw4WjAvXtEiFMehqx",
+        "name": "CFDE GeneSet catalog encoding"
+      },
+      {
+        "command": "python3 design/build_account_example.py",
+        "description": "Offline authored UI example. No research agent or external KG query was executed.",
+        "id": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+        "name": "ScientificAccount design example assembly",
+        "software_name": "REVEAL HTML fixture builder",
+        "software_version": "0.2.0"
+      },
+      {
+        "command": "python scripts/build_bubble_account.py",
+        "description": "Reproducible offline extraction of retained source columns, not a fresh CFDE query.",
+        "id": "dapper:Activity.nislSNQbz48tvkoAsVkBk8NxJjF7XThC",
+        "name": "Captured CFDE column projection",
+        "software_name": "REVEAL bubble fixture builder",
+        "software_version": "1"
+      },
+      {
+        "command": "python scripts/build_bubble_account.py",
+        "description": "Offline assembly of source locators and explicit illustrative classifications; no scientific review.",
+        "id": "dapper:Activity.aqc7zlmMA0hixxB9RRkB_lF9sXTUJWkJ",
+        "name": "Fixture evidence inventory",
+        "software_name": "REVEAL bubble fixture builder",
+        "software_version": "1"
+      }
+    ],
+    "claims": [
+      {
+        "direction": "SUPPORTS",
+        "has_evidence": [
+          "dapper:EvidenceItem.7GkNnm9yFpVyW1KazI0fgyc3zd6soOEu",
+          "dapper:EvidenceItem.ua2xxfAwRBW_YWAX2lcp0FERgiIj0Y1z",
+          "dapper:EvidenceItem.Bi_6DGIpMXTNt9YXLL-rAWX_u_fmOLNg"
+        ],
+        "id": "dapper:Claim.iN6K2Rz0XKMnROZLUNLuhZhz0id5wK0h",
+        "proposition": "dapper:Proposition.cjK2Yz-rwiv49w9zH71aodlAHIzbNVqE",
+        "statement": "The EAGGL result supports SHH involvement in this mechanism through its reported loading of 0.5042 under cfde-inc-v2.",
+        "status": "proposed",
+        "was_attributed_to": [
+          "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+        ],
+        "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz"
+      },
+      {
+        "direction": "SUPPORTS",
+        "has_evidence": [
+          "dapper:EvidenceItem.OL2_nAY9jt52xBCVaDgHA-w2wMgG1dTr"
+        ],
+        "id": "dapper:Claim.eaeEY0LpLXwNmk3-Rr9s-YEiUokDLfO6",
+        "proposition": "dapper:Proposition.rCjXmKoJQot2L0j-JXULHltjuBgtYhnD",
+        "statement": "The EAGGL result supports GLI3 involvement in this mechanism through its reported loading of 0.3245 under cfde-inc-v2.",
+        "status": "proposed",
+        "was_attributed_to": [
+          "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+        ],
+        "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz"
+      },
+      {
+        "direction": "SUPPORTS",
+        "has_evidence": [
+          "dapper:EvidenceItem.FY72LzsGILxi9FSYp3UC3dJrvRjg4yhV",
+          "dapper:EvidenceItem.iSSEZ1l6D1NdV5TB8DOaDm7ZfnRSkgsR"
+        ],
+        "id": "dapper:Claim.0Tdjx1Ry7AC5sP50HIlUfKb-cwpgY-3u",
+        "proposition": "dapper:Proposition.b06Styo26ZiZC2Sy599Uk98OKhiNgcuy",
+        "statement": "The EAGGL result supports TCF7L2 involvement in this mechanism through its reported loading of 0.3813 under cfde-inc-v2.",
+        "status": "proposed",
+        "was_attributed_to": [
+          "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+        ],
+        "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz"
+      },
+      {
+        "direction": "SUPPORTS",
+        "has_evidence": [
+          "dapper:EvidenceItem.zGPBcs9UEKF30hSswAcICslECIjWNGpS"
+        ],
+        "id": "dapper:Claim.Yi6Uhd9aRwVHLlLSoc4TxEMo0VWswD0a",
+        "proposition": "dapper:Proposition.yUAm2Mgs3NxOTghFk_4SrqgpYaecOFvL",
+        "statement": "The EAGGL result supports involvement of the AMP AD / GTEx brain-aging set, with a loading of 1.0 on mechanism Factor1.",
+        "status": "proposed",
+        "was_attributed_to": [
+          "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+        ],
+        "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz"
+      },
+      {
+        "direction": "SUPPORTS",
+        "has_evidence": [
+          "dapper:EvidenceItem.YuVob9-YBd1uHmFIvdEzvnFZWdWXMCyt"
+        ],
+        "id": "dapper:Claim.fUp7z48VwrXH5oueNfh7D4nNhQMNtC3C",
+        "proposition": "dapper:Proposition.YglauZfsf1X5GagFEmSSWB-dwoGljEGz",
+        "statement": "The EAGGL result supports involvement of the PsychENCODE geneM16 set, with a loading of 0.4518 on mechanism Factor1.",
+        "status": "proposed",
+        "was_attributed_to": [
+          "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+        ],
+        "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz"
+      },
+      {
+        "direction": "SUPPORTS",
+        "has_evidence": [
+          "dapper:EvidenceItem.C3levH7QDaBJE59UP4qgI6BIodhkHWWE"
+        ],
+        "id": "dapper:Claim.8uwyJZx7pdEoZ9Vw7Xu726ukdLf2FwyW",
+        "proposition": "dapper:Proposition.3dNz6hkwxQ199hXVaHISAWghx_R6G8og",
+        "statement": "PIGEAN supports SHH trait-level involvement with a combined relevance score of 3.86; this is distinct from its mechanism loading.",
+        "status": "proposed",
+        "was_attributed_to": [
+          "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+        ],
+        "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz"
+      },
+      {
+        "direction": "SUPPORTS",
+        "has_evidence": [
+          "dapper:EvidenceItem.ZawKNAfvISVoKyK__IPfaHSBi-FTFeO7"
+        ],
+        "id": "dapper:Claim.YMgLIul-wf8vntqWIY_enxh56yTZx9pI",
+        "proposition": "dapper:Proposition.6cRd977XvXOzcsRLrJfwthdIHn_iRAOT",
+        "statement": "PIGEAN supports GLI3 trait-level involvement with a combined relevance score of 1.98; this is distinct from its mechanism loading.",
+        "status": "proposed",
+        "was_attributed_to": [
+          "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+        ],
+        "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz"
+      },
+      {
+        "direction": "SUPPORTS",
+        "has_evidence": [
+          "dapper:EvidenceItem.1K7MwHOhXF9rUkapPvYnaR6LCS1jrPbf"
+        ],
+        "id": "dapper:Claim.YwrSSe0OE5Uq62PD1t_vvDHAcNeJn8ol",
+        "proposition": "dapper:Proposition.9Ah6tV2FtJ8m_rEHO6e92pmWxAyfU8U_",
+        "statement": "PIGEAN supports TCF7L2 trait-level involvement with a combined relevance score of 2.42; this is distinct from its mechanism loading.",
+        "status": "proposed",
+        "was_attributed_to": [
+          "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+        ],
+        "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz"
+      },
+      {
+        "direction": "SUPPORTS",
+        "has_evidence": [
+          "dapper:EvidenceItem.Q8XJ1KhVOb7qfeOnUA9M9TlXs2q46Xfc"
+        ],
+        "id": "dapper:Claim.0wzE-AEqZ1fcgl2B0ZoYHZ7YiQBbR3lE",
+        "proposition": "dapper:Proposition.NJYh11lXY-LXoFXrJeK7KkfI7r7iQzFT",
+        "statement": "PIGEAN supports trait-level involvement of the AMP AD / GTEx brain-aging set, with beta=0.115 and beta_uncorrected=0.119.",
+        "status": "proposed",
+        "was_attributed_to": [
+          "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+        ],
+        "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz"
+      },
+      {
+        "direction": "SUPPORTS",
+        "has_evidence": [
+          "dapper:EvidenceItem.dlZE2kDhY4EqshVinxv10O044-qjOgce"
+        ],
+        "id": "dapper:Claim.JXS6Wb_N1ZXOvGvsPoW0UiQdTb_2j2d9",
+        "proposition": "dapper:Proposition.JfxEcQLDt9bMiSejgOKxh7G8ylVGAqxI",
+        "statement": "PIGEAN supports trait-level involvement of the PsychENCODE geneM16 set, with beta=0.00729 and beta_uncorrected=0.0586.",
+        "status": "proposed",
+        "was_attributed_to": [
+          "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+        ],
+        "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz"
+      },
+      {
+        "direction": "SUPPORTS",
+        "has_evidence": [
+          "dapper:EvidenceItem.1Idm3RIE7irCu8aj3Z4jS58QMjvSfMV_",
+          "dapper:EvidenceItem.OOhcXSoHkq_NT2yHZG8A8Fo9nL9ATjf-"
+        ],
+        "id": "dapper:Claim.N5EVC_d0CV0e76th1zsyX3wHf1Bw16VZ",
+        "proposition": "dapper:Proposition.9l7Nq6exgMpGL5Z3Tn4Luy62urD9GHT5",
+        "statement": "For this illustrative scenario, a mock ProKN assertion supports SHH membership in the AMP AD / GTEx brain-aging set. The membership is unverified.",
+        "status": "proposed",
+        "was_attributed_to": [
+          "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+        ],
+        "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz"
+      },
+      {
+        "direction": "SUPPORTS",
+        "has_evidence": [
+          "dapper:EvidenceItem.xo3daB43jQWl3SM_0V_OOhkO0votrOkZ",
+          "dapper:EvidenceItem.CmkML4Zy3RuBW0p4b2DA1O-wZ6AQGLz-"
+        ],
+        "id": "dapper:Claim.GseJ6JHI0scMFrE5_I-x9ZC4etecmMT0",
+        "proposition": "dapper:Proposition.6T-VChVL5ddew5vFiMsuYE8O4_60DfUz",
+        "statement": "For this illustrative scenario, a mock BiomarkerKG assertion supports TCF7L2 membership in the PsychENCODE geneM16 set. The membership is unverified.",
+        "status": "proposed",
+        "was_attributed_to": [
+          "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+        ],
+        "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz"
+      }
+    ],
+    "datasets": [
+      {
+        "access_level": "controlled",
+        "description": "Retained CFDE response and deterministic column projection. Scientific interpretation remains authored and unreviewed.",
+        "has_file": [
+          "dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ",
+          "dapper:File.TLbPNA0MRbI7oUpipACe2r-gRZX8OP6c"
+        ],
+        "id": "dapper:Dataset.NlxGa58i2Tz0316MDyohMLN_HbOr-FpE",
+        "location": "data/fixtures/bubble-account-v1/sources/",
+        "name": "Captured CAD-in-T2D gene observations",
+        "resource_type": "dataset",
+        "version": "1"
+      },
+      {
+        "access_level": "controlled",
+        "description": "Retained CFDE gene-set results and deterministic projection; neither establishes causal direction.",
+        "has_file": [
+          "dapper:File.Dt0S38v_sLn5jiOAVXMrMWTrXBLnsn83",
+          "dapper:File.HGsrMluIk1mo4e0a6aCD0zBcXZa-Y716"
+        ],
+        "id": "dapper:Dataset.3C638GAM_39hZy0Alf4cuL_MEwLPwYbZ",
+        "location": "data/fixtures/bubble-account-v1/sources/",
+        "name": "Captured CAD-in-T2D gene-set observations",
+        "resource_type": "dataset",
+        "version": "1"
+      },
+      {
+        "access_level": "controlled",
+        "description": "Exact imported DisMech source revision and unchanged discussion defining the selected knowledge gap.",
+        "has_file": [
+          "dapper:File.eG0HM7wVGbDLt-99TA-OMnMeKqdIircT",
+          "dapper:File.v2cEzhI5P_mdYWuY_HyJjvzyNZpzuP96"
+        ],
+        "id": "dapper:Dataset.rCYYDnawiURjDtPs-d2yau2n33CVvZsk",
+        "location": "data/fixtures/bubble-account-v1/sources/",
+        "name": "Captured CAD reverse-causation discussion",
+        "resource_type": "dataset",
+        "version": "1"
+      },
+      {
+        "access_level": "controlled",
+        "description": "Invented membership assertions and mixed provenance inventory for UI testing. Not retrieved from ProKN or BiomarkerKG.",
+        "has_file": [
+          "dapper:File._FB2fhvDopxDEHgoDgf2Hk4jE0wxilag",
+          "dapper:File.6JYwag_kjbSwZ-eLeKmZxI0EmWd2gcLD"
+        ],
+        "id": "dapper:Dataset.H6YuykNGw3yY2JZYMuqc_VwTyDVGAq3A",
+        "location": "data/fixtures/bubble-account-v1/sources/",
+        "name": "Illustrative membership and fixture inventory",
+        "resource_type": "dataset",
+        "version": "1"
+      }
+    ],
+    "evidence_items": [
+      {
+        "context": "Source locator: pigean-gene-factor.response.json#/data/0. Trait: portal CADinT2D; model: cfde-inc-v2; mechanism: factor:portal:CADinT2D:cfde-inc-v2:Factor1. Source metrics retain their original meanings; no probability calibration is assumed.",
+        "direction": "SUPPORTS",
+        "evidence_source": "CFDE — captured PIGEAN/EAGGL result",
+        "explanation": "The loading is used as evidence of involvement in the mechanism. It does not distinguish amplification from inhibition.",
+        "id": "dapper:EvidenceItem.7GkNnm9yFpVyW1KazI0fgyc3zd6soOEu",
+        "snippet": "\"factor_value\":0.5042",
+        "target_proposition": "dapper:Proposition.cjK2Yz-rwiv49w9zH71aodlAHIzbNVqE",
+        "was_attributed_to": [
+          "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+        ],
+        "was_derived_from": [
+          "dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ",
+          "dapper:Dataset.NlxGa58i2Tz0316MDyohMLN_HbOr-FpE"
+        ],
+        "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz"
+      },
+      {
+        "context": "Source locator: pigean-gene-factor.response.json#/data/3. Trait: portal CADinT2D; model: cfde-inc-v2; mechanism: factor:portal:CADinT2D:cfde-inc-v2:Factor1. Source metrics retain their original meanings; no probability calibration is assumed.",
+        "direction": "SUPPORTS",
+        "evidence_source": "CFDE — captured PIGEAN/EAGGL result",
+        "explanation": "The loading is used as evidence of involvement in the mechanism. It does not distinguish amplification from inhibition.",
+        "id": "dapper:EvidenceItem.OL2_nAY9jt52xBCVaDgHA-w2wMgG1dTr",
+        "snippet": "\"factor_value\":0.3245",
+        "target_proposition": "dapper:Proposition.rCjXmKoJQot2L0j-JXULHltjuBgtYhnD",
+        "was_attributed_to": [
+          "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+        ],
+        "was_derived_from": [
+          "dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ",
+          "dapper:Dataset.NlxGa58i2Tz0316MDyohMLN_HbOr-FpE"
+        ],
+        "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz"
+      },
+      {
+        "context": "Source locator: pigean-gene-factor.response.json#/data/1. Trait: portal CADinT2D; model: cfde-inc-v2; mechanism: factor:portal:CADinT2D:cfde-inc-v2:Factor1. Source metrics retain their original meanings; no probability calibration is assumed.",
+        "direction": "SUPPORTS",
+        "evidence_source": "CFDE — captured PIGEAN/EAGGL result",
+        "explanation": "The loading is used as evidence of involvement in the mechanism. It does not distinguish amplification from inhibition.",
+        "id": "dapper:EvidenceItem.FY72LzsGILxi9FSYp3UC3dJrvRjg4yhV",
+        "snippet": "\"factor_value\":0.3813",
+        "target_proposition": "dapper:Proposition.b06Styo26ZiZC2Sy599Uk98OKhiNgcuy",
+        "was_attributed_to": [
+          "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+        ],
+        "was_derived_from": [
+          "dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ",
+          "dapper:Dataset.NlxGa58i2Tz0316MDyohMLN_HbOr-FpE"
+        ],
+        "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz"
+      },
+      {
+        "context": "Source locator: pigean-gene-set-factor.response.json#/data/0. Trait: portal CADinT2D; model: cfde-inc-v2; mechanism: factor:portal:CADinT2D:cfde-inc-v2:Factor1. Source metrics retain their original meanings; no probability calibration is assumed.",
+        "direction": "SUPPORTS",
+        "evidence_source": "CFDE — captured PIGEAN/EAGGL result",
+        "explanation": "This is program-level involvement. The source label alone does not establish a particular causal process, cell type or activity readout.",
+        "id": "dapper:EvidenceItem.zGPBcs9UEKF30hSswAcICslECIjWNGpS",
+        "snippet": "\"factor_value\":1.0",
+        "target_proposition": "dapper:Proposition.yUAm2Mgs3NxOTghFk_4SrqgpYaecOFvL",
+        "was_attributed_to": [
+          "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+        ],
+        "was_derived_from": [
+          "dapper:File.Dt0S38v_sLn5jiOAVXMrMWTrXBLnsn83",
+          "dapper:Dataset.3C638GAM_39hZy0Alf4cuL_MEwLPwYbZ"
+        ],
+        "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz"
+      },
+      {
+        "context": "Source locator: pigean-gene-set-factor.response.json#/data/2. Trait: portal CADinT2D; model: cfde-inc-v2; mechanism: factor:portal:CADinT2D:cfde-inc-v2:Factor1. Source metrics retain their original meanings; no probability calibration is assumed.",
+        "direction": "SUPPORTS",
+        "evidence_source": "CFDE — captured PIGEAN/EAGGL result",
+        "explanation": "This is program-level involvement. The source label alone does not establish a particular causal process, cell type or activity readout.",
+        "id": "dapper:EvidenceItem.YuVob9-YBd1uHmFIvdEzvnFZWdWXMCyt",
+        "snippet": "\"factor_value\":0.4518",
+        "target_proposition": "dapper:Proposition.YglauZfsf1X5GagFEmSSWB-dwoGljEGz",
+        "was_attributed_to": [
+          "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+        ],
+        "was_derived_from": [
+          "dapper:File.Dt0S38v_sLn5jiOAVXMrMWTrXBLnsn83",
+          "dapper:Dataset.3C638GAM_39hZy0Alf4cuL_MEwLPwYbZ"
+        ],
+        "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz"
+      },
+      {
+        "context": "Source locator: pigean-gene-factor.response.json#/data/0. Trait: portal CADinT2D; model: cfde-inc-v2; mechanism: factor:portal:CADinT2D:cfde-inc-v2:Factor1. Source metrics retain their original meanings; no probability calibration is assumed.",
+        "direction": "SUPPORTS",
+        "evidence_source": "CFDE — captured PIGEAN/EAGGL result",
+        "explanation": "The reported gene–trait relevance supports this scoped involvement assessment. It does not answer whether genetic risk is amplified by an exposure or whether the exposure is a downstream readout.",
+        "id": "dapper:EvidenceItem.C3levH7QDaBJE59UP4qgI6BIodhkHWWE",
+        "snippet": "\"combined\":3.86",
+        "target_proposition": "dapper:Proposition.3dNz6hkwxQ199hXVaHISAWghx_R6G8og",
+        "was_attributed_to": [
+          "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+        ],
+        "was_derived_from": [
+          "dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ",
+          "dapper:Dataset.NlxGa58i2Tz0316MDyohMLN_HbOr-FpE"
+        ],
+        "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz"
+      },
+      {
+        "context": "Source locator: pigean-gene-factor.response.json#/data/3. Trait: portal CADinT2D; model: cfde-inc-v2; mechanism: factor:portal:CADinT2D:cfde-inc-v2:Factor1. Source metrics retain their original meanings; no probability calibration is assumed.",
+        "direction": "SUPPORTS",
+        "evidence_source": "CFDE — captured PIGEAN/EAGGL result",
+        "explanation": "The reported gene–trait relevance supports this scoped involvement assessment. It does not answer whether genetic risk is amplified by an exposure or whether the exposure is a downstream readout.",
+        "id": "dapper:EvidenceItem.ZawKNAfvISVoKyK__IPfaHSBi-FTFeO7",
+        "snippet": "\"combined\":1.98",
+        "target_proposition": "dapper:Proposition.6cRd977XvXOzcsRLrJfwthdIHn_iRAOT",
+        "was_attributed_to": [
+          "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+        ],
+        "was_derived_from": [
+          "dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ",
+          "dapper:Dataset.NlxGa58i2Tz0316MDyohMLN_HbOr-FpE"
+        ],
+        "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz"
+      },
+      {
+        "context": "Source locator: pigean-gene-factor.response.json#/data/1. Trait: portal CADinT2D; model: cfde-inc-v2; mechanism: factor:portal:CADinT2D:cfde-inc-v2:Factor1. Source metrics retain their original meanings; no probability calibration is assumed.",
+        "direction": "SUPPORTS",
+        "evidence_source": "CFDE — captured PIGEAN/EAGGL result",
+        "explanation": "The reported gene–trait relevance supports this scoped involvement assessment. It does not answer whether genetic risk is amplified by an exposure or whether the exposure is a downstream readout.",
+        "id": "dapper:EvidenceItem.1K7MwHOhXF9rUkapPvYnaR6LCS1jrPbf",
+        "snippet": "\"combined\":2.42",
+        "target_proposition": "dapper:Proposition.9Ah6tV2FtJ8m_rEHO6e92pmWxAyfU8U_",
+        "was_attributed_to": [
+          "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+        ],
+        "was_derived_from": [
+          "dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ",
+          "dapper:Dataset.NlxGa58i2Tz0316MDyohMLN_HbOr-FpE"
+        ],
+        "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz"
+      },
+      {
+        "context": "Source locator: pigean-gene-set-factor.response.json#/data/0. Trait: portal CADinT2D; model: cfde-inc-v2; mechanism: factor:portal:CADinT2D:cfde-inc-v2:Factor1. Source metrics retain their original meanings; no probability calibration is assumed.",
+        "direction": "SUPPORTS",
+        "evidence_source": "CFDE — captured PIGEAN/EAGGL result",
+        "explanation": "The two effect estimates describe the annotation–trait relationship on their source scales. They come from the same analysis and are not independent replications.",
+        "id": "dapper:EvidenceItem.Q8XJ1KhVOb7qfeOnUA9M9TlXs2q46Xfc",
+        "snippet": "\"beta\":0.115,\"beta_uncorrected\":0.119",
+        "target_proposition": "dapper:Proposition.NJYh11lXY-LXoFXrJeK7KkfI7r7iQzFT",
+        "was_attributed_to": [
+          "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+        ],
+        "was_derived_from": [
+          "dapper:File.Dt0S38v_sLn5jiOAVXMrMWTrXBLnsn83",
+          "dapper:Dataset.3C638GAM_39hZy0Alf4cuL_MEwLPwYbZ"
+        ],
+        "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz"
+      },
+      {
+        "context": "Source locator: pigean-gene-set-factor.response.json#/data/2. Trait: portal CADinT2D; model: cfde-inc-v2; mechanism: factor:portal:CADinT2D:cfde-inc-v2:Factor1. Source metrics retain their original meanings; no probability calibration is assumed.",
+        "direction": "SUPPORTS",
+        "evidence_source": "CFDE — captured PIGEAN/EAGGL result",
+        "explanation": "The two effect estimates describe the annotation–trait relationship on their source scales. They come from the same analysis and are not independent replications.",
+        "id": "dapper:EvidenceItem.dlZE2kDhY4EqshVinxv10O044-qjOgce",
+        "snippet": "\"beta\":0.00729,\"beta_uncorrected\":0.0586",
+        "target_proposition": "dapper:Proposition.JfxEcQLDt9bMiSejgOKxh7G8ylVGAqxI",
+        "was_attributed_to": [
+          "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+        ],
+        "was_derived_from": [
+          "dapper:File.Dt0S38v_sLn5jiOAVXMrMWTrXBLnsn83",
+          "dapper:Dataset.3C638GAM_39hZy0Alf4cuL_MEwLPwYbZ"
+        ],
+        "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz"
+      },
+      {
+        "context": "Source locator: illustrative-kg-assertions.json#/assertions/0. Trait: portal CADinT2D; model: cfde-inc-v2; mechanism: factor:portal:CADinT2D:cfde-inc-v2:Factor1. This is synthetic design evidence and has not been verified.",
+        "direction": "SUPPORTS",
+        "evidence_source": "ProKN — illustrative assertion, not retrieved",
+        "explanation": "This invented assertion directly supplies membership for the UI example. It is not a returned KG result and must not update the imported GeneSet membership.",
+        "id": "dapper:EvidenceItem.1Idm3RIE7irCu8aj3Z4jS58QMjvSfMV_",
+        "snippet": "SHH is a member of the retained AMP AD / GTEx gene set.",
+        "target_proposition": "dapper:Proposition.9l7Nq6exgMpGL5Z3Tn4Luy62urD9GHT5",
+        "was_attributed_to": [
+          "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+        ],
+        "was_derived_from": [
+          "dapper:File._FB2fhvDopxDEHgoDgf2Hk4jE0wxilag",
+          "dapper:Dataset.H6YuykNGw3yY2JZYMuqc_VwTyDVGAq3A"
+        ],
+        "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz"
+      },
+      {
+        "context": "Source locator: pigean-gene-factor.response.json and pigean-gene-set-factor.response.json; shared Factor1 neighborhood. Trait: portal CADinT2D; model: cfde-inc-v2; mechanism: factor:portal:CADinT2D:cfde-inc-v2:Factor1. Source metrics retain their original meanings; no probability calibration is assumed.",
+        "direction": "NEUTRAL",
+        "evidence_source": "CFDE — captured PIGEAN/EAGGL result",
+        "explanation": "Both entities load on the same mechanism. That is useful investigation context but does not establish that the gene belongs to the set.",
+        "id": "dapper:EvidenceItem.OOhcXSoHkq_NT2yHZG8A8Fo9nL9ATjf-",
+        "snippet": "\"factor\":\"Factor1\"",
+        "target_proposition": "dapper:Proposition.9l7Nq6exgMpGL5Z3Tn4Luy62urD9GHT5",
+        "was_attributed_to": [
+          "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+        ],
+        "was_derived_from": [
+          "dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ",
+          "dapper:File.Dt0S38v_sLn5jiOAVXMrMWTrXBLnsn83",
+          "dapper:Dataset.NlxGa58i2Tz0316MDyohMLN_HbOr-FpE",
+          "dapper:Dataset.3C638GAM_39hZy0Alf4cuL_MEwLPwYbZ"
+        ],
+        "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz"
+      },
+      {
+        "context": "Source locator: illustrative-kg-assertions.json#/assertions/0. Trait: portal CADinT2D; model: cfde-inc-v2; mechanism: factor:portal:CADinT2D:cfde-inc-v2:Factor1. This is synthetic design evidence and has not been verified.",
+        "direction": "NEUTRAL",
+        "evidence_source": "ProKN — illustrative assertion, not retrieved",
+        "explanation": "The mock membership suggests a gene-to-program connection to inspect alongside the program’s captured mechanism loading. It supplies context only; it is not independent support for mechanism involvement.",
+        "id": "dapper:EvidenceItem.ua2xxfAwRBW_YWAX2lcp0FERgiIj0Y1z",
+        "snippet": "SHH is a member of the retained AMP AD / GTEx gene set.",
+        "target_proposition": "dapper:Proposition.cjK2Yz-rwiv49w9zH71aodlAHIzbNVqE",
+        "was_attributed_to": [
+          "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+        ],
+        "was_derived_from": [
+          "dapper:File._FB2fhvDopxDEHgoDgf2Hk4jE0wxilag",
+          "dapper:Dataset.H6YuykNGw3yY2JZYMuqc_VwTyDVGAq3A"
+        ],
+        "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz"
+      },
+      {
+        "context": "Source locator: illustrative-kg-assertions.json#/assertions/1. Trait: portal CADinT2D; model: cfde-inc-v2; mechanism: factor:portal:CADinT2D:cfde-inc-v2:Factor1. This is synthetic design evidence and has not been verified.",
+        "direction": "SUPPORTS",
+        "evidence_source": "BiomarkerKG — illustrative assertion, not retrieved",
+        "explanation": "This invented assertion directly supplies membership for the UI example. It is not a returned KG result and must not update the imported GeneSet membership.",
+        "id": "dapper:EvidenceItem.xo3daB43jQWl3SM_0V_OOhkO0votrOkZ",
+        "snippet": "TCF7L2 is a member of the PsychENCODE geneM16 gene set.",
+        "target_proposition": "dapper:Proposition.6T-VChVL5ddew5vFiMsuYE8O4_60DfUz",
+        "was_attributed_to": [
+          "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+        ],
+        "was_derived_from": [
+          "dapper:File._FB2fhvDopxDEHgoDgf2Hk4jE0wxilag",
+          "dapper:Dataset.H6YuykNGw3yY2JZYMuqc_VwTyDVGAq3A"
+        ],
+        "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz"
+      },
+      {
+        "context": "Source locator: pigean-gene-factor.response.json and pigean-gene-set-factor.response.json; shared Factor1 neighborhood. Trait: portal CADinT2D; model: cfde-inc-v2; mechanism: factor:portal:CADinT2D:cfde-inc-v2:Factor1. Source metrics retain their original meanings; no probability calibration is assumed.",
+        "direction": "NEUTRAL",
+        "evidence_source": "CFDE — captured PIGEAN/EAGGL result",
+        "explanation": "Both entities load on the same mechanism. That is useful investigation context but does not establish that the gene belongs to the set.",
+        "id": "dapper:EvidenceItem.CmkML4Zy3RuBW0p4b2DA1O-wZ6AQGLz-",
+        "snippet": "\"factor\":\"Factor1\"",
+        "target_proposition": "dapper:Proposition.6T-VChVL5ddew5vFiMsuYE8O4_60DfUz",
+        "was_attributed_to": [
+          "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+        ],
+        "was_derived_from": [
+          "dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ",
+          "dapper:File.Dt0S38v_sLn5jiOAVXMrMWTrXBLnsn83",
+          "dapper:Dataset.NlxGa58i2Tz0316MDyohMLN_HbOr-FpE",
+          "dapper:Dataset.3C638GAM_39hZy0Alf4cuL_MEwLPwYbZ"
+        ],
+        "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz"
+      },
+      {
+        "context": "Source locator: illustrative-kg-assertions.json#/assertions/1. Trait: portal CADinT2D; model: cfde-inc-v2; mechanism: factor:portal:CADinT2D:cfde-inc-v2:Factor1. This is synthetic design evidence and has not been verified.",
+        "direction": "NEUTRAL",
+        "evidence_source": "BiomarkerKG — illustrative assertion, not retrieved",
+        "explanation": "The mock membership suggests a gene-to-program connection to inspect alongside the program’s captured mechanism loading. It supplies context only; it is not independent support for mechanism involvement.",
+        "id": "dapper:EvidenceItem.iSSEZ1l6D1NdV5TB8DOaDm7ZfnRSkgsR",
+        "snippet": "TCF7L2 is a member of the PsychENCODE geneM16 gene set.",
+        "target_proposition": "dapper:Proposition.b06Styo26ZiZC2Sy599Uk98OKhiNgcuy",
+        "was_attributed_to": [
+          "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+        ],
+        "was_derived_from": [
+          "dapper:File._FB2fhvDopxDEHgoDgf2Hk4jE0wxilag",
+          "dapper:Dataset.H6YuykNGw3yY2JZYMuqc_VwTyDVGAq3A"
+        ],
+        "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz"
+      },
+      {
+        "context": "Source locator: dismech-gap.source.json#/raw/rationale. Imported framing, not independent support for SHH involvement.",
+        "direction": "NEUTRAL",
+        "evidence_source": "Captured DisMech gap rationale",
+        "explanation": "This source identifies a causal question; the captured factor loading does not answer it.",
+        "id": "dapper:EvidenceItem.Bi_6DGIpMXTNt9YXLL-rAWX_u_fmOLNg",
+        "snippet": "Distinguishing genuine amplification of genetic effects from reverse causation",
+        "target_proposition": "dapper:Proposition.cjK2Yz-rwiv49w9zH71aodlAHIzbNVqE",
+        "was_attributed_to": [
+          "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+        ],
+        "was_derived_from": [
+          "dapper:File.eG0HM7wVGbDLt-99TA-OMnMeKqdIircT",
+          "dapper:Dataset.rCYYDnawiURjDtPs-d2yau2n33CVvZsk"
+        ],
+        "was_generated_by": "dapper:Activity.aqc7zlmMA0hixxB9RRkB_lF9sXTUJWkJ"
+      }
+    ],
+    "files": [
+      {
+        "description": "Original CFDE response bytes captured September 25, 2026; not a new retrieval.",
+        "filename": "pigean-gene-factor.response.json",
+        "id": "dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ",
+        "location": "data/fixtures/bubble-account-v1/sources/pigean-gene-factor.response.json",
+        "mime_type": "application/json",
+        "sha256": "3fdf0f2ae3f782824ec7f96687c4a988a88a6ffb0a106b52f4e20464cdf51e30",
+        "size_in_bytes": 2945
+      },
+      {
+        "description": "Original CFDE response bytes captured September 25, 2026; not a new retrieval.",
+        "filename": "pigean-gene-set-factor.response.json",
+        "id": "dapper:File.Dt0S38v_sLn5jiOAVXMrMWTrXBLnsn83",
+        "location": "data/fixtures/bubble-account-v1/sources/pigean-gene-set-factor.response.json",
+        "mime_type": "application/json",
+        "sha256": "b4ba6a21f6791c8b80ce8ef471361634ebb8b9f1f4e91e886fe1f05d02e7c1fa",
+        "size_in_bytes": 3785
+      },
+      {
+        "description": "Frozen DisMech source discussion; its exact question frames this example.",
+        "filename": "dismech-gap.source.json",
+        "id": "dapper:File.eG0HM7wVGbDLt-99TA-OMnMeKqdIircT",
+        "location": "data/fixtures/bubble-account-v1/sources/dismech-gap.source.json",
+        "mime_type": "application/json",
+        "sha256": "ed59adee2b7de542f72781a90265088feb79900ad88f83c60bc124ede420d78f",
+        "size_in_bytes": 3382
+      },
+      {
+        "description": "Invented assertions for UI design. Not retrieved from ProKN or BiomarkerKG; not verified GeneSet membership.",
+        "filename": "illustrative-kg-assertions.json",
+        "id": "dapper:File._FB2fhvDopxDEHgoDgf2Hk4jE0wxilag",
+        "location": "data/fixtures/bubble-account-v1/sources/illustrative-kg-assertions.json",
+        "mime_type": "application/json",
+        "sha256": "9539fb6db89cdc4f3122fa497dfe70c4940f9d0b21bcc17505f90da8770391dc",
+        "size_in_bytes": 821
+      },
+      {
+        "description": "Exact local imported DisMech source-file revision. Its selected discussion equals the retained CAD design discussion.",
+        "filename": "Coronary_Artery_Disease.yaml",
+        "id": "dapper:File.v2cEzhI5P_mdYWuY_HyJjvzyNZpzuP96",
+        "location": "data/fixtures/bubble-account-v1/sources/Coronary_Artery_Disease.yaml",
+        "mime_type": "application/yaml",
+        "sha256": "00f2a71dca11fd7d4a8c835ea9e978037dcbef88d3fb050c5e74192db2bd7338",
+        "size_in_bytes": 97708
+      },
+      {
+        "description": "Deterministic projection of captured CFDE gene metrics; not a new biological experiment.",
+        "filename": "gene-metrics.json",
+        "id": "dapper:File.TLbPNA0MRbI7oUpipACe2r-gRZX8OP6c",
+        "location": "data/fixtures/bubble-account-v1/sources/gene-metrics.json",
+        "mime_type": "application/json",
+        "sha256": "e676dae04260f521ae7094d321e66d8b610eb121ca0903c129c2fdd82b9bfed6",
+        "size_in_bytes": 841
+      },
+      {
+        "description": "Deterministic projection of captured CFDE gene-set metrics; not independent replication.",
+        "filename": "gene-set-metrics.json",
+        "id": "dapper:File.HGsrMluIk1mo4e0a6aCD0zBcXZa-Y716",
+        "location": "data/fixtures/bubble-account-v1/sources/gene-set-metrics.json",
+        "mime_type": "application/json",
+        "sha256": "43ce6a78941d4bd92912a769d72b2cef96aa7fa6ade7fc28d0486034d60afe02",
+        "size_in_bytes": 1421
+      },
+      {
+        "description": "Offline inventory combining captured source locators with explicitly illustrative assertion labels.",
+        "filename": "evidence-inventory.json",
+        "id": "dapper:File.6JYwag_kjbSwZ-eLeKmZxI0EmWd2gcLD",
+        "location": "data/fixtures/bubble-account-v1/sources/evidence-inventory.json",
+        "mime_type": "application/json",
+        "sha256": "fa1b3350a95ed44914de793d96c9c504d9dc069822c3f13c3b7204e6684b6b7c",
+        "size_in_bytes": 4136
+      }
+    ],
+    "gene_sets": [
+      {
+        "alternate_identifier": [
+          "gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+          "cfde:cfde-inc-v2:gene_set:AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn"
+        ],
+        "id": "dapper:GeneSet.I1UZhVhKU-YDerPLIxtnZOGlTXNAlrgD",
+        "member_type": "gene",
+        "name": "AMP AD / all brain / AMP AD MAYO TCX Diagnosis.AOD AD-CONTROL ALL dn | GTEx / brain / GTEx aging Brain 20-29 60-69 dn",
+        "term": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+        "was_derived_from": [
+          "https://cfde-dev.hugeampkpnbi.org/api/bio/keys/pigean-gene-set/2"
+        ],
+        "was_generated_by": "dapper:Activity.VM0nxPd0QVsZJ-7qw4WjAvXtEiFMehqx"
+      },
+      {
+        "alternate_identifier": [
+          "gene_set:PsychENCODE__all_signatures__PsychENCODE_geneM16",
+          "cfde:cfde-inc-v2:gene_set:PsychENCODE__all_signatures__PsychENCODE_geneM16"
+        ],
+        "id": "dapper:GeneSet.zQ8X81n_J-Fuv0zNRp1iQQXqIzuAOzGP",
+        "member_type": "gene",
+        "name": "PsychENCODE / all signatures / PsychENCODE geneM16",
+        "term": "PsychENCODE__all_signatures__PsychENCODE_geneM16",
+        "term_prefix": "PsychENCODE",
+        "was_derived_from": [
+          "https://cfde-dev.hugeampkpnbi.org/api/bio/keys/pigean-gene-set/2"
+        ],
+        "was_generated_by": "dapper:Activity.VM0nxPd0QVsZJ-7qw4WjAvXtEiFMehqx"
+      }
+    ],
+    "knowledge_gaps": [
+      {
+        "about_entities": [
+          "http://purl.obolibrary.org/obo/MONDO_0021661"
+        ],
+        "gap_description": "Population PGS×context analyses (Nagpal & Gibson 2026, PMID:42443528) are largely unable to establish the causality of specific contexts. dismech separates true environmental exposures (smoking, high-fat diet, sedentary lifestyle) from biochemical readouts (LDL, HDL, C-reactive protein); the biochemical \"contexts\" are prime reverse-causation suspects, since they may be partly downstream of the atherosclerotic process rather than upstream drivers, and behavioural contexts such as reduced physical activity may be rapid responses to incipient angina rather than causes. Distinguishing genuine amplification of genetic effects from reverse causation determines whether the modelled interventions (e.g. lowering cholesterol in high-PGS smokers) would actually reduce risk.",
+        "gap_kind": "KNOWLEDGE_GAP",
+        "id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+        "scope": "Coronary Artery Disease",
+        "text": "Are the CAD PGS×context interactions driven by adverse exposures causally amplifying genetic risk, or are some \"contexts\" actually downstream readouts of incipient disease (reverse causation)?"
+      }
+    ],
+    "mechanisms": [
+      {
+        "description": "EAGGL mechanism factor:portal:CADinT2D:cfde-inc-v2:Factor1. Factor1 is its interim name. Scope: coronary artery disease in people with type 2 diabetes.",
+        "id": "dapper:Mechanism.kEJMDzCkDYE94DpWaXrQg-eC4gFGQyuX",
+        "name": "CAD-in-T2D mechanism Factor1"
+      }
+    ],
+    "persons": [
+      {
+        "family_name": "Example",
+        "given_name": "Design",
+        "id": "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+      }
+    ],
+    "propositions": [
+      {
+        "id": "dapper:Proposition.cjK2Yz-rwiv49w9zH71aodlAHIzbNVqE",
+        "object_entity": "dapper:Mechanism.kEJMDzCkDYE94DpWaXrQg-eC4gFGQyuX",
+        "proposition_kind": "BIOLOGICAL_INTERPRETATION",
+        "relation": "urn:reveal:relation:involved-in",
+        "scope": "Coronary artery disease in people with type 2 diabetes (portal CADinT2D). The mechanism is factor:portal:CADinT2D:cfde-inc-v2:Factor1.",
+        "statement": "SHH is involved in mechanism Factor1 relevant to coronary artery disease in people with type 2 diabetes.",
+        "subject_entity": "urn:cfde:gene:SHH"
+      },
+      {
+        "id": "dapper:Proposition.rCjXmKoJQot2L0j-JXULHltjuBgtYhnD",
+        "object_entity": "dapper:Mechanism.kEJMDzCkDYE94DpWaXrQg-eC4gFGQyuX",
+        "proposition_kind": "BIOLOGICAL_INTERPRETATION",
+        "relation": "urn:reveal:relation:involved-in",
+        "scope": "Coronary artery disease in people with type 2 diabetes (portal CADinT2D). The mechanism is factor:portal:CADinT2D:cfde-inc-v2:Factor1.",
+        "statement": "GLI3 is involved in mechanism Factor1 relevant to coronary artery disease in people with type 2 diabetes.",
+        "subject_entity": "urn:cfde:gene:GLI3"
+      },
+      {
+        "id": "dapper:Proposition.b06Styo26ZiZC2Sy599Uk98OKhiNgcuy",
+        "object_entity": "dapper:Mechanism.kEJMDzCkDYE94DpWaXrQg-eC4gFGQyuX",
+        "proposition_kind": "BIOLOGICAL_INTERPRETATION",
+        "relation": "urn:reveal:relation:involved-in",
+        "scope": "Coronary artery disease in people with type 2 diabetes (portal CADinT2D). The mechanism is factor:portal:CADinT2D:cfde-inc-v2:Factor1.",
+        "statement": "TCF7L2 is involved in mechanism Factor1 relevant to coronary artery disease in people with type 2 diabetes.",
+        "subject_entity": "urn:cfde:gene:TCF7L2"
+      },
+      {
+        "id": "dapper:Proposition.yUAm2Mgs3NxOTghFk_4SrqgpYaecOFvL",
+        "object_entity": "dapper:Mechanism.kEJMDzCkDYE94DpWaXrQg-eC4gFGQyuX",
+        "proposition_kind": "BIOLOGICAL_INTERPRETATION",
+        "relation": "urn:reveal:relation:involved-in",
+        "scope": "Coronary artery disease in people with type 2 diabetes (portal CADinT2D). The mechanism is factor:portal:CADinT2D:cfde-inc-v2:Factor1.",
+        "statement": "The gene program represented by the AMP AD / GTEx brain-aging set is involved in mechanism Factor1 relevant to CAD in people with type 2 diabetes.",
+        "subject_entity": "dapper:GeneSet.I1UZhVhKU-YDerPLIxtnZOGlTXNAlrgD"
+      },
+      {
+        "id": "dapper:Proposition.YglauZfsf1X5GagFEmSSWB-dwoGljEGz",
+        "object_entity": "dapper:Mechanism.kEJMDzCkDYE94DpWaXrQg-eC4gFGQyuX",
+        "proposition_kind": "BIOLOGICAL_INTERPRETATION",
+        "relation": "urn:reveal:relation:involved-in",
+        "scope": "Coronary artery disease in people with type 2 diabetes (portal CADinT2D). The mechanism is factor:portal:CADinT2D:cfde-inc-v2:Factor1.",
+        "statement": "The gene program represented by the PsychENCODE geneM16 set is involved in mechanism Factor1 relevant to CAD in people with type 2 diabetes.",
+        "subject_entity": "dapper:GeneSet.zQ8X81n_J-Fuv0zNRp1iQQXqIzuAOzGP"
+      },
+      {
+        "id": "dapper:Proposition.3dNz6hkwxQ199hXVaHISAWghx_R6G8og",
+        "object_entity": "urn:cfde:trait:portal:CADinT2D",
+        "proposition_kind": "BIOLOGICAL_INTERPRETATION",
+        "relation": "urn:reveal:relation:involved-in",
+        "scope": "Coronary artery disease in people with type 2 diabetes (portal CADinT2D). Trait-level biological involvement.",
+        "statement": "SHH is involved in the biology of coronary artery disease in people with type 2 diabetes.",
+        "subject_entity": "urn:cfde:gene:SHH"
+      },
+      {
+        "id": "dapper:Proposition.6cRd977XvXOzcsRLrJfwthdIHn_iRAOT",
+        "object_entity": "urn:cfde:trait:portal:CADinT2D",
+        "proposition_kind": "BIOLOGICAL_INTERPRETATION",
+        "relation": "urn:reveal:relation:involved-in",
+        "scope": "Coronary artery disease in people with type 2 diabetes (portal CADinT2D). Trait-level biological involvement.",
+        "statement": "GLI3 is involved in the biology of coronary artery disease in people with type 2 diabetes.",
+        "subject_entity": "urn:cfde:gene:GLI3"
+      },
+      {
+        "id": "dapper:Proposition.9Ah6tV2FtJ8m_rEHO6e92pmWxAyfU8U_",
+        "object_entity": "urn:cfde:trait:portal:CADinT2D",
+        "proposition_kind": "BIOLOGICAL_INTERPRETATION",
+        "relation": "urn:reveal:relation:involved-in",
+        "scope": "Coronary artery disease in people with type 2 diabetes (portal CADinT2D). Trait-level biological involvement.",
+        "statement": "TCF7L2 is involved in the biology of coronary artery disease in people with type 2 diabetes.",
+        "subject_entity": "urn:cfde:gene:TCF7L2"
+      },
+      {
+        "id": "dapper:Proposition.NJYh11lXY-LXoFXrJeK7KkfI7r7iQzFT",
+        "object_entity": "urn:cfde:trait:portal:CADinT2D",
+        "proposition_kind": "BIOLOGICAL_INTERPRETATION",
+        "relation": "urn:reveal:relation:involved-in",
+        "scope": "Coronary artery disease in people with type 2 diabetes (portal CADinT2D). Trait-level biological involvement.",
+        "statement": "The gene program represented by the AMP AD / GTEx brain-aging set is involved in the biology of CAD in people with type 2 diabetes.",
+        "subject_entity": "dapper:GeneSet.I1UZhVhKU-YDerPLIxtnZOGlTXNAlrgD"
+      },
+      {
+        "id": "dapper:Proposition.JfxEcQLDt9bMiSejgOKxh7G8ylVGAqxI",
+        "object_entity": "urn:cfde:trait:portal:CADinT2D",
+        "proposition_kind": "BIOLOGICAL_INTERPRETATION",
+        "relation": "urn:reveal:relation:involved-in",
+        "scope": "Coronary artery disease in people with type 2 diabetes (portal CADinT2D). Trait-level biological involvement.",
+        "statement": "The gene program represented by the PsychENCODE geneM16 set is involved in the biology of CAD in people with type 2 diabetes.",
+        "subject_entity": "dapper:GeneSet.zQ8X81n_J-Fuv0zNRp1iQQXqIzuAOzGP"
+      },
+      {
+        "id": "dapper:Proposition.9l7Nq6exgMpGL5Z3Tn4Luy62urD9GHT5",
+        "object_entity": "dapper:GeneSet.I1UZhVhKU-YDerPLIxtnZOGlTXNAlrgD",
+        "proposition_kind": "BIOLOGICAL_INTERPRETATION",
+        "relation": "urn:reveal:relation:member-of",
+        "scope": "Coronary artery disease in people with type 2 diabetes (portal CADinT2D). Illustrative membership proposition; not established by captured CFDE data.",
+        "statement": "SHH belongs to the gene set representing the AMP AD / GTEx brain-aging set.",
+        "subject_entity": "urn:cfde:gene:SHH"
+      },
+      {
+        "id": "dapper:Proposition.6T-VChVL5ddew5vFiMsuYE8O4_60DfUz",
+        "object_entity": "dapper:GeneSet.zQ8X81n_J-Fuv0zNRp1iQQXqIzuAOzGP",
+        "proposition_kind": "BIOLOGICAL_INTERPRETATION",
+        "relation": "urn:reveal:relation:member-of",
+        "scope": "Coronary artery disease in people with type 2 diabetes (portal CADinT2D). Illustrative membership proposition; not established by captured CFDE data.",
+        "statement": "TCF7L2 belongs to the gene set representing the PsychENCODE geneM16 set.",
+        "subject_entity": "urn:cfde:gene:TCF7L2"
+      }
+    ],
+    "scientific_accounts": [
+      {
+        "closing_remarks": "SHH, GLI3 and TCF7L2, together with the AMP AD / GTEx and PsychENCODE geneM16 programs, are implicated in the same CAD-in-T2D mechanism by their captured EAGGL loadings. Their PIGEAN trait-level results connect these assessments to CAD in people with type 2 diabetes. The illustrative membership assertions show how genes could be connected to the programs, but those links remain unverified. Together, the assessed relationships prioritize a mechanism for investigating the selected gap. They do not distinguish exposure-driven amplification of genetic risk from downstream readouts or reverse causation; that requires temporal or intervention evidence not present here.",
+        "component_claims": [
+          "dapper:Claim.iN6K2Rz0XKMnROZLUNLuhZhz0id5wK0h",
+          "dapper:Claim.eaeEY0LpLXwNmk3-Rr9s-YEiUokDLfO6",
+          "dapper:Claim.0Tdjx1Ry7AC5sP50HIlUfKb-cwpgY-3u",
+          "dapper:Claim.Yi6Uhd9aRwVHLlLSoc4TxEMo0VWswD0a",
+          "dapper:Claim.fUp7z48VwrXH5oueNfh7D4nNhQMNtC3C",
+          "dapper:Claim.8uwyJZx7pdEoZ9Vw7Xu726ukdLf2FwyW",
+          "dapper:Claim.YMgLIul-wf8vntqWIY_enxh56yTZx9pI",
+          "dapper:Claim.YwrSSe0OE5Uq62PD1t_vvDHAcNeJn8ol",
+          "dapper:Claim.0wzE-AEqZ1fcgl2B0ZoYHZ7YiQBbR3lE",
+          "dapper:Claim.JXS6Wb_N1ZXOvGvsPoW0UiQdTb_2j2d9",
+          "dapper:Claim.N5EVC_d0CV0e76th1zsyX3wHf1Bw16VZ",
+          "dapper:Claim.GseJ6JHI0scMFrE5_I-x9ZC4etecmMT0"
+        ],
+        "conclusion_claims": [
+          "dapper:Claim.iN6K2Rz0XKMnROZLUNLuhZhz0id5wK0h",
+          "dapper:Claim.eaeEY0LpLXwNmk3-Rr9s-YEiUokDLfO6",
+          "dapper:Claim.0Tdjx1Ry7AC5sP50HIlUfKb-cwpgY-3u",
+          "dapper:Claim.Yi6Uhd9aRwVHLlLSoc4TxEMo0VWswD0a",
+          "dapper:Claim.fUp7z48VwrXH5oueNfh7D4nNhQMNtC3C"
+        ],
+        "context": "A CAD-in-T2D evidence slice used to investigate the selected broader CAD gap. This authored design packet combines captured CFDE observations with explicitly illustrative KG membership assertions. No live agent ran. Canonical bubble-account-v1 fixture, structurally validated only; not a live research result or independently reviewed account.",
+        "id": "dapper:ScientificAccount.05Vs-l6pVZHt9ttebmJqK2VNodZUouTb",
+        "name": "Canonical bubble example: genes and gene programs in CAD-in-T2D",
+        "question": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+        "was_attributed_to": [
+          "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+        ],
+        "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz"
+      }
+    ],
+    "used_edges": [
+      {
+        "object": "dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ",
+        "predicate": "prov:used",
+        "subject": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz"
+      },
+      {
+        "object": "dapper:File.Dt0S38v_sLn5jiOAVXMrMWTrXBLnsn83",
+        "predicate": "prov:used",
+        "subject": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz"
+      },
+      {
+        "object": "dapper:File.eG0HM7wVGbDLt-99TA-OMnMeKqdIircT",
+        "predicate": "prov:used",
+        "subject": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz"
+      },
+      {
+        "object": "dapper:File._FB2fhvDopxDEHgoDgf2Hk4jE0wxilag",
+        "predicate": "prov:used",
+        "subject": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz"
+      },
+      {
+        "object": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+        "predicate": "prov:used",
+        "subject": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz"
+      },
+      {
+        "object": "dapper:File.6JYwag_kjbSwZ-eLeKmZxI0EmWd2gcLD",
+        "predicate": "prov:used",
+        "subject": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz"
+      },
+      {
+        "object": "dapper:File.TLbPNA0MRbI7oUpipACe2r-gRZX8OP6c",
+        "predicate": "prov:used",
+        "subject": "dapper:Activity.aqc7zlmMA0hixxB9RRkB_lF9sXTUJWkJ"
+      },
+      {
+        "object": "dapper:File.HGsrMluIk1mo4e0a6aCD0zBcXZa-Y716",
+        "predicate": "prov:used",
+        "subject": "dapper:Activity.aqc7zlmMA0hixxB9RRkB_lF9sXTUJWkJ"
+      },
+      {
+        "object": "dapper:File._FB2fhvDopxDEHgoDgf2Hk4jE0wxilag",
+        "predicate": "prov:used",
+        "subject": "dapper:Activity.aqc7zlmMA0hixxB9RRkB_lF9sXTUJWkJ"
+      },
+      {
+        "object": "dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ",
+        "predicate": "prov:used",
+        "subject": "dapper:Activity.nislSNQbz48tvkoAsVkBk8NxJjF7XThC"
+      },
+      {
+        "object": "dapper:File.Dt0S38v_sLn5jiOAVXMrMWTrXBLnsn83",
+        "predicate": "prov:used",
+        "subject": "dapper:Activity.nislSNQbz48tvkoAsVkBk8NxJjF7XThC"
+      }
+    ],
+    "was_derived_from_edges": [
+      {
+        "object": "dapper:File.v2cEzhI5P_mdYWuY_HyJjvzyNZpzuP96",
+        "predicate": "prov:wasDerivedFrom",
+        "subject": "dapper:File.eG0HM7wVGbDLt-99TA-OMnMeKqdIircT"
+      },
+      {
+        "object": "dapper:File.TLbPNA0MRbI7oUpipACe2r-gRZX8OP6c",
+        "predicate": "prov:wasDerivedFrom",
+        "subject": "dapper:File.6JYwag_kjbSwZ-eLeKmZxI0EmWd2gcLD"
+      },
+      {
+        "object": "dapper:File.HGsrMluIk1mo4e0a6aCD0zBcXZa-Y716",
+        "predicate": "prov:wasDerivedFrom",
+        "subject": "dapper:File.6JYwag_kjbSwZ-eLeKmZxI0EmWd2gcLD"
+      },
+      {
+        "object": "dapper:File._FB2fhvDopxDEHgoDgf2Hk4jE0wxilag",
+        "predicate": "prov:wasDerivedFrom",
+        "subject": "dapper:File.6JYwag_kjbSwZ-eLeKmZxI0EmWd2gcLD"
+      },
+      {
+        "object": "dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ",
+        "predicate": "prov:wasDerivedFrom",
+        "subject": "dapper:File.TLbPNA0MRbI7oUpipACe2r-gRZX8OP6c"
+      },
+      {
+        "object": "dapper:File.Dt0S38v_sLn5jiOAVXMrMWTrXBLnsn83",
+        "predicate": "prov:wasDerivedFrom",
+        "subject": "dapper:File.HGsrMluIk1mo4e0a6aCD0zBcXZa-Y716"
+      }
+    ],
+    "was_generated_by_edges": [
+      {
+        "object": "dapper:Activity.aqc7zlmMA0hixxB9RRkB_lF9sXTUJWkJ",
+        "predicate": "prov:wasGeneratedBy",
+        "subject": "dapper:File.6JYwag_kjbSwZ-eLeKmZxI0EmWd2gcLD"
+      },
+      {
+        "object": "dapper:Activity.nislSNQbz48tvkoAsVkBk8NxJjF7XThC",
+        "predicate": "prov:wasGeneratedBy",
+        "subject": "dapper:File.TLbPNA0MRbI7oUpipACe2r-gRZX8OP6c"
+      },
+      {
+        "object": "dapper:Activity.nislSNQbz48tvkoAsVkBk8NxJjF7XThC",
+        "predicate": "prov:wasGeneratedBy",
+        "subject": "dapper:File.HGsrMluIk1mo4e0a6aCD0zBcXZa-Y716"
+      }
+    ]
+  },
+  "payloads": [
+    {
+      "object_id": "dapper:Activity.VM0nxPd0QVsZJ-7qw4WjAvXtEiFMehqx",
+      "payload_sha256": "b895d42a87e8a85e0fbfe84e51a12f255d413a388e652149254023c5ebf9a5cc"
+    },
+    {
+      "object_id": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+      "payload_sha256": "315f6299622203b9155f8bed1f5f6f371fae08010c1deaebe75e03057adf613e"
+    },
+    {
+      "object_id": "dapper:Activity.nislSNQbz48tvkoAsVkBk8NxJjF7XThC",
+      "payload_sha256": "1ac7cda85db8de7a02c39678023cd27451e2dc54a25382acde9d1cfc5e744ca5"
+    },
+    {
+      "object_id": "dapper:Activity.aqc7zlmMA0hixxB9RRkB_lF9sXTUJWkJ",
+      "payload_sha256": "aedf1b0a199a35a148162abe8526a6d9fe500cfbdfdaa3c665b1e23a470bbef7"
+    },
+    {
+      "object_id": "dapper:Claim.iN6K2Rz0XKMnROZLUNLuhZhz0id5wK0h",
+      "payload_sha256": "3fbc747a3589c62414ceebcf183a62c51ef116d7b57a2773c3b5372c743ccf7a"
+    },
+    {
+      "object_id": "dapper:Claim.eaeEY0LpLXwNmk3-Rr9s-YEiUokDLfO6",
+      "payload_sha256": "30b3728e15fa88e4b848724642d0cf017074a1b434471c961a94e6fb13e7a10c"
+    },
+    {
+      "object_id": "dapper:Claim.0Tdjx1Ry7AC5sP50HIlUfKb-cwpgY-3u",
+      "payload_sha256": "f4ab3cb9578b07f48999246ebb5cf29518d01470a204529f0e05e56e78e11a6a"
+    },
+    {
+      "object_id": "dapper:Claim.Yi6Uhd9aRwVHLlLSoc4TxEMo0VWswD0a",
+      "payload_sha256": "5f55979adf0dc24e8f1a1dc3c7a28db727a35775118a8b416584fbc198dfdcfd"
+    },
+    {
+      "object_id": "dapper:Claim.fUp7z48VwrXH5oueNfh7D4nNhQMNtC3C",
+      "payload_sha256": "e3f6b4d544461d8a0ae03b2ef94cc7e3a5b12eb9bd200eb39a873e3b5b4fb69e"
+    },
+    {
+      "object_id": "dapper:Claim.8uwyJZx7pdEoZ9Vw7Xu726ukdLf2FwyW",
+      "payload_sha256": "a5926d4727e4ad7b59d1b7727cc9ae690cef3d1c85a52c339a414ef8bd7c07b2"
+    },
+    {
+      "object_id": "dapper:Claim.YMgLIul-wf8vntqWIY_enxh56yTZx9pI",
+      "payload_sha256": "0c4f000451aa181090c7e17c2fa045180f9a9debd46b09bc6889d7600983b8d4"
+    },
+    {
+      "object_id": "dapper:Claim.YwrSSe0OE5Uq62PD1t_vvDHAcNeJn8ol",
+      "payload_sha256": "40a800f2379fce9298165818168a8b92ab131bbcb1493297176b35277cda41c8"
+    },
+    {
+      "object_id": "dapper:Claim.0wzE-AEqZ1fcgl2B0ZoYHZ7YiQBbR3lE",
+      "payload_sha256": "fbee16a5f5affc59d22ae370ed826e4f7d82b2398b7ff891e27f1982aba39c68"
+    },
+    {
+      "object_id": "dapper:Claim.JXS6Wb_N1ZXOvGvsPoW0UiQdTb_2j2d9",
+      "payload_sha256": "eea56ef41df3cb171f455ff7bc121314c33889aeffb5d33103a9c9b49702923e"
+    },
+    {
+      "object_id": "dapper:Claim.N5EVC_d0CV0e76th1zsyX3wHf1Bw16VZ",
+      "payload_sha256": "9c233de7913804eef7d46612d8ca7894270a98324d3fff67f3be12005234506f"
+    },
+    {
+      "object_id": "dapper:Claim.GseJ6JHI0scMFrE5_I-x9ZC4etecmMT0",
+      "payload_sha256": "ccaaec10dfc412f80792b305a9ccdcaae049554920e805ee552b15d3d2da9480"
+    },
+    {
+      "object_id": "dapper:Dataset.NlxGa58i2Tz0316MDyohMLN_HbOr-FpE",
+      "payload_sha256": "6f4977c74130afb92e4c8e327f7c3b56bd73747d08a716535420e6ea88fcde07"
+    },
+    {
+      "object_id": "dapper:Dataset.3C638GAM_39hZy0Alf4cuL_MEwLPwYbZ",
+      "payload_sha256": "95f38091db936a9be793d9477192449854c365924682e520adfa1935ef9f52c9"
+    },
+    {
+      "object_id": "dapper:Dataset.rCYYDnawiURjDtPs-d2yau2n33CVvZsk",
+      "payload_sha256": "bb976496e78e63599add6cce5064769f50a2e937df868747023ba226ba209627"
+    },
+    {
+      "object_id": "dapper:Dataset.H6YuykNGw3yY2JZYMuqc_VwTyDVGAq3A",
+      "payload_sha256": "cddcc6ec8f4b05dea035d127275bee94a6cb2e0024f332758657bbf7bac86bfa"
+    },
+    {
+      "object_id": "dapper:EvidenceItem.7GkNnm9yFpVyW1KazI0fgyc3zd6soOEu",
+      "payload_sha256": "0b8154c1d6999358817cec4b2ede5c8cab2776631da166adda649f0749b6bac6"
+    },
+    {
+      "object_id": "dapper:EvidenceItem.OL2_nAY9jt52xBCVaDgHA-w2wMgG1dTr",
+      "payload_sha256": "c442b257083c62e03ee3b9852317929fdb2e50f1918684a0f9975be82cfefbf6"
+    },
+    {
+      "object_id": "dapper:EvidenceItem.FY72LzsGILxi9FSYp3UC3dJrvRjg4yhV",
+      "payload_sha256": "6eb59908af2cfa953866b81839b82416e104e4b41e8b7fb88df81e82dbde537f"
+    },
+    {
+      "object_id": "dapper:EvidenceItem.zGPBcs9UEKF30hSswAcICslECIjWNGpS",
+      "payload_sha256": "159b55d7b6c8cdecc4c82dde6a6fa94bbc6e86dbf7d69acfef029c85d8ec8f96"
+    },
+    {
+      "object_id": "dapper:EvidenceItem.YuVob9-YBd1uHmFIvdEzvnFZWdWXMCyt",
+      "payload_sha256": "fc3f2a57b97e5e7d66fa361dae3e651e2c930c9298966adaab2a9447a44eb095"
+    },
+    {
+      "object_id": "dapper:EvidenceItem.C3levH7QDaBJE59UP4qgI6BIodhkHWWE",
+      "payload_sha256": "fe4df689942bae618c91420e4067b931ee118c893153c102e197e13cefdefc20"
+    },
+    {
+      "object_id": "dapper:EvidenceItem.ZawKNAfvISVoKyK__IPfaHSBi-FTFeO7",
+      "payload_sha256": "51f87f23e40c25a7900a0e0e249b26f1ff493f9ad99b88d6fd453e3d933d90a0"
+    },
+    {
+      "object_id": "dapper:EvidenceItem.1K7MwHOhXF9rUkapPvYnaR6LCS1jrPbf",
+      "payload_sha256": "def7d42f3dd904454c522bad741b6a8362f8171645a238a3b4daabcca6985ffc"
+    },
+    {
+      "object_id": "dapper:EvidenceItem.Q8XJ1KhVOb7qfeOnUA9M9TlXs2q46Xfc",
+      "payload_sha256": "1bd90f0807eeed77d3f9d4fd44ce17852e802b165a9b6828d5ddc2a83723ac5e"
+    },
+    {
+      "object_id": "dapper:EvidenceItem.dlZE2kDhY4EqshVinxv10O044-qjOgce",
+      "payload_sha256": "db21d188b2d5771916a70aba9e0c0d8a9ed4d52919d581c3ffe98ab7b93c5ecd"
+    },
+    {
+      "object_id": "dapper:EvidenceItem.1Idm3RIE7irCu8aj3Z4jS58QMjvSfMV_",
+      "payload_sha256": "40b44fdafc870e864373e22261c47a7d8b0f2b500b0865cf5503b8f268d67bde"
+    },
+    {
+      "object_id": "dapper:EvidenceItem.OOhcXSoHkq_NT2yHZG8A8Fo9nL9ATjf-",
+      "payload_sha256": "307147399e72173b537ca3c07f5178afe81fb71d8d27024ab7ae9763ce422fc7"
+    },
+    {
+      "object_id": "dapper:EvidenceItem.ua2xxfAwRBW_YWAX2lcp0FERgiIj0Y1z",
+      "payload_sha256": "c2a8a5ad28c06cd0bc801a29ef5b3e02b68364141957565524592c908aecec5e"
+    },
+    {
+      "object_id": "dapper:EvidenceItem.xo3daB43jQWl3SM_0V_OOhkO0votrOkZ",
+      "payload_sha256": "00b2d515a94caef89a26e0b305b99e733461672aa70a6725fa0204f7730cc890"
+    },
+    {
+      "object_id": "dapper:EvidenceItem.CmkML4Zy3RuBW0p4b2DA1O-wZ6AQGLz-",
+      "payload_sha256": "25148616f597facd8d5f01d5737029aa705a82a976e623231be2bcecdb75e867"
+    },
+    {
+      "object_id": "dapper:EvidenceItem.iSSEZ1l6D1NdV5TB8DOaDm7ZfnRSkgsR",
+      "payload_sha256": "019401b1ddbc9fd00cc3c7a1cf459bbe8bcb24c425728806dc66871bece4bb5b"
+    },
+    {
+      "object_id": "dapper:EvidenceItem.Bi_6DGIpMXTNt9YXLL-rAWX_u_fmOLNg",
+      "payload_sha256": "8d2c49d8ba3eda3c1da92df4dc285fd3416975de69acb90542eddf94716fa687"
+    },
+    {
+      "object_id": "dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ",
+      "payload_sha256": "324eb1fd489bae247fbaaf83e6545bb1e143cc6bb5a0f70ac8cb0a6642a4d503"
+    },
+    {
+      "object_id": "dapper:File.Dt0S38v_sLn5jiOAVXMrMWTrXBLnsn83",
+      "payload_sha256": "2b72fc92700590f92d05225bb73d2d3fa1dc1599c7ec9e612420ae97b662731c"
+    },
+    {
+      "object_id": "dapper:File.eG0HM7wVGbDLt-99TA-OMnMeKqdIircT",
+      "payload_sha256": "5a885486417981fd3b0722c0541438babbe462036182ddb7cbb4bd7d69b322d5"
+    },
+    {
+      "object_id": "dapper:File._FB2fhvDopxDEHgoDgf2Hk4jE0wxilag",
+      "payload_sha256": "1804746566e0b10620483601b190aef234bcc27bf406d64161dc8e47e58c823a"
+    },
+    {
+      "object_id": "dapper:File.v2cEzhI5P_mdYWuY_HyJjvzyNZpzuP96",
+      "payload_sha256": "d912e7bb0300cf0d10bd8b4c7e0a38d78079d43c5e887671d4e1e727ca23f82e"
+    },
+    {
+      "object_id": "dapper:File.TLbPNA0MRbI7oUpipACe2r-gRZX8OP6c",
+      "payload_sha256": "247ed9d505d66cd0fac89a0db4340ef2501db2fd31e5264c0046934d9c1de4c5"
+    },
+    {
+      "object_id": "dapper:File.HGsrMluIk1mo4e0a6aCD0zBcXZa-Y716",
+      "payload_sha256": "c094e138884cf92a7334db0de7f9c5618c8eb2385e86334d3edb6e5f9639fd1a"
+    },
+    {
+      "object_id": "dapper:File.6JYwag_kjbSwZ-eLeKmZxI0EmWd2gcLD",
+      "payload_sha256": "f88a5555f3e128c593af476e8401f2d3f41ddfc4a8b820fb8f0622f7d2f7084c"
+    },
+    {
+      "object_id": "dapper:GeneSet.I1UZhVhKU-YDerPLIxtnZOGlTXNAlrgD",
+      "payload_sha256": "2be4463d3fd0bd4c5c3999c2c8147b7ca51456d01221b2827fa695b6956acf59"
+    },
+    {
+      "object_id": "dapper:GeneSet.zQ8X81n_J-Fuv0zNRp1iQQXqIzuAOzGP",
+      "payload_sha256": "08295eadcb990499d015f5093ecf03871cc556d927da2561e96c71e31d0fac14"
+    },
+    {
+      "object_id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+      "payload_sha256": "ba9dd4ef2b18a3292a0281fcdf5d71b3e6d84b3e1a1ac7cd63f21ef91ec1f081"
+    },
+    {
+      "object_id": "dapper:Mechanism.kEJMDzCkDYE94DpWaXrQg-eC4gFGQyuX",
+      "payload_sha256": "977910a2a2bfb04901b23ab9aafbb4bf287bfd1411fc7fa138ee33528d82a5aa"
+    },
+    {
+      "object_id": "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he",
+      "payload_sha256": "f564c87a557ed709cf172e05d8e6c43d3bde7adf62c66f48968e3653954281ec"
+    },
+    {
+      "object_id": "dapper:Proposition.cjK2Yz-rwiv49w9zH71aodlAHIzbNVqE",
+      "payload_sha256": "15a8386a0a7357736f0ce54dc149838cb255723c64a9f13f7d4af47a4ddb3ab8"
+    },
+    {
+      "object_id": "dapper:Proposition.rCjXmKoJQot2L0j-JXULHltjuBgtYhnD",
+      "payload_sha256": "fe4fb52025c0884ee56aec8eab05a34bbcfb369dfc8c37791bdff353ca1d5df6"
+    },
+    {
+      "object_id": "dapper:Proposition.b06Styo26ZiZC2Sy599Uk98OKhiNgcuy",
+      "payload_sha256": "7824283a8ffb5bd08559506d0549eb229f205cb33295f53cae2d3a439d0d13c0"
+    },
+    {
+      "object_id": "dapper:Proposition.yUAm2Mgs3NxOTghFk_4SrqgpYaecOFvL",
+      "payload_sha256": "b4817ee3c28dedec5362a608940d50abfa883abe2cdad0c3eaad146c269a7d56"
+    },
+    {
+      "object_id": "dapper:Proposition.YglauZfsf1X5GagFEmSSWB-dwoGljEGz",
+      "payload_sha256": "7eb05d213eda21ca07d4402fb64957370f1edd8c6d42534b83163bb68a4364d1"
+    },
+    {
+      "object_id": "dapper:Proposition.3dNz6hkwxQ199hXVaHISAWghx_R6G8og",
+      "payload_sha256": "6c0f6e46df6716757af1677b822b743cf52190838051a87c761fc69685a46cc8"
+    },
+    {
+      "object_id": "dapper:Proposition.6cRd977XvXOzcsRLrJfwthdIHn_iRAOT",
+      "payload_sha256": "622ad2e03dda8c4cca56b2bb42b1060253a32ccb287696ddeb1b7e621fff899e"
+    },
+    {
+      "object_id": "dapper:Proposition.9Ah6tV2FtJ8m_rEHO6e92pmWxAyfU8U_",
+      "payload_sha256": "7ddfe0e98c428752702a622ad04c448880691e0c8758a010dde63aba574f73cd"
+    },
+    {
+      "object_id": "dapper:Proposition.NJYh11lXY-LXoFXrJeK7KkfI7r7iQzFT",
+      "payload_sha256": "bedb43fad994f9abb1c1d989ba732bfd94ab3cf527839254a98f41abef5c45c5"
+    },
+    {
+      "object_id": "dapper:Proposition.JfxEcQLDt9bMiSejgOKxh7G8ylVGAqxI",
+      "payload_sha256": "7695770e8c6e4b851ffd9a32906bd643b5855778d8c8dedbd2d365b1b5d5a269"
+    },
+    {
+      "object_id": "dapper:Proposition.9l7Nq6exgMpGL5Z3Tn4Luy62urD9GHT5",
+      "payload_sha256": "6bef2e0e591a9e1a09288914a68177d5f7ddaa8a7ec9dcca1f2c85a66a49c480"
+    },
+    {
+      "object_id": "dapper:Proposition.6T-VChVL5ddew5vFiMsuYE8O4_60DfUz",
+      "payload_sha256": "18b0914d773f882268652162522a59540af15e50ac807611bd4f2c7b26542577"
+    },
+    {
+      "object_id": "dapper:ScientificAccount.05Vs-l6pVZHt9ttebmJqK2VNodZUouTb",
+      "payload_sha256": "1597868eccb5bfd564274eda7e64cd1861e606b44896b58c6d2bf448252e0ff8"
+    }
+  ],
+  "research_statement": {
+    "job_id": null,
+    "paragraph_id": null,
+    "status": "not_requested"
+  },
+  "root_id": "dapper:ScientificAccount.05Vs-l6pVZHt9ttebmJqK2VNodZUouTb",
+  "schema": {
+    "dependency_snapshot_sha256": "3f07f48396ab893ed0fae8ad0101e0c2ac1bc36161e91cc2525d5ed0aeb0140f",
+    "identity_profile": "DAPPER-ID-1",
+    "schema_sha256": "fcb53e728f77c271e614738a63a08e16d2d2f0ced71117a43ec3542132f6ebd4"
+  }
+}

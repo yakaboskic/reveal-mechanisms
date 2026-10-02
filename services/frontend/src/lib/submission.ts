@@ -16,6 +16,13 @@ export type SubmissionAttempt = {
   submitKey: { binding: string; key: string } | null;
 };
 
+/** Receipt reconciliation reads the original dispatch; current editor validation applies only to a new run. */
+export function submissionActionDisabled({ ready, busy, uncertain, newInputsValid }: {
+  ready: boolean; busy: boolean; uncertain: boolean; newInputsValid: boolean;
+}) {
+  return !ready || busy || (!uncertain && !newInputsValid);
+}
+
 export function rememberSubmission(attempt: SubmissionAttempt | null) {
   try {
     if (attempt) sessionStorage.setItem(submissionStorageKey, JSON.stringify(attempt));
@@ -27,8 +34,9 @@ export function restoreSubmission(): SubmissionAttempt | null {
   try {
     const value = JSON.parse(sessionStorage.getItem(submissionStorageKey) || "null") as SubmissionAttempt | null;
     if (value && ["anonymous", "google", "orcid", "session"].includes(value.method) && value.composer?.source_gap && value.composer.eaggl_anchors.length && Array.isArray(value.requestKeys) && value.requestKeys.every(entry => Array.isArray(entry) && entry.length === 2 && entry.every(part => typeof part === "string")) && typeof value.anonymousKey === "string"
-      // A submission kept across a reference reload holds superseded anchors; it cannot succeed.
-      && currentComposer(value.composer)) return value;
+      // An uncertain dispatch may already have committed. Preserve its exact receipt so a retry
+      // reconciles that job even after a reference cutover; unsubmitted stale inputs are discarded.
+      && (value.submitKey || currentComposer(value.composer))) return value;
   } catch { /* Ignore an incomplete browser snapshot. */ }
   rememberSubmission(null);
   return null;

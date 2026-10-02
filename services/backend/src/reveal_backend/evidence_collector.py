@@ -133,7 +133,7 @@ def collect_package(*, gap_id, factor_ids, output, dapper, project_root, dismech
                     geneset_import, model='cfde-inc-v2', limit=100, max_nodes=250, max_edges=1000,
                     client_factory=HttpCaptureClient, geneset_resolver=None,
                     selected_graphs=('biomarkerkg', 'prokn'), max_accounts=3,selection_metadata=None,
-                    max_parallel_requests=4):
+                    max_parallel_requests=4, user_inputs=None):
     """Resolve input IDs, retrieve bounded evidence, freeze sources, then build.
 
     The local DisMech index and GeneSet export are configurable source adapters;
@@ -397,6 +397,17 @@ def collect_package(*, gap_id, factor_ids, output, dapper, project_root, dismech
                 'authoring': {'skill': instructions[0], 'contract': instructions[1], 'references': instructions[2:], 'required_question': gap_node['id'], 'max_accounts': max_accounts,
                               'assembly_builder': {'version': BUILD_VERSION, 'source_sha256': sha256(builder_bytes)}},
                 'external_evidence': {'status': 'not_queried', 'selected_graphs': list(selected_graphs), 'ledger': [], 'assertions': []}}
+        if user_inputs:
+            from copy import deepcopy
+            from .user_inputs import read
+            supplied=deepcopy(user_inputs)
+            for upload in supplied['uploads']:
+                original=read(upload['storage']); extracted=read(upload['extraction']['storage'])
+                key='user-upload-'+upload['id']
+                store.add(key,original,'binary',filename=upload['filename'],media_type=upload['media_type'],private=True)
+                store.add(key+'-text',extracted,'json',filename=upload['id']+'-text.json',private=True)
+                upload.update(original_artifact_id=key,extraction_artifact_id=key+'-text',content=decode(extracted))
+            spec['user_inputs']=supplied
         (store.directory / 'build-input.json').write_bytes(canonical_json(spec))
         began = time.monotonic()
         built = build_package(spec, store.blobs, dapper)

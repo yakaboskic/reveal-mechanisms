@@ -176,6 +176,8 @@ async def dispatch_job(repository, job_id):
 
 def reconcile_stale(repository, limit=25):
     recovered = 0
+    from .user_inputs import cleanup
+    with repository.transaction() as tx: cleanup(tx)
     # Read indexed execution pages ordered by oldest update. Completed records
     # move to an archive kind at completion in a future compaction migration;
     # SQL JSON filtering keeps terminal records from starving active work now.

@@ -79,6 +79,7 @@ enums:
       json: {}
       yaml: {}
       text: {}
+      binary: {}
   EPAttachmentResolution:
     description: DisMech attachment lookup outcome.
     permissible_values:
@@ -285,7 +286,11 @@ classes:
       path:
         range: string
         required: true
-        pattern: ^sources/[0-9a-f]{64}\.(json|yaml|text)$
+        pattern: ^sources/[0-9a-f]{64}\.(json|yaml|text|binary)$
+      private:
+        range: boolean
+      media_type:
+        range: string
       dapper_file_id:
         range: EPFileID
         required: true
@@ -296,6 +301,27 @@ classes:
         - range: string
         - range: EPRepositoryOrigin
           inlined: true
+  EPUserInputs:
+    description: Private researcher direction and supplied material; hypotheses are not observations.
+    attributes:
+      format:
+        range: string
+        required: true
+        equals_string: reveal.user-inputs/1
+      research_direction:
+        range: string
+        required: true
+      context:
+        range: string
+        required: true
+      hypotheses:
+        range: string
+        required: true
+      uploads:
+        range: EPRawObject
+        required: true
+        multivalued: true
+        inlined_as_list: true
   EPRawObject:
     description: Opaque upstream JSON object. Fields are preserved, not reinterpreted or validated as DAPPER.
       Only explicitly identified source boundaries are open.
@@ -1348,6 +1374,9 @@ classes:
       closed; only raw source boundaries are extensible.
     tree_root: true
     attributes:
+      user_inputs:
+        range: EPUserInputs
+        inlined: true
       package_version:
         range: string
         required: true

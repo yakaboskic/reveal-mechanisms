@@ -1,0 +1,14 @@
+.about-page{max-width:1120px;margin:0 auto;padding:38px 28px 64px;color:var(--reading)}
+.about-intro h1{color:var(--ink);font-size:clamp(30px,4vw,44px);line-height:1.2;letter-spacing:-1.15px;margin:0 0 16px}
+.about-intro>p{max-width:780px;font-size:17px;line-height:1.7;margin:0}
+.about-page a{text-decoration:underline;text-underline-offset:4px;text-decoration-color:#bdcddd}
+.about-reuse{margin-top:36px}
+.about-method{margin-top:48px;padding-top:36px;border-top:1px solid var(--line)}
+.about-section-heading{margin-bottom:20px}
+.about-page h2{font-size:23px;line-height:1.4;color:var(--ink);margin:0 0 8px}
+.about-section-heading>p{margin:0;font-size:15px;line-height:1.7;color:#697c96}
+.about-footer{border-top:1px solid var(--line);padding-top:30px;margin-top:42px;display:flex;justify-content:space-between;align-items:center;gap:32px;font-size:14px}
+.about-footer h2{font-size:20px}
+.about-footer p{margin:0;max-width:600px;line-height:1.8}
+.about-explore{white-space:nowrap;min-height:44px;display:inline-flex;align-items:center;gap:10px;font-size:14px}
+@media(max-width:680px){.about-page{padding:24px 20px 44px}.about-intro>p{font-size:15px}.about-page h2{font-size:20px}.about-reuse{margin-top:28px}.about-method{margin-top:32px;padding-top:28px}.about-section-heading>p{font-size:14px}.about-footer{align-items:flex-start;flex-direction:column;gap:12px;margin-top:30px}.about-intro h1{letter-spacing:-.7px}}

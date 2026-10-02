@@ -9242,6 +9242,294 @@
     "curl": "curl -X POST https://api.reveal.example.org/v1/citations/render -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"locale\":\"en-US\",\"paragraph_id\":\"dapper:Paragraph.uSYa1LdXNPuwlSgsCz3oZ7IfrVoztroD\",\"style\":\"apa\"}'"
   },
   {
+    "operation_id": "createUpload",
+    "case": "example",
+    "method": "POST",
+    "path_template": "/v1/uploads",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/uploads",
+      "path": {},
+      "query": {},
+      "headers": {
+        "Idempotency-Key": "22222222-2222-4222-8222-222222222222",
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      },
+      "body": {
+        "draft_id": "22222222-2222-4222-8222-222222222222",
+        "filename": "notes.txt",
+        "media_type": "text/plain",
+        "size_bytes": 5,
+        "sha256": "185f8db32271fe25f561a6fc938b2e264306ec304eda518007d1764826381969"
+      }
+    },
+    "responses": {
+      "201": {
+        "content_type": "application/json",
+        "examples": {
+          "example": {
+            "upload": {
+              "id": "22222222-2222-4222-8222-222222222222",
+              "draft_id": "22222222-2222-4222-8222-222222222222",
+              "filename": "notes.txt",
+              "media_type": "text/plain",
+              "size_bytes": 5,
+              "sha256": "185f8db32271fe25f561a6fc938b2e264306ec304eda518007d1764826381969",
+              "status": "pending",
+              "created_at": "2026-09-24T16:00:00Z",
+              "expires_at": "2026-10-02T00:00:00Z",
+              "storage": null,
+              "extraction": null,
+              "error": null
+            },
+            "transfer": {
+              "method": "POST",
+              "url": "/v1/uploads/22222222-2222-4222-8222-222222222222/content",
+              "fields": {},
+              "encoding": "base64"
+            }
+          }
+        }
+      }
+    },
+    "curl": "curl -X POST https://api.reveal.example.org/v1/uploads -H 'Idempotency-Key: 22222222-2222-4222-8222-222222222222' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"draft_id\":\"22222222-2222-4222-8222-222222222222\",\"filename\":\"notes.txt\",\"media_type\":\"text/plain\",\"sha256\":\"185f8db32271fe25f561a6fc938b2e264306ec304eda518007d1764826381969\",\"size_bytes\":5}'"
+  },
+  {
+    "operation_id": "listUploads",
+    "case": "request",
+    "method": "GET",
+    "path_template": "/v1/uploads",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/uploads?draft_id=22222222-2222-4222-8222-222222222222",
+      "path": {},
+      "query": {
+        "draft_id": "22222222-2222-4222-8222-222222222222"
+      },
+      "headers": {
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
+        "Accept": "application/json"
+      },
+      "body": null
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/json",
+        "examples": {
+          "example": {
+            "items": [
+              {
+                "id": "22222222-2222-4222-8222-222222222222",
+                "draft_id": "22222222-2222-4222-8222-222222222222",
+                "filename": "notes.txt",
+                "media_type": "text/plain",
+                "size_bytes": 5,
+                "sha256": "185f8db32271fe25f561a6fc938b2e264306ec304eda518007d1764826381969",
+                "status": "pending",
+                "created_at": "2026-09-24T16:00:00Z",
+                "expires_at": "2026-10-02T00:00:00Z",
+                "storage": null,
+                "extraction": null,
+                "error": null
+              }
+            ]
+          }
+        }
+      }
+    },
+    "curl": "curl -X GET 'https://api.reveal.example.org/v1/uploads?draft_id=22222222-2222-4222-8222-222222222222' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
+  },
+  {
+    "operation_id": "getUpload",
+    "case": "request",
+    "method": "GET",
+    "path_template": "/v1/uploads/{upload_id}",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/uploads/22222222-2222-4222-8222-222222222222",
+      "path": {
+        "upload_id": "22222222-2222-4222-8222-222222222222"
+      },
+      "query": {},
+      "headers": {
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
+        "Accept": "application/json"
+      },
+      "body": null
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/json",
+        "examples": {
+          "example": {
+            "id": "22222222-2222-4222-8222-222222222222",
+            "draft_id": "22222222-2222-4222-8222-222222222222",
+            "filename": "notes.txt",
+            "media_type": "text/plain",
+            "size_bytes": 5,
+            "sha256": "185f8db32271fe25f561a6fc938b2e264306ec304eda518007d1764826381969",
+            "status": "pending",
+            "created_at": "2026-09-24T16:00:00Z",
+            "expires_at": "2026-10-02T00:00:00Z",
+            "storage": null,
+            "extraction": null,
+            "error": null
+          }
+        }
+      }
+    },
+    "curl": "curl -X GET https://api.reveal.example.org/v1/uploads/22222222-2222-4222-8222-222222222222 -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
+  },
+  {
+    "operation_id": "removeUpload",
+    "case": "request",
+    "method": "DELETE",
+    "path_template": "/v1/uploads/{upload_id}",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/uploads/22222222-2222-4222-8222-222222222222",
+      "path": {
+        "upload_id": "22222222-2222-4222-8222-222222222222"
+      },
+      "query": {},
+      "headers": {
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
+        "Accept": "application/json"
+      },
+      "body": null
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/json",
+        "examples": {
+          "example": {
+            "id": "22222222-2222-4222-8222-222222222222",
+            "draft_id": "22222222-2222-4222-8222-222222222222",
+            "filename": "notes.txt",
+            "media_type": "text/plain",
+            "size_bytes": 5,
+            "sha256": "185f8db32271fe25f561a6fc938b2e264306ec304eda518007d1764826381969",
+            "status": "pending",
+            "created_at": "2026-09-24T16:00:00Z",
+            "expires_at": "2026-10-02T00:00:00Z",
+            "storage": null,
+            "extraction": null,
+            "error": null
+          }
+        }
+      }
+    },
+    "curl": "curl -X DELETE https://api.reveal.example.org/v1/uploads/22222222-2222-4222-8222-222222222222 -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
+  },
+  {
+    "operation_id": "completeUpload",
+    "case": "request",
+    "method": "POST",
+    "path_template": "/v1/uploads/{upload_id}/complete",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/uploads/22222222-2222-4222-8222-222222222222/complete",
+      "path": {
+        "upload_id": "22222222-2222-4222-8222-222222222222"
+      },
+      "query": {},
+      "headers": {
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
+        "Accept": "application/json"
+      },
+      "body": null
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/json",
+        "examples": {
+          "example": {
+            "id": "22222222-2222-4222-8222-222222222222",
+            "draft_id": "22222222-2222-4222-8222-222222222222",
+            "filename": "notes.txt",
+            "media_type": "text/plain",
+            "size_bytes": 5,
+            "sha256": "185f8db32271fe25f561a6fc938b2e264306ec304eda518007d1764826381969",
+            "status": "pending",
+            "created_at": "2026-09-24T16:00:00Z",
+            "expires_at": "2026-10-02T00:00:00Z",
+            "storage": null,
+            "extraction": null,
+            "error": null
+          }
+        }
+      }
+    },
+    "curl": "curl -X POST https://api.reveal.example.org/v1/uploads/22222222-2222-4222-8222-222222222222/complete -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
+  },
+  {
+    "operation_id": "uploadLocalContent",
+    "case": "example",
+    "method": "POST",
+    "path_template": "/v1/uploads/{upload_id}/content",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/uploads/22222222-2222-4222-8222-222222222222/content",
+      "path": {
+        "upload_id": "22222222-2222-4222-8222-222222222222"
+      },
+      "query": {},
+      "headers": {
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      },
+      "body": {
+        "content_base64": "SGVsbG8="
+      }
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/json",
+        "examples": {
+          "example": {
+            "id": "22222222-2222-4222-8222-222222222222",
+            "draft_id": "22222222-2222-4222-8222-222222222222",
+            "filename": "notes.txt",
+            "media_type": "text/plain",
+            "size_bytes": 5,
+            "sha256": "185f8db32271fe25f561a6fc938b2e264306ec304eda518007d1764826381969",
+            "status": "pending",
+            "created_at": "2026-09-24T16:00:00Z",
+            "expires_at": "2026-10-02T00:00:00Z",
+            "storage": null,
+            "extraction": null,
+            "error": null
+          }
+        }
+      }
+    },
+    "curl": "curl -X POST https://api.reveal.example.org/v1/uploads/22222222-2222-4222-8222-222222222222/content -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"content_base64\":\"SGVsbG8=\"}'"
+  },
+  {
+    "operation_id": "downloadUpload",
+    "case": "request",
+    "method": "GET",
+    "path_template": "/v1/uploads/{upload_id}/download",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/uploads/22222222-2222-4222-8222-222222222222/download",
+      "path": {
+        "upload_id": "22222222-2222-4222-8222-222222222222"
+      },
+      "query": {},
+      "headers": {
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
+        "Accept": "application/json"
+      },
+      "body": null
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/octet-stream",
+        "examples": {
+          "text": "Hello"
+        }
+      }
+    },
+    "curl": "curl -X GET https://api.reveal.example.org/v1/uploads/22222222-2222-4222-8222-222222222222/download -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
+  },
+  {
     "operation_id": "subscribeWorkspaceEvents",
     "case": "request",
     "method": "GET",
@@ -9325,16 +9613,17 @@
     "method": "GET",
     "path_template": "/v1/accounts",
     "request": {
-      "url": "https://api.reveal.example.org/v1/accounts?gap_id=dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk&q=mechanism&reference_state=all&limit=20",
+      "url": "https://api.reveal.example.org/v1/accounts?gap_id=dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk&q=mechanism&scope=workspace&sort=recent&reference_state=all&limit=20",
       "path": {},
       "query": {
         "gap_id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
         "q": "mechanism",
+        "scope": "workspace",
+        "sort": "recent",
         "reference_state": "all",
         "limit": 20
       },
       "headers": {
-        "Authorization": "Bearer <api-key-or-gateway-assertion>",
         "Accept": "application/json"
       },
       "body": null
@@ -9528,7 +9817,222 @@
         }
       }
     },
-    "curl": "curl -X GET 'https://api.reveal.example.org/v1/accounts?gap_id=dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk&q=mechanism&reference_state=all&limit=20' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
+    "curl": "curl -X GET 'https://api.reveal.example.org/v1/accounts?gap_id=dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk&q=mechanism&scope=workspace&sort=recent&reference_state=all&limit=20' -H 'Accept: application/json'"
+  },
+  {
+    "operation_id": "getLeaderboard",
+    "case": "request",
+    "method": "GET",
+    "path_template": "/v1/leaderboard",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/leaderboard?view=researchers&sort=overall&evidence=all&limit=20",
+      "path": {},
+      "query": {
+        "view": "researchers",
+        "sort": "overall",
+        "evidence": "all",
+        "limit": 20
+      },
+      "headers": {
+        "Accept": "application/json"
+      },
+      "body": null
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/json",
+        "examples": {
+          "empty_community": {
+            "as_of": "2026-09-24T16:00:00Z",
+            "score_version": "public-contribution-v1",
+            "cohort_size": 0,
+            "voting_participants": 0,
+            "exclusions": {
+              "fixture_accounts": 0,
+              "uncredited_accounts": 0,
+              "conflicting_accounts": 0,
+              "invalid_public_accounts": 0,
+              "excluded_evidence_paths": 0,
+              "fixture_explorations": 0,
+              "uncredited_explorations": 0
+            },
+            "definitions": [
+              {
+                "id": "accounts",
+                "label": "Public scientific accounts",
+                "description": "Distinct currently public canonical accounts, excluding demo/test fixtures."
+              }
+            ],
+            "methodology": {
+              "weights": {
+                "accounts": 0.3,
+                "votes": 0.4,
+                "gaps": 0.3
+              },
+              "scope": "Currently public frozen snapshots only; all time.",
+              "score": "Positive metrics use the eligible-cohort midrank percentile; nonpositive metrics receive zero. Weighted 30/40/30. Exact ties share rank.",
+              "own_votes": "Researcher scores exclude their own ballots. Account scores retain canonical totals.",
+              "evidence": "Only explicit evidence interpretations targeting the claim proposition qualify; direction counts can overlap."
+            },
+            "view": "researchers",
+            "sort": "overall",
+            "evidence": "all",
+            "items": [],
+            "page": {
+              "next_cursor": null,
+              "has_more": false,
+              "snapshot_id": "illustrative-contract-snapshot"
+            }
+          }
+        }
+      }
+    },
+    "curl": "curl -X GET 'https://api.reveal.example.org/v1/leaderboard?view=researchers&sort=overall&evidence=all&limit=20' -H 'Accept: application/json'"
+  },
+  {
+    "operation_id": "getLeaderboardRecords",
+    "case": "request",
+    "method": "GET",
+    "path_template": "/v1/leaderboard/{view}/{entry_id}/records",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/leaderboard/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/records?metric=votes&evidence=all&limit=20",
+      "path": {
+        "view": "accounts",
+        "entry_id": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd"
+      },
+      "query": {
+        "metric": "votes",
+        "evidence": "all",
+        "limit": 20
+      },
+      "headers": {
+        "Accept": "application/json"
+      },
+      "body": null
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/json",
+        "examples": {
+          "example_account": {
+            "as_of": "2026-09-24T16:00:00Z",
+            "score_version": "public-contribution-v1",
+            "cohort_size": 0,
+            "voting_participants": 0,
+            "exclusions": {
+              "fixture_accounts": 0,
+              "uncredited_accounts": 0,
+              "conflicting_accounts": 0,
+              "invalid_public_accounts": 0,
+              "excluded_evidence_paths": 0,
+              "fixture_explorations": 0,
+              "uncredited_explorations": 0
+            },
+            "definitions": [
+              {
+                "id": "accounts",
+                "label": "Public scientific accounts",
+                "description": "Distinct currently public canonical accounts, excluding demo/test fixtures."
+              }
+            ],
+            "methodology": {
+              "weights": {
+                "accounts": 0.3,
+                "votes": 0.4,
+                "gaps": 0.3
+              },
+              "scope": "Currently public frozen snapshots only; all time.",
+              "score": "Positive metrics use the eligible-cohort midrank percentile; nonpositive metrics receive zero. Weighted 30/40/30. Exact ties share rank.",
+              "own_votes": "Researcher scores exclude their own ballots. Account scores retain canonical totals.",
+              "evidence": "Only explicit evidence interpretations targeting the claim proposition qualify; direction counts can overlap."
+            },
+            "view": "accounts",
+            "id": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
+            "metric": "votes",
+            "evidence": "all",
+            "entry": {
+              "id": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
+              "kind": "account",
+              "label": "Genes and gene programs in a shared CAD-in-T2D mechanism",
+              "rank": 1,
+              "metrics": {
+                "overall_score": 0,
+                "net_votes": 0,
+                "upvotes": 0,
+                "downvotes": 0,
+                "voter_count": 0,
+                "researcher_count": 0,
+                "account_count": 1,
+                "account_gap_count": 1,
+                "explored_gap_count": 1,
+                "claim_count": 12
+              },
+              "components": {
+                "accounts": 0,
+                "votes": 0,
+                "gaps": 0
+              },
+              "orcid": null,
+              "account_id": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
+              "gap_id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+              "gap": {
+                "id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+                "label": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk"
+              },
+              "attribution": null,
+              "directions": {
+                "SUPPORTS": 0,
+                "DISPUTES": 0,
+                "MIXED": 0,
+                "NEUTRAL": 0,
+                "UNKNOWN": 0
+              }
+            },
+            "total": 1,
+            "items": [
+              {
+                "id": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
+                "kind": "account",
+                "label": "Genes and gene programs in a shared CAD-in-T2D mechanism",
+                "url": "/accounts/dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
+                "account_ids": [
+                  "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd"
+                ],
+                "claim_ids": [
+                  "dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km",
+                  "dapper:Claim.Uv7_cT46DdsqZMvk5nh8G48qOIKvhRgc",
+                  "dapper:Claim.I2mf6PJ0DPF5_nnbiBjAhgjlUCOiUZZ9",
+                  "dapper:Claim.Kd3psmdr4G9AlD0UU1E1Vu6AjpKaQYWE",
+                  "dapper:Claim.NBafdtdEE2Uabs-8pZqurv7SoWpg7Yhi",
+                  "dapper:Claim.Oe2UZeV7oMY4NsMHyB8h4HJO1FH4nSGF",
+                  "dapper:Claim.2idJniYU4zCtCN6puy8XZ2mzo9Mq6c5p",
+                  "dapper:Claim.H5icBYm5JLM3_T-b1mMfH65Nc0zMhZzH",
+                  "dapper:Claim.xzV_35EYnLl-zy03YbmhfBk_ynNbl7H9",
+                  "dapper:Claim.SYqCJXxCVXDpwflRSdZnkVLzGLO_vi_r",
+                  "dapper:Claim.x7aCVQ1uTkYKLJo32ZyAGMGZaAGCSvWV",
+                  "dapper:Claim.uzqyfwuhf59hSTdravdcr4cTxuitWGx-"
+                ],
+                "evidence_ids": [],
+                "directions": {
+                  "SUPPORTS": 0,
+                  "DISPUTES": 0,
+                  "MIXED": 0,
+                  "NEUTRAL": 0,
+                  "UNKNOWN": 0
+                },
+                "value": 0
+              }
+            ],
+            "page": {
+              "next_cursor": null,
+              "has_more": false,
+              "snapshot_id": "illustrative-contract-snapshot"
+            }
+          }
+        }
+      }
+    },
+    "curl": "curl -X GET 'https://api.reveal.example.org/v1/leaderboard/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/records?metric=votes&evidence=all&limit=20' -H 'Accept: application/json'"
   },
   {
     "operation_id": "listKnowledgeGapAccounts",

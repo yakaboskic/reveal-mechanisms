@@ -279,6 +279,7 @@ def build_package(spec, blobs, dapper):
     require(spec.get('input_version') == INPUT_VERSION, 'Unsupported build input version')
     allowed = {'input_version', 'prefixes', 'identifier_policy', 'dapper_pin', 'selection', 'dismech',
                'mechanisms', 'gene_sets', 'dapper_context', 'captures', 'artifacts', 'policy', 'authoring', 'external_evidence'}
+    if 'user_inputs' in spec: allowed.add('user_inputs')
     require(set(spec) == allowed, f'Build input keys differ from contract: {sorted(set(spec) ^ allowed)}')
     canonical_json(spec)
     require(set(blobs) == set(spec['artifacts']), 'Artifact byte map does not match manifest')
@@ -320,12 +321,12 @@ def build_package(spec, blobs, dapper):
     for key, item in sorted(spec['artifacts'].items()):
         data = blobs[key]
         require(sha256(data) == item['sha256'], f'Artifact checksum mismatch: {key}')
-        require(item['format'] in ('json', 'yaml', 'text'), f'Unknown artifact format: {key}')
+        require(item['format'] in ('json', 'yaml', 'text', 'binary'), f'Unknown artifact format: {key}')
         require(Path(item['filename']).name == item['filename'], f'Invalid artifact filename: {key}')
-        if item['format'] != 'text': payloads[key] = decode(data, item['format'])
+        if item['format'] in ('json','yaml'): payloads[key] = decode(data, item['format'])
         path = f"sources/{item['sha256']}.{item['format']}"
         output_files[path] = data
-        file_node = dapper.file(item['filename'], data, {'json': 'application/json', 'yaml': 'application/yaml', 'text': 'text/plain'}[item['format']])
+        file_node = dapper.file(item['filename'], data, item.get('media_type') or {'json': 'application/json', 'yaml': 'application/yaml', 'text': 'text/plain','binary':'application/octet-stream'}[item['format']])
         if file_node['id'] not in index:
             document.setdefault('files', []).append(file_node); index[file_node['id']] = file_node
         else:
@@ -642,6 +643,14 @@ def build_package(spec, blobs, dapper):
               'policy': policy, 'external_evidence': spec['external_evidence'], 'authoring': spec['authoring'],
               'readiness': {'input_capture_complete': not blockers, 'capture_blockers': sorted(blockers),
                             'agent_dispatch_validated': False, 'remaining_checks': ['runtime and trusted attribution', 'target-model token budget', 'worker authorization and tool policy']}}
+    if 'user_inputs' in spec:
+        packet['user_inputs']=deepcopy(spec['user_inputs'])
+        for upload in packet['user_inputs']['uploads']:
+            original=source_artifacts[upload['original_artifact_id']]
+            extracted=source_artifacts[upload['extraction_artifact_id']]
+            require(original['sha256']==upload['sha256'] and extracted['sha256']==upload['extraction']['storage']['sha256'], 'User input capture changed')
+            require(payloads[upload['extraction_artifact_id']]==upload['content'], 'User input extraction changed')
+            upload.update(original_file_id=original['dapper_file_id'],extraction_file_id=extracted['dapper_file_id'])
     check_refs(packet)
     # Bind local instruction metadata to the exact bytes included with this package.
     for instruction in [spec['authoring']['skill'], spec['authoring']['contract'], *spec['authoring']['references']]:

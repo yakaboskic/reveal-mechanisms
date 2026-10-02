@@ -4,16 +4,17 @@
   "method": "GET",
   "path_template": "/v1/accounts",
   "request": {
-    "url": "https://api.reveal.example.org/v1/accounts?gap_id=dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk&q=mechanism&reference_state=all&limit=20",
+    "url": "https://api.reveal.example.org/v1/accounts?gap_id=dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk&q=mechanism&scope=workspace&sort=recent&reference_state=all&limit=20",
     "path": {},
     "query": {
       "gap_id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
       "q": "mechanism",
+      "scope": "workspace",
+      "sort": "recent",
       "reference_state": "all",
       "limit": 20
     },
     "headers": {
-      "Authorization": "Bearer <api-key-or-gateway-assertion>",
       "Accept": "application/json"
     },
     "body": null
@@ -207,5 +208,5 @@
       }
     }
   },
-  "curl": "curl -X GET 'https://api.reveal.example.org/v1/accounts?gap_id=dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk&q=mechanism&reference_state=all&limit=20' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
+  "curl": "curl -X GET 'https://api.reveal.example.org/v1/accounts?gap_id=dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk&q=mechanism&scope=workspace&sort=recent&reference_state=all&limit=20' -H 'Accept: application/json'"
 }

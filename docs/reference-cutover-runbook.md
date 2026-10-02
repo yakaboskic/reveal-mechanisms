@@ -155,13 +155,13 @@ reload verify --target $t --generation $G > $C/verify.$t.json        # must be o
 1. Start the durable Workflow stack on this branch: `.venv/bin/python scripts/durable_deployment.py prepare`, then `… up --build`. Check `http://127.0.0.1:18001/api/reveal/readyz` returns `ready` in legacy mode, with mapping run `272cfa19…`.
 2. **Before planning**, make the fixtures in the UI:
    - one legacy account or outcome, ideally published (use an existing one if `reveal_workflow_local` has it);
-   - one draft with legacy factor anchors;
-   - one gap-only draft.
+   - one named, explicitly saved draft with legacy factor anchors;
+   - one named, explicitly saved gap-only draft. Temporary editors are not retained unless saved.
 3. Run the loop with `t=local NS=reveal-workflow-local`. Keep a composer tab open during the apply.
 4. Headed checks, with the stack still running:
    - [ ] `readyz` is ready. Factor search and suggest return `factor:kpn:…` ids labelled with KPN phenotype names.
    - [ ] The open composer re-reads its anchors after the cutover. The anchored draft is dropped; editing it recovers into a new draft without losing the edit. The gap-only draft is kept.
-   - [ ] The old account or outcome shows the **Outdated reference** badge. Its banner lists the original anchors, and **Start a new analysis on this gap with current factors** opens `/?draft=<id>&suggest=current` with suggestions.
+   - [ ] The old account or outcome shows the **Outdated reference** badge. Its banner lists the original anchors, and **Start a new analysis on this gap with current factors** opens a temporary `/drafts/<id>?suggest=current` editor with suggestions. Its copied inputs are retained only when the researcher explicitly saves or submits.
    - [ ] The workspace and gap pages offer the current/archived/all filters. The collapsed account counts match the filter. Votes and workspace search still work on archived items.
    - [ ] A published old item stays public, with the badge. The old Mechanism URL returns the frozen factor.
    - [ ] One KPN-anchored analysis submit completes. It is paid, so run exactly one.

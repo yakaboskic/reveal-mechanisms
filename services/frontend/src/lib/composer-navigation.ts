@@ -1,9 +1,12 @@
-/** The URL chooses the question; browser storage only recovers that selection. */
+/** Editor and run identities are separate; legacy query links remain readable. */
 export type ComposerSelection = { job: string | null; draft: string | null; gap: string | null };
 type SavedSelection = { job?: { id: string } | null; draft?: { id: string } | null; gap?: { object: { id: string } } | null };
 
-export function composerSelection(params: Pick<URLSearchParams, "get">): ComposerSelection {
-  return { job: params.get("job") || null, draft: params.get("draft") || null, gap: params.get("gap") || null };
+export function composerSelection(params: Pick<URLSearchParams, "get">, pathname = "/"): ComposerSelection {
+  const route = /^\/(drafts|runs)\/([^/]+)\/?$/.exec(pathname);
+  const job = route?.[1] === "runs" ? decodeURIComponent(route[2]) : params.get("job") || null;
+  if (job) return { job, draft: null, gap: null };
+  return { job: null, draft: route?.[1] === "drafts" ? decodeURIComponent(route[2]) : params.get("draft") || null, gap: params.get("gap") || null };
 }
 export function selectionKey(selection: ComposerSelection) {
   return JSON.stringify([selection.job, selection.draft, selection.gap]);
@@ -22,10 +25,9 @@ export function questionSelection(draftId?: string | null, gapId?: string | null
 }
 export function selectionUrl(url: URL, selection: ComposerSelection) {
   const next = new URL(url);
-  for (const key of ["job", "draft", "gap"] as const) {
-    if (selection[key]) next.searchParams.set(key, selection[key]);
-    else next.searchParams.delete(key);
-  }
+  next.pathname = selection.job ? `/runs/${encodeURIComponent(selection.job)}` : selection.draft ? `/drafts/${encodeURIComponent(selection.draft)}` : "/";
+  for (const key of ["job", "draft", "gap"]) next.searchParams.delete(key);
+  if (!selection.job && !selection.draft && selection.gap) next.searchParams.set("gap", selection.gap);
   next.searchParams.delete("error");
   return next;
 }

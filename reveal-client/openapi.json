@@ -14190,6 +14190,1310 @@
         ]
       }
     },
+    "/v1/uploads": {
+      "post": {
+        "operationId": "createUpload",
+        "tags": [
+          "Drafts"
+        ],
+        "summary": "createUpload",
+        "description": "Owner-scoped private research attachment. Original bytes and extraction are pinned by checksum and immutable version before submission.",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "example": "22222222-2222-4222-8222-222222222222",
+            "description": "Stable upload initiation retry key."
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Successful response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadTicket"
+                },
+                "examples": {
+                  "example": {
+                    "summary": "Example",
+                    "value": {
+                      "upload": {
+                        "id": "22222222-2222-4222-8222-222222222222",
+                        "draft_id": "22222222-2222-4222-8222-222222222222",
+                        "filename": "notes.txt",
+                        "media_type": "text/plain",
+                        "size_bytes": 5,
+                        "sha256": "185f8db32271fe25f561a6fc938b2e264306ec304eda518007d1764826381969",
+                        "status": "pending",
+                        "created_at": "2026-09-24T16:00:00Z",
+                        "expires_at": "2026-10-02T00:00:00Z",
+                        "storage": null,
+                        "extraction": null,
+                        "error": null
+                      },
+                      "transfer": {
+                        "method": "POST",
+                        "url": "/v1/uploads/22222222-2222-4222-8222-222222222222/content",
+                        "fields": {},
+                        "encoding": "base64"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "description": "Correlation ID for this HTTP request.",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              },
+              "Location": {
+                "description": "Relative URL of the created resource.",
+                "schema": {
+                  "type": "string",
+                  "format": "uri-reference"
+                },
+                "example": "/v1/drafts/22222222-2222-4222-8222-222222222222"
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "invalid_request": {
+                    "summary": "Invalid request",
+                    "value": {
+                      "type": "urn:reveal:problem:invalid-request",
+                      "title": "Invalid Request",
+                      "status": 400,
+                      "code": "INVALID_REQUEST",
+                      "detail": "A parameter or cursor does not match the requested operation.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication Required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "authentication_required": {
+                    "summary": "Authentication required",
+                    "value": {
+                      "type": "urn:reveal:problem:authentication-required",
+                      "title": "Authentication Required",
+                      "status": 401,
+                      "code": "AUTHENTICATION_REQUIRED",
+                      "detail": "A valid trusted-gateway API assertion is required.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "not_found": {
+                    "summary": "Not found",
+                    "value": {
+                      "type": "urn:reveal:problem:not-found",
+                      "title": "Not Found",
+                      "status": 404,
+                      "code": "NOT_FOUND",
+                      "detail": "No accessible record exists for the supplied identifier or exact revision.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate Limited",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "rate_limited": {
+                    "summary": "Rate limited",
+                    "value": {
+                      "type": "urn:reveal:problem:rate-limited",
+                      "title": "Rate Limited",
+                      "status": 429,
+                      "code": "RATE_LIMITED",
+                      "detail": "Retry after the interval in Retry-After.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": true
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "example": 30
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApplicationBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UploadCreate"
+              },
+              "examples": {
+                "example": {
+                  "summary": "Example",
+                  "value": {
+                    "draft_id": "22222222-2222-4222-8222-222222222222",
+                    "filename": "notes.txt",
+                    "media_type": "text/plain",
+                    "size_bytes": 5,
+                    "sha256": "185f8db32271fe25f561a6fc938b2e264306ec304eda518007d1764826381969"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "label": "example",
+            "source": "curl -X POST https://api.reveal.example.org/v1/uploads -H 'Idempotency-Key: 22222222-2222-4222-8222-222222222222' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"draft_id\":\"22222222-2222-4222-8222-222222222222\",\"filename\":\"notes.txt\",\"media_type\":\"text/plain\",\"sha256\":\"185f8db32271fe25f561a6fc938b2e264306ec304eda518007d1764826381969\",\"size_bytes\":5}'"
+          }
+        ]
+      },
+      "get": {
+        "operationId": "listUploads",
+        "tags": [
+          "Drafts"
+        ],
+        "summary": "listUploads",
+        "description": "Owner-scoped private research attachment. Original bytes and extraction are pinned by checksum and immutable version before submission.",
+        "parameters": [
+          {
+            "name": "draft_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "22222222-2222-4222-8222-222222222222",
+            "description": "Owned editor identifier."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadList"
+                },
+                "examples": {
+                  "example": {
+                    "summary": "Example",
+                    "value": {
+                      "items": [
+                        {
+                          "id": "22222222-2222-4222-8222-222222222222",
+                          "draft_id": "22222222-2222-4222-8222-222222222222",
+                          "filename": "notes.txt",
+                          "media_type": "text/plain",
+                          "size_bytes": 5,
+                          "sha256": "185f8db32271fe25f561a6fc938b2e264306ec304eda518007d1764826381969",
+                          "status": "pending",
+                          "created_at": "2026-09-24T16:00:00Z",
+                          "expires_at": "2026-10-02T00:00:00Z",
+                          "storage": null,
+                          "extraction": null,
+                          "error": null
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "description": "Correlation ID for this HTTP request.",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "invalid_request": {
+                    "summary": "Invalid request",
+                    "value": {
+                      "type": "urn:reveal:problem:invalid-request",
+                      "title": "Invalid Request",
+                      "status": 400,
+                      "code": "INVALID_REQUEST",
+                      "detail": "A parameter or cursor does not match the requested operation.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication Required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "authentication_required": {
+                    "summary": "Authentication required",
+                    "value": {
+                      "type": "urn:reveal:problem:authentication-required",
+                      "title": "Authentication Required",
+                      "status": 401,
+                      "code": "AUTHENTICATION_REQUIRED",
+                      "detail": "A valid trusted-gateway API assertion is required.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "not_found": {
+                    "summary": "Not found",
+                    "value": {
+                      "type": "urn:reveal:problem:not-found",
+                      "title": "Not Found",
+                      "status": 404,
+                      "code": "NOT_FOUND",
+                      "detail": "No accessible record exists for the supplied identifier or exact revision.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate Limited",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "rate_limited": {
+                    "summary": "Rate limited",
+                    "value": {
+                      "type": "urn:reveal:problem:rate-limited",
+                      "title": "Rate Limited",
+                      "status": 429,
+                      "code": "RATE_LIMITED",
+                      "detail": "Retry after the interval in Retry-After.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": true
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "example": 30
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApplicationBearer": []
+          }
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "label": "request",
+            "source": "curl -X GET 'https://api.reveal.example.org/v1/uploads?draft_id=22222222-2222-4222-8222-222222222222' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
+          }
+        ]
+      }
+    },
+    "/v1/uploads/{upload_id}": {
+      "get": {
+        "operationId": "getUpload",
+        "tags": [
+          "Drafts"
+        ],
+        "summary": "getUpload",
+        "description": "Owner-scoped private research attachment. Original bytes and extraction are pinned by checksum and immutable version before submission.",
+        "parameters": [
+          {
+            "name": "upload_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "22222222-2222-4222-8222-222222222222",
+            "description": "Opaque owner-scoped upload identifier."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Upload"
+                },
+                "examples": {
+                  "example": {
+                    "summary": "Example",
+                    "value": {
+                      "id": "22222222-2222-4222-8222-222222222222",
+                      "draft_id": "22222222-2222-4222-8222-222222222222",
+                      "filename": "notes.txt",
+                      "media_type": "text/plain",
+                      "size_bytes": 5,
+                      "sha256": "185f8db32271fe25f561a6fc938b2e264306ec304eda518007d1764826381969",
+                      "status": "pending",
+                      "created_at": "2026-09-24T16:00:00Z",
+                      "expires_at": "2026-10-02T00:00:00Z",
+                      "storage": null,
+                      "extraction": null,
+                      "error": null
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "description": "Correlation ID for this HTTP request.",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "invalid_request": {
+                    "summary": "Invalid request",
+                    "value": {
+                      "type": "urn:reveal:problem:invalid-request",
+                      "title": "Invalid Request",
+                      "status": 400,
+                      "code": "INVALID_REQUEST",
+                      "detail": "A parameter or cursor does not match the requested operation.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication Required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "authentication_required": {
+                    "summary": "Authentication required",
+                    "value": {
+                      "type": "urn:reveal:problem:authentication-required",
+                      "title": "Authentication Required",
+                      "status": 401,
+                      "code": "AUTHENTICATION_REQUIRED",
+                      "detail": "A valid trusted-gateway API assertion is required.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "not_found": {
+                    "summary": "Not found",
+                    "value": {
+                      "type": "urn:reveal:problem:not-found",
+                      "title": "Not Found",
+                      "status": 404,
+                      "code": "NOT_FOUND",
+                      "detail": "No accessible record exists for the supplied identifier or exact revision.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate Limited",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "rate_limited": {
+                    "summary": "Rate limited",
+                    "value": {
+                      "type": "urn:reveal:problem:rate-limited",
+                      "title": "Rate Limited",
+                      "status": 429,
+                      "code": "RATE_LIMITED",
+                      "detail": "Retry after the interval in Retry-After.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": true
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "example": 30
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApplicationBearer": []
+          }
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "label": "request",
+            "source": "curl -X GET https://api.reveal.example.org/v1/uploads/22222222-2222-4222-8222-222222222222 -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "removeUpload",
+        "tags": [
+          "Drafts"
+        ],
+        "summary": "removeUpload",
+        "description": "Owner-scoped private research attachment. Original bytes and extraction are pinned by checksum and immutable version before submission.",
+        "parameters": [
+          {
+            "name": "upload_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "22222222-2222-4222-8222-222222222222",
+            "description": "Opaque owner-scoped upload identifier."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Upload"
+                },
+                "examples": {
+                  "example": {
+                    "summary": "Example",
+                    "value": {
+                      "id": "22222222-2222-4222-8222-222222222222",
+                      "draft_id": "22222222-2222-4222-8222-222222222222",
+                      "filename": "notes.txt",
+                      "media_type": "text/plain",
+                      "size_bytes": 5,
+                      "sha256": "185f8db32271fe25f561a6fc938b2e264306ec304eda518007d1764826381969",
+                      "status": "pending",
+                      "created_at": "2026-09-24T16:00:00Z",
+                      "expires_at": "2026-10-02T00:00:00Z",
+                      "storage": null,
+                      "extraction": null,
+                      "error": null
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "description": "Correlation ID for this HTTP request.",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "invalid_request": {
+                    "summary": "Invalid request",
+                    "value": {
+                      "type": "urn:reveal:problem:invalid-request",
+                      "title": "Invalid Request",
+                      "status": 400,
+                      "code": "INVALID_REQUEST",
+                      "detail": "A parameter or cursor does not match the requested operation.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication Required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "authentication_required": {
+                    "summary": "Authentication required",
+                    "value": {
+                      "type": "urn:reveal:problem:authentication-required",
+                      "title": "Authentication Required",
+                      "status": 401,
+                      "code": "AUTHENTICATION_REQUIRED",
+                      "detail": "A valid trusted-gateway API assertion is required.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "not_found": {
+                    "summary": "Not found",
+                    "value": {
+                      "type": "urn:reveal:problem:not-found",
+                      "title": "Not Found",
+                      "status": 404,
+                      "code": "NOT_FOUND",
+                      "detail": "No accessible record exists for the supplied identifier or exact revision.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate Limited",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "rate_limited": {
+                    "summary": "Rate limited",
+                    "value": {
+                      "type": "urn:reveal:problem:rate-limited",
+                      "title": "Rate Limited",
+                      "status": 429,
+                      "code": "RATE_LIMITED",
+                      "detail": "Retry after the interval in Retry-After.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": true
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "example": 30
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApplicationBearer": []
+          }
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "label": "request",
+            "source": "curl -X DELETE https://api.reveal.example.org/v1/uploads/22222222-2222-4222-8222-222222222222 -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
+          }
+        ]
+      }
+    },
+    "/v1/uploads/{upload_id}/complete": {
+      "post": {
+        "operationId": "completeUpload",
+        "tags": [
+          "Drafts"
+        ],
+        "summary": "completeUpload",
+        "description": "Owner-scoped private research attachment. Original bytes and extraction are pinned by checksum and immutable version before submission.",
+        "parameters": [
+          {
+            "name": "upload_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "22222222-2222-4222-8222-222222222222",
+            "description": "Opaque owner-scoped upload identifier."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Upload"
+                },
+                "examples": {
+                  "example": {
+                    "summary": "Example",
+                    "value": {
+                      "id": "22222222-2222-4222-8222-222222222222",
+                      "draft_id": "22222222-2222-4222-8222-222222222222",
+                      "filename": "notes.txt",
+                      "media_type": "text/plain",
+                      "size_bytes": 5,
+                      "sha256": "185f8db32271fe25f561a6fc938b2e264306ec304eda518007d1764826381969",
+                      "status": "pending",
+                      "created_at": "2026-09-24T16:00:00Z",
+                      "expires_at": "2026-10-02T00:00:00Z",
+                      "storage": null,
+                      "extraction": null,
+                      "error": null
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "description": "Correlation ID for this HTTP request.",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "invalid_request": {
+                    "summary": "Invalid request",
+                    "value": {
+                      "type": "urn:reveal:problem:invalid-request",
+                      "title": "Invalid Request",
+                      "status": 400,
+                      "code": "INVALID_REQUEST",
+                      "detail": "A parameter or cursor does not match the requested operation.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication Required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "authentication_required": {
+                    "summary": "Authentication required",
+                    "value": {
+                      "type": "urn:reveal:problem:authentication-required",
+                      "title": "Authentication Required",
+                      "status": 401,
+                      "code": "AUTHENTICATION_REQUIRED",
+                      "detail": "A valid trusted-gateway API assertion is required.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "not_found": {
+                    "summary": "Not found",
+                    "value": {
+                      "type": "urn:reveal:problem:not-found",
+                      "title": "Not Found",
+                      "status": 404,
+                      "code": "NOT_FOUND",
+                      "detail": "No accessible record exists for the supplied identifier or exact revision.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate Limited",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "rate_limited": {
+                    "summary": "Rate limited",
+                    "value": {
+                      "type": "urn:reveal:problem:rate-limited",
+                      "title": "Rate Limited",
+                      "status": 429,
+                      "code": "RATE_LIMITED",
+                      "detail": "Retry after the interval in Retry-After.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": true
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "example": 30
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApplicationBearer": []
+          }
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "label": "request",
+            "source": "curl -X POST https://api.reveal.example.org/v1/uploads/22222222-2222-4222-8222-222222222222/complete -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
+          }
+        ]
+      }
+    },
+    "/v1/uploads/{upload_id}/content": {
+      "post": {
+        "operationId": "uploadLocalContent",
+        "tags": [
+          "Drafts"
+        ],
+        "summary": "uploadLocalContent",
+        "description": "Owner-scoped private research attachment. Original bytes and extraction are pinned by checksum and immutable version before submission.",
+        "parameters": [
+          {
+            "name": "upload_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "22222222-2222-4222-8222-222222222222",
+            "description": "Opaque owner-scoped upload identifier."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Upload"
+                },
+                "examples": {
+                  "example": {
+                    "summary": "Example",
+                    "value": {
+                      "id": "22222222-2222-4222-8222-222222222222",
+                      "draft_id": "22222222-2222-4222-8222-222222222222",
+                      "filename": "notes.txt",
+                      "media_type": "text/plain",
+                      "size_bytes": 5,
+                      "sha256": "185f8db32271fe25f561a6fc938b2e264306ec304eda518007d1764826381969",
+                      "status": "pending",
+                      "created_at": "2026-09-24T16:00:00Z",
+                      "expires_at": "2026-10-02T00:00:00Z",
+                      "storage": null,
+                      "extraction": null,
+                      "error": null
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "description": "Correlation ID for this HTTP request.",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "invalid_request": {
+                    "summary": "Invalid request",
+                    "value": {
+                      "type": "urn:reveal:problem:invalid-request",
+                      "title": "Invalid Request",
+                      "status": 400,
+                      "code": "INVALID_REQUEST",
+                      "detail": "A parameter or cursor does not match the requested operation.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication Required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "authentication_required": {
+                    "summary": "Authentication required",
+                    "value": {
+                      "type": "urn:reveal:problem:authentication-required",
+                      "title": "Authentication Required",
+                      "status": 401,
+                      "code": "AUTHENTICATION_REQUIRED",
+                      "detail": "A valid trusted-gateway API assertion is required.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "not_found": {
+                    "summary": "Not found",
+                    "value": {
+                      "type": "urn:reveal:problem:not-found",
+                      "title": "Not Found",
+                      "status": 404,
+                      "code": "NOT_FOUND",
+                      "detail": "No accessible record exists for the supplied identifier or exact revision.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate Limited",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "rate_limited": {
+                    "summary": "Rate limited",
+                    "value": {
+                      "type": "urn:reveal:problem:rate-limited",
+                      "title": "Rate Limited",
+                      "status": 429,
+                      "code": "RATE_LIMITED",
+                      "detail": "Retry after the interval in Retry-After.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": true
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "example": 30
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApplicationBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UploadContent"
+              },
+              "examples": {
+                "example": {
+                  "summary": "Example",
+                  "value": {
+                    "content_base64": "SGVsbG8="
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "label": "example",
+            "source": "curl -X POST https://api.reveal.example.org/v1/uploads/22222222-2222-4222-8222-222222222222/content -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"content_base64\":\"SGVsbG8=\"}'"
+          }
+        ]
+      }
+    },
+    "/v1/uploads/{upload_id}/download": {
+      "get": {
+        "operationId": "downloadUpload",
+        "tags": [
+          "Drafts"
+        ],
+        "summary": "downloadUpload",
+        "description": "Owner-scoped private research attachment. Original bytes and extraction are pinned by checksum and immutable version before submission.",
+        "parameters": [
+          {
+            "name": "upload_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "22222222-2222-4222-8222-222222222222",
+            "description": "Opaque owner-scoped upload identifier."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                },
+                "examples": {
+                  "text": {
+                    "value": "Hello"
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "description": "Correlation ID for this HTTP request.",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "invalid_request": {
+                    "summary": "Invalid request",
+                    "value": {
+                      "type": "urn:reveal:problem:invalid-request",
+                      "title": "Invalid Request",
+                      "status": 400,
+                      "code": "INVALID_REQUEST",
+                      "detail": "A parameter or cursor does not match the requested operation.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication Required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "authentication_required": {
+                    "summary": "Authentication required",
+                    "value": {
+                      "type": "urn:reveal:problem:authentication-required",
+                      "title": "Authentication Required",
+                      "status": 401,
+                      "code": "AUTHENTICATION_REQUIRED",
+                      "detail": "A valid trusted-gateway API assertion is required.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "not_found": {
+                    "summary": "Not found",
+                    "value": {
+                      "type": "urn:reveal:problem:not-found",
+                      "title": "Not Found",
+                      "status": 404,
+                      "code": "NOT_FOUND",
+                      "detail": "No accessible record exists for the supplied identifier or exact revision.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate Limited",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "rate_limited": {
+                    "summary": "Rate limited",
+                    "value": {
+                      "type": "urn:reveal:problem:rate-limited",
+                      "title": "Rate Limited",
+                      "status": 429,
+                      "code": "RATE_LIMITED",
+                      "detail": "Retry after the interval in Retry-After.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": true
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "example": 30
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApplicationBearer": []
+          }
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "label": "request",
+            "source": "curl -X GET https://api.reveal.example.org/v1/uploads/22222222-2222-4222-8222-222222222222/download -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
+          }
+        ]
+      }
+    },
     "/v1/me/workspace/events": {
       "get": {
         "operationId": "subscribeWorkspaceEvents",
@@ -14630,8 +15934,8 @@
         "tags": [
           "Scientific content"
         ],
-        "summary": "List your scientific accounts",
-        "description": "Owner-scoped, newest first then account ID; deduplicate repeated deliveries by digest. Filter by exact gap_id. Optional q searches account ID, title and closing remarks, knowledge-gap ID/name/text and original attribution display name across all saved summaries before pagination. No private records from other users with the same gap. Closing remarks provide the summary; paragraph status is independent. Publication is current mutable workspace state, separate from immutable scientific content. reference_state filters current and archived work; the default all lists current items first.",
+        "summary": "Browse or search scientific accounts",
+        "description": "scope=workspace (default) requires a session and lists only owned accounts, newest creation first. scope=public lists only explicitly published frozen snapshots across researchers and omits private job IDs; no session is required, but invalid supplied credentials are rejected. Deduplicate by canonical account digest. Filter by exact gap_id. Optional q searches account ID, title and closing remarks, knowledge-gap ID/name/text and original attribution display name across the entire authorized collection before pagination. sort=recent (default) orders public accounts by publication date; sort=votes orders by net account votes, then recency. Account ID breaks ties. Cursors bind scope, normalized query, sort, reference_state, registered viewer and the current collection/vote snapshot. Closing remarks provide the summary; paragraph status is independent. reference_state filters current and archived work before pagination; default all groups current items first while preserving the selected vote or recency order within each group.",
         "parameters": [
           {
             "name": "gap_id",
@@ -14657,6 +15961,36 @@
             },
             "example": "mechanism",
             "description": "Case-insensitive literal search over the entire authorized saved collection before pagination. Whitespace is normalized; every query word must match. Cursors are bound to the normalized query."
+          },
+          {
+            "name": "scope",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "public",
+                "workspace"
+              ],
+              "default": "workspace"
+            },
+            "example": "workspace",
+            "description": ""
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "recent",
+                "votes"
+              ],
+              "default": "recent"
+            },
+            "example": "recent",
+            "description": ""
           },
           {
             "name": "reference_state",
@@ -15047,6 +16381,7 @@
           }
         },
         "security": [
+          {},
           {
             "ApplicationBearer": []
           }
@@ -15055,7 +16390,715 @@
           {
             "lang": "Shell",
             "label": "request",
-            "source": "curl -X GET 'https://api.reveal.example.org/v1/accounts?gap_id=dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk&q=mechanism&reference_state=all&limit=20' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
+            "source": "curl -X GET 'https://api.reveal.example.org/v1/accounts?gap_id=dapper%3AKnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk&q=mechanism&scope=workspace&sort=recent&reference_state=all&limit=20' -H 'Accept: application/json'"
+          }
+        ]
+      }
+    },
+    "/v1/leaderboard": {
+      "get": {
+        "operationId": "getLeaderboard",
+        "tags": [
+          "Scientific content"
+        ],
+        "summary": "Rank public community contributions",
+        "description": "All-time contribution rankings computed over the complete currently public frozen population before pagination. Original registered actor attribution uses opaque contributor keys; missing/anonymous/conflicting attribution is uncredited. Exclude fixtures before projection, deduplicate canonical accounts, exclude own ballots from researcher recognition, and retain all canonical votes for account ranking. Researchers sort by overall (default), accounts, votes, gaps or explored; accounts sort only by votes; datasets sort by accounts (default), claims, gaps or researchers. evidence=all|supporting affects datasets only. Positive metric percentiles use midrank, weighted 30/40/30; exact score ties share ranks before display rounding. Invalid supplied credentials are rejected. No private metadata, jobs, requests or voter identities are exposed. Cursors bind the whole current projection and query; publication or vote changes expire them. Responses are private, no-store.",
+        "parameters": [
+          {
+            "name": "view",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "researchers",
+                "accounts",
+                "datasets"
+              ],
+              "default": "researchers"
+            },
+            "example": "researchers",
+            "description": ""
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "overall",
+                "accounts",
+                "votes",
+                "gaps",
+                "explored",
+                "claims",
+                "researchers"
+              ]
+            },
+            "example": "overall",
+            "description": ""
+          },
+          {
+            "name": "evidence",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "all",
+                "supporting"
+              ],
+              "default": "all"
+            },
+            "example": "all",
+            "description": ""
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            },
+            "example": 20,
+            "description": ""
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "example": "opaque-next-page",
+            "description": "Omit for the first page. A returned next_cursor is opaque; the example is illustrative and cannot be used against a live service."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeaderboardList"
+                },
+                "examples": {
+                  "empty_community": {
+                    "summary": "Empty community",
+                    "value": {
+                      "as_of": "2026-09-24T16:00:00Z",
+                      "score_version": "public-contribution-v1",
+                      "cohort_size": 0,
+                      "voting_participants": 0,
+                      "exclusions": {
+                        "fixture_accounts": 0,
+                        "uncredited_accounts": 0,
+                        "conflicting_accounts": 0,
+                        "invalid_public_accounts": 0,
+                        "excluded_evidence_paths": 0,
+                        "fixture_explorations": 0,
+                        "uncredited_explorations": 0
+                      },
+                      "definitions": [
+                        {
+                          "id": "accounts",
+                          "label": "Public scientific accounts",
+                          "description": "Distinct currently public canonical accounts, excluding demo/test fixtures."
+                        }
+                      ],
+                      "methodology": {
+                        "weights": {
+                          "accounts": 0.3,
+                          "votes": 0.4,
+                          "gaps": 0.3
+                        },
+                        "scope": "Currently public frozen snapshots only; all time.",
+                        "score": "Positive metrics use the eligible-cohort midrank percentile; nonpositive metrics receive zero. Weighted 30/40/30. Exact ties share rank.",
+                        "own_votes": "Researcher scores exclude their own ballots. Account scores retain canonical totals.",
+                        "evidence": "Only explicit evidence interpretations targeting the claim proposition qualify; direction counts can overlap."
+                      },
+                      "view": "researchers",
+                      "sort": "overall",
+                      "evidence": "all",
+                      "items": [],
+                      "page": {
+                        "next_cursor": null,
+                        "has_more": false,
+                        "snapshot_id": "illustrative-contract-snapshot"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "description": "Correlation ID for this HTTP request.",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication Required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "authentication_required": {
+                    "summary": "Authentication required",
+                    "value": {
+                      "type": "urn:reveal:problem:authentication-required",
+                      "title": "Authentication Required",
+                      "status": 401,
+                      "code": "AUTHENTICATION_REQUIRED",
+                      "detail": "A valid trusted-gateway API assertion is required.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Version Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "version_conflict": {
+                    "summary": "Version conflict",
+                    "value": {
+                      "type": "urn:reveal:problem:version-conflict",
+                      "title": "Version Conflict",
+                      "status": 409,
+                      "code": "VERSION_CONFLICT",
+                      "detail": "The saved draft has changed. Reload and reconcile before retrying.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false,
+                      "current_version": 3
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid Input",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "invalid_input": {
+                    "summary": "Invalid input",
+                    "value": {
+                      "type": "urn:reveal:problem:invalid-input",
+                      "title": "Invalid Input",
+                      "status": 422,
+                      "code": "INVALID_INPUT",
+                      "detail": "The request does not satisfy the operation contract.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false,
+                      "field_errors": [
+                        {
+                          "pointer": "/inquiry",
+                          "message": "A valid DAPPER inquiry is required."
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate Limited",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "rate_limited": {
+                    "summary": "Rate limited",
+                    "value": {
+                      "type": "urn:reveal:problem:rate-limited",
+                      "title": "Rate Limited",
+                      "status": 429,
+                      "code": "RATE_LIMITED",
+                      "detail": "Retry after the interval in Retry-After.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": true
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "example": 30
+              }
+            }
+          },
+          "503": {
+            "description": "Dependency Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "dependency_unavailable": {
+                    "summary": "Dependency unavailable",
+                    "value": {
+                      "type": "urn:reveal:problem:dependency-unavailable",
+                      "title": "Dependency Unavailable",
+                      "status": 503,
+                      "code": "DEPENDENCY_UNAVAILABLE",
+                      "detail": "A required dependency is temporarily unavailable; no replacement ranking or scientific result was fabricated.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {},
+          {
+            "ApplicationBearer": []
+          }
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "label": "request",
+            "source": "curl -X GET 'https://api.reveal.example.org/v1/leaderboard?view=researchers&sort=overall&evidence=all&limit=20' -H 'Accept: application/json'"
+          }
+        ]
+      }
+    },
+    "/v1/leaderboard/{view}/{entry_id}/records": {
+      "get": {
+        "operationId": "getLeaderboardRecords",
+        "tags": [
+          "Scientific content"
+        ],
+        "summary": "Inspect records contributing to a public ranking",
+        "description": "The exact public eligibility and evidence scope used by leaderboard totals. One record per distinct counted unit; votes return one account record with its signed net contribution. Sum vote values to reproduce the headline; other totals equal record count. entry includes context for direct links. Researchers allow accounts/votes/gaps/explored; accounts allow accounts/votes/claims/gaps/researchers; datasets allow accounts/claims/gaps/researchers/files. Revoked and ineligible entries return the same 404. Public keys and canonical scientific IDs only. All-time contribution rankings computed over the complete currently public frozen population before pagination. Original registered actor attribution uses opaque contributor keys; missing/anonymous/conflicting attribution is uncredited. Exclude fixtures before projection, deduplicate canonical accounts, exclude own ballots from researcher recognition, and retain all canonical votes for account ranking. Researchers sort by overall (default), accounts, votes, gaps or explored; accounts sort only by votes; datasets sort by accounts (default), claims, gaps or researchers. evidence=all|supporting affects datasets only. Positive metric percentiles use midrank, weighted 30/40/30; exact score ties share ranks before display rounding. Invalid supplied credentials are rejected. No private metadata, jobs, requests or voter identities are exposed. Cursors bind the whole current projection and query; publication or vote changes expire them. Responses are private, no-store.",
+        "parameters": [
+          {
+            "name": "view",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/LeaderboardView"
+            },
+            "example": "accounts",
+            "description": ""
+          },
+          {
+            "name": "entry_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
+            "description": ""
+          },
+          {
+            "name": "metric",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "accounts",
+                "votes",
+                "gaps",
+                "explored",
+                "claims",
+                "researchers",
+                "files"
+              ],
+              "default": "accounts"
+            },
+            "example": "votes",
+            "description": ""
+          },
+          {
+            "name": "evidence",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "all",
+                "supporting"
+              ],
+              "default": "all"
+            },
+            "example": "all",
+            "description": ""
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            },
+            "example": 20,
+            "description": ""
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "example": "opaque-next-page",
+            "description": "Omit for the first page. A returned next_cursor is opaque; the example is illustrative and cannot be used against a live service."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeaderboardRecords"
+                },
+                "examples": {
+                  "example_account": {
+                    "summary": "Example account",
+                    "value": {
+                      "as_of": "2026-09-24T16:00:00Z",
+                      "score_version": "public-contribution-v1",
+                      "cohort_size": 0,
+                      "voting_participants": 0,
+                      "exclusions": {
+                        "fixture_accounts": 0,
+                        "uncredited_accounts": 0,
+                        "conflicting_accounts": 0,
+                        "invalid_public_accounts": 0,
+                        "excluded_evidence_paths": 0,
+                        "fixture_explorations": 0,
+                        "uncredited_explorations": 0
+                      },
+                      "definitions": [
+                        {
+                          "id": "accounts",
+                          "label": "Public scientific accounts",
+                          "description": "Distinct currently public canonical accounts, excluding demo/test fixtures."
+                        }
+                      ],
+                      "methodology": {
+                        "weights": {
+                          "accounts": 0.3,
+                          "votes": 0.4,
+                          "gaps": 0.3
+                        },
+                        "scope": "Currently public frozen snapshots only; all time.",
+                        "score": "Positive metrics use the eligible-cohort midrank percentile; nonpositive metrics receive zero. Weighted 30/40/30. Exact ties share rank.",
+                        "own_votes": "Researcher scores exclude their own ballots. Account scores retain canonical totals.",
+                        "evidence": "Only explicit evidence interpretations targeting the claim proposition qualify; direction counts can overlap."
+                      },
+                      "view": "accounts",
+                      "id": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
+                      "metric": "votes",
+                      "evidence": "all",
+                      "entry": {
+                        "id": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
+                        "kind": "account",
+                        "label": "Genes and gene programs in a shared CAD-in-T2D mechanism",
+                        "rank": 1,
+                        "metrics": {
+                          "overall_score": 0,
+                          "net_votes": 0,
+                          "upvotes": 0,
+                          "downvotes": 0,
+                          "voter_count": 0,
+                          "researcher_count": 0,
+                          "account_count": 1,
+                          "account_gap_count": 1,
+                          "explored_gap_count": 1,
+                          "claim_count": 12
+                        },
+                        "components": {
+                          "accounts": 0,
+                          "votes": 0,
+                          "gaps": 0
+                        },
+                        "orcid": null,
+                        "account_id": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
+                        "gap_id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+                        "gap": {
+                          "id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+                          "label": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk"
+                        },
+                        "attribution": null,
+                        "directions": {
+                          "SUPPORTS": 0,
+                          "DISPUTES": 0,
+                          "MIXED": 0,
+                          "NEUTRAL": 0,
+                          "UNKNOWN": 0
+                        }
+                      },
+                      "total": 1,
+                      "items": [
+                        {
+                          "id": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
+                          "kind": "account",
+                          "label": "Genes and gene programs in a shared CAD-in-T2D mechanism",
+                          "url": "/accounts/dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
+                          "account_ids": [
+                            "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd"
+                          ],
+                          "claim_ids": [
+                            "dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km",
+                            "dapper:Claim.Uv7_cT46DdsqZMvk5nh8G48qOIKvhRgc",
+                            "dapper:Claim.I2mf6PJ0DPF5_nnbiBjAhgjlUCOiUZZ9",
+                            "dapper:Claim.Kd3psmdr4G9AlD0UU1E1Vu6AjpKaQYWE",
+                            "dapper:Claim.NBafdtdEE2Uabs-8pZqurv7SoWpg7Yhi",
+                            "dapper:Claim.Oe2UZeV7oMY4NsMHyB8h4HJO1FH4nSGF",
+                            "dapper:Claim.2idJniYU4zCtCN6puy8XZ2mzo9Mq6c5p",
+                            "dapper:Claim.H5icBYm5JLM3_T-b1mMfH65Nc0zMhZzH",
+                            "dapper:Claim.xzV_35EYnLl-zy03YbmhfBk_ynNbl7H9",
+                            "dapper:Claim.SYqCJXxCVXDpwflRSdZnkVLzGLO_vi_r",
+                            "dapper:Claim.x7aCVQ1uTkYKLJo32ZyAGMGZaAGCSvWV",
+                            "dapper:Claim.uzqyfwuhf59hSTdravdcr4cTxuitWGx-"
+                          ],
+                          "evidence_ids": [],
+                          "directions": {
+                            "SUPPORTS": 0,
+                            "DISPUTES": 0,
+                            "MIXED": 0,
+                            "NEUTRAL": 0,
+                            "UNKNOWN": 0
+                          },
+                          "value": 0
+                        }
+                      ],
+                      "page": {
+                        "next_cursor": null,
+                        "has_more": false,
+                        "snapshot_id": "illustrative-contract-snapshot"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "description": "Correlation ID for this HTTP request.",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication Required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "authentication_required": {
+                    "summary": "Authentication required",
+                    "value": {
+                      "type": "urn:reveal:problem:authentication-required",
+                      "title": "Authentication Required",
+                      "status": 401,
+                      "code": "AUTHENTICATION_REQUIRED",
+                      "detail": "A valid trusted-gateway API assertion is required.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "not_found": {
+                    "summary": "Not found",
+                    "value": {
+                      "type": "urn:reveal:problem:not-found",
+                      "title": "Not Found",
+                      "status": 404,
+                      "code": "NOT_FOUND",
+                      "detail": "No accessible record exists for the supplied identifier or exact revision.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Version Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "version_conflict": {
+                    "summary": "Version conflict",
+                    "value": {
+                      "type": "urn:reveal:problem:version-conflict",
+                      "title": "Version Conflict",
+                      "status": 409,
+                      "code": "VERSION_CONFLICT",
+                      "detail": "The saved draft has changed. Reload and reconcile before retrying.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false,
+                      "current_version": 3
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid Input",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "invalid_input": {
+                    "summary": "Invalid input",
+                    "value": {
+                      "type": "urn:reveal:problem:invalid-input",
+                      "title": "Invalid Input",
+                      "status": 422,
+                      "code": "INVALID_INPUT",
+                      "detail": "The request does not satisfy the operation contract.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false,
+                      "field_errors": [
+                        {
+                          "pointer": "/inquiry",
+                          "message": "A valid DAPPER inquiry is required."
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate Limited",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "rate_limited": {
+                    "summary": "Rate limited",
+                    "value": {
+                      "type": "urn:reveal:problem:rate-limited",
+                      "title": "Rate Limited",
+                      "status": 429,
+                      "code": "RATE_LIMITED",
+                      "detail": "Retry after the interval in Retry-After.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": true
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "example": 30
+              }
+            }
+          },
+          "503": {
+            "description": "Dependency Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "dependency_unavailable": {
+                    "summary": "Dependency unavailable",
+                    "value": {
+                      "type": "urn:reveal:problem:dependency-unavailable",
+                      "title": "Dependency Unavailable",
+                      "status": 503,
+                      "code": "DEPENDENCY_UNAVAILABLE",
+                      "detail": "A required dependency is temporarily unavailable; no replacement ranking or scientific result was fabricated.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {},
+          {
+            "ApplicationBearer": []
+          }
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "label": "request",
+            "source": "curl -X GET 'https://api.reveal.example.org/v1/leaderboard/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/records?metric=votes&evidence=all&limit=20' -H 'Accept: application/json'"
           }
         ]
       }
@@ -31953,6 +33996,27 @@
             },
             "uniqueItems": true,
             "maxItems": 2
+          },
+          "research_direction": {
+            "type": "string",
+            "maxLength": 6000
+          },
+          "context": {
+            "type": "string",
+            "maxLength": 20000
+          },
+          "hypotheses": {
+            "type": "string",
+            "maxLength": 12000
+          },
+          "upload_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "uniqueItems": true,
+            "maxItems": 5
           }
         },
         "required": [
@@ -31977,12 +34041,33 @@
             "minLength": 1,
             "maxLength": 120,
             "pattern": "\\S"
+          },
+          "lifecycle": {
+            "type": "string",
+            "enum": [
+              "temporary",
+              "saved"
+            ]
+          },
+          "source_draft_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "source_draft_version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Loaded revision of the originating saved draft. Historical revisions up to the current revision are allowed; omitted means current."
           }
         },
         "required": [
           "composer"
         ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "dependentRequired": {
+          "source_draft_version": [
+            "source_draft_id"
+          ]
+        }
       },
       "DraftPatch": {
         "type": "object",
@@ -31999,6 +34084,12 @@
             "minLength": 1,
             "maxLength": 120,
             "pattern": "\\S"
+          },
+          "lifecycle": {
+            "type": "string",
+            "enum": [
+              "saved"
+            ]
           }
         },
         "required": [
@@ -32039,6 +34130,36 @@
             "minLength": 1,
             "maxLength": 120,
             "pattern": "\\S"
+          },
+          "lifecycle": {
+            "type": "string",
+            "enum": [
+              "temporary",
+              "saved"
+            ]
+          },
+          "source_draft_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "saved_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "source_draft_version": {
+            "type": "integer",
+            "minimum": 1
           }
         },
         "required": [
@@ -32307,6 +34428,17 @@
           "submitted_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "user_inputs": {
+            "$ref": "#/components/schemas/UserInputs"
+          },
+          "originating_saved_draft_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "originating_saved_draft_version": {
+            "type": "integer",
+            "minimum": 1
           },
           "linked_dismech_context": {
             "type": "array",
@@ -33773,6 +35905,9 @@
               "$ref": "#/components/schemas/ArtifactAccess"
             }
           },
+          "fixture_origin": {
+            "$ref": "#/components/schemas/FixtureOrigin"
+          },
           "research_statement": {
             "$ref": "#/components/schemas/ParagraphState"
           },
@@ -34522,6 +36657,341 @@
         ],
         "additionalProperties": false,
         "description": "Exact imported DisMech source observation and DAPPER mapping. Resolve and validate server-side. No client-authored question."
+      },
+      "UploadStorage": {
+        "type": "object",
+        "properties": {
+          "store": {
+            "type": "string",
+            "enum": [
+              "s3",
+              "filesystem"
+            ]
+          },
+          "bucket": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "version_id": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "content_type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "store",
+          "key",
+          "sha256",
+          "size_bytes",
+          "content_type"
+        ],
+        "additionalProperties": false
+      },
+      "UploadExtraction": {
+        "type": "object",
+        "properties": {
+          "storage": {
+            "$ref": "#/components/schemas/UploadStorage"
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "reveal.upload-text/1"
+            ]
+          },
+          "segment_count": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "original_sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        },
+        "required": [
+          "storage",
+          "format",
+          "segment_count",
+          "original_sha256"
+        ],
+        "additionalProperties": false
+      },
+      "Upload": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "draft_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "filename": {
+            "type": "string"
+          },
+          "media_type": {
+            "type": "string"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 8000000
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "ready",
+              "failed",
+              "removed"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "storage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UploadStorage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "extraction": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UploadExtraction"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "draft_id",
+          "filename",
+          "media_type",
+          "size_bytes",
+          "sha256",
+          "status",
+          "created_at",
+          "expires_at",
+          "storage",
+          "extraction",
+          "error"
+        ],
+        "additionalProperties": false
+      },
+      "UploadCreate": {
+        "type": "object",
+        "properties": {
+          "draft_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "filename": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 240
+          },
+          "media_type": {
+            "type": "string",
+            "maxLength": 150
+          },
+          "size_bytes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 8000000
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        },
+        "required": [
+          "draft_id",
+          "filename",
+          "media_type",
+          "size_bytes",
+          "sha256"
+        ],
+        "additionalProperties": false
+      },
+      "UploadTicket": {
+        "type": "object",
+        "properties": {
+          "upload": {
+            "$ref": "#/components/schemas/Upload"
+          },
+          "transfer": {
+            "type": "object",
+            "properties": {
+              "method": {
+                "type": "string",
+                "enum": [
+                  "POST"
+                ]
+              },
+              "url": {
+                "type": "string"
+              },
+              "fields": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "encoding": {
+                "type": "string",
+                "enum": [
+                  "multipart",
+                  "base64"
+                ]
+              }
+            },
+            "required": [
+              "method",
+              "url",
+              "fields",
+              "encoding"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "upload",
+          "transfer"
+        ],
+        "additionalProperties": false
+      },
+      "UploadList": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Upload"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "additionalProperties": false
+      },
+      "UploadContent": {
+        "type": "object",
+        "properties": {
+          "content_base64": {
+            "type": "string",
+            "maxLength": 10666676
+          }
+        },
+        "required": [
+          "content_base64"
+        ],
+        "additionalProperties": false
+      },
+      "UserInputs": {
+        "type": "object",
+        "properties": {
+          "format": {
+            "type": "string",
+            "enum": [
+              "reveal.user-inputs/1"
+            ]
+          },
+          "research_direction": {
+            "type": "string"
+          },
+          "context": {
+            "type": "string"
+          },
+          "hypotheses": {
+            "type": "string"
+          },
+          "uploads": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Upload"
+            },
+            "maxItems": 5
+          }
+        },
+        "required": [
+          "format",
+          "research_direction",
+          "context",
+          "hypotheses",
+          "uploads"
+        ],
+        "additionalProperties": false
+      },
+      "FixtureOrigin": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "canonical_fixture"
+            ]
+          },
+          "fixture_version": {
+            "type": "string"
+          },
+          "content_sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "scientific_acceptance": {
+            "type": "string",
+            "enum": [
+              "not_reviewed"
+            ]
+          }
+        },
+        "required": [
+          "kind",
+          "fixture_version",
+          "content_sha256",
+          "scientific_acceptance"
+        ],
+        "additionalProperties": false
       },
       "GapSourceDetail": {
         "type": "object",
@@ -35485,6 +37955,9 @@
               }
             ]
           },
+          "fixture_origin": {
+            "$ref": "#/components/schemas/FixtureOrigin"
+          },
           "archive": {
             "$ref": "#/components/schemas/ReferenceArchive"
           }
@@ -35516,6 +37989,851 @@
           }
         },
         "required": [
+          "items",
+          "page"
+        ],
+        "additionalProperties": false
+      },
+      "LeaderboardView": {
+        "type": "string",
+        "enum": [
+          "researchers",
+          "accounts",
+          "datasets"
+        ]
+      },
+      "LeaderboardSort": {
+        "type": "string",
+        "enum": [
+          "overall",
+          "accounts",
+          "votes",
+          "gaps",
+          "explored",
+          "claims",
+          "researchers"
+        ]
+      },
+      "LeaderboardMetric": {
+        "type": "string",
+        "enum": [
+          "accounts",
+          "votes",
+          "gaps",
+          "explored",
+          "claims",
+          "researchers",
+          "files"
+        ]
+      },
+      "LeaderboardEvidence": {
+        "type": "string",
+        "enum": [
+          "all",
+          "supporting"
+        ]
+      },
+      "LeaderboardAttribution": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^researcher_[a-f0-9]{64}$"
+          },
+          "label": {
+            "type": "string"
+          },
+          "orcid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "orcid"
+        ],
+        "additionalProperties": false
+      },
+      "LeaderboardDirections": {
+        "type": "object",
+        "properties": {
+          "SUPPORTS": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "DISPUTES": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "MIXED": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "NEUTRAL": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "UNKNOWN": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "SUPPORTS",
+          "DISPUTES",
+          "MIXED",
+          "NEUTRAL",
+          "UNKNOWN"
+        ],
+        "additionalProperties": false
+      },
+      "LeaderboardMetrics": {
+        "type": "object",
+        "properties": {
+          "account_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "upvotes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "downvotes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "voter_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "account_gap_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "explored_gap_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "claim_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "researcher_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "net_votes": {
+            "type": "integer"
+          },
+          "overall_score": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          }
+        },
+        "required": [
+          "account_count",
+          "upvotes",
+          "downvotes",
+          "voter_count",
+          "account_gap_count",
+          "explored_gap_count",
+          "claim_count",
+          "researcher_count",
+          "net_votes",
+          "overall_score"
+        ],
+        "additionalProperties": false
+      },
+      "LeaderboardEntry": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "researcher",
+              "account",
+              "dataset"
+            ]
+          },
+          "label": {
+            "type": "string"
+          },
+          "rank": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "metrics": {
+            "$ref": "#/components/schemas/LeaderboardMetrics"
+          },
+          "components": {
+            "type": "object",
+            "properties": {
+              "accounts": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "votes": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "gaps": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100
+              }
+            },
+            "required": [
+              "accounts",
+              "votes",
+              "gaps"
+            ],
+            "additionalProperties": false
+          },
+          "orcid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "account_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "gap_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "gap": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "label"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "attribution": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LeaderboardAttribution"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "directions": {
+            "$ref": "#/components/schemas/LeaderboardDirections"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "label",
+          "rank",
+          "metrics",
+          "components",
+          "orcid",
+          "account_id",
+          "gap_id",
+          "gap",
+          "attribution",
+          "directions"
+        ],
+        "additionalProperties": false
+      },
+      "LeaderboardMetadata": {
+        "type": "object",
+        "properties": {
+          "as_of": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "score_version": {
+            "type": "string",
+            "enum": [
+              "public-contribution-v1"
+            ]
+          },
+          "cohort_size": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "voting_participants": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "exclusions": {
+            "type": "object",
+            "properties": {
+              "fixture_accounts": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "uncredited_accounts": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "conflicting_accounts": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "invalid_public_accounts": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "excluded_evidence_paths": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "fixture_explorations": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "uncredited_explorations": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "fixture_accounts",
+              "uncredited_accounts",
+              "conflicting_accounts",
+              "invalid_public_accounts",
+              "excluded_evidence_paths",
+              "fixture_explorations",
+              "uncredited_explorations"
+            ],
+            "additionalProperties": false
+          },
+          "definitions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "label",
+                "description"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "methodology": {
+            "type": "object",
+            "properties": {
+              "weights": {
+                "type": "object",
+                "properties": {
+                  "accounts": {
+                    "type": "number"
+                  },
+                  "votes": {
+                    "type": "number"
+                  },
+                  "gaps": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "accounts",
+                  "votes",
+                  "gaps"
+                ],
+                "additionalProperties": false
+              },
+              "scope": {
+                "type": "string"
+              },
+              "score": {
+                "type": "string"
+              },
+              "own_votes": {
+                "type": "string"
+              },
+              "evidence": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "weights",
+              "scope",
+              "score",
+              "own_votes",
+              "evidence"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "as_of",
+          "score_version",
+          "cohort_size",
+          "voting_participants",
+          "exclusions",
+          "definitions",
+          "methodology"
+        ],
+        "additionalProperties": false,
+        "description": "Only public eligibility/exclusion totals. No counts of private work. Observation time is not a cursor revision. Original actors are represented by opaque public keys; no job, request, private email or voter identity is exposed."
+      },
+      "LeaderboardList": {
+        "type": "object",
+        "properties": {
+          "as_of": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "score_version": {
+            "type": "string",
+            "enum": [
+              "public-contribution-v1"
+            ]
+          },
+          "cohort_size": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "voting_participants": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "exclusions": {
+            "type": "object",
+            "properties": {
+              "fixture_accounts": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "uncredited_accounts": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "conflicting_accounts": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "invalid_public_accounts": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "excluded_evidence_paths": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "fixture_explorations": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "uncredited_explorations": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "fixture_accounts",
+              "uncredited_accounts",
+              "conflicting_accounts",
+              "invalid_public_accounts",
+              "excluded_evidence_paths",
+              "fixture_explorations",
+              "uncredited_explorations"
+            ],
+            "additionalProperties": false
+          },
+          "definitions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "label",
+                "description"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "methodology": {
+            "type": "object",
+            "properties": {
+              "weights": {
+                "type": "object",
+                "properties": {
+                  "accounts": {
+                    "type": "number"
+                  },
+                  "votes": {
+                    "type": "number"
+                  },
+                  "gaps": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "accounts",
+                  "votes",
+                  "gaps"
+                ],
+                "additionalProperties": false
+              },
+              "scope": {
+                "type": "string"
+              },
+              "score": {
+                "type": "string"
+              },
+              "own_votes": {
+                "type": "string"
+              },
+              "evidence": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "weights",
+              "scope",
+              "score",
+              "own_votes",
+              "evidence"
+            ],
+            "additionalProperties": false
+          },
+          "view": {
+            "$ref": "#/components/schemas/LeaderboardView"
+          },
+          "sort": {
+            "$ref": "#/components/schemas/LeaderboardSort"
+          },
+          "evidence": {
+            "$ref": "#/components/schemas/LeaderboardEvidence"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LeaderboardEntry"
+            }
+          },
+          "page": {
+            "$ref": "#/components/schemas/Page"
+          }
+        },
+        "required": [
+          "as_of",
+          "score_version",
+          "cohort_size",
+          "voting_participants",
+          "exclusions",
+          "definitions",
+          "methodology",
+          "view",
+          "sort",
+          "evidence",
+          "items",
+          "page"
+        ],
+        "additionalProperties": false
+      },
+      "LeaderboardRecord": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "account",
+              "gap",
+              "claim",
+              "researcher",
+              "file",
+              "exploration"
+            ]
+          },
+          "label": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "account_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "claim_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "directions": {
+            "$ref": "#/components/schemas/LeaderboardDirections"
+          },
+          "value": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "label",
+          "url",
+          "account_ids",
+          "claim_ids",
+          "evidence_ids",
+          "directions",
+          "value"
+        ],
+        "additionalProperties": false,
+        "description": "One distinct counted public unit. For votes, one account record carries its signed net value; summing values reproduces the headline. Other metrics count records. Evidence IDs preserve explicit interpretations, never inferred scientific endorsement."
+      },
+      "LeaderboardRecords": {
+        "type": "object",
+        "properties": {
+          "as_of": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "score_version": {
+            "type": "string",
+            "enum": [
+              "public-contribution-v1"
+            ]
+          },
+          "cohort_size": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "voting_participants": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "exclusions": {
+            "type": "object",
+            "properties": {
+              "fixture_accounts": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "uncredited_accounts": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "conflicting_accounts": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "invalid_public_accounts": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "excluded_evidence_paths": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "fixture_explorations": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "uncredited_explorations": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "fixture_accounts",
+              "uncredited_accounts",
+              "conflicting_accounts",
+              "invalid_public_accounts",
+              "excluded_evidence_paths",
+              "fixture_explorations",
+              "uncredited_explorations"
+            ],
+            "additionalProperties": false
+          },
+          "definitions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "label",
+                "description"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "methodology": {
+            "type": "object",
+            "properties": {
+              "weights": {
+                "type": "object",
+                "properties": {
+                  "accounts": {
+                    "type": "number"
+                  },
+                  "votes": {
+                    "type": "number"
+                  },
+                  "gaps": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "accounts",
+                  "votes",
+                  "gaps"
+                ],
+                "additionalProperties": false
+              },
+              "scope": {
+                "type": "string"
+              },
+              "score": {
+                "type": "string"
+              },
+              "own_votes": {
+                "type": "string"
+              },
+              "evidence": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "weights",
+              "scope",
+              "score",
+              "own_votes",
+              "evidence"
+            ],
+            "additionalProperties": false
+          },
+          "view": {
+            "$ref": "#/components/schemas/LeaderboardView"
+          },
+          "id": {
+            "type": "string"
+          },
+          "metric": {
+            "$ref": "#/components/schemas/LeaderboardMetric"
+          },
+          "evidence": {
+            "$ref": "#/components/schemas/LeaderboardEvidence"
+          },
+          "entry": {
+            "$ref": "#/components/schemas/LeaderboardEntry"
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LeaderboardRecord"
+            }
+          },
+          "page": {
+            "$ref": "#/components/schemas/Page"
+          }
+        },
+        "required": [
+          "as_of",
+          "score_version",
+          "cohort_size",
+          "voting_participants",
+          "exclusions",
+          "definitions",
+          "methodology",
+          "view",
+          "id",
+          "metric",
+          "evidence",
+          "entry",
+          "total",
           "items",
           "page"
         ],
@@ -37780,7 +41098,8 @@
         "enum": [
           "json",
           "yaml",
-          "text"
+          "text",
+          "binary"
         ],
         "title": "EPArtifactFormat",
         "type": "string"
@@ -40245,6 +43564,12 @@
           "format": {
             "$ref": "#/components/schemas/PackageEPArtifactFormat"
           },
+          "media_type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "origin": {
             "anyOf": [
               {
@@ -40259,8 +43584,14 @@
             ]
           },
           "path": {
-            "pattern": "^sources/[0-9a-f]{64}\\.(json|yaml|text)$",
+            "pattern": "^sources/[0-9a-f]{64}\\.(json|yaml|text|binary)$",
             "type": "string"
+          },
+          "private": {
+            "type": [
+              "boolean",
+              "null"
+            ]
           },
           "sha256": {
             "pattern": "^[0-9a-f]{64}$",
@@ -40295,6 +43626,12 @@
           "format": {
             "$ref": "#/components/schemas/PackageEPArtifactFormat"
           },
+          "media_type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "origin": {
             "anyOf": [
               {
@@ -40309,8 +43646,14 @@
             ]
           },
           "path": {
-            "pattern": "^sources/[0-9a-f]{64}\\.(json|yaml|text)$",
+            "pattern": "^sources/[0-9a-f]{64}\\.(json|yaml|text|binary)$",
             "type": "string"
+          },
+          "private": {
+            "type": [
+              "boolean",
+              "null"
+            ]
           },
           "sha256": {
             "pattern": "^[0-9a-f]{64}$",
@@ -40579,6 +43922,40 @@
           "source_ref"
         ],
         "title": "EPTraitObservation",
+        "type": "object"
+      },
+      "PackageEPUserInputs": {
+        "additionalProperties": false,
+        "description": "Private researcher direction and supplied material; hypotheses are not observations.",
+        "properties": {
+          "context": {
+            "type": "string"
+          },
+          "format": {
+            "const": "reveal.user-inputs/1",
+            "type": "string"
+          },
+          "hypotheses": {
+            "type": "string"
+          },
+          "research_direction": {
+            "type": "string"
+          },
+          "uploads": {
+            "items": {
+              "$ref": "#/components/schemas/PackageEPRawObject"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "format",
+          "research_direction",
+          "context",
+          "hypotheses",
+          "uploads"
+        ],
+        "title": "EPUserInputs",
         "type": "object"
       },
       "PackageEdge": {
@@ -40937,6 +44314,16 @@
             },
             "minProperties": 1,
             "type": "object"
+          },
+          "user_inputs": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PackageEPUserInputs"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -44925,6 +48312,16 @@
             },
             "minProperties": 1,
             "type": "object"
+          },
+          "user_inputs": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PackageEPUserInputs"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [

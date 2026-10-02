@@ -23,6 +23,7 @@ from . import publication
 from . import analysis_outcomes
 from . import reference_generation
 from . import votes
+from . import user_inputs
 
 CONTRACT = json.loads((ROOT/'api/openapi.json').read_text())
 GATEWAY = json.loads((ROOT/'schema/gateway.schema.json').read_text())
@@ -53,7 +54,7 @@ async def publication_cache_policy(request: Request, call_next):
     response = await call_next(request)
     path = request.url.path.removeprefix(request.scope.get('root_path', ''))
     if path.startswith(('/v1/accounts', '/v1/claims', '/v1/objects', '/v1/gene-sets',
-            '/v1/paragraphs', '/v1/citations', '/v1/artifacts', '/v1/knowledge-gaps', '/v1/analysis-outcomes')):
+            '/v1/paragraphs', '/v1/citations', '/v1/artifacts', '/v1/knowledge-gaps', '/v1/analysis-outcomes', '/v1/leaderboard')):
         # Visibility is revocable and workspace responses vary by principal.
         response.headers['Cache-Control'] = 'private, no-store'
         vary = [part.strip() for part in response.headers.get('Vary', '').split(',') if part.strip()]
@@ -529,7 +530,8 @@ def get_mechanism(source_id:str,source_revision:str|None=None):
 def list_drafts(request:Request,limit:int=50,cursor:str|None=None):
     with repo.transaction() as tx:
         user=principal(tx,request.headers.get('authorization'))['user_id']
-        return page([dict(r['data'],owner_user_id=user) for r in tx.list('draft',user)],user,limit,cursor,'drafts')
+        user_inputs.cleanup(tx,user)
+        return page([dict(r['data'],owner_user_id=user) for r in tx.list('draft',user) if user_inputs.saved(r['data'])],user,limit,cursor,'drafts')
 
 @app.post('/v1/drafts',status_code=201)
 async def create_draft(request:Request):
@@ -538,6 +540,16 @@ async def create_draft(request:Request):
         user=principal(tx,request.headers.get('authorization'))['user_id']
         def create():
             draft={'id':uid(),'owner_user_id':user,'version':1,'composer':body['composer'],'created_at':now(),'updated_at':now()}
+            lifecycle=body.get('lifecycle','saved')
+            draft.update(lifecycle=lifecycle,expires_at=user_inputs.expiration() if lifecycle=='temporary' else None)
+            if body.get('source_draft_id'):
+                source=user_inputs.available(owned(tx,'draft',body['source_draft_id'],user)['data'])
+                if not user_inputs.saved(source): raise Problem(422,'SOURCE_DRAFT_NOT_SAVED','Only a saved draft can supply editor lineage.')
+                source_version=body.get('source_draft_version',source['version'])
+                if source_version>source['version']:
+                    raise Problem(409,'SOURCE_DRAFT_VERSION_CONFLICT','The supplied source draft revision does not exist.',current_version=source['version'])
+                draft.update(source_draft_id=source['id'],source_draft_version=source_version)
+            user_inputs.resolve(tx,user,body['composer'])
             if 'name' in body: draft['name']=body['name'].strip()
             freeze_draft_bindings(tx,draft['id'],user,body['composer'])
             tx.put('draft',draft['id'],user,draft); return draft
@@ -547,7 +559,7 @@ async def create_draft(request:Request):
 def get_draft(draft_id:str,request:Request):
     with repo.transaction() as tx:
         user=principal(tx,request.headers.get('authorization'))['user_id']; row=owned(tx,'draft',draft_id,user)
-        return dict(row['data'],owner_user_id=user)
+        return dict(user_inputs.available(row['data']),owner_user_id=user)
 
 @app.patch('/v1/drafts/{draft_id}')
 async def patch_draft(draft_id:str,request:Request):
@@ -556,12 +568,17 @@ async def patch_draft(draft_id:str,request:Request):
     with repo.transaction() as tx:
         user=principal(tx,request.headers.get('authorization'))['user_id']
         def update():
-            row=owned(tx,'draft',draft_id,user); draft=row['data']
+            row=owned(tx,'draft',draft_id,user); draft=user_inputs.available(row['data'])
             if draft['version']!=body['expected_version']: raise Problem(409,'VERSION_CONFLICT','This draft changed in another tab.',current_version=draft['version'])
             if 'composer' in body:
+                user_inputs.resolve(tx,user,body['composer'])
                 freeze_draft_bindings(tx,draft_id,user,body['composer'])
                 draft['composer']=body['composer']
             if 'name' in body: draft['name']=body['name'].strip()
+            if body.get('lifecycle')=='saved':
+                if not draft.get('name'): raise Problem(422,'DRAFT_NAME_REQUIRED','Name the draft before saving it.')
+                draft.update(lifecycle='saved',expires_at=None,saved_at=now())
+            elif not user_inputs.saved(draft): draft['expires_at']=user_inputs.expiration()
             draft.update(version=draft['version']+1,updated_at=now(),owner_user_id=user)
             tx.put('draft',draft_id,user,draft,expected=row['version']); return draft
         return idempotent(tx,user,'draft:'+draft_id,request.headers.get('idempotency-key'),body,update)
@@ -574,12 +591,9 @@ async def delete_draft(draft_id:str,request:Request):
         def remove():
             draft=owned(tx,'draft',draft_id,user)['data']
             if draft['version']!=body['expected_version']: raise Problem(409,'VERSION_CONFLICT','This draft changed in another tab. Refresh before deleting it.',current_version=draft['version'])
-            requests={r['id'] for r in tx.list('request',user) if r['data']['source_draft_id']==draft_id}
-            if any(r['data']['kind']=='analysis' and r['data'].get('research_request_id') in requests and r['data']['status'] not in jobs.TERMINAL for r in tx.list('job',user)):
-                raise Problem(409,'DRAFT_IN_USE','This draft has active research. Wait for it to finish or stop the run before deleting the draft.')
             tx.remove('draft',draft_id); tx.remove('draft_binding',draft_id)
             # Editable state may be removed; submitted evidence and results remain immutable.
-            remaining=[r['data'] for r in tx.list('draft',user)]
+            remaining=[r['data'] for r in tx.list('draft',user) if user_inputs.saved(r['data'])]
             remaining.sort(key=lambda d:(d['updated_at'],d['id']),reverse=True)
             for row in tx.list('exploration',user):
                 exploration=row['data']
@@ -589,6 +603,75 @@ async def delete_draft(draft_id:str,request:Request):
                 tx.put('exploration',row['id'],user,exploration,expected=row['version'])
             return {'id':draft_id,'deleted':True}
         return idempotent(tx,user,'delete-draft:'+draft_id,request.headers.get('idempotency-key'),body,remove)
+
+@app.post('/v1/uploads',status_code=201)
+async def initiate_upload(request:Request):
+    body=await request.json(); validate(body,'UploadCreate')
+    with repo.transaction() as tx:
+        user=principal(tx,request.headers.get('authorization'))['user_id']
+        result=idempotent(tx,user,'uploads',request.headers.get('idempotency-key'),body,lambda:user_inputs.initiate(tx,user,body))
+        current=owned(tx,'upload',result['upload']['id'],user)['data']
+        return {'upload':user_inputs.public_upload(current),'transfer':user_inputs.transfer(current)}
+
+@app.get('/v1/uploads')
+def list_uploads(request:Request,draft_id:str):
+    with repo.read_transaction() as tx:
+        user=principal(tx,request.headers.get('authorization'))['user_id']; owned(tx,'draft',draft_id,user)
+        return {'items':[user_inputs.public_upload(row['data']) for row in tx.list('upload',user)
+            if row['data']['draft_id']==draft_id and row['data']['status']!='removed']}
+
+@app.get('/v1/uploads/{upload_id}')
+def get_upload(upload_id:str,request:Request):
+    with repo.read_transaction() as tx:
+        user=principal(tx,request.headers.get('authorization'))['user_id']
+        return user_inputs.public_upload(owned(tx,'upload',upload_id,user)['data'])
+
+@app.post('/v1/uploads/{upload_id}/content')
+async def upload_content(upload_id:str,request:Request):
+    if user_inputs.s3_enabled(): raise Problem(404,'NOT_FOUND','Local upload transport is disabled.')
+    raw=bytearray()
+    async for part in request.stream():
+        raw.extend(part)
+        if len(raw)>user_inputs.MAX_FILE_BYTES*4//3+100: raise Problem(413,'UPLOAD_TOO_LARGE','Upload exceeds 8 MB.')
+    try: body=json.loads(raw)
+    except ValueError: raise Problem(422,'INVALID_UPLOAD','Invalid upload body.') from None
+    with repo.transaction() as tx:
+        user=principal(tx,request.headers.get('authorization'))['user_id']
+        return user_inputs.stage_local(tx,user,upload_id,body.get('content_base64'))
+
+@app.post('/v1/uploads/{upload_id}/complete')
+async def complete_upload(upload_id:str,request:Request):
+    with repo.read_transaction() as tx:
+        user=principal(tx,request.headers.get('authorization'))['user_id']
+        before=owned(tx,'upload',upload_id,user); value=before['data']
+    failure=None
+    try: completed=await asyncio.to_thread(user_inputs.complete,value)
+    except Problem as error:
+        failure=error; completed={**value,'status':'failed','error':error.detail}
+    with repo.transaction() as tx:
+        row=owned(tx,'upload',upload_id,user)
+        if row['data']['status']=='ready': return user_inputs.public_upload(row['data'])
+        if row['version']!=before['version']: raise Problem(409,'UPLOAD_CHANGED','The upload changed while processing.')
+        tx.put('upload',upload_id,user,completed,expected=before['version'])
+    if failure: raise failure
+    return user_inputs.public_upload(completed)
+
+@app.delete('/v1/uploads/{upload_id}')
+def remove_upload(upload_id:str,request:Request):
+    with repo.transaction() as tx:
+        user=principal(tx,request.headers.get('authorization'))['user_id']; row=owned(tx,'upload',upload_id,user)
+        if user_inputs.referenced(tx,upload_id): raise Problem(409,'UPLOAD_IN_USE','Remove the attachment from saved inputs first. Submitted inputs are retained.')
+        value={**row['data'],'status':'removed'}; tx.put('upload',upload_id,user,value)
+        return user_inputs.public_upload(value)
+
+@app.get('/v1/uploads/{upload_id}/download')
+async def download_upload(upload_id:str,request:Request):
+    with repo.read_transaction() as tx:
+        user=principal(tx,request.headers.get('authorization'))['user_id']; value=owned(tx,'upload',upload_id,user)['data']
+        if value['status']!='ready': raise Problem(404,'NOT_FOUND','Upload is unavailable.')
+    data=await asyncio.to_thread(user_inputs.read,value['storage'])
+    return Response(data,media_type=value['media_type'],headers={'Content-Disposition':"attachment; filename*=UTF-8''"+quote(value['filename'],safe=''),
+        'X-Content-Type-Options':'nosniff','Cache-Control':'private, no-store'})
 
 @app.get('/v1/research-requests')
 def list_requests(request:Request,limit:int=50,cursor:str|None=None):
@@ -638,7 +721,7 @@ def create_job_transaction(body,authorization,idempotency_key):
                 account=owned(tx,'account',body['account_id'],user)
                 return jobs.enqueue(tx,user,'paragraph',account_id=body['account_id'],inputs=body)
             reload_gate(tx)
-            draft=owned(tx,'draft',body['draft_id'],user)['data']
+            draft=user_inputs.available(owned(tx,'draft',body['draft_id'],user)['data'])
             if draft['version']!=body['draft_version']: raise Problem(409,'VERSION_CONFLICT','Save the current draft before submitting.',current_version=draft['version'])
             composer=draft['composer']
             if not composer['source_gap'] or not composer['eaggl_anchors']: raise Problem(422,'ANCHOR_REQUIRED','Select a source question and at least one mechanism anchor.')
@@ -650,7 +733,9 @@ def create_job_transaction(body,authorization,idempotency_key):
             document={'knowledge_gaps':[gap['object']], 'mechanisms':[saved['selections'][s['reference']['source_id']]['record']['object'] for s in composer['eaggl_anchors']]}
             frozen={'id':uid(),'owner_user_id':user,'source_draft_id':draft['id'],'source_draft_version':draft['version'],'composer':composer,'question_id':gap['object']['id'],
                 'document':document,'attribution':{'user_id':user,'person_id':None,'display_name':identity['display_name'],'orcid':identity['orcid'],'orcid_authenticated':identity['orcid_authenticated'],'observed_at':now(),'principal_kind':identity['principal_kind']},
-                'submitted_at':now(),'linked_dismech_context':contexts}
+                'submitted_at':now(),'linked_dismech_context':contexts,'user_inputs':user_inputs.resolve(tx,user,composer)}
+            if draft.get('source_draft_id'):
+                frozen.update(originating_saved_draft_id=draft['source_draft_id'],originating_saved_draft_version=draft['source_draft_version'])
             tx.put('request',frozen['id'],user,frozen)
             request_binding={'dismech_import_id':saved['dismech_import_id'],'source_gap':gap,
                 'anchors':[saved['selections'][s['reference']['source_id']]['binding'] for s in composer['eaggl_anchors']],
@@ -746,14 +831,51 @@ async def record_exploration(request:Request):
     return await asyncio.to_thread(record)
 
 @app.get('/v1/accounts')
-def accounts(request:Request,limit:int=20,cursor:str|None=None,gap_id:str|None=None,q:str=Query('',max_length=200),reference_state:str='all'):
+def accounts(request:Request,limit:int=20,cursor:str|None=None,gap_id:str|None=None,q:str=Query('',max_length=200),scope:str='workspace',sort:str='recent',reference_state:str='all'):
     from .workspace_search import normalize, filter_summaries
+    if scope not in ('public','workspace'): raise Problem(422,'INVALID_QUERY','Choose public or workspace discovery.')
+    if sort not in ('recent','votes'): raise Problem(422,'INVALID_QUERY','Choose recent or votes sorting.')
     query=normalize(q)
     with repo.read_transaction() as tx:
-        user=principal(tx,request.headers.get('authorization'))['user_id']
-        items=by_reference_state([item for item in visible_accounts(tx,user,attribution=True) if not gap_id or item['account']['question']==gap_id],reference_state)
-        items=votes.account_summaries(tx,items,votes.viewer(tx,request.headers.get('authorization')))
-        return page(filter_summaries(items,query,'account'),user,limit,cursor,listing_scope(['accounts',gap_id,query],reference_state))
+        user=optional_identity(tx,request)
+        if scope=='workspace' and user is None: raise Problem(401,'SESSION_EXPIRED','Continue with a registered or anonymous session to browse your workspace.')
+        items=publication.public_accounts(tx) if scope=='public' else visible_accounts(tx,user,attribution=True)
+        items=filter_summaries([item for item in items if not gap_id or item['account']['question']==gap_id],query,'account')
+        viewer=votes.viewer(tx,request.headers.get('authorization'))
+        items=votes.account_summaries(tx,items,viewer)
+        # Keep workspace ordering unchanged; public recency is the actual
+        # publication date, with deterministic identity ties across pages.
+        items.sort(key=lambda item:item['account']['id'])
+        items.sort(key=lambda item:(item['publication'].get('published_at') or item['created_at']) if scope=='public' else item['created_at'],reverse=True)
+        if sort=='votes': items.sort(key=lambda item:(item.get('votes') or {}).get('score',0),reverse=True)
+        # Current work leads the default combined list; each reference group
+        # retains the requested vote/recency ordering, before pagination.
+        items=by_reference_state(items,reference_state)
+        return page(items,(viewer or '') if scope=='public' else user,limit,cursor,listing_scope(['accounts',gap_id,query,scope,sort],reference_state))
+
+@app.get('/v1/leaderboard')
+def community_leaderboard(request:Request,view:str='researchers',sort:str|None=None,evidence:str='all',limit:int=20,cursor:str|None=None):
+    from . import leaderboard
+    sort=leaderboard.options(view,sort,evidence)
+    if view!='datasets': evidence='all'
+    with repo.read_transaction() as tx:
+        optional_identity(tx,request)  # Invalid supplied credentials never downgrade to public.
+        projection=leaderboard.build(tx,evidence)
+    items=leaderboard.ranking(projection,view,sort)
+    result=page(items,limit=limit,cursor=cursor,scope=digest(['leaderboard',view,sort,evidence]),snapshot_items=projection['revision'])
+    return {**result,**projection['metadata'],'view':view,'sort':sort,'evidence':evidence}
+
+@app.get('/v1/leaderboard/{view}/{entry_id}/records')
+def leaderboard_records(view:str,entry_id:str,request:Request,metric:str='accounts',evidence:str='all',limit:int=20,cursor:str|None=None):
+    from . import leaderboard
+    leaderboard.options(view,evidence=evidence,metric=metric)
+    if view!='datasets': evidence='all'
+    with repo.read_transaction() as tx:
+        optional_identity(tx,request)
+        projection=leaderboard.build(tx,evidence)
+    entry,items=leaderboard.details(projection,view,entry_id,metric)
+    result=page(items,limit=limit,cursor=cursor,scope=digest(['leaderboard-records',view,entry_id,metric,evidence]),snapshot_items=projection['revision'])
+    return {**result,**projection['metadata'],'view':view,'id':entry_id,'metric':metric,'evidence':evidence,'entry':entry,'total':len(items)}
 
 @app.get('/v1/accounts/{dapper_id}/publication')
 def account_publication(dapper_id:str,request:Request):
@@ -879,6 +1001,7 @@ def scientific(identity,request,kind='object'):
             return encoded+'.'+hmac.new(secret,encoded.encode(),hashlib.sha256).hexdigest()
         clipped=object_envelope(document,identity,metadata,artifacts,max_depth=depth,max_nodes=maximum,offset=offset,continuation=continuation)
         if 'research_statement' in result: clipped['research_statement']=result['research_statement']
+        if 'fixture_origin' in result: clipped['fixture_origin']=result['fixture_origin']
         if kind=='account': clipped['publication']=publication.state(tx,public['owner'] if public else user,identity,
             can_manage=public is None,record=public if public else publication_record,account_result=result)
         if archive: clipped['archive']=archive

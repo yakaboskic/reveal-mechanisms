@@ -3,13 +3,13 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, messageOf, type Schema } from "@/lib/client";
-import { currentAnalysisComposer, selectedGap } from "@/lib/composer";
+import { archivedResearchInputs, currentAnalysisComposer, selectedGap, type CopiedResearchInputs } from "@/lib/composer";
 import { archivedDate, isArchived, outdatedFromAnchor, referenceFactorHref, referenceReloaded, referenceStateLabels, referenceStates, type ArchivedAnchor, type ArchivedFactor, type ReferenceArchive, type ReferenceState } from "@/lib/reference";
 import { useIdentity } from "./Session";
 import { LoadingStatus } from "./LoadingSurface";
 import "./reference-archive.css";
 
-type CopiedSettings = Partial<Pick<Schema<"Composer">, "selected_kgs" | "mechanism_subquery">>;
+type CopiedSettings = CopiedResearchInputs;
 export const newAnalysisLabel = "Start a new analysis on this gap with current factors";
 
 /** "Outdated reference" marker for work built on a superseded EAGGL reference generation. */
@@ -61,7 +61,7 @@ function ArchivedFactorDetails({ anchor }: { anchor: ArchivedAnchor }) {
 }
 
 /**
- * Creates a draft with the gap, inquiry and knowledge graphs copied and no
+ * Opens a temporary draft with the gap, inquiry, documents and knowledge graphs copied and no
  * anchors, then opens it so the composer suggests current factors. Visitors
  * without a session open the gap instead, which suggests anchors in the browser.
  */
@@ -74,13 +74,13 @@ export function StartCurrentAnalysis({ gapId, settings }: { gapId: string; setti
     if (!me) { router.push(`/?gap=${encodeURIComponent(gapId)}`); return; }
     setBusy(true); setError("");
     try {
-      const [gap, copied] = await Promise.all([api.gap(gapId), settings ? settings().catch(() => ({})) : Promise.resolve({})]);
+      const [gap, copied] = await Promise.all([api.gap(gapId), settings ? settings() : Promise.resolve({})]);
       const composer = currentAnalysisComposer(selectedGap(gap), copied);
       const binding = JSON.stringify({ user: me.user_id, composer });
       if (pending.current?.binding !== binding) pending.current = { binding, key: crypto.randomUUID() };
-      const draft = await api.createDraft(composer, pending.current.key, "New analysis with current factors");
+      const draft = await api.createWorkingDraft(composer, pending.current.key);
       pending.current = null;
-      router.push(`/?draft=${encodeURIComponent(draft.id)}&suggest=current`);
+      router.push(`/drafts/${encodeURIComponent(draft.id)}?suggest=current`);
     } catch (failure) { setError(messageOf(failure)); }
     finally { setBusy(false); }
   };
@@ -104,12 +104,7 @@ export function ReferenceArchiveBanner({ archive, subject, gapId, settings, anch
   </section>;
 }
 
-/** Copies the frozen request's inquiry and knowledge graphs for the owner; others keep defaults. */
+/** Copies the frozen request's inputs for its owner; public readers keep defaults. */
 export const requestSettings = (archive: ReferenceArchive, fallback: CopiedSettings = {}) => async (): Promise<CopiedSettings> => {
-  const requestId = archive.analysis.request_id;
-  if (!requestId) return fallback;
-  try {
-    const request = await api.request(requestId);
-    return { selected_kgs: fallback.selected_kgs || request.composer.selected_kgs, mechanism_subquery: request.composer.mechanism_subquery };
-  } catch { return fallback; } // Public readers cannot read another owner's request.
+  return archivedResearchInputs(archive.analysis.request_id, api.request, fallback);
 };

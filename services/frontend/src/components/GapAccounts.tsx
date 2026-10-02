@@ -83,7 +83,7 @@ function AccountList({ gap, scope, reference, filter, onCount, onArchived }: {
     {filter}
     {!visible && busy && <LoadingSurface compact title="Loading scientific accounts" description="Finding proposed answers for this knowledge gap." rows={2} />}
     {visible?.items.map(item => {
-      const href = `/accounts/${encodeURIComponent(item.account.id)}?view=conclusions`;
+      const href = `/accounts/${encodeURIComponent(item.account.id)}`;
       const date = dateLabel(item.created_at);
       return <article className={`gap-account-card${item.votes ? " has-votes" : ""}`} key={item.account.id}>
         {item.votes && <div className="gap-account-votes"><VoteControls key={`${binding}\0${item.account.id}`} compact vertical kind="account" id={item.account.id} initial={item.votes}

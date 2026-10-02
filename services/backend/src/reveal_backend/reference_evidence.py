@@ -1,9 +1,10 @@
-"""Collect a gap and KPN reference factors into frozen builder inputs from MySQL (no network).
+"""Collect a gap and KPN factors from MySQL without CFDE/BioIndex requests.
 
 The evidence source for model eaggl-capped-v1 (docs/reference-reload.md §8). It produces the
 same build input as evidence_collector.collect_package, so the unchanged offline builder
 (evidence_package.build_package) and the worker's checks accept it. DisMech gap, attachment
-and document handling is identical to collect_package. The CFDE interactive API and BioIndex
+and document handling is identical to collect_package. Frozen researcher text and uploads are
+captured privately with the same immutable storage references and checksums. The CFDE interactive API and BioIndex
 captures are replaced by captures read from one reference generation in MySQL. Every capture
 goes through the same CaptureStore (exact bytes, sha256) with a string `origin` naming its SQL
 tables and the generation: `mysql:<table>+<table>?generation_id=<gen>` for SQL results and
@@ -81,6 +82,7 @@ HGNC.SYMBOL as the default; only prefixes the included objects use join the pack
 """
 from __future__ import annotations
 
+from copy import deepcopy
 import json
 import math
 from pathlib import Path
@@ -689,7 +691,7 @@ def _gene_set_objects(evidence, base_prefixes):
 
 def collect_reference_package(*, gap_id, factor_ids, output, dapper, project_root, dismech_source, dismech_index,
                               generation_id, connection_factory, selected_graphs=('biomarkerkg', 'prokn'), max_accounts=3,
-                              selection_metadata=None, limit=100, max_nodes=250, max_edges=1000):
+                              selection_metadata=None, limit=100, max_nodes=250, max_edges=1000, user_inputs=None):
     """Resolve a gap and KPN factor public ids, freeze MySQL reference evidence, then build.
 
     Returns the builder's BuiltPackage, like collect_package (`.package`, `.write(path)`).
@@ -744,6 +746,18 @@ def collect_reference_package(*, gap_id, factor_ids, output, dapper, project_roo
         store.add('assembly-builder-source', builder_bytes, 'text', filename='evidence_package.py')
         store.add('collector-source', Path(__file__).read_bytes(), 'text', filename='reference_evidence.py')
         context['mechanisms'] += [evidence.mechanism_nodes[identity] for identity in factor_ids]
+        supplied = None
+        if user_inputs is not None:
+            from .user_inputs import read
+            supplied = deepcopy(user_inputs)
+            # Capture once, before byte-budget retries. Storage references and exact
+            # upload bytes stay frozen; the source artifacts remain private.
+            for upload in supplied['uploads']:
+                original = read(upload['storage']); extracted = read(upload['extraction']['storage'])
+                key = 'user-upload-' + upload['id']
+                store.add(key, original, 'binary', filename=upload['filename'], media_type=upload['media_type'], private=True)
+                store.add(key + '-text', extracted, 'json', filename=upload['id'] + '-text.json', private=True)
+                upload.update(original_artifact_id=key, extraction_artifact_id=key + '-text', content=decode(extracted))
 
         def build_spec(retained):
             document, package_prefixes, bindings = {key: list(value) for key, value in context.items()}, dict(prefixes), {}
@@ -765,6 +779,7 @@ def collect_reference_package(*, gap_id, factor_ids, output, dapper, project_roo
                                   'dismissed_eaggl_ids': (selection_metadata or {}).get('dismissed_eaggl_ids', []),
                                   'semantic_retrieval': (selection_metadata or {}).get('semantic_retrieval', {'status': 'not_computed', 'embedding_run_id': None}),
                                   'expansion_policy': {'rounds': 1, 'reducer': 'mean', 'connection_scope': 'direct', 'context': ''}},
+                    **({'user_inputs': supplied} if supplied is not None else {}),
                     'dismech': dismech, 'mechanisms': evidence.mechanisms, 'gene_sets': bindings, 'dapper_context': document,
                     'captures': {'connections': {target: {'status': 'captured', 'artifact_id': evidence.connections[target]} for target in TARGETS},
                                  'contextual': {'status': 'captured', 'artifact_id': contextual_id}, 'bioindex': evidence.bioindex},

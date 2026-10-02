@@ -52,6 +52,9 @@ KIND_ACTIONS: dict[str, str] = {
         'analysis_outcome_by_job', 'scientific_document', 'object', 'object_document', 'object_observation', 'paragraph',
         'citation', 'citation_rendering', 'grant', 'exploration', 'outbox', 'notification_outbox', 'idempotency',
         'workspace_event', 'workspace_cursor',
+        # Private upload metadata and immutable fixture receipts are independent
+        # of the reference generation; frozen requests retain their input refs.
+        'upload', 'fixture_seed',
         # Identities.
         'principal', 'identity', 'transfer', 'citation_actor',
         # Community ballots and their public tallies (votes.py), keyed by gap or published account id and never

@@ -136,6 +136,7 @@ Built by `reference_generation.build_stamp`:
 | `request` (kind analysis) | ARCHIVE | `archive` |
 | `draft` with ≥1 EAGGL anchor, and its `draft_binding` | DROP, after backfilling `request_binding.anchor_display` from it | — |
 | drafts with only a gap | KEEP | — |
+| `upload`, `fixture_seed` | KEEP untouched | Private attachment metadata and immutable fixture seed receipts are independent of reference generations. Frozen requests retain their input artifact references even when the originating draft is dropped. |
 | `request_binding`, `evidence`, `artifact`, terminal `job`, `queue`, `attempt`, `execution`, `dispatch`, `event`, `remote_event`, `analysis_outcome_by_job`, `scientific_document`, `object*`, `paragraph`, `citation*`, `grant`, `exploration`, `outbox`, `notification_outbox`, `idempotency`, `workspace_event`, `workspace_cursor`, `vote` and `vote_total` (community ballots and tallies, keyed by gap or account id), identity and infrastructure kinds | KEEP untouched | — |
 | non-terminal analysis `job` with no `dispatch_input` | CANCEL (`jobs.cancel`) | late finishers are stamped at creation |
 | `suggestion`, old `vector_snapshot`/`vector_batch` | DROP at `purge-retired` | — |

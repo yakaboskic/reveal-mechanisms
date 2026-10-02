@@ -98,6 +98,38 @@ def schemas(b):
         description='Exact imported DisMech source observation and DAPPER mapping. Resolve and validate server-side. No client-authored question.'))
     props=S['Composer']['properties'];props.pop('inquiry');props.pop('dismech_context');props['source_gap']=null(ref('SelectedGap'))
     S['Composer']['required']=list(props)
+    props.update(research_direction=string(maxLength=6000),context=string(maxLength=20000),
+        hypotheses=string(maxLength=12000),upload_ids=array(uuid,uniqueItems=True,maxItems=5))
+    for kind in ('Draft','DraftCreate'):
+        S[kind]['properties']['lifecycle']=enum('temporary','saved')
+        S[kind]['properties']['source_draft_id']=uuid
+    S['Draft']['properties'].update(expires_at=null(time),saved_at=time,source_draft_version={'type':'integer','minimum':1})
+    S['DraftCreate']['properties']['source_draft_version']={'type':'integer','minimum':1,
+        'description':'Loaded revision of the originating saved draft. Historical revisions up to the current revision are allowed; omitted means current.'}
+    S['DraftCreate']['dependentRequired']={'source_draft_version':['source_draft_id']}
+    S['DraftPatch']['properties']['lifecycle']=enum('saved')
+    b.add('UploadStorage',obj({'store':enum('s3','filesystem'),'bucket':string(),'key':string(),'version_id':string(),
+        'sha256':digest,'size_bytes':{'type':'integer','minimum':0},'content_type':string()},
+        ['store','key','sha256','size_bytes','content_type']))
+    b.add('UploadExtraction',obj({'storage':ref('UploadStorage'),'format':enum('reveal.upload-text/1'),
+        'segment_count':{'type':'integer','minimum':1},'original_sha256':digest}))
+    b.add('Upload',obj({'id':uuid,'draft_id':uuid,'filename':string(),'media_type':string(),
+        'size_bytes':{'type':'integer','minimum':1,'maximum':8000000},'sha256':digest,
+        'status':enum('pending','ready','failed','removed'),'created_at':time,'expires_at':time,
+        'storage':null(ref('UploadStorage')),'extraction':null(ref('UploadExtraction')),'error':null(string())}))
+    b.add('UploadCreate',obj({'draft_id':uuid,'filename':string(minLength=1,maxLength=240),
+        'media_type':string(maxLength=150),'size_bytes':{'type':'integer','minimum':1,'maximum':8000000},'sha256':digest}))
+    b.add('UploadTicket',obj({'upload':ref('Upload'),'transfer':obj({'method':enum('POST'),'url':string(),
+        'fields':{'type':'object','additionalProperties':{'type':'string'}},'encoding':enum('multipart','base64')})}))
+    b.add('UploadList',obj({'items':array(ref('Upload'))}))
+    b.add('UploadContent',obj({'content_base64':string(maxLength=10666676)}))
+    b.add('UserInputs',obj({'format':enum('reveal.user-inputs/1'),'research_direction':string(),'context':string(),
+        'hypotheses':string(),'uploads':array(ref('Upload'),maxItems=5)}))
+    b.add('FixtureOrigin',obj({'kind':enum('canonical_fixture'),'fixture_version':string(),'content_sha256':digest,
+        'scientific_acceptance':enum('not_reviewed')}))
+    S['AccountResult']['properties']['fixture_origin']=ref('FixtureOrigin')
+    S['ResearchRequest']['properties'].update(user_inputs=ref('UserInputs'),originating_saved_draft_id=uuid,
+        originating_saved_draft_version={'type':'integer','minimum':1})
     S['Composer']['description']='Mutable source selection and EAGGL anchors. An empty draft may have null source_gap/zero anchors. Analysis requires an exact source-selected DisMech gap and at least one current-model EAGGL anchor. Linked DisMech context is server-owned, not editable input.'
     for k in ['inquiry','dismech_context']: S['SuggestInput']['properties'].pop(k)
     S['SuggestInput']['properties']['source_gap']=ref('SelectedGap');S['SuggestInput']['required']=list(S['SuggestInput']['properties'])
@@ -181,8 +213,42 @@ def schemas(b):
         'claim_count':{'type':'integer','minimum':1},'created_at':time,'job_id':null(uuid),'research_statement':ref('ParagraphState'),
         'publication':ref('PublicationState'),'votes':null(ref('VoteState'))}))
     S['AccountSummary']['properties']['attribution']=null(ref('AttributionSnapshot'))
+    S['AccountSummary']['properties']['fixture_origin']=ref('FixtureOrigin')
     S['AccountSummary']['description']='One accessible accepted scientific account, deduplicated by its DAPPER identity. Publication reports the current owner publication state; public discovery uses can_manage=false. Optional attribution is the immutable original request actor, not the current workspace owner; null denotes unavailable historical attribution. Title and brief synthesis are account.name and account.closing_remarks.'
     b.add('AccountList',obj({'items':array(ref('AccountSummary')),'page':ref('Page')}))
+    count={'type':'integer','minimum':0}
+    b.add('LeaderboardView',enum('researchers','accounts','datasets'))
+    b.add('LeaderboardSort',enum('overall','accounts','votes','gaps','explored','claims','researchers'))
+    b.add('LeaderboardMetric',enum('accounts','votes','gaps','explored','claims','researchers','files'))
+    b.add('LeaderboardEvidence',enum('all','supporting'))
+    b.add('LeaderboardAttribution',obj({'id':string(pattern='^researcher_[a-f0-9]{64}$'),'label':string(),'orcid':null(string())}))
+    b.add('LeaderboardDirections',obj({key:count for key in ('SUPPORTS','DISPUTES','MIXED','NEUTRAL','UNKNOWN')}))
+    b.add('LeaderboardMetrics',obj({**{key:count for key in ('account_count','upvotes','downvotes','voter_count',
+        'account_gap_count','explored_gap_count','claim_count','researcher_count')},'net_votes':{'type':'integer'},
+        'overall_score':{'type':'number','minimum':0,'maximum':100}}))
+    b.add('LeaderboardEntry',obj({'id':string(),'kind':enum('researcher','account','dataset'),'label':string(),
+        'rank':{'type':'integer','minimum':1},'metrics':ref('LeaderboardMetrics'),
+        'components':obj({key:{'type':'number','minimum':0,'maximum':100} for key in ('accounts','votes','gaps')}),
+        'orcid':null(string()),'account_id':null(string()),'gap_id':null(string()),
+        'gap':null(obj({'id':string(),'label':string()})),'attribution':null(ref('LeaderboardAttribution')),
+        'directions':ref('LeaderboardDirections')}))
+    b.add('LeaderboardMetadata',obj({'as_of':time,'score_version':enum('public-contribution-v1'),
+        'cohort_size':count,'voting_participants':count,'exclusions':obj({key:count for key in
+            ('fixture_accounts','uncredited_accounts','conflicting_accounts','invalid_public_accounts','excluded_evidence_paths','fixture_explorations','uncredited_explorations')}),
+        'definitions':array(obj({'id':string(),'label':string(),'description':string()})),
+        'methodology':obj({'weights':obj({key:{'type':'number'} for key in ('accounts','votes','gaps')}),
+            'scope':string(),'score':string(),'own_votes':string(),'evidence':string()})},
+        description='Only public eligibility/exclusion totals. No counts of private work. Observation time is not a cursor revision. Original actors are represented by opaque public keys; no job, request, private email or voter identity is exposed.'))
+    b.add('LeaderboardList',obj({**deepcopy(S['LeaderboardMetadata']['properties']),
+        'view':ref('LeaderboardView'),'sort':ref('LeaderboardSort'),'evidence':ref('LeaderboardEvidence'),
+        'items':array(ref('LeaderboardEntry')),'page':ref('Page')}))
+    b.add('LeaderboardRecord',obj({'id':string(),'kind':enum('account','gap','claim','researcher','file','exploration'),
+        'label':string(),'url':string(),'account_ids':array(string()),'claim_ids':array(string()),'evidence_ids':array(string()),
+        'directions':ref('LeaderboardDirections'),'value':{'type':'integer'}},
+        description='One distinct counted public unit. For votes, one account record carries its signed net value; summing values reproduces the headline. Other metrics count records. Evidence IDs preserve explicit interpretations, never inferred scientific endorsement.'))
+    b.add('LeaderboardRecords',obj({**deepcopy(S['LeaderboardMetadata']['properties']),
+        'view':ref('LeaderboardView'),'id':string(),'metric':ref('LeaderboardMetric'),'evidence':ref('LeaderboardEvidence'),
+        'entry':ref('LeaderboardEntry'),'total':count,'items':array(ref('LeaderboardRecord')),'page':ref('Page')}))
     b.add('ExplorationInput',obj({'source_gap':ref('SelectedGap'),'draft_id':null(uuid)},['source_gap'],
         description='Records a visit under the authenticated principal. Exact source revision is required; optional draft must belong to that principal and selected gap.'))
     b.add('Exploration',obj({'source_gap':ref('SelectedGap'),'knowledge_gap':ref('DapperKnowledgeGap'),
@@ -349,6 +415,30 @@ def reference_examples(b, f, e):
 def endpoints(b,f,e):
     P=b.PATHS;S=b.SCHEMAS;ref=b.ref;obj=b.obj;array=b.array;string=b.string;enum=b.enum;did=b.did;null=b.nullable
     uuid=string(format='uuid')
+    upload_path=[b.parameter('upload_id','path',uuid,b.DRAFT_ID,True,'Opaque owner-scoped upload identifier.')]
+    sample_upload={'id':b.DRAFT_ID,'draft_id':b.DRAFT_ID,'filename':'notes.txt','media_type':'text/plain',
+        'size_bytes':5,'sha256':'185f8db32271fe25f561a6fc938b2e264306ec304eda518007d1764826381969',
+        'status':'pending','created_at':b.NOW,'expires_at':'2026-10-02T00:00:00Z','storage':None,'extraction':None,'error':None}
+    upload_examples={'Upload':sample_upload,'UploadList':{'items':[sample_upload]},
+        'UploadTicket':{'upload':sample_upload,'transfer':{'method':'POST','url':'/v1/uploads/'+b.DRAFT_ID+'/content','fields':{},'encoding':'base64'}},
+        'UploadCreate':{k:sample_upload[k] for k in ('draft_id','filename','media_type','size_bytes','sha256')},
+        'UploadContent':{'content_base64':'SGVsbG8='}}
+    def upload_operation(path,method,operation,response,request=None,parameters=None):
+        b.operation(path,method,operation,'Drafts',operation,
+            'Owner-scoped private research attachment. Original bytes and extraction are pinned by checksum and immutable version before submission.',
+            response,{'example':upload_examples[response]},request_schema=request,
+            request_examples={'example':upload_examples[request]} if request else None,
+            parameters=parameters,status=201 if operation=='createUpload' else 200)
+    upload_operation('/v1/uploads','post','createUpload','UploadTicket','UploadCreate',[
+        b.parameter('Idempotency-Key','header',string(minLength=1,maxLength=200),b.DRAFT_ID,True,'Stable upload initiation retry key.')])
+    upload_operation('/v1/uploads','get','listUploads','UploadList',parameters=[b.parameter('draft_id','query',uuid,b.DRAFT_ID,True,'Owned editor identifier.')])
+    upload_operation('/v1/uploads/{upload_id}','get','getUpload','Upload',parameters=upload_path)
+    upload_operation('/v1/uploads/{upload_id}','delete','removeUpload','Upload',parameters=upload_path)
+    upload_operation('/v1/uploads/{upload_id}/complete','post','completeUpload','Upload',parameters=upload_path)
+    upload_operation('/v1/uploads/{upload_id}/content','post','uploadLocalContent','Upload','UploadContent',upload_path)
+    upload_operation('/v1/uploads/{upload_id}/download','get','downloadUpload','Upload',parameters=upload_path)
+    P['/v1/uploads/{upload_id}/download']['get']['responses']['200']['content']={'application/octet-stream':{'schema':{'type':'string','format':'binary'},'examples':{'text':{'value':'Hello'}}}}
+    next(ex for ex in b.EXCHANGES if ex['operation_id']=='downloadUpload')['responses']={'200':{'content_type':'application/octet-stream','examples':{'text':'Hello'}}}
     P['/v1/me/workspace/events']={'get':{'operationId':'subscribeWorkspaceEvents','tags':['Research history'],
         'summary':'Subscribe to committed workspace changes',
         'description':'Authenticated SSE backed by durable RDS replay and managed Redis Pub/Sub wakeups. Subscribe before replay. Send Last-Event-ID or after to resume; both must agree if supplied. workspace_change carries WorkspaceEvent. ready, resync_required, connection_degraded and access_revoked are stream control events. Resync explicitly reloads authorized collections. Heartbeats do not read Redis or query application state.',
@@ -432,10 +522,39 @@ def endpoints(b,f,e):
     workspace_query=b.parameter('q','query',string(maxLength=200,default='',description='Case-insensitive literal search over the entire authorized saved collection before pagination. Whitespace is normalized; every query word must match. Cursors are bound to the normalized query.'),'mechanism')
     account={'account':f['account'],'knowledge_gap':f['gap'],'claim_count':len(f['account_document']['claims']),
         'created_at':b.NOW,'job_id':b.JOB_ID,'research_statement':e['account']['research_statement'],'publication':private_publication,'votes':None}
-    b.operation('/v1/accounts','get','listAccounts','Scientific content','List your scientific accounts',
-        'Owner-scoped, newest first then account ID; deduplicate repeated deliveries by digest. Filter by exact gap_id. Optional q searches account ID, title and closing remarks, knowledge-gap ID/name/text and original attribution display name across all saved summaries before pagination. No private records from other users with the same gap. Closing remarks provide the summary; paragraph status is independent. Publication is current mutable workspace state, separate from immutable scientific content.'+state_note,
-        'AccountList',{'owned':{'items':[account],'page':e['page']},'archived':{'items':[dict(account,archive=R['account'])],'page':e['page']}},
-        parameters=[b.parameter('gap_id','query',did('KnowledgeGap'),f['gap']['id']),deepcopy(workspace_query),reference_state]+b.page_parameters(),errors=('400','401','409','422','429'))
+    b.operation('/v1/accounts','get','listAccounts','Scientific content','Browse or search scientific accounts',
+        'scope=workspace (default) requires a session and lists only owned accounts, newest creation first. scope=public lists only explicitly published frozen snapshots across researchers and omits private job IDs; no session is required, but invalid supplied credentials are rejected. Deduplicate by canonical account digest. Filter by exact gap_id. Optional q searches account ID, title and closing remarks, knowledge-gap ID/name/text and original attribution display name across the entire authorized collection before pagination. sort=recent (default) orders public accounts by publication date; sort=votes orders by net account votes, then recency. Account ID breaks ties. Cursors bind scope, normalized query, sort, reference_state, registered viewer and the current collection/vote snapshot. Closing remarks provide the summary; paragraph status is independent. reference_state filters current and archived work before pagination; default all groups current items first while preserving the selected vote or recency order within each group.',
+        'AccountList',{'owned':{'items':[account],'page':e['page']},'archived':{'items':[dict(account,archive=R['account'])],'page':e['page']}},parameters=[b.parameter('gap_id','query',did('KnowledgeGap'),f['gap']['id']),deepcopy(workspace_query),b.parameter('scope','query',enum('public','workspace',default='workspace'),'workspace'),b.parameter('sort','query',enum('recent','votes',default='recent'),'recent'),reference_state]+b.page_parameters(),public=True,errors=('400','401','409','422','429'))
+    leaderboard_metadata={'as_of':b.NOW,'score_version':'public-contribution-v1','cohort_size':0,'voting_participants':0,
+        'exclusions':{key:0 for key in ('fixture_accounts','uncredited_accounts','conflicting_accounts','invalid_public_accounts','excluded_evidence_paths','fixture_explorations','uncredited_explorations')},
+        'definitions':[{'id':'accounts','label':'Public scientific accounts','description':'Distinct currently public canonical accounts, excluding demo/test fixtures.'}],
+        'methodology':{'weights':{'accounts':.3,'votes':.4,'gaps':.3},'scope':'Currently public frozen snapshots only; all time.',
+            'score':'Positive metrics use the eligible-cohort midrank percentile; nonpositive metrics receive zero. Weighted 30/40/30. Exact ties share rank.',
+            'own_votes':'Researcher scores exclude their own ballots. Account scores retain canonical totals.',
+            'evidence':'Only explicit evidence interpretations targeting the claim proposition qualify; direction counts can overlap.'}}
+    leaderboard_entry={'id':f['account']['id'],'kind':'account','label':f['account'].get('name') or 'Example scientific account','rank':1,
+        'metrics':{**{key:0 for key in ('overall_score','net_votes','upvotes','downvotes','voter_count','researcher_count')},
+            'account_count':1,'account_gap_count':1,'explored_gap_count':1,'claim_count':len(f['account']['component_claims'])},
+        'components':{'accounts':0,'votes':0,'gaps':0},'orcid':None,'account_id':f['account']['id'],'gap_id':f['gap']['id'],
+        'gap':{'id':f['gap']['id'],'label':f['gap'].get('name') or f['gap']['id']},'attribution':None,
+        'directions':{key:0 for key in ('SUPPORTS','DISPUTES','MIXED','NEUTRAL','UNKNOWN')}}
+    leaderboard_description='All-time contribution rankings computed over the complete currently public frozen population before pagination. Original registered actor attribution uses opaque contributor keys; missing/anonymous/conflicting attribution is uncredited. Exclude fixtures before projection, deduplicate canonical accounts, exclude own ballots from researcher recognition, and retain all canonical votes for account ranking. Researchers sort by overall (default), accounts, votes, gaps or explored; accounts sort only by votes; datasets sort by accounts (default), claims, gaps or researchers. evidence=all|supporting affects datasets only. Positive metric percentiles use midrank, weighted 30/40/30; exact score ties share ranks before display rounding. Invalid supplied credentials are rejected. No private metadata, jobs, requests or voter identities are exposed. Cursors bind the whole current projection and query; publication or vote changes expire them. Responses are private, no-store.'
+    b.operation('/v1/leaderboard','get','getLeaderboard','Scientific content','Rank public community contributions',
+        leaderboard_description,'LeaderboardList',{'empty_community':{**leaderboard_metadata,'view':'researchers','sort':'overall','evidence':'all','items':[],'page':e['page']}},
+        parameters=[b.parameter('view','query',enum('researchers','accounts','datasets',default='researchers'),'researchers'),
+            b.parameter('sort','query',deepcopy(S['LeaderboardSort']),'overall'),
+            b.parameter('evidence','query',enum('all','supporting',default='all'),'all')]+b.page_parameters(),
+        public=True,errors=('401','409','422','429','503'))
+    b.operation('/v1/leaderboard/{view}/{entry_id}/records','get','getLeaderboardRecords','Scientific content','Inspect records contributing to a public ranking',
+        'The exact public eligibility and evidence scope used by leaderboard totals. One record per distinct counted unit; votes return one account record with its signed net contribution. Sum vote values to reproduce the headline; other totals equal record count. entry includes context for direct links. Researchers allow accounts/votes/gaps/explored; accounts allow accounts/votes/claims/gaps/researchers; datasets allow accounts/claims/gaps/researchers/files. Revoked and ineligible entries return the same 404. Public keys and canonical scientific IDs only. '+leaderboard_description,
+        'LeaderboardRecords',{'example_account':{**leaderboard_metadata,'view':'accounts','id':f['account']['id'],'metric':'votes','evidence':'all',
+            'entry':leaderboard_entry,'total':1,'items':[{'id':f['account']['id'],'kind':'account','label':leaderboard_entry['label'],
+                'url':'/accounts/'+f['account']['id'],'account_ids':[f['account']['id']],'claim_ids':f['account']['component_claims'],
+                'evidence_ids':[],'directions':leaderboard_entry['directions'],'value':0}],'page':e['page']}},
+        parameters=[b.parameter('view','path',ref('LeaderboardView'),'accounts',True),b.parameter('entry_id','path',string(),f['account']['id'],True),
+            b.parameter('metric','query',enum('accounts','votes','gaps','explored','claims','researchers','files',default='accounts'),'votes'),
+            b.parameter('evidence','query',enum('all','supporting',default='all'),'all')]+b.page_parameters(),
+        public=True,errors=('401','404','409','422','429','503'))
     b.operation('/v1/knowledge-gaps/{gap_id}/accounts','get','listKnowledgeGapAccounts','Knowledge gaps','List visible scientific accounts for a knowledge gap',
         'Accepted accounts for the exact DAPPER KnowledgeGap identity, newest first then account ID, deduplicated by scientific-account digest. Public scope (default) lists explicitly published snapshots across owners and omits private job IDs. Workspace scope requires a valid session and lists only its saved accounts. Invalid supplied sessions are rejected for either scope. Source-revision checks validate the selected observation; changed gap digests never merge. Attribution remains the original request actor. Each account ID links to its existing scientific endpoint, whose public reads are restricted to its published snapshot.'+state_note,
         'AccountList',{'owned':{'items':[dict(account,attribution=e['research_request']['attribution'])],'page':e['page']},'no_visible_accounts':{'items':[],'page':e['page']},

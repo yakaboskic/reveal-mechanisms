@@ -175,7 +175,7 @@ class ClassificationTests(unittest.TestCase):
                      'outcome_summary', 'outcome_publication', 'request'):
             self.assertEqual(archive.classify(kind), 'archive')
         for kind in ('request_binding', 'evidence', 'exploration', 'workspace_event', 'workspace_cursor', 'object', 'grant', 'citation',
-                     'principal', 'identity', 'citation_actor', 'reference_active', 'idempotency',
+                     'principal', 'identity', 'citation_actor', 'reference_active', 'idempotency', 'upload', 'fixture_seed',
                      # Written by votes.py on main: ballots (owner = voter) and tallies (owner = system), keyed by gap or account.
                      'vote', 'vote_total'):
             self.assertEqual(archive.classify(kind), 'keep')
@@ -318,6 +318,35 @@ class CutoverTests(Repo):
             archive.archive_prefix(self.repo, LEGACY, KPN, apply=True)
         with self.assertRaises(reference.ReferenceError): archive.archive_prefix(self.repo, LEGACY, LEGACY, apply=False)
         self.assertEqual(self.all_rows(), before)
+
+    def test_cutover_keeps_uploads_and_fixture_receipts_with_frozen_input_refs(self):
+        upload_id, receipt_id = uid(), uid()
+        upload = {'id': upload_id, 'draft_id': self.anchored[0], 'filename': 'private-notes.txt',
+                  'status': 'ready', 'storage': {'store': 's3', 'key': 'local/immutable-input',
+                    'version_id': 'captured-version', 'sha256': 'f' * 64},
+                  'extraction': {'text': 'Private observation'}, 'expires_at': T2}
+        receipt = {'format': 'reveal.fixture-seed-receipt/1', 'account_id': self.account_id,
+                   'content_sha256': 'e' * 64, 'scientific_acceptance': 'not_reviewed'}
+        self.put('upload', upload_id, self.owner, upload)
+        self.put('fixture_seed', receipt_id, self.owner, receipt)
+        with self.repo.transaction() as tx:
+            request = tx.get('request', self.r1)['data']
+            request['user_inputs'] = {'format': 'reveal.user-inputs/1', 'context': 'Private context',
+                                      'research_direction': '', 'hypotheses': '', 'uploads': [deepcopy(upload)]}
+            tx.put('request', self.r1, self.owner, request)
+        before = self.all_rows()
+        plan = archive.plan_prefix(self.repo, KPN, from_generation=LEGACY)
+        self.assertTrue(plan['ok']); self.assertEqual(plan['unknown_kinds'], [])
+        self.assertEqual({kind: plan['actions'][kind] for kind in ('upload', 'fixture_seed')},
+                         {'upload': 'keep', 'fixture_seed': 'keep'})
+        self.assertEqual(self.all_rows(), before)
+        self.run_cutover()
+        after = self.all_rows()
+        for key in (('upload', upload_id), ('fixture_seed', receipt_id)):
+            self.assertEqual(after[key], before[key])
+        self.assertIsNone(self.get('draft', self.anchored[0]))
+        self.assertEqual(self.get('request', self.r1)['data']['user_inputs'], request['user_inputs'])
+        self.assertIsNotNone(self.stamp('request', self.r1))
 
     def test_cutover_stamps_every_archived_kind_in_place(self):
         before = self.all_rows()

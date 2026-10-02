@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { RevalidationCache, workspaceFreshMs } from "../src/lib/revalidation-cache";
-import { changesWorkspace } from "../src/lib/workspace-events";
+import { affectedWorkspaceTabs, changesWorkspace } from "../src/lib/workspace-events";
 import { loadWorkspaceData, workspaceKey, workspaceKeyParts, type WorkspaceKey, type WorkspaceData } from "../src/lib/workspace-data";
 import { api, ApiError, type Schema } from "../src/lib/client";
 
@@ -68,10 +68,48 @@ test("revoked access clears all cached private tabs", async () => {
 });
 
 test("workspace changes invalidate while searches, rendering and private reads do not", () => {
-  for (const [method, path] of [["POST", "/v1/jobs"], ["PATCH", "/v1/drafts/id"], ["POST", "/v1/jobs/id/retry-review"], ["POST", "/v1/me/explorations"], ["POST", "/v1/accounts/id/publication"], ["POST", "/v1/analysis-outcomes/id/publication"]]) {
+  for (const [method, path] of [["POST", "/v1/jobs"], ["PATCH", "/v1/drafts/id"], ["POST", "/v1/drafts/id/save"], ["POST", "/v1/jobs/id/retry-review"], ["POST", "/v1/me/explorations"], ["POST", "/v1/accounts/id/publication"], ["POST", "/v1/analysis-outcomes/id/publication"]]) {
     assert.equal(changesWorkspace(method, "/api/backend" + path), true, path);
   }
   for (const [method, path] of [["GET", "/v1/accounts"], ["POST", "/v1/citations/render"], ["POST", "/v1/mechanisms/suggest"]]) assert.equal(changesWorkspace(method, path), false);
+});
+
+test("saved draft loading excludes temporary work without fetching jobs or frozen requests", async t => {
+  t.mock.method(api, "drafts", async (cursor?: string) => ({
+    items: cursor ? [{ id: "legacy" }] : [{ id: "saved", lifecycle: "saved" }, { id: "temporary", lifecycle: "temporary" }],
+    page: { next_cursor: cursor ? null : "next", has_more: !cursor, snapshot_id: "test" },
+  }));
+  t.mock.method(api, "jobs", () => assert.fail("Draft display must not depend on runs"));
+  t.mock.method(api, "requests", () => assert.fail("Draft display must not depend on frozen requests"));
+  const signal = new AbortController().signal;
+  let data = await loadWorkspaceData("drafts", undefined, "refresh", signal);
+  assert.deepEqual(data.drafts.map(draft => draft.id), ["saved"]);
+  assert.equal(data.cursor, "next");
+  data = await loadWorkspaceData("drafts", data, "append", signal);
+  assert.deepEqual(data.drafts.map(draft => draft.id), ["saved", "legacy"]);
+  assert.equal(data.cursor, null);
+});
+
+test("research runs load frozen inputs independently of deleted drafts and exclude paragraph jobs", async t => {
+  const page = { next_cursor: null, has_more: false, snapshot_id: "test" };
+  t.mock.method(api, "drafts", () => assert.fail("Run history must not read mutable drafts"));
+  t.mock.method(api, "jobs", async () => ({ items: [{ id: "research", kind: "analysis", research_request_id: "frozen" }, { id: "paragraph", kind: "paragraph" }], page }));
+  t.mock.method(api, "requests", async () => ({ items: [{ id: "frozen", source_draft_id: "deleted-draft" }], page }));
+  const signal = new AbortController().signal;
+  let data = await loadWorkspaceData("runs", undefined, "refresh", signal);
+  assert.deepEqual(data.jobs.map(job => job.id), ["research"]);
+  assert.equal(data.requests[0].source_draft_id, "deleted-draft");
+  data = await loadWorkspaceData("runs", data, "activity", signal);
+  assert.deepEqual(data.jobs.map(job => job.id), ["research"]);
+});
+
+test("draft and run events invalidate their independent tabs and gap history", () => {
+  assert.deepEqual(affectedWorkspaceTabs({ collections: ["drafts"] } as never), ["drafts", "gaps"]);
+  assert.deepEqual(affectedWorkspaceTabs({ collections: ["jobs"] } as never), ["runs", "gaps"]);
+  assert.deepEqual(affectedWorkspaceTabs({ collections: ["requests"] } as never), ["runs", "gaps"]);
+  assert.deepEqual(affectedWorkspaceTabs({ collections: ["identity"] } as never), ["drafts", "runs", "gaps", "accounts", "explorations"]);
+  assert.equal(workspaceKey("drafts", "ignored"), "drafts");
+  assert.equal(workspaceKey("runs", "ignored"), "runs");
 });
 
 test("revalidation refreshes every previously loaded page without duplicating rows or resetting pagination", async t => {
