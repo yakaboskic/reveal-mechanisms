@@ -1174,35 +1174,36 @@ def test_apply_refuses_drift_missing_backup_and_unapproved_production(tmp_path, 
     with pytest.raises(rr.Refused, match='approval does not match'): apply(services, tmp_path)
 
 
-def local_cutover_services(tmp_path, *, calls=None):
+def waiver_cutover_services(tmp_path, name, *, calls=None):
     services, db, archive, original = cutover_services(tmp_path, calls=calls)
-    services.targets_file.write_text(TARGETS + f"""  local:
+    services.targets_file.write_text(TARGETS + f"""  {name}:
     database: cyaka_reveal_mechanisms
-    prefix: reveal_workflow_local
-    vector_environment: local
+    prefix: reveal_workflow_{name}
+    vector_environment: {name}
     upstash_host: {HOST}
     production: false
 """)
-    repo = services.repository('reveal_workflow_local')
+    repo = services.repository(f'reveal_workflow_{name}')
     with original.read_transaction() as tx:
         snapshots = tx.list('vector_snapshot')
         active = tx.get('vector_active', ENV_NAME)['data']
     with repo.transaction() as tx:
         for row in snapshots:
             data = row['data']
-            tx.put('vector_snapshot', row['id'], 'catalog', {**data, 'environment': 'local',
-                'factor_namespace': data['factor_namespace'].replace(ENV_NAME + '-', 'local-', 1),
-                'context_namespace': data['context_namespace'].replace(ENV_NAME + '-', 'local-', 1)})
-        tx.put('vector_active', 'local', 'catalog', active)
+            tx.put('vector_snapshot', row['id'], 'catalog', {**data, 'environment': name,
+                'factor_namespace': data['factor_namespace'].replace(ENV_NAME + '-', name + '-', 1),
+                'context_namespace': data['context_namespace'].replace(ENV_NAME + '-', name + '-', 1)})
+        tx.put('vector_active', name, 'catalog', active)
     return services, db, archive, repo
 
 
-def test_local_snapshot_waiver_keeps_protected_apply_and_truthful_audit(tmp_path, monkeypatch, capsys):
+@pytest.mark.parametrize('name', ['local', 'qa'])
+def test_snapshot_waiver_keeps_protected_apply_and_truthful_audit(tmp_path, monkeypatch, capsys, name):
     calls = []
-    services, db, archive, repo = local_cutover_services(tmp_path, calls=calls)
-    target, plan, path = write_plan(services, tmp_path, 'local')
+    services, db, archive, repo = waiver_cutover_services(tmp_path, name, calls=calls)
+    target, plan, path = write_plan(services, tmp_path, name)
     approve(services, path)
-    def forbidden_rds(): raise AssertionError('The local waiver must not call RDS')
+    def forbidden_rds(): raise AssertionError('The explicit waiver must not call RDS')
     services.rds = forbidden_rds
     verified = []
     def verify(*args, **kwargs):
@@ -1210,46 +1211,59 @@ def test_local_snapshot_waiver_keeps_protected_apply_and_truthful_audit(tmp_path
             verified.append((rg.read_active(tx)['generation_id'], bool(rg.read_gate(tx))))
         return {'passed': True, 'checks': {}}
     monkeypatch.setattr(rr, 'verify_target', verify)
-    assert rr.main(['apply', '--target', 'local', '--plan', str(path), '--approval', str(tmp_path / 'approval.local.json'),
+    assert rr.main(['apply', '--target', name, '--plan', str(path), '--approval', str(tmp_path / f'approval.{name}.json'),
                     '--backup-dir', str(tmp_path / 'backups'), '--skip-aurora-snapshot'], services=services) == 0
     result = json.loads(capsys.readouterr().out)
     assert result['ok'] and result['status'] == 'complete'
-    skipped = {'status': 'skipped', 'reason': 'explicit_local_only_waiver', 'created': False}
+    skipped = {'status': 'skipped', 'reason': f'explicit_{name}_only_waiver', 'created': False}
     assert result['backups']['aurora'] == result['steps'][0]['aurora'] == skipped
     assert [step['step'] for step in result['steps']] == ['preflight', 'lock', 'gate_closed', 'drain', 'backups',
         'delta_capture', 'snapshot_verified', 'activated', 'superseded', 'archived', 'post_archive_capture', 'verified', 'gate_opened']
     dumps = [call[1] for call in calls if call[0] == 'mysqldump']
     assert len(dumps) == 2 and '--no-data' in dumps[0] and '--no-data' not in dumps[1]
-    assert all('reveal_workflow_local_records' in command for command in dumps)
+    assert all(f'reveal_workflow_{name}_records' in command for command in dumps)
     assert len(list((tmp_path / 'backups').iterdir())) == 1
     assert result['backups']['records']['bytes'] > 0 and result['backups']['records']['sha256']
     assert verified == [(GEN, True)]
     with repo.read_transaction() as tx:
         audit = tx.get(rg.RELOAD_KIND, digest([plan['plan_sha256']]))['data']
         assert rg.read_gate(tx) is None and rg.read_active(tx)['generation_id'] == GEN
-        assert tx.get('vector_active', 'local')['data']['snapshot_id'] == NEW_SNAPSHOT
+        assert tx.get('vector_active', name)['data']['snapshot_id'] == NEW_SNAPSHOT
     assert audit['backups']['aurora'] == audit['steps'][0]['aurora'] == skipped
     assert audit['verification']['passed'] and audit['status'] == 'complete'
 
 
+@pytest.mark.parametrize('name', ['local', 'qa'])
 @pytest.mark.parametrize('change', [
-    {'name': 'rehearsal'}, {'name': 'compose'}, {'name': 'qa'}, {'name': 'prod'},
-    {'prefix': 'reveal'}, {'prefix': 'reveal_workflow_qa'}, {'vector_environment': 'prod'}, {'production': True},
+    {'name': 'rehearsal'}, {'name': 'compose'}, {'name': 'prod'}, {'name': 'other'},
+    {'prefix': 'reveal'}, {'prefix': 'reveal_compose'}, {'vector_environment': 'prod'},
+    {'production': True}, {'production': None}, {'production': 0},
 ])
-def test_snapshot_waiver_refuses_every_nonlocal_identity_before_side_effects(tmp_path, change):
-    target = {'name': 'local', 'prefix': 'reveal_workflow_local', 'vector_environment': 'local', 'production': False, **change}
-    with pytest.raises(rr.Refused, match='allowed only for local / reveal_workflow_local'):
+def test_snapshot_waiver_refuses_other_identities_before_side_effects(tmp_path, name, change):
+    target = {'name': name, 'prefix': f'reveal_workflow_{name}', 'vector_environment': name, 'production': False, **change}
+    with pytest.raises(rr.Refused, match='allowed only for the exact non-production local or QA target'):
         rr.apply_plan(SimpleNamespace(), target, tmp_path / 'unused-plan', tmp_path / 'unused-approval', skip_aurora_snapshot=True)
 
 
+@pytest.mark.parametrize('name', ['local', 'qa'])
+@pytest.mark.parametrize('field', ['name', 'prefix', 'vector_environment'])
+def test_snapshot_waiver_refuses_mixed_local_qa_identities(tmp_path, name, field):
+    other = 'qa' if name == 'local' else 'local'
+    target = {'name': name, 'prefix': f'reveal_workflow_{name}', 'vector_environment': name, 'production': False}
+    target[field] = f'reveal_workflow_{other}' if field == 'prefix' else other
+    with pytest.raises(rr.Refused, match='allowed only for the exact non-production local or QA target'):
+        rr.apply_plan(SimpleNamespace(), target, tmp_path / 'unused-plan', tmp_path / 'unused-approval', skip_aurora_snapshot=True)
+
+
+@pytest.mark.parametrize('name', ['local', 'qa'])
 @pytest.mark.parametrize('failure', ['approval', 'backup_dir', 'drift', 'records', 'vector'])
-def test_local_snapshot_waiver_preserves_pre_gate_guards(tmp_path, monkeypatch, failure):
-    services, db, archive, repo = local_cutover_services(tmp_path)
-    target, plan, path = write_plan(services, tmp_path, 'local')
-    approval_path = tmp_path / 'approval.local.json'
+def test_snapshot_waiver_preserves_pre_gate_guards(tmp_path, monkeypatch, failure, name):
+    services, db, archive, repo = waiver_cutover_services(tmp_path, name)
+    target, plan, path = write_plan(services, tmp_path, name)
+    approval_path = tmp_path / f'approval.{name}.json'
     approve(services, path)
     options = {'skip_aurora_snapshot': True, 'backup_dir': tmp_path / 'backups'}
-    def forbidden_rds(): raise AssertionError('The local waiver must not call RDS')
+    def forbidden_rds(): raise AssertionError('The explicit waiver must not call RDS')
     services.rds = forbidden_rds
     if failure == 'approval':
         approval = rr.read_json(approval_path)
@@ -1275,13 +1289,14 @@ def test_local_snapshot_waiver_preserves_pre_gate_guards(tmp_path, monkeypatch, 
         assert rg.read_gate(tx) is None and rg.read_active(tx) is None
 
 
+@pytest.mark.parametrize('name', ['local', 'qa'])
 @pytest.mark.parametrize('option', ['--backup-snapshot-id', '--create-aurora-snapshot'])
-def test_snapshot_waiver_cannot_be_combined_with_other_backup_choices(tmp_path, option):
-    arguments = ['apply', '--target', 'local', '--plan', 'plan.json', '--approval', 'approval.json', '--skip-aurora-snapshot', option]
+def test_snapshot_waiver_cannot_be_combined_with_other_backup_choices(tmp_path, option, name):
+    arguments = ['apply', '--target', name, '--plan', 'plan.json', '--approval', 'approval.json', '--skip-aurora-snapshot', option]
     if option == '--backup-snapshot-id': arguments.append('real-snapshot')
     with pytest.raises(SystemExit) as error: rr.parser().parse_args(arguments)
     assert error.value.code == 2
-    target = {'name': 'local', 'prefix': 'reveal_workflow_local', 'vector_environment': 'local', 'production': False}
+    target = {'name': name, 'prefix': f'reveal_workflow_{name}', 'vector_environment': name, 'production': False}
     options = {'backup_snapshot_id': 'real-snapshot'} if option == '--backup-snapshot-id' else {'create_aurora_snapshot': True}
     with pytest.raises(rr.Refused, match='cannot be combined'):
         rr.apply_plan(SimpleNamespace(), target, tmp_path / 'unused-plan', tmp_path / 'unused-approval', skip_aurora_snapshot=True, **options)

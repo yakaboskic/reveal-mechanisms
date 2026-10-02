@@ -1897,12 +1897,13 @@ def apply_plan(services, target, plan_path, approval_path, *, allow_production=F
                backup_dir=None, backup_snapshot_id=None, create_aurora_snapshot=False, skip_aurora_snapshot=False,
                aurora_cluster_id=None, keep_gate=False, poll_seconds=5):
     if skip_aurora_snapshot:
-        if (target.get('name') != 'local' or target.get('prefix') != 'reveal_workflow_local'
-                or target.get('vector_environment') != 'local' or target.get('production') is not False):
-            raise Refused('--skip-aurora-snapshot is allowed only for local / reveal_workflow_local (non-production, vector environment local)')
+        identity = (target.get('name'), target.get('prefix'), target.get('vector_environment'))
+        if (identity not in {('local', 'reveal_workflow_local', 'local'), ('qa', 'reveal_workflow_qa', 'qa')}
+                or target.get('production') is not False):
+            raise Refused('--skip-aurora-snapshot is allowed only for the exact non-production local or QA target')
         if backup_snapshot_id or create_aurora_snapshot:
             raise Refused('--skip-aurora-snapshot cannot be combined with another Aurora backup option')
-    skipped_aurora = {'status': 'skipped', 'reason': 'explicit_local_only_waiver', 'created': False}
+    skipped_aurora = {'status': 'skipped', 'reason': f'explicit_{target.get("name")}_only_waiver', 'created': False}
     bind_target(services, target)
     plan, approval = read_plan(plan_path), read_json(approval_path)
     if plan['kind'] != 'apply' or plan['target'] != target: raise Refused('The plan is for a different target or allow-list entry')
@@ -1913,7 +1914,7 @@ def apply_plan(services, target, plan_path, approval_path, *, allow_production=F
     if not resume:
         if not backup_dir: raise Refused('--backup-dir is required')
         if not (backup_snapshot_id or create_aurora_snapshot or skip_aurora_snapshot):
-            raise Refused('A backup is required: --backup-snapshot-id or --create-aurora-snapshot (local alone may use --skip-aurora-snapshot)')
+            raise Refused('A backup is required: --backup-snapshot-id or --create-aurora-snapshot (local and QA alone may use --skip-aurora-snapshot)')
     fresh = build_plan(services, target, plan['generation_id'])
     if fresh['plan_sha256'] != plan['plan_sha256']:
         changed = sorted(key for key in set(plan) | set(fresh) if key not in ('plan_sha256', 'planned_at', 'observed')
@@ -2461,7 +2462,7 @@ def parser():
     backup = c.add_mutually_exclusive_group()
     backup.add_argument('--backup-snapshot-id'); backup.add_argument('--create-aurora-snapshot', action='store_true')
     backup.add_argument('--skip-aurora-snapshot', action='store_true',
-                        help='Explicit local-only waiver: local / reveal_workflow_local; still requires the records dump, typed plan approval and verification')
+                        help='Explicit local/QA-only waiver for their exact allow-listed identities; still requires the records dump, typed plan approval and verification')
     c.add_argument('--aurora-cluster-id'); c.add_argument('--keep-gate', action='store_true')
     c = commands.add_parser('verify', help='Read-only post-conditions of one target')
     c.add_argument('--target', required=True); c.add_argument('--generation')
