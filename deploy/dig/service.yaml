@@ -89,6 +89,8 @@ qa:
   on_demand_base: 1
   env:
     REVEAL_APPLICATION_TABLE_PREFIX: reveal_workflow_qa
+    EMBEDDING_SERVICE_URL: https://embedding-service-848707719401.us-east1.run.app
+    REVEAL_QUERY_EMBEDDING_SERVICE_URL: https://embedding-service-848707719401.us-east1.run.app
     REVEAL_MAX_ACTIVE_JOBS: '10'
     REVEAL_JOB_NAMESPACE: reveal-workflow-qa
     REVEAL_VECTOR_ENVIRONMENT: qa

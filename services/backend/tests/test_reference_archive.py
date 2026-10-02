@@ -57,7 +57,8 @@ class Repo(unittest.TestCase):
 
     def setUp(self):
         temporary = tempfile.TemporaryDirectory(); self.addCleanup(temporary.cleanup)
-        self.repo = Repository(str(Path(temporary.name) / 'app.sqlite'), table_prefix='reveal_reload_rehearsal'); self.repo.migrate()
+        self.repo = Repository(str(Path(temporary.name) / 'app.sqlite'),
+                               table_prefix=getattr(self, 'TABLE_PREFIX', 'reveal_reload_rehearsal')); self.repo.migrate()
         for context in (patch.dict(os.environ, {'REVEAL_JOB_TRANSPORT': 'database', 'REVEAL_JOB_NAMESPACE': 'reveal'}),
                         patch('reveal_backend.redis_notifications.publish')):
             context.start(); self.addCleanup(context.stop)
@@ -629,6 +630,152 @@ class CaptureTests(unittest.TestCase):
         tampered = dict(row, snapshot=dict(row['snapshot'], label='edited'))
         with self.assertRaisesRegex(reference.ReferenceError, 'does not match'): archive.write_archived_factors(FakeConnection(answer), [tampered])
         self.assertEqual(archive.write_archived_factors(FakeConnection(answer), []), 0)
+
+
+class FixtureCaptureTests(Repo):
+    """The local authored fixture has real partial captures, but no imported factor row."""
+    TABLE_PREFIX = 'reveal_workflow_local'
+
+    def setUp(self):
+        super().setUp()
+        from reveal_backend.evidence_package import canonical_json, sha256
+        self.canonical_json, self.sha256 = canonical_json, sha256
+        self.directory = Path(__file__).resolve().parents[3] / 'data/fixtures/bubble-account-v1'
+        self.origin = {'kind': 'canonical_fixture', 'fixture_version': 'bubble-account-v1',
+                       'content_sha256': archive.EXTERNAL_FIXTURE_CONTENT, 'scientific_acceptance': 'not_reviewed'}
+        self.raw = {checksum: (self.directory / f'sources/{index}.response.json').read_bytes()
+                    for index, _, checksum, _ in archive.EXTERNAL_FIXTURE_FILES}
+        self.receipt_id, self.document_id, self.account_key = self.seed(self.owner)
+        self.reads = []
+
+    def seed(self, owner):
+        document = json.loads((self.directory / 'scientific-account.json').read_text())
+        artifacts = []
+        for file in document['files']:
+            checksum = file['sha256']; storage = {'store': 's3', 'bucket': 'fixture-test',
+                'key': f'reveal/artifacts/sha256/{checksum[:2]}/{checksum}', 'version_id': 'retained-version',
+                'sha256': checksum, 'size_bytes': file['size_in_bytes'], 'content_type': 'application/json'}
+            file['location'] = f's3://{storage["bucket"]}/{storage["key"]}'
+            artifact = {'sha256': checksum, 'file': deepcopy(file), 'storage': storage, 'fixture_origin': self.origin}
+            self.put('artifact', digest([owner, checksum]), owner, artifact); artifacts.append(artifact)
+        for dataset in document['datasets']: dataset['location'] = 's3://fixture-test/reveal/artifacts/sha256/'
+        document_sha = self.sha256(self.canonical_json(document)); document_id = digest([owner, document_sha])
+        account_key = digest([owner, archive.EXTERNAL_FIXTURE_ACCOUNT])
+        anchor = {'source_id': archive.EXTERNAL_FIXTURE_SOURCE, 'mechanism_id': archive.EXTERNAL_FIXTURE_MECHANISM,
+                  'archived_reference_factor_id': reference.archive_id(LEGACY, archive.EXTERNAL_FIXTURE_SOURCE)}
+        self.put('account', account_key, owner, {'fixture_origin': self.origin,
+            'summary': {'account': document['scientific_accounts'][0], 'archive': {
+                'from_reference_generation': LEGACY, 'reference': {'model': reference.LEGACY_MODEL, 'anchors': [anchor]}}},
+            'result': {'document': document, 'root_id': archive.EXTERNAL_FIXTURE_ACCOUNT}})
+        self.put('scientific_document', document_id, owner,
+                 {'document': document, 'sha256': document_sha, 'fixture_origin': self.origin})
+        receipt_id = digest([owner, 'canonical-fixture', 'bubble-account-v1', archive.EXTERNAL_FIXTURE_CONTENT])
+        self.put('fixture_seed', receipt_id, owner, {'format': 'reveal.fixture-seed-receipt/1', 'receipt_id': receipt_id,
+            'fixture_version': 'bubble-account-v1', 'content_sha256': archive.EXTERNAL_FIXTURE_CONTENT,
+            'owner_user_id': owner, 'table_prefix': self.TABLE_PREFIX, 'account_id': archive.EXTERNAL_FIXTURE_ACCOUNT,
+            'scientific_document_sha256': document_sha, 'artifacts': artifacts,
+            'scientific_acceptance': 'not_reviewed', 'jobs_dispatched': 0})
+        return receipt_id, document_id, account_key
+
+    def read_artifact(self, ref):
+        self.reads.append(deepcopy(ref))
+        return self.raw[ref['sha256']]
+
+    def capture(self, generation=None, sources=None, reader=None):
+        return archive.capture_fixture_factors(self.repo, generation or LEGACY_GENERATION,
+            [archive.EXTERNAL_FIXTURE_SOURCE] if sources is None else sources,
+            read_artifact=reader or self.read_artifact)
+
+    def change(self, kind, identity, mutate, owner=None):
+        row = self.get(kind, identity); mutate(row['data'])
+        self.put(kind, identity, owner or row['owner'], row['data'])
+
+    def test_freezes_exact_partial_capture_without_claiming_import_membership_or_changing_work(self):
+        before = self.all_rows()
+        row, = self.capture(); snapshot = row['snapshot']; provenance = snapshot['metadata']['source_provenance']
+        document = self.get('scientific_document', self.document_id)['data']['document']
+        self.assertEqual(snapshot['mechanism'], document['mechanisms'][0])
+        self.assertEqual(row['archive_id'], reference.archive_id(LEGACY, archive.EXTERNAL_FIXTURE_SOURCE))
+        self.assertEqual(row['snapshot_sha256'], digest(snapshot))
+        self.assertEqual((snapshot['source_id'], snapshot['factor_id'], snapshot['model']),
+                         (archive.EXTERNAL_FIXTURE_SOURCE, 'CADinT2D::Factor1', reference.LEGACY_MODEL))
+        self.assertEqual((provenance['kind'], provenance['generation_membership'], provenance['completeness']),
+                         ('retained_external_cfde_capture', 'not_asserted', 'partial'))
+        self.assertEqual(snapshot['label'], 'Factor1')
+        self.assertEqual(provenance['rows_with_other_label_factor'], 1)
+        self.assertEqual(len(provenance['source_labels']), 2)
+        self.assertEqual(snapshot['top_genes'], []); self.assertEqual(snapshot['top_gene_sets'], [])
+        self.assertEqual(len(self.reads), 2)
+        for capture, (_, file_id, checksum, size) in zip(provenance['captures'], archive.EXTERNAL_FIXTURE_FILES):
+            self.assertEqual((capture['file_id'], capture['sha256'], capture['size_bytes']), (file_id, checksum, size))
+            self.assertEqual(capture['observations'], json.loads(self.raw[checksum])['data'])
+            self.assertEqual(len(capture['observations']), 8); self.assertTrue(capture['partial'])
+        self.assertEqual(before, self.all_rows())
+        self.assertEqual(self.capture(), [row])
+        self.seed(self.other)
+        self.assertEqual(self.capture(), [row], 'same scientific source stays deterministic across fixture owners')
+
+    def test_missing_receipt_and_unrelated_prefix_source_or_generation_do_not_create_archives(self):
+        with self.repo.transaction() as tx:
+            tx.execute('DELETE FROM reveal_records WHERE kind=%s AND id=%s', ('fixture_seed', self.receipt_id))
+        self.assertEqual(self.capture(), []); self.assertEqual(self.reads, [])
+        self.seed(self.owner)
+        self.assertEqual(self.capture(sources=[LEGACY_ID]), [])
+        self.assertEqual(self.capture(generation=KPN_GENERATION), [])
+        self.assertEqual(self.capture(generation=dict(LEGACY_GENERATION, generation_id=KPN)), [])
+        with patch.object(self.repo, 'table_prefix', 'reveal'):
+            self.assertEqual(self.capture(), [])
+        self.assertEqual(self.reads, [])
+
+    def test_owner_receipt_and_archived_anchor_checks_fail_closed(self):
+        for kind, identity, mutate, owner in (
+            ('fixture_seed', self.receipt_id, lambda d: d.update(owner_user_id=self.other), None),
+            ('fixture_seed', self.receipt_id, lambda d: d.update(receipt_id='forged'), None),
+            ('account', self.account_key, lambda d: None, self.other),
+            ('account', self.account_key, lambda d: d.update(fixture_origin={}), None),
+            ('account', self.account_key, lambda d: d['summary']['archive']['reference']['anchors'][0].update(
+                mechanism_id=MECHANISM), None),
+            ('scientific_document', self.document_id, lambda d: None, self.other),
+        ):
+            with self.subTest(kind=kind, mutate=mutate):
+                self.seed(self.owner); self.change(kind, identity, mutate, owner)
+                with self.assertRaises(reference.ReferenceError): self.capture()
+        self.assertEqual(self.reads, [])
+
+    def test_edited_document_is_rejected_even_when_its_stored_checksum_is_recomputed(self):
+        document = self.get('scientific_document', self.document_id)['data']['document']
+        document['mechanisms'][0]['description'] += ' Invented provenance.'
+        checksum = self.sha256(self.canonical_json(document))
+        self.put('scientific_document', digest([self.owner, checksum]), self.owner,
+                 {'document': document, 'sha256': checksum, 'fixture_origin': self.origin})
+        self.change('fixture_seed', self.receipt_id, lambda d: d.update(scientific_document_sha256=checksum))
+        with self.assertRaisesRegex(reference.ReferenceError, 'pinned original fixture'): self.capture()
+        self.assertEqual(self.reads, [])
+
+    def test_source_artifact_requires_owner_receipt_and_exact_immutable_version(self):
+        checksum = archive.EXTERNAL_FIXTURE_FILES[0][2]; key = digest([self.owner, checksum])
+        for mutate, owner in (
+            (lambda d: None, self.other),
+            (lambda d: d['storage'].update(version_id='null'), None),
+            (lambda d: d['storage'].update(version_id='different-version'), None),
+            (lambda d: d['storage'].update(sha256='0' * 64), None),
+            (lambda d: d['file'].update(id=MECHANISM), None),
+        ):
+            with self.subTest(mutate=mutate):
+                self.seed(self.owner); self.change('artifact', key, mutate, owner)
+                with self.assertRaises(reference.ReferenceError): self.capture()
+        self.assertEqual(self.reads, [])
+        self.seed(self.owner)
+        self.change('fixture_seed', self.receipt_id, lambda d: d.update(artifacts=[]))
+        with self.assertRaisesRegex(reference.ReferenceError, 'original seed receipt'): self.capture()
+
+    def test_source_byte_corruption_and_read_failure_are_not_replaced_by_descriptions(self):
+        before = self.all_rows()
+        with self.assertRaisesRegex(reference.ReferenceError, 'checksum'):
+            self.capture(reader=lambda ref: b'{}')
+        def unavailable(ref): raise OSError('retained bytes unavailable')
+        with self.assertRaisesRegex(OSError, 'unavailable'): self.capture(reader=unavailable)
+        self.assertEqual(before, self.all_rows())
 
 
 if __name__ == '__main__': unittest.main()

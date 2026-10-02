@@ -79,6 +79,8 @@ See `schema/migrations/008_reference_generation.sql` for the full DDL. Summary:
  "generation_manifest_sha256"}
 ```
 
+**Pinned local fixture exception.** For `reveal_workflow_local` only, capture can supplement a missing legacy factor from the original `bubble-account-v1` fixture's retained CFDE responses. It checks the pinned fixture content, owner receipt, archived account anchor, unchanged scientific document and Mechanism, and both immutable S3 versions against their exact source checksums. Imported factor snapshots take precedence; arbitrary account descriptions cannot supply this fallback. `metadata.source_provenance` labels it `retained_external_cfde_capture` with `generation_membership: not_asserted`: the generation identifies the archived account context, not membership in its loaded import. Both partial eight-row responses remain intact, including a conflicting `label_factor: Factor2` on a `factor: Factor1` observation; the archive keeps the original interim label `Factor1`. `top_genes` and `top_gene_sets` stay empty because the captures establish neither complete rankings nor imported mappings. Invalid or unavailable retained evidence fails closed; original published science is unchanged.
+
 ## 4. Application records (per prefix, `<prefix>_records`)
 
 **New kinds.** All are owned by `catalog`.

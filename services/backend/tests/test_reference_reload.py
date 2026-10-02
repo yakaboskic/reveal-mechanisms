@@ -1488,6 +1488,30 @@ def test_purge_plan_gates_then_deletes_in_order_and_only_stale_namespaces(tmp_pa
 # capture / status / CLI
 
 
+@pytest.mark.parametrize('do_apply', [False, True])
+def test_capture_supplements_only_missing_factors_from_verified_retained_fixture(tmp_path, do_apply):
+    services, db, archive, repo = cutover_services(tmp_path)
+    imported, external, unavailable = 'source:imported', 'source:external', 'source:unavailable'
+    imported_row, retained_row = {'source_id': imported, 'origin': 'import'}, {'source_id': external, 'origin': 'fixture_capture'}
+    archive.referenced_sources = lambda repository: {LEGACY: {imported, external, unavailable}}
+    archive.capture_factors = lambda *args, **kwargs: [dict(imported_row)]
+    reads = []
+    def retained(repository, generation, source_ids, *, read_artifact):
+        assert generation['generation_id'] == LEGACY and read_artifact == services.read_artifact
+        reads.append((repository.table_prefix, source_ids))
+        assert imported not in source_ids  # An external capture can never replace an imported row.
+        return [dict(retained_row)] if external in source_ids else []
+    archive.capture_fixture_factors = retained
+    written = []
+    def write(connection, rows): written.extend(rows); return len(rows)
+    archive.write_archived_factors = write
+    result = rr.capture_generation(services, LEGACY, [PREFIX, 'reveal'], apply=do_apply, dapper=None)
+    assert reads == [(PREFIX, [external, unavailable]), ('reveal', [unavailable])]
+    assert result['sources'] == 3 and result['captured'] == 2 and result['unresolved'] == [unavailable]
+    assert result['written'] == (2 if do_apply else 0)
+    assert written == ([imported_row, retained_row] if do_apply else [])
+
+
 def test_capture_freezes_referenced_factors_and_writes_a_cold_export(tmp_path):
     services, db, archive, repo = cutover_services(tmp_path)
     db.generations[LEGACY]['legacy_gene_set_import_id'] = '2' * 64
@@ -1553,6 +1577,47 @@ class Vectors:
     def query(self, *, vector, top_k, namespace):
         rows = [SimpleNamespace(id=i, score=float(np.dot(v, vector))) for i, v in self.namespaces[namespace].items()]
         return sorted(rows, key=lambda row: (-row.score, row.id))[:top_k]
+
+
+def test_gap_verification_resolves_canonical_only_fixture_against_pinned_import(tmp_path):
+    services = fake_services(tmp_path)
+    fixture = rr.ROOT / 'data/fixtures/bubble-account-v1'
+    source = rr.read_json(fixture / 'sources/dismech-gap.source.json')
+    identity = rr.read_json(fixture / 'scientific-account.json')['knowledge_gaps'][0]['id']
+    dismech_import_id = '1' * 64
+    db = FakeDB(rules=[
+        (r'^SELECT JSON_UNQUOTE.*FROM dismech_discussions', [(source['id'],)]),
+        (r'^SELECT payload FROM dismech_discussions', [(json.dumps(source),)]),
+    ])
+    gap = {'id': identity, 'source_id': None, 'source_revision': None}
+    # Actual pinned DAPPER runtime: scope, rationale and expanded MONDO term must match the catalog.
+    assert rr.unresolved_gaps(services, db, dismech_import_id, {'account': {'fixture': {'gap': gap}}}) == []
+    assert all('import_id=%s AND is_gap=1' in sql and params == (dismech_import_id,) for sql, params in db.log)
+    bad = {'account': {
+        'missing_canonical': {'gap': {**gap, 'id': 'dapper:KnowledgeGap.missing'}},
+        'bad_source': {'gap': {**gap, 'source_id': 'dismech:missing'}},
+        'missing_identity': {'gap': {'id': None, 'source_id': None}},
+        'empty_gap': {'gap': {}},
+        'not_bound_to_a_gap': {'gap': None},
+    }}
+    assert rr.unresolved_gaps(services, db, dismech_import_id, bad) == [
+        '(missing gap identity)', 'dapper:KnowledgeGap.missing', 'dismech:missing']
+    # A gap from a different payload/import cannot be accepted just because its id is well formed.
+    changed = {**source, 'raw': {**source['raw'], 'prompt': 'A different scientific question'}}
+    db.rules[1] = (r'^SELECT payload FROM dismech_discussions', [(json.dumps(changed),)])
+    assert rr.unresolved_gaps(services, db, dismech_import_id, {'account': {'fixture': {'gap': gap}}}) == [identity]
+    assert rr.unresolved_gaps(services, db, None, {'account': {'fixture': {'gap': gap}}}) == [identity]
+
+
+def test_gap_verification_keeps_source_path_strict_without_loading_canonical_runtime(tmp_path):
+    services = fake_services(tmp_path)
+    def no_runtime(*args): raise AssertionError('Source-backed gaps do not need canonical reconstruction')
+    services.dapper_runtime = no_runtime
+    db = FakeDB(rules=[(r'FROM dismech_discussions', [('gap-1',)])])
+    stamps = {'request': {'r1': {'gap': {'id': 'kg', 'source_id': 'gap-1'}}}}
+    assert rr.unresolved_gaps(services, db, '1' * 64, stamps) == []
+    stamps['request']['r2'] = {'gap': {'id': 'kg', 'source_id': 'gap-missing'}}
+    assert rr.unresolved_gaps(services, db, '1' * 64, stamps) == ['gap-missing']
 
 
 def test_verify_checks_pointers_counts_inventory_neighbours_and_archive(tmp_path):

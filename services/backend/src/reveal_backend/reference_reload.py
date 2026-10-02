@@ -1524,6 +1524,15 @@ def capture_generation(services, generation_id, prefixes, *, apply, cold=False, 
             except Exception as error: emit(services, f'DAPPER runtime unavailable ({type(error).__name__}); mechanism ids are not recomputed')
         rows = archive.capture_factors(connection, generation, sorted(sources), runtime=runtime) if sources else []
         captured = {row.get('source_id') for row in rows}
+        # Imported factors remain authoritative. A canonical fixture may retain a verified,
+        # immutable external capture for a factor absent from the imported scientific tables.
+        for prefix in prefixes:
+            missing = sorted(sources - captured)
+            if not missing: break
+            retained = archive.capture_fixture_factors(services.repository(prefix), generation, missing,
+                                                       read_artifact=services.read_artifact)
+            rows.extend(retained)
+            captured.update(row['source_id'] for row in retained)
         report = {'generation_id': generation_id, 'apply': apply, 'referenced': per_prefix, 'sources': len(sources),
                   'captured': len(rows), 'unresolved': sorted(sources - captured)[:50],
                   'written': archive.write_archived_factors(connection, rows) if apply and rows else 0,
@@ -2000,6 +2009,40 @@ def _stamps(tx, kind, path):
     return stamps
 
 
+def unresolved_gaps(services, connection, dismech_import_id, stamps):
+    """Resolve source-backed gaps, or canonical-only frozen gaps, in the pinned import.
+
+    Orphan/fixture accounts legitimately freeze a KnowledgeGap without a source selection.
+    A missing source id is not itself a missing gap, but its canonical id must still resolve.
+    """
+    selected = [stamp['gap'] for rows in stamps.values() for stamp in rows.values() if stamp.get('gap') is not None]
+    source_ids = {row[0] for row in query(connection,
+        "SELECT JSON_UNQUOTE(JSON_EXTRACT(payload,'$.id')) FROM dismech_discussions WHERE import_id=%s AND is_gap=1",
+        (dismech_import_id,))} if dismech_import_id else set()
+    canonical_ids = set()
+    if dismech_import_id and any(isinstance(gap, dict) and not gap.get('source_id') and gap.get('id') for gap in selected):
+        runtime = services.dapper_runtime(DEFAULT_DAPPER)
+        for (payload,) in query(connection, 'SELECT payload FROM dismech_discussions WHERE import_id=%s AND is_gap=1', (dismech_import_id,)):
+            row = json.loads(payload) if isinstance(payload, (str, bytes)) else payload
+            raw = row['raw']
+            # The same canonical KnowledgeGap fields and MONDO expansion served by Catalog.load.
+            node = {'text': raw['prompt'], 'gap_description': raw.get('rationale') or raw['prompt'],
+                    'gap_kind': row['kind'], 'scope': row['document_name']}
+            disease = (row.get('disease_term') or {}).get('term', {}).get('id')
+            if disease: node['about_entities'] = [runtime.resolver({'MONDO': 'http://purl.obolibrary.org/obo/MONDO_'}).expand(disease)]
+            canonical_ids.add(runtime.compute_id(node, 'KnowledgeGap', runtime.schema))
+    unresolved = set()
+    for gap in selected:
+        if not isinstance(gap, dict) or not gap.get('id'):
+            unresolved.add('(missing gap identity)')
+            continue
+        source_id = gap.get('source_id')
+        if source_id:
+            if source_id not in source_ids: unresolved.add(source_id)
+        elif gap['id'] not in canonical_ids: unresolved.add(gap['id'])
+    return sorted(unresolved)
+
+
 def verify_target(services, target, *, generation_id=None, client=None):
     archive, vi, vr = services.module('reference_archive'), services.module('vector_ingestion'), services.module('vector_retrieval')
     checks = {}
@@ -2065,10 +2108,7 @@ def verify_target(services, target, *, generation_id=None, client=None):
         missing += sorted(set(wanted) - present)
         check('archived_factors', not missing, missing=missing[:20])
         dismech = generation.get('dismech_import_id')
-        gaps = {row[0] for row in query(connection, "SELECT JSON_UNQUOTE(JSON_EXTRACT(payload,'$.id')) FROM dismech_discussions WHERE import_id=%s AND is_gap=1",
-                                         (dismech,))} if dismech else set()
-        unresolved = sorted({(stamp.get('gap') or {}).get('source_id') for rows in stamps.values() for stamp in rows.values()
-                             if stamp.get('gap')} - gaps)
+        unresolved = unresolved_gaps(services, connection, dismech, stamps)
         check('gaps_resolve', bool(dismech) and not unresolved, unresolved=unresolved[:20])
     finally: connection.close()
     passed = all(item['passed'] for item in checks.values())

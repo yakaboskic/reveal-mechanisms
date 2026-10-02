@@ -14,7 +14,7 @@ import time
 import numpy as np
 
 from .eaggl_bundle import TEMPLATE, canonical, open_capture, text_hash
-from .embedding_client import DEFAULT_MODEL, DEFAULT_SERVICE_URL, get_embeddings
+from .embedding_client import DEFAULT_MODEL, DEFAULT_SERVICE_URL, get_embeddings, query_embedding_service_url
 
 
 def validate_vectors(vectors, count, dimensions=None):
@@ -224,10 +224,12 @@ class FactorSearchIndex:
         config = self.run['config']
         dimensions = self.matrix.shape[1]
         scope = (self.run['run_id'], text_hash(canonical(config)), dimensions)
+        service_url = query_embedding_service_url(config['service_url'])
+        query_scope = (scope, text_hash(service_url))
 
         def fetch(missing):
             raw = embedder(missing, model=config['model'], provider=config['provider'],
-                service_url=config['service_url'], max_workers=1, max_retries=2, timeout=30)
+                service_url=service_url, max_workers=1, max_retries=2, timeout=30)
             validate_vectors(raw, len(missing), dimensions)
             # Validation must not reduce the precision used by per-context
             # suggestion scoring (custom embedders may return float64).
@@ -242,7 +244,7 @@ class FactorSearchIndex:
                     imported[text] = candidate[1]
         missing = [text for text in texts if text not in imported]
         if missing:
-            resolved = self.query_cache.get(missing, scope, fetch)
+            resolved = self.query_cache.get(missing, query_scope, fetch)
             imported.update(zip(missing, resolved))
         # Return an independent matrix while preserving every occurrence and
         # its original position, including mixed imported and novel text.

@@ -10,8 +10,8 @@ A reload never deletes scientific work. This module
 
 Stamping bumps only the row version: logical payload versions (draft/publication/outcome
 publication `version`), `provenance` and account `result` are never touched. Every pass is
-idempotent and runs one repository transaction per owner. No network I/O; SQL helpers take
-an explicit DB-API connection.
+idempotent and runs one repository transaction per owner. SQL helpers take an explicit
+DB-API connection; retained source capture uses an explicit, read-only artifact reader.
 """
 from __future__ import annotations
 
@@ -852,6 +852,142 @@ def capture_factors(connection, generation: dict, source_ids, *, runtime=None, s
                     'generation_manifest_sha256': manifest_sha256}
         rows.append(_archived_row(snapshot))
     return rows
+
+
+# This authored local fixture predates reference-generation membership. Its original
+# CFDE response captures are real, but CADinT2D::Factor1 was not in the imported legacy
+# factors. Pin the reviewed fixture and source bytes: a Mechanism description, arbitrary
+# fixture_origin, or edited receipt must never manufacture an external factor archive.
+EXTERNAL_FIXTURE_CONTENT = '83e9b71b365954a3d212c40896232958342693e775e9f1cb6349f990d14043b3'
+EXTERNAL_FIXTURE_DOCUMENT = 'ede867fbd62d442986c26ceea7bf157ef56a864397ed0aec23072fab3f0a98ab'
+EXTERNAL_FIXTURE_ACCOUNT = 'dapper:ScientificAccount.05Vs-l6pVZHt9ttebmJqK2VNodZUouTb'
+EXTERNAL_FIXTURE_SOURCE = 'factor:portal:CADinT2D:cfde-inc-v2:Factor1'
+EXTERNAL_FIXTURE_MECHANISM = 'dapper:Mechanism.kEJMDzCkDYE94DpWaXrQg-eC4gFGQyuX'
+EXTERNAL_FIXTURE_FILES = (
+    ('pigean-gene-factor', 'dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ',
+     '3fdf0f2ae3f782824ec7f96687c4a988a88a6ffb0a106b52f4e20464cdf51e30', 2945),
+    ('pigean-gene-set-factor', 'dapper:File.Dt0S38v_sLn5jiOAVXMrMWTrXBLnsn83',
+     'b4ba6a21f6791c8b80ce8ef471361634ebb8b9f1f4e91e886fe1f05d02e7c1fa', 3785),
+)
+
+
+def capture_fixture_factors(repository, generation: dict, source_ids, *, read_artifact) -> list[dict]:
+    """Supplement *missing* imported factors from the pinned local fixture's retained bytes.
+
+    This is deliberately not a general description-based factor fallback. The receipt,
+    owner, archived account, complete scientific document (apart from storage locations),
+    original Mechanism, and two versioned artifact references must all agree. The reader
+    receives only those S3 references, outside the read transaction; returned bytes are
+    independently size/checksum checked. Nothing is written here.
+
+    The resulting generation is the retiring *account context*, not a claim that the
+    external source belonged to the imported generation. Metadata preserves the original
+    observations and their limitations. Empty top_* arrays avoid presenting the partial
+    eight-row responses as a complete top-50 or manufacturing ranked gene-set mappings.
+    """
+    if (repository.table_prefix != 'reveal_workflow_local' or generation.get('kind') != LEGACY_KIND
+            or generation.get('model') != LEGACY_MODEL or EXTERNAL_FIXTURE_SOURCE not in source_ids):
+        return []
+    identity = generation.get('generation_id'); _require_generation(identity)
+    from .evidence_package import canonical_json, sha256
+
+    def require(condition, message):
+        if not condition: raise ReferenceError('Retained canonical factor source: ' + message)
+
+    origin = {'kind': 'canonical_fixture', 'fixture_version': 'bubble-account-v1',
+              'content_sha256': EXTERNAL_FIXTURE_CONTENT, 'scientific_acceptance': 'not_reviewed'}
+    retained = []
+    with repository.read_transaction() as tx:
+        for row in tx.list('fixture_seed'):
+            receipt, owner = row['data'], row['owner']
+            if (receipt.get('content_sha256') != EXTERNAL_FIXTURE_CONTENT
+                    or receipt.get('account_id') != EXTERNAL_FIXTURE_ACCOUNT):
+                continue
+            expected_receipt = digest([owner, 'canonical-fixture', 'bubble-account-v1', EXTERNAL_FIXTURE_CONTENT])
+            require(row['id'] == receipt.get('receipt_id') == expected_receipt
+                    and receipt.get('format') == 'reveal.fixture-seed-receipt/1'
+                    and receipt.get('fixture_version') == 'bubble-account-v1'
+                    and receipt.get('owner_user_id') == owner
+                    and receipt.get('table_prefix') == repository.table_prefix
+                    and receipt.get('scientific_acceptance') == 'not_reviewed'
+                    and receipt.get('jobs_dispatched') == 0, 'fixture receipt identity differs')
+            account = tx.get('account', digest([owner, EXTERNAL_FIXTURE_ACCOUNT]))
+            require(account is not None and account['owner'] == owner
+                    and account['data'].get('fixture_origin') == origin, 'owning fixture account is missing or changed')
+            stamp = stamp_of('account', account['data'])
+            if not stamp or stamp.get('from_reference_generation') != identity: continue
+            require(any(a.get('source_id') == EXTERNAL_FIXTURE_SOURCE
+                        and a.get('mechanism_id') == EXTERNAL_FIXTURE_MECHANISM
+                        and a.get('archived_reference_factor_id') == archive_id(identity, EXTERNAL_FIXTURE_SOURCE)
+                        for a in (stamp.get('reference') or {}).get('anchors') or []), 'archived account anchor differs')
+            document_sha = receipt.get('scientific_document_sha256')
+            stored = tx.get('scientific_document', digest([owner, document_sha]))
+            require(stored is not None and stored['owner'] == owner and stored['data'].get('fixture_origin') == origin,
+                    'retained scientific document is missing or belongs to another owner')
+            document = stored['data'].get('document') or {}
+            require(stored['data'].get('sha256') == document_sha == sha256(canonical_json(document)),
+                    'retained scientific document checksum differs')
+            scientific = deepcopy(document)
+            for group in ('files', 'datasets'):
+                for item in scientific.get(group) or []: item.pop('location', None)
+            require(sha256(canonical_json(scientific)) == EXTERNAL_FIXTURE_DOCUMENT,
+                    'scientific content differs from the pinned original fixture')
+            mechanism, = document['mechanisms']
+            require(mechanism['id'] == EXTERNAL_FIXTURE_MECHANISM
+                    and (_parse_mechanism(mechanism) or {}).get('source_id') == EXTERNAL_FIXTURE_SOURCE,
+                    'original Mechanism identity differs')
+            files = {file['id']: file for file in document['files']}
+            artifacts = []
+            for index, file_id, checksum, size in EXTERNAL_FIXTURE_FILES:
+                artifact = tx.get('artifact', digest([owner, checksum]))
+                require(artifact is not None and artifact['owner'] == owner, 'retained source artifact is missing or belongs to another owner')
+                data = artifact['data']; storage = data.get('storage') or {}; file = files[file_id]
+                require(data.get('sha256') == file.get('sha256') == storage.get('sha256') == checksum
+                        and file.get('size_in_bytes') == storage.get('size_bytes') == size
+                        and data.get('file') == file and storage.get('store') == 's3'
+                        and bool(storage.get('bucket')) and bool(storage.get('key'))
+                        and isinstance(storage.get('version_id'), str) and storage['version_id'] not in ('', 'null')
+                        and file.get('location') == f's3://{storage["bucket"]}/{storage["key"]}',
+                        'retained source file or immutable version binding differs')
+                require(any(item.get('file') == file and item.get('storage') == storage
+                            for item in receipt.get('artifacts') or []), 'source artifact is absent from the original seed receipt')
+                artifacts.append((index, file_id, checksum, size, deepcopy(storage)))
+            retained.append((deepcopy(mechanism), artifacts))
+    if not retained: return []
+
+    snapshots = []
+    for mechanism, artifacts in retained:
+        captures, labels, other_label_rows = [], set(), 0
+        for index, file_id, checksum, size, storage in artifacts:
+            raw = read_artifact(storage)
+            require(isinstance(raw, bytes) and len(raw) == size and sha256(raw) == checksum, 'source bytes fail checksum verification')
+            response = json.loads(raw)
+            require(response.get('index') == index and response.get('q') == ['CADinT2D', LEGACY_MODEL, 'Factor1']
+                    and response.get('count') == len(response.get('data') or []) == 8, 'source response query or row count differs')
+            for item in response['data']:
+                require(item.get('phenotype') == 'CADinT2D' and item.get('trait_group') == 'portal'
+                        and item.get('gene_set_size') == LEGACY_MODEL and item.get('factor') == 'Factor1',
+                        'source observation factor identity differs')
+                labels.add(item['label'])
+                if item.get('label_factor') != 'Factor1': other_label_rows += 1
+            captures.append({'file_id': file_id, 'sha256': checksum, 'size_bytes': size,
+                             'source_path': f'data/fixtures/bubble-account-v1/sources/{index}.response.json',
+                             'index': index, 'query': response['q'], 'page': response['page'], 'limit': response['limit'],
+                             'progress': response['progress'], 'partial': True, 'observations': response['data']})
+        snapshots.append({'format': SNAPSHOT_FORMAT, 'generation_id': identity, 'model': LEGACY_MODEL,
+            'source_id': EXTERNAL_FIXTURE_SOURCE, 'factor_id': 'CADinT2D::Factor1', 'trait': 'CADinT2D', 'kpn_trait_id': None,
+            'label': 'Factor1', 'mechanism': mechanism,
+            'metadata': {'source_provenance': {'kind': 'retained_external_cfde_capture', 'fixture_origin': origin,
+                'generation_membership': 'not_asserted',
+                'generation_scope': 'The generation identifies the archived account context, not membership of this external factor in that import.',
+                'completeness': 'partial',
+                'label_basis': 'Original fixture interim name; source label disagreements are not resolved.',
+                'source_labels': sorted(labels), 'rows_with_other_label_factor': other_label_rows,
+                'limitations': 'Two retained eight-row CFDE responses only. Full factor loadings, top-50 rankings and imported gene-set mappings are unavailable. Source labels differ, including a Factor2 label_factor on a Factor1 row; the original observations are preserved.',
+                'captures': captures}},
+            'top_genes': [], 'top_gene_sets': [], 'generation_manifest_sha256': digest(generation.get('manifest') or {})})
+    require(len({digest(snapshot) for snapshot in snapshots}) == 1, 'fixture owners have conflicting source captures')
+    return [_archived_row(snapshots[0])]
 
 
 def write_archived_factors(connection, rows) -> int:

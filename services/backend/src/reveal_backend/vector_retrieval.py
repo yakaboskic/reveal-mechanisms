@@ -17,7 +17,7 @@ import httpx
 import numpy as np
 
 from .eaggl_embeddings import QueryVectorCache, validate_vectors
-from .embedding_client import get_embeddings
+from .embedding_client import get_embeddings, query_embedding_service_url
 from .repository import canonical, digest
 from .runtime_config import setting
 
@@ -226,6 +226,7 @@ class UpstashFactorIndex:
         if not texts or any(not isinstance(text, str) or not text.strip() for text in texts):
             raise ValueError('Queries cannot be blank')
         config = self.run['config']
+        service_url = query_embedding_service_url(config['service_url'])
         def fetch(missing):
             found, novel = {}, []
             for text in missing:
@@ -236,12 +237,13 @@ class UpstashFactorIndex:
                 else: novel.append(text)
             if novel:
                 raw = embedder(novel, model=config['model'], provider=config['provider'],
-                    service_url=config['service_url'], max_workers=1, max_retries=2, timeout=30)
+                    service_url=service_url, max_workers=1, max_retries=2, timeout=30)
                 validate_vectors(raw, len(novel), self.run['dimensions'])
                 vectors = normalized(raw, self.run['dimensions'])
                 found.update(zip(novel, vectors))
             return np.stack([found[text] for text in missing])
-        return self.query_cache.get(texts, self.snapshot['embedding_space'], fetch)
+        query_scope = (self.snapshot['embedding_space'], hashlib.sha256(service_url.encode()).hexdigest())
+        return self.query_cache.get(texts, query_scope, fetch)
 
     def candidates(self, vectors, top_k, *, exclude=()):
         if not 1 <= top_k <= self.candidate_limit:
