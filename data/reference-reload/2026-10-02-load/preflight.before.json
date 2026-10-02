@@ -1,0 +1,176 @@
+{
+  "blockers": [],
+  "checked_at": "2026-10-02T08:07:04.422082Z",
+  "database": "cyaka_reveal_mechanisms",
+  "embedding_service": {
+    "dimensions": 768,
+    "reachable": true
+  },
+  "format": "reveal.reference-reload-preflight/1",
+  "grants": {
+    "alter": true,
+    "create": true,
+    "delete": true,
+    "drop": true,
+    "index": true,
+    "insert": true,
+    "references": true,
+    "select": true,
+    "update": true
+  },
+  "inventory": {
+    "approx_rows": {
+      "cfde_gene_set_aliases": 749143,
+      "dapper_objects": 696395,
+      "dismech_causal_edges": 30322,
+      "dismech_discussions": 2046,
+      "dismech_documents": 2717,
+      "dismech_embedding_inputs": 19707,
+      "dismech_embedding_runs": 0,
+      "dismech_embedding_vectors": 14874,
+      "dismech_gap_attachments": 3960,
+      "dismech_hypotheses": 691,
+      "dismech_imports": 0,
+      "dismech_mechanisms": 11142,
+      "dismech_ontology_terms": 20226,
+      "dismech_vocabulary": 56228,
+      "eaggl_cfde_factor_links": 1611,
+      "eaggl_cfde_gene_set_links": 8658,
+      "eaggl_cfde_link_runs": 0,
+      "eaggl_embedding_runs": 0,
+      "eaggl_factors": 3739,
+      "eaggl_gene_loadings": 2404912,
+      "eaggl_genes": 18490,
+      "eaggl_graph_edges": 9224,
+      "eaggl_graph_nodes": 3552,
+      "eaggl_imports": 0,
+      "eaggl_name_embeddings": 2268,
+      "gene_set_imports": 0,
+      "reveal_compose_records": 341,
+      "reveal_compose_transaction_lock": 0,
+      "reveal_records": 10236,
+      "reveal_transaction_lock": 0,
+      "reveal_workflow_local_records": 2127,
+      "reveal_workflow_local_transaction_lock": 0,
+      "reveal_workflow_qa_records": 5480,
+      "reveal_workflow_qa_transaction_lock": 0
+    },
+    "exact": {
+      "dismech_embedding_runs": 1,
+      "dismech_imports": 1,
+      "eaggl_cfde_link_runs": 1,
+      "eaggl_embedding_runs": 1,
+      "eaggl_imports": 1,
+      "gene_set_imports": 1
+    }
+  },
+  "lock_free": true,
+  "ok": true,
+  "prefixes": [
+    {
+      "lock_table": true,
+      "prefix": "reveal_compose",
+      "records_table": true,
+      "target": "compose"
+    },
+    {
+      "lock_table": true,
+      "prefix": "reveal_workflow_local",
+      "records_table": true,
+      "target": "local"
+    },
+    {
+      "lock_table": true,
+      "prefix": "reveal",
+      "records_table": true,
+      "target": "prod"
+    },
+    {
+      "lock_table": true,
+      "prefix": "reveal_workflow_qa",
+      "records_table": true,
+      "target": "qa"
+    },
+    {
+      "lock_table": false,
+      "prefix": "reveal_reload_rehearsal",
+      "records_table": false,
+      "target": "rehearsal"
+    }
+  ],
+  "reference_tables": {
+    "archived_reference_factors": false,
+    "cfde_gene_set_collections": false,
+    "cfde_gene_sets": false,
+    "embedding_spaces": false,
+    "factor_gene_set_projections": false,
+    "kpn_traits": false,
+    "reference_factors": false,
+    "reference_generations": false,
+    "reference_vectors": false,
+    "vector_bindings": false
+  },
+  "server": {
+    "aurora_version": "3.10.3",
+    "innodb_read_only": false,
+    "max_allowed_packet": 67108864,
+    "read_only": false,
+    "round_trip_ms": 12.371,
+    "sql_mode_global": "",
+    "sql_mode_session": "",
+    "tls_cipher_present": true,
+    "version": "8.0.42"
+  },
+  "sources": {
+    "dismech": {
+      "complete": [
+        "4062563df48bbc8aa418b7add0af083115184e70c1d909e66ab70d505087e395"
+      ],
+      "context_runs": [
+        {
+          "dismech_import_id": "4062563df48bbc8aa418b7add0af083115184e70c1d909e66ab70d505087e395",
+          "run_id": "dd922e3b7b405f68626bd1679129764de605fd9e278244cca8de54b304d47824",
+          "status": "complete"
+        }
+      ],
+      "selected": "4062563df48bbc8aa418b7add0af083115184e70c1d909e66ab70d505087e395",
+      "selected_context_run": "dd922e3b7b405f68626bd1679129764de605fd9e278244cca8de54b304d47824"
+    },
+    "eaggl": {
+      "embedding_runs": [
+        "d4c0300978778453c847c7c3447a316e55b1b0cfe469c647f148ecc1a77f57d7"
+      ],
+      "factors": 4037,
+      "import_id": "a548ad801c11551de74f04a4cb2ecce65e776a443d2730a01ec6e17d89a6f1bc",
+      "imports": [
+        "a548ad801c11551de74f04a4cb2ecce65e776a443d2730a01ec6e17d89a6f1bc"
+      ],
+      "loadings": 2553330,
+      "run_config": {
+        "dimensions": 768,
+        "model": "pritamdeka/BioBERT-mnli-snli-scinli-scitail-mednli-stsb",
+        "model_revision": "unspecified",
+        "provider": "huggingface",
+        "service_url": "https://embedding-service-27386110942.us-east1.run.app"
+      },
+      "selected_run": "d4c0300978778453c847c7c3447a316e55b1b0cfe469c647f148ecc1a77f57d7",
+      "source_version": "legacy-711-trait-capped-union",
+      "status": "complete"
+    },
+    "mapping_runs": {
+      "complete": [
+        "272cfa19d093257863d7e7134776229dbc9b9b018d974e6b311285686833ec31"
+      ],
+      "eaggl_import_id": "a548ad801c11551de74f04a4cb2ecce65e776a443d2730a01ec6e17d89a6f1bc",
+      "embedding_runs": [
+        "d4c0300978778453c847c7c3447a316e55b1b0cfe469c647f148ecc1a77f57d7"
+      ],
+      "gene_set_import_id": "3714a036aea279190d4723d9ddf2dd81d105e3427c38d9fc685e7fd606cb260e",
+      "selected": "272cfa19d093257863d7e7134776229dbc9b9b018d974e6b311285686833ec31"
+    }
+  },
+  "warnings": [
+    "rehearsal: reveal_reload_rehearsal_records does not exist",
+    "rehearsal: reveal_reload_rehearsal_transaction_lock does not exist"
+  ]
+}

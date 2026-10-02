@@ -255,6 +255,11 @@ authentication, so keep it behind the tunnel. The database is opened immutable; 
 
 ## Reference reload (`db_` stage)
 
+> **Cutover round:** the load round finished on 2026-10-02 (generation `ec3364ae…`). The cutover is driven from the
+> laptop with the CLI, following [../docs/reference-cutover-runbook.md](../docs/reference-cutover-runbook.md). Do not run
+> any `db_` command on this host from now on: `db_capture_cmd` writes into every prefix, and LAP does not know about the
+> laptop's applies.
+
 The contract is `../docs/reference-reload.md` (§7 is the CLI, §10 this stage). Every `db_` command is a
 `local cmd`: run.pl itself runs `python -m reveal_backend.reference_reload` from the backend venv on the submit
 host, even under `--bsub`. `--bsub` therefore gains nothing for these steps; run LAP in tmux instead, so a dropped
