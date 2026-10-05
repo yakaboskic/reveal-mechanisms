@@ -49,6 +49,11 @@ main { flex:1; display:flex; flex-direction:column; width:100%; max-width:1448px
 .welcome-card .card-icon-fill { fill:var(--teal); stroke:none; }
 .welcome-card strong { color:var(--teal); font-size:16px; line-height:1.35; }
 .welcome-card span { color:var(--muted); font-size:14px; font-weight:400; line-height:1.45; }
+.welcome-panel-stage { flex:1; display:grid; place-items:center; }
+.welcome-panel { width:min(100%,440px); background:white; border-radius:8px; padding:1.6rem 1.5rem 1.4rem; box-shadow:0 16px 40px rgba(24,54,77,.16); }
+.welcome-panel h2 { font-size:24px; margin-bottom:1.15rem; }
+.welcome-options { display:grid; gap:.65rem; }
+.welcome-options button { width:100%; }
 .workspace-toolbar { display:flex; align-items:center; justify-content:space-between; gap:1rem; margin:0 0 14px; }
 .workspace-toolbar > span { font-weight:600; }
 .workspace-toolbar > div { display:flex; align-items:center; gap:1rem; }

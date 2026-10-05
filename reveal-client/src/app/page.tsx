@@ -50,12 +50,14 @@ export default function Home() {
   const [streamAttempt, setStreamAttempt] = useState(0);
   const [workspaceAttempt, setWorkspaceAttempt] = useState(0);
   const [pending, setPending] = useState<PendingSubmission | null>(null);
+  const [welcomeOpen, setWelcomeOpen] = useState(false);
   const editorGeneration = useRef(0), jobGeneration = useRef(0);
   const collections = useRef<{ drafts: boolean; jobs: boolean; flight: Promise<void> | null }>({ drafts: false, jobs: false, flight: null });
   const identity = useRef<string | null>(null);
   const searchAbort = useRef<AbortController | null>(null), suggestionAbort = useRef<AbortController | null>(null);
   const mutationKeys = useRef(createMutationKeys());
   const currentJob = useRef<Job | null>(null);
+  const startFocus = useRef<string | null>(null);
   const dirty = !draft || JSON.stringify(draft.composer) !== JSON.stringify(composer) || (draft.name || "") !== name;
   const mutable = Boolean(principal) && !busy;
 
@@ -160,17 +162,29 @@ export default function Home() {
   // The stream owns status changes; only selecting a different job reconnects it.
   }, [principal?.user_id, job?.id, streamAttempt, refresh]);
   useEffect(() => () => { searchAbort.current?.abort(); suggestionAbort.current?.abort(); }, []);
+  useEffect(() => {
+    if (welcomeOpen || !startFocus.current) return;
+    const id = startFocus.current;
+    startFocus.current = null;
+    const element = document.getElementById(id);
+    element?.scrollIntoView({ block: "center" });
+    element?.focus();
+  }, [welcomeOpen]);
 
   async function connect() {
     setBusy("connect"); setError("");
-    try { const value = await api.connect(); setPrincipal(value.principal); setNotice("Workspace connected. Choose a knowledge gap to begin."); }
+    try {
+      const value = await api.connect(); setPrincipal(value.principal); setNotice("");
+      const params = new URLSearchParams(window.location.search);
+      setWelcomeOpen(!params.has("draft") && !params.has("job"));
+    }
     catch (error) { setError(errorMessage(error)); }
     finally { setBusy(""); }
   }
   async function disconnect() {
     setBusy("disconnect");
     try {
-      await api.disconnect(); setPrincipal(null); currentJob.current = null; setJob(null); setDraft(null); setJobs([]); setDrafts([]);
+      await api.disconnect(); setWelcomeOpen(false); setPrincipal(null); currentJob.current = null; setJob(null); setDraft(null); setJobs([]); setDrafts([]);
       setComposer(emptyComposer()); setName(""); setGap(null); setSuggestion(null); setActivity([]); setPending(null);
       setNotice("Disconnected. Saved work and running jobs remain on the server.");
     } catch (error) { setError(errorMessage(error)); }
@@ -204,6 +218,11 @@ export default function Home() {
     if (dirty && (composer.source_gap || name) && !window.confirm("Start a new draft? Unsaved changes will be discarded.")) return;
     ++editorGeneration.current; suggestionAbort.current?.abort(); setSuggesting(false);
     setDraft(null); setName(""); setComposer(emptyComposer()); setGap(null); setSuggestion(null); setLocation("draft", null); setNotice(""); setError("");
+  }
+  function startFrom(action: "draft" | "saved" | "gap" | "jobs") {
+    if (action === "draft") newDraft();
+    startFocus.current = action === "draft" ? "draft-name" : action === "saved" ? "saved-draft" : action === "gap" ? "gap-search" : "job-select";
+    setWelcomeOpen(false);
   }
   async function save() {
     setBusy("save"); setError("");
@@ -251,7 +270,7 @@ export default function Home() {
     <main>
       {error && <div className="notice error" role="alert"><span>{error}</span><button className="quiet" onClick={() => setError("")} aria-label="Dismiss error">Dismiss</button></div>}
       {principal && notice && <p className="notice" role="status">{notice}</p>}
-      {!principal ? <section className="welcome"><div className="welcome-lead"><h2>Choose the gap. Ground the claim.</h2><button onClick={connect} disabled={!!busy || checking}>{checking ? "Checking workspace…" : busy === "connect" ? "Connecting…" : "Connect workspace"}</button></div><div className="welcome-cards"><a className="welcome-card" href="#learn-reveal-client" onClick={event => event.preventDefault()}><svg viewBox="0 0 72 56" aria-hidden="true"><path d="M36 12v32M14 16c7 5 15 5 22-2 7 7 15 7 22 2v28c-7 5-15 5-22-2-7 7-15 7-22 2V16z" /></svg><strong>Learn REVEAL client</strong><span>A guide to the workspace, from a knowledge gap to a grounded claim.</span></a><a className="welcome-card" href="#quick-start-demo" onClick={event => event.preventDefault()}><svg viewBox="0 0 72 56" aria-hidden="true"><rect x="14" y="12" width="44" height="32" rx="3" /><path className="card-icon-fill" d="M33 22l12 6-12 6z" /></svg><strong>Watch quick start demo</strong><span>A short walkthrough of connecting and starting an investigation.</span></a></div></section> : <>
+      {!principal ? <section className="welcome"><div className="welcome-lead"><h2>Choose the gap. Ground the claim.</h2><button onClick={connect} disabled={!!busy || checking}>{checking ? "Checking workspace…" : busy === "connect" ? "Connecting…" : "Connect workspace"}</button></div><div className="welcome-cards"><a className="welcome-card" href="#learn-reveal-client" onClick={event => event.preventDefault()}><svg viewBox="0 0 72 56" aria-hidden="true"><path d="M36 12v32M14 16c7 5 15 5 22-2 7 7 15 7 22 2v28c-7 5-15 5-22-2-7 7-15 7-22 2V16z" /></svg><strong>Learn REVEAL client</strong><span>A guide to the workspace, from a knowledge gap to a grounded claim.</span></a><a className="welcome-card" href="#quick-start-demo" onClick={event => event.preventDefault()}><svg viewBox="0 0 72 56" aria-hidden="true"><rect x="14" y="12" width="44" height="32" rx="3" /><path className="card-icon-fill" d="M33 22l12 6-12 6z" /></svg><strong>Watch quick start demo</strong><span>A short walkthrough of connecting and starting an investigation.</span></a></div></section> : welcomeOpen ? <div className="welcome-panel-stage"><section className="welcome-panel" role="dialog" aria-modal="true" aria-labelledby="welcome-heading"><h2 id="welcome-heading">Welcome to your workspace</h2><div className="welcome-options"><button className="secondary" onClick={() => startFrom("draft")}>Start a new draft</button><button className="secondary" onClick={() => startFrom("saved")} disabled={!drafts.length}>Open saved draft</button><button className="secondary" onClick={() => startFrom("gap")}>Choose a knowledge gap</button><button className="secondary" onClick={() => startFrom("jobs")}>Workspace jobs</button></div></section></div> : <>
         <div className="workspace-toolbar"><span>{principal.display_name || "Research workspace"}</span><div><span className="muted small">{workspaceState || "Connecting workspace updates…"}</span><button className="quiet small" onClick={() => { setWorkspaceAttempt(value => value + 1); void refresh().catch(error => setError(errorMessage(error))); }}>Reconnect updates</button></div></div>
         <div className="workspace-grid">
           <section className="draft-pane" aria-labelledby="draft-heading">
