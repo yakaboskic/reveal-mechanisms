@@ -136,6 +136,7 @@ class SQLiteConnection:
     def __init__(self):
         self.db = sqlite3.connect(':memory:'); self.db.execute('PRAGMA foreign_keys=ON')
         self.lock_available, self.released, self.fail_table = True, [], None
+        self.statements = []
     def cursor(self): return SQLiteCursor(self)
     def commit(self): self.db.commit()
     def rollback(self): self.db.rollback()
@@ -148,6 +149,7 @@ class SQLiteCursor:
     def __exit__(self, *args): self.cursor.close()
     def execute(self, sql, args=()):
         self.synthetic = None
+        self.connection.statements.append(sql)
         if 'GET_LOCK(' in sql: self.synthetic = [(int(self.connection.lock_available),)]; return
         if 'RELEASE_LOCK(' in sql: self.connection.released.append(args[0]); self.synthetic = [(1,)]; return
         if sql.startswith('SET SESSION') or sql == 'SHOW WARNINGS': self.synthetic = []; return
@@ -214,6 +216,96 @@ class DatabaseTests(Fixture):
         capture = importer.prepare(self.source); self.connection.lock_available = False
         with self.assertRaisesRegex(RuntimeError, 'Another gnomAD'): importer.load(self.connection, capture)
         self.assertEqual(self.connection.db.execute('SELECT COUNT(*) FROM gnomad_constraint_imports').fetchone()[0], 0)
+
+    def test_activate_reuses_ready_import_without_source_or_payload_reads_and_is_idempotent(self):
+        capture = self.prepare([record()]); identity = capture.manifest['import_id']
+        importer.load(self.connection, capture, table_prefix='reveal_workflow_local')
+        self.source.unlink(); self.connection.statements.clear(); self.connection.released.clear()
+        with patch.object(importer, 'verify_rows') as rehash, patch.object(importer, 'file_hash') as source_hash:
+            result = importer.activate(self.connection, identity, table_prefix='reveal_workflow_qa')
+            again = importer.activate(self.connection, identity, table_prefix='reveal_workflow_qa')
+            rehash.assert_not_called(); source_hash.assert_not_called()
+        self.assertTrue(result['activated']); self.assertFalse(again['activated'])
+        self.assertEqual(self.active(), {'reveal_workflow_local': identity, 'reveal_workflow_qa': identity})
+        self.assertEqual(result['verification'], {'metadata_verified': True, 'row_counts_verified': True,
+            'content_rehashed': False, 'content_verification': 'previously_verified_at_ingestion',
+            'transcript_sha256': capture.manifest['transcript_sha256'], 'gene_sha256': capture.manifest['gene_sha256']})
+        source_queries = [sql for sql in self.connection.statements if 'gnomad_constraint_transcripts' in sql or 'gnomad_gene_constraints' in sql]
+        self.assertEqual(len(source_queries), 4)
+        self.assertTrue(all(sql.startswith('SELECT COUNT(*)') and 'WHERE import_id=%s' in sql for sql in source_queries))
+        self.assertEqual(set(self.connection.released), {'gnomad:import:' + identity[:48], 'gnomad:active:reveal_workflow_qa'})
+
+    def test_activate_missing_unready_or_locked_import_cannot_change_pointers(self):
+        capture = self.prepare([record()]); identity = capture.manifest['import_id']
+        importer.load(self.connection, capture, table_prefix='reveal_workflow_local')
+        with self.assertRaisesRegex(ValueError, 'does not exist'):
+            importer.activate(self.connection, '0' * 64, table_prefix='reveal_workflow_qa')
+        self.connection.db.execute("UPDATE gnomad_constraint_imports SET status='loading'"); self.connection.db.commit()
+        with self.assertRaisesRegex(ValueError, 'requires a ready'):
+            importer.activate(self.connection, identity, table_prefix='reveal_workflow_qa')
+        self.connection.lock_available = False
+        with self.assertRaisesRegex(RuntimeError, 'Another gnomAD'):
+            importer.activate(self.connection, identity, table_prefix='reveal_workflow_qa')
+        self.assertEqual(self.active(), {'reveal_workflow_local': identity})
+
+    def test_activate_rejects_conflicting_metadata_identity_manifest_and_counts(self):
+        capture = self.prepare([record()]); identity = capture.manifest['import_id']
+        scenarios = [
+            ('source_version', '4.1.1', None, 'metadata differs'),
+            ('source_sha256', '1' * 64, None, 'metadata differs'),
+            ('source_url', 'https://example.org/other.tsv', None, 'metadata differs'),
+            ('selection_policy', 'other-policy', None, 'metadata differs'),
+            ('source_version', '4.1.1', ('source_version', '4.1.1'), 'identity differs'),
+            (None, None, ('import_id', '0' * 64), 'identity differs'),
+            (None, None, ('format', 'unknown'), 'Unsupported'),
+            (None, None, ('transcript_sha256', None), 'previously verified'),
+            (None, None, ('gene_sha256', 'invalid'), 'previously verified'),
+            (None, None, ('transcript_count', True), 'Invalid transcript_count'),
+            (None, None, ('transcript_count', 2), 'stored count'),
+            (None, None, ('gene_count', 0), 'stored count'),
+        ]
+        for column, value, manifest_change, message in scenarios:
+            with self.subTest(column=column, manifest_change=manifest_change):
+                connection = SQLiteConnection()
+                try:
+                    importer.migrate(connection); importer.load(connection, capture, table_prefix='reveal_workflow_local')
+                    if column: connection.db.execute(f'UPDATE gnomad_constraint_imports SET {column}=?', (value,))
+                    if manifest_change:
+                        manifest = dict(capture.manifest); manifest[manifest_change[0]] = manifest_change[1]
+                        connection.db.execute('UPDATE gnomad_constraint_imports SET manifest=?', (json.dumps(manifest),))
+                    connection.commit()
+                    with self.assertRaisesRegex(ValueError, message): importer.activate(connection, identity, table_prefix='reveal_workflow_qa')
+                    self.assertEqual(dict(connection.db.execute('SELECT table_prefix,import_id FROM gnomad_constraint_active')), {'reveal_workflow_local': identity})
+                finally: connection.close()
+
+    def test_activate_pointer_failure_rolls_back_and_leaves_prior_scopes_unchanged(self):
+        first = self.prepare([record()]); importer.load(self.connection, first, table_prefix='reveal_workflow_qa')
+        second = self.prepare([record(**{'lof.pLI': '.1'})]); identity = second.manifest['import_id']
+        importer.load(self.connection, second, table_prefix='reveal_workflow_local')
+        before = self.active(); original = importer.activate_pointer
+        def fail_after_pointer(*args):
+            original(*args)
+            raise ConnectionError('Failure after pointer update')
+        with patch.object(importer, 'activate_pointer', side_effect=fail_after_pointer), self.assertRaises(ConnectionError):
+            importer.activate(self.connection, identity, table_prefix='reveal_workflow_qa')
+        self.assertEqual(self.active(), before)
+        self.assertEqual(self.connection.db.execute('SELECT COUNT(*) FROM gnomad_constraint_imports').fetchone()[0], 2)
+        importer.activate(self.connection, identity, table_prefix='reveal_workflow_qa')
+        self.assertEqual(self.active(), {'reveal_workflow_local': identity, 'reveal_workflow_qa': identity})
+
+    def test_activate_cli_dry_run_and_target_validation_never_connect(self):
+        with patch.object(importer, 'mysql_connection') as connect, redirect_stdout(io.StringIO()):
+            result = importer.main(['activate', '--import-id', 'a' * 64, '--table-prefix', 'reveal_workflow_qa'])
+            self.assertFalse(result['apply']); self.assertFalse(result['database_checked']); connect.assert_not_called()
+            for args in [[], ['--import-id', 'a' * 64], ['--import-id', 'invalid', '--table-prefix', 'reveal_workflow_qa'],
+                         ['--import-id', 'a' * 64, '--table-prefix', 'reveal_workflow_qa', '--input', str(self.source)]]:
+                with self.subTest(args=args), self.assertRaises(SystemExit): importer.main(['activate', *args])
+            connect.assert_not_called()
+        env = self.root / 'backend.env'; env.write_text('REVEAL_APPLICATION_TABLE_PREFIX=reveal_workflow_local\n')
+        with patch.dict(importer.os.environ, {}, clear=True), patch.object(importer, 'mysql_connection') as connect:
+            with self.assertRaisesRegex(ValueError, 'prefix does not match'):
+                importer.main(['activate', '--import-id', 'a' * 64, '--table-prefix', 'reveal_workflow_qa', '--env-file', str(env), '--apply'])
+            connect.assert_not_called()
 
 
 if __name__ == '__main__': unittest.main()

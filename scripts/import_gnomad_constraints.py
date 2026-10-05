@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate/import a pinned gnomAD constraint TSV; dry-run unless --apply is given."""
+"""Import a pinned gnomAD constraint TSV or activate a ready import; dry-run by default."""
 from __future__ import annotations
 
 import argparse
@@ -233,6 +233,74 @@ def verify_rows(cursor, capture, batch_size):
         progress(f'Verified {table}: {count:,} rows; exact content digest matches')
 
 
+def activate_pointer(cursor, identity, table_prefix):
+    cursor.execute('SELECT import_id FROM gnomad_constraint_active WHERE table_prefix=%s FOR UPDATE', (table_prefix,))
+    active = cursor.fetchone()
+    if not active:
+        cursor.execute('INSERT INTO gnomad_constraint_active (table_prefix,import_id) VALUES (%s,%s)', (table_prefix, identity))
+    elif active[0] != identity:
+        cursor.execute('UPDATE gnomad_constraint_active SET import_id=%s,activated_at=CURRENT_TIMESTAMP WHERE table_prefix=%s', (identity, table_prefix))
+    return not active or active[0] != identity
+
+
+def validate_ready_manifest(identity, stored):
+    if not stored: raise ValueError('The requested gnomAD import does not exist')
+    metadata = dict(zip(('source_version', 'source_sha256', 'source_url', 'selection_policy', 'status', 'manifest'), stored))
+    if metadata['status'] != 'ready': raise ValueError('Activation requires a ready, previously verified gnomAD import')
+    manifest = metadata['manifest']
+    if isinstance(manifest, (str, bytes)): manifest = json.loads(manifest)
+    if not isinstance(manifest, dict) or manifest.get('format') != 'reveal.gnomad-constraints/1':
+        raise ValueError('Unsupported gnomAD import manifest')
+    basis = {key: metadata[key] for key in ('source_version', 'source_sha256', 'source_url', 'selection_policy')}
+    if any(manifest.get(key) != value for key, value in basis.items()):
+        raise ValueError('Stored gnomAD import metadata differs from its manifest')
+    if (not isinstance(basis['source_version'], str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,31}', basis['source_version'])
+            or not isinstance(basis['source_url'], str) or not basis['source_url'].startswith('https://') or len(basis['source_url']) > 4096
+            or basis['selection_policy'] != POLICY):
+        raise ValueError('Unsupported gnomAD source metadata or selection policy')
+    for key in ('source_sha256', 'transcript_sha256', 'gene_sha256'):
+        if not isinstance(manifest.get(key), str) or not re.fullmatch(r'[a-f0-9]{64}', manifest[key]):
+            raise ValueError(f'Invalid previously verified {key} in gnomAD manifest')
+    if manifest.get('import_id') != identity or hashlib.sha256(canonical(basis).encode()).hexdigest() != identity:
+        raise ValueError('Stored gnomAD import identity differs from its source metadata')
+    for key, minimum in (('source_bytes', 1), ('transcript_count', 1), ('gene_count', 0)):
+        if type(manifest.get(key)) is not int or manifest[key] < minimum:
+            raise ValueError(f'Invalid {key} in gnomAD manifest')
+    if manifest['gene_count'] > manifest['transcript_count']:
+        raise ValueError('Invalid gene_count in gnomAD manifest')
+    return manifest
+
+
+def activate(connection, identity, *, table_prefix):
+    """Promote an immutable ready import using its ingestion verification receipt."""
+    if not isinstance(identity, str) or not re.fullmatch(r'[a-f0-9]{64}', identity): raise ValueError('Invalid gnomAD import ID')
+    if not table_prefix: raise ValueError('Activation requires an explicit table prefix')
+    application_prefix(table_prefix)
+    with locks(connection, ['gnomad:import:' + identity[:48], 'gnomad:active:' + table_prefix]):
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute('START TRANSACTION')
+                cursor.execute('SELECT source_version,source_sha256,source_url,selection_policy,status,manifest FROM gnomad_constraint_imports WHERE import_id=%s FOR UPDATE', (identity,))
+                manifest = validate_ready_manifest(identity, cursor.fetchone())
+                for table, key in (('gnomad_constraint_transcripts', 'transcript_count'), ('gnomad_gene_constraints', 'gene_count')):
+                    # The import_id prefix of each primary key bounds this count;
+                    # raw provenance JSON never crosses the network on promotion.
+                    cursor.execute(f'SELECT COUNT(*) FROM {table} WHERE import_id=%s', (identity,))
+                    count = cursor.fetchone()[0]
+                    if count != manifest[key]: raise ValueError(f'{table}: stored count {count} differs from verified manifest {manifest[key]}')
+                activated = activate_pointer(cursor, identity, table_prefix)
+                connection.commit()
+        except BaseException:
+            connection.rollback()
+            raise
+    progress(f'Activated ready gnomAD import for {table_prefix}; reused ingestion digests, current row counts verified')
+    return {'import_id': identity, 'status': 'ready', 'reused': True, 'activated': activated, 'table_prefix': table_prefix,
+            'transcript_count': manifest['transcript_count'], 'gene_count': manifest['gene_count'],
+            'verification': {'metadata_verified': True, 'row_counts_verified': True, 'content_rehashed': False,
+                             'content_verification': 'previously_verified_at_ingestion',
+                             'transcript_sha256': manifest['transcript_sha256'], 'gene_sha256': manifest['gene_sha256']}}
+
+
 def load(connection, capture, *, table_prefix=None, batch_size=1000):
     if not 1 <= batch_size <= 5000: raise ValueError('Batch size must be between 1 and 5000')
     if table_prefix is not None:
@@ -269,13 +337,7 @@ def load(connection, capture, *, table_prefix=None, batch_size=1000):
                 if file_hash(capture.path) != manifest['source_sha256']: raise ValueError('Constraint TSV changed while loading')
                 verify_rows(cursor, capture, batch_size)
                 if not reused: cursor.execute("UPDATE gnomad_constraint_imports SET status='ready' WHERE import_id=%s", (identity,))
-                if table_prefix:
-                    cursor.execute('SELECT import_id FROM gnomad_constraint_active WHERE table_prefix=%s FOR UPDATE', (table_prefix,))
-                    active = cursor.fetchone()
-                    if not active:
-                        cursor.execute('INSERT INTO gnomad_constraint_active (table_prefix,import_id) VALUES (%s,%s)', (table_prefix, identity)); activated = True
-                    elif active[0] != identity:
-                        cursor.execute('UPDATE gnomad_constraint_active SET import_id=%s,activated_at=CURRENT_TIMESTAMP WHERE table_prefix=%s', (identity, table_prefix)); activated = True
+                if table_prefix: activated = activate_pointer(cursor, identity, table_prefix)
                 connection.commit()
                 progress('Committed verified gnomAD import' + (f'; activation scope {table_prefix}' if table_prefix else '; no activation'))
         except BaseException:
@@ -287,19 +349,25 @@ def load(connection, capture, *, table_prefix=None, batch_size=1000):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=('migrate', 'load'))
+    parser.add_argument('command', choices=('migrate', 'load', 'activate'))
     parser.add_argument('--input', type=Path, help='Uncompressed gnomAD constraint TSV; required for load')
+    parser.add_argument('--import-id', help='Existing ready import ID; required for activate')
     parser.add_argument('--source-version', default='4.1')
     parser.add_argument('--source-url', default=SOURCE_URL)
     parser.add_argument('--env-file', type=Path, help='Explicit private connection settings; no default environment file is read')
     parser.add_argument('--ca-file', type=Path, help='Verified TLS certificate override for host/container path differences')
     parser.add_argument('--table-prefix', help='Explicit environment activation target; omitted means import without activation')
     parser.add_argument('--batch-size', type=int, default=1000)
-    parser.add_argument('--apply', action='store_true', help='Apply migration or transactional import to the configured MySQL database')
+    parser.add_argument('--apply', action='store_true', help='Apply migration, transactional import or ready-import activation to the configured MySQL database')
     parser.add_argument('--report', type=Path, help='Optional local JSON receipt; contains no credentials')
     args = parser.parse_args(argv)
     if args.command == 'load' and args.input is None: parser.error('load requires --input')
     if args.command == 'migrate' and (args.input or args.table_prefix): parser.error('migrate does not load or activate a source')
+    if args.command == 'activate':
+        if args.input: parser.error('activate uses an existing import and does not accept --input')
+        if not args.import_id or not re.fullmatch(r'[a-f0-9]{64}', args.import_id): parser.error('activate requires --import-id as 64 lowercase hexadecimal characters')
+        if not args.table_prefix: parser.error('activate requires an explicit --table-prefix')
+    elif args.import_id: parser.error('--import-id is only valid for activate')
     if args.table_prefix is not None:
         if not args.table_prefix: parser.error('--table-prefix must not be empty')
         application_prefix(args.table_prefix)
@@ -307,6 +375,10 @@ def main(argv=None):
     capture = prepare(args.input, source_version=args.source_version, source_url=args.source_url) if args.command == 'load' else None
     result = {'apply': args.apply, 'command': args.command, 'migration': MIGRATION.name}
     if capture: result.update(manifest=capture.manifest, table_prefix=args.table_prefix)
+    if args.command == 'activate':
+        result.update(import_id=args.import_id, table_prefix=args.table_prefix,
+                      verification_plan='Validate ready manifest, source identity and current row counts; reuse ingestion content digests without rehashing',
+                      database_checked=False)
     if args.apply:
         if args.env_file:
             from dotenv import dotenv_values
@@ -320,7 +392,11 @@ def main(argv=None):
             if args.table_prefix and target != args.table_prefix: raise ValueError('Explicit activation prefix does not match the selected environment file')
         if args.ca_file: os.environ['REVEAL_MYSQL_CA_FILE'] = str(args.ca_file.resolve())
         connection = mysql_connection()
-        try: result['result'] = load(connection, capture, table_prefix=args.table_prefix, batch_size=args.batch_size) if capture else migrate(connection)
+        try:
+            if args.command == 'activate':
+                result['result'] = activate(connection, args.import_id, table_prefix=args.table_prefix)
+                result['database_checked'] = True
+            else: result['result'] = load(connection, capture, table_prefix=args.table_prefix, batch_size=args.batch_size) if capture else migrate(connection)
         finally: connection.close()
     if args.report:
         args.report.parent.mkdir(parents=True, exist_ok=True)
