@@ -46,14 +46,20 @@ services/backend/.venv/bin/python -m reveal_backend.reference_release publish \
     --release lap/out/projects/eaggl_capped__cfde_2026_09_28/release/files --env local --env qa --env prod
 ```
 
-For each `--env`, in the order given:
-1. Upsert into the four namespaces every vector that is missing or changed.
-2. Load the `<prefix>_ref_*__new` tables, then swap all of them, `ref_release` included, with one `RENAME TABLE`.
-3. Add the frozen snapshots of new or changed factors to `archived_reference_factors`. A snapshot is keyed by the factor's `source_revision`, so an unchanged factor adds no row. Its `generation_id` is the first release that published it.
-4. Delete the vectors that are no longer in the release.
-5. Write a `reference_release` record. Open composers get the `catalog.updated` (`reference`) event from it.
+First, every file is checked against the manifest. A partial copy, or a folder that a rebuild is replacing, is refused.
 
-It takes about 5 minutes per environment, and a repeat run is fast. To roll back, publish the previous release folder.
+Then, for each `--env` in the order given:
+1. Add the vectors each of the four namespaces lacks. The served tables don't name them yet, so the app is unaffected.
+2. Add the frozen snapshots of new or changed factors to `archived_reference_factors`. A snapshot is keyed by the factor's `source_revision`, so an unchanged factor adds no row. Its `generation_id` is the first release that published it.
+3. Load the `<prefix>_ref_*__new` tables, then swap all of them, `ref_release` included, with one `RENAME TABLE`.
+   - The swap waits at most 5 seconds at a time for a long reader of the live tables, up to 12 times, so app queries never queue behind it for long.
+   - If the release folder was replaced while the tables loaded (a rebuild), the swap is refused.
+4. Overwrite the vectors that changed, then delete the ones that are no longer in the release.
+5. Write a `reference_release` record. Open composers in that environment get the `catalog.updated` (`reference`) event from it.
+
+It takes about 5 minutes per environment, and a repeat run is fast. If a publish dies, run it again: it cleans up and finishes the remaining steps. To roll back, publish the previous release folder.
+
+A release that only adds gene sets keeps every saved anchor valid. An analysis can mix factors saved under different releases, because the binding's run ids name the embedding space, not the release.
 
 Credentials:
 - MySQL: `REVEAL_MYSQL_*` from the repository `.env`.
@@ -70,8 +76,12 @@ Credentials:
    - **local:** publish local, run the new code, check the UI.
    - **QA:** publish QA (the code still running ignores the new tables), deploy, check.
    - **prod:** publish prod, then deploy. The prod deploy needs sagehen03's approval.
-     - If prod was never cut over by the old reload, run `archive-prod --apply --backup-dir <dir>` after the new code is serving prod. It backs up `reveal_records`, then stamps prod's existing work exactly as the cutover stamped local's and QA's.
-     - Let running legacy analysis jobs finish first, or cancel them; the new code can't collect legacy anchors.
+     - If prod was never cut over by the old reload, run `archive-prod --apply --backup-dir <dir>` after the new code is serving prod.
+       - It backs up `reveal_records`, then stamps prod's legacy work exactly as the cutover stamped local's and QA's.
+       - Work made with the new code stays current.
+       - It cancels the legacy analysis jobs that haven't started collecting, since the new code can't collect legacy anchors.
+       - It refuses while a legacy job that has already collected is still running. Run it again once that job finishes.
+     - It refuses a prefix that the old reload already cut over.
 
    Until cleanup, rolling back an environment means redeploying its previous code.
 5. **Clean up** after about a week, with `cleanup --apply`. It deletes:
