@@ -49,6 +49,8 @@ SNAPSHOT_FORMAT = 'reveal.archived-reference-factor/1'
 RECORD_KIND, RECORD_ID = 'reference_release', 'current'
 # Environment -> application table prefix. Its vectors live in <env>-factors|contexts|gene-sets|collections.
 ENVIRONMENTS = {'local': 'reveal_workflow_local', 'qa': 'reveal_workflow_qa', 'prod': 'reveal'}
+# Each environment's REVEAL_NOTIFICATION_NAMESPACE (deploy/dig/service.yaml, scripts/durable_deployment.py).
+NOTIFICATION_NAMESPACES = {'local': 'reveal-workflow-local', 'qa': 'reveal-qa', 'prod': 'reveal-prod'}
 KINDS = ('factors', 'contexts', 'gene_sets', 'collections')
 VECTOR_KINDS = {'factors': 'factor', 'contexts': 'context', 'gene_sets': 'gene_set', 'collections': 'collection'}
 DEFAULT_TOP_N = 50
@@ -57,6 +59,9 @@ CALIBRATION_TEXTS, CALIBRATION_THRESHOLD = 8, 0.999
 UPSERT_BATCH, UPSERT_WORKERS, RANGE_PAGE, DELETE_BATCH = 200, 4, 200, 1000
 INSERT_BYTES = 512 << 10  # per INSERT batch; pymysql splits executemany statements at ~1 MB (escaping included)
 DUPLICATE_KEY = 1062  # the only MySQL warning INSERT IGNORE may raise here
+# DDL on live tables waits at most SWAP_LOCK_WAIT seconds per attempt for their metadata locks: a RENAME queued behind a long
+# reader would block every other reader of those tables. Retried SWAP_ATTEMPTS times.
+SWAP_LOCK_WAIT, SWAP_ATTEMPTS, LOCK_WAIT_TIMEOUT = 5, 12, 1205
 LONG_SUFFIX = '.cfde_projection.long.tsv.gz'
 LONG_COLUMNS = ['trait', 'kpn_trait_id', 'factor_id', 'factor', 'factor_label', 'gene_set_id', 'collection_id', 'cfde_label', 'library',
                 'joint_loading', 'marginal_loading', 'joint_rank_in_factor', 'marginal_rank_in_factor', 'is_joint_top_factor']
@@ -248,6 +253,7 @@ class Services:
         return mysql_connection()
     def repository(self, prefix): return Repository(table_prefix=prefix)
     def clock(self): return datetime.now(timezone.utc)
+    def sleep(self, seconds): time.sleep(seconds)
     def embed(self, texts, **options):
         from .embedding_client import get_embeddings
         return get_embeddings(texts, **options)
@@ -583,6 +589,7 @@ def long_file_ranks(path, top_n):
             items = libraries[library]
             by_joint, by_marginal = sorted(items, key=joint_of), sorted(items, key=marginal_of)
             joint, marginal = list(map(joint_of, by_joint)), list(map(marginal_of, by_marginal))
+            if len(set(joint)) < len(joint) or len(set(marginal)) < len(marginal): raise Refused(f'{name}: {factor} has tied ranks')
             # A library rank is the count of the library's rows ranked at or above the row: bisect in the sorted ranks.
             for row in sorted({id(row): row for row in by_joint[:top_n] + by_marginal[:top_n]}.values(), key=joint_of):
                 kept.append((row[0], library, row[2], row[3], bisect_right(joint, row[4]), bisect_right(marginal, row[5]), row[6].rstrip('\n')))
@@ -852,11 +859,9 @@ def build_vectors(services, directory, factors, gene_sets, collections, embeddin
 
 
 def dapper_runtime():
-    """The pinned DAPPER runtime the catalog mints Mechanism ids with, or None when it is unavailable."""
-    try:
-        from .acceptance import public_runtime
-        return public_runtime()
-    except Exception: return None
+    """The pinned DAPPER runtime the catalog mints Mechanism ids with."""
+    from .acceptance import public_runtime
+    return public_runtime()
 
 
 def _archived_row(snapshot, source_revision):
@@ -904,12 +909,21 @@ def long_files_in(directory):
     return sorted(path for path in directory.rglob('*' + LONG_SUFFIX) if not any(part.startswith('.') for part in path.relative_to(directory).parts))
 
 
+def _replaceable(path):
+    """A directory --out may replace: empty (dot entries aside) or an earlier release folder."""
+    if not path.is_dir(): return False
+    if all(entry.name.startswith('.') for entry in path.iterdir()): return True
+    try: manifest = read_json(path / 'manifest.json')
+    except (OSError, ValueError): return False
+    return isinstance(manifest, dict) and manifest.get('format') == RELEASE_FORMAT
+
+
 def build_release(services, project_dir, long_files, embeddings_dir, cache_path, out, *, kpn_release=None, top_n=DEFAULT_TOP_N,
                   workers=1, runtime=None):
     """Write the release folder (module docstring) and swap it into `out`; reuse an identical release already there."""
     project_dir, out = Path(project_dir), Path(out)
     if top_n < 1 or workers < 1: raise Refused('--top-n and --workers must be positive')
-    if out.exists() and not out.is_dir(): raise Refused(f'{out} is not a directory')
+    if out.exists() and not _replaceable(out): raise Refused(f'{out} exists and is not a release folder: refusing to replace it')
     stem, paths = lap_inputs(project_dir)
     lap = lap_tables(paths, kpn_release)
     by_kpn = {trait['kpn_trait_id']: trait for trait in lap['traits']}
@@ -925,6 +939,10 @@ def build_release(services, project_dir, long_files, embeddings_dir, cache_path,
                  for collection_id, row in lap['index'].items()}
     missing = sorted(str(path) for path in documents.values() if not path.is_file())
     if missing: raise Refused(f'Missing {len(missing)} collection documents, e.g. {missing[:3]}')
+    if runtime is None:
+        # Required: a factor revision's frozen snapshot is stored once, so a missing Mechanism id could never be added later.
+        try: runtime = dapper_runtime()
+        except Exception as error: raise Refused(f'The DAPPER runtime that mints Mechanism ids is unavailable ({type(error).__name__}: {error})') from error
     out.parent.mkdir(parents=True, exist_ok=True)
     temporary, started = Path(tempfile.mkdtemp(prefix=f'.{out.name}.build-', dir=out.parent)), time.monotonic()
     def progress(message): emit(services, f'{stem}: {message} ({time.monotonic() - started:.0f}s)')
@@ -961,8 +979,6 @@ def build_release(services, project_dir, long_files, embeddings_dir, cache_path,
         files_sha = {name: _sha256_file(temporary / name) for name in DATA_FILES}
         release_id = release_identity(files_sha)
         progress(f'release {release_id[:12]}; archived factor snapshots')
-        runtime = dapper_runtime() if runtime is None else runtime
-        if not runtime: emit(services, 'DAPPER runtime unavailable: archived snapshots carry no Mechanism ids')
         counts['archived_factors'] = write_jsonl(temporary / ARCHIVE_FILE, archived_rows(
             release_id, factors, by_kpn, top_genes, temporary / 'projections.tsv.gz', lap['gene_sets'], runtime))
         manifest = {'format': RELEASE_FORMAT, 'release_id': release_id, 'built_at': now(), 'files': files_sha,
@@ -1059,7 +1075,25 @@ def open_release(release):
     if manifest.get('format') != RELEASE_FORMAT or set(manifest.get('files') or {}) != set(DATA_FILES) \
             or release_identity(manifest['files']) != manifest.get('release_id'):
         raise Refused(f'{release}: not a {RELEASE_FORMAT} folder')
+    expected = {**manifest['files'], ARCHIVE_FILE: (manifest.get('archive') or {}).get('sha256')}
+    for name, sha in expected.items():
+        path = release / name
+        if not path.is_file() or _sha256_file(path) != sha:
+            raise Refused(f'{path} does not match the manifest: a partial copy, or a rebuild in progress?')
     return manifest
+
+
+def watch_release(release):
+    """A check that refuses once the folder's files were replaced (a rebuild swaps the folder). The publisher re-reads them at
+    each step, so it checks before each swap that every table came from the folder it verified."""
+    names = (*DATA_FILES, ARCHIVE_FILE, 'manifest.json')
+    def stats():
+        try: return [(lambda stat: (stat.st_ino, stat.st_size, stat.st_mtime_ns))((Path(release) / name).stat()) for name in names]
+        except OSError: return None
+    before = stats()
+    def unchanged():
+        if before is None or stats() != before: raise Refused(f'{release} changed during the publish (a rebuild?): publish it again')
+    return unchanged
 
 
 def table_rows(release, manifest, published_at):
@@ -1091,25 +1125,37 @@ def current_release(connection, prefix):
     return {'release_id': rows[0][0], 'published_at': _timestamp(rows[0][1])} if len(rows) == 1 else None
 
 
-def replace_tables(services, connection, release, manifest, prefix):
-    """Fill <prefix>_ref_*__new, then swap every table (ref_release included) in one RENAME and drop the old ones."""
+def swap_ddl(services, connection, sql):
+    """DDL on live or just-swapped tables, retried while a long reader holds their metadata locks (SWAP_LOCK_WAIT)."""
+    for attempt in range(1, SWAP_ATTEMPTS + 1):
+        try: return execute(connection, sql)
+        except Exception as error:
+            if not (error.args and error.args[0] == LOCK_WAIT_TIMEOUT) or attempt == SWAP_ATTEMPTS: raise
+            emit(services, f'{sql.split()[0]} waits for a long reader of the live tables ({attempt}/{SWAP_ATTEMPTS})')
+            services.sleep(SWAP_LOCK_WAIT)
+
+
+def replace_tables(services, connection, release, manifest, prefix, unchanged_folder=lambda: None):
+    """Fill <prefix>_ref_*__new, then swap every table (ref_release included) in one RENAME and drop the old ones.
+    `unchanged_folder()` refuses before the RENAME when the release folder was replaced while its tables loaded."""
+    new, old = [table_name(prefix, t, '__new') for t in TABLES], [table_name(prefix, t, '__old') for t in TABLES]
+    swap_ddl(services, connection, 'DROP TABLE IF EXISTS ' + ', '.join(new + old))  # leftovers of a run that died
     current = current_release(connection, prefix)
     if current and current['release_id'] == manifest['release_id']: return {'action': 'unchanged', 'published_at': current['published_at']}
-    new, old = [table_name(prefix, t, '__new') for t in TABLES], [table_name(prefix, t, '__old') for t in TABLES]
-    execute(connection, 'DROP TABLE IF EXISTS ' + ', '.join(new + old))
     for statement in schema_statements(prefix, '__new'): execute(connection, statement)
     published, rows = services.clock(), {}
     for table, rows_of, batch_size in table_rows(release, manifest, published):
         emit(services, f'{prefix}: loading {table}')
         rows[table] = insert_rows(connection, table_name(prefix, table, '__new'), COLUMNS[table], rows_of(), batch_size)
+    unchanged_folder()
     present = existing_tables(connection, [table_name(prefix, t) for t in TABLES])
     pairs = []
     for table in TABLES:
         final = table_name(prefix, table)
         if final in present: pairs.append(f'{final} TO {table_name(prefix, table, "__old")}')
         pairs.append(f'{table_name(prefix, table, "__new")} TO {final}')
-    execute(connection, 'RENAME TABLE ' + ', '.join(pairs))
-    execute(connection, 'DROP TABLE IF EXISTS ' + ', '.join(old))
+    swap_ddl(services, connection, 'RENAME TABLE ' + ', '.join(pairs))
+    swap_ddl(services, connection, 'DROP TABLE IF EXISTS ' + ', '.join(old))
     return {'action': 'replaced', 'rows': rows, 'published_at': _timestamp(published)}
 
 
@@ -1170,44 +1216,65 @@ def list_vectors(client, namespace):
         cursor = following
 
 
-def sync_vectors(services, client, release, env):
-    """Upsert every vector that is missing or whose metadata (vector_sha256 included) differs; deletes nothing."""
+def upsert_vectors(client, namespace, items):
+    def upsert(batch):
+        client.upsert(vectors=[{'id': identity, 'vector': vector.tolist(), 'metadata': metadata} for identity, vector, metadata in batch],
+                      namespace=namespace)
+    with ThreadPoolExecutor(max_workers=UPSERT_WORKERS) as pool:
+        for _ in pool.map(upsert, list(_chunks(items, UPSERT_BATCH))): pass
+    return len(items)
+
+
+def add_vectors(services, client, release, env):
+    """Before the swap: upsert the vectors each namespace lacks (all of a first publish). The served tables don't name these
+    ids, so the app is unaffected. Plans the rest: `changed` (metadata, vector_sha256 included, differs) and `stale` ids."""
     plans, namespaces = {}, set(client.list_namespaces())
     for kind in KINDS:
         namespace = f"{env}-{kind.replace('_', '-')}"
         items, existing = release_vectors(release, kind), list_vectors(client, namespace) if namespace in namespaces else {}
-        changed = [item for item in items if existing.get(item[0]) != item[2]]
-        def upsert(batch, namespace=namespace):
-            client.upsert(vectors=[{'id': identity, 'vector': vector.tolist(), 'metadata': metadata} for identity, vector, metadata in batch],
-                          namespace=namespace)
-        with ThreadPoolExecutor(max_workers=UPSERT_WORKERS) as pool:
-            for _ in pool.map(upsert, list(_chunks(changed, UPSERT_BATCH))): pass
-        stale = sorted(set(existing) - {item[0] for item in items})
-        plans[kind] = {'namespace': namespace, 'vectors': len(items), 'existing': len(existing), 'upserted': len(changed), 'stale': stale}
-        emit(services, f'{namespace}: {len(changed)} of {len(items)} vectors upserted, {len(stale)} stale')
+        plan = plans[kind] = {'namespace': namespace, 'vectors': len(items), 'existing': len(existing),
+                              'changed': [item for item in items if item[0] in existing and existing[item[0]] != item[2]],
+                              'stale': sorted(set(existing) - {item[0] for item in items})}
+        plan['added'] = upsert_vectors(client, namespace, [item for item in items if item[0] not in existing])
+        emit(services, f"{namespace}: {plan['added']} of {len(items)} vectors added; {len(plan['changed'])} changed, {len(plan['stale'])} stale")
     return plans
 
 
-def prune_vectors(client, plans):
+def update_vectors(client, plans):
+    """Once the environment's tables hold the release: overwrite the changed vectors, then delete the stale ones."""
     for plan in plans.values():
+        plan['updated'] = upsert_vectors(client, plan['namespace'], plan['changed'])
         plan['deleted'] = 0
         for batch in _chunks(plan['stale'], DELETE_BATCH):
             plan['deleted'] += int(_value(client.delete(ids=batch, namespace=plan['namespace']), 'deleted', 0) or 0)
 
 
-def write_record(repository, current, release_id):
-    """<prefix>_records reference_release/current: the release the environment's tables now hold (rewritten only on change)."""
+@contextmanager
+def _environ(**values):
+    saved = {key: os.environ.get(key) for key in values}
+    os.environ.update(values)
+    try: yield
+    finally:
+        for key, value in saved.items():
+            if value is None: os.environ.pop(key, None)
+            else: os.environ[key] = value
+
+
+def write_record(repository, current, release_id, notification_namespace):
+    """<prefix>_records reference_release/current: the release the environment's tables now hold (rewritten only on change).
+    Its catalog.updated event goes to the environment's own channels, not this process's REVEAL_NOTIFICATION_NAMESPACE."""
     if not current or current['release_id'] != release_id: return {'written': False, 'reason': 'the tables do not hold this release'}
     data = {'release_id': current['release_id'], 'published_at': current['published_at']}
-    with repository.transaction() as tx:
+    with _environ(REVEAL_NOTIFICATION_NAMESPACE=notification_namespace), repository.transaction() as tx:
         old = tx.get(RECORD_KIND, RECORD_ID)
         if old and old['data'] == data: return {**data, 'written': False}
         tx.put(RECORD_KIND, RECORD_ID, rg.CATALOG_OWNER, data)
     return {**data, 'written': True}
 
 
-def publish_environment(services, release, manifest, env, *, vectors=True, tables=True):
-    """Steps 1-6 of one environment (module docstring); vectors are pruned only once its tables hold the release."""
+def publish_environment(services, release, manifest, env, *, vectors=True, tables=True, unchanged_folder=lambda: None):
+    """One environment (module docstring): add the missing vectors; then, under the environment's lock, store new frozen
+    snapshots and swap the tables; once its tables hold the release, update changed vectors, delete stale ones, write the record."""
     prefix, release_id, lock = ENVIRONMENTS[env], manifest['release_id'], f'reveal:publish:{ENVIRONMENTS[env]}'
     seconds, started = {}, time.monotonic()
     result = {'env': env, 'prefix': prefix, 'release_id': release_id, 'seconds': seconds}
@@ -1215,24 +1282,29 @@ def publish_environment(services, release, manifest, env, *, vectors=True, table
         began = time.monotonic()
         try: return function()
         finally: seconds[name] = round(time.monotonic() - began, 3)
+    client = services.vector_client(env) if vectors else None
+    # Before any MySQL session: a first publish uploads every vector, and an idle locked session could be dropped meanwhile.
+    plans = step('vectors', lambda: add_vectors(services, client, release, env)) if vectors else None
     connection, locked = services.connect(), False
     try:
         with connection.cursor() as cursor:  # executemany may split statements: strict mode fails every one
             cursor.execute(STRICT_MODE); cursor.execute("SET time_zone = '+00:00'")
+            cursor.execute(f'SET SESSION lock_wait_timeout = {SWAP_LOCK_WAIT}')
         if scalar(connection, 'SELECT GET_LOCK(%s,%s)', (lock, 0)) != 1: raise Refused(f'Another publish to {env} holds the lock {lock}')
         locked = True
-        client = services.vector_client(env) if vectors else None
-        plans = step('vectors', lambda: sync_vectors(services, client, release, env)) if vectors else None
         if tables:
-            result['tables'] = step('tables', lambda: replace_tables(services, connection, release, manifest, prefix))
+            # Snapshots first: immutable rows keyed by factor revision, so a run that dies at any later step never misses them.
             result['archived_factors'] = step('archived_factors', lambda: insert_archived(connection, release))
+            result['tables'] = step('tables', lambda: replace_tables(services, connection, release, manifest, prefix, unchanged_folder))
         else: result['tables'] = result['archived_factors'] = 'skipped'
         current = current_release(connection, prefix)
-        if plans is not None and current and current['release_id'] == release_id: step('prune', lambda: prune_vectors(client, plans))
-        result['vectors'] = 'skipped' if plans is None else {kind: {**{key: value for key, value in plan.items() if key != 'stale'},
-                                                                    'stale': len(plan['stale']), 'deleted': plan.get('deleted', 'not pruned')}
-                                                             for kind, plan in plans.items()}
-        result['record'] = step('record', lambda: write_record(services.repository(prefix), current, release_id))
+        if plans is not None and current and current['release_id'] == release_id: step('update', lambda: update_vectors(client, plans))
+        # updated and deleted stay None until the environment's tables hold the release.
+        result['vectors'] = 'skipped' if plans is None else {kind: {
+            'namespace': plan['namespace'], 'vectors': plan['vectors'], 'existing': plan['existing'], 'added': plan['added'],
+            'changed': len(plan['changed']), 'updated': plan.get('updated'), 'stale': len(plan['stale']), 'deleted': plan.get('deleted')}
+            for kind, plan in plans.items()}
+        result['record'] = step('record', lambda: write_record(services.repository(prefix), current, release_id, NOTIFICATION_NAMESPACES[env]))
     finally:
         try:
             if locked: scalar(connection, 'SELECT RELEASE_LOCK(%s)', (lock,))
@@ -1244,10 +1316,13 @@ def publish_environment(services, release, manifest, env, *, vectors=True, table
 
 def publish_release(services, release, environments, *, vectors=True, tables=True, results=None):
     """publish_environment for each environment in order; `results` collects the finished ones (also on failure)."""
+    unchanged_folder = watch_release(release)
     manifest, results = open_release(release), [] if results is None else results
+    unchanged_folder()  # not replaced while its files were verified
     for env in dict.fromkeys(environments):
         if env not in ENVIRONMENTS: raise Refused(f'Unknown environment {env!r}; expected one of {sorted(ENVIRONMENTS)}')
-        results.append(publish_environment(services, Path(release), manifest, env, vectors=vectors, tables=tables))
+        results.append(publish_environment(services, Path(release), manifest, env, vectors=vectors, tables=tables,
+                                           unchanged_folder=unchanged_folder))
     return {'release_id': manifest['release_id'], 'release': str(release), 'environments': results}
 
 

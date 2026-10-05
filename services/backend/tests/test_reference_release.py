@@ -9,7 +9,9 @@ import hashlib
 import io
 from itertools import groupby
 import json
+import os
 import re
+import shutil
 import sqlite3
 from types import SimpleNamespace
 
@@ -452,6 +454,31 @@ def test_out_folder_is_swapped_only_when_the_release_changes(lap, tmp_path):
     assert rr.open_release(out)['release_id'] == second['release_id'] and sorted(p.name for p in out.parent.iterdir()) == ['files']
 
 
+def test_build_never_replaces_a_folder_that_is_not_a_release(lap, tmp_path):
+    out = tmp_path / 'project'  # a mistyped --out, say the LAP project dir
+    (out / 'outputs').mkdir(parents=True); (out / 'outputs' / 'projection.tsv').write_text('keep')
+    with pytest.raises(rr.Refused, match='is not a release folder'): build(lap, out)
+    assert (out / 'outputs' / 'projection.tsv').read_text() == 'keep' and not list(tmp_path.glob('.project*'))
+    (tmp_path / 'empty' / '.nfs0001').parent.mkdir(); (tmp_path / 'empty' / '.nfs0001').write_text('')  # LAP's mkdir'd folder
+    assert build(lap, tmp_path / 'empty')['reused'] is False
+
+
+def test_build_requires_the_dapper_runtime_before_doing_any_work(lap, tmp_path, monkeypatch):
+    def unavailable(): raise ImportError('no DAPPER runtime')
+    monkeypatch.setattr(rr, 'dapper_runtime', unavailable)
+    with pytest.raises(rr.Refused, match='DAPPER runtime that mints Mechanism ids is unavailable'): build(lap, tmp_path / 'out', runtime=None)
+    assert not (tmp_path / 'out').exists() and not list(tmp_path.glob('.out.build-*'))
+
+
+def test_tied_ranks_are_refused(tmp_path):
+    row = {'trait': 'T2D', 'kpn_trait_id': KPN_A, 'factor_id': 'T2D::Factor1', 'factor': 'Factor1', 'factor_label': 'x', 'collection_id': COLL[0],
+           'cfde_label': 'x', 'library': 'LIB', 'joint_loading': '0.5', 'marginal_loading': '0.1', 'is_joint_top_factor': 0}
+    path = tmp_path / f'T2D{rr.LONG_SUFFIX}'
+    tsv(path, rr.LONG_COLUMNS, [{**row, 'gene_set_id': SETS[0], 'joint_rank_in_factor': 1, 'marginal_rank_in_factor': 1},
+                                {**row, 'gene_set_id': SETS[1], 'joint_rank_in_factor': 1, 'marginal_rank_in_factor': 2}])
+    with pytest.raises(rr.Refused, match='T2D::Factor1 has tied ranks'): rr.long_file_ranks(path, 1)
+
+
 def test_build_refuses_missing_long_files_and_unordered_factors(lap, tmp_path):
     with pytest.raises(rr.Refused, match='No long file for 1 traits'):
         rr.build_release(build_services(), lap.project, lap.long_files[:1], lap.cfde, lap.cache, tmp_path / 'out', workers=1, runtime=RUNTIME)
@@ -493,12 +520,17 @@ class FakeCursor:
 
 class FakeDB:
     """Stateful MySQL stand-in: tables are lists of row dicts; DDL, RENAME, INSERT [IGNORE] and the publish SELECTs."""
-    def __init__(self, events, lock=1): self.events, self.tables, self.lock, self.closed = events, {}, lock, 0
+    def __init__(self, events, lock=1, failures=None):
+        self.events, self.tables, self.lock, self.closed = events, {}, lock, 0
+        self.failures = failures or {}  # {sql prefix: [error code, times]}: that statement raises before it changes anything
     def cursor(self): return FakeCursor(self)
     def commit(self): pass
     def rollback(self): pass
     def close(self): self.closed += 1
     def answer(self, sql, params):
+        for prefix, failure in self.failures.items():
+            if sql.startswith(prefix) and failure[1]:
+                failure[1] -= 1; raise OSError(failure[0], f'scripted failure of {prefix}')
         if sql.startswith('SELECT GET_LOCK'): return [(self.lock,)]
         if sql.startswith(('SELECT RELEASE_LOCK',)): return [(1,)]
         if sql.startswith(('SET ', 'SHOW WARNINGS')): return []
@@ -608,14 +640,16 @@ def test_publish_fills_new_tables_swaps_them_in_one_rename_and_records_the_relea
     projection = db['reveal_workflow_qa_ref_projections'][0]
     assert isinstance(projection['joint_loading'], float) and isinstance(projection['joint_loading_text'], str) and isinstance(projection['joint_rank'], int)
     assert {row['edge_role'] for row in db['reveal_workflow_qa_ref_dapper_edges']} == {'data_input', 'metadata_input', None}
-    # Frozen snapshots: INSERT IGNORE into the shared table, after the swap.
+    # Frozen snapshots: INSERT IGNORE into the shared table, before the swap.
     archived = sql_events(events, r'^INSERT IGNORE INTO archived_reference_factors')
     assert len(db['archived_reference_factors']) == 3 and qa['archived_factors'] == {'rows': 3, 'inserted': 3}
     assert {row['generation_id'] for row in db['archived_reference_factors']} == {manifest['release_id']}
-    # Upstash: upserts before the swap, the stale vector deleted after it.
+    # Upstash: the missing vectors before any MySQL statement, the stale vector deleted after the swap.
     position = {id(event): i for i, event in enumerate(events)}
     upserts, deletes = [e for e in events if e[0] == 'upsert'], [e for e in events if e[0] == 'delete']
-    assert max(position[id(e)] for e in upserts) < position[id(renames[0])] < position[id(archived[0])] < min(position[id(e)] for e in deletes)
+    first_sql = min(position[id(e)] for e in events if e[0] in ('sql', 'many'))
+    assert max(position[id(e)] for e in upserts) < first_sql < position[id(archived[0])] < position[id(renames[0])] < min(position[id(e)] for e in deletes)
+    assert 'SET SESSION lock_wait_timeout = 5' in statements[:statements.index('SELECT GET_LOCK(%s,%s)')]
     assert deletes == [('delete', 'qa-factors', ['KPN.TRAIT:0000001::Factor9'])]
     namespaces = services.index.namespaces
     assert sorted(namespaces) == ['qa-collections', 'qa-contexts', 'qa-factors', 'qa-gene-sets']
@@ -629,10 +663,11 @@ def test_publish_fills_new_tables_swaps_them_in_one_rename_and_records_the_relea
     assert context[1]['metadata'] == {'kind': 'context', 'input_sha256': context[0], 'vector_sha256': context[1]['metadata']['vector_sha256']}
     assert set(namespaces['qa-gene-sets'][SETS[0]]['metadata']) == {'kind', 'collection_id', 'library', 'name', 'input_sha256', 'vector_sha256'}
     assert namespaces['qa-collections'][COLL[1]]['metadata']['label'] == 'OTHER__p__HZ1'
-    assert qa['vectors']['factors'] == {'namespace': 'qa-factors', 'vectors': 3, 'existing': 1, 'upserted': 3, 'stale': 1, 'deleted': 1}
+    assert qa['vectors']['factors'] == {'namespace': 'qa-factors', 'vectors': 3, 'existing': 1, 'added': 3, 'changed': 0, 'updated': 0,
+                                        'stale': 1, 'deleted': 1}
     stored = record(services, 'reveal_workflow_qa')
     assert stored['owner'] == rg.CATALOG_OWNER and stored['data'] == {'release_id': manifest['release_id'], 'published_at': '2026-10-05T12:00:00.123456Z'}
-    assert qa['record']['written'] is True and set(qa['seconds']) == {'vectors', 'tables', 'archived_factors', 'prune', 'record', 'total'}
+    assert qa['record']['written'] is True and set(qa['seconds']) == {'vectors', 'tables', 'archived_factors', 'update', 'record', 'total'}
     if workspace_events.tracked(rr.RECORD_KIND):  # the app announces a published release as the public 'reference' catalog event
         with services.repository('reveal_workflow_qa').read_transaction() as tx: published = tx.list('workspace_event', 'public')
         assert [(event['data']['event_type'], event['data']['entity_id']) for event in published] == [('catalog.updated', 'reference')]
@@ -646,8 +681,12 @@ def test_republishing_the_same_release_changes_nothing(release, tmp_path, monkey
     events.clear()
     again = rr.publish_release(services, release, ['qa'])['environments'][0]
     assert again['tables']['action'] == 'unchanged' and again['archived_factors'] == {'rows': 3, 'inserted': 0}
-    assert not sql_events(events, r'^(CREATE TABLE reveal|RENAME|DROP|INSERT)') and not [e for e in events if e[0] in ('upsert', 'delete')]
-    assert all(plan['upserted'] == 0 and plan['deleted'] == 0 for plan in again['vectors'].values())
+    tables = [f'reveal_workflow_qa_ref_{name}' for name in rr.TABLES]
+    # Only the leftovers of a run that died are dropped: none here.
+    assert [event[1] for event in sql_events(events, r'^(CREATE TABLE reveal|RENAME|DROP|INSERT)')] == [
+        'DROP TABLE IF EXISTS ' + ', '.join([t + '__new' for t in tables] + [t + '__old' for t in tables])]
+    assert not [e for e in events if e[0] in ('upsert', 'delete')]
+    assert all((plan['added'], plan['updated'], plan['deleted']) == (0, 0, 0) for plan in again['vectors'].values())
     assert again['record']['written'] is False and record(services, 'reveal_workflow_qa')['version'] == 1
 
 
@@ -661,6 +700,9 @@ def test_publishing_a_new_release_replaces_every_table_and_prunes_old_vectors(la
     second_release = build(lap, tmp_path / 'second')
     services.clock = lambda: datetime(2026, 10, 6, tzinfo=timezone.utc)
     services.index.namespaces['qa-gene-sets']['dapper:GeneSet.' + 'q' * 32] = {'vector': [1.0] * DIMS, 'metadata': {'kind': 'gene_set'}}
+    relabeled = f'{KPN_A}::Factor2'  # as if the served release had another vector for it
+    services.index.namespaces['qa-factors'][relabeled]['metadata'] = dict(services.index.namespaces['qa-factors'][relabeled]['metadata'],
+                                                                          vector_sha256='0' * 64)
     events.clear()
     second = rr.publish_release(services, tmp_path / 'second', ['qa'])['environments'][0]
     tables = [f'reveal_workflow_qa_ref_{name}' for name in rr.TABLES]
@@ -673,7 +715,12 @@ def test_publishing_a_new_release_replaces_every_table_and_prunes_old_vectors(la
     changed = rg.public_id(KPN_B, 'Factor1')
     assert sorted((row['source_id'] == changed, row['generation_id']) for row in archived) == sorted(
         [(False, first['release_id'])] * 2 + [(True, first['release_id']), (True, second_release['release_id'])])
-    assert second['vectors']['gene_sets']['deleted'] == 1 and second['vectors']['factors']['upserted'] == 0  # labels unchanged
+    assert second['vectors']['gene_sets']['deleted'] == 1
+    # The changed vector is overwritten only once the tables hold the release (the served tables keep their vectors until the swap).
+    assert (second['vectors']['factors']['added'], second['vectors']['factors']['changed'], second['vectors']['factors']['updated']) == (0, 1, 1)
+    position = {id(event): i for i, event in enumerate(events)}
+    (update,) = [e for e in events if e[0] == 'upsert' and relabeled in e[2]]
+    assert position[id(update)] > position[id(renames[0])] and update[2] == [relabeled]
     assert record(services, 'reveal_workflow_qa')['data'] == {'release_id': second_release['release_id'], 'published_at': '2026-10-06T00:00:00.000000Z'}
     assert first['release_id'] != second_release['release_id']
 
@@ -682,8 +729,9 @@ def test_publish_refuses_while_another_publish_holds_the_lock(release, tmp_path)
     events = []
     services = publish_services(tmp_path, events, db=FakeDB(events, lock=0))
     with pytest.raises(rr.Refused, match='holds the lock reveal:publish:reveal_workflow_qa'): rr.publish_release(services, release, ['qa'])
-    assert not sql_events(events, r'^(CREATE|RENAME|DROP|INSERT)|RELEASE_LOCK') and not [e for e in events if e[0] != 'sql']
-    assert services.db.closed == 1
+    # Only the vectors the namespaces lack were added (the served tables never name them): no table change, update or delete.
+    assert not sql_events(events, r'^(CREATE|RENAME|DROP|INSERT)|RELEASE_LOCK') and not [e for e in events if e[0] == 'delete']
+    assert 'KPN.TRAIT:0000001::Factor9' in services.index.namespaces['qa-factors'] and services.db.closed == 1
 
 
 def test_publish_environments_in_order_with_their_own_prefix_lock_and_namespaces(release, tmp_path):
@@ -712,9 +760,71 @@ def test_skip_flags_leave_their_side_untouched(release, tmp_path):
     (tmp_path / 'fresh').mkdir()
     only_vectors = rr.publish_release(fresh, release, ['qa'], tables=False)['environments'][0]
     assert only_vectors['tables'] == 'skipped' and not sql_events(events, r'^(CREATE|RENAME|DROP|INSERT)')
-    # The tables do not hold this release yet: upsert, but neither prune nor record.
-    assert only_vectors['vectors']['factors']['upserted'] == 3 and only_vectors['vectors']['factors']['deleted'] == 'not pruned'
+    # The tables do not hold this release yet: add, but neither update, delete nor record.
+    assert (only_vectors['vectors']['factors']['added'], only_vectors['vectors']['factors']['updated'], only_vectors['vectors']['factors']['deleted']) == (3, None, None)
     assert not [e for e in events if e[0] == 'delete'] and only_vectors['record'] == {'written': False, 'reason': 'the tables do not hold this release'}
+
+
+def test_open_release_refuses_files_that_do_not_match_the_manifest(release, tmp_path):
+    for name in ('factor_genes.tsv.gz', rr.ARCHIVE_FILE):
+        copy = tmp_path / f'copy-{len(name)}'
+        shutil.copytree(release, copy)
+        data = (copy / name).read_bytes(); (copy / name).write_bytes(data[:len(data) // 2])  # a partial copy
+        with pytest.raises(rr.Refused, match=f'{re.escape(name)} does not match the manifest'): rr.open_release(copy)
+        events = []
+        with pytest.raises(rr.Refused, match='does not match the manifest'): rr.publish_release(publish_services(tmp_path, events), copy, ['qa'])
+        assert not events
+
+
+def test_a_rebuild_during_the_publish_stops_it_before_the_swap(release, tmp_path):
+    events = []
+    services = publish_services(tmp_path, events)
+    def rebuild():  # what build_release does: the folder is renamed aside and a new one renamed in
+        shutil.copytree(release, tmp_path / 'rebuilt'); release.rename(tmp_path / 'aside'); (tmp_path / 'rebuilt').rename(release)
+        return CLOCK
+    services.clock = rebuild  # called once the tables start loading
+    with pytest.raises(rr.Refused, match='changed during the publish'): rr.publish_release(services, release, ['qa'])
+    assert not sql_events(events, r'^RENAME') and 'reveal_workflow_qa_ref_release' not in services.db.tables
+    services.clock = lambda: CLOCK
+    again = rr.publish_release(services, release, ['qa'])['environments'][0]  # the rebuilt folder is published as a whole
+    assert again['tables']['action'] == 'replaced' and not [name for name in services.db.tables if name.endswith('__new')]
+
+
+def test_a_publish_that_died_after_the_swap_is_finished_by_a_rerun(release, tmp_path):
+    events = []
+    services = publish_services(tmp_path, events, db=FakeDB(events, failures={'DROP TABLE IF EXISTS reveal_workflow_qa_ref_traits__old': [2003, 1]}))
+    with pytest.raises(OSError, match='scripted failure'): rr.publish_release(services, release, ['qa'])
+    tables = services.db.tables
+    assert 'reveal_workflow_qa_ref_release' in tables and 'reveal_workflow_qa_ref_traits__old' not in tables  # first publish: no __old
+    assert 'KPN.TRAIT:0000001::Factor9' in services.index.namespaces['qa-factors'] and record(services, 'reveal_workflow_qa') is None
+    tables['reveal_workflow_qa_ref_traits__old'] = []  # as a later release's crash would leave it
+    again = rr.publish_release(services, release, ['qa'])['environments'][0]
+    assert again['tables']['action'] == 'unchanged' and 'reveal_workflow_qa_ref_traits__old' not in tables
+    assert again['vectors']['factors']['deleted'] == 1 and again['record']['written'] is True
+
+
+def test_the_swap_waits_briefly_for_long_readers_and_retries(release, tmp_path):
+    events, slept = [], []
+    services = publish_services(tmp_path, events, db=FakeDB(events, failures={'RENAME TABLE': [rr.LOCK_WAIT_TIMEOUT, 2]}))
+    services.sleep = slept.append
+    assert rr.publish_release(services, release, ['qa'])['environments'][0]['tables']['action'] == 'replaced'
+    assert len(sql_events(events, r'^RENAME')) == 3 and slept == [rr.SWAP_LOCK_WAIT] * 2
+    events.clear()
+    other = publish_services(tmp_path / 'other', events, db=FakeDB(events, failures={'RENAME TABLE': [rr.LOCK_WAIT_TIMEOUT, rr.SWAP_ATTEMPTS]}))
+    (tmp_path / 'other').mkdir(); other.sleep = slept.append
+    with pytest.raises(OSError): rr.publish_release(other, release, ['qa'])
+    assert len(sql_events(events, r'^RENAME')) == rr.SWAP_ATTEMPTS and 'reveal_workflow_qa_ref_release' not in other.db.tables
+
+
+def test_the_release_event_goes_to_each_environments_own_channels(release, tmp_path, monkeypatch):
+    published = []
+    monkeypatch.setattr(redis_notifications, 'publish', lambda channels: published.append((os.environ.get('REVEAL_NOTIFICATION_NAMESPACE'), list(channels))))
+    monkeypatch.setenv('REVEAL_NOTIFICATION_NAMESPACE', 'reveal-local')
+    rr.publish_release(publish_services(tmp_path, []), release, ['qa', 'prod'], vectors=False)
+    if not workspace_events.tracked(rr.RECORD_KIND): pytest.skip('the record kind emits no workspace event')
+    assert [namespace for namespace, _ in published] == ['reveal-qa', 'reveal-prod']
+    assert all(name.startswith(namespace + ':notify:') for namespace, channels in published for name in channels)
+    assert os.environ['REVEAL_NOTIFICATION_NAMESPACE'] == 'reveal-local'
 
 
 def test_vector_listing_pages_until_the_cursor_ends_and_refuses_a_stuck_cursor():
