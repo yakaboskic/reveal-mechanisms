@@ -1,4 +1,4 @@
-import type { AnalysisInput, Composer, Draft, Gap, Job, Me, Page, Schema } from "./types";
+import type { AnalysisInput, Composer, Draft, Factor, Gap, Job, Me, Page, Schema } from "./types";
 
 export class ApiError extends Error {
   constructor(public status: number, public code: string, message: string) { super(message); }
@@ -33,7 +33,9 @@ export const api = {
   draft: (id: string) => request<Draft>(backend("drafts/" + encodeURIComponent(id))),
   jobs: () => request<Page<Job>>(backend("jobs?limit=100")),
   job: (id: string) => request<Job>(backend("jobs/" + encodeURIComponent(id))),
+  requests: (signal?: AbortSignal) => request<Page<Schema<"ResearchRequest">>>(backend("research-requests?limit=100"), { signal }),
   gap: (id: string, signal?: AbortSignal) => request<Gap>(backend("knowledge-gaps/" + encodeURIComponent(id)), { signal }),
+  factor: (id: string, signal?: AbortSignal) => request<Factor>(backend("mechanisms/" + encodeURIComponent(id)), { signal }),
   gaps: async (query: string, signal?: AbortSignal): Promise<Gap[]> => {
     if (!query.trim()) return (await request<Schema<"GapList">>(backend("knowledge-gaps?limit=12"), { signal })).items;
     return (await request<Schema<"GapSearchResults">>(backend("knowledge-gaps/search?mode=fuzzy&limit=12&q=" + encodeURIComponent(query)), { signal })).items.map(hit => hit.gap);
@@ -44,6 +46,9 @@ export const api = {
   }),
   save: (draft: Draft | null, composer: Composer, name: string, key: string) => request<Draft>(backend("drafts" + (draft ? "/" + encodeURIComponent(draft.id) : "")), {
     method: draft ? "PATCH" : "POST", key, body: { composer, ...(name.trim() ? { name: name.trim() } : {}), ...(draft ? { expected_version: draft.version } : {}) },
+  }),
+  deleteDraft: (draft: Draft, key: string) => request<{ id: string; deleted: true }>(backend("drafts/" + encodeURIComponent(draft.id)), {
+    method: "DELETE", key, body: { expected_version: draft.version },
   }),
   submit: (body: AnalysisInput, key: string) => request<Job>(backend("jobs"), { method: "POST", body, key }),
   cancel: (id: string) => request<Job>(backend("jobs/" + encodeURIComponent(id) + "/cancel"), { method: "POST" }),
