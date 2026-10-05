@@ -82,6 +82,7 @@ export function LoadingHeatmap({ items, min, max, label, orderingLabel = "rank",
       {inspected && active && <div className="loading-heatmap-tooltip" role="tooltip" id={`${identity}-tooltip`} style={{ left: active.left, top: active.top }}>
         <strong>{inspected.label}</strong><span>Loading {loadingValue(inspected.loading)} <span aria-hidden="true">·</span> Rank {inspected.rank}</span>
         {inspectedMembership && <span className="loading-heatmap-membership">{inspectedMembership}</span>}
+        {inspected.details?.length ? <dl className="loading-heatmap-details">{inspected.details.map(detail => <div key={detail.label}><dt>{detail.label}</dt><dd>{detail.value}</dd></div>)}</dl> : null}
         {inspected.description && <small>{inspected.description}</small>}
       </div>}
     </div>
@@ -95,8 +96,10 @@ export function LoadingHeatmap({ items, min, max, label, orderingLabel = "rank",
     </div>}
     {selected && <div className="loading-heatmap-selection" aria-live="polite">
       <div><strong>{selected.label}</strong><span>Loading <b>{loadingValue(selected.loading)}</b> <span aria-hidden="true">·</span> Rank {selected.rank}</span>{selectedMembership && <span className="loading-heatmap-membership">{selectedMembership}</span>}{selected.description && <small>{selected.description}</small>}
-        {(selected.href || (onAction && actionLabel)) && <div className="loading-heatmap-selection-actions">
+        {selected.details?.length ? <dl className="loading-heatmap-details">{selected.details.map(detail => <div key={detail.label}><dt>{detail.label}</dt><dd>{detail.value}</dd></div>)}</dl> : null}
+        {(selected.href || selected.links?.length || (onAction && actionLabel)) && <div className="loading-heatmap-selection-actions">
           {selected.href && <Link href={selected.href}>View gene set and provenance <span aria-hidden="true">↗</span></Link>}
+          {selected.links?.map(link => <a key={link.href} href={link.href} target="_blank" rel="noreferrer">{link.label} <span aria-hidden="true">↗</span></a>)}
           {onAction && actionLabel && <button type="button" onClick={() => onAction(selected)}>{actionLabel}</button>}
         </div>}
       </div>

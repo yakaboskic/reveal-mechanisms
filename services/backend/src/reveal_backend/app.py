@@ -534,10 +534,10 @@ def get_factor_detail(source_id:str,generation_id:str|None=None,source_revision:
 
 @app.get('/v1/factor-loadings')
 def get_factor_loadings(source_id:str,kind:str='gene',metric:str='joint',sort:str='loading',q:str='',limit:int=200,offset:int=0,
-                        generation_id:str|None=None,source_revision:str|None=None):
+                        generation_id:str|None=None,source_revision:str|None=None,gnomad_import_id:str|None=None):
     from .factor_details import factor_loadings
     return factor_loadings(catalog,source_id,kind=kind,metric=metric,sort=sort,q=q,limit=limit,offset=offset,
-                           generation_id=generation_id,source_revision=source_revision)
+                           generation_id=generation_id,source_revision=source_revision,gnomad_import_id=gnomad_import_id)
 
 @app.get('/v1/catalog/gene-sets/{gene_set_id}')
 def get_catalog_gene_set(gene_set_id:str,generation_id:str|None=None):

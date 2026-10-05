@@ -15862,7 +15862,8 @@
               "max": 0.24,
               "coverage": "Retained per-trait projections: gene sets in the top 50 by joint or marginal loading. Search covers this retained subset, not every gene set in the source library.",
               "available": true
-            }
+            },
+            "gnomad": null
           }
         }
       }
@@ -15875,13 +15876,14 @@
     "method": "GET",
     "path_template": "/v1/factor-loadings",
     "request": {
-      "url": "https://api.reveal.example.org/v1/factor-loadings?source_id=factor%3Akpn%3A0000398%3Aeaggl-capped-v1%3AFactor1&kind=gene&metric=joint&sort=loading&q=LEPR&limit=200&offset=0&generation_id=d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c&source_revision=191055aeb63ba725d7254b602556a76546a1857662c79f9e40da3eefbb8c2550",
+      "url": "https://api.reveal.example.org/v1/factor-loadings?source_id=factor%3Akpn%3A0000398%3Aeaggl-capped-v1%3AFactor1&kind=gene&metric=joint&sort=loading&gnomad_import_id=none&q=LEPR&limit=200&offset=0&generation_id=d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c&source_revision=191055aeb63ba725d7254b602556a76546a1857662c79f9e40da3eefbb8c2550",
       "path": {},
       "query": {
         "source_id": "factor:kpn:0000398:eaggl-capped-v1:Factor1",
         "kind": "gene",
         "metric": "joint",
         "sort": "loading",
+        "gnomad_import_id": "none",
         "q": "LEPR",
         "limit": 200,
         "offset": 0,
@@ -15908,7 +15910,8 @@
                 "id": "LEPR",
                 "label": "LEPR",
                 "loading": 0.98,
-                "rank": 1
+                "rank": 1,
+                "gnomad": null
               }
             ],
             "total": 1,
@@ -15921,12 +15924,13 @@
               "max": 0.98,
               "coverage": "All stored nonzero EAGGL gene loadings. Genes absent from this import are not assigned a zero loading.",
               "available": true
-            }
+            },
+            "gnomad": null
           }
         }
       }
     },
-    "curl": "curl -X GET 'https://api.reveal.example.org/v1/factor-loadings?source_id=factor%3Akpn%3A0000398%3Aeaggl-capped-v1%3AFactor1&kind=gene&metric=joint&sort=loading&q=LEPR&limit=200&offset=0&generation_id=d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c&source_revision=191055aeb63ba725d7254b602556a76546a1857662c79f9e40da3eefbb8c2550' -H 'Accept: application/json'"
+    "curl": "curl -X GET 'https://api.reveal.example.org/v1/factor-loadings?source_id=factor%3Akpn%3A0000398%3Aeaggl-capped-v1%3AFactor1&kind=gene&metric=joint&sort=loading&gnomad_import_id=none&q=LEPR&limit=200&offset=0&generation_id=d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c&source_revision=191055aeb63ba725d7254b602556a76546a1857662c79f9e40da3eefbb8c2550' -H 'Accept: application/json'"
   },
   {
     "operation_id": "getCatalogGeneSet",

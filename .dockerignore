@@ -20,3 +20,4 @@ services/frontend/.next
 **/*.password.txt
 graphify-out
 .pytest_cache
+gnomad*.constraint_metrics.tsv

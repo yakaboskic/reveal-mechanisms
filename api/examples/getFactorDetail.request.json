@@ -75,7 +75,8 @@
             "max": 0.24,
             "coverage": "Retained per-trait projections: gene sets in the top 50 by joint or marginal loading. Search covers this retained subset, not every gene set in the source library.",
             "available": true
-          }
+          },
+          "gnomad": null
         }
       }
     }

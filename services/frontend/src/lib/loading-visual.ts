@@ -6,6 +6,8 @@ export type LoadingCell = {
   rank: number;
   description?: string;
   href?: string;
+  details?: readonly { label: string; value: string }[];
+  links?: readonly { label: string; href: string }[];
   /** Omit when membership has not been established, rather than implying false. */
   isMember?: boolean;
 };

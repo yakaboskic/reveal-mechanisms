@@ -6,6 +6,7 @@ import { api, ApiError, messageOf, type Schema } from "@/lib/client";
 import { factorApi } from "@/lib/factor-api";
 import { factorHref, traitHref, referenceReturnPath, returnLabel } from "@/lib/factor-links";
 import { mechanismName, mechanismTrait } from "@/lib/mechanism-display";
+import { constraintDefinitions, constraintSourceHref } from "@/lib/gnomad-display";
 import { LoadingSurface } from "./LoadingSurface";
 import { LoadingHeatmap } from "./LoadingHeatmap";
 import { Record } from "./Scientific";
@@ -43,20 +44,36 @@ export function FactorView({ sourceId, revision, archiveId, from }: { sourceId: 
   const result = loaded?.binding === binding ? loaded : null;
   const error = failure?.binding === binding ? failure.message : "";
   const detail = result?.detail;
+  const traitUrl = detail?.factor.kpn_trait ? traitHref(detail.factor.kpn_trait.id) : null;
   const self = factorHref(sourceId, detail?.factor.source_revision || revision, { archiveId, from });
   return <main id="main" className="reference-page factor-page"><ReferenceNavigation from={from} />
     {!result ? <LoadingSurface title={error ? "Couldn’t open this factor" : "Opening factor"} description="Retrieving its gene loadings, gene-set projections and source record." error={error} onRetry={() => retry(n => n + 1)} skeleton="record" /> : result.archived ? <ArchivedFactorView snapshot={result.archived} /> : detail && <>
-      <header className="reference-heading"><p className="reference-kind">EAGGL factor</p><h1>{mechanismName(detail.factor)}</h1><p className="factor-trait">{mechanismTrait(detail.factor)}</p>
+      <header className="reference-heading"><p className="reference-kind">EAGGL factor</p><h1>{mechanismName(detail.factor)}</h1><p className="factor-trait">{traitUrl ? <a href={traitUrl} target="_blank" rel="noopener noreferrer">{mechanismTrait(detail.factor)}</a> : mechanismTrait(detail.factor)}</p>
       </header>
+      <FactorExplorer key={binding} detail={detail} self={self} />
+      <section id="factor-additional-info" className="factor-additional-info" aria-labelledby="factor-additional-info-title">
+      <h2 id="factor-additional-info-title">Additional info</h2>
       <details id="factor-source" className="factor-metadata"><summary>Factor details</summary>
-        <div className="reference-meta"><span>{detail.provenance.factor_id}</span><span>{detail.factor.model}</span>{detail.factor.kpn_trait && (traitHref(detail.factor.kpn_trait.id) ? <a href={traitHref(detail.factor.kpn_trait.id)!} target="_blank" rel="noopener noreferrer">{detail.factor.kpn_trait.id} ↗</a> : <span>{detail.factor.kpn_trait.id}</span>)}</div>
+        <div className="reference-meta"><span>{detail.provenance.factor_id}</span><span>{detail.factor.model}</span>{detail.factor.kpn_trait && (traitUrl ? <a href={traitUrl} target="_blank" rel="noopener noreferrer">{detail.factor.kpn_trait.id} ↗</a> : <span>{detail.factor.kpn_trait.id}</span>)}</div>
         <p>These loadings describe this factor in the selected EAGGL model. A high loading is an association with the factor, not a causal conclusion.</p>
         <dl className="reference-properties"><div><dt>Source identity</dt><dd>{detail.factor.source_id}</dd></div><div><dt>Source revision</dt><dd>{detail.factor.source_revision}</dd></div>{detail.generation_id && <div><dt>Reference generation</dt><dd>{detail.generation_id}</dd></div>}</dl>
         <details className="reference-raw"><summary>Factor and provenance records</summary><Record value={detail.factor.object} /><Record value={detail.provenance} /><Record value={detail.factor.catalog_file} /></details>
       </details>
-      <FactorExplorer key={binding} detail={detail} self={self} />
+      <ConstraintSource source={detail.gnomad} />
+      </section>
     </>}
   </main>;
+}
+
+function ConstraintSource({ source }: { source: Schema<"GnomadImport"> | null | undefined }) {
+  if (!source) return <p className="loading-explanation">gnomAD constraint annotations are not available for this reference.</p>;
+  const href = constraintSourceHref(source.source_url);
+  return <details className="gnomad-source"><summary>gnomAD {source.version} constraint annotations</summary>
+    <p>{constraintDefinitions.pli} {constraintDefinitions.loeuf} {constraintDefinitions.mis_z}</p>
+    <p>Constraint order puts missing values last. Heatmap colors and ranks always describe the original factor loading.</p>
+    <dl><div><dt>Transcript selection</dt><dd>{source.selection_policy}</dd></div><div><dt>Import</dt><dd>{source.import_id}</dd></div><div><dt>Source SHA-256</dt><dd>{source.source_sha256}</dd></div></dl>
+    {href && <a href={href} target="_blank" rel="noreferrer">Source constraint table ↗</a>}
+  </details>;
 }
 
 function ArchivedFactorView({ snapshot }: { snapshot: Schema<"ArchivedReferenceFactor"> }) {

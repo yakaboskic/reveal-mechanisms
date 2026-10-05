@@ -61,8 +61,10 @@ The factor-page harness checks encoded reference identities, exact hover values,
 keyboard navigation, collapsed metadata, retained tabs, alphabetical ordering,
 append pagination, fixed color scales under search and membership overlays,
 late search/member response protection, generation-pinned exact membership,
-joint/marginal switching, provenance navigation, member search,
-unknown values, archived snapshots, retry states, and mobile layout. It uses
+joint/marginal switching, provenance navigation, member search, gene-only gnomAD
+constraint ordering and exact metric/source display, and import-pinned pagination
+that refuses mixed annotations. It also covers unknown values, archived snapshots,
+retry states, and mobile layout. It uses
 intercepted API examples and illustrative rows, never a research submission.
 
 The gap-navigation cache harness verifies that About and gap-information routes

@@ -382,4 +382,4 @@ Open an exact reference factor, search its retained loadings, and follow a gene 
 
 Requests/responses are taken from the existing validated OpenAPI exchange library. The CADinT2D analysis/paragraph sequence is internally linked. The CAD source-selected gap now frames the request and account. The evidence package is a separate captured input; the authored account is not its validated agent output. Semantic scores and agent outputs remain illustrative fixtures.
 
-The mapping covers 60 operations and all 78 exchanges. OpenAPI SHA-256: `b776bd3040080a7b5f1d0de89d9f6695c460b1c9b15663eb1f39e732f0355b12`. No endpoints or payloads were changed to build this diagram.
+The mapping covers 60 operations and all 78 exchanges. OpenAPI SHA-256: `f3aa4c2ad7275c67a409230a81fe1343e2b8ee6d8ed659cca140f3b4d2a59d27`. No endpoints or payloads were changed to build this diagram.

@@ -16292,6 +16292,7 @@ paths:
                         top 50 by joint or marginal loading. Search covers this retained
                         subset, not every gene set in the source library.'
                       available: true
+                    gnomad: null
           headers:
             X-Request-ID:
               description: Correlation ID for this HTTP request.
@@ -16392,11 +16393,24 @@ paths:
           enum:
           - alphabetical
           - loading
+          - gnomad_pli
+          - gnomad_loeuf
+          - gnomad_mis_z
           default: loading
         example: loading
-        description: Case-insensitive alphabetical label order, or descending numeric
-          loading. Applied to the full matched set before pagination; ranks remain
-          loading ranks.
+        description: Global label/loading order or gene-only gnomAD constraint order.
+          pLI and missense Z descend; LOEUF ascends; missing metrics sort last. gnomAD
+          sorting requires an active imported annotation source (503 otherwise).
+      - name: gnomad_import_id
+        in: query
+        required: false
+        schema:
+          type: string
+          pattern: ^(none|[a-f0-9]{64})$
+        example: none
+        description: Gene-only annotation pin from FactorDetail.gnomad.import_id.
+          Use none when annotations are absent. A change returns 409 to prevent mixed-source
+          append pages.
       - name: q
         in: query
         required: false
@@ -16463,11 +16477,13 @@ paths:
                       label: LEPR
                       loading: 0.98
                       rank: 1
+                      gnomad: null
                     total: 1
                     offset: 0
                     limit: 200
                     next_offset: null
                     summary: *id071
+                    gnomad: null
           headers:
             X-Request-ID:
               description: Correlation ID for this HTTP request.
@@ -16520,7 +16536,7 @@ paths:
       x-codeSamples:
       - lang: Shell
         label: request
-        source: 'curl -X GET ''https://api.reveal.example.org/v1/factor-loadings?source_id=factor%3Akpn%3A0000398%3Aeaggl-capped-v1%3AFactor1&kind=gene&metric=joint&sort=loading&q=LEPR&limit=200&offset=0&generation_id=d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c&source_revision=191055aeb63ba725d7254b602556a76546a1857662c79f9e40da3eefbb8c2550''
+        source: 'curl -X GET ''https://api.reveal.example.org/v1/factor-loadings?source_id=factor%3Akpn%3A0000398%3Aeaggl-capped-v1%3AFactor1&kind=gene&metric=joint&sort=loading&gnomad_import_id=none&q=LEPR&limit=200&offset=0&generation_id=d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c&source_revision=191055aeb63ba725d7254b602556a76546a1857662c79f9e40da3eefbb8c2550''
           -H ''Accept: application/json'''
   /v1/catalog/gene-sets/{gene_set_id}:
     get:
@@ -24653,6 +24669,107 @@ components:
       - items
       - page
       additionalProperties: false
+    GnomadImport:
+      type: object
+      properties:
+        import_id:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+        version:
+          type: string
+        source_sha256:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+        source_url:
+          anyOf:
+          - type: string
+          - type: 'null'
+        selection_policy:
+          type: string
+      required:
+      - import_id
+      - version
+      - source_sha256
+      - source_url
+      - selection_policy
+      additionalProperties: false
+      description: Immutable gnomAD constraint source active for this environment.
+        Independent of the factor reference generation. Pin import_id for paginated
+        gene reads.
+    GnomadGeneConstraint:
+      type: object
+      properties:
+        symbol:
+          type: string
+        gene_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+        transcript:
+          anyOf:
+          - type: string
+          - type: 'null'
+        status:
+          type: string
+          enum:
+          - selected
+          - ambiguous_gene
+          - ambiguous_transcript
+          - no_primary_transcript
+          - no_ensembl_gene
+        selection_method:
+          anyOf:
+          - type: string
+            enum:
+            - mane_select
+            - canonical
+          - type: 'null'
+        selection_reason:
+          type: string
+        pli:
+          anyOf:
+          - type: number
+            minimum: 0
+            maximum: 1
+          - type: 'null'
+        loeuf:
+          anyOf:
+          - type: number
+            minimum: 0
+          - type: 'null'
+        mis_z:
+          anyOf:
+          - &id080
+            type: number
+          - type: 'null'
+        lof_oe:
+          anyOf:
+          - type: number
+            minimum: 0
+          - type: 'null'
+        flags:
+          type: array
+          items:
+            type: string
+      required:
+      - symbol
+      - gene_id
+      - transcript
+      - status
+      - selection_method
+      - selection_reason
+      - pli
+      - loeuf
+      - mis_z
+      - lof_oe
+      - flags
+      additionalProperties: false
+      description: Exact-symbol gnomAD constraint annotation. A unique Ensembl MANE
+        Select transcript is preferred, otherwise a unique canonical transcript. pLI
+        is probability of loss-of-function intolerance (higher = stronger constraint);
+        LOEUF is the LoF observed/expected upper confidence bound (lower = stronger
+        constraint); mis_z is the missense Z score. Missing or ambiguous metrics stay
+        null. Source quality flags are retained.
     LoadingSummary:
       type: object
       properties:
@@ -24661,8 +24778,7 @@ components:
           minimum: 0
         min:
           anyOf:
-          - &id080
-            type: number
+          - *id080
           - type: 'null'
         max:
           anyOf:
@@ -24714,6 +24830,10 @@ components:
         marginal_rank:
           type: integer
           minimum: 1
+        gnomad:
+          anyOf:
+          - $ref: '#/components/schemas/GnomadGeneConstraint'
+          - type: 'null'
       required:
       - id
       - label
@@ -24758,6 +24878,10 @@ components:
           $ref: '#/components/schemas/LoadingSummary'
         gene_sets:
           $ref: '#/components/schemas/LoadingSummary'
+        gnomad:
+          anyOf:
+          - $ref: '#/components/schemas/GnomadImport'
+          - type: 'null'
       required:
       - factor
       - generation_id
@@ -24786,6 +24910,9 @@ components:
           enum:
           - alphabetical
           - loading
+          - gnomad_pli
+          - gnomad_loeuf
+          - gnomad_mis_z
         items:
           type: array
           items:
@@ -24802,6 +24929,10 @@ components:
           - type: 'null'
         summary:
           $ref: '#/components/schemas/LoadingSummary'
+        gnomad:
+          anyOf:
+          - $ref: '#/components/schemas/GnomadImport'
+          - type: 'null'
       required:
       - source_id
       - generation_id
@@ -24816,11 +24947,11 @@ components:
       - summary
       additionalProperties: false
       description: Bounded loading page. sort=loading (default) orders by descending
-        score; sort=alphabetical orders case-insensitive labels before pagination.
-        Stable identifiers break ties. Ranks always remain original loading ranks,
-        independent of sort. total counts search matches; summary.total counts all
-        retained rows. Pin generation_id and source_revision returned by FactorDetail
-        on subsequent requests.
+        score; alphabetical orders case-insensitive labels. Gene-only gnomad_pli and
+        gnomad_mis_z sort descending; gnomad_loeuf sorts ascending, all with missing
+        values last and stable symbol ties. Sorting applies globally before pagination.
+        Ranks and heatmap score ranges always remain original factor loadings. Pin
+        generation_id, source_revision, and gnomad_import_id returned by FactorDetail.
     CatalogGeneSet:
       type: object
       properties:

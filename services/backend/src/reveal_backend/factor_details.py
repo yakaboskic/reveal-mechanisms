@@ -10,13 +10,15 @@ import re
 
 from .auth import Problem
 from .reference_generation import KPN_MODEL
-from .repository import digest
+from .repository import application_prefix, digest
 from .runtime_config import mysql_connection
 
 GENE_COVERAGE = 'All stored nonzero EAGGL gene loadings. Genes absent from this import are not assigned a zero loading.'
 SET_COVERAGE = 'Retained per-trait projections: gene sets in the top 50 by joint or marginal loading. Search covers this retained subset, not every gene set in the source library.'
 LEGACY_COVERAGE = 'Imported ranked gene-set links only. This legacy import does not store numeric gene-set loadings.'
 GENE_SET_ID = re.compile(r'dapper:GeneSet\.[A-Za-z0-9_-]{32}')
+GNOMAD_SORTS = {'gnomad_pli': ('c.pli', 'DESC'), 'gnomad_loeuf': ('c.loeuf', 'ASC'),
+                'gnomad_mis_z': ('c.mis_z', 'DESC')}
 
 
 def _json(value):
@@ -27,6 +29,26 @@ def _rows(connection, sql, args=()):
     with connection.cursor() as cursor:
         cursor.execute(sql, args)
         return cursor.fetchall()
+
+
+def _gnomad(connection, import_id=None):
+    """Resolve the environment's independently versioned constraint annotation."""
+    if import_id is not None and import_id != 'none' and not re.fullmatch('[a-f0-9]{64}', import_id):
+        raise Problem(422, 'INVALID_QUERY', 'Invalid gnomAD import pin.')
+    try:
+        rows = _rows(connection, 'SELECT i.import_id,i.source_version,i.source_sha256,i.source_url,i.selection_policy'
+                     ' FROM gnomad_constraint_active a JOIN gnomad_constraint_imports i ON i.import_id=a.import_id'
+                     ' WHERE a.table_prefix=%s AND i.status=%s', (application_prefix(), 'ready'))
+    except Exception as error:
+        # A code rollout may precede this optional, additive migration. Only the
+        # missing annotation table is optional; outages and other SQL errors fail.
+        if not (getattr(error, 'args', ()) and error.args[0] == 1146 and 'gnomad_constraint_' in str(error)):
+            raise
+        rows = []
+    result = dict(zip(('import_id', 'version', 'source_sha256', 'source_url', 'selection_policy'), rows[0])) if rows else None
+    if import_id is not None and import_id != (result['import_id'] if result else 'none'):
+        raise Problem(409, 'SOURCE_REVISION_CHANGED', 'The gnomAD annotations have changed. Reload the factor page before loading more genes.')
+    return result
 
 
 def _selection(catalog, source_id, generation_id=None, source_revision=None):
@@ -92,14 +114,15 @@ def factor_detail(catalog, source_id, *, generation_id=None, source_revision=Non
         return {'factor': record, 'generation_id': generation,
                 'provenance': {'eaggl_import_id': binding['eaggl_import_id'], 'factor_id': binding['eaggl_factor_id'],
                                'factor_key': binding.get('factor_key'), 'model': record['model']},
+                'gnomad': _gnomad(connection),
                 'genes': _summary(connection, _query(binding, generation, index, 'gene', 'joint')),
                 'gene_sets': _summary(connection, _query(binding, generation, index, 'gene_set', 'joint'))}
     finally:
         connection.close()
 
 
-def factor_loadings(catalog, source_id, *, kind='gene', metric='joint', sort='loading', q='', limit=200, offset=0, generation_id=None, source_revision=None):
-    if kind not in ('gene', 'gene_set') or metric not in ('joint', 'marginal') or sort not in ('alphabetical', 'loading') or not 1 <= limit <= 500 or offset < 0 or len(q) > 200:
+def factor_loadings(catalog, source_id, *, kind='gene', metric='joint', sort='loading', q='', limit=200, offset=0, generation_id=None, source_revision=None, gnomad_import_id=None):
+    if kind not in ('gene', 'gene_set') or metric not in ('joint', 'marginal') or sort not in ('alphabetical', 'loading', *GNOMAD_SORTS) or not 1 <= limit <= 500 or offset < 0 or len(q) > 200 or (kind != 'gene' and (sort in GNOMAD_SORTS or gnomad_import_id is not None)):
         raise Problem(422, 'INVALID_QUERY', 'Invalid loading kind, metric, sort, search, or pagination.')
     _, binding, generation = _selection(catalog, source_id, generation_id, source_revision)
     connection = mysql_connection()
@@ -108,6 +131,18 @@ def factor_loadings(catalog, source_id, *, kind='gene', metric='joint', sort='lo
         query = _query(binding, generation, index, kind, metric)
         summary = _summary(connection, query)
         base, args, label, _, ordering, columns, _, _ = query
+        gnomad = _gnomad(connection, gnomad_import_id) if kind == 'gene' else None
+        if sort in GNOMAD_SORTS and gnomad is None:
+            raise Problem(503, 'SOURCE_NOT_READY', 'gnomAD constraint annotations have not been loaded for this environment.')
+        if kind == 'gene' and gnomad:
+            # One exact-symbol row per import, including explicit unresolved
+            # identities. Join after ranking so annotations cannot change ranks.
+            base = base.replace(' ranked WHERE 1=1', ' ranked LEFT JOIN gnomad_gene_constraints c ON c.import_id=%s AND c.gene_symbol=ranked.symbol WHERE 1=1')
+            args += (gnomad['import_id'],)
+            columns += ',c.gene_symbol,c.gene_id,c.transcript_id,c.selection_status,c.selection_reason,c.pli,c.loeuf,c.mis_z,c.lof_oe,c.constraint_flags'
+        if sort in GNOMAD_SORTS:
+            column, direction = GNOMAD_SORTS[sort]
+            ordering = column + ' IS NULL,' + column + ' ' + direction + ',LOWER(ranked.symbol),ranked.symbol,ranked.gene_index'
         if sort == 'alphabetical':
             ordering = ('LOWER(ranked.symbol),ranked.symbol,ranked.gene_index' if kind == 'gene' else
                         'LOWER(s.gene_set_name),s.gene_set_id' if binding.get('model') == KPN_MODEL else
@@ -125,8 +160,16 @@ def factor_loadings(catalog, source_id, *, kind='gene', metric='joint', sort='lo
         items = []
         for row in rows:
             if kind == 'gene':
-                symbol, loading, original_rank = row
+                symbol, loading, original_rank = row[:3]
                 item = {'id': symbol, 'label': symbol, 'loading': float(loading), 'rank': original_rank}
+                item['gnomad'] = None
+                if gnomad and row[3] is not None:
+                    matched, gene, transcript, status, reason, pli, loeuf, mis_z, lof_oe, flags = row[3:]
+                    item['gnomad'] = {'symbol': matched, 'gene_id': gene, 'transcript': transcript, 'status': status,
+                        'selection_method': reason if status == 'selected' else None, 'selection_reason': reason,
+                        'pli': float(pli) if pli is not None else None, 'loeuf': float(loeuf) if loeuf is not None else None,
+                        'mis_z': float(mis_z) if mis_z is not None else None, 'lof_oe': float(lof_oe) if lof_oe is not None else None,
+                        'flags': _json(flags) if flags else []}
             elif binding.get('model') == KPN_MODEL:
                 identity, label, library, size, joint, marginal, joint_rank, marginal_rank = row
                 item = {'id': identity, 'gene_set_id': identity, 'label': label, 'library': library, 'gene_count': size,
@@ -139,7 +182,7 @@ def factor_loadings(catalog, source_id, *, kind='gene', metric='joint', sort='lo
             items.append(item)
         next_offset = offset + len(items)
         return {'source_id': source_id, 'generation_id': generation, 'kind': kind, 'metric': metric, 'sort': sort, 'items': items,
-                'total': total, 'offset': offset, 'limit': limit, 'next_offset': next_offset if next_offset < total else None, 'summary': summary}
+                'total': total, 'offset': offset, 'limit': limit, 'next_offset': next_offset if next_offset < total else None, 'summary': summary, 'gnomad': gnomad}
     finally:
         connection.close()
 

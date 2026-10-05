@@ -17,6 +17,7 @@ from reveal_backend import app as api
 from reveal_backend import factor_details as details
 from reveal_backend.auth import Problem
 from reveal_backend.reference_generation import KPN_MODEL
+from reveal_backend.repository import application_prefix
 from reveal_backend.runtime_config import ROOT
 
 CONTRACT = json.loads((ROOT / 'api/openapi.json').read_text())
@@ -63,6 +64,9 @@ CREATE TABLE cfde_gene_set_collections(generation_id TEXT,collection_id TEXT,cfd
 CREATE TABLE eaggl_cfde_gene_set_links(run_id TEXT,factor_index INTEGER,gene_set_import_id TEXT,resolved_alias_sha256 TEXT,source_key TEXT,node_id TEXT,gene_set_rank INTEGER);
 CREATE TABLE cfde_gene_set_aliases(import_id TEXT,node_id_sha256 TEXT,dapper_id TEXT,provenance TEXT,source_key TEXT);
 CREATE TABLE dapper_objects(id TEXT,payload TEXT);
+CREATE TABLE gnomad_constraint_imports(import_id TEXT PRIMARY KEY,source_version TEXT,source_sha256 TEXT,source_url TEXT,selection_policy TEXT,status TEXT);
+CREATE TABLE gnomad_constraint_active(table_prefix TEXT PRIMARY KEY,import_id TEXT);
+CREATE TABLE gnomad_gene_constraints(import_id TEXT,gene_symbol TEXT,gene_id TEXT,transcript_id TEXT,selection_status TEXT,selection_reason TEXT,pli REAL,loeuf REAL,mis_z REAL,lof_oe REAL,constraint_flags TEXT,PRIMARY KEY(import_id,gene_symbol));
 ''')
             c.execute('INSERT INTO eaggl_factors VALUES(?,?,?,?)', (IMPORT, 17, hashlib.sha256(b'T2D::Factor1').hexdigest(), 'T2D::Factor1'))
             for index, (symbol, weight) in enumerate([('GABRB3', .9), ('GABRA5', .9), ('GABRG3', .4), ('LITERAL%_GENE', .01)]):
@@ -193,9 +197,80 @@ CREATE TABLE dapper_objects(id TEXT,payload TEXT);
         self.assertEqual(caught.exception.status, 503)
 
     def test_invalid_queries_are_bounded(self):
-        for query in ({'limit': 501}, {'limit': 0}, {'offset': -1}, {'kind': 'trait'}, {'metric': 'bad'}, {'sort': 'bad'}, {'q': 'x' * 201}):
+        for query in ({'limit': 501}, {'limit': 0}, {'offset': -1}, {'kind': 'trait'}, {'metric': 'bad'}, {'sort': 'bad'}, {'q': 'x' * 201},
+                      {'kind': 'gene_set', 'sort': 'gnomad_pli'}, {'kind': 'gene_set', 'gnomad_import_id': 'none'}, {'gnomad_import_id': 'bad'}):
             response = self.client.get('/v1/factor-loadings', params={'source_id': FACTOR['source_id'], **query})
             self.assertEqual(response.status_code, 422, response.text)
+
+    def annotations(self):
+        with sqlite3.connect(self.path) as c:
+            c.execute('INSERT INTO gnomad_constraint_imports VALUES(?,?,?,?,?,?)', ('a'*64, '4.1', 'b'*64, None, 'ensembl-mane-canonical-v1', 'ready'))
+            c.execute('INSERT INTO gnomad_constraint_active VALUES(?,?)', (application_prefix(), 'a'*64))
+            for symbol, pli, loeuf, mis_z, flags in [('GABRA5', .9, .3, 5., []), ('GABRB3', .9, .4, 6., ['outlier']), ('GABRG3', None, .2, -1., [])]:
+                c.execute('INSERT INTO gnomad_gene_constraints VALUES(?,?,?,?,?,?,?,?,?,?,?)',
+                          ('a'*64, symbol, 'ENSG00000166206', 'ENST00000000001', 'selected', 'mane_select', pli, loeuf, mis_z, .1, json.dumps(flags)))
+
+    def test_constraint_sort_is_global_null_last_stable_and_preserves_factor_values(self):
+        self.annotations()
+        expected = {'gnomad_pli': ['GABRA5', 'GABRB3', 'GABRG3', 'LITERAL%_GENE'],
+                    'gnomad_loeuf': ['GABRG3', 'GABRA5', 'GABRB3', 'LITERAL%_GENE'],
+                    'gnomad_mis_z': ['GABRB3', 'GABRA5', 'GABRG3', 'LITERAL%_GENE']}
+        baseline = self.loadings()
+        original = {item['id']: (item['rank'], item['loading']) for item in baseline['items']}
+        for sort, labels in expected.items():
+            with self.subTest(sort=sort):
+                first = self.loadings(sort=sort, limit=2, gnomad_import_id='a'*64)
+                second = self.loadings(sort=sort, limit=2, offset=first['next_offset'], gnomad_import_id='a'*64)
+                rows = first['items'] + second['items']
+                self.assertEqual([item['label'] for item in rows], labels)
+                self.assertEqual({item['id']: (item['rank'], item['loading']) for item in rows}, original)
+                self.assertEqual(first['summary'], baseline['summary'])
+                self.assertIsNone(second['next_offset'])
+                self.validate(first, 'FactorLoadings')
+        self.assertEqual(self.loadings(sort='gnomad_mis_z')['items'][0]['gnomad']['flags'], ['outlier'])
+        missing = self.loadings(q='LITERAL', sort='gnomad_pli')
+        self.assertIsNone(missing['items'][0]['gnomad'])
+        matched = self.loadings(q='GABRG3', sort='gnomad_pli')['items'][0]
+        self.assertEqual(matched['rank'], 3)
+        self.assertIsNone(matched['gnomad']['pli'])
+        self.assertEqual(matched['gnomad']['loeuf'], .2)
+        response = self.client.get('/v1/factor-loadings', params={'source_id': FACTOR['source_id'], 'sort': 'gnomad_loeuf', 'gnomad_import_id': 'a'*64})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()['items'][0]['label'], 'GABRG3')
+
+    def test_annotation_pin_rejects_changes_and_is_environment_scoped(self):
+        self.assertIsNone(self.loadings(gnomad_import_id='none')['gnomad'])
+        self.annotations()
+        detail = details.factor_detail(self.catalog, FACTOR['source_id'])
+        self.assertEqual(detail['gnomad']['import_id'], 'a'*64)
+        self.validate(detail, 'FactorDetail')
+        for pin in ('none', 'c'*64):
+            with self.assertRaises(Problem) as caught: self.loadings(gnomad_import_id=pin)
+            self.assertEqual(caught.exception.code, 'SOURCE_REVISION_CHANGED')
+        with patch.dict('os.environ', {'REVEAL_APPLICATION_TABLE_PREFIX': 'reveal_unannotated'}):
+            self.assertIsNone(self.loadings()['gnomad'])
+            self.assertTrue(all(item['gnomad'] is None for item in self.loadings()['items']))
+            with self.assertRaises(Problem) as caught: self.loadings(sort='gnomad_pli')
+            self.assertEqual(caught.exception.code, 'SOURCE_NOT_READY')
+
+    def test_unresolved_annotation_is_retained_as_unknown_never_zero(self):
+        self.annotations()
+        with sqlite3.connect(self.path) as c:
+            c.execute('INSERT INTO gnomad_gene_constraints VALUES(?,?,?,?,?,?,?,?,?,?,?)',
+                      ('a'*64, 'LITERAL%_GENE', None, None, 'ambiguous_gene', 'multiple_ensembl_gene_ids', None, None, None, None, '[]'))
+        item = self.loadings(sort='gnomad_loeuf')['items'][-1]
+        self.assertEqual(item['gnomad']['status'], 'ambiguous_gene')
+        self.assertIsNone(item['gnomad']['selection_method'])
+        self.assertIsNone(item['gnomad']['loeuf'])
+        self.validate(self.loadings(), 'FactorLoadings')
+
+    def test_missing_optional_migration_is_tolerated_but_other_database_errors_are_not(self):
+        from pymysql.err import ProgrammingError, OperationalError
+        with patch.object(details, '_rows', side_effect=ProgrammingError(1146, "Table 'db.gnomad_constraint_active' doesn't exist")):
+            self.assertIsNone(details._gnomad(None))
+        for error in (OperationalError(2006, 'Server gone away'), ProgrammingError(1146, "Table 'db.eaggl_genes' doesn't exist")):
+            with patch.object(details, '_rows', side_effect=error), self.assertRaises(type(error)):
+                details._gnomad(None)
 
     def test_legacy_rank_is_not_a_numeric_loading(self):
         self.catalog.bindings[FACTOR['source_id']].update(model='cfde-inc-v2', mapping_run_id='mapping')

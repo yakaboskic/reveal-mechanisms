@@ -1,12 +1,12 @@
 {
   "openapi": "3.1.1",
-  "openapi_sha256": "b776bd3040080a7b5f1d0de89d9f6695c460b1c9b15663eb1f39e732f0355b12",
+  "openapi_sha256": "f3aa4c2ad7275c67a409230a81fe1343e2b8ee6d8ed659cca140f3b4d2a59d27",
   "paths": 49,
   "operations": 60,
-  "local_refs_resolved": 823,
+  "local_refs_resolved": 826,
   "request_body_examples_validated": 21,
   "response_examples_validated": 357,
-  "parameter_examples_validated": 155,
+  "parameter_examples_validated": 156,
   "request_exchanges_validated": 78,
   "dapper_documents": {
     "scientific-account.dapper.json": {

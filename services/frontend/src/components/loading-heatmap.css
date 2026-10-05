@@ -18,6 +18,9 @@
 .loading-heatmap-tooltip strong{font-weight:550;margin-bottom:3px}
 .loading-heatmap-tooltip>span{font-variant-numeric:tabular-nums;color:#526e60}
 .loading-heatmap-tooltip small{font-size:11px;line-height:1.6;margin-top:5px;color:#7b8990}
+.loading-heatmap-details{margin:7px 0;font-size:11px;line-height:1.6;font-variant-numeric:tabular-nums}
+.loading-heatmap-details>div{display:flex;gap:14px;justify-content:space-between}
+.loading-heatmap-details dt{color:#667b70}.loading-heatmap-details dd{margin:0;color:#405e4d}
 .loading-heatmap-legend{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:7px;margin-top:12px;font-size:11px;line-height:1.7;color:#6a7a84;font-variant-numeric:tabular-nums}
 .loading-heatmap-swatches{display:flex;gap:3px}
 .loading-heatmap-legend i{display:inline-block;width:12px;height:12px;border:1px solid #174f3020;border-radius:2px}

@@ -4,6 +4,8 @@
 .reference-kind{font-size:12px;color:#64798b;margin:0 0 10px}
 .reference-heading h1{font-size:clamp(25px,3.1vw,34px);line-height:1.25;font-weight:500;letter-spacing:-.7px;margin:0 0 12px;max-width:34ch;overflow-wrap:anywhere}
 .reference-heading .factor-trait{font-size:18px;color:#56708a;margin:0 0 18px;line-height:1.5}
+.factor-trait a{color:inherit;text-decoration:underline;text-decoration-color:#b4c7d8;text-underline-offset:4px}
+.factor-trait a:hover{text-decoration-color:currentColor}
 .reference-meta{display:flex;flex-wrap:wrap;gap:9px 22px;font-size:12px;color:#65788c}
 .reference-description{font-size:14px;line-height:1.8;max-width:78ch;color:#5b7087}
 .reference-sections{display:flex;flex-wrap:wrap;gap:12px 30px;border-top:1px solid #e2e9ef;border-bottom:1px solid #e2e9ef;padding:15px 0;margin:26px 0 4px}
@@ -28,6 +30,13 @@
 .loading-metric{display:flex;align-items:center;gap:9px;font-size:12px;color:#687b8c}
 .loading-metric select{min-height:42px;min-width:110px;width:auto;border-color:#cddce0;border-radius:7px;color:#405d4d}
 .loading-explanation{font-size:12px;line-height:1.7;color:#64798a;margin:8px 0 14px}
+.gnomad-source{font-size:11px;color:#71818d;margin:8px 0 16px;max-width:85ch;overflow-wrap:anywhere}
+.gnomad-source>summary{font-size:12px;padding:5px 0;color:#627c70}
+.gnomad-source p{margin:8px 0;line-height:1.8}.gnomad-source dl{margin:10px 0}
+.gnomad-source dl>div{display:grid;grid-template-columns:130px minmax(0,1fr);gap:12px;margin:5px 0}.gnomad-source dd{margin:0}
+.loading-table td.gnomad-provenance-cell{min-width:180px;white-space:normal;overflow-wrap:anywhere}
+.gnomad-gene-provenance summary{padding:0;font-size:11px;color:#607767}
+.gnomad-gene-provenance p{font-size:11px;margin:7px 0}.gnomad-gene-provenance a{display:block;font-size:11px;margin-top:5px}
 .loading-result-count{display:flex;align-items:center;justify-content:space-between;gap:15px;font-size:12px;color:#526e5c;margin:16px 0 10px;font-variant-numeric:tabular-nums;min-height:20px}
 .loading-result-count>span{font-size:11px;color:#778b7d}
 .loading-table-scroll{overflow:auto;max-height:420px;border:1px solid #dce6e0;border-radius:7px}
@@ -48,7 +57,9 @@
 .loading-empty button{min-height:36px;color:#35654b;font-size:12px;white-space:nowrap;text-decoration:underline}
 .reference-source{padding-top:30px;margin-top:8px}
 .reference-source>p{font-size:13px;color:#64788c;max-width:78ch}
-.factor-metadata{margin:-12px 0 26px;color:#64788c;font-size:12px;border-bottom:1px solid #e2e9ef;padding-bottom:13px}
+.factor-additional-info{padding-top:28px}
+.factor-additional-info>h2{font-size:17px;color:#526a7f;margin-bottom:12px}
+.factor-metadata{margin:0 0 8px;color:#64788c;font-size:12px}
 .factor-metadata>summary{width:fit-content;padding:8px 0;cursor:pointer;color:#54728b}
 .factor-metadata[open]>summary{margin-bottom:12px}
 .factor-metadata>p{max-width:78ch;line-height:1.7}

@@ -23,6 +23,17 @@ const datasetId = 'dapper:Dataset.' + 'd'.repeat(32), activityId = 'dapper:Activ
 // explicitly synthetic renderer fixtures, not biological assertions or saved data.
 const geneNames = ['NRXN1', 'SHANK3', 'PTEN', 'GABRA1', 'GABRB2', 'GABRG3', 'NRXN1_ALT'];
 const genes = Array.from({ length: 205 }, (_, index) => ({ id: geneNames[index] || `ZZ_FIXTURE_GENE_${String(index + 1).padStart(3, '0')}`, label: geneNames[index] || `ZZ_FIXTURE_GENE_${String(index + 1).padStart(3, '0')}`, loading: index === 0 ? 0.7196999788284302 : index === 1 ? 0.6890000104904175 : index === 204 ? 0 : Number((0.67 - index * 0.003).toFixed(6)), rank: index + 1 }));
+const gnomadSource = { import_id: 'gnomad-fixture-import', version: '4.1.1', source_sha256: '9'.repeat(64), source_url: 'https://example.org/gnomad-fixture.tsv', selection_policy: 'Unique Ensembl MANE Select, otherwise unique canonical transcript' };
+const constraintFixtures = [
+  { pli: 0.99, loeuf: 0.1, mis_z: 2.4 }, { pli: 0.2, loeuf: 0.9, mis_z: 5.1 }, { pli: 0, loeuf: 0, mis_z: -1 },
+  { pli: null, loeuf: null, mis_z: null }, { pli: null, loeuf: 0.4, mis_z: null }, { pli: 0.5, loeuf: null, mis_z: 0.3 },
+];
+const annotatedGenes = genes.map((row, index) => ({ ...row, gnomad: index >= constraintFixtures.length ? null : {
+  symbol: row.label, gene_id: `ENSG${String(179915 + index).padStart(11, '0')}`, transcript: index === 3 ? null : `ENST${String(406316 + index).padStart(11, '0')}.7`,
+  status: index === 3 ? 'ambiguous_transcript' : 'selected', selection_method: index === 3 ? null : index === 4 ? 'canonical' : 'mane_select',
+  selection_reason: index === 3 ? 'Multiple MANE Select transcripts recorded' : 'Unique preferred Ensembl transcript',
+  ...constraintFixtures[index], lof_oe: index === 3 ? null : 0.1, flags: index === 0 ? ['low_coverage'] : [],
+} }));
 const sets = Array.from({ length: 73 }, (_, index) => ({
   id: index === 0 ? setId : `dapper:GeneSet.${String(index).padStart(32, 'b')}`,
   gene_set_id: index === 0 ? setId : `dapper:GeneSet.${String(index).padStart(32, 'b')}`,
@@ -63,7 +74,7 @@ async function harness(name, options = {}) {
   const context = await browser.newContext({ viewport: options.mobile ? { width: 390, height: 844 } : { width: 1300, height: 1050 }, isMobile: !!options.mobile, hasTouch: !!options.mobile, reducedMotion: 'reduce', serviceWorkers: 'block' });
   const page = await context.newPage(); activePage = page; page.setDefaultTimeout(20000);
   const calls = [], errors = [], unexpected = [], pending = new Map();
-  const gates = { detail: !options.retry, genes: !options.retry };
+  const gates = { detail: !options.retry, genes: !options.retry, importChanged: false };
   page.on('pageerror', error => errors.push(error.message));
   await context.route('**/*', async route => {
     try {
@@ -78,7 +89,7 @@ async function harness(name, options = {}) {
       assert.equal(path, `/api/backend/v1/factors/${factor.source_id}`);
       assert.equal(url.searchParams.get('source_revision'), factor.source_revision);
       if (!gates.detail) return route.fulfill({ status: 503, json: { code: 'DEPENDENCY_UNAVAILABLE', detail: 'Fixture factor lookup interrupted. Please retry.' } });
-      return route.fulfill({ json: detail });
+      return route.fulfill({ json: options.gnomad ? { ...detail, gnomad: gnomadSource } : detail });
     }
     if (path === '/api/backend/v1/factor-loadings') {
       assert.equal(url.searchParams.get('source_id'), factor.source_id);
@@ -86,16 +97,22 @@ async function harness(name, options = {}) {
       assert.equal(url.searchParams.get('generation_id'), generation);
       const kind = url.searchParams.get('kind'), metric = url.searchParams.get('metric'), q = (url.searchParams.get('q') || '').toLowerCase(), offset = Number(url.searchParams.get('offset') || 0), limit = Number(url.searchParams.get('limit'));
       assert.ok(limit === (kind === 'gene' ? 200 : 50) || (kind === 'gene_set' && limit === 500), 'Panels use bounded pages; the picker loads its own complete gene-set options');
-      const sort = url.searchParams.get('sort'); assert.ok(['alphabetical', 'loading'].includes(sort), 'Order must be explicit');
+      const sort = url.searchParams.get('sort'); assert.ok(['alphabetical', 'loading', ...(kind === 'gene' ? ['gnomad_pli', 'gnomad_loeuf', 'gnomad_mis_z'] : [])].includes(sort), 'Order must be explicit and constraint sorts are gene-only');
+      if (kind === 'gene') assert.equal(url.searchParams.get('gnomad_import_id'), options.gnomad ? gnomadSource.import_id : 'none', 'Every gene page and sort stays pinned to the initial annotation import, including no import');
       if (kind === 'gene' && !gates.genes) return route.fulfill({ status: 503, json: { code: 'DEPENDENCY_UNAVAILABLE', detail: 'Fixture loading lookup interrupted. Please retry.' } });
-      let values = structuredClone(kind === 'gene' ? genes : sets);
+      let values = structuredClone(kind === 'gene' ? options.gnomad ? annotatedGenes : genes : sets);
       if (kind === 'gene_set' && options.nullSets) values = values.map(row => ({ ...row, loading: null }));
       else if (kind === 'gene_set' && metric === 'marginal') values = values.map(row => ({ ...row, loading: row.marginal_loading })).sort((a, b) => b.loading - a.loading).map((row, index) => ({ ...row, rank: index + 1 }));
       const numeric = values.flatMap(row => row.loading === null ? [] : [row.loading]);
       const summary = { ...(kind === 'gene' ? detail.genes : detail.gene_sets), min: numeric.length ? Math.min(...numeric) : null, max: numeric.length ? Math.max(...numeric) : null, available: !!numeric.length };
       if (sort === 'alphabetical') values.sort((a, b) => a.label.toLowerCase().localeCompare(b.label.toLowerCase()) || a.id.localeCompare(b.id));
+      if (sort.startsWith('gnomad_')) {
+        const field = sort.slice('gnomad_'.length), direction = field === 'loeuf' ? 1 : -1;
+        values.sort((a, b) => { const av = a.gnomad?.status === 'selected' ? a.gnomad[field] : null, bv = b.gnomad?.status === 'selected' ? b.gnomad[field] : null;
+          return (av == null ? bv == null ? 0 : 1 : bv == null ? -1 : direction * (av - bv)) || a.label.localeCompare(b.label); });
+      }
       const matches = values.filter(row => `${row.label} ${row.library || ''}`.toLowerCase().includes(q));
-      const json = { source_id: factor.source_id, generation_id: generation, kind, metric, sort, items: matches.slice(offset, offset + limit), total: matches.length, offset, limit, next_offset: offset + limit < matches.length ? offset + limit : null, summary };
+      const json = { source_id: factor.source_id, generation_id: generation, kind, metric, sort, items: matches.slice(offset, offset + limit), total: matches.length, offset, limit, next_offset: offset + limit < matches.length ? offset + limit : null, summary, gnomad: kind === 'gene' && options.gnomad ? { ...gnomadSource, ...(gates.importChanged && offset ? { import_id: 'different-import' } : {}) } : null };
       if (q === 'shank' && options.race) await new Promise(resolve => pending.set('slow-search', resolve));
       try { return await route.fulfill({ json }); } catch (error) { if (!/closed|cancel|intercept/i.test(String(error))) throw error; }
       return;
@@ -215,6 +232,58 @@ try {
   await full.shot('gene-set-provenance.png');
   await page.getByRole('link', { name: 'Back to factor', exact: false }).click(); await waitTiles(page, 200);
   await full.close(['collapsed metadata and accessible trait link', 'alphabetical requests and global ordering with preserved ranks', 'exact float hover and roving keyboard inspection', 'search debounce and late-response protection', 'fixed scale across filtering', 'both page continuations append', 'tab panels retain loaded rows', 'joint/marginal and strongest-first switch', 'exact member overlay and unchanged colors', 'membership response races and generation pinning', 'unknown namespace membership stays unknown', 'clear overlay and heatmap/table overlay actions', 'generation-pinned provenance and searchable members', 'return to exact factor']);
+
+  const constraints = await harness('gnomAD sorts, exact annotations, missing metrics and frozen import paging', { gnomad: true });
+  const constraintPage = constraints.page; await constraints.open(); await waitTiles(constraintPage, 200);
+  const genePanel = panel(constraintPage), order = genePanel.locator('.loading-sort select');
+  const loadingColor = await geneTile(constraintPage, 'NRXN1').evaluate(element => getComputedStyle(element).backgroundColor);
+  const source = page.locator('#factor-additional-info details.gnomad-source'); await source.locator('summary').click();
+  assert.match(await source.innerText(), /probability of loss-of-function intolerance/);
+  assert.match(await source.innerText(), /missing values last/);
+  assert.match(await source.innerText(), new RegExp(gnomadSource.source_sha256));
+  assert.equal(await source.getByRole('link', { name: /Source constraint table/ }).getAttribute('href'), gnomadSource.source_url);
+  for (const [sort, expected] of [
+    ['gnomad_pli', ['NRXN1', 'GABRG3', 'SHANK3', 'PTEN']],
+    ['gnomad_loeuf', ['PTEN', 'NRXN1', 'GABRB2', 'SHANK3']],
+    ['gnomad_mis_z', ['SHANK3', 'NRXN1', 'GABRG3', 'PTEN']],
+  ]) {
+    await order.selectOption(sort);
+    await constraintPage.waitForFunction(first => document.querySelector('#gene-loadings .loading-heatmap-tile')?.getAttribute('aria-label')?.startsWith(`${first};`), expected[0]);
+    assert.deepEqual((await labels(constraintPage)).slice(0, 4), expected, 'Constraint order is global and numeric zero precedes missing values');
+    assert.equal(await geneTile(constraintPage, 'NRXN1').evaluate(element => getComputedStyle(element).backgroundColor), loadingColor, 'Constraint ordering must preserve factor loading colors');
+  }
+  await geneTile(constraintPage, 'SHANK3').hover();
+  const metricDetails = await constraintPage.getByRole('tooltip').locator('.loading-heatmap-details').innerText();
+  assert.match(metricDetails, /pLI\s+0\.2/); assert.match(metricDetails, /LOEUF\s+0\.9/); assert.match(metricDetails, /Missense Z\s+5\.1/);
+  await geneTile(constraintPage, 'SHANK3').click();
+  const selection = genePanel.locator('.loading-heatmap-selection');
+  assert.match(await selection.innerText(), /Rank 2[\s\S]*gnomAD 4\.1\.1[\s\S]*MANE Select transcript/);
+  assert.equal(new URL(await selection.getByRole('link', { name: /gnomAD gene/ }).getAttribute('href')).searchParams.get('dataset'), 'gnomad_r4');
+  assert.equal(new URL(await selection.getByRole('link', { name: /Ensembl transcript/ }).getAttribute('href')).searchParams.get('t'), annotatedGenes[1].gnomad.transcript);
+  const constraintSearch = genePanel.getByRole('searchbox', { name: 'Search gene loadings', exact: true });
+  await constraintSearch.fill('NRXN1_ALT'); await waitTiles(constraintPage, 1); await tiles(constraintPage).first().hover();
+  assert.equal((await constraintPage.getByRole('tooltip').innerText()).match(/Not reported/g)?.length, 3);
+  assert.match(await constraintPage.getByRole('tooltip').innerText(), /No matching gene in this import/);
+  await constraintSearch.fill(''); await waitTiles(constraintPage, 200);
+  await genePanel.getByRole('button', { name: 'Table', exact: true }).click();
+  const ambiguousRow = genePanel.locator('tbody tr').filter({ has: constraintPage.getByRole('rowheader', { name: 'GABRA1', exact: true }) });
+  assert.equal((await ambiguousRow.innerText()).match(/Not reported/g)?.length, 3); assert.match(await ambiguousRow.innerText(), /Ambiguous transcript selection/);
+  const flaggedRow = genePanel.locator('tbody tr').filter({ has: constraintPage.getByRole('rowheader', { name: 'NRXN1', exact: true }) });
+  await flaggedRow.locator('summary').click(); assert.match(await flaggedRow.innerText(), /Source flags: low_coverage/);
+  await constraints.shot('factor-gnomad-table.png');
+  await genePanel.getByRole('button', { name: 'Heatmap', exact: true }).click();
+  await order.selectOption('gnomad_pli'); await constraintPage.waitForFunction(() => document.querySelector('#gene-loadings .loading-heatmap-tile')?.getAttribute('aria-label')?.startsWith('NRXN1;'));
+  const retainedConstraintRows = await labels(constraintPage); constraints.gates.importChanged = true;
+  await genePanel.getByRole('button', { name: 'Load more genes', exact: true }).click();
+  await genePanel.getByText('The gnomAD annotation import changed. Reload the factor page to use the new annotations.', { exact: true }).waitFor();
+  assert.deepEqual(await labels(constraintPage), retainedConstraintRows, 'A mismatched import cannot append to retained rows');
+  constraints.gates.importChanged = false; await genePanel.getByRole('button', { name: 'Retry', exact: false }).click(); await waitTiles(constraintPage, 205);
+  assert.deepEqual((await labels(constraintPage)).slice(0, 200), retainedConstraintRows);
+  assert.deepEqual((await labels(constraintPage)).slice(4), annotatedGenes.filter(row => row.gnomad?.pli == null).sort((a, b) => a.label.localeCompare(b.label)).map(row => row.label), 'Null metrics remain last across the page boundary');
+  await constraints.shot('factor-gnomad-heatmap.png');
+  await tab(constraintPage, 'gene_set').click(); await waitTiles(constraintPage, 50, 'gene_set');
+  assert.deepEqual(await panel(constraintPage, 'gene_set').locator('.loading-sort option').evaluateAll(options => options.map(option => option.value)), ['alphabetical', 'loading']);
+  await constraints.close(['three global constraint sorts with missing values last', 'zero and signed metrics remain numeric', 'exact hover values and original loading rank/color', 'safe source/gene/transcript provenance links', 'null and ambiguous annotations stay explicit', 'source quality flags stay visible', 'search and append pin initial gnomAD import', 'changed import cannot mix pages', 'constraint sorting is gene-only']);
 
   const retry = await harness('factor and loading retries, missing scores and empty search', { retry: true, nullSets: true });
   await retry.open(); await retry.page.getByText('Fixture factor lookup interrupted. Please retry.', { exact: true }).waitFor(); retry.gates.detail = true; await retry.page.getByRole('button', { name: 'Retry', exact: false }).click();

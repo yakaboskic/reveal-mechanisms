@@ -3796,6 +3796,29 @@ export interface components {
             items: components["schemas"]["Job"][];
             page: components["schemas"]["Page"];
         };
+        /** @description Immutable gnomAD constraint source active for this environment. Independent of the factor reference generation. Pin import_id for paginated gene reads. */
+        GnomadImport: {
+            import_id: string;
+            version: string;
+            source_sha256: string;
+            source_url: string | null;
+            selection_policy: string;
+        };
+        /** @description Exact-symbol gnomAD constraint annotation. A unique Ensembl MANE Select transcript is preferred, otherwise a unique canonical transcript. pLI is probability of loss-of-function intolerance (higher = stronger constraint); LOEUF is the LoF observed/expected upper confidence bound (lower = stronger constraint); mis_z is the missense Z score. Missing or ambiguous metrics stay null. Source quality flags are retained. */
+        GnomadGeneConstraint: {
+            symbol: string;
+            gene_id: string | null;
+            transcript: string | null;
+            /** @enum {string} */
+            status: "selected" | "ambiguous_gene" | "ambiguous_transcript" | "no_primary_transcript" | "no_ensembl_gene";
+            selection_method: ("mane_select" | "canonical") | null;
+            selection_reason: string;
+            pli: number | null;
+            loeuf: number | null;
+            mis_z: number | null;
+            lof_oe: number | null;
+            flags: string[];
+        };
         /** @description Statistics over the entire retained factor loading set, unaffected by search or pagination. available means numeric scores are stored. Missing values are not zero. */
         LoadingSummary: {
             total: number;
@@ -3817,6 +3840,7 @@ export interface components {
             marginal_loading?: number;
             joint_rank?: number;
             marginal_rank?: number;
+            gnomad?: components["schemas"]["GnomadGeneConstraint"] | null;
         };
         FactorDetail: {
             factor: components["schemas"]["EagglFactor"];
@@ -3829,8 +3853,9 @@ export interface components {
             };
             genes: components["schemas"]["LoadingSummary"];
             gene_sets: components["schemas"]["LoadingSummary"];
+            gnomad?: components["schemas"]["GnomadImport"] | null;
         };
-        /** @description Bounded loading page. sort=loading (default) orders by descending score; sort=alphabetical orders case-insensitive labels before pagination. Stable identifiers break ties. Ranks always remain original loading ranks, independent of sort. total counts search matches; summary.total counts all retained rows. Pin generation_id and source_revision returned by FactorDetail on subsequent requests. */
+        /** @description Bounded loading page. sort=loading (default) orders by descending score; alphabetical orders case-insensitive labels. Gene-only gnomad_pli and gnomad_mis_z sort descending; gnomad_loeuf sorts ascending, all with missing values last and stable symbol ties. Sorting applies globally before pagination. Ranks and heatmap score ranges always remain original factor loadings. Pin generation_id, source_revision, and gnomad_import_id returned by FactorDetail. */
         FactorLoadings: {
             source_id: string;
             generation_id: string | null;
@@ -3839,13 +3864,14 @@ export interface components {
             /** @enum {string} */
             metric: "joint" | "marginal";
             /** @enum {string} */
-            sort: "alphabetical" | "loading";
+            sort: "alphabetical" | "loading" | "gnomad_pli" | "gnomad_loeuf" | "gnomad_mis_z";
             items: components["schemas"]["FactorLoading"][];
             total: number;
             offset: number;
             limit: number;
             next_offset: number | null;
             summary: components["schemas"]["LoadingSummary"];
+            gnomad?: components["schemas"]["GnomadImport"] | null;
         };
         /** @description Imported public reference data, never an owner account graph. object is the exact stored GeneSet or null; provenance preserves imported collection prefixes, organizations, datasets, files and activities. Unknown/derived account aliases return 404. */
         CatalogGeneSet: {
@@ -11717,10 +11743,15 @@ export interface operations {
                 /** @example joint */
                 metric?: "joint" | "marginal";
                 /**
-                 * @description Case-insensitive alphabetical label order, or descending numeric loading. Applied to the full matched set before pagination; ranks remain loading ranks.
+                 * @description Global label/loading order or gene-only gnomAD constraint order. pLI and missense Z descend; LOEUF ascends; missing metrics sort last. gnomAD sorting requires an active imported annotation source (503 otherwise).
                  * @example loading
                  */
-                sort?: "alphabetical" | "loading";
+                sort?: "alphabetical" | "loading" | "gnomad_pli" | "gnomad_loeuf" | "gnomad_mis_z";
+                /**
+                 * @description Gene-only annotation pin from FactorDetail.gnomad.import_id. Use none when annotations are absent. A change returns 409 to prevent mixed-source append pages.
+                 * @example none
+                 */
+                gnomad_import_id?: string;
                 /** @example LEPR */
                 q?: string;
                 /** @example 200 */

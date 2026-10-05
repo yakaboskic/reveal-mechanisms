@@ -6,6 +6,7 @@ import { messageOf, type Schema } from "@/lib/client";
 import { factorApi } from "@/lib/factor-api";
 import { geneSetHref } from "@/lib/factor-links";
 import { appendLoadings, overlayMembers } from "@/lib/factor-explorer";
+import { constraintCell, constraintDefinitions, constraintLinks, constraintSelection, constraintValue, loadingSortLabels, type LoadingSort } from "@/lib/gnomad-display";
 import { LoadingSurface } from "./LoadingSurface";
 import { LoadingHeatmap } from "./LoadingHeatmap";
 
@@ -87,9 +88,10 @@ export function FactorExplorer({ detail, self }: { detail: Schema<"FactorDetail"
 function LoadingPanel({ detail, kind, self, overlay, onOverlay, children }: { detail: Schema<"FactorDetail">; kind: Kind; self: string; overlay?: Overlay | null; onOverlay?: (choice: OverlayChoice) => void; children?: React.ReactNode }) {
   const id = useId(), isGene = kind === "gene", title = isGene ? "Gene loadings" : "Gene-set loadings";
   const [search, setSearch] = useState(""), [q, setQuery] = useState("");
-  const [metric, setMetric] = useState<"joint" | "marginal">("joint"), [sort, setSort] = useState<"alphabetical" | "loading">("alphabetical");
+  const [metric, setMetric] = useState<"joint" | "marginal">("joint"), [sort, setSort] = useState<LoadingSort>("alphabetical");
   const [offset, setOffset] = useState(0), [view, setView] = useState("heatmap"), [attempt, retry] = useState(0);
-  const binding = JSON.stringify([detail.factor.source_id, detail.factor.source_revision, detail.generation_id, kind, q, metric, sort]);
+  const gnomadImportId = isGene ? detail.gnomad?.import_id || "none" : undefined;
+  const binding = JSON.stringify([detail.factor.source_id, detail.factor.source_revision, detail.generation_id, gnomadImportId, kind, q, metric, sort]);
   const requestKey = `${binding}:${offset}:${attempt}`;
   const [loaded, setLoaded] = useState<{ binding: string; result: Schema<"FactorLoadings"> } | null>(null);
   const [failure, setFailure] = useState<{ key: string; message: string } | null>(null), [settled, setSettled] = useState("");
@@ -97,15 +99,16 @@ function LoadingPanel({ detail, kind, self, overlay, onOverlay, children }: { de
   useEffect(() => { const timer = setTimeout(() => { setQuery(search.trim()); setOffset(0); }, 250); return () => clearTimeout(timer); }, [search]);
   useEffect(() => {
     const controller = new AbortController(); setFailure(null);
-    void factorApi.loadings({ source_id: detail.factor.source_id, source_revision: detail.factor.source_revision, generation_id: detail.generation_id || undefined, kind, metric, sort, q, offset, limit: isGene ? 200 : 50 }, controller.signal)
+    void factorApi.loadings({ source_id: detail.factor.source_id, source_revision: detail.factor.source_revision, generation_id: detail.generation_id || undefined, gnomad_import_id: gnomadImportId, kind, metric, sort, q, offset, limit: isGene ? 200 : 50 }, controller.signal)
       .then(result => {
         if (controller.signal.aborted) return;
-        if (result.source_id !== detail.factor.source_id || result.generation_id !== detail.generation_id || result.kind !== kind || result.metric !== metric) throw new Error("These loadings belong to a different reference. Reload the factor page.");
+        if (result.source_id !== detail.factor.source_id || result.generation_id !== detail.generation_id || result.kind !== kind || result.metric !== metric || result.sort !== sort) throw new Error("These loadings belong to a different reference or order. Reload the factor page.");
+        if (isGene && (result.gnomad?.import_id || "none") !== gnomadImportId) throw new Error("The gnomAD annotation import changed. Reload the factor page to use the new annotations.");
         setLoaded(previous => ({ binding, result: { ...result, items: offset && previous?.binding === binding ? appendLoadings(previous.result.items, result.items) : result.items } }));
       }).catch(error => { if (!controller.signal.aborted) setFailure({ key: requestKey, message: messageOf(error) }); })
       .finally(() => { if (!controller.signal.aborted) setSettled(requestKey); });
     return () => controller.abort();
-  }, [binding, requestKey, detail, kind, isGene, metric, sort, q, offset]);
+  }, [binding, requestKey, detail, kind, isGene, gnomadImportId, metric, sort, q, offset]);
   const result = loaded?.binding === binding ? loaded.result : null;
   const error = failure?.key === requestKey ? failure.message : "";
   const summary = result?.summary || (isGene ? detail.genes : detail.gene_sets);
@@ -116,15 +119,25 @@ function LoadingPanel({ detail, kind, self, overlay, onOverlay, children }: { de
     <div className="loading-heading"><div><h2 id={`${id}-title`}>{title}</h2><p>{summary.coverage}</p></div><div className="loading-view" role="group" aria-label={`${title} view`}><button type="button" aria-pressed={view === "heatmap"} onClick={() => setView("heatmap")}>Heatmap</button><button type="button" aria-pressed={view === "table"} onClick={() => setView("table")}>Table</button></div></div>
     <div className="loading-tools"><label className="loading-search" htmlFor={`${id}-search`}><svg width="17" height="17" viewBox="0 0 20 20" fill="none" stroke="currentColor" aria-hidden="true"><circle cx="8" cy="8" r="5.5" /><path d="m12 12 5 5" /></svg><span className="sr-only">Search {isGene ? "gene" : "gene-set"} loadings</span><input id={`${id}-search`} type="search" placeholder={isGene ? "Search gene symbols…" : "Search gene sets or libraries…"} maxLength={200} value={search} onChange={event => setSearch(event.target.value)} /></label>
       {!isGene && <label className="loading-metric">Loading<select value={metric} onChange={event => { setMetric(event.target.value as "joint" | "marginal"); setOffset(0); }}><option value="joint">Joint</option><option value="marginal">Marginal</option></select></label>}
-      <label className="loading-sort">Order<select value={sort} onChange={event => { setSort(event.target.value as "alphabetical" | "loading"); setOffset(0); }}><option value="alphabetical">Alphabetical</option><option value="loading">Strongest first</option></select></label>
+      <label className="loading-sort">Order<select value={sort} onChange={event => { setSort(event.target.value as LoadingSort); setOffset(0); }}>{(Object.keys(loadingSortLabels) as LoadingSort[]).filter(value => isGene || !value.startsWith("gnomad_")).map(value => <option key={value} value={value} disabled={value.startsWith("gnomad_") && !detail.gnomad}>{loadingSortLabels[value]}</option>)}</select></label>
     </div>
     {!isGene && <p className="loading-explanation">{metric === "joint" ? "Joint loadings fit this trait’s factors together to explain each gene set." : "Marginal loadings fit each factor separately to each gene set."} Values are specific to this factor and metric.</p>}
     {children}
     {!result ? <LoadingSurface compact title={error ? `Couldn’t load ${isGene ? "genes" : "gene sets"}` : `Loading ${isGene ? "genes" : "gene sets"}`} error={error} onRetry={() => retry(n => n + 1)} rows={2} /> : <>
-      <p className="loading-result-count" role="status">{result.total ? `${count(result.items.length)} of ${count(result.total)}${q ? " matches" : ` ${isGene ? "genes" : "gene sets"}`}` : q ? "No matching loadings" : "No loadings available"}{result.total > 0 && <span>{sort === "alphabetical" ? "Alphabetical" : "Strongest first"}</span>}</p>
-      {!result.items.length ? <div className="loading-empty"><p>{q ? `No ${isGene ? "gene symbols" : "gene sets or libraries"} match “${q}”.` : "This reference does not include loadings for this factor."}</p>{q && <button type="button" onClick={() => setSearch("")}>Clear search</button>}</div> : view === "heatmap" ? <LoadingHeatmap label={title} min={summary.min} max={summary.max} orderingLabel={sort === "alphabetical" ? "name" : "rank"} overlayLabel={overlay?.label} items={result.items.map(row => ({ id: row.id, label: row.label, loading: row.loading, rank: row.rank, description: row.library || undefined, href: cellHref(row), isMember: membership(row) }))} actionLabel={!isGene && onOverlay ? "Overlay on genes" : undefined} onAction={!isGene && onOverlay ? item => { const row = result.items.find(value => value.id === item.id); if (row) selectOverlay(row); } : undefined} /> : <div className="loading-table-scroll" tabIndex={0} role="region" aria-label={`${title} table`}><table className="loading-table"><thead><tr><th scope="col">Rank</th><th scope="col">{isGene ? "Gene" : "Gene set"}</th>{!isGene && <th scope="col">Library</th>}<th scope="col">{isGene ? "Loading" : `${metric === "joint" ? "Joint" : "Marginal"} loading`}</th>{(overlay || !isGene) && <th scope="col">{isGene ? "Gene-set member" : "Explore"}</th>}</tr></thead><tbody>{result.items.map(row => <tr key={row.id} className={membership(row) ? "loading-table-member" : undefined}><td>{row.rank}</td><th scope="row">{cellHref(row) ? <Link href={cellHref(row)!}>{row.label}</Link> : row.label}</th>{!isGene && <td>{row.library || "Not reported"}</td>}<td>{valueLabel(row.loading)}</td>{isGene && overlay && <td>{membership(row) === true ? "Member" : membership(row) === false ? "Not a member" : "Unknown"}</td>}{!isGene && <td>{row.gene_set_id && <button type="button" className="loading-overlay-action" onClick={() => selectOverlay(row)}>Overlay on genes</button>}</td>}</tr>)}</tbody></table></div>}
+      <p className="loading-result-count" role="status">{result.total ? `${count(result.items.length)} of ${count(result.total)}${q ? " matches" : ` ${isGene ? "genes" : "gene sets"}`}` : q ? "No matching loadings" : "No loadings available"}{result.total > 0 && <span>{loadingSortLabels[sort]}</span>}</p>
+      {!result.items.length ? <div className="loading-empty"><p>{q ? `No ${isGene ? "gene symbols" : "gene sets or libraries"} match “${q}”.` : "This reference does not include loadings for this factor."}</p>{q && <button type="button" onClick={() => setSearch("")}>Clear search</button>}</div> : view === "heatmap" ? <LoadingHeatmap label={title} min={summary.min} max={summary.max} orderingLabel={loadingSortLabels[sort]} overlayLabel={overlay?.label} items={result.items.map(row => ({ id: row.id, label: row.label, loading: row.loading, rank: row.rank, description: row.library || undefined, href: cellHref(row), isMember: membership(row), ...(isGene ? constraintCell(row.gnomad, detail.gnomad) : {}) }))} actionLabel={!isGene && onOverlay ? "Overlay on genes" : undefined} onAction={!isGene && onOverlay ? item => { const row = result.items.find(value => value.id === item.id); if (row) selectOverlay(row); } : undefined} /> : <div className="loading-table-scroll" tabIndex={0} role="region" aria-label={`${title} table`}><table className="loading-table"><thead><tr><th scope="col">Rank</th><th scope="col">{isGene ? "Gene" : "Gene set"}</th>{!isGene && <th scope="col">Library</th>}<th scope="col">{isGene ? "Loading" : `${metric === "joint" ? "Joint" : "Marginal"} loading`}</th>{isGene && detail.gnomad && <><th scope="col" title={constraintDefinitions.pli}>pLI</th><th scope="col" title={constraintDefinitions.loeuf}>LOEUF</th><th scope="col" title={constraintDefinitions.mis_z}>Missense Z</th><th scope="col">gnomAD provenance</th></>}{(overlay || !isGene) && <th scope="col">{isGene ? "Gene-set member" : "Explore"}</th>}</tr></thead><tbody>{result.items.map(row => <tr key={row.id} className={membership(row) ? "loading-table-member" : undefined}><td>{row.rank}</td><th scope="row">{cellHref(row) ? <Link href={cellHref(row)!}>{row.label}</Link> : row.label}</th>{!isGene && <td>{row.library || "Not reported"}</td>}<td>{valueLabel(row.loading)}</td>{isGene && detail.gnomad && <><td>{constraintValue(row.gnomad, "pli")}</td><td>{constraintValue(row.gnomad, "loeuf")}</td><td>{constraintValue(row.gnomad, "mis_z")}</td><td className="gnomad-provenance-cell"><ConstraintProvenance annotation={row.gnomad} source={detail.gnomad} /></td></>}{isGene && overlay && <td>{membership(row) === true ? "Member" : membership(row) === false ? "Not a member" : "Unknown"}</td>}{!isGene && <td>{row.gene_set_id && <button type="button" className="loading-overlay-action" onClick={() => selectOverlay(row)}>Overlay on genes</button>}</td>}</tr>)}</tbody></table></div>}
       {error && <LoadingSurface compact title="Couldn’t load more" error={error} onRetry={() => retry(n => n + 1)} skeleton="none" />}
       {result.next_offset !== null && <div className="loading-append"><button type="button" disabled={busy} onClick={() => setOffset(result.next_offset!)}>{busy ? "Loading more…" : `Load more ${isGene ? "genes" : "gene sets"}`}</button></div>}
     </>}
   </section>;
+}
+
+function ConstraintProvenance({ annotation, source }: { annotation: Schema<"GnomadGeneConstraint"> | null | undefined; source: Schema<"GnomadImport"> }) {
+  if (!annotation) return <span>No matching gene in this import</span>;
+  return <details className="gnomad-gene-provenance"><summary>{constraintSelection(annotation)}{annotation.flags.length > 0 && " · flagged"}</summary>
+    <p>gnomAD {source.version}</p>{annotation.transcript && <p>{annotation.transcript}</p>}
+    <p>{annotation.selection_reason}</p><p>LoF observed/expected: {constraintValue(annotation, "lof_oe")}</p>
+    {annotation.flags.length > 0 && <p>Source flags: {annotation.flags.join(", ")}</p>}
+    {constraintLinks(annotation, source.version).map(link => <a key={link.href} href={link.href} target="_blank" rel="noreferrer">{link.label} ↗</a>)}
+  </details>;
 }
