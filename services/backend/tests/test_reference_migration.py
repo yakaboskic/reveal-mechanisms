@@ -23,7 +23,7 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / 'scripts'))
 import reference_migration as cli
 
-from reveal_backend import redis_notifications
+from reveal_backend import jobs, redis_notifications
 from reveal_backend import reference_archive as archive
 from reveal_backend import reference_generation as rg
 from reveal_backend.repository import Repository, canonical, digest
@@ -366,7 +366,7 @@ def test_archive_prod_backs_up_first_then_points_at_the_kpn_generation_and_archi
     with prod.read_transaction() as tx:
         active, request = rg.read_active(tx), tx.get('request', 'request-1')['data']
     assert (active['generation_id'], active['model'], active['previous_generation_id']) == (G, rg.KPN_MODEL, None)
-    assert archive_calls == [('reveal', L, G, {'apply': True})]  # the old apply's call: legacy mode is auto-detected
+    assert archive_calls == [('reveal', L, G, {'apply': True, 'only_from': L})]  # the old apply's call, legacy work only
     assert result['archive']['counts'] == {'request': 1} and result['archive']['legacy_fallback'] is True
     stamp = request['archive']
     assert (stamp['from_reference_generation'], stamp['to_reference_generation']) == (L, G)
@@ -386,10 +386,74 @@ def test_archive_prod_refuses_a_prefix_active_on_another_generation(prod, archiv
     assert not (tmp_path / 'backups').exists() and not archive_calls and all_rows(prod) == before
 
 
+RELEASE = 'ab' * 32
+KPN_SOURCE = rg.public_id('KPN.TRAIT:0000398', 'Factor2')
+# The new code's catalog binding (catalog.py): every generation-like field holds the release id.
+RELEASE_BINDING = {'eaggl_factor_id': 'T2D::Factor2', 'factor_key': 'KPN.TRAIT:0000398::Factor2', 'kpn_trait_id': 'KPN.TRAIT:0000398',
+                   'eaggl_import_id': None, 'embedding_run_id': RELEASE, 'mapping_run_id': RELEASE, 'gene_set_import_id': RELEASE,
+                   'reference_generation_id': RELEASE, 'model': rg.KPN_MODEL, 'cfde_node_id': KPN_SOURCE, 'cfde_payload': {'label': 'Beta cell'}}
+
+
+def add_drafts_and_release_work(repo):
+    """A legacy draft, and a request and draft the new code made once it served prod (bound to a reference release)."""
+    with repo.transaction() as tx:
+        tx.put('request', 'request-2', 'user-1', {'id': 'request-2', 'owner_user_id': 'user-1', 'question_id': 'dapper:KnowledgeGap.' + '3' * 32,
+                                                   'submitted_at': '2026-10-06T00:00:00Z'})
+        tx.put('request_binding', 'request-2', 'user-1', {'anchors': [RELEASE_BINDING],
+               'anchor_display': {KPN_SOURCE: {'label': 'Beta cell', 'subtitle': 'Type 2 diabetes (Factor2)'}}})
+        for identity, source, binding in (('draft-1', SOURCES[0], BINDING), ('draft-2', KPN_SOURCE, RELEASE_BINDING)):
+            tx.put('draft', identity, 'user-1', {'id': identity, 'composer': {'source_gap': {'id': 'dapper:KnowledgeGap.' + '3' * 32},
+                                                  'eaggl_anchors': [{'reference': {'source': 'eaggl', 'source_id': source}}]}})
+            tx.put('draft_binding', identity, 'user-1', {'selections': {source: {'binding': binding}}})
+
+
+def test_archive_prod_archives_only_legacy_work(prod, tmp_path):
+    add_drafts_and_release_work(prod)
+    result = cli.archive_prod(prod, apply=True, backup_dir=tmp_path / 'backups')
+    assert result['archive']['counts'] == {'request': 1} and result['archive']['current'] == {'request': 1}
+    assert [item['id'] for item in result['archive']['dropped_drafts']] == ['draft-1']
+    with prod.read_transaction() as tx:
+        assert 'archive' in tx.get('request', 'request-1')['data'] and 'archive' not in tx.get('request', 'request-2')['data']
+        assert tx.get('draft', 'draft-1') is None and tx.get('draft_binding', 'draft-1') is None
+        assert tx.get('draft', 'draft-2') and tx.get('draft_binding', 'draft-2')
+
+
+def test_archive_prod_cancels_uncollected_legacy_jobs_and_waits_for_collected_ones(prod, tmp_path):
+    add_drafts_and_release_work(prod)
+    with prod.transaction() as tx:
+        queued = jobs.enqueue(tx, 'user-1', 'analysis', request_id='request-1', inputs={'kind': 'analysis'})
+        collected = jobs.enqueue(tx, 'user-1', 'analysis', request_id='request-1', inputs={'kind': 'analysis'})
+        queue = tx.get('queue', collected['id'])['data']; queue['dispatch_input'] = {'kind': 'analysis', 'sha256': '9' * 64}
+        tx.put('queue', collected['id'], 'user-1', queue)
+        current = jobs.enqueue(tx, 'user-1', 'analysis', request_id='request-2', inputs={'kind': 'analysis'})
+    dry = cli.archive_prod(prod, apply=False)
+    assert sorted((job['id'], job['action']) for job in dry['legacy_jobs']) == sorted([(queued['id'], 'cancel'), (collected['id'], 'wait')])
+    with pytest.raises(cli.Refused, match='1 legacy analysis jobs are still running'):
+        cli.archive_prod(prod, apply=True, backup_dir=tmp_path / 'backups')
+    with prod.read_transaction() as tx:
+        assert [tx.get('job', job['id'])['data']['status'] for job in (queued, collected, current)] == ['cancelled', 'queued', 'queued']
+        assert rg.read_active(tx) is None and 'archive' not in tx.get('request', 'request-1')['data']
+    with prod.transaction() as tx:  # the collected job finishes
+        job = tx.get('job', collected['id'])['data']; job.update(status='succeeded', stage='complete')
+        tx.put('job', collected['id'], 'user-1', job)
+    result = cli.archive_prod(prod, apply=True, backup_dir=tmp_path / 'backups')
+    assert result['cancelled_jobs'] == [] and result['archive']['counts'] == {'request': 1}
+    with prod.read_transaction() as tx: assert tx.get('job', current['id'])['data']['status'] == 'queued'
+
+
+def test_archive_prod_refuses_a_prefix_the_reload_cut_over(prod, archive_calls, tmp_path):
+    with prod.transaction() as tx: rg.write_active(tx, G, rg.KPN_MODEL, expected_previous=None, vector_snapshot_id='5' * 64)
+    before = all_rows(prod)
+    for apply in (True, False):
+        with pytest.raises(cli.Refused, match='cut over by the reference reload'):
+            cli.archive_prod(prod, apply=apply, backup_dir=tmp_path / 'backups')
+    assert not (tmp_path / 'backups').exists() and not archive_calls and all_rows(prod) == before
+
+
 def test_archive_prod_dry_run_writes_nothing(prod, archive_calls, tmp_path):
     before = all_rows(prod)
     result = cli.archive_prod(prod, apply=False)
-    assert archive_calls == [('reveal', L, G, {'apply': False})] and result['reference_active'] is None and 'backup' not in result
+    assert archive_calls == [('reveal', L, G, {'apply': False, 'only_from': L})] and result['reference_active'] is None and 'backup' not in result
     assert result['archive']['counts'] == {'request': 1} and all_rows(prod) == before
     with pytest.raises(cli.Refused, match='--backup-dir'): cli.archive_prod(prod, apply=True)
     assert all_rows(prod) == before
@@ -401,7 +465,9 @@ def test_archive_prod_dry_run_writes_nothing(prod, archive_calls, tmp_path):
 PROTECTED = {'archived_reference_factors', 'dismech_imports', 'dismech_documents', 'dismech_mechanisms', 'dismech_gap_attachments',
              'reveal_records', 'reveal_transaction_lock', 'reveal_workflow_qa_records', 'reveal_workflow_qa_transaction_lock',
              'reveal_workflow_local_records', 'reveal_workflow_local_transaction_lock',
-             'reveal_ref_factors', 'reveal_workflow_qa_ref_factors', 'reveal_workflow_local_ref_factors'}
+             'reveal_ref_factors', 'reveal_workflow_qa_ref_factors', 'reveal_workflow_local_ref_factors',
+             'reveal_ref_release', 'reveal_workflow_qa_ref_release', 'reveal_workflow_local_ref_release'}
+RELEASE_ID = 'e' * 64
 RETIRED = ['reveal_compose_records', 'reveal_compose_transaction_lock', 'reveal_reload_rehearsal_records',
            'reveal_reload_rehearsal_transaction_lock']
 OLD_NAMESPACES = ['compose-cfde-collection-' + 'e' * 24, 'local-c-' + 'a' * 48, 'local-f-' + 'a' * 48, 'prod-eaggl-factor-' + 'b' * 24,
@@ -417,7 +483,7 @@ class Upstash:
     def delete_namespace(self, name): self.log.append(('delete_namespace', name)); self.names.remove(name)
 
 
-def cleanup_env(*, tables=(), drop_tables=(), namespaces=OLD_NAMESPACES + RELEASE_NAMESPACES + OTHER_NAMESPACES, frozen=SOURCES):
+def cleanup_env(*, tables=(), drop_tables=(), namespaces=OLD_NAMESPACES + RELEASE_NAMESPACES + OTHER_NAMESPACES, frozen=SOURCES, empty=()):
     tables = (set(cli.SHARED_TABLES) | PROTECTED | set(RETIRED) | set(tables)) - set(drop_tables)
     remaining = dict(RECORDS)
     def counts(sql, params):
@@ -433,6 +499,7 @@ def cleanup_env(*, tables=(), drop_tables=(), namespaces=OLD_NAMESPACES + RELEAS
         (r'^SELECT kind,COUNT\(\*\) FROM `\w+` WHERE kind IN', counts),
         (r'^SELECT cfde_node_id FROM eaggl_cfde_factor_links WHERE run_id=%s', [(source,) for source in SOURCES]),
         (r'^SELECT archive_id FROM archived_reference_factors WHERE generation_id=%s', [(rg.archive_id(L, source),) for source in frozen]),
+        (r'^SELECT release_id FROM `\w+` LIMIT 1', lambda sql, params: [] if re.search(r'`(\w+)`', sql)[1] in empty else [(RELEASE_ID,)]),
         (r'^DELETE FROM', delete), (r'^DROP TABLE', 0)])
     return db, Upstash(namespaces, log)
 
@@ -453,7 +520,8 @@ def test_cleanup_dry_run_lists_exactly_what_would_go_without_executing(monkeypat
     assert result['statements'][0] == ('DELETE FROM `reveal_records` WHERE kind IN (' + ','.join(['%s'] * 13) + ') LIMIT 10000')
     assert result['statements'][4:] == [f'DROP TABLE `{table}`' for table in list(cli.SHARED_TABLES) + RETIRED]
     assert result['blockers'] == [] and result['readiness']['legacy_factors'] == {'expected': 3, 'missing': 0}
-    assert result['readiness']['environments']['prod'] == {'prefix': 'reveal', 'release_tables': ['reveal_ref_factors'],
+    assert result['readiness']['environments']['prod'] == {'prefix': 'reveal', 'release_id': RELEASE_ID,
+                                                           'release_tables': ['reveal_ref_factors', 'reveal_ref_release'],
                                                            'namespaces': {f'prod-{kind}': True for kind in cli.RELEASE_NAMESPACE_KINDS}}
 
 
@@ -479,7 +547,11 @@ def test_cleanup_apply_runs_namespaces_then_records_then_tables_and_spares_prote
 def test_cleanup_refuses_until_every_environment_published_and_legacy_factors_are_frozen():
     cases = [(dict(namespaces=OLD_NAMESPACES + [name for name in RELEASE_NAMESPACES if name != 'prod-factors']), 'prod has no published release'),
              (dict(namespaces=OLD_NAMESPACES + [name for name in RELEASE_NAMESPACES if name != 'local-contexts']), 'local has no published release'),
-             (dict(drop_tables=['reveal_workflow_qa_ref_factors']), 'qa has no published release'),
+             (dict(drop_tables=['reveal_workflow_qa_ref_release']), 'qa has no published release'),
+             # A publish that died before its RENAME leaves only __new tables (and the namespaces it already filled).
+             (dict(drop_tables=['reveal_ref_release', 'reveal_ref_factors'], tables=['reveal_ref_release__new', 'reveal_ref_factors__new']),
+              'prod has no published release'),
+             (dict(empty=['reveal_workflow_local_ref_release']), 'local has no published release'),
              (dict(frozen=SOURCES[:2]), '1 legacy factors are not frozen')]
     for options, message in cases:
         db, client = cleanup_env(**options)

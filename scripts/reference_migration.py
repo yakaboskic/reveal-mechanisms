@@ -399,22 +399,34 @@ def backup_records(repo, directory):
 
 
 def archive_prod(repo, *, apply, backup_dir=None):
+    """Archive prod's legacy work as the old cutover archived local's and QA's. It runs once the new code serves prod, so
+    only legacy-generation work is archived (only_from): work bound to a reference release stays current."""
     with repo.read_transaction() as tx: active = rg.read_active(tx)
+    if active and active.get('vector_snapshot_id'):  # only the old reload's activation names a vector snapshot
+        raise Refused(f"{repo.table_prefix} was cut over by the reference reload (active on {active.get('generation_id', '')[:12]}): "
+                      'its work is already archived')
     if active and active.get('generation_id') != KPN_GENERATION:
         raise Refused(f"{repo.table_prefix} is active on {active.get('generation_id')}, not {KPN_GENERATION[:12]}: archive-prod is only for a "
                       'prefix that was never cut over')
     report = {'apply': apply, 'prefix': repo.table_prefix, 'from_generation': LEGACY_GENERATION, 'to_generation': KPN_GENERATION,
-              'reference_active': active}
+              'reference_active': active, 'legacy_jobs': archive.nonterminal_analysis_jobs(repo, LEGACY_GENERATION)}
     if not apply:
-        report['archive'] = archive.archive_prefix(repo, LEGACY_GENERATION, KPN_GENERATION, apply=False)
+        report['archive'] = archive.archive_prefix(repo, LEGACY_GENERATION, KPN_GENERATION, apply=False, only_from=LEGACY_GENERATION)
         return report
     if not backup_dir: raise Refused('--backup-dir is required')
     report['backup'] = backup_records(repo, backup_dir)
+    # As the old apply drained: the new worker cannot collect a legacy job, so uncollected ones are cancelled. A collected
+    # one can still write an account, so the pass waits for it: run archive-prod again once it has finished.
+    report['cancelled_jobs'] = archive.cancel_nonterminal_jobs(repo, LEGACY_GENERATION, apply=True)
+    running = [job['id'] for job in archive.nonterminal_analysis_jobs(repo, LEGACY_GENERATION)]
+    if running:
+        raise Refused(f'{len(running)} legacy analysis jobs are still running ({", ".join(running[:5])}): run archive-prod again once they '
+                      'have finished')
     with repo.transaction() as tx:
         # write_active is a no-op when the prefix is already active on the generation.
         report['reference_active'] = rg.write_active(tx, KPN_GENERATION, rg.KPN_MODEL, expected_previous=None)
     # As the old apply ran its archive pass: in legacy mode, rows without a derivable generation assume the legacy one.
-    report['archive'] = archive.archive_prefix(repo, LEGACY_GENERATION, KPN_GENERATION, apply=True)
+    report['archive'] = archive.archive_prefix(repo, LEGACY_GENERATION, KPN_GENERATION, apply=True, only_from=LEGACY_GENERATION)
     return report
 
 
@@ -464,10 +476,13 @@ def readiness(connection, tables, namespaces):
             if expected - present: blockers.append(f'{len(expected - present)} legacy factors are not frozen: run freeze-legacy --apply first')
     environments = {}
     for environment, prefix in ENVIRONMENTS.items():
-        released = sorted(table for table in tables if table.startswith(prefix + '_ref_'))
+        released = sorted(table for table in tables if table.startswith(prefix + '_ref_') and not table.endswith(('__new', '__old')))
+        # Published = the swap happened: <prefix>_ref_release holds the release row (leftover __new tables don't count).
+        release = (query(connection, f'SELECT release_id FROM `{prefix}_ref_release` LIMIT 1') if f'{prefix}_ref_release' in tables else [])
         present = {f'{environment}-{kind}': f'{environment}-{kind}' in namespaces for kind in RELEASE_NAMESPACE_KINDS}
-        environments[environment] = {'prefix': prefix, 'release_tables': released, 'namespaces': present}
-        if not released or not all(present[f'{environment}-{kind}'] for kind in SERVED_NAMESPACE_KINDS):
+        environments[environment] = {'prefix': prefix, 'release_id': release[0][0] if release else None, 'release_tables': released,
+                                     'namespaces': present}
+        if not release or not all(present[f'{environment}-{kind}'] for kind in SERVED_NAMESPACE_KINDS):
             blockers.append(f'{environment} has no published release ({prefix}_ref_* tables, {environment}-factors and {environment}-contexts)')
     return {'legacy_factors': legacy, 'environments': environments}, blockers
 
