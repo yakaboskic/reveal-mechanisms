@@ -29,7 +29,7 @@ from projection_workflow import (FACTOR_INDEX_COLUMNS, GENE_SET_INDEX_COLUMNS, L
 from factor_portal import build, queries, server  # noqa: E402
 from factor_portal.__main__ import FACTOR_AUDIT_COLUMNS, GENE_SET_AUDIT_COLUMNS, build_parser, main  # noqa: E402
 from factor_portal.assets import render_page  # noqa: E402
-import test_reload_stage as lint  # noqa: E402
+import test_release_stage as lint  # noqa: E402
 
 TOP_N = 2
 UNIVERSE = ["G%02d" % i for i in range(1, 14)] + ["C1ORF1"]

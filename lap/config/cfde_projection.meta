@@ -12,7 +12,6 @@
 !key web_out_dir http://internal.broadinstitute.org/~cyakabos/reveal-lap
 !key default_umask 002
 !key cfde_embeddings_dir /humgen/diabetes/users/chase/data/dig-s3/gene_sets/cfde/2026-09-28/embeddings/pritamdeka-BioBERT-mnli-snli-scinli-scitail-mednli-stsb
-!key reload_from_generation active
 
 eaggl_capped__cfde_2026_09_28 class project
 eaggl_capped__cfde_2026_09_28 loading_variant capped
@@ -3933,33 +3932,3 @@ toastSAO kpn_trait_id KPN.TRAIT:0001412
 toastUNDETER class trait
 toastUNDETER parent eaggl_capped__cfde_2026_09_28
 toastUNDETER kpn_trait_id KPN.TRAIT:0001413
-
-rehearsal class reload_target
-rehearsal parent eaggl_capped__cfde_2026_09_28
-rehearsal app_prefix reveal_reload_rehearsal
-rehearsal vector_env rehearsal
-rehearsal production false
-
-local class reload_target
-local parent eaggl_capped__cfde_2026_09_28
-local app_prefix reveal_workflow_local
-local vector_env local
-local production false
-
-compose class reload_target
-compose parent eaggl_capped__cfde_2026_09_28
-compose app_prefix reveal_compose
-compose vector_env local
-compose production false
-
-qa class reload_target
-qa parent eaggl_capped__cfde_2026_09_28
-qa app_prefix reveal_workflow_qa
-qa vector_env qa
-qa production false
-
-prod class reload_target
-prod parent eaggl_capped__cfde_2026_09_28
-prod app_prefix reveal
-prod vector_env prod
-prod production true
