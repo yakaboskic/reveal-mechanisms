@@ -3,7 +3,7 @@
 The default deployment is an HTTP API plus the Next.js frontend. Upstash Workflow
 delivers bounded, signed execution requests through QStash. Aurora owns job state,
 step fences, dispatch intent and event replay; versioned S3 objects hold immutable
-inputs, captured outputs and review checkpoints. Upstash Vector provides semantic
+inputs, captured outputs and historical review checkpoints. Upstash Vector provides semantic
 candidate retrieval. Upstash Redis provides Pub/Sub wakeups only.
 
 ## Integration contract
@@ -107,11 +107,13 @@ remain recoverable, and the allocation stays counted against remote capacity
 until deletion or a confirmed provider 404 is acknowledged. No Redis reads or
 in-process background task are needed to keep cleanup alive.
 
-Review calls and tool processing read and replace only the saved review JSON
-and immutable workspace manifest. These steps and direct capture create no
-temporary directory. Initial preparation, validation, review initialization and
-final acceptance still use bounded file-based scratch where their validators
-require files; legacy bootstrap also keeps its existing scratch path.
+Account and paragraph acceptance use deterministic validation, with no second AI
+review. Passing captured output proceeds directly to saving. Historical review
+checkpoints remain available for diagnostics; saved output from an incomplete
+legacy review can be revalidated through the compatible retry route. Initial
+preparation, validation and final acceptance use bounded file-based scratch where
+their validators require files; legacy bootstrap keeps its existing scratch path. The legacy
+`REVEAL_MAX_REVIEW_STEPS` setting caps concurrent deterministic validation steps.
 Their S3 restores use four parallel downloads
 with bounded buffered bytes and cancellation draining. This adds no workspace
 cache and no Redis reads.
@@ -312,12 +314,13 @@ On that preceding release, managed signed probe `ce4b4ebd-0691-4433-908b-625de20
 
 Real Box direct-transfer and deletion probes passed locally. The deployed QA probe verifies task-role S3 checkpoint reads/writes and signed delivery; full cloud Box transfer and long scientific execution remain unverified. No new paid scientific run was made. Shared ingress limits are unchanged.
 
-The first scientific pilot completed one authoring attempt, durable capture and Box
-cleanup. After 31 acknowledged reviewer calls, its final response was not
+The first scientific pilot, before retirement of the AI reviewer, completed one
+authoring attempt, durable capture and Box cleanup. After 31 acknowledged reviewer calls, its final response was not
 acknowledged; the original HTTP status was not retained. Independent free
 token-count requests reproduced rejection of the old final-decision tool schema
-and acceptance of the corrected schema. Both review paths now use that schema,
-and durable private checkpoints preserve bounded provider-error diagnostics.
+and acceptance of the corrected schema. The historical reviewer implementations
+retain that schema and bounded provider-error diagnostics; live acceptance no
+longer calls them.
 The fix passed 82 focused tests and 35 subtests.
 
 The original job remains `REVIEW_UNAVAILABLE`, with no accepted account or

@@ -177,8 +177,13 @@ class Ledger:
 
 
 def iri(value):
-    if not isinstance(value, str) or not re.fullmatch(r'(?:https?://|urn:)[^\s<>"{}|^`\\]+', value):
+    # CURIEs such as MONDO:0010017 need expansion, but are ordinary query
+    # feedback. Marking them denied poisons the entire execution ledger even
+    # if the agent corrects the query. SPARQL delimiters remain a policy denial.
+    if isinstance(value, str) and re.search(r'[<>"{}|^`\\]', value):
         raise PolicyError('Query terms must be absolute, syntactically safe IRIs')
+    if not isinstance(value, str) or not re.fullmatch(r'(?:https?://|urn:)[^\s<>"{}|^`\\]+', value):
+        raise QueryValidationError('Query terms must be absolute, syntactically safe IRIs; expand CURIEs to their schema-derived IRIs')
     return '<' + value + '>'
 
 
@@ -205,13 +210,13 @@ def query_arguments(arguments, selected_graphs):
     if arguments.get('contains'):
         term = arguments['contains']
         if not isinstance(term, str) or not 2 <= len(term) <= 100:
-            raise PolicyError('Search term must contain 2–100 characters')
+            raise QueryValidationError('Search term must contain 2–100 characters')
         if not arguments.get('subject') and not arguments.get('predicate'):
             raise QueryValidationError('Unbound whole-graph text scans are unavailable. Supply a schema-derived predicate or exact subject IRI; prefer predicate plus literal for an exact label/symbol lookup. An unavailable query is not evidence of absence.')
         search_literal = json.dumps(term.lower(), ensure_ascii=True)
         filters = f' FILTER(CONTAINS(LCASE(STR(?o)), {search_literal})) '
         if arguments.get('object'):
-            raise PolicyError('Text search and fixed object cannot be combined')
+            raise QueryValidationError('Text search and fixed object cannot be combined')
     # Include bound terms in the result so every assertion retains all three positions.
     bindings = ' '.join(f'BIND({iri(arguments[k])} AS ?{alias})' for k, alias in [('subject', 's'), ('predicate', 'p'), ('object', 'o')] if arguments.get(k))
     if literal is not None:

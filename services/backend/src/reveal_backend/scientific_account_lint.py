@@ -9,6 +9,7 @@ from dataclasses import asdict
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import tempfile
@@ -25,6 +26,53 @@ class AccountValidationError(ValueError):
     def __init__(self, report):
         self.report = report
         super().__init__('Scientific account failed validation; inspect report.findings')
+
+
+def cfde_source_files(package, package_path):
+    """Recognize frozen reference evidence across the HTTP and SQL collectors.
+
+    A SQL-looking origin alone is not evidence. Bind its verified capture to the
+    package's reference generation and source envelope, and follow derived
+    captures only when all their inputs are captured reference observations.
+    """
+    sources = package['source_artifacts']
+    accepted = {key for key, source in sources.items() if isinstance(source.get('origin'), str)
+                and source['origin'].startswith(('https://dev.cfdeknowledge.org/api/',
+                                                  'https://cfde-dev.hugeampkpnbi.org/api/'))}
+    pigean = package.get('pigean', {})
+    generations = {node.get('fit', {}).get('upstream_build') for node in pigean.get('mechanisms', {}).values()}
+    if pigean.get('model') == 'eaggl-capped-v1' and len(generations) == 1:
+        generation = next(iter(generations))
+        if isinstance(generation, str) and re.fullmatch(r'[a-f0-9]{64}', generation):
+            tables = {'reference_factors', 'kpn_traits', 'eaggl_factors', 'eaggl_genes',
+                      'eaggl_gene_loadings', 'factor_gene_set_projections', 'cfde_gene_sets',
+                      'cfde_gene_set_collections'}
+            reference, derived = set(), {}
+            root = Path(package_path).resolve().parent
+            for key, source in sources.items():
+                origin = source.get('origin')
+                if source.get('format') != 'json' or not isinstance(origin, str) or not origin.startswith(('mysql:', 'mysql-derived:')):
+                    continue
+                path = (root / source['path']).resolve()
+                require(path.is_relative_to(root), 'Source artifact path escape')
+                raw = path.read_bytes()
+                require(sha256(raw) == source['sha256'], 'Captured source checksum changed')
+                capture = decode(raw)
+                provenance = capture.get('source', {})
+                kind = provenance.get('kind')
+                names = provenance.get('tables' if kind == 'mysql' else 'derived_from')
+                if (capture.get('generation_id') != generation or capture.get('model') != 'eaggl-capped-v1'
+                        or not isinstance(names, list) or not names or not all(isinstance(name, str) for name in names)
+                        or origin != f"{kind}:{'+'.join(names)}?generation_id={generation}"):
+                    continue
+                if kind == 'mysql' and capture.get('format') == 'reveal.reference-evidence.mysql-capture/1' and set(names) <= tables:
+                    reference.add(key)
+                elif kind == 'mysql-derived' and capture.get('format') == 'reveal.reference-evidence.derived-capture/1':
+                    derived[key] = set(names)
+            while added := {key for key, dependencies in derived.items() if key not in reference and dependencies <= reference}:
+                reference.update(added)
+            accepted.update(reference)
+    return {sources[key]['dapper_file_id'] for key in accepted}
 
 
 def lint_scientific_account(document, *, dapper_root, release_lock, evidence_package=None, ledger_path=None, mode='draft', strict=False):
@@ -109,11 +157,7 @@ def _lint(document_path, dapper_root, lock_path, package_path, mode, strict, led
             if not isinstance(account.get('closing_remarks'), str) or not account['closing_remarks'].strip():
                 error('account-synthesis', identity, 'A nonempty closing_remarks synthesis is required')
         # Structural CFDE ancestry is explicit evidence lineage, not shared Activity inputs.
-        cfde_files = set()
-        for source in package['source_artifacts'].values():
-            origin = source.get('origin')
-            if isinstance(origin, str) and origin.startswith(('https://dev.cfdeknowledge.org/api/', 'https://cfde-dev.hugeampkpnbi.org/api/')):
-                cfde_files.add(source['dapper_file_id'])
+        cfde_files = cfde_source_files(package, package_path)
         def evidence_lineage(identity, seen):
             if identity in cfde_files:
                 return identity in nodes and identity in trusted and nodes[identity][1] == trusted[identity]
@@ -155,7 +199,7 @@ def _lint(document_path, dapper_root, lock_path, package_path, mode, strict, led
             'dapper_release': release, 'counts': {**upstream.counts, 'errors': errors, 'warnings': warnings},
             'findings': findings, 'scientific_grounding_evaluated': False,
             'remaining_acceptance_checks': ['trusted attribution and job ownership',
-                                           'external-evidence ledger and tool policy', 'scientific support and synthesis review']}
+                                           'external-evidence ledger and tool policy']}
 
 
 if __name__ == '__main__':

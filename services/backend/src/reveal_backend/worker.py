@@ -48,7 +48,7 @@ def public_activity(job,kind,payload):
             detail=activity('preparation','completed','harness')
         else:
             # A provider result ends authoring, not the job. Output still needs
-            # durable capture and independent validation before acceptance.
+            # durable capture and deterministic validation before acceptance.
             job['stage']='collecting_output'
             # This is a completion notice, not the start of a timed capture
             # operation. The job remains running in its collection stage.
@@ -376,7 +376,7 @@ class Worker:
             snapshot=queue.get('dispatch_input')
             review_source=queue.get('review_source')
             if review_source:
-                require(snapshot and mode=='box','Review retry requires the original frozen Box input')
+                require(snapshot and mode=='box','Saved-output retry requires the original frozen Box input')
             if queue.get('remote_handle') and not snapshot:
                 # Backward-compatible recovery of already launched attempts:
                 # locate a frozen manifest, never recollect or choose new bytes.
@@ -427,7 +427,7 @@ class Worker:
             if review_source:
                 phase='scientific_validation'
                 from .review_retry import replay_capture
-                await emit('stage',{'stage':'validating','message':'Verifying saved research output before retrying independent review. No research agent is being launched.'})
+                await emit('stage',{'stage':'validating','message':'Validating saved research output before saving. The research agent will not run again.'})
                 result=await asyncio.to_thread(replay_capture,request,review_source)
             else:
                 phase='agent_execution'
@@ -476,13 +476,6 @@ class Worker:
                         (directory/f'validation-{index+1}.json').write_bytes(canonical_json(exc.report))
                         raise
                     (directory/f'validation-{index+1}.json').write_bytes(canonical_json(report))
-                    if mode=='box':
-                        from .scientific_grounding import MODEL as REVIEW_MODEL, review_account
-                        grounding=await asyncio.to_thread(review_account,doc,package,result.ledger_manifest_path,
-                            model=REVIEW_MODEL,api_key=setting('ANTHROPIC_API_KEY'),
-                            max_budget_usd=float(setting('REVEAL_GROUNDING_MAX_BUDGET_USD','0.30')))
-                        (directory/f'grounding-{index+1}.json').write_bytes(canonical_json(grounding))
-                        require(grounding['accepted'],'Independent source-grounding review rejected unsupported or overstated scientific content')
                     accepted.append((doc,report,final_path))
                 if await self.begin_persistence(job,token,'Saving validated scientific accounts and their source provenance.'):
                     await self.accept_accounts(job,token,accepted,frozen,input_path,result,directory,mode)
@@ -490,13 +483,6 @@ class Worker:
                 require(result.paragraph_path is not None,'Paragraph execution returned no segments')
                 raw=assert_artifact(result.paragraph_path,request.output_dir)
                 segments=decode(raw.read_bytes())
-                if mode=='box':
-                    from .scientific_grounding import MODEL as REVIEW_MODEL, review_paragraph
-                    grounding=await asyncio.to_thread(review_paragraph,segments,paragraph_input,
-                        model=REVIEW_MODEL,api_key=setting('ANTHROPIC_API_KEY'),
-                        max_budget_usd=float(setting('REVEAL_GROUNDING_MAX_BUDGET_USD','0.30')))
-                    (directory/'paragraph-grounding.json').write_bytes(canonical_json(grounding))
-                    require(grounding['accepted'],'Independent source-grounding review rejected unsupported or overstated paragraph content')
                 await self.accept_paragraph(job,token,segments,paragraph_input,directory)
             if await cancelled(): jobs.finish(self.repository,job['id'],token,'cancelled')
         except Exception as exc:
@@ -514,19 +500,11 @@ class Worker:
                         return
             # Scientific exceptions are retained as bounded local diagnostics;
             # API errors do not echo third-party headers/URLs/credentials.
-            from .scientific_grounding import ScientificReviewUnavailable
             diagnostic={'phase':phase,'error_type':type(exc).__name__,'message':str(exc)[:3000] if not isinstance(exc,OSError) else 'Operating system error'}
-            if isinstance(exc,ScientificReviewUnavailable): diagnostic['review_audit']=exc.audit
             (directory/'failure.json').write_bytes(canonical_json(diagnostic))
             await asyncio.to_thread(self.save_workspace,job,token,root)
             if phase=='evidence_preparation':
                 code,message='EVIDENCE_PREPARATION_FAILED','The source evidence could not be prepared.'
-            elif isinstance(exc,ScientificReviewUnavailable):
-                from .job_failures import review_failure
-                failure=review_failure(exc)
-                failure['message']+=' The saved draft and existing accounts are preserved.'
-                jobs.finish(self.repository,job['id'],token,'failed',failure=failure)
-                return
             elif phase=='scientific_validation' and isinstance(exc,ValueError):
                 code,message='VALIDATION_FAILED','The attempt failed scientific validation.'
             else:

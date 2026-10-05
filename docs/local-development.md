@@ -81,21 +81,15 @@ This exercises the actual application database and queue with the deterministic 
 
 Authoring defaults to 100 turns (`REVEAL_AGENT_MAX_TURNS`), with the existing independent $3 cost cap and 900-second deadline. Configure a lower turn cap explicitly if needed. Changing environment limits requires recreating the worker container, not just restarting it. A turn-limit exit stays an operational failure with retained diagnostics; it never becomes an insufficient-evidence finding. Retrying starts a new attempt, and does not resume the completed failed provider session.
 
-The root `.env` controls the separate spending limits. For demos, for example:
+The root `.env` controls the authoring spending limit. For demos, for example:
 
 ```dotenv
 REVEAL_AGENT_MAX_BUDGET_USD=25
-REVEAL_GROUNDING_MAX_BUDGET_USD=10
-REVEAL_GROUNDING_MAX_TURNS=32
-REVEAL_GROUNDING_MAX_REQUEST_BYTES=524288
-REVEAL_GROUNDING_MAX_INPUT_TOKENS=128000
 ```
 
-Both dollar limits accept positive finite USD amounts. Defaults when unset are $3 per authoring job and $0.30 per account/paragraph review. These are individual caps, not a combined request cap: an analysis can produce several accounts and their paragraph jobs. Every explicit review retry receives the configured review allowance. Increasing these values does not bypass scientific validation or the separate time, turn, and context limits. Budget failures show which phase stopped, its cap, and recorded spend when available. Review can stop below the cap when reserving its next call would exceed the remaining amount.
+This accepts a positive finite USD amount and defaults to $3 per authoring job. Each analysis and paragraph job has its own cap, rather than a combined submission cap. Increasing it does not bypass deterministic validation or the separate authoring time and turn limits. Budget failures show the cap and recorded spend when available. The retired second AI review does not run, and `REVEAL_GROUNDING_*` settings no longer affect account or paragraph acceptance.
 
-The three review context/turn settings accept positive integers. Defaults remain 8 model calls, 98,304 serialized request bytes and 64,000 actual input tokens. A limit failure identifies which limit stopped review and its configured value. The dollar cap applies throughout; raising the context or turn allowance never bypasses the spending guard or permits acceptance without a verdict.
-
-For `REVIEW_UNAVAILABLE` or `REVIEW_BUDGET_EXCEEDED`, **Retry scientific review** requeues the same job using its verified saved authoring output and frozen evidence. No authoring agent or evidence collection runs again. The retry keeps the original model/runtime provenance, checks captured files and sources again, and writes separate attempt diagnostics. A complete passing verdict is still required for account acceptance; scientific rejections cannot use this shortcut.
+For old jobs stopped with `REVIEW_UNAVAILABLE` or `REVIEW_BUDGET_EXCEEDED`, **Save existing output** requeues the same job using its verified saved authoring output and frozen evidence. No authoring agent, evidence collection, or AI reviewer runs again. The action keeps the original model/runtime provenance, checks captured files, identities, sources, ownership and tool policy again, and saves passing results with separate attempt diagnostics. Historical scientific rejections and incomplete captures cannot use this recovery action. The compatible API route remains `/v1/jobs/{job_id}/retry-review`.
 
 Set `REVEAL_CLAUDE_MODEL` in the root `.env` to choose the model for research and paragraph authoring:
 
@@ -106,7 +100,7 @@ REVEAL_CLAUDE_MODEL=claude-sonnet-4-6
 # REVEAL_CLAUDE_MODEL=claude-fable-5-1
 ```
 
-Use an exact [Claude API model ID](https://platform.claude.com/docs/en/models/overview) available to your Anthropic API key. Exact IDs let the worker verify the captured runtime against the frozen choice; avoid aliases such as `opus`. The authoring model is frozen when a job is first dispatched and retained during recovery. A later paragraph job selects its own model when dispatched. This setting does not change the independent review model or increase the authoring cost/time limits.
+Use an exact [Claude API model ID](https://platform.claude.com/docs/en/models/overview) available to your Anthropic API key. Exact IDs let the worker verify the captured runtime against the frozen choice; avoid aliases such as `opus`. The authoring model is frozen when a job is first dispatched and retained during recovery. A later paragraph job selects its own model when dispatched. This setting does not increase the authoring cost/time limits.
 
 After editing `.env`, let active jobs finish, then reload configuration and the current source:
 
@@ -117,11 +111,11 @@ After editing `.env`, let active jobs finish, then reload configuration and the 
 
 These scripts recreate this checkout's containers while preserving database records and artifacts. Running `dev-up.sh` alone reuses existing containers and does not apply changed environment values.
 
-Live account acceptance runs the pinned DAPPER linter, exact source-observation checks, and a separate model review of every Claim and the closing synthesis against captured evidence. The [bounded scientific reviewer](scientific-review.md) uses pinned `claude-sonnet-4-6` and a local evidence-pointer reader, without the authoring conversation or external tools. It enforces request/read/turn limits, actual response usage and `REVEAL_GROUNDING_MAX_BUDGET_USD` (default $0.30 cumulative per account), in addition to the authoring budget. Rejected scientific content is preserved as a diagnostic, never promoted to an accepted account. Operationally unavailable or incomplete reviews produce `REVIEW_UNAVAILABLE` without a scientific verdict. This fallible review does not establish experimental truth. There is no automatic paid repair loop or separate token-count request.
+Live account acceptance runs the pinned DAPPER linter, trusted assembly and identity checks, exact source-observation checks, ownership checks, and execution-ledger/tool-policy enforcement. Accounts are saved once those deterministic checks pass. No second AI review, reviewer verdict, or review budget is part of acceptance. Invalid output is retained with its validation diagnostics and is not saved as an accepted account. These checks establish structure and source fidelity; they do not establish experimental truth or prove that an interpretation is scientifically correct. The [retired scientific review design](scientific-review.md) is retained as historical documentation.
 
 Evidence collection treats the requested candidate count as a maximum. The complete collected package and original source bytes are frozen for recovery and uploaded as files. The agent starts from a bounded index and the project-local parsing skill, then reads relevant exact records progressively. The worker no longer token-counts or prunes the entire stored package to fit an inline prompt. Configured collection, upload, runtime and cost limits remain; see [file-backed agent reading](evidence-package-builder.md#file-backed-agent-reading).
 
-Paragraph authoring is a separate Box job using only the accepted account and exact citation revisions. It has its own configured authoring cap and independent faithfulness review; its failure leaves the accepted account available. The default runtime cap applies per Box job, and each accepted account can enqueue a paragraph job, so it is not an aggregate per-submission spending limit. Cancelled provider sessions may not emit a final cost; consult provider billing for actual totals.
+Paragraph authoring is a separate Box job using only the accepted account and exact citation revisions. It has its own configured authoring cap and deterministic checks of citation targets, exact revisions and spans, immutable account content, and the Paragraph profile. No second AI faithfulness review runs; a paragraph failure leaves the accepted account available. The default runtime cap applies per Box job, and each accepted account can enqueue a paragraph job, so it is not an aggregate per-submission spending limit. Cancelled provider sessions may not emit a final cost; consult provider billing for actual totals.
 
 Public activity can lag remote execution on a high-latency Aurora connection; the validation machine measured about 1.13 seconds just for TLS connection setup. The worker batches already available events into atomic writes capped at 20 events and 256 KiB, retaining each event and replay identity. It checkpoints the remote cursor only after persistence; recovery deduplicates committed events if a checkpoint was interrupted. Browser replay and job polling use consistent read-only snapshots and indexed event ranges, so they do not acquire the worker's write mutex. Heartbeats run independently of storage callbacks, and completed remote event backlogs drain before outputs are collected. Connections are still opened per transaction; an active progress display does not necessarily mean Claude is still generating.
 

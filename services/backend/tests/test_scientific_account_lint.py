@@ -12,9 +12,47 @@ from unittest.mock import patch
 import test_evidence_package as fixtures
 from reveal_backend.dapper_release import clone_release, prepare_agent_workspace, verify_release
 from reveal_backend.evidence_package import EvidenceBuildError, canonical_json, decode, sha256
-from reveal_backend.scientific_account_lint import AccountValidationError, lint_scientific_account, validate_scientific_account
+from reveal_backend.scientific_account_lint import AccountValidationError, cfde_source_files, lint_scientific_account, validate_scientific_account
 
 ROOT = fixtures.ROOT
+
+
+class ReferenceSourceLineageTests(unittest.TestCase):
+    def test_sql_sources_require_verified_generation_and_capture_provenance(self):
+        generation = 'a' * 64
+        package = {'pigean': {'model': 'eaggl-capped-v1', 'mechanisms': {'factor': {'fit': {'upstream_build': generation}}}},
+                   'source_artifacts': {}}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            def add(key, *, kind='mysql', names=('eaggl_gene_loadings',), **changes):
+                body = {'format': 'reveal.reference-evidence.' + ('mysql-capture/1' if kind == 'mysql' else 'derived-capture/1'),
+                        'generation_id': generation, 'model': 'eaggl-capped-v1',
+                        'source': {'kind': kind, 'tables' if kind == 'mysql' else 'derived_from': list(names)}, 'data': []}
+                body.update(changes)
+                raw = canonical_json(body); (root / key).write_bytes(raw)
+                package['source_artifacts'][key] = {'path': key, 'format': 'json', 'sha256': sha256(raw),
+                    'origin': f"{kind}:{'+'.join(names)}?generation_id={generation}", 'dapper_file_id': 'file:' + key}
+            add('loading')
+            add('connections', kind='mysql-derived', names=('loading',))
+            add('contextual', kind='mysql-derived', names=('connections',))
+            add('other-generation', generation_id='b' * 64)
+            add('other-model', model='other-model')
+            add('dismech', names=('dismech_documents',))
+            add('generation-metadata', names=('reference_generations',))
+            add('instructions', format='reveal.instructions/1')
+            add('mixed-derived', kind='mysql-derived', names=('loading', 'instructions'))
+            add('missing-derived', kind='mysql-derived', names=('missing',))
+            add('cyclic-derived', kind='mysql-derived', names=('cyclic-derived',))
+            add('wrong-origin')
+            package['source_artifacts']['wrong-origin']['origin'] = 'mysql:other?generation_id=' + generation
+            self.assertEqual(cfde_source_files(package, root / 'package.json'),
+                             {'file:loading', 'file:connections', 'file:contextual'})
+            package['pigean']['model'] = 'cfde-inc-v2'
+            self.assertEqual(cfde_source_files(package, root / 'package.json'), set())
+            package['pigean']['model'] = 'eaggl-capped-v1'
+            (root / 'loading').write_text('{}')
+            with self.assertRaisesRegex(EvidenceBuildError, 'checksum changed'):
+                cfde_source_files(package, root / 'package.json')
 
 
 class ScientificAccountLintTests(unittest.TestCase):
@@ -100,6 +138,46 @@ p.write_text(json.dumps(doc))
         final = self.lint(self.draft)
         self.assertFalse(final['valid'])
         self.assertIn('final-identity', {f['check'] for f in final['findings']})
+
+    def test_reference_sql_capture_passes_draft_lint_and_final_assembly(self):
+        from reveal_backend import acceptance
+        from test_reference_evidence import ReferenceEvidenceTests
+        ReferenceEvidenceTests.setUpClass()
+        try:
+            package = ReferenceEvidenceTests.single.package
+            package_path = ReferenceEvidenceTests.root / 'single/package/evidence-package.json'
+            mechanism_id = next(iter(package['pigean']['mechanisms'].values()))['dapper_id']
+            mechanism = next(node for node in package['dapper_context']['mechanisms'] if node['id'] == mechanism_id)
+            trusted = {node['id']: (group, node) for group, rows in package['dapper_context'].items()
+                       if isinstance(rows, list) for node in rows if isinstance(node, dict) and 'id' in node}
+            keys = [next(key for key in package['source_artifacts'] if key.startswith('gene-factor-')), 'connections-gene']
+            for key in keys:
+                with self.subTest(source=key):
+                    source = package['source_artifacts'][key]
+                    capture = decode((package_path.parent / source['path']).read_bytes())
+                    document = deepcopy(self.draft)
+                    document['prefixes'] = package['prefixes']
+                    document['knowledge_gaps'] = [deepcopy(trusted[package['selection']['knowledge_gap_id']][1])]
+                    document['scientific_accounts'][0]['question'] = package['selection']['knowledge_gap_id']
+                    document['mechanisms'] = [deepcopy(mechanism)]
+                    document['propositions'][0]['object_entity'] = mechanism_id
+                    document['files'] = [deepcopy(trusted[source['dapper_file_id']][1])]
+                    document['used_edges'][0]['object'] = source['dapper_file_id']
+                    evidence = document['evidence_items'][0]
+                    evidence['was_derived_from'] = [source['dapper_file_id']]
+                    locator, observation = ('/data/0', capture['data'][0]) if 'data' in capture else ('/response/candidates/0', capture['response']['candidates'][0])
+                    evidence.update(context=f'Captured observation `{locator}`.', snippet=json.dumps(observation))
+                    with patch.object(acceptance, 'release_root', return_value=self.release), patch.object(acceptance, 'LOCK', self.lock):
+                        document = acceptance.hydrate_inputs(document, trusted)
+                        raw = self.root / 'sql-account.json'; raw.write_bytes(canonical_json(document))
+                        report = lint_scientific_account(raw, dapper_root=self.release, release_lock=self.lock,
+                                                         evidence_package=package_path, mode='draft')
+                        self.assertTrue(report['valid'], report)
+                        _, final = acceptance.assemble_account(raw, package_path, self.root / 'sql-assembled.json',
+                            {'user_id': 'sql-owner', 'principal_kind': 'anonymous'}, {'id': 'sql-job'}, 1, 'box')
+                    self.assertTrue(final['valid'], final)
+        finally:
+            ReferenceEvidenceTests.tearDownClass()
 
     def test_distinct_claims_share_source_without_collapsing_assessments(self):
         # Real captured CFDE rows support separate scoped involvement drafts.

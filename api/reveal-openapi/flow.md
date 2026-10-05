@@ -110,9 +110,9 @@ Freeze the current editor snapshot and queue analysis; unsaved edits do not over
 **Worker processing behind the job:**
 
 - Resolve frozen DisMech context; four same-seed CFDE connections plus contextual edges and BioIndex queries.
-- Build, validate and freeze the evidence package with exact source artifacts and supplied documents for the agent and independent reviewer.
+- Build, validate and freeze the evidence package with exact source artifacts and supplied documents for the research agent and final source validation.
 - Fresh verified DAPPER clone, Claude Code in Box, selected Proto-OKN tools.
-- Trusted assembly, minting, final lint plus grounding/ledger/ownership checks.
+- Trusted assembly, minting, final lint plus source/ledger/ownership checks; save passing accounts without a second AI review.
 
 ### 5. Prepare evidence and observe research
 
@@ -131,7 +131,7 @@ Evidence preparation followed by public agent/tool activity; Stop stays availabl
 - One active loading state; no private reasoning.
 - Package is the schema-current captured input; account fixture is separately authored, not its accepted agent output.
 - Completed activity compresses into Gap analysis complete.
-- Budget failures expose phase, cap and recorded spend. Incomplete independent review can be retried against verified saved output, without launching the research agent.
+- Budget failures expose phase, cap and recorded spend. Output retained after an incomplete legacy review can be validated and saved without launching another research agent or AI reviewer.
 
 ### 6. Read the scientific account
 
@@ -366,4 +366,4 @@ Upload exact bytes directly to a short-lived S3 staging destination, then verify
 
 Requests/responses are taken from the existing validated OpenAPI exchange library. The CADinT2D analysis/paragraph sequence is internally linked. The CAD source-selected gap now frames the request and account. The evidence package is a separate captured input; the authored account is not its validated agent output. Semantic scores and agent outputs remain illustrative fixtures.
 
-The mapping covers 57 operations and all 75 exchanges. OpenAPI SHA-256: `1a05e6bf54cee6a15f46010d7985ce36236c2bd90582babf45f764fc37275619`. No endpoints or payloads were changed to build this diagram.
+The mapping covers 57 operations and all 75 exchanges. OpenAPI SHA-256: `601ed010b984e9860cde7d53347ad0c381902762bd3b7e0445cdadabab56cb95`. No endpoints or payloads were changed to build this diagram.

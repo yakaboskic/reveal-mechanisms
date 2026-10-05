@@ -45,7 +45,7 @@ function ActivityEntry({ row, active, now, step, onInspect }: { row: ActivityRow
     {event.detail?.counts && <small>{event.detail.counts.nodes} nodes, {event.detail.counts.edges} edges ({event.detail.counts.scope})</small>}
   </div>;
 }
-/** `archived`: the analysis was frozen on a superseded reference generation, so review cannot be retried. */
+/** `archived`: the analysis was frozen on a superseded reference generation, so its saved output cannot be accepted. */
 export function Activity({ initial, onJob, archived = false }: { initial: Schema<"Job">; onJob: (job: Schema<"Job">) => void; archived?: boolean }) {
   const paragraph = initial.kind === "paragraph";
   const labels = paragraph ? { ...stageLabels, preparation: "Statement preparation", research: "Writing statement", collection: "Collecting statement", validation: "Checking claims and citations", saving: "Saving statement" } : stageLabels;
@@ -189,8 +189,8 @@ export function Activity({ initial, onJob, archived = false }: { initial: Schema
       <div className="activity-follow">{following ? <span>{active ? "Following live activity" : "End of activity"}</span> : <><span>Auto-follow paused</span><button onClick={jumpToLatest}>Jump to latest <span aria-hidden="true">↓</span></button></>}</div>
     </>}
     {job.failure && <p className="error" role="alert">{job.failure.message === "Claude execution failed: error_max_turns" ? "The agent reached its turn limit before completing the result. No scientific result was accepted. Your draft and activity are saved; retry to start a new analysis." : job.failure.message}</p>}
-    {canRetryReview && <div className="review-retry"><button className="text-button" disabled={retryingReview} onClick={() => void retryReview()}>{retryingReview ? "Queueing review…" : "Retry scientific review"}</button><p className="muted">Uses the saved output. The research agent will not run again. Review uses the currently configured review budget.</p></div>}
-    {archived && job.status === "failed" && job.failure?.retryable && ["REVIEW_UNAVAILABLE", "REVIEW_BUDGET_EXCEEDED"].includes(job.failure.code) && <p className="notice">This analysis used an outdated EAGGL reference, so its review can’t be retried. Start a new analysis on this knowledge gap with current factors instead.</p>}
+    {canRetryReview && <div className="review-retry"><button className="text-button" disabled={retryingReview} onClick={() => void retryReview()}>{retryingReview ? "Queueing validation…" : "Save existing output"}</button><p className="muted">Checks the saved output and sources, then saves the result if validation passes. No new research or AI review runs.</p></div>}
+    {archived && job.status === "failed" && job.failure?.retryable && ["REVIEW_UNAVAILABLE", "REVIEW_BUDGET_EXCEEDED"].includes(job.failure.code) && <p className="notice">This analysis used an outdated EAGGL reference, so its saved output can’t be accepted. Start a new analysis on this knowledge gap with current factors instead.</p>}
     {reviewRetryError && <p className="error" role="alert">{reviewRetryError}</p>}
     {progress.status === "insufficient_evidence" && (paragraph ? <p className="notice">The saved account did not support a faithful research statement. The account and activity are retained.</p> : <JobOutcome key={job.id} jobId={job.id} />)}
     {error && <div className="error" role="alert">{error} <button onClick={() => { setError(""); setRetry(n => n + 1); }}>Reconnect</button></div>}

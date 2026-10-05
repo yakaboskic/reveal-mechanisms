@@ -98,6 +98,14 @@ class CleanupTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await self.engine.step(payload,0),result)
         self.assertEqual(self.adapter.capture_once.await_count,1)
 
+    async def test_invalid_paragraph_finishes_as_validation_failure_without_review(self):
+        job,payload,result,_=await self.handed_off()
+        with (patch('reveal_backend.workflow_execution.validate_execution_ledger'),
+              patch('reveal_backend.durable_review.call_one',side_effect=AssertionError('No paid review'))):
+            result=await self.engine.step(payload,result['index'])
+        self.assertTrue(result['done'])
+        self.assertEqual(self.rows(job)['job']['failure']['code'],'VALIDATION_FAILED')
+
     async def test_direct_capture_skips_temp_directory_restore_and_local_request(self):
         job,payload=self.seed(); rows=self.rows(job)
         with self.repo.transaction() as tx:
@@ -137,7 +145,7 @@ class CleanupTests(unittest.IsolatedAsyncioTestCase):
     async def test_cancel_after_handoff_finishes_without_paid_work_or_waiting_for_cleanup(self):
         job,payload,result,cleanup=await self.handed_off()
         with self.repo.transaction() as tx: jobs.cancel(tx,tx.get('job',job['id'])['data'])
-        with patch.object(self.engine,'review',AsyncMock(side_effect=AssertionError('no paid review'))):
+        with patch('reveal_backend.durable_review.call_one',side_effect=AssertionError('no paid review')):
             terminal=await self.engine.step(payload,result['index'])
         self.assertTrue(terminal['done']); self.assertEqual(self.rows(job)['job']['status'],'cancelled')
         self.assertTrue(self.rows(job)['execution']['capacity_reserved'])
@@ -148,11 +156,13 @@ class CleanupTests(unittest.IsolatedAsyncioTestCase):
     async def test_terminal_review_retry_preserves_capacity_and_late_ack_does_not_reset_main_fence(self):
         job,payload,result,cleanup=await self.handed_off()
         _,execution,_=state.acquire(self.repo,payload,result['index']); token=execution['fence']
+        state.save(self.repo,payload,token,validated_paths=['validated/stale.json'])
         jobs.finish(self.repo,job['id'],token,'failed',failure={'code':'REVIEW_UNAVAILABLE','retryable':True,'message':'No verdict'})
         state.complete(self.repo,payload,token,next_phase='complete',done=True)
         with patch('reveal_backend.artifact_store.s3_enabled',return_value=True),self.repo.transaction() as tx:
             current=tx.get('job',job['id'])['data']; enqueue_review(tx,current,current['last_event_id'])
         current=self.rows(job); self.assertEqual(current['execution']['generation'],2)
+        self.assertIsNone(current['execution']['validated_paths'])
         self.assertEqual(current['execution']['cleanup_id'],cleanup['cleanup_id'])
         self.assertTrue(current['execution']['capacity_reserved']); self.assertFalse(current['execution']['cleanup_complete'])
         _,active,_=state.acquire(self.repo,{**payload,'generation':2},0)
@@ -281,43 +291,61 @@ class CleanupTests(unittest.IsolatedAsyncioTestCase):
             tx.put('queue',job['id'],'owner',queue)
         return job,payload,storage,sibling
 
-    async def test_review_call_and_tools_update_only_json_without_any_scratch_or_sibling_download(self):
-        job,payload,storage,sibling=self.stored_review()
-        engine=WorkflowExecution(self.repo,storage=storage)
-        response=Mock(status_code=200)
-        response.json.return_value={'stop_reason':'tool_use','content':[{'type':'tool_use','id':'read-1',
-            'name':'read_evidence','input':{'pointer':'/package/dismech/observation'}}],
-            'usage':{'input_tokens':1000,'output_tokens':100}}
-        with (patch.dict('os.environ',{'ANTHROPIC_API_KEY':'fake'}),
-              patch('reveal_backend.scientific_grounding.httpx.post',return_value=response) as paid,
-              patch('reveal_backend.workflow_execution.tempfile.TemporaryDirectory',side_effect=AssertionError('No review scratch')),
-              patch.object(engine,'request',side_effect=AssertionError('No review materialization')),
-              patch.object(storage,'restore',side_effect=AssertionError('No full restore')),
-              patch.object(storage,'snapshot',side_effect=AssertionError('No full snapshot')),
-              patch.object(storage,'get',wraps=storage.get) as get):
-            first=await engine.step(payload,0)
-            self.assertEqual(first['phase'],'review_tools')
-            second=await engine.step(payload,1)
-            self.assertEqual(second['phase'],'review_call')
-            paid.assert_called_once()
-            self.assertNotIn(sibling['key'],[call.args[0]['key'] for call in get.call_args_list])
-        execution=self.rows(job)['execution']
-        review=json.loads(storage.read_workspace_file(execution['workspace'],'review/1-0.json'))
-        self.assertEqual(len(review['session']['calls']),1); self.assertEqual(len(review['reads']),1)
-        self.assertIsNone(review['pending']); self.assertIsNone(review['response'])
-        unchanged=next(item['storage'] for item in storage.workspace_manifest(execution['workspace'])['files'] if item['path']=='unchanged-source.bin')
-        self.assertEqual(unchanged,sibling)
+    async def test_retired_review_phases_redirect_to_validation_without_paid_work_or_materialization(self):
+        for phase in ('review_init', 'review_call', 'review_tools'):
+            with self.subTest(phase=phase):
+                job,payload,storage,_=self.stored_review()
+                with self.repo.transaction() as tx:
+                    value=tx.get('execution',job['id'])['data']; value['phase']=phase
+                    tx.put('execution',job['id'],'owner',value)
+                before=self.rows(job)['execution']['workspace']
+                audit=storage.read_workspace_file(before,'review/1-0.json')
+                engine=WorkflowExecution(self.repo,storage=storage)
+                with (patch('reveal_backend.durable_review.call_one',side_effect=AssertionError('No paid review')) as paid,
+                      patch('reveal_backend.workflow_execution.tempfile.TemporaryDirectory',side_effect=AssertionError('No migration scratch')),
+                      patch.object(engine,'request',side_effect=AssertionError('No input materialization')),
+                      patch.object(storage,'restore',side_effect=AssertionError('No full restore')),
+                      patch.object(storage,'get',side_effect=AssertionError('No audit or source downloads'))):
+                    result=await engine.step(payload,0)
+                    self.assertEqual(result['phase'],'validate')
+                    self.assertEqual(await engine.step(payload,0),result)
+                    paid.assert_not_called()
+                execution=self.rows(job)['execution']
+                self.assertIsNone(execution['validated_paths'])
+                self.assertEqual(execution['workspace'],before)
+                self.assertEqual(execution['review_checkpoint'],'review/1-0.json')
+                self.assertEqual(storage.read_workspace_file(before,'review/1-0.json'),audit)
 
-    async def test_metadata_review_keeps_paid_reservation_on_lost_response_and_never_repeats_it(self):
-        job,payload,storage,_=self.stored_review(); engine=WorkflowExecution(self.repo,storage=storage)
-        with patch.dict('os.environ',{'ANTHROPIC_API_KEY':'fake'}),patch('reveal_backend.scientific_grounding.httpx.post',side_effect=TimeoutError()) as paid:
+    async def test_retired_review_keeps_pending_paid_reservation_without_resuming_it(self):
+        job,payload,storage,_=self.stored_review()
+        before=self.rows(job)['execution']['workspace']
+        review=json.loads(storage.read_workspace_file(before,'review/1-0.json'))
+        review['pending']={'request_sha256':'historical-paid-request','reserved_usd':.5}
+        review['failure']={'error_type':'TimeoutError'}
+        reference=storage.replace_workspace_files(before,{'review/1-0.json':json.dumps(review).encode()})
+        with self.repo.transaction() as tx:
+            for kind in ('execution','queue'):
+                value=tx.get(kind,job['id'])['data']; value['workspace']=reference
+                tx.put(kind,job['id'],'owner',value)
+        engine=WorkflowExecution(self.repo,storage=storage)
+        with patch('reveal_backend.scientific_grounding.httpx.post',side_effect=AssertionError('No reviewer API')) as paid:
             result=await engine.step(payload,0)
-            self.assertTrue(result['done']); self.assertEqual(await engine.step(payload,0),result)
-            paid.assert_called_once()
+            self.assertEqual(result['phase'],'validate')
+            paid.assert_not_called()
         execution=self.rows(job)['execution']
-        review=json.loads(storage.read_workspace_file(execution['workspace'],'review/1-0.json'))
-        self.assertIsNotNone(review['pending']); self.assertEqual(review['failure']['error_type'],'TimeoutError')
-        self.assertEqual(self.rows(job)['job']['failure']['code'],'REVIEW_UNAVAILABLE')
+        self.assertEqual(json.loads(storage.read_workspace_file(execution['workspace'],'review/1-0.json')),review)
+
+    async def test_retired_review_migrates_local_checkpoint_without_restoring_scratch(self):
+        job,payload,result,_=await self.handed_off()
+        with self.repo.transaction() as tx:
+            value=tx.get('execution',job['id'])['data']
+            value.update(phase='review_call',validated_paths=['validated/old.json'])
+            tx.put('execution',job['id'],'owner',value)
+        with (patch('reveal_backend.workflow_execution.tempfile.TemporaryDirectory',side_effect=AssertionError('No migration scratch')),
+              patch('reveal_backend.durable_review.call_one',side_effect=AssertionError('No paid review'))):
+            result=await self.engine.step(payload,result['index'])
+        self.assertEqual(result['phase'],'validate')
+        self.assertIsNone(self.rows(job)['execution']['validated_paths'])
 
 
 if __name__=='__main__': unittest.main()

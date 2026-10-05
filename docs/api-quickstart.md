@@ -79,7 +79,7 @@ That cookie file is a credential. It stays ignored under `.runtime/`. Mutation r
 
 Use actual response IDs, encoded with `encodeURIComponent` when placed in URL segments. Follow cursor pagination. A job requires a selected gap and 1–10 valid native anchors. Running a job calls live paid providers; reading the contract and browsing existing records does not launch one. Examples for exact payloads live in [api/examples/exchanges.json](../api/examples/exchanges.json).
 
-Research passes through frozen evidence collection, Box authoring, deterministic structural/source validation, then independent scientific review. An accepted account can trigger a separate cited-statement job. A completed attempt may instead record `insufficient_evidence`. Validation failure preserves drafts and captures; it does not publish a scientific account. See [scientific linting](scientific-account-linting.md), [review](scientific-review.md), and [exploration outcomes](exploration-outcomes.md).
+Research passes through frozen evidence collection, Box authoring, trusted deterministic identity, provenance, source and tool-policy validation, then saving of passing accounts. No second AI review runs. An accepted account can trigger a separate cited-statement job. A completed attempt may instead record `insufficient_evidence`. Validation failure preserves drafts and captures; it does not publish a scientific account. See [scientific linting](scientific-account-linting.md), [retired review design](scientific-review.md), and [exploration outcomes](exploration-outcomes.md).
 
 For an existing job, inspect its events without submitting more work:
 

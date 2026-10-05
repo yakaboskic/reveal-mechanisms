@@ -1,5 +1,7 @@
 # Refactor REVEAL execution and retrieval to Upstash
 
+> Historical plan: the independent scientific reviewer described below was retired on 4 October 2026. Current account and paragraph acceptance saves output after deterministic validation; see [the runtime contract](durable-workflow-runtime.md).
+
 Draft — September 29, 2026; updated September 30, 2026. This document proposes implementation work; it changes no runtime behavior. It is based on the current working tree, including deployment work that is still uncommitted. Recheck the relevant modules before starting each phase because other agents are editing this repository.
 
 **Proposed decision:** replace the dedicated Docker worker pool and Redis delivery stack with Upstash Workflow invoking bounded Python execution steps, and use Upstash Vector to store embeddings and perform vector search. Keep Upstash Box for the research agent, Aurora/RDS for authoritative application state and source records, and S3 for frozen inputs, outputs, and checkpoints. Job concurrency should be independent of backend container count. Upstash Vector is a required part of the target architecture, not an optional cache in front of local vector search.

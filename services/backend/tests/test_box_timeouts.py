@@ -49,6 +49,55 @@ class KGTimeoutTests(unittest.TestCase):
         self.assertEqual(self.ledger.entries[0]['status'], 'failed')
         self.assertIn('predicate', result['content'][0]['text'])
 
+    def test_curie_query_can_be_corrected_without_poisoning_execution_ledger(self):
+        from reveal_backend.agent_execution import ExecutionRequest, ExecutionResult
+        from reveal_backend.acceptance import LOCK
+        from reveal_backend.evidence_package import sha256
+        from reveal_backend.worker import validate_execution_ledger
+
+        client = Mock(server_info={}); client.call.return_value = deepcopy(EMPTY)
+        tools = ScopedTools(('biomarkerkg',), self.ledger, client=client)
+        # Actual query shape from QA job 374ef39d, previously classified denied.
+        arguments = {'graph': 'biomarkerkg', 'limit': 10, 'object': 'MONDO:0010017',
+                     'predicate': 'http://purl.obolibrary.org/obo/OBCI_1000002'}
+        feedback = tools.call('query_graph', arguments)
+        self.assertTrue(feedback['isError']); client.call.assert_not_called()
+        self.assertEqual(self.ledger.entries[0]['status'], 'failed')
+        self.assertIn('expand CURIEs', feedback['content'][0]['text'])
+        tools.call('query_graph', {**arguments, 'object': 'http://purl.obolibrary.org/obo/MONDO_0010017'})
+        self.assertEqual(self.ledger.entries[1]['status'], 'empty')
+        self.ledger.freeze()
+
+        package = self.root/'input.json'; package.write_bytes(b'{}')
+        runtime = self.root/'runtime.json'
+        runtime.write_bytes(canonical({'job_id': 'offline', 'attempt': 1,
+            'input_sha256': sha256(package.read_bytes()), 'model': 'test-model',
+            'dapper': {'commit': json.loads(LOCK.read_bytes())['commit']}}))
+        request = ExecutionRequest('offline', 1, 'research', package, self.root,
+                                   selected_graphs=('biomarkerkg',))
+        result = ExecutionResult('insufficient_evidence', self.root,
+            runtime_manifest_path=runtime, ledger_manifest_path=self.root/'manifest.json')
+        validate_execution_ledger(result, request, 'test-model')
+
+    def test_query_typos_fail_but_policy_violations_stay_denied(self):
+        client = Mock()
+        tools = ScopedTools(('prokn',), self.ledger, client=client)
+        repairable = [
+            {'subject': 'relative/path'}, {'subject': 'https://example.org/has space'},
+            {'subject': 123}, {'predicate': LABEL, 'contains': 'x'},
+            {'predicate': LABEL, 'contains': 'gene', 'object': 'urn:gene'},
+        ]
+        denied = [
+            {'subject': 'https://example.org/x> } SERVICE <https://evil'},
+            {'query': 'SELECT * WHERE {?s ?p ?o}'}, {'graph': 'unselected', 'subject': 'urn:gene'},
+        ]
+        for arguments, status in [(value, 'failed') for value in repairable] + [(value, 'denied') for value in denied]:
+            with self.subTest(arguments=arguments):
+                result = tools.call('query_graph', {'graph': 'prokn', **arguments})
+                self.assertTrue(result['isError'])
+                self.assertEqual(self.ledger.entries[-1]['status'], status)
+        client.call.assert_not_called()
+
     def test_predicate_scoped_contains_keeps_object_unbound(self):
         dataset = Dataset()
         graph = dataset.graph(URIRef('https://purl.org/okn/frink/kg/prokn'))

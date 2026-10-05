@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-/** Local browser regression; all API calls mocked, including review retries. */
+/** Local browser regression; all API calls mocked, including validation of retained output. */
 import assert from 'node:assert/strict';
-import { access, mkdir, readdir, writeFile } from 'node:fs/promises';
+import { access, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -24,8 +24,16 @@ const { chromium } = await playwright();
 const browser = await chromium.launch({ headless: true, executablePath: await executable() });
 const report = { status: 'running', scope: 'Mocked UI only: no real API writes, sign-in or model requests.', scenarios: [] };
 const userId = '11111111-1111-4111-8111-111111111111', jobId = '33333333-3333-4333-8333-333333333333';
+const requestId = '44444444-4444-4444-8444-444444444444';
+const fixture = JSON.parse(await readFile(resolve(root, 'services/frontend/src/lib/fixtures/contract.json'), 'utf8'));
+const exchange = JSON.parse(await readFile(resolve(root, 'api/examples/getResearchRequest.request.json'), 'utf8'));
+const frozenRequest = { ...Object.values(exchange.responses['200'].examples)[0], id: requestId, owner_user_id: userId };
+const gap = fixture.gaps.items.find(item => item.object.id === frozenRequest.composer.source_gap.id);
+const factor = fixture.suggestions.automatic_anchors.map(item => item.factor).find(item => item.source_id === frozenRequest.composer.eaggl_anchors[0].reference.source_id);
+assert.ok(gap && factor, 'Saved-input fixtures must match the frozen research request.');
+const emptyPage = { items: [], page: { has_more: false, next_cursor: null, snapshot_id: 'retained-output-fixture' } };
 const original = { id: jobId, kind: 'analysis', owner_user_id: userId, status: 'failed', stage: 'validating',
-  research_request_id: '44444444-4444-4444-8444-444444444444', input_account_id: null,
+  research_request_id: requestId, input_account_id: null,
   created_at: '2026-09-29T12:00:00Z', updated_at: '2026-09-29T12:10:00Z', completed_at: '2026-09-29T12:10:00Z',
   result: null, failure: { code: 'REVIEW_BUDGET_EXCEEDED', retryable: true,
     message: 'Independent scientific review stopped to stay within its $0.30 budget. Recorded review spend: $0.2079. No scientific verdict was reached.',
@@ -53,18 +61,25 @@ try {
       if (request.method() !== 'GET') { state.unexpected.push(request.method() + ' ' + path); return route.abort(); }
       if (path === '/api/session/status') return reply({ principal: { user_id: userId }, canClaim: false, providers: { google: false, orcid: false } });
       if (path === '/api/backend/v1/me') return reply({ user_id: userId, principal_kind: 'registered', display_name: 'Review fixture', workspace_expires_at: null });
+      if (path === '/api/backend/v1/me/workspace/events') return route.fulfill({ contentType: 'text/event-stream', body: ': local fixture heartbeat\n\n' });
+      if (path === `/api/backend/v1/research-requests/${requestId}`) return reply(frozenRequest);
+      if (decodeURIComponent(path) === `/api/backend/v1/knowledge-gaps/${gap.object.id}`) return reply(gap);
+      if (decodeURIComponent(path) === `/api/backend/v1/knowledge-gaps/${gap.object.id}/vote`) return reply(gap.votes || { upvotes: 0, downvotes: 0, score: 0, user_vote: null, can_vote: false });
+      if (['accounts', 'outcomes'].some(kind => decodeURIComponent(path) === `/api/backend/v1/knowledge-gaps/${gap.object.id}/${kind}`)) return reply(emptyPage);
+      if (decodeURIComponent(path) === `/api/backend/v1/mechanisms/${factor.source_id}`) return reply(factor);
       if (path === `/api/backend/v1/jobs/${jobId}`) return reply(state.job);
       if (path === `/api/backend/v1/jobs/${jobId}/events`) return route.fulfill({ contentType: 'text/event-stream', body: '' });
       state.unexpected.push(request.method() + ' ' + path); return reply({}, 503);
     });
     await page.goto(`${origin}/?job=${jobId}`);
     await page.getByRole('alert').filter({ hasText: state.job.failure.message }).waitFor();
-    const retry = page.getByRole('button', { name: 'Retry scientific review', exact: true });
+    const retry = page.getByRole('button', { name: 'Save existing output', exact: true });
     if (mode === 'authoring-budget') {
       assert.equal(await retry.count(), 0);
     } else {
+      await page.getByText('Checks the saved output and sources, then saves the result if validation passes. No new research or AI review runs.', { exact: true }).waitFor();
       await retry.click();
-      assert.equal(await page.getByRole('button', { name: 'Queueing review…', exact: true }).isDisabled(), true);
+      assert.equal(await page.getByRole('button', { name: 'Queueing validation…', exact: true }).isDisabled(), true);
       release();
       await page.getByText('Retry confirmation unavailable.', { exact: true }).waitFor();
       await retry.click();
@@ -75,9 +90,9 @@ try {
       assert.ok(state.retries[0].key);
       assert.equal(await retry.count(), 0);
       state.job = { ...state.job, status: 'failed', completed_at: '2026-09-29T12:11:00Z', last_event_id: '4',
-        failure: { code: 'VALIDATION_FAILED', retryable: true, message: 'Independent review rejected unsupported scientific content.' } };
+        failure: { code: 'VALIDATION_FAILED', retryable: true, message: 'The account failed deterministic source validation.' } };
       await page.getByText(state.job.failure.message, { exact: true }).waitFor();
-      assert.equal(await retry.count(), 0, 'Scientific rejection must not offer an operational review retry');
+      assert.equal(await retry.count(), 0, 'Validation failure must not offer recovery for a historical incomplete review');
     }
     assert.deepEqual(state.unexpected, []); assert.deepEqual(state.errors, []);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);

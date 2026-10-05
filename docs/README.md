@@ -32,7 +32,7 @@ Updated October 1, 2026. Start with the [Workflow runtime](durable-workflow-runt
 - [Collect and build an evidence package](evidence-package-builder.md)
 - [How the agent constructs a ScientificAccount](scientific-account-construction.md)
 - [Agent account linter and pinned DAPPER startup](scientific-account-linting.md)
-- [Independent scientific review — 28 September 2026](scientific-review.md)
+- [Retired independent scientific review — historical design](scientific-review.md)
 - [DAPPER object citations — REVEAL profile v1](citation-standard.md)
 - [PIGEAN/EAGGL claim templates — biological propositions and result evidence](pigean-claim-model.md)
 - [Evidence-package schema](../schema/README.md)

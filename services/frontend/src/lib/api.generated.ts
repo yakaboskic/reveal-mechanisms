@@ -598,8 +598,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Retry independent review on saved output
-         * @description Owner-only, idempotent retry for REVIEW_UNAVAILABLE or REVIEW_BUDGET_EXCEEDED. Require the latest job event ID and a checksum-verified completed authoring capture. Requeue the same job with a new validation attempt; preserve original evidence, authoring model, artifacts and activity. Never launch the research agent. Scientific rejection, incomplete capture and active or successful jobs cannot use this route. Current configured review budget applies to each explicit retry. Normal account acceptance and paragraph generation follow a passing review. An analysis frozen on a superseded reference generation cannot retry review (409 REFERENCE_GENERATION_SUPERSEDED: start a new analysis on the gap with current factors). Analysis review retry waits while a reference reload is in progress (503 REFERENCE_RELOAD_IN_PROGRESS).
+         * Validate and save retained output
+         * @description Owner-only, idempotent retry for REVIEW_UNAVAILABLE or REVIEW_BUDGET_EXCEEDED. Require the latest job event ID and a checksum-verified completed authoring capture. Requeue the same job with a new validation attempt; preserve original evidence, authoring model, artifacts and activity. Run deterministic validation and normal saving, without another research or AI review call. Historical scientific rejection, incomplete capture and active or successful jobs cannot use this route. Normal account acceptance and paragraph generation follow passing validation. An analysis frozen on a superseded reference generation cannot validate and save retained output (409 REFERENCE_GENERATION_SUPERSEDED: start a new analysis on the gap with current factors). Saved-output validation waits while a reference reload is in progress (503 REFERENCE_RELOAD_IN_PROGRESS).
          */
         post: operations["retryJobReview"];
         delete?: never;

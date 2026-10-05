@@ -1,7 +1,7 @@
 """RDS-owned workflow state, transactional dispatch, short leases and fences.
 
 This module never connects to Redis. Scheduler history is advisory: only this
-record can authorize a phase, paid creation, review, or outcome commit.
+record can authorize a phase, paid creation, validation, or outcome commit.
 """
 from datetime import datetime, timedelta, timezone
 import os
@@ -43,7 +43,8 @@ def create(tx, job, queue):
         'created_at': now(), 'updated_at': now(), 'expected_at': after(60),
         'disposition': 'ready', 'cancel_requested': False,
         'review_checkpoint': None, 'review_index': 0,
-        'validated_paths': previous.get('validated_paths') if reviewing else None,
+        # Revalidate saved output against the current deterministic gates.
+        'validated_paths': None,
     }
     if reviewing and source.get('cleanup_id'):
         execution.update(cleanup_id=source['cleanup_id'], capture_sha256=source['capture_sha256'])
@@ -80,11 +81,10 @@ def stored_bootstrap(execution):
 
 
 def needs_scratch(execution):
-    return execution['phase'] not in ('create', 'observe', 'launch', 'complete') and not (
+    return execution['phase'] not in ('create', 'observe', 'launch', 'complete', 'review_init', 'review_call', 'review_tools') and not (
         execution['phase'] == 'bootstrap' and stored_bootstrap(execution)) and not (
         execution['phase'] == 'cleanup' and execution.get('abandoned')) and not (
-        execution['phase'] == 'capture' and (execution.get('box') or {}).get('capture_protocol') == 's3-v1') and not (
-        execution['phase'] in ('review_call','review_tools') and (execution.get('workspace') or {}).get('store') == 's3')
+        execution['phase'] == 'capture' and (execution.get('box') or {}).get('capture_protocol') == 's3-v1')
 
 
 def cleanup_record(tx, identity):
@@ -201,7 +201,7 @@ def acquire(repository, payload, index, *, lease_seconds=600):
         # Separate short-running preparation and validation limits from the
         # durable active-Box cap. All replicas share these RDS reservations.
         groups = {'prepare': 'preparation', 'bootstrap': 'preparation', 'validate': 'review',
-                  'review_init': 'review', 'review_call': 'review', 'review_tools': 'review', 'commit': 'review', 'capture': 'capture'}
+                  'commit': 'review', 'capture': 'capture'}
         group = groups.get(state['phase']); deferred = False
         if group or needs_scratch(state):
             active = [item['data'] for item in tx.list('execution')

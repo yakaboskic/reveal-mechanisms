@@ -498,8 +498,8 @@ def endpoints(b,f,e):
         'next_call_max_usd':null({'type':'number','minimum':0})})
     S['JobFailure']['properties']['budget']=ref('JobBudgetFailure')
     S['ReviewRetryInput']=obj({'expected_last_event_id':string(pattern='^[0-9]+$')})
-    b.operation('/v1/jobs/{job_id}/retry-review','post','retryJobReview','Jobs','Retry independent review on saved output',
-        'Owner-only, idempotent retry for REVIEW_UNAVAILABLE or REVIEW_BUDGET_EXCEEDED. Require the latest job event ID and a checksum-verified completed authoring capture. Requeue the same job with a new validation attempt; preserve original evidence, authoring model, artifacts and activity. Never launch the research agent. Scientific rejection, incomplete capture and active or successful jobs cannot use this route. Current configured review budget applies to each explicit retry. Normal account acceptance and paragraph generation follow a passing review.',
+    b.operation('/v1/jobs/{job_id}/retry-review','post','retryJobReview','Jobs','Validate and save retained output',
+        'Owner-only, idempotent retry for REVIEW_UNAVAILABLE or REVIEW_BUDGET_EXCEEDED. Require the latest job event ID and a checksum-verified completed authoring capture. Requeue the same job with a new validation attempt; preserve original evidence, authoring model, artifacts and activity. Run deterministic validation and normal saving, without another research or AI review call. Historical scientific rejection, incomplete capture and active or successful jobs cannot use this route. Normal account acceptance and paragraph generation follow passing validation.',
         'Job',{'queued':dict(e['complete'],status='queued',stage='validating',failure=None,result=None,completed_at=None)},
         request_schema='ReviewRetryInput',request_examples={'saved_output':{'expected_last_event_id':'2'}},
         parameters=[b.parameter('job_id','path',uuid,b.JOB_ID,True)],status=202,idempotent=True,errors=('401','404','409','422','429'))
@@ -753,9 +753,9 @@ def reference_endpoints(b, f, e):
     describe('/v1/jobs','post',' Analysis anchors must belong to the active reference generation (409 REFERENCE_GENERATION_SUPERSEDED: start a new analysis on the gap with current factors), and analysis submission waits while a reference reload is in progress (503 REFERENCE_RELOAD_IN_PROGRESS). Paragraph jobs, including on archived accounts, are not affected.')
     problem('/v1/jobs','post',409,'REFERENCE_GENERATION_SUPERSEDED','This draft uses factors from a superseded reference generation; start a new analysis on this gap with current factors.')
     problem('/v1/jobs','post',503,'REFERENCE_RELOAD_IN_PROGRESS',reload)
-    describe('/v1/jobs/{job_id}/retry-review','post',' An analysis frozen on a superseded reference generation cannot retry review (409 REFERENCE_GENERATION_SUPERSEDED: start a new analysis on the gap with current factors). Analysis review retry waits while a reference reload is in progress (503 REFERENCE_RELOAD_IN_PROGRESS).')
+    describe('/v1/jobs/{job_id}/retry-review','post',' An analysis frozen on a superseded reference generation cannot validate and save retained output (409 REFERENCE_GENERATION_SUPERSEDED: start a new analysis on the gap with current factors). Saved-output validation waits while a reference reload is in progress (503 REFERENCE_RELOAD_IN_PROGRESS).')
     problem('/v1/jobs/{job_id}/retry-review','post',409,'REFERENCE_GENERATION_SUPERSEDED','This analysis used a superseded reference generation. Start a new analysis on this gap with current factors.')
-    problem('/v1/jobs/{job_id}/retry-review','post',503,'REFERENCE_RELOAD_IN_PROGRESS','Reference data is being reloaded. Retry review shortly.')
+    problem('/v1/jobs/{job_id}/retry-review','post',503,'REFERENCE_RELOAD_IN_PROGRESS','Reference data is being reloaded. Retry validation shortly.')
     describe('/v1/accounts/{dapper_id}','get',' An account built on a superseded reference generation carries archive (public copies null its job and request ids); it stays readable, downloadable and publishable, and paragraph jobs still run.')
     example('/v1/accounts/{dapper_id}','archived',dict(deepcopy(e['account']),archive=R['account']))
     describe('/v1/research-requests/{request_id}','get',' A request frozen on a superseded reference generation carries archive.')

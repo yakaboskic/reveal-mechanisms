@@ -90,6 +90,27 @@ def call_one(state, api_key, checkpoint, *, client=None):
 
 
 def process_response(state):
+    """A malformed reviewer response is no verdict, not rejected science.
+
+    Keep the same failure boundary as the synchronous reviewer. The durable
+    response remains available for inspection and an explicit review retry.
+    """
+    try:
+        return _process_response(state)
+    except Exception as exc:
+        audit = {'calls': state['session']['calls'],
+                 'actual_cost_usd': state['session']['spent'],
+                 'configured_max_usd': state['budget'],
+                 'reads': state.get('reads', []),
+                 'response_error_type': type(exc).__name__}
+        if isinstance(exc, grounding.ScientificReviewUnavailable):
+            audit.update(exc.audit)
+        raise grounding.ScientificReviewUnavailable(
+            str(exc) if isinstance(exc, grounding.ScientificReviewUnavailable)
+            else 'Scientific review evidence or response was invalid', audit) from exc
+
+
+def _process_response(state):
     state = deepcopy(state); response = state['response']
     if response is None and state.get('processed_response_sha256'): return state
     require(response is not None and state['pending'] is None, 'Review response is not durably acknowledged')

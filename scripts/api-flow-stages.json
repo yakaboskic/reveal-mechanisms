@@ -75,9 +75,9 @@
       ],
       "worker": [
         "Resolve frozen DisMech context; four same-seed CFDE connections plus contextual edges and BioIndex queries.",
-        "Build, validate and freeze the evidence package with exact source artifacts and supplied documents for the agent and independent reviewer.",
+        "Build, validate and freeze the evidence package with exact source artifacts and supplied documents for the research agent and final source validation.",
         "Fresh verified DAPPER clone, Claude Code in Box, selected Proto-OKN tools.",
-        "Trusted assembly, minting, final lint plus grounding/ledger/ownership checks."
+        "Trusted assembly, minting, final lint plus source/ledger/ownership checks; save passing accounts without a second AI review."
       ]
     },
     {
@@ -98,7 +98,7 @@
         "One active loading state; no private reasoning.",
         "Package is the schema-current captured input; account fixture is separately authored, not its accepted agent output.",
         "Completed activity compresses into Gap analysis complete.",
-        "Budget failures expose phase, cap and recorded spend. Incomplete independent review can be retried against verified saved output, without launching the research agent."
+        "Budget failures expose phase, cap and recorded spend. Output retained after an incomplete legacy review can be validated and saved without launching another research agent or AI reviewer."
       ]
     },
     {
