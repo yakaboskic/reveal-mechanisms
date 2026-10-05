@@ -24,7 +24,7 @@ import numpy as np
 
 from .eaggl_embeddings import QueryVectorCache, validate_vectors
 from .embedding_client import DEFAULT_MODEL, DEFAULT_SERVICE_URL, get_embeddings
-from .repository import canonical
+from .repository import canonical, digest
 from .runtime_config import setting
 
 POLICY_VERSION = 'upstash-cosine-reference-release-v1'
@@ -92,6 +92,13 @@ def query_vector_provenance(vectors):
             'query_vectors_base64': [base64.b64encode(np.asarray(vector, dtype='<f8').tobytes()).decode('ascii') for vector in vectors]}
 
 
+def embedding_space(embedding):
+    """Run id of a release's embedding space (its manifest `embedding` block). Vectors are a function of the model and the
+    text, so anchors bound under different releases of one space still share one run: evidence_package
+    frozen_semantic_association compares the run ids of a binding and of its suggestion."""
+    return digest({key: (embedding or {}).get(key) for key in ('model', 'model_revision', 'provider', 'dimensions')})
+
+
 def cosine_score(score):
     if isinstance(score, bool) or not isinstance(score, (int, float)) or not math.isfinite(score) or not -1e-6 <= score <= 1 + 1e-6:
         raise VectorUnavailable('Invalid cosine score from Vector')
@@ -122,12 +129,12 @@ class UpstashFactorIndex:
     """`<env>-factors` (query and fetch) and `<env>-contexts` (fetch) for one served reference release."""
     candidate_limit = MAX_CANDIDATES
 
-    def __init__(self, factor_ids, *, dimensions, release_id, environment_name=None, client=None):
+    def __init__(self, factor_ids, *, dimensions, release_id, embedding_run=None, environment_name=None, client=None):
         if type(dimensions) is not int or dimensions < 1:
             raise VectorUnavailable('The reference release does not name its embedding dimensions')
         self.environment = environment(environment_name)
         self.factor_namespace, self.context_namespace = namespace('factors', self.environment), namespace('contexts', self.environment)
-        self.dimensions, self.release_id = dimensions, release_id
+        self.dimensions, self.release_id, self.embedding_run = dimensions, release_id, embedding_run or release_id
         self.factors = [{'factor_id': identity} for identity in factor_ids]
         self.served = frozenset(factor_ids)
         self.client = client if client is not None else client_from_environment()
@@ -238,7 +245,7 @@ class UpstashFactorIndex:
                 'candidate_limit': self.candidate_limit, 'policy_version': POLICY_VERSION, 'release_id': self.release_id,
                 'factor_namespace': self.factor_namespace, 'context_namespace': self.context_namespace,
                 'query_embedding': {'model': config['model'], 'provider': config['provider'], 'dimensions': self.dimensions},
-                'mapping_run_id': self.release_id, 'embedding_run_id': self.release_id, 'dismech_embedding_run_id': self.release_id}
+                'mapping_run_id': self.embedding_run, 'embedding_run_id': self.embedding_run, 'dismech_embedding_run_id': self.embedding_run}
 
 
 def retrieve_native(index, factor_legacy, vectors, limit, exclude=()):

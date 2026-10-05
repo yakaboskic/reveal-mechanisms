@@ -23,6 +23,7 @@ class StoredSuggestionTests(unittest.TestCase):
         self.catalog = Catalog()
         self.catalog.loaded = True
         self.catalog.release_id = fixtures.RELEASE
+        self.catalog.embedding_run = 'embedding-space'
         self.catalog.index = fixtures.make_release_index({text: vector for text, vector in zip(('alpha', 'beta', 'gamma'), fixtures.embedding(['alpha', 'beta', 'gamma']).tolist())})
         self.provider = self.catalog.index.client
         self.catalog.dismech_import = 'dismech-import'
@@ -62,7 +63,7 @@ class StoredSuggestionTests(unittest.TestCase):
                 self.assertTrue(result)
                 self.assertEqual(result[0]['contexts'], ['dapper:gap'])
         provenance = self.catalog.context_embedding_provenance([('dapper:gap', 'gamma')])
-        self.assertEqual(provenance['dismech_embedding_run_id'], fixtures.RELEASE)
+        self.assertEqual(provenance['dismech_embedding_run_id'], 'embedding-space')
         self.assertEqual(provenance['context_embedding_inputs'][0], {
             key: value for key, value in context_input('source:gap', 'knowledge_gap', 'c' * 64, 'gamma').items() if key != 'input_text'})
         self.assertEqual(provenance['context_embedding_inputs'][0]['template'], 'dismech-gap-text-v1')

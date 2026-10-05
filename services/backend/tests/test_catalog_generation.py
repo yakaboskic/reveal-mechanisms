@@ -27,7 +27,7 @@ from reveal_backend.dismech_embeddings import TEMPLATES
 from reveal_backend.evidence_package import canonical_json, sha256
 from reveal_backend.reference_generation import KPN_MODEL, archive_id, factor_key, mechanism_node, public_id
 from reveal_backend.repository import Repository, canonical, digest
-from reveal_backend.vector_retrieval import UpstashFactorIndex
+from reveal_backend.vector_retrieval import UpstashFactorIndex, embedding_space
 
 DISMECH_IMPORT = digest('dismech-import')
 EAGGL_IMPORT = digest('eaggl-import')
@@ -240,7 +240,8 @@ class CatalogReleaseTests(unittest.TestCase):
     def test_release_serves_every_factor_with_records_and_bindings(self):
         catalog = self.load()
         self.assertEqual((catalog.release_id, catalog.reference_generation_id, catalog.model), (R1, R1, KPN_MODEL))
-        self.assertEqual((catalog.mapping_run, catalog.geneset_import, catalog.embedding_run, catalog.eaggl_import), (R1, R1, R1, EAGGL_IMPORT))
+        space = embedding_space(manifest()['embedding'])  # the run fields name the embedding space, not the release
+        self.assertEqual((catalog.mapping_run, catalog.geneset_import, catalog.embedding_run, catalog.eaggl_import), (space, R1, space, EAGGL_IMPORT))
         self.assertEqual(catalog.release, {'release_id': R1, 'published_at': '2026-10-05 12:00:00', 'manifest': manifest()})
         self.assertTrue(self.queried('FROM reveal_ref_release') and self.queried('reveal_ref_factors f JOIN reveal_ref_traits t'))
         for retired in ('reference_generations', 'kpn_traits', 'reference_factors', 'eaggl_cfde', 'eaggl_embedding_runs', 'dismech_embedding'):
@@ -260,7 +261,7 @@ class CatalogReleaseTests(unittest.TestCase):
         self.assertIs(catalog.factor_legacy[key], catalog.factors[T2D2])
         # Bindings keep their field names; every run field names the release.
         self.assertEqual(catalog.bindings[T2D2], {'eaggl_factor_id': 'T2D::Factor2', 'factor_key': key, 'kpn_trait_id': trait,
-            'eaggl_import_id': EAGGL_IMPORT, 'embedding_run_id': R1, 'mapping_run_id': R1, 'gene_set_import_id': R1,
+            'eaggl_import_id': EAGGL_IMPORT, 'embedding_run_id': space, 'mapping_run_id': space, 'gene_set_import_id': R1,
             'reference_generation_id': R1, 'model': KPN_MODEL, 'cfde_node_id': T2D2, 'cfde_payload': meta})
         self.assertEqual(catalog.provenance('q', 'hybrid', True), {'query': 'q', 'mode': 'hybrid', 'corpus_snapshot': R1, 'embedding_model': 'm',
             'embedding_revision': R1, 'template_version': 'eaggl-label-v1', 'score_aggregation': 'maximum_per_context'})
@@ -272,7 +273,7 @@ class CatalogReleaseTests(unittest.TestCase):
         self.publish(R1, release_manifest={'embedding': {'dimensions': 2}})
         catalog = self.load()
         self.assertIsNone(catalog.bindings[T2D1]['eaggl_import_id'])
-        self.assertEqual(catalog.bindings[T2D1]['mapping_run_id'], R1)
+        self.assertEqual(catalog.bindings[T2D1]['mapping_run_id'], embedding_space({'dimensions': 2}))
 
     def test_lexical_and_fuzzy_search_match_label_public_id_and_trait(self):
         catalog = self.load()
@@ -288,7 +289,8 @@ class CatalogReleaseTests(unittest.TestCase):
         rows = catalog.search_factors('insulin', 'semantic', 2, query_vector=np.array([1., 0.]))
         self.assertEqual([row['record']['source_id'] for row in rows], [T2D1, T2D2])
         retrieval = rows[0]['retrieval']
-        self.assertEqual((retrieval['release_id'], retrieval['mapping_run_id'], retrieval['embedding_run_id']), (R1, R1, R1))
+        space = embedding_space(manifest()['embedding'])
+        self.assertEqual((retrieval['release_id'], retrieval['mapping_run_id'], retrieval['embedding_run_id']), (R1, space, space))
         self.assertEqual(retrieval['aliases'], [{'id': factor_key('KPN.TRAIT:0000398', 'Factor1'), 'vector_sha256': 'v-T2D::Factor1'}])
         gap = catalog.by_source[OPEN_GAP['id']]['object']  # An unattached gap suggests from its prompt's stored vector.
         with patch.object(catalog_module, 'get_embeddings', side_effect=AssertionError('Stored contexts need no embedding call')):
@@ -301,7 +303,7 @@ class CatalogReleaseTests(unittest.TestCase):
         self.assertEqual(linked[0]['record']['source_id'], T2D1)
         self.assertEqual(linked[0]['context_similarities'], {MECHANISM['id']: 1.0})
         self.assertEqual(catalog.context_embedding_provenance([(MECHANISM['id'], MECHANISM['description'])]), {
-            'dismech_embedding_run_id': R1, 'dismech_import_id': DISMECH_IMPORT, 'context_embedding_templates': TEMPLATES,
+            'dismech_embedding_run_id': space, 'dismech_import_id': DISMECH_IMPORT, 'context_embedding_templates': TEMPLATES,
             'context_embedding_inputs': [{'source_id': MECHANISM['id'], 'source_kind': 'mechanism', 'source_revision': FILES[MECHANISM['source_file']],
                                           'template': 'dismech-description-v1', 'input_sha256': sha256(MECHANISM['description'].encode())}]})
         self.assertProblem(503, 'DISMECH_EMBEDDINGS_NOT_READY', catalog.context_embedding_provenance, [('unknown', 'text')])
@@ -390,7 +392,9 @@ class CatalogReleaseTests(unittest.TestCase):
         self.assertTrue(catalog.refresh_if_changed())
         self.assertEqual((catalog.release_id, self.repo.reads), (R2, 1))
         self.assertEqual((catalog.factors[T2D1]['reference_generation_id'], catalog.factors[T2D1]['cfde_anchor']['label']), (R2, 'insulin secretion (refit)'))
-        self.assertEqual({catalog.bindings[T2D1][key] for key in ('embedding_run_id', 'mapping_run_id', 'gene_set_import_id', 'reference_generation_id')}, {R2})
+        self.assertEqual({catalog.bindings[T2D1][key] for key in ('gene_set_import_id', 'reference_generation_id')}, {R2})
+        # Same embedding space: anchors bound under either release share their runs (evidence_package compares them).
+        self.assertEqual({catalog.bindings[T2D1][key] for key in ('embedding_run_id', 'mapping_run_id')}, {embedding_space(manifest()['embedding'])})
         self.assertEqual(first_factors[T2D1]['reference_generation_id'], R1)  # Readers of the old state kept a consistent view.
         self.assertEqual(catalog.index.release_id, R2)
         self.assertEqual(len(self.runtimes), 1)  # The DAPPER runtime is process-wide.

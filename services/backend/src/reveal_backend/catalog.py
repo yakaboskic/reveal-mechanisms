@@ -26,7 +26,8 @@ from .runtime_config import ROOT, setting, mysql_connection
 from .evidence_package import DapperRuntime, canonical_json, sha256
 from .embedding_client import get_embeddings
 from .dismech_embeddings import TEMPLATES, context_input
-from .vector_retrieval import UpstashFactorIndex, VectorUnavailable, embedding_config, retrieve_native, query_vector_provenance
+from .vector_retrieval import (UpstashFactorIndex, VectorUnavailable, embedding_config, embedding_space, retrieve_native,
+    query_vector_provenance)
 from .reference_generation import (GENERATION_RE, KPN_MODEL, ReferenceError as ReferenceInvariant,
     mechanism_node, parse_factor_key, public_id)
 import numpy as np
@@ -116,8 +117,9 @@ class Catalog:
         self.repo = repo
         self.refresh_lock, self.lookup_lock = threading.Lock(), threading.Lock()
         self.release_checked_at = None
-        # The served reference release, resolved by load(). Every run field of a binding names it.
-        self.release = self.release_id = self.reference_generation_id = None
+        # The served reference release, resolved by load(), and the run id of its embedding space (embedding_space).
+        self.release = self.release_id = self.reference_generation_id = self.geneset_import = None
+        self.embedding_run = self.mapping_run = None
         self.model = KPN_MODEL
         # archive_cache: {archive_id: (checked_at, snapshot|None)}; archive_unavailable_at: when the table was last found missing or empty.
         self.archive_cache, self.archive_unavailable_at = {}, None
@@ -218,7 +220,8 @@ class Catalog:
         if published and published != embedding_config()['model']:
             LOGGER.warning('The configured query embedding model differs from the reference release embedding model')
         try:
-            index = UpstashFactorIndex([row['factor_key'] for row in factor_rows], dimensions=embedding.get('dimensions'), release_id=self.release_id)
+            index = UpstashFactorIndex([row['factor_key'] for row in factor_rows], dimensions=embedding.get('dimensions'), release_id=self.release_id,
+                                       embedding_run=self.embedding_run)
         except VectorUnavailable as error:
             raise Problem(503, 'SEMANTIC_SEARCH_UNAVAILABLE', str(error)) from error
         check_vector_readiness(index)
@@ -253,9 +256,10 @@ class Catalog:
                     item = json.loads(r[0]); attachments[item['gap_id']].append(item)
                 factor_rows = self.release_factors(cursor)
             self.release, self.release_id = release, release['release_id']
-            # Bindings keep their run field names; each names the release (evidence_package.frozen_semantic_association
-            # compares the run ids of a binding and of its suggestion).
-            self.reference_generation_id = self.mapping_run = self.geneset_import = self.embedding_run = self.release_id
+            # Bindings keep their field names: the generation and gene-set fields name the release, the run fields its
+            # embedding space (vector_retrieval.embedding_space), so a release that only adds gene sets keeps every run.
+            self.reference_generation_id = self.geneset_import = self.release_id
+            self.mapping_run = self.embedding_run = embedding_space(release['manifest'].get('embedding'))
             self.eaggl_import = release['manifest'].get('eaggl_import_id')
             self.index = self.vector_index(factor_rows)
         finally: connection.close()
@@ -300,7 +304,7 @@ class Catalog:
                 'catalog_file': runtime.file('cfde-factor.json', canonical_json(metadata), 'application/json')}
             self.factors[native] = record; self.factor_legacy[row['factor_key']] = record
             self.bindings[native] = {'eaggl_factor_id': row['eaggl_factor_id'], 'factor_key': row['factor_key'], 'kpn_trait_id': trait,
-                'eaggl_import_id': getattr(self, 'eaggl_import', None), 'embedding_run_id': release, 'mapping_run_id': release,
+                'eaggl_import_id': getattr(self, 'eaggl_import', None), 'embedding_run_id': self.embedding_run, 'mapping_run_id': self.mapping_run,
                 'gene_set_import_id': release, 'reference_generation_id': release, 'model': KPN_MODEL,
                 'cfde_node_id': native, 'cfde_payload': metadata}
     def retrieval_index(self):
@@ -459,7 +463,7 @@ class Catalog:
 
     def context_embedding_provenance(self, contexts):
         inputs = self.context_inputs(contexts)
-        return {'dismech_embedding_run_id': self.release_id, 'dismech_import_id': self.dismech_import,
+        return {'dismech_embedding_run_id': self.embedding_run, 'dismech_import_id': self.dismech_import,
                 'context_embedding_templates': deepcopy(TEMPLATES),
                 'context_embedding_inputs': [{key: value for key, value in row.items() if key != 'input_text'} for row in inputs]}
 
