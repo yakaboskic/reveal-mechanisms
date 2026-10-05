@@ -1,38 +1,40 @@
 """Collect a gap and KPN factors from MySQL without CFDE/BioIndex requests.
 
-The evidence source for model eaggl-capped-v1 (docs/reference-reload.md §8). It produces the
-same build input as evidence_collector.collect_package, so the unchanged offline builder
+The evidence source for model eaggl-capped-v1. It produces the same build input as
+evidence_collector.collect_package, so the unchanged offline builder
 (evidence_package.build_package) and the worker's checks accept it. DisMech gap, attachment
 and document handling is identical to collect_package. Frozen researcher text and uploads are
 captured privately with the same immutable storage references and checksums. The CFDE interactive API and BioIndex
-captures are replaced by captures read from one reference generation in MySQL. Every capture
-goes through the same CaptureStore (exact bytes, sha256) with a string `origin` naming its SQL
-tables and the generation: `mysql:<table>+<table>?generation_id=<gen>` for SQL results and
-`mysql-derived:<artifact>+<artifact>?generation_id=<gen>` for captures computed only from them.
+captures are replaced by captures read from this environment's current reference release: the
+flat reveal_ref_* tables (named per application prefix by repository.application_sql). Every
+capture goes through the same CaptureStore (exact bytes, sha256) with a string `origin` naming its
+tables and the release: `mysql:<table>+<table>?release_id=<release>` for SQL results and
+`mysql-derived:<artifact>+<artifact>?release_id=<release>` for captures computed only from them.
+Tables and statements are recorded with their contract names (reveal_ref_*); the release id
+identifies the data whatever prefix serves it.
 
 Capture formats (JSON artifacts; numbers are the MySQL values, never rescaled)
 
-`reveal.reference-evidence.mysql-capture/1`: SQL statements and their rows
-    {format, generation_id, model, source: {kind: 'mysql', tables, statements: [{sql, parameters,
+`reveal.reference-evidence.mysql-capture/2`: SQL statements and their rows
+    {format, release_id, model, source: {kind: 'mysql', tables, statements: [{sql, parameters,
      row_count}]}, ..., data: [row, ...]}     rows sorted deterministically, not in engine order
-  reference-generation      the reference_generations row
-  reference-factors         the anchors: reference_factors x kpn_traits, with metadata
-  eaggl-factor-index        the anchors' eaggl_factors rows (factor_index, factor_id)
-  factor-gene-overlap       loadings of every EAGGL factor on the gene candidates
-  candidate-factors         reference_factors x kpn_traits of the top overlapping factors (an
-                            EAGGL factor missing from the generation is left out: requested_eaggl_factor_ids)
-  gene-set-payloads         cfde_gene_sets rows of the gene-set candidates (metadata JSON)
-  gene-set-collections      their collections; of the payload only `provenance` (the collection
-                            YAML's prefixes, organizations, datasets, files and activities)
+  reference-release         the reveal_ref_release row
+  reference-factors         the anchors: reveal_ref_factors x reveal_ref_traits, with metadata
+  factor-gene-overlap       loadings (reveal_ref_factor_genes) of every factor on the gene candidates
+  candidate-factors         reveal_ref_factors x reveal_ref_traits of the top overlapping factors (a
+                            factor key missing from reveal_ref_factors is left out: requested_factor_keys)
+  gene-set-payloads         reveal_ref_gene_sets rows of the gene-set candidates (metadata JSON)
+  gene-set-collections      their reveal_ref_collections; of the payload only `provenance` (the
+                            collection YAML's prefixes, organizations, datasets, files and activities)
   contextual-gene-set-projections  retained candidate factors x retained gene sets
 BioIndex-compatible captures add {index, q, limit: null, continuation: null, scope}, so the
 builder binds them like its BioIndex queries. `limit` is null because each is a complete SQL
 result, not a page. Every row has phenotype (the KPN trait number), trait_group 'kpn',
 gene_set_size (the model string: the builder's scope key, not a gene count) and factor, plus:
-  gene-factor-<tag>         gene, factor_value = eaggl_gene_loadings.loading, gene_index
+  gene-factor-<tag>         gene, factor_value = reveal_ref_factor_genes.loading
   gene_set-factor-<tag>     gene_set (dapper:GeneSet id), factor_value = joint_loading, the
-                            marginal loading, both %.4g texts, joint/marginal ranks,
-                            is_joint_top_factor, gene_set_name, library, collection_id,
+                            marginal loading, both %.4g texts, joint/marginal ranks (per
+                            library), is_joint_top_factor, gene_set_name, library, collection_id,
                             cfde_label, n_genes, n_genes_in_eaggl_universe
 Trait-level PIGEAN phenotype associations (gene/gene-set to trait: combined/log_bf/prior,
 beta/rs_score) are not in MySQL, so no trait-scope query is bound. The build policy allows
@@ -41,7 +43,7 @@ bioindex:trait:trait:kpn:NNNNNNN:(gene|gene_set):not_captured, and box_adapter a
 package whose only blockers are these. Factor-scope rows carry no trait metrics either: the
 package's trait observations (ascertained via a mechanism) have empty reported_metrics, never zero.
 
-`reveal.reference-evidence.derived-capture/1`: computed only from the captures above
+`reveal.reference-evidence.derived-capture/2`: computed only from the captures above
   connections-<target>  typed candidates in the interactive-API request/response shape that the
       builder reads. `method: 'POST'` and `status: 200` are the builder's completed-query
       envelope. No HTTP request is made: source.kind is 'mysql-derived' and there is no `url`.
@@ -57,17 +59,20 @@ package's trait observations (ascertained via a mechanism) have empty reported_m
                         among the retained nodes (anchors and retained factor candidates)
   gene-set-resolution   per gene-set candidate: exact CFDE DAPPER GeneSet, or alias only and why
 
+Format /1 captures (reference generations) carried generation_id instead of release_id and read
+the generation-scoped tables; packages built from them keep validating (scientific_account_lint).
+
 Identifiers. Anchors are KPN public ids, factor:kpn:NNNNNNN:eaggl-capped-v1:FactorN. Their fit
 has trait_group 'kpn', phenotype NNNNNNN, trait_id trait:kpn:NNNNNNN and upstream_build = the
-generation id. Mechanism nodes come from reference_generation.mechanism_node, so their ids
-agree with the catalog. Genes are gene:<EAGGL symbol>, traits trait:kpn:NNNNNNN, and gene sets
+release id. Mechanism nodes come from reference_generation.mechanism_node, so their ids
+agree with the catalog. Genes are gene:<symbol>, traits trait:kpn:NNNNNNN, and gene sets
 gene_set:<dapper:GeneSet id>.
 
 Gene sets. The builder binds a gene-set candidate to a DAPPER GeneSet whose
 alternate_identifier contains the candidate id. A CFDE GeneSet (alternate_identifier = [name])
 cannot contain it without changing its identity. Each retained gene set therefore has an alias
 GeneSet {name, member_type, alternate_identifier: [gene_set:<CFDE id>]}, and the binding names
-the alias. The exact CFDE GeneSet is added when cfde_gene_sets.metadata['dapper_gene_set']
+the alias. The exact CFDE GeneSet is added when reveal_ref_gene_sets.metadata['dapper_gene_set']
 holds the node as written in its GeneSetCollection YAML and every DAPPER object it refers to
 is stored:
   - the non-identity slots in_gene_set_collection, in_gmt_file, gmt_entry and has_embedding
@@ -83,6 +88,7 @@ HGNC.SYMBOL as the default; only prefixes the included objects use join the pack
 from __future__ import annotations
 
 from copy import deepcopy
+from datetime import timezone
 import json
 import math
 from pathlib import Path
@@ -92,12 +98,13 @@ import time
 from .evidence_collector import CaptureStore, add_source_prefixes, deepcopy_record, gz_records
 from .evidence_package import (BUILD_VERSION, INPUT_VERSION, TARGETS, EvidenceBuildError, build_package, canonical_json,
                                decode, finite, frozen_semantic_association, pointer, ref, require, sha256, unique)
-from .reference_generation import (GENERATION_RE, KPN_KIND, KPN_MODEL, PROJECTION_SCOPE, ReferenceError, kpn_number,
-                                   mechanism_node, parse_public_id)
+from .reference_generation import GENERATION_RE, KPN_MODEL, ReferenceError, kpn_number, mechanism_node, parse_public_id
+from .repository import application_prefix, application_sql
 
-ROWS_FORMAT = 'reveal.reference-evidence.mysql-capture/1'
-DERIVED_FORMAT = 'reveal.reference-evidence.derived-capture/1'
-USABLE_STATUSES = ('complete', 'superseded')
+ROWS_FORMAT = 'reveal.reference-evidence.mysql-capture/2'
+DERIVED_FORMAT = 'reveal.reference-evidence.derived-capture/2'
+# Projection ranks are per library (reveal_ref_projections has no scope column).
+PROJECTION_SCOPE = 'per_library'
 TRAIT_GROUP = 'kpn'
 MAX_PACKAGE_BYTES = 2_000_000
 IN_BATCH = 500
@@ -111,27 +118,30 @@ INSTRUCTIONS = ('services/backend/agent-skills/construct-scientific-account/SKIL
                 'docs/scientific-account-construction.md', 'docs/pigean-claim-model.md', 'docs/dapper-integration.md',
                 'docs/agent-evidence-integration.md', 'services/backend/agent-skills/read-evidence-package/SKILL.md')
 
-FACTOR_COLUMNS = ('factor_key', 'public_id', 'eaggl_factor_id', 'kpn_trait_id', 'factor_number', 'label', 'eaggl_import_id')
+RELEASE_COLUMNS = ('release_id', 'published_at', 'manifest')
+RELEASE_SQL = 'SELECT release_id,published_at,manifest FROM reveal_ref_release'
+FACTOR_COLUMNS = ('factor_key', 'public_id', 'eaggl_factor_id', 'kpn_trait_id', 'factor_number', 'label')
 FACTOR_DETAIL = ('input_sha256', 'source_revision', 'metadata')
 TRAIT_COLUMNS = ('phenotype_name', 'legacy_phenotype_id', 'trait_group', 'trait_type')
 FACTOR_SQL = ('SELECT ' + ','.join('f.' + c for c in FACTOR_COLUMNS) + ',{detail}' + ','.join('t.' + c for c in TRAIT_COLUMNS) +
-              ' FROM reference_factors f JOIN kpn_traits t ON t.generation_id=f.generation_id AND t.kpn_trait_id=f.kpn_trait_id'
-              ' WHERE f.generation_id=%s AND f.{column} IN ({marks})')
+              ' FROM reveal_ref_factors f JOIN reveal_ref_traits t ON t.kpn_trait_id=f.kpn_trait_id WHERE f.{column} IN ({marks})')
+FACTOR_TABLES = ['reveal_ref_factors', 'reveal_ref_traits']
+LOADING_SQL = 'SELECT gene,loading FROM reveal_ref_factor_genes WHERE factor_key=%s'
+OVERLAP_SQL = 'SELECT factor_key,gene,loading FROM reveal_ref_factor_genes WHERE gene IN ({marks})'
 PROJECTION_COLUMNS = ('factor_key', 'gene_set_id', 'joint_loading', 'marginal_loading', 'joint_loading_text',
                       'marginal_loading_text', 'joint_rank', 'marginal_rank', 'is_joint_top_factor')
 PROJECTION_EXTRA = PROJECTION_COLUMNS[3:]
-PROJECTION_SQL = ('SELECT ' + ','.join('p.' + c for c in PROJECTION_COLUMNS) + ' FROM factor_gene_set_projections p'
-                  ' WHERE p.generation_id=%s AND p.scope=%s AND p.factor_key IN ({keys}) AND p.gene_set_id IN ({marks})')
+PROJECTION_SQL = ('SELECT ' + ','.join('p.' + c for c in PROJECTION_COLUMNS) + ' FROM reveal_ref_projections p'
+                  ' WHERE p.factor_key IN ({keys}) AND p.gene_set_id IN ({marks})')
 GENE_SET_COLUMNS = ('gene_set_name', 'library', 'collection_id', 'cfde_label', 'n_genes', 'n_genes_in_eaggl_universe')
 ANCHOR_PROJECTION_SQL = ('SELECT ' + ','.join('p.' + c for c in PROJECTION_COLUMNS) +
                          ',s.gene_set_name,s.library,s.collection_id,c.cfde_label,s.n_genes,s.n_genes_in_eaggl_universe'
-                         ' FROM factor_gene_set_projections p JOIN cfde_gene_sets s ON s.generation_id=p.generation_id AND s.gene_set_id=p.gene_set_id'
-                         ' JOIN cfde_gene_set_collections c ON c.generation_id=s.generation_id AND c.collection_id=s.collection_id'
-                         ' WHERE p.generation_id=%s AND p.scope=%s AND p.factor_key=%s')
+                         ' FROM reveal_ref_projections p JOIN reveal_ref_gene_sets s ON s.gene_set_id=p.gene_set_id'
+                         ' JOIN reveal_ref_collections c ON c.collection_id=s.collection_id WHERE p.factor_key=%s')
 GENE_SET_SQL = ('SELECT gene_set_id,collection_id,gene_set_name,library,n_genes,n_genes_in_eaggl_universe,legacy_source_key,metadata'
-                ' FROM cfde_gene_sets WHERE generation_id=%s AND gene_set_id IN ({marks})')
-COLLECTION_SQL = ("SELECT collection_id,cfde_label,library,n_sets,JSON_EXTRACT(payload,'$.provenance') FROM cfde_gene_set_collections"
-                  ' WHERE generation_id=%s AND collection_id IN ({marks})')
+                ' FROM reveal_ref_gene_sets WHERE gene_set_id IN ({marks})')
+COLLECTION_SQL = ("SELECT collection_id,cfde_label,library,n_sets,JSON_EXTRACT(payload,'$.provenance') FROM reveal_ref_collections"
+                  ' WHERE collection_id IN ({marks})')
 PROVENANCE_GROUPS = ('activities', 'files', 'datasets', 'organizations')
 JSON_COLUMNS = ('manifest', 'metadata', 'provenance')
 
@@ -148,17 +158,22 @@ def _value(column, value):
     if isinstance(value, (bytes, bytearray)): value = bytes(value).decode('utf-8')
     if column in JSON_COLUMNS and isinstance(value, str): value = json.loads(value)
     if isinstance(value, float): finite(value, column)
+    if hasattr(value, 'isoformat'):  # MySQL sessions run in UTC.
+        value = (value if value.tzinfo else value.replace(tzinfo=timezone.utc)).astimezone(timezone.utc).isoformat().replace('+00:00', 'Z')
     return value
 
 
 class _Reader:
-    """One DB-API connection (one consistent read transaction); every statement is recorded."""
-    def __init__(self, connection):
-        self.connection, self.count = connection, 0
+    """One DB-API connection (one consistent read transaction); every statement is recorded.
+
+    Statements name the contract tables (reveal_ref_*); they run against this environment's prefix.
+    """
+    def __init__(self, connection, prefix=None):
+        self.connection, self.count, self.prefix = connection, 0, application_prefix(prefix)
 
     def rows(self, statements, sql, parameters, columns):
         with self.connection.cursor() as cursor:
-            cursor.execute(sql, tuple(parameters))
+            cursor.execute(application_sql(sql, self.prefix), tuple(parameters))
             result = cursor.fetchall()
         require(all(len(row) == len(columns) for row in result), 'Unexpected MySQL result shape')
         statements.append({'sql': sql, 'parameters': list(parameters), 'row_count': len(result)}); self.count += 1
@@ -173,20 +188,20 @@ class _Reader:
         return rows
 
 
-def _origin(kind, names, generation_id):
-    return f"{kind}:{'+'.join(names)}?generation_id={generation_id}"
+def _origin(kind, names, release_id):
+    return f"{kind}:{'+'.join(names)}?release_id={release_id}"
 
 
-def _add_rows(store, key, generation_id, tables, statements, data, **fields):
-    body = {'format': ROWS_FORMAT, 'generation_id': generation_id, 'model': KPN_MODEL,
+def _add_rows(store, key, release_id, tables, statements, data, **fields):
+    body = {'format': ROWS_FORMAT, 'release_id': release_id, 'model': KPN_MODEL,
             'source': {'kind': 'mysql', 'tables': list(tables), 'statements': statements}, **fields, 'data': data}
-    return store.add(key, canonical_json(body), 'json', origin=_origin('mysql', tables, generation_id))
+    return store.add(key, canonical_json(body), 'json', origin=_origin('mysql', tables, release_id))
 
 
-def _add_derived(store, key, generation_id, derived_from, body):
-    body = {'format': DERIVED_FORMAT, 'generation_id': generation_id, 'model': KPN_MODEL, **body,
+def _add_derived(store, key, release_id, derived_from, body):
+    body = {'format': DERIVED_FORMAT, 'release_id': release_id, 'model': KPN_MODEL, **body,
             'source': {'kind': 'mysql-derived', 'derived_from': list(derived_from), **body.get('source', {})}}
-    return store.add(key, canonical_json(body), 'json', origin=_origin('mysql-derived', derived_from, generation_id))
+    return store.add(key, canonical_json(body), 'json', origin=_origin('mysql-derived', derived_from, release_id))
 
 
 def _tag(value):
@@ -206,31 +221,31 @@ def _trait_node(kpn_trait_id):
 
 
 def _scope_row(row):
-    """The builder's BioIndex scope keys for a reference_factors row."""
+    """The builder's BioIndex scope keys for a reveal_ref_factors row."""
     return {'phenotype': kpn_number(row['kpn_trait_id']), 'trait_group': TRAIT_GROUP, 'gene_set_size': KPN_MODEL,
             'factor': _factor_of(row['public_id'])}
 
 
-def _edge(generation_id, family, relation, source, target, raw_score=None, extra=None):
+def _edge(release_id, family, relation, source, target, raw_score=None, extra=None):
     """Deterministic edge: one relationship has the same bytes in every capture."""
-    edge = {'id': sha256(canonical_json(['reveal.reference-edge/1', generation_id, family, source, target]))[:32],
+    edge = {'id': sha256(canonical_json(['reveal.reference-edge/1', release_id, family, source, target]))[:32],
             'source': source, 'target': target, 'family': family, 'relation': relation, 'label': family.replace('_', ' '),
             'path_nodes': [source, target], 'extra': extra or {}}
     if raw_score is not None: edge['raw_score'] = finite(raw_score, 'edge raw_score')
     return edge
 
 
-def _gene_edge(generation_id, source, symbol, loading):
-    return _edge(generation_id, 'factor_gene_direct', 'direct', source, 'gene:' + symbol, loading)
+def _gene_edge(release_id, source, symbol, loading):
+    return _edge(release_id, 'factor_gene_direct', 'direct', source, 'gene:' + symbol, loading)
 
 
-def _gene_set_edge(generation_id, source, row):
-    return _edge(generation_id, 'factor_gene_set_direct', 'direct', source, 'gene_set:' + row['gene_set_id'], row['joint_loading'],
+def _gene_set_edge(release_id, source, row):
+    return _edge(release_id, 'factor_gene_set_direct', 'direct', source, 'gene_set:' + row['gene_set_id'], row['joint_loading'],
                  {'projection_scope': PROJECTION_SCOPE, **{c: row[c] for c in PROJECTION_EXTRA}})
 
 
-def _trait_edge(generation_id, source, kpn_trait_id):
-    return _edge(generation_id, 'factor_trait_direct', 'factor_of_trait', source, _trait_node(kpn_trait_id), None, {'kpn_trait_id': kpn_trait_id})
+def _trait_edge(release_id, source, kpn_trait_id):
+    return _edge(release_id, 'factor_trait_direct', 'factor_of_trait', source, _trait_node(kpn_trait_id), None, {'kpn_trait_id': kpn_trait_id})
 
 
 def _candidate(node, edges, anchor_count, aggregate):
@@ -345,37 +360,37 @@ def _dismech_context(store, dapper, dismech_source, gap_manifest, gap_record, ha
 
 class _Evidence:
     """Everything read for one package; captures are written to the store as they are read."""
-    def __init__(self, store, reader, dapper, generation_id, factor_ids, limit):
-        self.store, self.reader, self.dapper, self.generation_id = store, reader, dapper, generation_id
+    def __init__(self, store, reader, dapper, release_id, factor_ids, limit):
+        # release_id: the release the caller expects, or None for whichever release is published.
+        self.store, self.reader, self.dapper, self.release_id = store, reader, dapper, release_id
         self.factor_ids, self.limit, self.count = factor_ids, limit, len(factor_ids)
         self.mechanisms, self.mechanism_nodes, self.bioindex, self.connections, self.candidates = {}, {}, [], {}, {}
-        self.factor_rows = {}        # public id -> reference_factors row (anchors and factor candidates)
+        self.factor_rows = {}        # public id -> reveal_ref_factors row (anchors and factor candidates)
         self.gene_loadings = {}      # anchor -> {symbol: loading}
-        self.gene_index = {}         # symbol -> eaggl gene_index
         self.projections = {}        # anchor -> {gene_set_id: projection row}
         self.gene_set_info = {}      # gene_set_id -> name/library/collection columns
-        self.profiles = {}           # eaggl factor id -> {symbol: loading} on the gene candidates
+        self.profiles = {}           # factor key -> {symbol: loading} on the gene candidates
         self.anchor_captures = {}    # anchor -> (gene capture, gene-set capture)
 
     def rows(self, key, tables, sql, parameters, columns, sort, **fields):
         statements = []
         data = sorted(self.reader.rows(statements, sql, parameters, columns), key=sort)
-        _add_rows(self.store, key, self.generation_id, tables, statements, data, **fields)
+        _add_rows(self.store, key, self.release_id, tables, statements, data, **fields)
         return data
 
     def factor_rows_by(self, key, column, values, detail=False, **fields):
         statements, rows = [], []
         if values:
             columns = FACTOR_COLUMNS + (FACTOR_DETAIL if detail else ()) + TRAIT_COLUMNS
-            rows = self.reader.batched(statements, FACTOR_SQL, [self.generation_id], sorted(values), columns, column=column,
+            rows = self.reader.batched(statements, FACTOR_SQL, [], sorted(values), columns, column=column,
                                        detail=''.join('f.' + c + ',' for c in FACTOR_DETAIL) if detail else '')
         rows.sort(key=lambda row: (row['kpn_trait_id'], row['factor_number'], row['factor_key']))
-        _add_rows(self.store, key, self.generation_id, ['reference_factors', 'kpn_traits'], statements, rows, **fields)
+        _add_rows(self.store, key, self.release_id, FACTOR_TABLES, statements, rows, **fields)
         return rows
 
     def read(self):
-        generation = self.generation()
-        anchors = self.anchors(generation)
+        self.release()
+        anchors = self.anchors()
         for identity in self.factor_ids: self.anchor_observations(identity)
         self.request = {'anchor_items': [self.anchor_item(identity) for identity in self.factor_ids], 'exclude_node_ids': self.factor_ids,
                         'model': KPN_MODEL, 'reducer': 'mean', 'connection_scope': 'direct', 'context': '', 'limit': self.limit}
@@ -387,43 +402,31 @@ class _Evidence:
         # loadings are not phenotype-query associations. The builder records the explicit blockers.
         return self
 
-    def generation(self):
-        rows = self.rows('reference-generation', ['reference_generations'],
-                         'SELECT generation_id,kind,model,status,eaggl_import_id,eaggl_embedding_run_id,dismech_import_id,manifest '
-                         'FROM reference_generations WHERE generation_id=%s', [self.generation_id],
-                         ('generation_id', 'kind', 'model', 'status', 'eaggl_import_id', 'eaggl_embedding_run_id', 'dismech_import_id', 'manifest'),
-                         lambda row: row['generation_id'])
-        require(len(rows) == 1, f'Reference generation {self.generation_id} is not loaded')
-        generation = rows[0]
-        require(generation['kind'] == KPN_KIND and generation['model'] == KPN_MODEL,
-                f'Reference generation {self.generation_id} is not a {KPN_MODEL} generation')
-        require(generation['status'] in USABLE_STATUSES,
-                f'Reference generation {self.generation_id} is {generation["status"]}; its reference data is not servable')
-        return generation
+    def release(self):
+        """The published release row; every later read is of this release (one read transaction)."""
+        statements = []
+        rows = self.reader.rows(statements, RELEASE_SQL, [], RELEASE_COLUMNS)
+        require(len(rows) == 1, 'No reference release is published for this environment')
+        release = rows[0]
+        require(isinstance(release['release_id'], str) and bool(GENERATION_RE.fullmatch(release['release_id'])),
+                'The published reference release id is malformed')
+        require(self.release_id in (None, release['release_id']),
+                f'The published reference release is {release["release_id"]}, not {self.release_id}')
+        self.release_id = release['release_id']
+        _add_rows(self.store, 'reference-release', self.release_id, ['reveal_ref_release'], statements, rows)
+        return release
 
-    def anchors(self, generation):
+    def anchors(self):
         rows = self.factor_rows_by('reference-factors', 'public_id', self.factor_ids, detail=True)
         self.anchor_refs = {row['public_id']: i for i, row in enumerate(rows)}
         missing = sorted(set(self.factor_ids) - set(self.anchor_refs))
-        require(not missing, f'Selected factors are not in reference generation {self.generation_id}: {missing}')
+        require(not missing, f'Selected factors are not in the current reference release {self.release_id}: {missing}')
         for row in rows:
             fit = parse_public_id(row['public_id'])
             require(row['factor_key'] == fit['factor_key'] and row['kpn_trait_id'] == fit['kpn_trait_id'],
                     f'Reference factor row differs from its public id: {row["public_id"]}')
             self.factor_rows[row['public_id']] = row
-        imports = {row['eaggl_import_id'] or generation['eaggl_import_id'] for row in rows}
-        require(len(imports) == 1 and None not in imports, 'Selected factors need one EAGGL import')
-        self.import_id = next(iter(imports))
-        statements = []
-        index = self.reader.batched(statements, 'SELECT factor_index,factor_id,trait,label FROM eaggl_factors WHERE import_id=%s AND factor_id_sha256 IN ({marks})',
-                                    [self.import_id], sorted({sha256(row['eaggl_factor_id'].encode()) for row in rows}),
-                                    ('factor_index', 'factor_id', 'trait', 'label'))
-        index.sort(key=lambda row: row['factor_index'])
-        _add_rows(self.store, 'eaggl-factor-index', self.generation_id, ['eaggl_factors'], statements, index, eaggl_import_id=self.import_id)
-        self.eaggl_index = {row['factor_id']: row['factor_index'] for row in index}
-        for row in rows:
-            require(row['eaggl_factor_id'] in self.eaggl_index, f'EAGGL factor {row["eaggl_factor_id"]} is not in import {self.import_id}')
-        self.anchor_eaggl = {row['eaggl_factor_id'] for row in rows}
+        self.anchor_keys = {row['factor_key'] for row in rows}
         for row in rows:
             identity, number = row['public_id'], kpn_number(row['kpn_trait_id'])
             node = mechanism_node(identity, row['phenotype_name'], row['kpn_trait_id'], _factor_of(identity), row['label'])
@@ -432,7 +435,7 @@ class _Evidence:
             self.mechanisms[identity] = {'dapper_id': node['id'], 'source_label': row['label'],
                 'source_ref': ref('reference-factors', f'/data/{self.anchor_refs[identity]}'),
                 'fit': {'trait_group': TRAIT_GROUP, 'phenotype': number, 'model': KPN_MODEL, 'factor': _factor_of(identity),
-                        'trait_id': _trait_node(row['kpn_trait_id']), 'upstream_build': self.generation_id}}
+                        'trait_id': _trait_node(row['kpn_trait_id']), 'upstream_build': self.release_id}}
         return rows
 
     def anchor_item(self, identity):
@@ -443,24 +446,19 @@ class _Evidence:
         row, tag = self.factor_rows[identity], _tag(identity)
         q = [kpn_number(row['kpn_trait_id']), KPN_MODEL, _factor_of(identity)]
         statements = []
-        loadings = self.reader.rows(statements, 'SELECT l.gene_index,g.symbol,l.loading FROM eaggl_gene_loadings l JOIN eaggl_genes g '
-                                    'ON g.import_id=l.import_id AND g.gene_index=l.gene_index WHERE l.import_id=%s AND l.factor_index=%s',
-                                    [self.import_id, self.eaggl_index[row['eaggl_factor_id']]], ('gene_index', 'symbol', 'loading'))
-        loadings.sort(key=lambda r: (-r['loading'], r['symbol'], r['gene_index']))
-        require(len({r['symbol'] for r in loadings}) == len(loadings), f'Duplicate gene symbol in the EAGGL loadings of {identity}')
-        gene_key = _add_rows(self.store, 'gene-factor-' + tag, self.generation_id, ['eaggl_gene_loadings', 'eaggl_genes'], statements,
-                             [{**_scope_row(row), 'gene': r['symbol'], 'factor_value': r['loading'], 'gene_index': r['gene_index']} for r in loadings],
+        loadings = self.reader.rows(statements, LOADING_SQL, [row['factor_key']], ('gene', 'loading'))
+        loadings.sort(key=lambda r: (-r['loading'], r['gene']))
+        require(len({r['gene'] for r in loadings}) == len(loadings), f'Duplicate gene in the loadings of {identity}')
+        gene_key = _add_rows(self.store, 'gene-factor-' + tag, self.release_id, ['reveal_ref_factor_genes'], statements,
+                             [{**_scope_row(row), 'gene': r['gene'], 'factor_value': r['loading']} for r in loadings],
                              index='pigean-gene-factor', q=q, limit=None, continuation=None,
-                             scope={'mechanism_id': identity, 'factor_key': row['factor_key'], 'eaggl_factor_id': row['eaggl_factor_id'],
-                                    'eaggl_import_id': self.import_id})
-        self.gene_loadings[identity] = {r['symbol']: r['loading'] for r in loadings}
-        self.gene_index.update({r['symbol']: r['gene_index'] for r in loadings})
+                             scope={'mechanism_id': identity, 'factor_key': row['factor_key'], 'eaggl_factor_id': row['eaggl_factor_id']})
+        self.gene_loadings[identity] = {r['gene']: r['loading'] for r in loadings}
         statements = []
-        projections = self.reader.rows(statements, ANCHOR_PROJECTION_SQL, [self.generation_id, PROJECTION_SCOPE, row['factor_key']],
-                                       PROJECTION_COLUMNS + GENE_SET_COLUMNS)
-        projections.sort(key=lambda r: (r['joint_rank'], r['marginal_rank'], r['gene_set_id']))
-        set_key = _add_rows(self.store, 'gene_set-factor-' + tag, self.generation_id,
-                            ['factor_gene_set_projections', 'cfde_gene_sets', 'cfde_gene_set_collections'], statements,
+        projections = self.reader.rows(statements, ANCHOR_PROJECTION_SQL, [row['factor_key']], PROJECTION_COLUMNS + GENE_SET_COLUMNS)
+        projections.sort(key=lambda r: (r['joint_rank'], r['marginal_rank'], r['library'], r['gene_set_id']))
+        set_key = _add_rows(self.store, 'gene_set-factor-' + tag, self.release_id,
+                            ['reveal_ref_projections', 'reveal_ref_gene_sets', 'reveal_ref_collections'], statements,
                             [{**_scope_row(row), 'gene_set': r['gene_set_id'], 'factor_value': r['joint_loading'],
                               **{c: r[c] for c in PROJECTION_COLUMNS[2:] + GENE_SET_COLUMNS}} for r in projections],
                             index='pigean-gene-set-factor', q=q, limit=None, continuation=None,
@@ -475,7 +473,7 @@ class _Evidence:
         items = sorted(items, key=lambda item: (-item['aggregate_score'], item['candidate']['node_id']))[:self.limit]
         response = {'candidates': items, 'candidate_count': len(items),
                     'graph': {'nodes': [item['candidate'] for item in items], 'edges': [edge for item in items for edge in item['edges']]}}
-        self.connections[target] = _add_derived(self.store, 'connections-' + target, self.generation_id, derived_from,
+        self.connections[target] = _add_derived(self.store, 'connections-' + target, self.release_id, derived_from,
             {'method': 'POST', 'status': 200, 'source': {'target_type': target, 'scoring': scoring},
              'request': {**self.request, 'target_type': target}, 'response': response})
         for item in items:
@@ -488,10 +486,10 @@ class _Evidence:
         for identity in self.factor_ids:
             for symbol, loading in self.gene_loadings[identity].items(): genes.setdefault(symbol, {})[identity] = loading
         items = [_candidate({'node_id': 'gene:' + symbol, 'node_type': 'gene', 'node_key': symbol, 'label': symbol, 'subtitle': 'Gene'},
-                            [_gene_edge(self.generation_id, a, symbol, loads[a]) for a in sorted(loads)], self.count, _mean(loads.values(), self.count))
+                            [_gene_edge(self.release_id, a, symbol, loads[a]) for a in sorted(loads)], self.count, _mean(loads.values(), self.count))
                  for symbol, loads in genes.items()]
         return sorted(self.connect('gene', [self.anchor_captures[a][0] for a in self.factor_ids], items,
-                                   'raw_score = eaggl_gene_loadings.loading; aggregate_score = sum over anchors / anchor count'))
+                                   'raw_score = reveal_ref_factor_genes.loading; aggregate_score = sum over anchors / anchor count'))
 
     def typed_gene_sets(self):
         sets = {}
@@ -502,10 +500,10 @@ class _Evidence:
             info = self.gene_set_info[gene_set_id]
             node = {'node_id': 'gene_set:' + gene_set_id, 'node_type': 'gene_set', 'node_key': gene_set_id, 'label': info['gene_set_name'],
                     'subtitle': f'{info["library"]} gene set ({info["cfde_label"]})'}
-            items.append(_candidate(node, [_gene_set_edge(self.generation_id, a, rows[a]) for a in sorted(rows)], self.count,
+            items.append(_candidate(node, [_gene_set_edge(self.release_id, a, rows[a]) for a in sorted(rows)], self.count,
                                     _mean([row['joint_loading'] for row in rows.values()], self.count)))
         return sorted(self.connect('gene_set', [self.anchor_captures[a][1] for a in self.factor_ids], items,
-                                   f'raw_score = factor_gene_set_projections.joint_loading (scope {PROJECTION_SCOPE}); '
+                                   f'raw_score = reveal_ref_projections.joint_loading (ranks {PROJECTION_SCOPE}); '
                                    'aggregate_score = sum over anchors / anchor count; anchors without a retained projection row contribute 0'))
 
     def typed_traits(self, anchors):
@@ -513,7 +511,7 @@ class _Evidence:
         for row in anchors: traits.setdefault(row['kpn_trait_id'], []).append(row)
         items = [_candidate({'node_id': _trait_node(trait), 'node_type': 'trait', 'node_key': trait, 'label': rows[0]['phenotype_name'],
                              'subtitle': f'KPN trait {trait} ({rows[0]["trait_group"] or "ungrouped"})'},
-                            [_trait_edge(self.generation_id, row['public_id'], trait) for row in rows], self.count, len(rows) / self.count)
+                            [_trait_edge(self.release_id, row['public_id'], trait) for row in rows], self.count, len(rows) / self.count)
                  for trait, rows in traits.items()]
         self.connect('trait', ['reference-factors'], items, 'factor_of_trait membership; aggregate_score = fraction of anchors fitted in the trait')
         return {trait: sorted(row['public_id'] for row in rows) for trait, rows in traits.items()}
@@ -521,31 +519,28 @@ class _Evidence:
     def typed_factors(self):
         statements, overlap = [], []
         if self.gene_candidates:
-            overlap = self.reader.batched(statements, 'SELECT e.factor_id,g.symbol,l.loading FROM eaggl_gene_loadings l JOIN eaggl_factors e '
-                                          'ON e.import_id=l.import_id AND e.factor_index=l.factor_index JOIN eaggl_genes g ON g.import_id=l.import_id '
-                                          'AND g.gene_index=l.gene_index WHERE l.import_id=%s AND l.gene_index IN ({marks})',
-                                          [self.import_id], sorted(self.gene_index[s] for s in self.gene_candidates), ('factor_id', 'symbol', 'loading'))
-        overlap.sort(key=lambda r: (r['factor_id'], r['symbol']))
-        _add_rows(self.store, 'factor-gene-overlap', self.generation_id, ['eaggl_gene_loadings', 'eaggl_factors', 'eaggl_genes'], statements, overlap,
-                  eaggl_import_id=self.import_id, gene_candidates=self.gene_candidates)
-        for row in overlap: self.profiles.setdefault(row['factor_id'], {})[row['symbol']] = row['loading']
+            overlap = self.reader.batched(statements, OVERLAP_SQL, [], sorted(self.gene_candidates), ('factor_key', 'gene', 'loading'))
+        overlap.sort(key=lambda r: (r['factor_key'], r['gene']))
+        _add_rows(self.store, 'factor-gene-overlap', self.release_id, ['reveal_ref_factor_genes'], statements, overlap,
+                  gene_candidates=self.gene_candidates)
+        for row in overlap: self.profiles.setdefault(row['factor_key'], {})[row['gene']] = row['loading']
         anchors = {a: {s: self.gene_loadings[a].get(s, 0.0) for s in self.gene_candidates} for a in self.factor_ids}
         shares = {}
-        for factor_id, profile in self.profiles.items():
-            if factor_id in self.anchor_eaggl: continue
+        for factor_key, profile in self.profiles.items():
+            if factor_key in self.anchor_keys: continue
             per_anchor = {}
             for identity, anchor in anchors.items():
                 total = math.fsum(anchor.values())
                 shared = sorted(s for s in self.gene_candidates if anchor[s] > 0 and profile.get(s, 0) > 0)
                 if total > 0 and shared: per_anchor[identity] = (math.fsum(min(anchor[s], profile[s]) for s in shared) / total, shared)
-            if per_anchor: shares[factor_id] = per_anchor
+            if per_anchor: shares[factor_key] = per_anchor
         chosen = sorted(shares, key=lambda f: (-_mean([v[0] for v in shares[f].values()], self.count), f))[:self.limit]
-        rows = self.factor_rows_by('candidate-factors', 'eaggl_factor_id', chosen, requested_eaggl_factor_ids=chosen)
+        rows = self.factor_rows_by('candidate-factors', 'factor_key', chosen, requested_factor_keys=chosen)
         items = []
         for row in rows:
-            public, per_anchor = row['public_id'], shares[row['eaggl_factor_id']]
+            public, per_anchor = row['public_id'], shares[row['factor_key']]
             self.factor_rows[public] = row
-            edges = [_edge(self.generation_id, 'factor_factor_shared_genes', 'shared_candidate_gene_loading', a, public, per_anchor[a][0],
+            edges = [_edge(self.release_id, 'factor_factor_shared_genes', 'shared_candidate_gene_loading', a, public, per_anchor[a][0],
                            {'shared_genes': per_anchor[a][1], 'shared_gene_count': len(per_anchor[a][1]), 'gene_candidate_count': len(self.gene_candidates)})
                      for a in sorted(per_anchor)]
             items.append(_candidate({'node_id': public, 'node_type': 'factor', 'node_key': _factor_of(public), 'label': row['label'],
@@ -564,28 +559,27 @@ class _Evidence:
         statements, rows = [], []
         if others and gene_sets:
             keys = sorted(self.factor_rows[node]['factor_key'] for node in others)
-            rows = self.reader.batched(statements, PROJECTION_SQL, [self.generation_id, PROJECTION_SCOPE, *keys], gene_sets, PROJECTION_COLUMNS,
-                                       keys=_marks(keys))
+            rows = self.reader.batched(statements, PROJECTION_SQL, keys, gene_sets, PROJECTION_COLUMNS, keys=_marks(keys))
         rows.sort(key=lambda r: (r['factor_key'], r['gene_set_id']))
-        _add_rows(self.store, 'contextual-gene-set-projections', self.generation_id, ['factor_gene_set_projections'], statements, rows)
+        _add_rows(self.store, 'contextual-gene-set-projections', self.release_id, ['reveal_ref_projections'], statements, rows)
         by_key = {self.factor_rows[node]['factor_key']: node for node in others}
         edges = {}
         def add(edge):
             require(edges.setdefault(edge['id'], edge) == edge, f'Conflicting contextual edge: {edge["id"]}')
         for node in factors:
             row = self.factor_rows[node]
-            loads = self.gene_loadings[node] if node in self.mechanisms else self.profiles.get(row['eaggl_factor_id'], {})
+            loads = self.gene_loadings[node] if node in self.mechanisms else self.profiles.get(row['factor_key'], {})
             for symbol in genes:
-                if symbol in loads: add(_gene_edge(self.generation_id, node, symbol, loads[symbol]))
+                if symbol in loads: add(_gene_edge(self.release_id, node, symbol, loads[symbol]))
             for gene_set_id in gene_sets:
-                if gene_set_id in self.projections.get(node, {}): add(_gene_set_edge(self.generation_id, node, self.projections[node][gene_set_id]))
-            if _trait_node(row['kpn_trait_id']) in members: add(_trait_edge(self.generation_id, node, row['kpn_trait_id']))
-        for row in rows: add(_gene_set_edge(self.generation_id, by_key[row['factor_key']], row))
+                if gene_set_id in self.projections.get(node, {}): add(_gene_set_edge(self.release_id, node, self.projections[node][gene_set_id]))
+            if _trait_node(row['kpn_trait_id']) in members: add(_trait_edge(self.release_id, node, row['kpn_trait_id']))
+        for row in rows: add(_gene_set_edge(self.release_id, by_key[row['factor_key']], row))
         for node in others:
             for edge in self.candidates[node]['edges']:
                 if edge['source'] in members: add(edge)
         derived = [key for pair in self.anchor_captures.values() for key in pair] + ['factor-gene-overlap', 'connections-factor', 'contextual-gene-set-projections']
-        return _add_derived(self.store, 'contextual', self.generation_id, derived,
+        return _add_derived(self.store, 'contextual', self.release_id, derived,
             {'method': 'POST', 'status': 200, 'source': {'scope': 'direct factor relationships among the requested nodes'},
              'request': {'node_ids': sorted(members), 'model': KPN_MODEL}, 'response': {'edges': [edges[key] for key in sorted(edges)]}})
 
@@ -608,7 +602,7 @@ def _resolve_gene_set(dapper, row, collection, base_prefixes, class_groups):
     """(exact GeneSet, dependency objects, extra prefixes, reason); reason is None when exact."""
     metadata = row['metadata'] if isinstance(row.get('metadata'), dict) else {}
     payload = metadata.get('dapper_gene_set')
-    if not isinstance(payload, dict): return None, [], {}, 'cfde_gene_sets.metadata.dapper_gene_set is not stored'
+    if not isinstance(payload, dict): return None, [], {}, 'reveal_ref_gene_sets.metadata.dapper_gene_set is not stored'
     node = {key: value for key, value in payload.items() if key not in NON_IDENTITY_GENE_SET_SLOTS}
     if node.get('id') != row['gene_set_id']: return None, [], {}, 'Stored GeneSet payload id differs from gene_set_id'
     provenance = (collection or {}).get('provenance')
@@ -642,22 +636,22 @@ def _resolve_gene_set(dapper, row, collection, base_prefixes, class_groups):
 
 def _gene_set_objects(evidence, base_prefixes):
     """Per gene-set candidate id: DAPPER objects for the context, extra prefixes and the builder binding."""
-    store, reader, dapper, generation_id = evidence.store, evidence.reader, evidence.dapper, evidence.generation_id
+    store, reader, dapper, release_id = evidence.store, evidence.reader, evidence.dapper, evidence.release_id
     wanted = evidence.gene_set_candidates
     statements = []
-    rows = reader.batched(statements, GENE_SET_SQL, [generation_id], wanted,
+    rows = reader.batched(statements, GENE_SET_SQL, [], wanted,
                           ('gene_set_id', 'collection_id', 'gene_set_name', 'library', 'n_genes', 'n_genes_in_eaggl_universe',
                            'legacy_source_key', 'metadata')) if wanted else []
     rows.sort(key=lambda row: row['gene_set_id'])
-    _add_rows(store, 'gene-set-payloads', generation_id, ['cfde_gene_sets'], statements, rows)
+    _add_rows(store, 'gene-set-payloads', release_id, ['reveal_ref_gene_sets'], statements, rows)
     identities = sorted({row['collection_id'] for row in rows})
     statements = []
-    collections = reader.batched(statements, COLLECTION_SQL, [generation_id], identities,
+    collections = reader.batched(statements, COLLECTION_SQL, [], identities,
                                  ('collection_id', 'cfde_label', 'library', 'n_sets', 'provenance')) if identities else []
     collections.sort(key=lambda row: row['collection_id'])
-    _add_rows(store, 'gene-set-collections', generation_id, ['cfde_gene_set_collections'], statements, collections)
+    _add_rows(store, 'gene-set-collections', release_id, ['reveal_ref_collections'], statements, collections)
     by_id = {row['gene_set_id']: (i, row) for i, row in enumerate(rows)}
-    require(set(by_id) == set(wanted), f'Gene-set candidates are missing from cfde_gene_sets: {sorted(set(wanted) - set(by_id))[:5]}')
+    require(set(by_id) == set(wanted), f'Gene-set candidates are missing from reveal_ref_gene_sets: {sorted(set(wanted) - set(by_id))[:5]}')
     by_collection = {row['collection_id']: row for row in collections}
     class_groups, shared, resolution, objects = _class_groups(dapper), {}, [], {}
     for gene_set_id in wanted:
@@ -672,13 +666,13 @@ def _gene_set_objects(evidence, base_prefixes):
         activity = any(_class_of(item['id']) == 'Activity' for item in dependencies)
         objects[node_id] = {'prefixes': used,
             'objects': [('gene_sets', alias)] + ([('gene_sets', exact)] + [(class_groups[_class_of(item['id'])], item) for item in dependencies] if exact else []),
-            'binding': {'dapper_id': alias['id'], 'import_id': generation_id, 'membership_status': 'loaded' if exact else 'not_loaded',
+            'binding': {'dapper_id': alias['id'], 'import_id': release_id, 'membership_status': 'loaded' if exact else 'not_loaded',
                         'construction_provenance_status': 'generating_activity_loaded' if activity else 'not_loaded',
                         'provenance_refs': [ref('gene-set-payloads', f'/data/{i}'), ref('gene-set-resolution', f'/gene_sets/{len(resolution)}')]}}
         resolution.append({'node_id': node_id, 'gene_set_id': gene_set_id, 'alias_dapper_id': alias['id'],
                            'status': 'exact_dapper_gene_set' if exact else 'alias_only', 'reason': reason,
                            'dapper_gene_set_id': exact['id'] if exact else None, 'dependency_ids': sorted(item['id'] for item in dependencies)})
-    _add_derived(store, 'gene-set-resolution', generation_id, ['gene-set-payloads', 'gene-set-collections'],
+    _add_derived(store, 'gene-set-resolution', release_id, ['gene-set-payloads', 'gene-set-collections'],
                  {'policy': 'Each gene-set candidate binds an alias GeneSet whose alternate_identifier is the candidate id. The exact CFDE '
                             'GeneSet (identity slots only, id recomputed) and its dependencies are added when stored; the alias then '
                             'was_derived_from it.', 'gene_sets': resolution})
@@ -690,12 +684,13 @@ def _gene_set_objects(evidence, base_prefixes):
 
 
 def collect_reference_package(*, gap_id, factor_ids, output, dapper, project_root, dismech_source, dismech_index,
-                              generation_id, connection_factory, selected_graphs=('biomarkerkg', 'prokn'), max_accounts=3,
+                              connection_factory, release_id=None, selected_graphs=('biomarkerkg', 'prokn'), max_accounts=3,
                               selection_metadata=None, limit=100, max_nodes=250, max_edges=1000, user_inputs=None):
     """Resolve a gap and KPN factor public ids, freeze MySQL reference evidence, then build.
 
-    Returns the builder's BuiltPackage, like collect_package (`.package`, `.write(path)`).
-    connection_factory() returns a DB-API connection; only reads run, in one transaction.
+    Evidence comes from this environment's current reference release; release_id, when given, must
+    be that release. Returns the builder's BuiltPackage, like collect_package (`.package`,
+    `.write(path)`). connection_factory() returns a DB-API connection; only reads run, in one transaction.
     """
     started = time.monotonic()
     project_root, dismech_source, dismech_index = Path(project_root).resolve(), Path(dismech_source).resolve(), Path(dismech_index)
@@ -704,7 +699,7 @@ def collect_reference_package(*, gap_id, factor_ids, output, dapper, project_roo
     require(type(limit) is int and 1 <= limit <= 100, 'limit must be between 1 and 100')
     require(type(max_nodes) is int and len(factor_ids) <= max_nodes <= 250, 'max_nodes must preserve anchors and be at most 250')
     require(type(max_edges) is int and 1 <= max_edges <= 1000, 'max_edges must be between 1 and 1000')
-    require(isinstance(generation_id, str) and bool(GENERATION_RE.fullmatch(generation_id)), 'A reference generation id is required')
+    require(release_id is None or (isinstance(release_id, str) and bool(GENERATION_RE.fullmatch(release_id))), 'Invalid reference release id')
     for identity in factor_ids:
         try: parse_public_id(identity)
         except ReferenceError as exc: raise EvidenceBuildError(f'Use a KPN factor public id: {identity}') from exc
@@ -726,7 +721,7 @@ def collect_reference_package(*, gap_id, factor_ids, output, dapper, project_roo
         stage('dismech_context', began)
         began = time.monotonic()
         connection = connection_factory()
-        evidence = _Evidence(store, _Reader(connection), dapper, generation_id, factor_ids, limit).read()
+        evidence = _Evidence(store, _Reader(connection), dapper, release_id, factor_ids, limit).read()
         gene_sets = _gene_set_objects(evidence, prefixes)
         # One ranking over all typed candidates, as in collect_package.
         candidates = evidence.candidates

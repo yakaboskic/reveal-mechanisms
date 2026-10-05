@@ -72,25 +72,24 @@ def prepare_source(tx, job, queue):
 def require_current_reference(tx, job):
     """Accepting saved output would mint accounts from the job's frozen reference data.
 
-    Blocked while a reference reload holds the gate, and for analysis jobs whose
-    request was frozen on a superseded generation. Legacy mode (no active
-    generation record) keeps today's behaviour; paragraph jobs need no reference data.
+    Blocked only for analysis jobs with an anchor whose factor id this environment's
+    reveal_ref_factors table no longer serves. Paragraph jobs need no reference data.
     """
     if job['kind'] != 'analysis': return
-    from .reference_generation import ReferenceError, generation_of_anchors, read_gate
-    if read_gate(tx):
-        raise Problem(503, 'REFERENCE_RELOAD_IN_PROGRESS', 'Reference data is being reloaded. Retry validation shortly.')
-    from .analysis_outcomes import active_reference_generation
-    active = active_reference_generation(tx)
-    if not active: return
     row = tx.get('request_binding', job.get('research_request_id') or '')
     binding = row['data'] if row and row['owner'] == job['owner_user_id'] else {}
-    try: generation = generation_of_anchors(binding.get('anchors'))
-    except ReferenceError: generation = None
-    # Fail closed: a binding whose generation cannot be shown current is not retried.
-    if generation != active:
+    identities = [anchor.get('cfde_node_id') if isinstance(anchor, dict) else None for anchor in binding.get('anchors') or []]
+    if not identities: return
+    wanted = sorted({identity for identity in identities if isinstance(identity, str)})
+    try:
+        served = {item[0] for item in tx.execute('SELECT public_id FROM reveal_ref_factors WHERE public_id IN ('
+                                                 + ','.join(['%s'] * len(wanted)) + ')', tuple(wanted)).fetchall()} if wanted else set()
+    except Exception as error:
+        raise Problem(503, 'SOURCE_NOT_READY', 'The reference factors are unavailable. Retry validation shortly.') from error
+    # Fail closed: an anchor without a factor id is never served.
+    if any(identity not in served for identity in identities):
         raise Problem(409, 'REFERENCE_GENERATION_SUPERSEDED',
-            'This analysis used a superseded reference generation. Start a new analysis on this gap with current factors.')
+            'This analysis used factors the current reference data no longer serves. Start a new analysis on this gap with current factors.')
 
 
 def enqueue_review(tx, job, expected_event_id):

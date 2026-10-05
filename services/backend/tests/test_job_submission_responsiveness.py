@@ -18,7 +18,7 @@ from reveal_backend.repository import Repository, now, uid
 
 class CachedCatalog:
     dismech_import, mapping_run, embedding_run = 'source-run', 'mapping-run', 'embedding-run'
-    gaps, factors = {'gap': {}}, {'factor': {}}
+    gaps, factors = {'gap': {}}, {'factor:portal:test:model:Factor1': {}}
 
     def load(self): pass
 

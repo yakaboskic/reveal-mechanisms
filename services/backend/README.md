@@ -23,7 +23,7 @@ The EAGGL CLI automatically loads the repository-root `.env`; its [template](../
 
 Defaults:
 
-- URL: `https://embedding-service-27386110942.us-east1.run.app` (`EMBEDDING_SERVICE_URL` override).
+- URL: `https://embedding-service-848707719401.us-east1.run.app` (`EMBEDDING_SERVICE_URL` override).
 - Model: `pritamdeka/BioBERT-mnli-snli-scinli-scitail-mednli-stsb` (`EMBEDDING_MODEL` override).
 - Provider: `huggingface`.
 - Batches: at most 100 texts; one concurrent request by default. Configure `max_workers` explicitly for import jobs.
@@ -39,7 +39,7 @@ similarity = cosine_similarity(vectors[0], vectors[1])
 vectors = get_embeddings(
     texts=["AIP-AHR transcriptional signaling"],
     model=DEFAULT_MODEL,
-    service_url="https://embedding-service-27386110942.us-east1.run.app",
+    service_url="https://embedding-service-848707719401.us-east1.run.app",
     api_key=service_key,  # supplied by the caller's secret configuration
     max_workers=1,
     max_retries=2,

@@ -280,11 +280,9 @@ def mount_workflow(app, repository):
         recovered = await asyncio.to_thread(reconcile_stale, repository)
         delivery = await dispatch_pending(repository)
         cleanup = await dispatch_cleanup(repository)
-        from .vector_workflow import dispatch_pending as dispatch_vectors
-        vector_delivery = await dispatch_vectors(repository)
         from .workspace_events import reconcile_notifications
         notifications = await asyncio.to_thread(reconcile_notifications, repository)
-        return {'recovered': recovered, **delivery, 'cleanup':cleanup, 'vector_delivery': vector_delivery, 'notifications': notifications}
+        return {'recovered': recovered, **delivery, 'cleanup':cleanup, 'notifications': notifications}
 
     @app.post(CLEANUP_PATH, include_in_schema=False)
     async def cleanup(request: Request):

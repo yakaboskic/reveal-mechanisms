@@ -1,10 +1,9 @@
-"""KPN reference evidence from MySQL is accepted by the unchanged builder, schema and worker checks."""
+"""KPN reference evidence from the reference release tables is accepted by the unchanged builder, schema and worker checks."""
 from copy import deepcopy
 import gzip
 import io
 import json
 from pathlib import Path
-import re
 import shutil
 import sqlite3
 import tarfile
@@ -17,13 +16,13 @@ from reveal_backend.box_adapter import dispatchable_capture
 from reveal_backend.evidence_package import (DapperRuntime, EvidenceBuildError, build_package, canonical_json, decode,
                                             load_build_input, sha256)
 from reveal_backend.evidence_schema import load_generated_schema, validate_package_shape
-from reveal_backend.reference_generation import KPN_KIND, KPN_MODEL, LEGACY_KIND, LEGACY_MODEL, factor_key, mechanism_node, public_id
+from reveal_backend.reference_generation import KPN_MODEL, LEGACY_MODEL, factor_key, mechanism_node, public_id
+from reveal_backend.scientific_account_lint import cfde_source_files
 
 ROOT = Path(__file__).resolve().parents[3]
 GAP = 'cad_pgsxc_reverse_causation'
 GAP_DAPPER_ID = 'dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk'  # collect_package's id for the same gap
-GENERATION = sha256(b'reference-evidence test generation')
-IMPORT = sha256(b'reference-evidence test eaggl import')
+RELEASE = sha256(b'reference-evidence test release')
 CAD, T2D = 'KPN.TRAIT:0000398', 'KPN.TRAIT:0000319'
 TRAITS = {CAD: ('CADinT2D', 'Coronary artery disease in type 2 diabetes', 'cardiovascular'), T2D: ('T2D', 'Type 2 diabetes', 'metabolic')}
 GENES = ['SHH', 'TCF7L2', 'SIX2', 'GLI3', 'FGF13', 'EYA2', 'CTNNB1', 'WNT4', 'APOB', 'LPA', 'PCSK9', 'INS']
@@ -63,13 +62,28 @@ class Cursor:
     def fetchone(self): return self.cursor.fetchone()
 
 
-def ddl(path):
-    """The committed MySQL DDL, respelled for SQLite (types, keys and constraints kept)."""
-    sql = '\n'.join(line for line in path.read_text().splitlines() if not line.lstrip().startswith('--'))
-    for statement in filter(str.strip, sql.split(';')):
-        statement = re.sub(r'CHARACTER SET \w+|COLLATE \w+|\bUNSIGNED\b|ENGINE=InnoDB DEFAULT CHARSET=\w+( COLLATE=\w+)?|ON UPDATE CURRENT_TIMESTAMP', '', statement)
-        statement = re.sub(r'UNIQUE KEY \w+\s*\(', 'UNIQUE (', statement)
-        yield re.sub(r',\s*INDEX \w+\s*\([^)]*\)', '', statement)
+# The flat per-environment reference tables (reveal_ref_*, contract columns), spelled for SQLite.
+REFERENCE_DDL = '''
+CREATE TABLE reveal_ref_release(release_id CHAR(64) PRIMARY KEY, published_at TEXT NOT NULL, manifest TEXT NOT NULL);
+CREATE TABLE reveal_ref_traits(kpn_trait_id TEXT PRIMARY KEY, legacy_phenotype_id TEXT NOT NULL UNIQUE, phenotype_name TEXT NOT NULL,
+  gwas_source_category TEXT NOT NULL, trait_group TEXT, legacy_trait_group TEXT, trait_type TEXT, description TEXT,
+  is_dichotomous INTEGER, is_complex INTEGER, n_factors INTEGER NOT NULL, metadata TEXT NOT NULL);
+CREATE TABLE reveal_ref_factors(factor_key TEXT PRIMARY KEY, public_id TEXT NOT NULL UNIQUE, eaggl_factor_id TEXT NOT NULL UNIQUE,
+  kpn_trait_id TEXT NOT NULL REFERENCES reveal_ref_traits(kpn_trait_id), factor_number INTEGER NOT NULL, label TEXT NOT NULL,
+  input_sha256 TEXT NOT NULL, source_revision TEXT NOT NULL, metadata TEXT NOT NULL);
+CREATE TABLE reveal_ref_factor_genes(factor_key TEXT NOT NULL REFERENCES reveal_ref_factors(factor_key), gene TEXT NOT NULL,
+  loading REAL NOT NULL, PRIMARY KEY(factor_key, gene));
+CREATE TABLE reveal_ref_collections(collection_id TEXT PRIMARY KEY, cfde_label TEXT NOT NULL UNIQUE, library TEXT NOT NULL,
+  n_sets INTEGER NOT NULL, payload TEXT NOT NULL);
+CREATE TABLE reveal_ref_gene_sets(gene_set_id TEXT PRIMARY KEY, collection_id TEXT NOT NULL REFERENCES reveal_ref_collections(collection_id),
+  gene_set_name TEXT NOT NULL, library TEXT NOT NULL, n_genes INTEGER NOT NULL, n_genes_in_eaggl_universe INTEGER NOT NULL,
+  legacy_source_key TEXT, metadata TEXT NOT NULL);
+CREATE TABLE reveal_ref_projections(factor_key TEXT NOT NULL REFERENCES reveal_ref_factors(factor_key),
+  gene_set_id TEXT NOT NULL REFERENCES reveal_ref_gene_sets(gene_set_id), library TEXT NOT NULL, joint_loading REAL NOT NULL,
+  marginal_loading REAL NOT NULL, joint_loading_text TEXT NOT NULL, marginal_loading_text TEXT NOT NULL, joint_rank INTEGER NOT NULL,
+  marginal_rank INTEGER NOT NULL, is_joint_top_factor INTEGER NOT NULL, PRIMARY KEY(factor_key, gene_set_id));
+'''
+TABLES = ('release', 'traits', 'factors', 'factor_genes', 'collections', 'gene_sets', 'projections')
 
 
 def insert(db, table, rows):
@@ -145,43 +159,37 @@ class ReferenceEvidenceTests(unittest.TestCase):
                 'C': (altered['id'], altered['name'], {'dapper_gene_set': altered}),
                 'D': (exact_d['id'], exact_d['name'], {'dapper_gene_set': exact_d})}
         db = sqlite3.connect(path); db.execute('PRAGMA foreign_keys=ON')
-        for migration in ('002_eaggl_factors.sql', '008_reference_generation.sql'):
-            for statement in ddl(ROOT / 'schema/migrations' / migration): db.execute(statement)
-        insert(db, 'eaggl_imports', [dict(import_id=IMPORT, source_namespace='eaggl', source_version='test', status='complete', manifest={}, progress={})])
-        insert(db, 'eaggl_genes', [dict(import_id=IMPORT, gene_index=i, symbol=g) for i, g in enumerate(GENES)])
-        insert(db, 'eaggl_factors', [dict(import_id=IMPORT, factor_index=i, factor_id=f'{TRAITS[t][0]}::{f}', factor_id_sha256=sha256(f'{TRAITS[t][0]}::{f}'.encode()),
-                                          trait=TRAITS[t][0], label=label, input_sha256=sha256(label.encode()), metadata={'label': label})
-                                     for i, (t, f, label, _) in enumerate(FACTORS)])
-        insert(db, 'eaggl_gene_loadings', [dict(import_id=IMPORT, factor_index=i, gene_index=GENES.index(g), loading=v)
-                                           for i, (_, _, _, loads) in enumerate(FACTORS) for g, v in loads.items()])
-        insert(db, 'reference_generations', [dict(generation_id=GENERATION, kind=KPN_KIND, model=KPN_MODEL, status='complete',
-                                                  eaggl_import_id=IMPORT, manifest={'format': 'test'})])
-        insert(db, 'kpn_traits', [dict(generation_id=GENERATION, kpn_trait_id=t, legacy_phenotype_id=legacy, phenotype_name=name, gwas_source_category='KPN',
-                                       trait_group=group, trait_type='phenotype', n_factors=sum(f[0] == t for f in FACTORS), metadata={'kpn_release': 'v0.0.2'})
-                                  for t, (legacy, name, group) in TRAITS.items()])
-        insert(db, 'reference_factors', [dict(generation_id=GENERATION, factor_key=factor_key(t, f), public_id=public_id(t, f), eaggl_factor_id=f'{TRAITS[t][0]}::{f}',
-                                              kpn_trait_id=t, factor_number=int(f[6:]), label=label, eaggl_import_id=IMPORT, input_sha256=sha256(label.encode()),
-                                              source_revision=sha256(f.encode()), metadata={'label': label, 'top_genes': ','.join(loads)})
-                                         for t, f, label, loads in FACTORS])
-        # The payload layout written by reference_reload build/load; only `provenance` is read.
+        db.executescript(REFERENCE_DDL)
+        insert(db, 'reveal_ref_release', [dict(release_id=RELEASE, published_at='2026-10-05T12:00:00Z',
+            manifest={'format': 'test', 'embedding': {'model': 'm', 'model_revision': 'r', 'provider': 'p', 'dimensions': 2}})])
+        insert(db, 'reveal_ref_traits', [dict(kpn_trait_id=t, legacy_phenotype_id=legacy, phenotype_name=name, gwas_source_category='KPN',
+                                              trait_group=group, trait_type='phenotype', n_factors=sum(f[0] == t for f in FACTORS), metadata={'kpn_release': 'v0.0.2'})
+                                         for t, (legacy, name, group) in TRAITS.items()])
+        insert(db, 'reveal_ref_factors', [dict(factor_key=factor_key(t, f), public_id=public_id(t, f), eaggl_factor_id=f'{TRAITS[t][0]}::{f}',
+                                               kpn_trait_id=t, factor_number=int(f[6:]), label=label, input_sha256=sha256(label.encode()),
+                                               source_revision=sha256(f.encode()), metadata={'label': label, 'top_genes': ','.join(loads)})
+                                          for t, f, label, loads in FACTORS])
+        insert(db, 'reveal_ref_factor_genes', [dict(factor_key=factor_key(t, f), gene=g, loading=v) for t, f, _, loads in FACTORS for g, v in loads.items()])
+        # The collection payload layout {collection, index, document_sha256, provenance}; only `provenance` is read.
         unrelated = dict(activity, name='dig-gene-set-extractors prepare_deg_long', activity_type='geneset_preparation'); del unrelated['id']
         unrelated['id'] = runtime.compute_id(unrelated, 'Activity', runtime.schema)
-        insert(db, 'cfde_gene_set_collections', [dict(generation_id=GENERATION, collection_id=collection, cfde_label='GTEx__test__HZ1', library='GTEx', n_sets=4,
+        insert(db, 'reveal_ref_collections', [dict(collection_id=collection, cfde_label='GTEx__test__HZ1', library='GTEx', n_sets=4,
             payload={'collection': {'id': collection, 'name': 'GTEx test collection', 'n_sets': 4}, 'index': {'label': 'GTEx__test__HZ1'},
                      'document_sha256': sha256(b'document'),
                      'provenance': {'prefixes': {'HGNC.SYMBOL': 'https://identifiers.org/hgnc.symbol:', 'humgen': 'file:///humgen/'},
                                     'organizations': [], 'datasets': [], 'files': [], 'activities': [unrelated, activity]}})])
-        insert(db, 'cfde_gene_sets', [dict(generation_id=GENERATION, gene_set_id=gid, collection_id=collection, gene_set_name=name, library='GTEx',
-                                           n_genes=3, n_genes_in_eaggl_universe=2, metadata=metadata) for gid, name, metadata in sets.values()])
+        insert(db, 'reveal_ref_gene_sets', [dict(gene_set_id=gid, collection_id=collection, gene_set_name=name, library='GTEx',
+                                                 n_genes=3, n_genes_in_eaggl_universe=2, metadata=metadata) for gid, name, metadata in sets.values()])
         projections = {(CAD, 'Factor1'): {'A': (.9, .8), 'B': (.5, .6), 'C': (.3, .2), 'D': (0., .4)}, (CAD, 'Factor2'): {'A': (.4, .5), 'D': (.6, .7)},
                        (T2D, 'Factor1'): {'B': (.7, .7), 'C': (.2, .1)}, (T2D, 'Factor2'): {'D': (.3, .3)}}
         rows = []
         for (t, f), values in projections.items():
             joint = sorted(values, key=lambda k: -values[k][0]); marginal = sorted(values, key=lambda k: -values[k][1])
-            rows += [dict(generation_id=GENERATION, scope='per_trait', factor_key=factor_key(t, f), gene_set_id=sets[k][0], joint_loading=j, marginal_loading=m,
+            # Ranks are per library; every fixture gene set is a GTEx set.
+            rows += [dict(factor_key=factor_key(t, f), gene_set_id=sets[k][0], library='GTEx', joint_loading=j, marginal_loading=m,
                           joint_loading_text=f'{j:.4g}', marginal_loading_text=f'{m:.4g}', joint_rank=joint.index(k) + 1, marginal_rank=marginal.index(k) + 1,
                           is_joint_top_factor=int(k == 'A')) for k, (j, m) in values.items()]
-        insert(db, 'factor_gene_set_projections', rows)
+        insert(db, 'reveal_ref_projections', rows)
         db.commit(); db.close()
         cls.activity = activity
         return {key: value[0] for key, value in sets.items()}
@@ -191,7 +199,7 @@ class ReferenceEvidenceTests(unittest.TestCase):
         def connect():
             connection = SQLiteMySQL(database or cls.database); connections.append(connection); return connection
         arguments = dict(gap_id=GAP, factor_ids=factor_ids, output=cls.root / name, dapper=cls.runtime, project_root=ROOT,
-                         dismech_source=cls.source, dismech_index=cls.index, generation_id=GENERATION, connection_factory=connect,
+                         dismech_source=cls.source, dismech_index=cls.index, connection_factory=connect,
                          selected_graphs=['biomarkerkg'], limit=20)
         arguments.update(overrides)
         with patch('reveal_backend.evidence_collector.urlopen', side_effect=AssertionError('Unexpected network')):
@@ -298,7 +306,7 @@ class ReferenceEvidenceTests(unittest.TestCase):
             'eaggl_anchors': [{'reference': {'source_id': ANCHOR}, 'origin': 'user_supplied'}],
             'dismissed_source_ids': [], 'selected_kgs': ['biomarkerkg']}}
         binding = {'source_gap': {'object': gap}, 'anchors': [{'cfde_node_id': ANCHOR, 'model': KPN_MODEL,
-                                                              'reference_generation_id': GENERATION}]}
+                                                              'reference_generation_id': sha256(b'an earlier release')}]}
         captured = []
 
         def collect_reference(**kwargs):
@@ -308,12 +316,13 @@ class ReferenceEvidenceTests(unittest.TestCase):
 
         directory = self.root / 'worker-private-inputs'
         with patch.object(worker, 'collect_reference_package', side_effect=collect_reference), \
-                patch.object(worker, 'collect_package', side_effect=AssertionError('KPN must not use the legacy collector')), \
                 patch.object(worker, 'DapperRuntime', return_value=self.runtime), \
                 patch('reveal_backend.user_inputs.artifacts_root', return_value=self.root):
             path, collected = worker.collect({}, frozen, binding, {'candidates_per_type': 20}, directory)
         self.assertEqual(captured[0]['user_inputs'], frozen['user_inputs'])
-        self.assertEqual(captured[0]['generation_id'], GENERATION)
+        # The frozen binding's release is not a collection pin: evidence comes from the current release.
+        self.assertFalse({'generation_id', 'release_id'} & set(captured[0]))
+        self.assertEqual({node['fit']['upstream_build'] for node in collected['pigean']['mechanisms'].values()}, {RELEASE})
         self.assertEqual(collected['user_inputs']['context'], frozen['user_inputs']['context'])
         with patch.object(worker, 'collect_reference_package', side_effect=AssertionError('Recovery must use its capture')), \
                 patch('reveal_backend.user_inputs.read', side_effect=AssertionError('Recovery must not reread mutable storage')):
@@ -337,7 +346,7 @@ class ReferenceEvidenceTests(unittest.TestCase):
         with repository.transaction() as tx:
             tx.put('request', 'private-request', owner, {'user_inputs': self.supplied_inputs()})
             tx.put('request_binding', 'private-request', owner, {'anchors': [{'model': KPN_MODEL,
-                'reference_generation_id': GENERATION, 'cfde_node_id': ANCHOR}]})
+                'reference_generation_id': RELEASE, 'cfde_node_id': ANCHOR}]})
             tx.put('job', 'private-job', owner, {'research_request_id': 'private-request'})
             tx.put('account', digest([owner, account]), owner, {'result': {}, 'summary': {'job_id': 'private-job'}})
             with self.assertRaises(Problem) as error:
@@ -353,11 +362,26 @@ class ReferenceEvidenceTests(unittest.TestCase):
         self.assertTrue(all(sql.startswith('SELECT ') for sql in connection.statements))
         self.assertTrue(connection.closed); self.assertEqual(connection.rollbacks, 1)
 
+    def test_reads_use_the_environment_prefix_and_record_contract_tables(self):
+        database = self.root / 'prefixed.sqlite3'; shutil.copyfile(self.database, database)
+        db = sqlite3.connect(database)
+        for table in TABLES: db.execute(f'ALTER TABLE reveal_ref_{table} RENAME TO reveal_workflow_qa_ref_{table}')
+        db.commit(); db.close()
+        with patch.dict('os.environ', {'REVEAL_APPLICATION_TABLE_PREFIX': 'reveal_workflow_qa'}):
+            package = self.collect('prefixed', [ANCHOR], database=database).package
+        statements = self.connections[0].statements
+        self.assertTrue(statements and all('reveal_workflow_qa_ref_' in sql and 'reveal_ref_' not in sql for sql in statements))
+        captured = self.artifact(package, 'reference-factors', 'prefixed')
+        self.assertEqual(captured['source']['tables'], ['reveal_ref_factors', 'reveal_ref_traits'])
+        self.assertTrue(all('FROM reveal_ref_factors' in statement['sql'] for statement in captured['source']['statements']))
+        # One release reads the same captured bytes whatever prefix serves it.
+        self.assertEqual(package['source_artifacts']['reference-factors']['sha256'], self.single.package['source_artifacts']['reference-factors']['sha256'])
+
     def test_mechanisms_use_public_ids_and_catalog_mechanism_nodes(self):
         package = self.built().package
         mechanism = package['pigean']['mechanisms'][ANCHOR]
         self.assertEqual(mechanism['fit'], {'trait_group': 'kpn', 'phenotype': '0000398', 'model': KPN_MODEL, 'factor': 'Factor1',
-                                            'trait_id': 'trait:kpn:0000398', 'upstream_build': GENERATION})
+                                            'trait_id': 'trait:kpn:0000398', 'upstream_build': RELEASE})
         node = mechanism_node(ANCHOR, TRAITS[CAD][1], CAD, 'Factor1', 'Hedgehog signalling')
         self.assertEqual(mechanism['dapper_id'], self.runtime.compute_id(node, 'Mechanism', self.runtime.schema))
         self.assertEqual(mechanism['display_name'], 'Coronary artery disease in type 2 diabetes mechanism Factor1')
@@ -406,7 +430,7 @@ class ReferenceEvidenceTests(unittest.TestCase):
             self.assertEqual(self.runtime.compute_id({k: v for k, v in exact.items() if k != 'id'}, 'GeneSet', self.runtime.schema), gene_set_id)
             self.assertFalse({'in_gene_set_collection', 'in_gmt_file', 'gmt_entry', 'has_embedding'} & set(exact))
             self.assertEqual((binding['membership_status'], binding['construction_provenance_status']), ('loaded', 'generating_activity_loaded'))
-            self.assertEqual(binding['import_id'], GENERATION)
+            self.assertEqual(binding['import_id'], RELEASE)
             self.assertEqual(resolution[gene_set_id]['status'], 'exact_dapper_gene_set')
         self.assertEqual([a['id'] for a in package['dapper_context']['activities']], [self.activity['id']])
         self.assertEqual(package['prefixes']['HGNC.SYMBOL'], 'https://identifiers.org/hgnc.symbol:')
@@ -421,23 +445,31 @@ class ReferenceEvidenceTests(unittest.TestCase):
         self.assertEqual(set(collections[0]), {'collection_id', 'cfde_label', 'library', 'n_sets', 'provenance'})
         self.assertEqual(len(collections[0]['provenance']['activities']), 2)  # only the referenced Activity joins the package
 
-    def test_captures_record_sql_origin_and_generation(self):
+    def test_captures_record_sql_origin_and_release(self):
         package = self.built().package
         mysql = {k: v for k, v in package['source_artifacts'].items() if isinstance(v.get('origin'), str) and v['origin'].startswith('mysql')}
         self.assertEqual({k for k in mysql if not k.startswith(('gene-factor-', 'gene_set-factor-', 'gene-trait-', 'gene_set-trait-', 'trait-factors-', 'connections-'))},
-                         {'reference-generation', 'reference-factors', 'eaggl-factor-index', 'factor-gene-overlap', 'candidate-factors',
+                         {'reference-release', 'reference-factors', 'factor-gene-overlap', 'candidate-factors',
                           'gene-set-payloads', 'gene-set-collections', 'gene-set-resolution', 'contextual', 'contextual-gene-set-projections'})
         for key, descriptor in mysql.items():
-            self.assertTrue(descriptor['origin'].endswith('?generation_id=' + GENERATION), key)
+            self.assertTrue(descriptor['origin'].endswith('?release_id=' + RELEASE), key)
             capture = self.artifact(package, key)
-            self.assertEqual((capture['generation_id'], capture['model']), (GENERATION, KPN_MODEL))
+            self.assertEqual((capture['release_id'], capture['model']), (RELEASE, KPN_MODEL))
+            self.assertNotIn('generation_id', capture)
             if descriptor['origin'].startswith('mysql:'):
-                self.assertEqual(capture['source']['kind'], 'mysql')
+                self.assertEqual((capture['source']['kind'], capture['format']), ('mysql', 'reveal.reference-evidence.mysql-capture/2'))
                 self.assertEqual(descriptor['origin'].split('?')[0], 'mysql:' + '+'.join(capture['source']['tables']))
+                self.assertTrue(all(table.startswith('reveal_ref_') for table in capture['source']['tables']))
                 self.assertTrue(all(s['sql'].startswith('SELECT ') for s in capture['source']['statements']))
             else:
-                self.assertEqual(capture['source']['kind'], 'mysql-derived')
+                self.assertEqual((capture['source']['kind'], capture['format']), ('mysql-derived', 'reveal.reference-evidence.derived-capture/2'))
                 self.assertTrue(set(capture['source']['derived_from']) <= set(package['source_artifacts']))
+        release = self.artifact(package, 'reference-release')['data']
+        self.assertEqual([(row['release_id'], row['published_at'], row['manifest']['embedding']['dimensions']) for row in release],
+                         [(RELEASE, '2026-10-05T12:00:00Z', 2)])
+        # The lint recognizes every captured reference observation of the release.
+        recognized = cfde_source_files(package, self.root / 'single/package/evidence-package.json')
+        self.assertEqual({package['source_artifacts'][key]['dapper_file_id'] for key in mysql} - recognized, set())
         connections = self.artifact(package, 'connections-gene')
         self.assertNotIn('url', connections)
         self.assertEqual((connections['method'], connections['status'], connections['request']['model']), ('POST', 200, KPN_MODEL))
@@ -445,7 +477,10 @@ class ReferenceEvidenceTests(unittest.TestCase):
         rows = self.artifact(package, 'gene-factor-' + sha256(canonical_json(ANCHOR))[:12])
         self.assertEqual((rows['index'], rows['q'], rows['limit']), ('pigean-gene-factor', ['0000398', KPN_MODEL, 'Factor1'], None))
         self.assertEqual(rows['data'][0], {'phenotype': '0000398', 'trait_group': 'kpn', 'gene_set_size': KPN_MODEL, 'factor': 'Factor1',
-                                           'gene': 'SHH', 'factor_value': .9, 'gene_index': 0})
+                                           'gene': 'SHH', 'factor_value': .9})
+        projections = self.artifact(package, 'gene_set-factor-' + sha256(canonical_json(ANCHOR))[:12])
+        self.assertEqual(projections['scope']['projection_scope'], 'per_library')
+        self.assertEqual({row['library'] for row in projections['data']}, {'GTEx'})
 
     def test_replay_from_build_input_is_byte_identical(self):
         built = self.built()
@@ -488,15 +523,17 @@ class ReferenceEvidenceTests(unittest.TestCase):
     def test_rejections_before_or_during_reads(self):
         with self.assertRaisesRegex(EvidenceBuildError, 'KPN factor public id'):
             self.collect('legacy-id', ['factor:portal:CADinT2D:cfde-inc-v2:Factor1'])
-        with self.assertRaisesRegex(EvidenceBuildError, 'not in reference generation'):
+        with self.assertRaisesRegex(EvidenceBuildError, 'not in the current reference release'):
             self.collect('unknown-factor', [public_id(CAD, 'Factor9')])
         self.assertTrue(self.connections[0].closed)
-        self.assertIn('not in reference generation', decode((self.root / 'unknown-factor/collection-error.json').read_bytes())['error'])
-        with self.assertRaisesRegex(EvidenceBuildError, 'generation id'):
-            self.collect('bad-generation', [ANCHOR], generation_id='legacy')
-        for name, change, message in [('loading', "UPDATE reference_generations SET status='loading'", 'is loading'),
-                                      ('legacy', f"UPDATE reference_generations SET kind='{LEGACY_KIND}',model='{LEGACY_MODEL}'", 'not a eaggl-capped-v1'),
-                                      ('missing', 'DELETE FROM factor_gene_set_projections', None)]:
+        self.assertIn('not in the current reference release', decode((self.root / 'unknown-factor/collection-error.json').read_bytes())['error'])
+        with self.assertRaisesRegex(EvidenceBuildError, 'Invalid reference release id'):
+            self.collect('bad-release', [ANCHOR], release_id='legacy')
+        with self.assertRaisesRegex(EvidenceBuildError, 'published reference release is ' + RELEASE):
+            self.collect('other-release', [ANCHOR], release_id='f' * 64)
+        self.assertEqual(self.collect('same-release', [ANCHOR], release_id=RELEASE).package['pigean']['mechanisms'][ANCHOR]['fit']['upstream_build'], RELEASE)
+        for name, change, message in [('unpublished', 'DELETE FROM reveal_ref_release', 'No reference release is published'),
+                                      ('missing', 'DELETE FROM reveal_ref_projections', None)]:
             database = self.root / f'{name}.sqlite3'; shutil.copyfile(self.database, database)
             db = sqlite3.connect(database); db.execute(change); db.commit(); db.close()
             if message:

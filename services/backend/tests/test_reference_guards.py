@@ -1,14 +1,14 @@
-"""Reference-generation guards, creation-time archive stamps and archive-aware reads.
+"""Reference guards over the served reference release, and reads of stored archive stamps.
 
-Covers docs/reference-reload.md §5 and §8: superseded selections are rejected
-(409), the reload gate holds analysis writes (503), late finishers are born
-archived, listings filter by reference_state, and superseded factors are 410.
-Legacy mode (no reference_active record) keeps today's behaviour.
+The rule: an anchor is current iff its factor id is served by this environment's current factor
+table (the catalog's factors; reveal_ref_factors for retry-review). Unserved anchors are rejected
+(409 REFERENCE_GENERATION_SUPERSEDED), unserved factor reads are 410 with their frozen snapshot,
+and there is no reload gate, no generation pointer and no stamping at creation. Archive stamps
+already stored on records (by the retired cutover) keep rendering, filtering and publishing as before.
 """
 import asyncio
 from contextlib import ExitStack, contextmanager
 from copy import deepcopy
-import importlib.util
 import json
 import os
 from pathlib import Path
@@ -26,7 +26,7 @@ import jwt
 from reveal_backend import analysis_outcomes, app as api, jobs, publication, worker
 from reveal_backend import reference_generation as reference
 from reveal_backend.auth import Problem
-from reveal_backend.evidence_package import canonical_json
+from reveal_backend.evidence_package import EvidenceBuildError, canonical_json
 from reveal_backend.repository import Repository, digest, now, uid
 from reveal_backend.runtime_config import ROOT
 
@@ -42,16 +42,20 @@ COMPOSER = example('createDraft.question_and_anchor.json')['composer']
 SUGGEST = example('suggestMechanisms.dismech_context.json')
 ACCOUNT = example('getAccount.request.json', True)
 
-MAPPING = 'a' * 64
-LEGACY = reference.legacy_generation_id(MAPPING)
-KPN = 'c' * 64
+R1, R2 = 'a' * 64, 'b' * 64
+LEGACY_GENERATION = reference.legacy_generation_id('c' * 64)
 LEGACY_ID = 'factor:portal:T2D:cfde-inc-v2:Factor1'
 KPN_ID = reference.public_id('KPN.TRAIT:0000398', 'Factor1')
+OTHER_ID = reference.public_id('KPN.TRAIT:0000398', 'Factor2')
 LEGACY_BINDING = {'eaggl_factor_id': 'T2D::Factor1', 'eaggl_import_id': 'f' * 64, 'embedding_run_id': 'e' * 64,
-                  'mapping_run_id': MAPPING, 'gene_set_import_id': 'd' * 64, 'cfde_node_id': LEGACY_ID}
-KPN_BINDING = {'eaggl_factor_id': 'T2D::Factor1', 'reference_generation_id': KPN, 'model': reference.KPN_MODEL,
-               'factor_key': 'KPN.TRAIT:0000398::Factor1', 'kpn_trait_id': 'KPN.TRAIT:0000398',
-               'mapping_run_id': KPN, 'gene_set_import_id': KPN, 'cfde_node_id': KPN_ID}
+                  'mapping_run_id': 'c' * 64, 'gene_set_import_id': 'd' * 64, 'cfde_node_id': LEGACY_ID}
+
+
+def binding(source_id, release):
+    key = reference.parse_public_id(source_id)['factor_key']
+    return {'eaggl_factor_id': 'T2D::' + key.split('::')[1], 'factor_key': key, 'kpn_trait_id': 'KPN.TRAIT:0000398',
+            'eaggl_import_id': None, 'embedding_run_id': release, 'mapping_run_id': release, 'gene_set_import_id': release,
+            'reference_generation_id': release, 'model': reference.KPN_MODEL, 'cfde_node_id': source_id}
 
 
 def factor(source_id, letter):
@@ -69,22 +73,21 @@ def selection(record):
     return {'reference': source_ref(record), 'origin': 'manual', 'suggestion_id': None}
 
 
-class Generations:
-    """Catalog double exposing the reference-generation attributes of docs §8."""
-    embedding_run = 'embedding'; mapping_run = MAPPING
+class Release:
+    """Catalog double: the factors of the served reference release (the catalog attributes the app reads)."""
+    model = reference.KPN_MODEL
+    LETTERS = {KPN_ID: '2', OTHER_ID: '3'}
 
     def __init__(self):
         self.gaps = {GAP_ID: GAP}; self.mechanisms = {}; self.dismech_import = 'dismech-import'
         self.archived, self.snapshots = {}, {}
-        self.serve_legacy()
+        self.serve(R1, KPN_ID, OTHER_ID)
 
-    def serve_legacy(self):
-        self.active_generation = None; self.reference_generation_id = LEGACY; self.model = reference.LEGACY_MODEL
-        self.factors = {LEGACY_ID: factor(LEGACY_ID, '1')}; self.bindings = {LEGACY_ID: deepcopy(LEGACY_BINDING)}
-
-    def serve_kpn(self):
-        self.active_generation = KPN; self.reference_generation_id = KPN; self.model = reference.KPN_MODEL
-        self.factors = {KPN_ID: factor(KPN_ID, '2')}; self.bindings = {KPN_ID: deepcopy(KPN_BINDING)}
+    def serve(self, release, *identities):
+        """Publish a release: the catalog's run fields name it and it serves exactly `identities`."""
+        self.release_id = self.reference_generation_id = self.embedding_run = self.mapping_run = release
+        self.factors = {identity: factor(identity, self.LETTERS[identity]) for identity in identities}
+        self.bindings = {identity: binding(identity, release) for identity in identities}
 
     def load(self): pass
 
@@ -105,30 +108,17 @@ class Generations:
     def archived_reference_factor(self, archive_id): return self.snapshots.get(archive_id)
     def dismech_catalog(self): return {}
     def suggest_factors(self, *args, **kwargs): return []
-    def context_embedding_provenance(self, *args): return {'dismech_embedding_run_id': 'context-run'}
+    def context_embedding_provenance(self, *args): return {'dismech_embedding_run_id': self.release_id}
     def provenance(self, *args): return {}
 
 
-def contract_archive():
-    """Stand-in for reveal_backend.reference_archive that follows the §4.2 placement contract."""
-    module = types.ModuleType('reveal_backend.reference_archive'); module.calls = []
-    places = {'account': 'summary', 'account_membership': 'summary', 'publication': 'summary', 'publication_snapshot': 'summary',
-              'analysis_outcome': 'record', 'outcome_snapshot': 'record', 'outcome_summary': None,
-              'outcome_publication': 'summary', 'request': None}
-    public = {'publication', 'publication_snapshot', 'outcome_publication', 'outcome_snapshot'}
-
-    def anchors_for_stamp(request_binding, *, draft_binding=None, scientific_document=None, composer=None, generation_id):
-        module.calls.append({'generation_id': generation_id, 'scientific_document': scientific_document, 'composer': composer})
-        return [{'source_id': anchor['cfde_node_id'], 'factor_id': anchor.get('eaggl_factor_id'),
-                 'archived_reference_factor_id': reference.archive_id(generation_id, anchor['cfde_node_id'])}
-                for anchor in request_binding['anchors']]
-
-    def stamp_payload(kind, payload, stamp):
-        payload = deepcopy(payload); target = payload[places[kind]] if places[kind] else payload
-        target['archive'] = reference.public_stamp(stamp) if kind in public else stamp
-        return payload
-
-    module.anchors_for_stamp, module.stamp_payload = anchors_for_stamp, stamp_payload
+def refusing_module(name, *functions):
+    """A stand-in module whose functions fail the test if the app ever calls them."""
+    module = types.ModuleType(name)
+    def refuse(function):
+        def call(*args, **kwargs): raise AssertionError(function + ' must not be called')
+        return call
+    for function in functions: setattr(module, function, refuse(function))
     return module
 
 
@@ -137,16 +127,26 @@ class ReferenceGuardTests(unittest.TestCase):
         temporary = tempfile.TemporaryDirectory(); self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name).resolve()
         self.repo = Repository(str(self.root / 'app.sqlite')); self.repo.migrate()
-        self.catalog = Generations(); self.archive = contract_archive()
-        # Replace only this key: restoring all of sys.modules would evict modules imported lazily meanwhile.
-        name = 'reveal_backend.reference_archive'; previous = sys.modules.get(name); sys.modules[name] = self.archive
+        self.catalog = Release()
+        # No stamping and no generation pointers: the archive pass is never imported, and the
+        # pointer/gate/generation helpers are never called.
+        name = 'reveal_backend.reference_archive'; previous = sys.modules.get(name)
+        sys.modules[name] = refusing_module(name, 'anchors_for_stamp', 'stamp_payload', 'capture_factors')
         self.addCleanup(lambda: sys.modules.__setitem__(name, previous) if previous is not None else sys.modules.pop(name, None))
+        for function in ('read_active', 'read_gate', 'generation_of_binding', 'generation_of_anchors'):
+            context = patch.object(reference, function, side_effect=AssertionError(function + ' must not be called'))
+            context.start(); self.addCleanup(context.stop)
         for context in (patch.object(api, 'repo', self.repo), patch.object(api, 'catalog', self.catalog),
                         patch.dict(os.environ, {'REVEAL_GATEWAY_SECRET': 's' * 40, 'REVEAL_GATEWAY_ISSUER': 'reveal-nextjs',
-                                                'REVEAL_GATEWAY_AUDIENCE': 'reveal-api', 'REVEAL_ARTIFACTS_DIR': str(self.root)})):
+                                                'REVEAL_GATEWAY_AUDIENCE': 'reveal-api', 'REVEAL_ARTIFACTS_DIR': str(self.root),
+                                                # Retired pins: never read.
+                                                'REVEAL_REFERENCE_GENERATION_ID': 'f' * 64})):
             context.start(); self.addCleanup(context.stop)
-        os.environ.pop('REVEAL_REFERENCE_GENERATION_ID', None)  # restored by patch.dict
         self.client = TestClient(api.app); self.owner = self.principal()
+        with self.repo.transaction() as tx:
+            # Retired records of the old cutover: a closed reload gate and a pointer to another generation.
+            tx.put(reference.CONTROL_KIND, reference.CONTROL_ID, reference.CATALOG_OWNER, {'closed': True, 'reason': 'retired gate'})
+            tx.put(reference.ACTIVE_KIND, reference.ACTIVE_ID, reference.CATALOG_OWNER, {'generation_id': 'e' * 64, 'model': reference.KPN_MODEL})
 
     # ------------------------------------------------------------------ helpers
     def principal(self):
@@ -162,13 +162,6 @@ class ReferenceGuardTests(unittest.TestCase):
         token = jwt.encode({'sub': owner or self.owner, 'principal_kind': 'registered', 'iss': 'reveal-nextjs', 'aud': 'reveal-api',
                             'iat': current, 'exp': current + 120, 'jti': uid()}, 's' * 40, algorithm='HS256')
         return {'Authorization': 'Bearer ' + token, 'Idempotency-Key': uid()}
-
-    def activate(self, generation=KPN):
-        with self.repo.transaction() as tx:
-            reference.write_active(tx, generation, reference.KPN_MODEL, expected_previous=None)
-
-    def gate(self, closed):
-        with self.repo.transaction() as tx: reference.set_gate(tx, closed, reason='test reload')
 
     def composer(self, *records, **changes):
         return dict(deepcopy(COMPOSER), eaggl_anchors=[selection(record) for record in records], **changes)
@@ -198,27 +191,41 @@ class ReferenceGuardTests(unittest.TestCase):
                    'anchor_display': {anchor['cfde_node_id']: {'label': 'Frozen label'} for anchor in anchors}})
             return jobs.enqueue(tx, self.owner, kind, request_id=request_id)
 
+    def served_table(self, *identities):
+        """This environment's reveal_ref_factors table (in the application database, as in Aurora)."""
+        with self.repo.transaction() as tx:
+            tx.execute('CREATE TABLE IF NOT EXISTS reveal_ref_factors(factor_key TEXT PRIMARY KEY, public_id TEXT, eaggl_factor_id TEXT, '
+                       'kpn_trait_id TEXT, factor_number INTEGER, label TEXT, input_sha256 TEXT, source_revision TEXT, metadata TEXT)')
+            tx.execute('DELETE FROM reveal_ref_factors')
+            for identity in identities:
+                parsed = reference.parse_public_id(identity)
+                tx.execute('INSERT INTO reveal_ref_factors VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)', (parsed['factor_key'], identity, 'T2D::' + parsed['factor'],
+                           parsed['kpn_trait_id'], int(parsed['factor'][6:]), 'label', '0' * 64, '1' * 64, '{}'))
+
     # ------------------------------------------------------------------ guards
-    def test_legacy_mode_freezes_and_submits_exactly_as_before(self):
-        legacy = self.catalog.factors[LEGACY_ID]
-        draft = self.create_draft(legacy)
-        # Unchanged anchors of the served generation are retained with their first-saved runs.
-        self.catalog.bindings[LEGACY_ID]['embedding_run_id'] = 'changed-embedding'
-        patched = self.patch_draft(draft, {'expected_version': 1, 'composer': self.composer(legacy, mechanism_subquery='edited')})
+    def test_served_anchors_freeze_and_submit_with_their_first_saved_runs(self):
+        kpn = self.catalog.factors[KPN_ID]
+        draft = self.create_draft(kpn)
+        # A later release still serves the factor: the unchanged anchor keeps its first-saved binding.
+        self.catalog.serve(R2, KPN_ID, OTHER_ID)
+        patched = self.patch_draft(draft, {'expected_version': 1, 'composer': self.composer(kpn, mechanism_subquery='edited')})
         self.assertEqual(patched.status_code, 200, patched.text)
         response = self.submit(patched.json()); self.assertEqual(response.status_code, 202, response.text)
         with self.repo.read_transaction() as tx:
-            binding = tx.get('request_binding', response.json()['research_request_id'])['data']
-            self.assertEqual(binding['anchors'], [LEGACY_BINDING])
-            self.assertIsNone(tx.get(reference.ACTIVE_KIND, reference.ACTIVE_ID))
-        self.code(self.client.get('/v1/mechanisms/factor:portal:T2D:cfde-inc-v2:Factor9'), 404, 'NOT_FOUND')
-        # Legacy mode never rejects manual anchors by generation.
-        body = dict(deepcopy(SUGGEST), manual_eaggl_anchors=[source_ref(factor('factor:portal:X:cfde-inc-v2:Factor2', '9'))])
-        self.assertEqual(self.client.post('/v1/mechanisms/suggest', json=body).status_code, 200)
+            frozen = tx.get('request_binding', response.json()['research_request_id'])['data']
+            self.assertEqual(frozen['anchors'], [binding(KPN_ID, R1)])
+            self.assertEqual(tx.get(reference.ACTIVE_KIND, reference.ACTIVE_ID)['data']['generation_id'], 'e' * 64)  # Never read or moved.
+        # A newly added anchor binds the current release.
+        other = self.catalog.factors[OTHER_ID]
+        patched = self.patch_draft(patched.json(), {'expected_version': 2, 'composer': self.composer(kpn, other)})
+        self.assertEqual(patched.status_code, 200, patched.text)
+        with self.repo.read_transaction() as tx:
+            selections = tx.get('draft_binding', draft['id'])['data']['selections']
+        self.assertEqual((selections[KPN_ID]['binding'], selections[OTHER_ID]['binding']), (binding(KPN_ID, R1), binding(OTHER_ID, R2)))
 
     def test_catalog_loads_before_write_transactions_open(self):
-        # A cold catalog load reads reference_active through the application pool: it must never nest
-        # inside a pooled transaction (draft saves, submits and vote writes hold the global write lock).
+        # A cold catalog load does network I/O: it must never run inside a pooled write
+        # transaction (draft saves, submits and vote writes hold the global write lock).
         depth, loads = [], []
         transaction, read_transaction = self.repo.transaction, self.repo.read_transaction
         def tracked(opener):
@@ -235,9 +242,10 @@ class ReferenceGuardTests(unittest.TestCase):
             stack.enter_context(patch.object(self.repo, 'read_transaction', tracked(read_transaction)))
             return stack
         self.catalog.load = lambda: loads.append(bool(depth))
+        kpn = self.catalog.factors[KPN_ID]
         with tracking():
-            draft = self.create_draft(self.catalog.factors[LEGACY_ID]); first = len(loads)
-            patched = self.patch_draft(draft, {'expected_version': 1, 'composer': self.composer(self.catalog.factors[LEGACY_ID], mechanism_subquery='x')})
+            draft = self.create_draft(kpn); first = len(loads)
+            patched = self.patch_draft(draft, {'expected_version': 1, 'composer': self.composer(kpn, mechanism_subquery='x')})
             self.assertEqual(patched.status_code, 200, patched.text); second = len(loads)
             self.assertEqual(self.submit(patched.json()).status_code, 202)
         self.assertEqual([loads[0], loads[first], loads[second]], [False, False, False])
@@ -261,57 +269,74 @@ class ReferenceGuardTests(unittest.TestCase):
                 self.assertEqual(response.status_code, 200, response.text)
                 self.assertEqual(loads, [False], (method, path))
 
-    def test_superseded_draft_submission_is_409_and_reload_gate_is_503(self):
-        draft = self.create_draft(self.catalog.factors[LEGACY_ID])
-        self.catalog.serve_kpn(); self.activate()
+    def test_unserved_draft_submission_is_409_and_there_is_no_reload_gate(self):
+        draft = self.create_draft(self.catalog.factors[KPN_ID])
+        self.catalog.serve(R2, OTHER_ID)  # The new release no longer serves the draft's factor.
         body = self.code(self.submit(draft), 409, 'REFERENCE_GENERATION_SUPERSEDED')
         self.assertFalse(body['retryable'])
         with self.repo.read_transaction() as tx:
             self.assertEqual(tx.list('job', self.owner), []); self.assertEqual(tx.list('request', self.owner), [])
-        current = self.create_draft(self.catalog.factors[KPN_ID])
+        # The retired gate record is closed, yet nothing waits for it.
+        current = self.create_draft(self.catalog.factors[OTHER_ID])
+        response = self.submit(current); self.assertEqual(response.status_code, 202, response.text)
+        with self.repo.read_transaction() as tx:
+            self.assertEqual(tx.get('request_binding', response.json()['research_request_id'])['data']['anchors'], [binding(OTHER_ID, R2)])
         account_id = 'dapper:ScientificAccount.' + 'a' * 32
         with self.repo.transaction() as tx:
             tx.put('account', digest([self.owner, account_id]), self.owner, {'result': {'document': {}}, 'summary': {}})
-        self.gate(True)
-        self.assertTrue(self.code(self.submit(current), 503, 'REFERENCE_RELOAD_IN_PROGRESS')['retryable'])
         paragraph = self.client.post('/v1/jobs', json={'kind': 'paragraph', 'account_id': account_id}, headers=self.headers())
         self.assertEqual(paragraph.status_code, 202, paragraph.text)
-        self.gate(False)
-        response = self.submit(current); self.assertEqual(response.status_code, 202, response.text)
-        with self.repo.read_transaction() as tx:
-            self.assertEqual(tx.get('request_binding', response.json()['research_request_id'])['data']['anchors'], [KPN_BINDING])
 
-    def test_draft_writes_revalidate_superseded_anchors_and_wait_for_the_gate(self):
-        legacy, draft = self.catalog.factors[LEGACY_ID], self.create_draft(self.catalog.factors[LEGACY_ID])
-        self.catalog.serve_kpn(); self.activate(); kpn = self.catalog.factors[KPN_ID]
+    def test_legacy_anchor_drafts_are_superseded(self):
+        legacy = factor(LEGACY_ID, '1')
+        with self.repo.transaction() as tx:
+            draft = {'id': uid(), 'owner_user_id': self.owner, 'version': 1, 'composer': self.composer(legacy), 'created_at': now(),
+                     'updated_at': now(), 'lifecycle': 'saved', 'expires_at': None, 'name': 'Legacy draft'}
+            tx.put('draft', draft['id'], self.owner, draft)
+            tx.put('draft_binding', draft['id'], self.owner, {'dismech_import_id': 'dismech-import', 'source_gap': GAP,
+                   'selections': {LEGACY_ID: {'reference': source_ref(legacy), 'record': legacy, 'binding': LEGACY_BINDING}}})
+        self.code(self.submit(draft), 409, 'REFERENCE_GENERATION_SUPERSEDED')
+        self.code(self.patch_draft(draft, {'expected_version': 1, 'composer': self.composer(legacy, mechanism_subquery='edited')}),
+                  409, 'REFERENCE_GENERATION_SUPERSEDED')
+
+    def test_draft_writes_revalidate_unserved_anchors(self):
+        kpn, draft = self.catalog.factors[KPN_ID], self.create_draft(self.catalog.factors[KPN_ID])
+        self.catalog.serve(R2, OTHER_ID)
+        other = self.catalog.factors[OTHER_ID]
         renamed = self.patch_draft(draft, {'expected_version': 1, 'name': 'Renamed'})
         self.assertEqual(renamed.status_code, 200, renamed.text)
-        stale = self.patch_draft(draft, {'expected_version': 2, 'composer': self.composer(legacy, mechanism_subquery='edited')})
+        stale = self.patch_draft(draft, {'expected_version': 2, 'composer': self.composer(kpn, mechanism_subquery='edited')})
         self.code(stale, 409, 'REFERENCE_GENERATION_SUPERSEDED')
         gap_only = self.patch_draft(draft, {'expected_version': 2, 'composer': self.composer()})
         self.assertEqual(gap_only.status_code, 200, gap_only.text)
-        self.gate(True)
-        self.code(self.patch_draft(draft, {'expected_version': 3, 'composer': self.composer(kpn)}), 503, 'REFERENCE_RELOAD_IN_PROGRESS')
-        self.create_draft(kpn, status=503)
-        self.create_draft()  # a gap-only draft ("new analysis with current factors") needs no reference data
-        self.gate(False)
-        current = self.patch_draft(draft, {'expected_version': 3, 'composer': self.composer(kpn)})
+        current = self.patch_draft(draft, {'expected_version': 3, 'composer': self.composer(other)})
         self.assertEqual(current.status_code, 200, current.text)
-        self.gate(True)
-        edited = self.patch_draft(draft, {'expected_version': 4, 'composer': self.composer(kpn, mechanism_subquery='still editable')})
+        edited = self.patch_draft(draft, {'expected_version': 4, 'composer': self.composer(other, mechanism_subquery='still editable')})
         self.assertEqual(edited.status_code, 200, edited.text)
         with self.repo.read_transaction() as tx:
-            self.assertEqual(tx.get('draft_binding', draft['id'])['data']['selections'][KPN_ID]['binding'], KPN_BINDING)
+            self.assertEqual(tx.get('draft_binding', draft['id'])['data']['selections'][OTHER_ID]['binding'], binding(OTHER_ID, R2))
+        # A served factor whose content changed is reselected, not superseded.
+        self.catalog.factors[OTHER_ID] = factor(OTHER_ID, '9')
+        changed = self.patch_draft(draft, {'expected_version': 5, 'composer': self.composer(other, mechanism_subquery='again')})
+        self.assertEqual(changed.status_code, 200, changed.text)  # Unchanged selections keep their frozen record.
+        reselected = self.patch_draft(draft, {'expected_version': 6, 'composer': self.composer(factor(OTHER_ID, '3') | {'source_revision': '4' * 64})})
+        self.code(reselected, 409, 'SOURCE_REVISION_CHANGED')
 
-    def test_suggest_rejects_manual_anchors_outside_the_active_generation(self):
-        self.catalog.serve_kpn()
+    def test_suggest_rejects_unserved_manual_anchors(self):
         body = dict(deepcopy(SUGGEST), manual_eaggl_anchors=[source_ref(factor(LEGACY_ID, '1'))])
         self.code(self.client.post('/v1/mechanisms/suggest', json=body), 409, 'REFERENCE_GENERATION_SUPERSEDED')
-        body['manual_eaggl_anchors'] = [source_ref(self.catalog.factors[KPN_ID])]
+        self.catalog.serve(R2, OTHER_ID)
+        body['manual_eaggl_anchors'] = [source_ref(factor(KPN_ID, '2'))]
+        self.code(self.client.post('/v1/mechanisms/suggest', json=body), 409, 'REFERENCE_GENERATION_SUPERSEDED')
+        body['manual_eaggl_anchors'] = [source_ref(self.catalog.factors[OTHER_ID])]
         response = self.client.post('/v1/mechanisms/suggest', json=body)
         self.assertEqual(response.status_code, 200, response.text)
+        with self.repo.read_transaction() as tx:
+            suggestion = tx.get('suggestion', response.json()['suggestion_id'])['data']
+        # Suggestion records carry the release in their run fields.
+        self.assertEqual((suggestion['embedding_run_id'], suggestion['mapping_run_id']), (R2, R2))
 
-    def test_retry_review_rejects_superseded_generation_and_waits_for_gate(self):
+    def test_retry_review_blocks_only_anchors_the_reference_factor_table_does_not_serve(self):
         def failed(anchors, kind='analysis', account_id=None):
             if kind == 'analysis': job = self.job_with_binding(anchors)
             else:
@@ -324,46 +349,46 @@ class ReferenceGuardTests(unittest.TestCase):
             with self.repo.read_transaction() as tx: return tx.get('job', job['id'])['data']
         retry = lambda job: self.client.post('/v1/jobs/' + job['id'] + '/retry-review',
                                              json={'expected_last_event_id': job['last_event_id']}, headers=self.headers())
-        legacy = failed([LEGACY_BINDING])
-        # Legacy mode: the guard passes; the (absent) saved capture is what refuses.
-        self.code(retry(legacy), 409, 'REVIEW_CAPTURE_UNAVAILABLE')
-        self.gate(True)
-        self.code(retry(legacy), 503, 'REFERENCE_RELOAD_IN_PROGRESS')
+        legacy, current, older = failed([LEGACY_BINDING]), failed([binding(KPN_ID, R1)]), failed([binding(KPN_ID, 'e' * 64), binding(OTHER_ID, R1)])
+        self.code(retry(current), 503, 'SOURCE_NOT_READY')  # No reference factor table yet.
+        self.served_table(KPN_ID, OTHER_ID)
+        self.code(retry(legacy), 409, 'REFERENCE_GENERATION_SUPERSEDED')
+        # The guard passes for served factors, whichever release froze them; the (absent) saved capture is what refuses.
+        self.code(retry(current), 409, 'REVIEW_CAPTURE_UNAVAILABLE')
+        self.code(retry(older), 409, 'REVIEW_CAPTURE_UNAVAILABLE')
         paragraph = failed([], 'paragraph', 'dapper:ScientificAccount.' + 'b' * 32)
         self.code(retry(paragraph), 409, 'REVIEW_CAPTURE_UNAVAILABLE')
-        self.gate(False); self.activate()
-        self.code(retry(legacy), 409, 'REFERENCE_GENERATION_SUPERSEDED')
-        self.code(retry(failed([KPN_BINDING])), 409, 'REVIEW_CAPTURE_UNAVAILABLE')
-
-    def test_generation_pin_overrides_the_active_record(self):
-        with self.repo.read_transaction() as tx: self.assertIsNone(analysis_outcomes.active_reference_generation(tx))
-        self.activate()
-        with self.repo.read_transaction() as tx: self.assertEqual(analysis_outcomes.active_reference_generation(tx), KPN)
-        with patch.dict(os.environ, {'REVEAL_REFERENCE_GENERATION_ID': 'e' * 64}), self.repo.read_transaction() as tx:
-            self.assertEqual(analysis_outcomes.active_reference_generation(tx), 'e' * 64)
+        self.served_table(KPN_ID)
+        self.code(retry(older), 409, 'REFERENCE_GENERATION_SUPERSEDED')
+        self.code(retry(current), 409, 'REVIEW_CAPTURE_UNAVAILABLE')
+        self.code(retry(failed([{**binding(KPN_ID, R1), 'cfde_node_id': None}])), 409, 'REFERENCE_GENERATION_SUPERSEDED')
 
     # ------------------------------------------------------------------ reads
-    def test_superseded_mechanism_is_gone_with_its_frozen_snapshot(self):
-        self.catalog.serve_kpn()
-        snapshot = {'format': 'reveal.archived-reference-factor/1', 'archive_id': reference.archive_id(LEGACY, LEGACY_ID),
-                    'generation_id': LEGACY, 'source_id': LEGACY_ID, 'top_genes': [{'symbol': 'TCF7L2', 'loading': 0.5}]}
-        self.catalog.archived[LEGACY_ID] = snapshot; self.catalog.snapshots[snapshot['archive_id']] = snapshot
-        body = self.code(self.client.get('/v1/mechanisms/' + LEGACY_ID), 410, 'REFERENCE_GENERATION_SUPERSEDED')
-        self.assertEqual(body['archived_reference_factor'], snapshot); self.assertFalse(body['retryable'])
+    def test_unserved_factor_is_gone_with_its_frozen_snapshot(self):
+        legacy = {'format': 'reveal.archived-reference-factor/1', 'archive_id': reference.archive_id(LEGACY_GENERATION, LEGACY_ID),
+                  'generation_id': LEGACY_GENERATION, 'source_id': LEGACY_ID, 'top_genes': [{'symbol': 'TCF7L2', 'loading': 0.5}]}
+        dropped = {'format': 'reveal.archived-reference-factor/1', 'archive_id': reference.archive_id(R1, OTHER_ID),
+                   'generation_id': R1, 'source_id': OTHER_ID, 'top_genes': [{'symbol': 'INS', 'loading': 0.7}]}
+        for snapshot in (legacy, dropped):
+            self.catalog.archived[snapshot['source_id']] = snapshot; self.catalog.snapshots[snapshot['archive_id']] = snapshot
+        self.catalog.serve(R2, KPN_ID)
+        for identity, snapshot in ((LEGACY_ID, legacy), (OTHER_ID, dropped)):
+            body = self.code(self.client.get('/v1/mechanisms/' + identity), 410, 'REFERENCE_GENERATION_SUPERSEDED')
+            self.assertEqual(body['archived_reference_factor'], snapshot); self.assertFalse(body['retryable'])
         uncaptured = self.code(self.client.get('/v1/mechanisms/factor:portal:T2D:cfde-inc-v2:Factor7'), 410, 'REFERENCE_GENERATION_SUPERSEDED')
         self.assertIsNone(uncaptured['archived_reference_factor'])
         self.code(self.client.get('/v1/mechanisms/' + reference.public_id('KPN.TRAIT:0000001', 'Factor3')), 404, 'NOT_FOUND')
         self.assertEqual(self.client.get('/v1/mechanisms/' + KPN_ID).json(), self.catalog.factors[KPN_ID])
         self.code(self.client.get('/v1/mechanisms/' + KPN_ID, params={'source_revision': '0' * 64}), 409, 'SOURCE_REVISION_CHANGED')
         # Public reference data: no session needed; unknown and malformed ids are 404.
-        response = self.client.get('/v1/reference-factors/' + snapshot['archive_id'])
-        self.assertEqual(response.status_code, 200, response.text); self.assertEqual(response.json(), snapshot)
+        response = self.client.get('/v1/reference-factors/' + legacy['archive_id'])
+        self.assertEqual(response.status_code, 200, response.text); self.assertEqual(response.json(), legacy)
         self.code(self.client.get('/v1/reference-factors/' + '0' * 64), 404, 'NOT_FOUND')
         self.code(self.client.get('/v1/reference-factors/not-an-archive-id'), 404, 'NOT_FOUND')
 
-    def test_account_detail_returns_archive_for_owner_and_public_snapshot(self):
+    def test_account_detail_returns_stored_archive_for_owner_and_public_snapshot(self):
         identity = ACCOUNT['root_id']; checksum = digest(ACCOUNT['document'])
-        stamp = reference.build_stamp(LEGACY, KPN, reference={'model': reference.LEGACY_MODEL, 'anchors': []}, gap=None,
+        stamp = reference.build_stamp(LEGACY_GENERATION, R1, reference={'model': reference.LEGACY_MODEL, 'anchors': []}, gap=None,
                                       analysis={'job_id': 'job', 'request_id': 'request', 'account_id': identity})
         publisher = self.principal()
         with self.repo.transaction() as tx:
@@ -389,7 +414,7 @@ class ReferenceGuardTests(unittest.TestCase):
         self.assertEqual(public.json()['archive'], reference.public_stamp(stamp))
         self.assertIsNone(public.json()['archive']['analysis']['job_id'])
 
-    # ------------------------------------------------------------------ stamping at creation
+    # ------------------------------------------------------------------ no stamping at creation; stored stamps keep rendering
     def outcome(self, job, *, created_at=None):
         record = {'outcome': 'insufficient_evidence', 'summary': 'Scoped', 'reason': 'Missing link', 'knowledge_gap': GAP['object'],
                   'source_gap': deepcopy(COMPOSER['source_gap']), 'anchors': [{'source_id': LEGACY_ID, 'name': 'Frozen'}],
@@ -398,46 +423,38 @@ class ReferenceGuardTests(unittest.TestCase):
         prepared = {'record': record, 'artifacts': {}}
         with self.repo.transaction() as tx: return analysis_outcomes.save(tx, job, prepared), prepared
 
-    def test_late_outcome_is_born_archived_and_published_without_private_ids(self):
-        current, _ = self.outcome(self.job_with_binding([LEGACY_BINDING]), created_at='2026-09-01T00:00:00Z')
-        self.activate()
-        same, _ = self.outcome(self.job_with_binding([KPN_BINDING]), created_at='2026-09-02T00:00:00Z')
-        document = {'knowledge_gaps': [GAP['object']], 'mechanisms': [factor(LEGACY_ID, '1')['object']]}
-        job = self.job_with_binding([LEGACY_BINDING], document=document)
-        late, prepared = self.outcome(job, created_at='2026-09-03T00:00:00Z')
-        # The request's frozen catalog Mechanism nodes and composer origins feed the stamp anchors.
-        self.assertEqual((self.archive.calls[-1]['scientific_document'], self.archive.calls[-1]['composer']['eaggl_anchors'][0]['origin']),
-                         (document, 'automatic'))
+    def test_outcomes_are_never_stamped_at_creation_and_stored_stamps_keep_rendering(self):
+        current, _ = self.outcome(self.job_with_binding([binding(KPN_ID, R1)]), created_at='2026-09-01T00:00:00Z')
+        late_job = self.job_with_binding([LEGACY_BINDING])  # Collected on reference data the release no longer serves.
+        late, prepared = self.outcome(late_job, created_at='2026-09-03T00:00:00Z')
         with self.repo.read_transaction() as tx:
-            for identity in (current, same):
+            for identity in (current, late):
                 self.assertNotIn('archive', tx.get('analysis_outcome', identity)['data']['record'])
                 self.assertNotIn('archive', tx.get('outcome_summary', identity)['data'])
-            record = tx.get('analysis_outcome', late)['data']['record']
-            stamp = record['archive']
-            self.assertEqual(tx.get('outcome_summary', late)['data']['archive'], stamp)
-        self.assertEqual((stamp['status'], stamp['reason']), ('archived', 'reference_generation_superseded'))
-        self.assertEqual((stamp['from_reference_generation'], stamp['to_reference_generation']), (LEGACY, KPN))
-        self.assertEqual(stamp['analysis'], {'job_id': job['id'], 'request_id': job['research_request_id'], 'evidence_package_sha256': '9' * 64,
-                                             'account_id': None, 'outcome_id': late})
-        self.assertEqual(stamp['gap'], {'id': GAP_ID, 'source_id': COMPOSER['source_gap']['source_id'],
-                                        'source_revision': COMPOSER['source_gap']['source_revision']})
-        self.assertEqual(stamp['reference']['model'], reference.LEGACY_MODEL)
-        self.assertEqual(stamp['reference']['anchors'][0]['archived_reference_factor_id'], reference.archive_id(LEGACY, LEGACY_ID))
-        self.assertEqual(record['provenance'], prepared['record']['provenance'])  # stamp sits outside provenance
-        with self.repo.transaction() as tx: self.assertEqual(analysis_outcomes.save(tx, job, prepared), late)  # replay
-        with self.repo.transaction() as tx: analysis_outcomes.change(tx, late, self.owner, 'public', 0)
+        with self.repo.transaction() as tx: self.assertEqual(analysis_outcomes.save(tx, late_job, prepared), late)  # replay
+        # An outcome the retired cutover stamped: the stamp sits in record.archive and the summary.
+        stored, _ = self.outcome(self.job_with_binding([LEGACY_BINDING]), created_at='2026-09-02T00:00:00Z')
+        stamp = reference.build_stamp(LEGACY_GENERATION, R1, reference={'model': reference.LEGACY_MODEL, 'anchors': []},
+            gap={'id': GAP_ID, 'source_id': COMPOSER['source_gap']['source_id'], 'source_revision': COMPOSER['source_gap']['source_revision']},
+            analysis={'job_id': uid(), 'request_id': uid(), 'evidence_package_sha256': '9' * 64, 'outcome_id': stored})
+        with self.repo.transaction() as tx:
+            row = tx.get('analysis_outcome', stored)['data']; row['record']['archive'] = stamp
+            tx.put('analysis_outcome', stored, self.owner, row)
+            summary = tx.get('outcome_summary', stored)['data']; summary['archive'] = stamp
+            tx.put('outcome_summary', stored, self.owner, summary)
+        with self.repo.transaction() as tx: analysis_outcomes.change(tx, stored, self.owner, 'public', 0)
         with self.repo.read_transaction() as tx:
-            published = tx.get('outcome_publication', late)['data']
+            published = tx.get('outcome_publication', stored)['data']
             shared = tx.get('outcome_snapshot', published['snapshot_id'])['data']['record']['archive']
         self.assertEqual(shared, reference.public_stamp(stamp)); self.assertEqual(published['summary']['archive'], shared)
-        self.assertIsNone(shared['analysis']['request_id']); self.assertEqual(shared['analysis']['outcome_id'], late)
-        self.assertEqual(self.client.get('/v1/analysis-outcomes/' + late).json()['archive'], shared)
-        self.assertEqual(self.client.get('/v1/analysis-outcomes/' + late, headers=self.headers()).json()['archive'], stamp)
+        self.assertIsNone(shared['analysis']['request_id']); self.assertEqual(shared['analysis']['outcome_id'], stored)
+        self.assertEqual(self.client.get('/v1/analysis-outcomes/' + stored).json()['archive'], shared)
+        self.assertEqual(self.client.get('/v1/analysis-outcomes/' + stored, headers=self.headers()).json()['archive'], stamp)
         # Listings: all (current first, newest first within each group), current, archived.
         listed = lambda state=None: [item['id'] for item in self.client.get('/v1/analysis-outcomes', headers=self.headers(),
             params={'reference_state': state} if state else {}).json()['items']]
-        self.assertEqual(listed(), [same, current, late])
-        self.assertEqual(listed('current'), [same, current]); self.assertEqual(listed('archived'), [late])
+        self.assertEqual(listed(), [late, current, stored])
+        self.assertEqual(listed('current'), [late, current]); self.assertEqual(listed('archived'), [stored])
         self.code(self.client.get('/v1/analysis-outcomes', params={'reference_state': 'outdated'}, headers=self.headers()), 422, 'INVALID_QUERY')
         path = '/v1/knowledge-gaps/' + GAP_ID + '/outcomes'
         self.assertEqual([item['archive'] for item in self.client.get(path).json()['items']], [shared])
@@ -464,17 +481,18 @@ class ReferenceGuardTests(unittest.TestCase):
             return job, identity, tx.get('account', digest([self.owner, identity]))['data'], \
                 tx.get('account_membership', digest([self.owner, identity]))['data']
 
-    def test_late_account_is_born_archived_listed_after_current_work_and_not_counted(self):
-        accept = self.accept_account
-        _, current, account, membership = accept([LEGACY_BINDING], 'c')
+    def test_accounts_are_never_stamped_at_creation_and_stored_stamps_keep_counting_apart(self):
+        _, current, account, membership = self.accept_account([binding(KPN_ID, R1)], 'c')
         self.assertNotIn('archive', account['summary']); self.assertNotIn('archive', membership['summary'])
-        self.activate()
-        job, late, account, membership = accept([LEGACY_BINDING], 'd')
-        stamp = account['summary']['archive']
-        self.assertEqual(membership['summary']['archive'], stamp); self.assertNotIn('archive', account['result'])
-        self.assertEqual((stamp['from_reference_generation'], stamp['to_reference_generation']), (LEGACY, KPN))
-        self.assertEqual((stamp['analysis']['account_id'], stamp['analysis']['job_id']), (late, job['id']))
-        self.assertEqual(self.archive.calls[-1]['scientific_document']['scientific_accounts'][0]['id'], late)
+        job, late, account, membership = self.accept_account([LEGACY_BINDING], 'd')
+        self.assertNotIn('archive', account['summary']); self.assertNotIn('archive', membership['summary'])
+        # The account the retired cutover stamped.
+        stamp = reference.build_stamp(LEGACY_GENERATION, R1, reference={'model': reference.LEGACY_MODEL, 'anchors': []}, gap=None,
+                                      analysis={'job_id': job['id'], 'request_id': job['research_request_id'], 'account_id': late})
+        with self.repo.transaction() as tx:
+            for kind in ('account', 'account_membership'):
+                row = tx.get(kind, digest([self.owner, late]))['data']; row['summary']['archive'] = stamp
+                tx.put(kind, digest([self.owner, late]), self.owner, row)
         listed = lambda state=None: [item['account']['id'] for item in self.client.get('/v1/accounts', headers=self.headers(),
             params={'reference_state': state} if state else {}).json()['items']]
         self.assertEqual(listed(), [current, late])  # newest first would put the archived account first
@@ -483,8 +501,6 @@ class ReferenceGuardTests(unittest.TestCase):
         # Current work alone ranks the gap; archived work is counted apart for the 'all' listing.
         self.assertEqual((gap['scientific_accounts']['count'], gap['scientific_accounts']['archived_count']), (1, 1))
         api.validate(gap, 'GapRecord')
-        public_gap = self.client.get('/v1/knowledge-gaps/' + GAP_ID).json()['scientific_accounts']
-        self.assertEqual(public_gap['count'], 0); self.assertNotIn('archived_count', public_gap)
         path = '/v1/knowledge-gaps/' + GAP_ID + '/accounts'
         items = self.client.get(path, params={'scope': 'workspace', 'reference_state': 'archived'}, headers=self.headers()).json()['items']
         self.assertEqual([item['account']['id'] for item in items], [late])
@@ -501,69 +517,31 @@ class ReferenceGuardTests(unittest.TestCase):
         self.assertEqual(self.client.get(path, params={'reference_state': 'current'}).json()['items'], [])
 
     # ------------------------------------------------------------------ research collection
-    def test_worker_selects_the_collector_by_anchor_model(self):
+    def test_worker_collects_kpn_anchors_from_the_current_release_and_rejects_legacy_anchors(self):
         class Collected(Exception): pass
         frozen = {'question_id': GAP_ID, 'composer': {'source_gap': deepcopy(COMPOSER['source_gap']), 'dismissed_source_ids': [],
                   'selected_kgs': ['prokn'], 'eaggl_anchors': []}}
-        def run(binding, name):
-            frozen['composer']['eaggl_anchors'] = [{'reference': {'source_id': anchor['cfde_node_id']}, 'origin': 'manual'} for anchor in binding]
-            with patch.object(worker, 'collect_reference_package', side_effect=Collected) as kpn, \
-                    patch.object(worker, 'collect_package', side_effect=Collected) as legacy, \
-                    patch.object(worker, 'geneset_resolver', return_value='resolver') as resolver, \
-                    patch.object(worker, 'DapperRuntime', return_value='runtime'):
-                with self.assertRaises(Collected):
-                    worker.collect({}, frozen, {'anchors': binding, 'retrieval': {}},
-                                   {'candidates_per_type': 7, 'max_nodes': 81, 'max_edges': 191, 'max_accounts': 2}, self.root / name)
-            return kpn, legacy, resolver
-        kpn, legacy, resolver = run([KPN_BINDING], 'kpn')
-        legacy.assert_not_called(); resolver.assert_not_called()
-        call = kpn.call_args.kwargs
-        self.assertEqual((call['generation_id'], call['connection_factory']), (KPN, worker.mysql_connection))
+        budgets = {'candidates_per_type': 7, 'max_nodes': 81, 'max_edges': 191, 'max_accounts': 2}
+        def collect(anchors, name):
+            frozen['composer']['eaggl_anchors'] = [{'reference': {'source_id': anchor['cfde_node_id']}, 'origin': 'manual'} for anchor in anchors]
+            return worker.collect({}, frozen, {'anchors': anchors, 'retrieval': {}}, budgets, self.root / name)
+        with patch.object(worker, 'collect_reference_package', side_effect=Collected) as collector, \
+                patch.object(worker, 'DapperRuntime', return_value='runtime'):
+            # A binding frozen on an earlier release is collected from the current release.
+            with self.assertRaises(Collected): collect([binding(KPN_ID, 'e' * 64)], 'kpn')
+            with self.assertRaisesRegex(EvidenceBuildError, 'Legacy cfde-inc-v2 anchors cannot be collected'): collect([LEGACY_BINDING], 'legacy')
+            with self.assertRaisesRegex(EvidenceBuildError, 'one known reference model'): collect([LEGACY_BINDING, binding(KPN_ID, R1)], 'mixed')
+        self.assertEqual(collector.call_count, 1)
+        call = collector.call_args.kwargs
+        self.assertEqual(call['connection_factory'], worker.mysql_connection)
+        self.assertFalse({'generation_id', 'release_id', 'model', 'geneset_import', 'geneset_resolver'} & set(call))
         self.assertEqual((call['factor_ids'], call['dapper'], call['limit'], call['max_nodes'], call['max_edges'], call['max_accounts']),
                          ([KPN_ID], 'runtime', 7, 81, 191, 2))
         self.assertEqual((call['gap_id'], call['selected_graphs'], call['project_root']),
                          (COMPOSER['source_gap']['source_id'], ['prokn'], ROOT))
         self.assertEqual(call['dismech_index'], ROOT / 'data/dismech-gaps/2026-09-24')
         self.assertEqual(set(call['selection_metadata']['origins']), {KPN_ID})
-        self.assertFalse({'model', 'geneset_import', 'geneset_resolver'} & set(call))
-        kpn, legacy, resolver = run([LEGACY_BINDING], 'legacy')
-        kpn.assert_not_called(); resolver.assert_called_once_with(LEGACY_BINDING['gene_set_import_id'])
-        call = legacy.call_args.kwargs
-        self.assertEqual((call['model'], call['geneset_resolver'], call['factor_ids']), (reference.LEGACY_MODEL, 'resolver', [LEGACY_ID]))
-        self.assertEqual(call['geneset_import'], ROOT / 'data/cfde-genesets/2026-09-24')
-        with self.assertRaisesRegex(ValueError, 'one known reference model'):
-            run([LEGACY_BINDING, KPN_BINDING], 'mixed')
-
-
-@unittest.skipUnless(importlib.util.find_spec('reveal_backend.reference_archive'), 'reference_archive is not installed yet')
-class ReferenceArchiveIntegrationTests(unittest.TestCase):
-    """With the real reference_archive module, late outcomes carry the §4.2 stamp outside provenance."""
-    setUp = ReferenceGuardTests.setUp
-    principal, activate, job_with_binding, outcome = (ReferenceGuardTests.principal, ReferenceGuardTests.activate,
-                                                      ReferenceGuardTests.job_with_binding, ReferenceGuardTests.outcome)
-
-    def test_real_module_stamps_late_outcome(self):
-        sys.modules.pop('reveal_backend.reference_archive', None)  # use the installed module, not the stand-in
-        self.activate()
-        identity, prepared = self.outcome(self.job_with_binding([LEGACY_BINDING]))
-        with self.repo.read_transaction() as tx:
-            record = tx.get('analysis_outcome', identity)['data']['record']
-            summary = tx.get('outcome_summary', identity)['data']
-        self.assertTrue(reference.is_archived(record)); self.assertEqual(summary['archive'], record['archive'])
-        self.assertEqual(record['archive']['to_reference_generation'], KPN)
-        self.assertEqual(record['provenance'], prepared['record']['provenance'])
-
-    accept_account = ReferenceGuardTests.accept_account
-
-    def test_real_module_stamps_late_account_and_membership(self):
-        sys.modules.pop('reveal_backend.reference_archive', None)
-        self.activate()
-        job, identity, account, membership = self.accept_account([LEGACY_BINDING], 'e')
-        self.assertTrue(reference.is_archived(account['summary'])); self.assertEqual(membership['summary']['archive'], account['summary']['archive'])
-        stamp = account['summary']['archive']
-        self.assertEqual((stamp['from_reference_generation'], stamp['to_reference_generation'], stamp['analysis']['account_id']), (LEGACY, KPN, identity))
-        self.assertEqual([anchor['source_id'] for anchor in stamp['reference']['anchors']], [LEGACY_ID])
-        self.assertNotIn('archive', account['result'])
-
+        self.assertEqual(call['selection_metadata']['semantic_retrieval']['embedding_run_id'], 'e' * 64)
+        self.assertFalse(hasattr(worker, 'collect_package') or hasattr(worker, 'geneset_resolver'))
 
 if __name__ == '__main__': unittest.main()

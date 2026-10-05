@@ -13,7 +13,7 @@ from fastapi import FastAPI, Request, Depends, Query
 from fastapi.responses import JSONResponse, StreamingResponse, Response, RedirectResponse
 from jsonschema import Draft202012Validator
 from .auth import Problem, decode_assertion, owned, require_owned, principal, publication_principal, service_authority
-from .catalog import GENERATION_TTL_SECONDS, Catalog
+from .catalog import RELEASE_TTL_SECONDS, Catalog
 from .repository import Repository, now, uid, digest
 from .runtime_config import ROOT, artifacts_root
 from .service_routing import mount_service
@@ -27,8 +27,8 @@ from . import user_inputs
 
 CONTRACT = json.loads((ROOT/'api/openapi.json').read_text())
 GATEWAY = json.loads((ROOT/'schema/gateway.schema.json').read_text())
-# The catalog polls the active reference generation on its own thread, never inside a request's transaction.
-repo, catalog = Repository(), Catalog(poll_seconds=GENERATION_TTL_SECONDS)
+# The catalog polls the published reference release on its own thread, never inside a request's transaction.
+repo, catalog = Repository(), Catalog(poll_seconds=RELEASE_TTL_SECONDS)
 
 def validate_query(request:Request):
     template=getattr(request.scope.get('route'),'path','')
@@ -143,35 +143,27 @@ def fresh_principal(kind, profile=None):
         'person': None, 'workspace_expires_at': (datetime.now(timezone.utc)+timedelta(days=30)).isoformat().replace('+00:00','Z') if kind=='anonymous' else None}
     return me
 
-def current_binding(binding):
-    """A frozen catalog binding belongs to the served reference generation.
+def served_anchor(source_id):
+    """An anchor is current iff the served reference release still serves its factor id.
 
-    Legacy mode (no active generation) keeps today's behaviour: saved selections retain
-    the exact run bindings first saved with them, so every binding is current. Catalogs
-    without generations (test doubles) accept every binding; in active mode a binding
-    whose generation cannot be derived is never current.
+    Saved selections retain the exact run bindings first saved with them while their factor is
+    served, whichever release froze them. Catalogs without factors (test doubles) serve every anchor.
     """
-    served=getattr(catalog,'reference_generation_id',None)
-    if served is None or not getattr(catalog,'active_generation',None): return True
-    try: return reference_generation.generation_of_binding(binding)==served
-    except reference_generation.ReferenceError: return False
+    factors=getattr(catalog,'factors',None)
+    return factors is None or source_id in factors
 
 def superseded_source(source_id):
-    """A factor id the active (non-legacy) generation no longer serves."""
-    return bool(getattr(catalog,'active_generation',None) and reference_generation.model_of_source_id(source_id)
-        and source_id not in catalog.factors)
+    """An EAGGL factor id that the served reference release does not serve."""
+    factors=getattr(catalog,'factors',None)
+    return factors is not None and reference_generation.model_of_source_id(source_id) is not None and source_id not in factors
 
 def superseded(detail,status=409,**extra):
     return Problem(status,'REFERENCE_GENERATION_SUPERSEDED',detail,**extra)
 
-def reload_gate(tx):
-    if reference_generation.read_gate(tx):
-        raise Problem(503,'REFERENCE_RELOAD_IN_PROGRESS','Reference data is being reloaded. Retry shortly.')
-
 def preload_catalog(composer=None):
-    """Cold-load the catalog before a write transaction opens: the cold load reads the active
-    generation through the application pool, which must never nest inside a pooled write
-    transaction. A loaded catalog does no I/O. Failures surface later with their usual precedence."""
+    """Cold-load the catalog before a write transaction opens: a cold load reads the reference
+    tables and checks the vector index, I/O that must never run while a write transaction holds
+    the global write lock. A loaded catalog does no I/O. Failures surface later with their usual precedence."""
     if composer is not None and not (composer.get('source_gap') or composer.get('eaggl_anchors')): return
     load=getattr(catalog,'load',None)
     if not load: return
@@ -180,25 +172,23 @@ def preload_catalog(composer=None):
 
 def freeze_draft_bindings(tx,draft_id,owner,composer):
     """An unchanged selection retains the exact run bindings first saved with it,
-    while its reference generation is still served; otherwise it is re-validated."""
+    while the served reference release still serves its factor; otherwise it is re-validated."""
     gap=catalog.selected(composer['source_gap']) if composer['source_gap'] else None
     if composer['eaggl_anchors'] and hasattr(catalog,'load'): catalog.load()
     previous=tx.get('draft_binding',draft_id)
     previous=previous['data'].get('selections',{}) if previous else {}
-    selections={}; gate_checked=False
+    selections={}
     for selection in composer['eaggl_anchors']:
         reference=selection['reference']; native=reference['source_id']; old=previous.get(native)
-        stale=bool(old) and not current_binding(old['binding'])
+        stale=bool(old) and not served_anchor(native)
         if old and old['reference']==reference and not stale:
             selections[native]=old
         else:
-            # Anchor writes wait for a reload to finish; unchanged anchors stay editable.
-            if not gate_checked: reload_gate(tx); gate_checked=True
             try:
                 catalog.validate_composer(dict(composer,eaggl_anchors=[selection]))
             except Problem as error:
                 if error.status==409 and error.code=='SOURCE_REVISION_CHANGED' and (stale or superseded_source(native)):
-                    raise superseded('This anchor belongs to a superseded reference generation; select current factors.') from None
+                    raise superseded('This anchor is no longer served by the current reference data; select current factors.') from None
                 raise
             selections[native]={'reference':reference,'record':catalog.factors[native],'binding':catalog.bindings[native]}
         suggestion=tx.get('suggestion',selection.get('suggestion_id')) if selection.get('suggestion_id') else None
@@ -261,7 +251,7 @@ def ready():
     # notification outage and retain their durable publication intent.
     from .redis_notifications import configuration
     return {'status': 'ready', **database, 'sources': {'dismech_import': catalog.dismech_import, 'gaps': len(catalog.gaps),
-        'mapping_run': catalog.mapping_run, 'mapped_factors': len(catalog.factors), 'embedding_run': catalog.embedding_run},
+        'release_id': getattr(catalog,'release_id',None), 'mapped_factors': len(catalog.factors)},
         'execution_mode': os.getenv('REVEAL_EXECUTION_MODE','box'), 'job_transport':jobs.transport(),
         'notifications':{'transport':configuration()[0], 'delivery':'pubsub', 'polling':False}}
 
@@ -464,7 +454,7 @@ def search_mechanisms(q: str='', mode: str='hybrid', limit: int=20,source:str='a
         items+=contexts; items.sort(key=lambda item:(-item['ranking']['value'],item['record']['source_id']))
         for rank,item in enumerate(items,1): item['ranking']['rank']=rank
     provenance=catalog.provenance(q,mode,source!='dismech' and mode in ('semantic','hybrid'))
-    if source=='all': provenance['corpus_snapshot']=digest([catalog.dismech_import,catalog.mapping_run])
+    if source=='all': provenance['corpus_snapshot']=digest([catalog.dismech_import,catalog.release_id])
     return {**page(items,limit=limit,cursor=cursor,scope=digest(['mechanisms',q,mode,source,model])),'search':provenance}
 
 @app.post('/v1/mechanisms/suggest')
@@ -476,9 +466,9 @@ async def suggest(request: Request):
 
 def build_suggestions(body):
     validate(body,'SuggestInput'); gap=catalog.selected(body['source_gap'])
-    # Manual anchors must come from the served generation, so a draft never mixes generations.
+    # Manual anchors must be factors the served reference release still serves.
     if any(superseded_source(anchor['source_id']) for anchor in body['manual_eaggl_anchors']):
-        raise superseded('A kept anchor belongs to a superseded reference generation; remove it and select current factors.')
+        raise superseded('A kept anchor is no longer served by the current reference data; remove it and select current factors.')
     exclude=set(body['dismissed_source_ids']) | {s['source_id'] for s in body['manual_eaggl_anchors']}
     contexts=[(a['target']['source_id'],catalog.mechanisms[a['target']['source_id']]['object']['description']) for a in gap['attachments'] if a['target'] and a['target']['source_id'] in catalog.mechanisms]
     query=body.get('subquery') or ' '.join(text for _,text in contexts) or gap['object']['text']
@@ -490,6 +480,7 @@ def build_suggestions(body):
     context_provenance=catalog.context_embedding_provenance(contexts) if precomputed else {'context_embedding_origin':'user_subquery'}
     suggestion_id=uid()
     with repo.transaction() as tx:
+        # The catalog's run fields name its served reference release, like the run fields of its bindings.
         tx.insert_many([('suggestion',suggestion_id,'catalog',{'mode':body.get('mode','semantic'),'embedding_run_id':catalog.embedding_run,'mapping_run_id':catalog.mapping_run,
             **context_provenance,'hits':{x['record']['source_id']:{'ranking':x['ranking'],'matched_context_ids':x['contexts'],
                 **({'retrieval':x['retrieval']} if 'retrieval' in x else {}),
@@ -498,14 +489,16 @@ def build_suggestions(body):
         'automatic_target_count':5,'search':catalog.provenance(query,body.get('mode','semantic'),True),'limitations':['Retrieval similarity is not evidence of biological support.']}
 
 def archived_factor(source_id):
-    """(superseded, frozen snapshot|None) for a factor id the served generation does not serve.
+    """(superseded, frozen snapshot|None) for a factor id the served reference release does not serve.
 
-    Legacy mode has no superseded generation, so unknown ids stay 404 as before.
-    A same-model id with no captured snapshot is simply unknown.
+    The frozen snapshot is the latest captured for the source_id, whichever reference data captured it.
+    An id of another reference model is always superseded; an unknown id of the served model without
+    a captured snapshot is simply unknown.
     """
     if not superseded_source(source_id): return False,None
     lookup=getattr(catalog,'archived_for_source',None); archived=lookup(source_id) if lookup else None
-    return bool(archived) or reference_generation.model_of_source_id(source_id)!=getattr(catalog,'model',None),archived
+    model=getattr(catalog,'model',reference_generation.KPN_MODEL)
+    return bool(archived) or reference_generation.model_of_source_id(source_id)!=model,archived
 
 @app.get('/v1/reference-factors/{archive_id}')
 def reference_factor(archive_id:str):
@@ -521,7 +514,7 @@ def get_mechanism(source_id:str,source_revision:str|None=None):
     if not record and source_id.startswith('dismech:'): record=catalog.dismech_catalog().get(source_id)
     if not record:
         gone,archived=archived_factor(source_id)
-        if gone: raise superseded('This factor belongs to a superseded reference generation.',410,archived_reference_factor=archived)
+        if gone: raise superseded('This factor is no longer served by the current reference data.',410,archived_reference_factor=archived)
         raise Problem(404,'NOT_FOUND','The mapped mechanism is unavailable.')
     if source_revision and source_revision!=record['source_revision']: raise Problem(409,'SOURCE_REVISION_CHANGED','The exact requested source revision is unavailable.')
     return record
@@ -717,18 +710,17 @@ def create_job_transaction(body,authorization,idempotency_key):
                 today=[r for r in tx.list('job',user) if r['data']['kind']=='analysis' and r['data']['created_at']>=cutoff]
                 if len(today)>=int(os.getenv('REVEAL_ANONYMOUS_ANALYSES_PER_DAY','5')): raise Problem(429,'ANONYMOUS_QUOTA_EXCEEDED','This anonymous workspace has reached its daily analysis allowance.')
             if body['kind']=='paragraph':
-                # Research statements need no reference data: allowed on archived accounts and during reloads.
+                # Research statements need no reference data: allowed on archived accounts.
                 account=owned(tx,'account',body['account_id'],user)
                 return jobs.enqueue(tx,user,'paragraph',account_id=body['account_id'],inputs=body)
-            reload_gate(tx)
             draft=user_inputs.available(owned(tx,'draft',body['draft_id'],user)['data'])
             if draft['version']!=body['draft_version']: raise Problem(409,'VERSION_CONFLICT','Save the current draft before submitting.',current_version=draft['version'])
             composer=draft['composer']
             if not composer['source_gap'] or not composer['eaggl_anchors']: raise Problem(422,'ANCHOR_REQUIRED','Select a source question and at least one mechanism anchor.')
             catalog.selected(composer['source_gap'])
             saved=owned(tx,'draft_binding',draft['id'],user)['data']; gap=saved['source_gap']
-            if not all(current_binding(saved['selections'][s['reference']['source_id']]['binding']) for s in composer['eaggl_anchors']):
-                raise superseded('This draft uses factors from a superseded reference generation; start a new analysis on this gap with current factors.')
+            if not all(served_anchor(s['reference']['source_id']) for s in composer['eaggl_anchors']):
+                raise superseded('This draft uses factors the current reference data no longer serves; start a new analysis on this gap with current factors.')
             contexts=[a['target'] for a in gap['attachments'] if a['target']]
             document={'knowledge_gaps':[gap['object']], 'mechanisms':[saved['selections'][s['reference']['source_id']]['record']['object'] for s in composer['eaggl_anchors']]}
             frozen={'id':uid(),'owner_user_id':user,'source_draft_id':draft['id'],'source_draft_version':draft['version'],'composer':composer,'question_id':gap['object']['id'],
@@ -820,7 +812,7 @@ def explorations(request:Request,limit:int=50,cursor:str|None=None):
 async def record_exploration(request:Request):
     body=await request.json(); validate(body,'ExplorationInput')
     def record():
-        # catalog.selected may reload the catalog after a reference cutover: keep it off the event loop.
+        # catalog.selected may cold-load the catalog: keep it off the event loop.
         gap=catalog.selected(body['source_gap'])
         with repo.transaction() as tx:
             user=principal(tx,request.headers.get('authorization'))['user_id']
@@ -1102,8 +1094,5 @@ from .workspace_events import register as register_workspace_events
 register_workspace_events(app, lambda: repo)
 from .workflow_routes import mount_workflow
 mount_workflow(app, repo)
-from .vector_workflow import mount_vector_workflow
-if jobs.transport() == 'workflow':
-    mount_vector_workflow(app, repo)
 
 app = mount_service(app, os.getenv('SERVICE_PATH_PREFIX', ''))

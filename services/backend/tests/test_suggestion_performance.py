@@ -18,6 +18,10 @@ from reveal_backend.auth import Problem
 from reveal_backend.catalog import Catalog
 from reveal_backend.eaggl_bundle import text_hash
 from reveal_backend.eaggl_embeddings import FactorSearchIndex, QueryVectorCache, vector_hash
+from reveal_backend.vector_retrieval import UpstashFactorIndex
+
+FACTOR_VECTORS = [('a', [1, 0]), ('b', [0, 1]), ('c', [.8, .6]), ('d', [0, -1]), ('alias', [-1, 0])]
+RELEASE = text_hash('test release')
 
 
 def make_index():
@@ -35,6 +39,31 @@ def make_index():
 def embedding(texts, **kwargs):
     values = {'alpha': [1, 0], 'beta': [0, 1], 'gamma': [-1, 0]}
     return np.asarray([values[text] for text in texts], dtype=np.float64)
+
+
+class VectorProvider:
+    """Upstash Vector stand-in over the environment's fixed namespaces; scores are (1 + cosine) / 2."""
+    def __init__(self, namespaces): self.rows, self.fetches = namespaces, []
+    def fetch(self, ids, namespace, **kwargs):
+        self.fetches.append((namespace, list(ids)))
+        return [deepcopy(self.rows.get(namespace, {}).get(identity)) for identity in ids]
+    def query_many(self, queries, namespace):
+        result = []
+        for query in queries:
+            q = np.asarray(query['vector'], dtype=np.float64); q /= np.linalg.norm(q)
+            rows = [dict(row, score=float((1 + np.asarray(row['vector'], dtype=np.float64) / np.linalg.norm(row['vector']) @ q) / 2))
+                    for row in self.rows.get(namespace, {}).values()]
+            result.append(sorted(rows, key=lambda row: (-row['score'], row['id']))[:query['top_k']])
+        return result
+
+
+def make_release_index(contexts=None):
+    """The release index over `test-factors` and `test-contexts` (context vectors keyed by their text's sha256)."""
+    namespaces = {'test-factors': {identity: {'id': identity, 'vector': vector, 'metadata': {'kind': 'factor'}} for identity, vector in FACTOR_VECTORS},
+                  'test-contexts': {text_hash(text): {'id': text_hash(text), 'vector': vector, 'metadata': {'kind': 'context'}}
+                                    for text, vector in (contexts or {}).items()}}
+    return UpstashFactorIndex([identity for identity, _ in FACTOR_VECTORS], dimensions=2, release_id=RELEASE, environment_name='test',
+                              client=VectorProvider(namespaces))
 
 
 class QueryCacheTests(unittest.TestCase):
@@ -165,7 +194,7 @@ class SuggestionRankingTests(unittest.TestCase):
     def setUp(self):
         self.catalog = Catalog()
         self.catalog.loaded = True
-        self.catalog.index = make_index()
+        self.catalog.index = make_release_index()
         self.catalog.factor_legacy = {
             legacy: {'source_id': native, 'source_revision': 'exact-source-' + native}
             for legacy, native in [('a', 'native:Z'), ('b', 'native:Y'), ('c', 'native:A'), ('d', 'native:X'), ('alias', 'native:Y')]}

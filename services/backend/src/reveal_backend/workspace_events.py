@@ -25,14 +25,14 @@ COLLECTIONS = {
     'analysis_outcome': ['explorations', 'gaps'], 'outcome_summary': ['explorations', 'gaps'],
     'outcome_publication': ['explorations', 'gaps'],
     'principal': ['identity'], 'grant': ['accounts', 'gaps', 'explorations'],
-    'vector_active': ['catalog', 'gaps', 'accounts'],
+    'reference_release': ['catalog', 'gaps', 'accounts'],
     'vote': ['gaps', 'accounts'],
 }
 TYPES = {'draft':'draft.changed', 'exploration':'exploration.updated', 'job':'job.updated',
     'account':'scientific_account.updated', 'account_membership':'scientific_account.updated',
     'paragraph':'scientific_account.updated', 'publication':'publication.changed',
     'outcome_publication':'publication.changed', 'principal':'identity.changed',
-    'vector_active':'catalog.updated'}
+    'reference_release':'catalog.updated'}
 
 
 def tracked(kind):
@@ -58,12 +58,12 @@ def track(tx, kind, identity, owner, data, old=None, operation='upsert', revisio
         tx.workspace_changes[(audience, kind, identity)] = {'event_type':TYPES.get(kind, 'workspace.changed'),
             'entity_id':entity_id, 'entity_revision':revision, 'operation':operation if audience == owner else 'remove',
             'collections':COLLECTIONS[kind]}
-    if kind in ('publication', 'outcome_publication', 'vector_active', 'vote'):
-        # Public notifications contain no owner or private scientific identifiers. A vector_active
-        # change (a reference cutover) is named 'reference' so open composers recheck their anchors
-        # only then, not on every publish or vote.
+    if kind in ('publication', 'outcome_publication', 'reference_release', 'vote'):
+        # Public notifications contain no owner or private scientific identifiers. A reference_release
+        # record (a published reference release) is named 'reference' so open composers recheck their
+        # anchors only then, not on every publish or vote.
         prior = tx.workspace_changes.get(('public', 'catalog', 'catalog')) or {}
-        reference = kind == 'vector_active' or prior.get('entity_id') == 'reference'
+        reference = kind == 'reference_release' or prior.get('entity_id') == 'reference'
         tx.workspace_changes[('public', 'catalog', 'catalog')] = {'event_type':'catalog.updated',
             'entity_id':'reference' if reference else 'catalog', 'entity_revision':revision, 'operation':'invalidate',
             'collections':['catalog', 'accounts', 'gaps', 'explorations']}

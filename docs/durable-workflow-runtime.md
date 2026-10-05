@@ -158,25 +158,11 @@ publications in `reveal_*`. Only API and frontend containers run. The local
 QStash server schedules requests separately; the actual managed Redis and Vector
 services are used.
 
-If the embedding service moves, local and QA query traffic can explicitly opt in with
-`REVEAL_QUERY_EMBEDDING_SERVICE_URL` in the backend environment. This must be an
-HTTPS base URL without credentials, query parameters or a fragment, and is
-accepted only with `REVEAL_APPLICATION_TABLE_PREFIX=reveal_workflow_local` or
-`reveal_workflow_qa`. Production and other prefixes reject the override.
-Before enabling it, retain a compatibility report comparing representative exact
-stored texts/vectors from every active corpus against the replacement endpoint:
-dimensions must match and every cosine must meet the reload calibration threshold
-(`0.999`). A successful health response alone is insufficient. Keep using the
-pinned model/provider and update the runtime `EMBEDDING_SERVICE_API_KEY` if needed.
-The opt-in changes only the transport for new query embeddings; frozen runs,
-snapshots, generations and embedding-space identities remain unchanged. Runtime
-query caches are scoped by both the frozen space and the selected endpoint;
-stored vectors still bypass the service. Updating `EMBEDDING_SERVICE_URL` alone
-does not override a frozen query endpoint. For QA, set the override and the service
-URL in `qa.env` in `deploy/dig/service.yaml`; the API key is already passed through
-QA's dedicated secret record as `EMBEDDING_SERVICE_API_KEY`. A root `.env` URL alone
-does not change QA deployment settings. Recreate the local API or deploy QA after
-an approved runtime configuration change; do not rewrite the shared embedding pins.
+Query embeddings use `EMBEDDING_SERVICE_URL`, `EMBEDDING_MODEL` and `EMBEDDING_PROVIDER` from the backend
+environment in every environment; stored factor-label and DisMech context vectors are fetched from Upstash by
+id and bypass the service. If the service moves, change `EMBEDDING_SERVICE_URL` (and
+`EMBEDDING_SERVICE_API_KEY` if needed) and recreate the API. The model must stay the one the published vectors
+were made with (see [reference-release.md](reference-release.md)).
 
 Stop the older legacy frontend before starting this stack if it already occupies
 port `3000`. Local OAuth callback URLs are

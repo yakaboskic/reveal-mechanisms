@@ -40,7 +40,7 @@ def service(monkeypatch, tmp_path):
             me = {**api.fresh_principal('anonymous'), 'user_id': identity}
             tx.put('principal', identity, identity, {'me': me, 'retired': False})
     catalog = SimpleNamespace(load=lambda: None, validate_composer=lambda *args, **kwargs: None,
-        selected=lambda reference: reference, dismech_import='source', gaps={}, mapping_run='mapping', factors={}, embedding_run='embedding')
+        selected=lambda reference: reference, dismech_import='source', gaps={}, mapping_run='mapping', factors={'factor:test': {}}, embedding_run='embedding')
     monkeypatch.setattr(api, 'repo', repo); monkeypatch.setattr(api, 'catalog', catalog)
     with TestClient(api.app) as client:
         yield SimpleNamespace(client=client, repo=repo, owner=owner, other=other,

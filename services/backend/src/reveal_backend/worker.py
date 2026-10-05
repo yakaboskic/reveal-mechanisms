@@ -14,10 +14,8 @@ from .auth import Problem, owned
 from .acceptance import assemble_account, object_envelope, release_root, LOCK, mint, validate_paragraph_document
 from .evidence_package import DapperRuntime, canonical_json, decode, require, sha256
 from .evidence_schema import validate_package_shape, load_generated_schema
-from .evidence_collector import collect_package
-from .evidence_database import geneset_resolver
 from .evidence_budget import fit_input_budget
-from .reference_generation import KPN_MODEL, LEGACY_MODEL, MODELS, generation_of_anchors
+from .reference_generation import KPN_MODEL, LEGACY_MODEL, MODELS
 from .repository import Repository, now, uid, digest
 from .runtime_config import ROOT, setting, artifacts_root, mysql_connection
 from . import jobs
@@ -198,7 +196,7 @@ def enrichment_status(result,selected,mode):
     return items
 
 def collect_reference_package(**kwargs):
-    """KPN-generation collector (reveal_backend.reference_evidence), imported on first use."""
+    """Reference-release collector (reveal_backend.reference_evidence), imported on first use."""
     from .reference_evidence import collect_reference_package as collect_reference
     return collect_reference(**kwargs)
 
@@ -254,14 +252,12 @@ def collect(job,frozen,binding,budgets,directory):
             selected_graphs=frozen['composer']['selected_kgs'],max_accounts=budgets.get('max_accounts',3),selection_metadata=metadata,
             limit=requested_limit,max_nodes=budgets.get('max_nodes',250),max_edges=budgets.get('max_edges',1000),
             user_inputs=frozen.get('user_inputs'))
-        model=anchor_model(binding['anchors'])
-        if model==KPN_MODEL:
-            # KPN generations capture the same evidence set from the reference tables in MySQL.
-            built=collect_reference_package(**sources,generation_id=generation_of_anchors(binding['anchors']),connection_factory=mysql_connection)
-        else:
-            built=collect_package(**sources,model=model,geneset_import=ROOT/'data/cfde-genesets/2026-09-24',
-                geneset_resolver=geneset_resolver(binding['anchors'][0]['gene_set_import_id']))
-
+        # Evidence comes from this environment's current reference release; legacy
+        # cfde-inc-v2 anchors are no longer served, so they cannot be collected.
+        require(anchor_model(binding['anchors'])==KPN_MODEL,
+            'Legacy cfde-inc-v2 anchors cannot be collected: the current reference data does not serve them. '
+            'Start a new analysis on this gap with current factors.')
+        built=collect_reference_package(**sources,connection_factory=mysql_connection)
         package=built.package
     validate_package_shape(package,load_generated_schema(ROOT/'schema/evidence-package.schema.json'))
     gap=next(g for g in package['dapper_context']['knowledge_gaps'] if g['id']==frozen['question_id'])
@@ -552,7 +548,6 @@ class Worker:
                 source['retained']=await asyncio.to_thread(retained_file,source['path'],checksum)
         await asyncio.to_thread(self.save_workspace,job,token,artifacts_root()/job['id'])
         evidence_sha256=sha256(package_path.read_bytes())
-        from .analysis_outcomes import creation_stamp, stamp_gap, stamped
         with self.repository.transaction() as tx:
             pair=jobs.fenced(tx,job['id'],token)
             if not pair or pair[0]['status']=='cancel_requested': return
@@ -582,11 +577,8 @@ class Worker:
                 envelope=object_envelope(doc,identity,metadata,artifact_access); envelope['research_statement']=state
                 summary={'account':account,'knowledge_gap':gap,'claim_count':len(account['component_claims']),'created_at':now(),'job_id':job['id'],'research_statement':state}
                 if not previous:
-                    # A job that finishes after its reference generation was superseded is born archived.
-                    stamp=creation_stamp(tx,owner,job['research_request_id'],gap=stamp_gap(frozen['composer'].get('source_gap'),frozen.get('question_id')),scientific_document=doc,
-                        analysis={'job_id':job['id'],'request_id':job['research_request_id'],'evidence_package_sha256':evidence_sha256,'account_id':identity})
-                    tx.put('account',digest([owner,identity]),owner,stamped('account',{'result':envelope,'summary':deepcopy(summary)},stamp))
-                    tx.put('account_membership',digest([owner,identity]),owner,stamped('account_membership',{'account_id':identity,'summary':summary},stamp))
+                    tx.put('account',digest([owner,identity]),owner,{'result':envelope,'summary':deepcopy(summary)})
+                    tx.put('account_membership',digest([owner,identity]),owner,{'account_id':identity,'summary':summary})
                 document_sha=sha256(path.read_bytes())
                 tx.put('scientific_document',digest([owner,document_sha]),owner,{'sha256':document_sha,'document':doc,'job_id':job['id'],'observed_at':now(),
                     'citation_metadata':metadata,'artifact_access':artifact_access})

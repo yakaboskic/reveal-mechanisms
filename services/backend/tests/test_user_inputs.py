@@ -87,7 +87,7 @@ def test_submission_clone_preserves_loaded_saved_revision_after_concurrent_edit(
     assert client.client.post('/v1/drafts',json={k:v for k,v in body.items() if k!='source_draft_id'},headers=client.headers(owner)).status_code==422
 
 
-def test_temporary_submission_preserves_reload_gate_expiry_and_context(client):
+def test_temporary_submission_preserves_expiry_and_context_without_a_reload_gate(client):
     from reveal_backend import reference_generation as reference
     owner=client.provision()
     composer={**deepcopy(application.COMPOSER),'context':'Research context to retain'}
@@ -96,16 +96,11 @@ def test_temporary_submission_preserves_reload_gate_expiry_and_context(client):
     with client.repo.transaction() as tx:
         expired['expires_at']='2000-01-01T00:00:00Z'
         tx.put('draft',expired['id'],owner,expired)
-        reference.set_gate(tx,True,reason='test reload')
+        # A closed gate record of the retired reference reload holds nothing.
+        reference.set_gate(tx,True,reason='retired reload gate')
     def submit(value):
         return client.client.post('/v1/jobs',json={'kind':'analysis','draft_id':value['id'],'draft_version':value['version']},
                                   headers=client.headers(owner))
-    for value in (draft,expired):
-        result=submit(value)
-        assert result.status_code==503 and result.json()['code']=='REFERENCE_RELOAD_IN_PROGRESS'
-    with client.repo.transaction() as tx:
-        assert tx.list('request',owner)==[] and tx.list('job',owner)==[]
-        reference.set_gate(tx,False,reason='test reload complete')
     result=submit(expired)
     assert result.status_code==410 and result.json()['code']=='EDITOR_EXPIRED'
     result=submit(draft)
