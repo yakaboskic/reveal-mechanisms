@@ -1501,19 +1501,23 @@ paths:
       tags:
       - Knowledge gaps
       summary: Browse knowledge gaps
-      description: 'Browse imported DisMech gaps ordered by distinct scientific-account
-        count descending. Public scope (default) counts only explicitly published
-        snapshots across users; workspace scope requires a session and counts owned
-        saved accounts. Equal-count gaps shuffle on each new browse; a server seed
+      description: 'Browse imported DisMech gaps using scientific-account or vote
+        ranking. Public scope (default) counts only explicitly published snapshots
+        across users; workspace scope requires a session and counts owned saved accounts.
+        Gaps tied on all ranking measures shuffle on each new browse; a server seed
         in the signed continuation cursor preserves tie order across pages. Exact
         gap digests only: no text matching, attempts, paragraph jobs or implicit source-revision
         rollup. Invalid supplied credentials are rejected even for public reads. Filters
-        apply before pagination; count or corpus changes expire cursors. sort=votes
-        orders by net gap vote score, then account count, then the same seeded tie
-        order. sort=accounts is the default. Vote changes, sort changes and registered-viewer
-        changes expire cursors. Account votes do not contribute to gap vote totals.
-        Counts include current accounts only: accounts archived by a reference reload
-        stay listed but are not counted.'
+        apply before pagination; count or corpus changes expire cursors. sort=accounts
+        (default) orders by current accessible account count, then the number of distinct
+        resolved DisMech Mechanisms, then the same seeded tie order. sort=votes orders
+        by net gap vote score, then the same mechanism count, then account count and
+        seeded ties. Mechanism counts deduplicate canonical dapper:Mechanism identities
+        and exclude unresolved, non-DisMech and non-Mechanism attachments. Vote changes,
+        attachment changes, sort changes and registered-viewer changes expire cursors.
+        Account votes do not contribute to gap vote totals. Counts include current
+        accounts only: accounts archived by a reference reload stay listed but are
+        not counted.'
       parameters:
       - name: kind
         in: query
@@ -2026,7 +2030,7 @@ paths:
                       id: dapper:File.pD1t7so66hPVDxDeNYyXaoZyUJIuQwEQ
                 kpn_factor:
                   summary: Kpn factor
-                  value:
+                  value: &id070
                     source: eaggl
                     source_id: factor:kpn:0000398:eaggl-capped-v1:Factor1
                     source_revision: 191055aeb63ba725d7254b602556a76546a1857662c79f9e40da3eefbb8c2550
@@ -16220,6 +16224,411 @@ paths:
         label: request
         source: 'curl -X GET https://api.reveal.example.org/v1/reference-factors/96d0fe43d87b838e172f352529665d602f4d42ec728f75f030207c5358f262f1
           -H ''Accept: application/json'''
+  /v1/factors/{source_id}:
+    get:
+      operationId: getFactorDetail
+      tags:
+      - Mechanisms
+      summary: Inspect a factor and its loading coverage
+      description: Read the active imported factor and score ranges. Requests never
+        run research or model inference. Pass source_revision from the anchor to prevent
+        a same-id factor silently changing across reference reloads.
+      parameters:
+      - name: source_id
+        in: path
+        required: true
+        schema:
+          type: string
+        example: factor:kpn:0000398:eaggl-capped-v1:Factor1
+        description: ''
+      - name: generation_id
+        in: query
+        required: false
+        schema:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+        example: d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c
+        description: Pin the reference generation returned by factor detail. A changed
+          active generation returns 409.
+      - name: source_revision
+        in: query
+        required: false
+        schema:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+        example: 191055aeb63ba725d7254b602556a76546a1857662c79f9e40da3eefbb8c2550
+        description: Pin the factor source revision; a mismatch returns 409 without
+          returning new-generation loadings.
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorDetail'
+              examples:
+                factor:
+                  summary: Factor
+                  value:
+                    factor: *id070
+                    generation_id: d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c
+                    provenance:
+                      eaggl_import_id: eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+                      factor_id: T2D::Factor1
+                      factor_key: KPN.TRAIT:0000398::Factor1
+                      model: eaggl-capped-v1
+                    genes: &id071
+                      total: 633
+                      min: 0.0001
+                      max: 0.98
+                      coverage: All stored nonzero EAGGL gene loadings. Genes absent
+                        from this import are not assigned a zero loading.
+                      available: true
+                    gene_sets:
+                      total: 71
+                      min: 0.0003
+                      max: 0.24
+                      coverage: 'Retained per-trait projections: gene sets in the
+                        top 50 by joint or marginal loading. Search covers this retained
+                        subset, not every gene set in the source library.'
+                      available: true
+          headers:
+            X-Request-ID:
+              description: Correlation ID for this HTTP request.
+              schema:
+                type: string
+                format: uuid
+        '404':
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                not_found:
+                  summary: Not found
+                  value: *id005
+        '409':
+          description: Version Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                version_conflict:
+                  summary: Version conflict
+                  value: *id006
+        '422':
+          description: Invalid Input
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                invalid_input:
+                  summary: Invalid input
+                  value: *id007
+        '503':
+          description: Dependency Unavailable
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                dependency_unavailable:
+                  summary: Dependency unavailable
+                  value: *id014
+      security:
+      - {}
+      - ApplicationBearer: []
+      x-codeSamples:
+      - lang: Shell
+        label: request
+        source: 'curl -X GET ''https://api.reveal.example.org/v1/factors/factor%3Akpn%3A0000398%3Aeaggl-capped-v1%3AFactor1?generation_id=d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c&source_revision=191055aeb63ba725d7254b602556a76546a1857662c79f9e40da3eefbb8c2550''
+          -H ''Accept: application/json'''
+  /v1/factor-loadings:
+    get:
+      operationId: getFactorLoadings
+      tags:
+      - Mechanisms
+      summary: Search and page factor loadings
+      description: Search literal gene symbols or gene-set names, library and identifier.
+        Gene scores are nonzero EAGGL weights; gene-set scores are joint/marginal
+        projections retained in the top 50 by either rank. Gene scores and set scores
+        have separate scales. Missing legacy set scores stay null.
+      parameters:
+      - name: source_id
+        in: query
+        required: true
+        schema:
+          type: string
+        example: factor:kpn:0000398:eaggl-capped-v1:Factor1
+        description: ''
+      - name: kind
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - gene
+          - gene_set
+        example: gene
+        description: ''
+      - name: metric
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - joint
+          - marginal
+        example: joint
+        description: ''
+      - name: sort
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - alphabetical
+          - loading
+          default: loading
+        example: loading
+        description: Case-insensitive alphabetical label order, or descending numeric
+          loading. Applied to the full matched set before pagination; ranks remain
+          loading ranks.
+      - name: q
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 200
+        example: LEPR
+        description: ''
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 500
+          default: 200
+        example: 200
+        description: ''
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+        example: 0
+        description: ''
+      - name: generation_id
+        in: query
+        required: false
+        schema:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+        example: d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c
+        description: Pin the reference generation returned by factor detail. A changed
+          active generation returns 409.
+      - name: source_revision
+        in: query
+        required: false
+        schema:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+        example: 191055aeb63ba725d7254b602556a76546a1857662c79f9e40da3eefbb8c2550
+        description: Pin the factor source revision; a mismatch returns 409 without
+          returning new-generation loadings.
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorLoadings'
+              examples:
+                genes:
+                  summary: Genes
+                  value:
+                    source_id: factor:kpn:0000398:eaggl-capped-v1:Factor1
+                    generation_id: d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c
+                    kind: gene
+                    metric: joint
+                    sort: loading
+                    items:
+                    - id: LEPR
+                      label: LEPR
+                      loading: 0.98
+                      rank: 1
+                    total: 1
+                    offset: 0
+                    limit: 200
+                    next_offset: null
+                    summary: *id071
+          headers:
+            X-Request-ID:
+              description: Correlation ID for this HTTP request.
+              schema:
+                type: string
+                format: uuid
+        '404':
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                not_found:
+                  summary: Not found
+                  value: *id005
+        '409':
+          description: Version Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                version_conflict:
+                  summary: Version conflict
+                  value: *id006
+        '422':
+          description: Invalid Input
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                invalid_input:
+                  summary: Invalid input
+                  value: *id007
+        '503':
+          description: Dependency Unavailable
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                dependency_unavailable:
+                  summary: Dependency unavailable
+                  value: *id014
+      security:
+      - {}
+      - ApplicationBearer: []
+      x-codeSamples:
+      - lang: Shell
+        label: request
+        source: 'curl -X GET ''https://api.reveal.example.org/v1/factor-loadings?source_id=factor%3Akpn%3A0000398%3Aeaggl-capped-v1%3AFactor1&kind=gene&metric=joint&sort=loading&q=LEPR&limit=200&offset=0&generation_id=d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c&source_revision=191055aeb63ba725d7254b602556a76546a1857662c79f9e40da3eefbb8c2550''
+          -H ''Accept: application/json'''
+  /v1/catalog/gene-sets/{gene_set_id}:
+    get:
+      operationId: getCatalogGeneSet
+      tags:
+      - Mechanisms
+      summary: Inspect imported gene-set provenance
+      description: Returns exact imported reference GeneSet and collection provenance.
+        This route does not expose private scientific-account objects; /v1/gene-sets
+        retains its existing publication/owner permissions.
+      parameters:
+      - name: gene_set_id
+        in: path
+        required: true
+        schema:
+          type: string
+          description: Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode
+            path values.
+          pattern: ^dapper:GeneSet\.[A-Za-z0-9_-]{32}$
+        example: dapper:GeneSet.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+        description: Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode
+          path values.
+      - name: generation_id
+        in: query
+        required: false
+        schema:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+        example: d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c
+        description: Pin the reference generation returned by factor detail. A changed
+          active generation returns 409.
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogGeneSet'
+              examples:
+                unavailable_object:
+                  summary: Unavailable object
+                  value:
+                    id: dapper:GeneSet.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+                    generation_id: d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c
+                    name: Example imported gene set
+                    library: GO_BP
+                    gene_count: 0
+                    genes_in_universe: 0
+                    object: null
+                    metadata: {}
+                    provenance: {}
+                    collection: null
+                    limitations:
+                    - Illustrative unavailable-object response; no provenance is fabricated.
+          headers:
+            X-Request-ID:
+              description: Correlation ID for this HTTP request.
+              schema:
+                type: string
+                format: uuid
+        '404':
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                not_found:
+                  summary: Not found
+                  value: *id005
+        '409':
+          description: Version Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                version_conflict:
+                  summary: Version conflict
+                  value: *id006
+        '422':
+          description: Invalid Input
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                invalid_input:
+                  summary: Invalid input
+                  value: *id007
+        '503':
+          description: Dependency Unavailable
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                dependency_unavailable:
+                  summary: Dependency unavailable
+                  value: *id014
+      security:
+      - {}
+      - ApplicationBearer: []
+      x-codeSamples:
+      - lang: Shell
+        label: request
+        source: 'curl -X GET ''https://api.reveal.example.org/v1/catalog/gene-sets/dapper%3AGeneSet.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa?generation_id=d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c''
+          -H ''Accept: application/json'''
 components:
   securitySchemes:
     ApplicationBearer:
@@ -22395,7 +22804,7 @@ components:
         source_id:
           type: string
           minLength: 1
-        source_revision: &id070
+        source_revision: &id072
           type: string
           pattern: ^[a-f0-9]{64}$
         dapper_id:
@@ -22424,7 +22833,7 @@ components:
           - gap_attachment
         suggestion_id:
           anyOf:
-          - &id073
+          - &id075
             type: string
             format: uuid
           - type: 'null'
@@ -22460,7 +22869,7 @@ components:
           type: string
         source_id:
           type: string
-        source_revision: *id070
+        source_revision: *id072
         object_class:
           const: Mechanism
           type: string
@@ -22484,7 +22893,7 @@ components:
           type: string
         source_id:
           type: string
-        source_revision: *id070
+        source_revision: *id072
         object_class:
           type: string
           const: Mechanism
@@ -22501,7 +22910,7 @@ components:
             or eaggl-capped-v1 (KPN reference generations).'
         catalog_file:
           $ref: '#/components/schemas/DapperFile'
-        reference_generation_id: &id083
+        reference_generation_id: &id089
           type: string
           description: 'Reference generation id: 64 lowercase hex characters.'
           pattern: ^[a-f0-9]{64}$
@@ -22588,7 +22997,7 @@ components:
           maxLength: 12000
         upload_ids:
           type: array
-          items: &id071
+          items: &id073
             type: string
             format: uuid
           uniqueItems: true
@@ -22610,7 +23019,7 @@ components:
       properties:
         composer:
           $ref: '#/components/schemas/Composer'
-        name: &id072
+        name: &id074
           type: string
           minLength: 1
           maxLength: 120
@@ -22620,7 +23029,7 @@ components:
           enum:
           - temporary
           - saved
-        source_draft_id: *id071
+        source_draft_id: *id073
         source_draft_version:
           type: integer
           minimum: 1
@@ -22640,7 +23049,7 @@ components:
           minimum: 1
         composer:
           $ref: '#/components/schemas/Composer'
-        name: *id072
+        name: *id074
         lifecycle:
           type: string
           enum:
@@ -22654,31 +23063,31 @@ components:
     Draft:
       type: object
       properties:
-        id: *id073
-        owner_user_id: *id073
+        id: *id075
+        owner_user_id: *id075
         version:
           type: integer
           minimum: 1
         composer:
           $ref: '#/components/schemas/Composer'
-        created_at: &id074
+        created_at: &id076
           type: string
           format: date-time
-        updated_at: *id074
-        name: *id072
+        updated_at: *id076
+        name: *id074
         lifecycle:
           type: string
           enum:
           - temporary
           - saved
-        source_draft_id: *id071
+        source_draft_id: *id073
         expires_at:
           anyOf:
-          - &id075
+          - &id077
             type: string
             format: date-time
           - type: 'null'
-        saved_at: *id075
+        saved_at: *id077
         source_draft_version:
           type: integer
           minimum: 1
@@ -22702,7 +23111,7 @@ components:
     DraftDeletion:
       type: object
       properties:
-        id: *id073
+        id: *id075
         deleted:
           type: boolean
           const: true
@@ -22732,7 +23141,7 @@ components:
     Me:
       type: object
       properties:
-        user_id: *id073
+        user_id: *id075
         display_name:
           anyOf:
           - type: string
@@ -22764,7 +23173,7 @@ components:
           - registered
         workspace_expires_at:
           anyOf:
-          - *id075
+          - *id077
           - type: 'null'
       required:
       - user_id
@@ -22782,7 +23191,7 @@ components:
     AttributionSnapshot:
       type: object
       properties:
-        user_id: *id073
+        user_id: *id075
         person_id:
           anyOf:
           - type: string
@@ -22801,7 +23210,7 @@ components:
           - type: 'null'
         orcid_authenticated:
           type: boolean
-        observed_at: *id074
+        observed_at: *id076
         principal_kind:
           type: string
           enum:
@@ -22819,9 +23228,9 @@ components:
     ResearchRequest:
       type: object
       properties:
-        id: *id073
-        owner_user_id: *id073
-        source_draft_id: *id073
+        id: *id075
+        owner_user_id: *id075
+        source_draft_id: *id075
         source_draft_version:
           type: integer
           minimum: 1
@@ -22836,10 +23245,10 @@ components:
           $ref: '#/components/schemas/DapperDocument'
         attribution:
           $ref: '#/components/schemas/AttributionSnapshot'
-        submitted_at: *id074
+        submitted_at: *id076
         user_inputs:
           $ref: '#/components/schemas/UserInputs'
-        originating_saved_draft_id: *id071
+        originating_saved_draft_id: *id073
         originating_saved_draft_version:
           type: integer
           minimum: 1
@@ -22873,7 +23282,7 @@ components:
           - dismech
         source_id:
           type: string
-        source_revision: *id070
+        source_revision: *id072
         status:
           anyOf:
           - type: string
@@ -23131,7 +23540,7 @@ components:
     Suggestions:
       type: object
       properties:
-        suggestion_id: *id073
+        suggestion_id: *id075
         automatic_anchors:
           type: array
           items:
@@ -23198,7 +23607,7 @@ components:
         kind:
           const: analysis
           type: string
-        draft_id: *id073
+        draft_id: *id075
         draft_version:
           type: integer
           minimum: 1
@@ -23317,7 +23726,7 @@ components:
         kind:
           const: analysis
           type: string
-        request_id: *id073
+        request_id: *id075
         account_ids:
           type: array
           items:
@@ -23333,9 +23742,9 @@ components:
             $ref: '#/components/schemas/Enrichment'
         paragraph_job_ids:
           type: array
-          items: *id071
+          items: *id073
           maxItems: 3
-        evidence_package_sha256: &id078
+        evidence_package_sha256: &id084
           type: string
           pattern: ^[a-f0-9]{64}$
       required:
@@ -23386,14 +23795,14 @@ components:
     Job:
       type: object
       properties:
-        id: *id073
+        id: *id075
         kind:
           type: string
           enum:
           - analysis
           - paragraph
-        owner_user_id: *id073
-        status: &id076
+        owner_user_id: *id075
+        status: &id078
           type: string
           enum:
           - queued
@@ -23403,7 +23812,7 @@ components:
           - succeeded
           - insufficient_evidence
           - failed
-        stage: &id077
+        stage: &id079
           type: string
           enum:
           - queued
@@ -23420,7 +23829,7 @@ components:
           - collecting_output
         research_request_id:
           anyOf:
-          - *id073
+          - *id075
           - type: 'null'
         input_account_id:
           anyOf:
@@ -23429,11 +23838,11 @@ components:
               path values.
             pattern: ^dapper:ScientificAccount\.[A-Za-z0-9_-]{32}$
           - type: 'null'
-        created_at: *id074
-        updated_at: *id074
+        created_at: *id076
+        updated_at: *id076
         completed_at:
           anyOf:
-          - *id074
+          - *id076
           - type: 'null'
         result:
           anyOf:
@@ -23497,7 +23906,7 @@ components:
               const: analysis
         then:
           properties:
-            research_request_id: *id073
+            research_request_id: *id075
             input_account_id:
               type: 'null'
             result:
@@ -23572,7 +23981,7 @@ components:
               - cancelled
         then:
           properties:
-            completed_at: *id074
+            completed_at: *id076
         else:
           properties:
             completed_at:
@@ -23604,8 +24013,8 @@ components:
         id:
           type: string
           pattern: ^[0-9]+$
-        job_id: *id073
-        occurred_at: *id074
+        job_id: *id075
+        occurred_at: *id076
         event_type:
           type: string
           enum:
@@ -23615,8 +24024,8 @@ components:
           - result
           - failure
           - activity
-        status: *id076
-        stage: *id077
+        status: *id078
+        stage: *id079
         message:
           type: string
         result:
@@ -23661,8 +24070,8 @@ components:
     SchemaPin:
       type: object
       properties:
-        schema_sha256: *id070
-        dependency_snapshot_sha256: *id070
+        schema_sha256: *id072
+        dependency_snapshot_sha256: *id072
         identity_profile:
           const: DAPPER-ID-1
           type: string
@@ -23679,7 +24088,7 @@ components:
           description: Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode
             path values.
           pattern: ^dapper:[A-Za-z][A-Za-z0-9]*\.[A-Za-z0-9_-]{32}$
-        payload_sha256: *id070
+        payload_sha256: *id072
       required:
       - object_id
       - payload_sha256
@@ -23696,7 +24105,7 @@ components:
           - type: 'null'
         expires_at:
           anyOf:
-          - *id074
+          - *id076
           - type: 'null'
         availability:
           type: string
@@ -23893,7 +24302,7 @@ components:
               node_id:
                 type: string
                 pattern: '^gene_set:'
-              import_id: *id070
+              import_id: *id072
             required:
             - model
             - node_id
@@ -23989,7 +24398,7 @@ components:
           type: string
         detail:
           type: string
-        request_id: *id073
+        request_id: *id075
         retryable:
           type: boolean
         current_version:
@@ -24104,14 +24513,14 @@ components:
               type: string
             processor_version:
               type: string
-            style_sha256: *id070
-            locale_sha256: *id070
+            style_sha256: *id072
+            locale_sha256: *id072
             citation_profile:
               const: reveal-citation-v1
               type: string
             metadata_checksums:
               type: array
-              items: *id070
+              items: *id072
           required:
           - processor
           - processor_version
@@ -24244,6 +24653,257 @@ components:
       - items
       - page
       additionalProperties: false
+    LoadingSummary:
+      type: object
+      properties:
+        total: &id081
+          type: integer
+          minimum: 0
+        min:
+          anyOf:
+          - &id080
+            type: number
+          - type: 'null'
+        max:
+          anyOf:
+          - *id080
+          - type: 'null'
+        coverage:
+          type: string
+        available:
+          type: boolean
+      required:
+      - total
+      - min
+      - max
+      - coverage
+      - available
+      additionalProperties: false
+      description: Statistics over the entire retained factor loading set, unaffected
+        by search or pagination. available means numeric scores are stored. Missing
+        values are not zero.
+    FactorLoading:
+      type: object
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+        loading:
+          anyOf:
+          - *id080
+          - type: 'null'
+        rank:
+          type: integer
+          minimum: 1
+        gene_set_id:
+          anyOf:
+          - type: string
+            description: Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode
+              path values.
+            pattern: ^dapper:GeneSet\.[A-Za-z0-9_-]{32}$
+          - type: 'null'
+        library:
+          type: string
+        gene_count: *id081
+        joint_loading: *id080
+        marginal_loading: *id080
+        joint_rank:
+          type: integer
+          minimum: 1
+        marginal_rank:
+          type: integer
+          minimum: 1
+      required:
+      - id
+      - label
+      - loading
+      - rank
+      additionalProperties: false
+      description: One retained gene weight or gene-set projection. rank is the full
+        factor gene rank or the original selected-metric gene-set projection rank,
+        unchanged by search/pagination; legacy sets preserve imported rank. joint_rank
+        and marginal_rank are original projection ranks. Legacy gene-set weights are
+        null.
+    FactorDetail:
+      type: object
+      properties:
+        factor:
+          $ref: '#/components/schemas/EagglFactor'
+        generation_id: &id082
+          anyOf:
+          - type: string
+            pattern: ^[a-f0-9]{64}$
+          - type: 'null'
+        provenance:
+          type: object
+          properties:
+            eaggl_import_id:
+              type: string
+            factor_id:
+              type: string
+            factor_key:
+              anyOf:
+              - type: string
+              - type: 'null'
+            model:
+              type: string
+          required:
+          - eaggl_import_id
+          - factor_id
+          - factor_key
+          - model
+          additionalProperties: false
+        genes:
+          $ref: '#/components/schemas/LoadingSummary'
+        gene_sets:
+          $ref: '#/components/schemas/LoadingSummary'
+      required:
+      - factor
+      - generation_id
+      - provenance
+      - genes
+      - gene_sets
+      additionalProperties: false
+    FactorLoadings:
+      type: object
+      properties:
+        source_id:
+          type: string
+        generation_id: *id082
+        kind:
+          type: string
+          enum:
+          - gene
+          - gene_set
+        metric:
+          type: string
+          enum:
+          - joint
+          - marginal
+        sort:
+          type: string
+          enum:
+          - alphabetical
+          - loading
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/FactorLoading'
+        total: *id081
+        offset: *id081
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 500
+        next_offset:
+          anyOf:
+          - *id081
+          - type: 'null'
+        summary:
+          $ref: '#/components/schemas/LoadingSummary'
+      required:
+      - source_id
+      - generation_id
+      - kind
+      - metric
+      - sort
+      - items
+      - total
+      - offset
+      - limit
+      - next_offset
+      - summary
+      additionalProperties: false
+      description: Bounded loading page. sort=loading (default) orders by descending
+        score; sort=alphabetical orders case-insensitive labels before pagination.
+        Stable identifiers break ties. Ranks always remain original loading ranks,
+        independent of sort. total counts search matches; summary.total counts all
+        retained rows. Pin generation_id and source_revision returned by FactorDetail
+        on subsequent requests.
+    CatalogGeneSet:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode
+            path values.
+          pattern: ^dapper:GeneSet\.[A-Za-z0-9_-]{32}$
+        generation_id: *id082
+        name:
+          type: string
+        library:
+          anyOf:
+          - type: string
+          - type: 'null'
+        gene_count:
+          anyOf:
+          - *id081
+          - type: 'null'
+        genes_in_universe:
+          anyOf:
+          - *id081
+          - type: 'null'
+        object:
+          anyOf:
+          - &id083
+            type: object
+            additionalProperties: true
+          - type: 'null'
+        metadata: *id083
+        provenance: *id083
+        collection:
+          anyOf:
+          - type: object
+            properties:
+              id:
+                type: string
+                description: Exact, case-sensitive, compact DAPPER-ID-1 identifier.
+                  URL-encode path values.
+                pattern: ^dapper:GeneSetCollection\.[A-Za-z0-9_-]{32}$
+              label:
+                type: string
+              library:
+                type: string
+              gene_set_count: *id081
+              object:
+                anyOf:
+                - *id083
+                - type: 'null'
+              payload_sha256:
+                anyOf:
+                - type: string
+                - type: 'null'
+            required:
+            - id
+            - label
+            - library
+            - gene_set_count
+            - object
+            - payload_sha256
+            additionalProperties: false
+          - type: 'null'
+        limitations:
+          type: array
+          items:
+            type: string
+      required:
+      - id
+      - generation_id
+      - name
+      - library
+      - gene_count
+      - genes_in_universe
+      - object
+      - metadata
+      - provenance
+      - collection
+      - limitations
+      additionalProperties: false
+      description: Imported public reference data, never an owner account graph. object
+        is the exact stored GeneSet or null; provenance preserves imported collection
+        prefixes, organizations, datasets, files and activities. Unknown/derived account
+        aliases return 404.
     WorkspaceEvent:
       type: object
       properties:
@@ -24260,7 +24920,7 @@ components:
           enum:
           - workspace
           - public
-        committed_at: *id075
+        committed_at: *id077
         event_type:
           type: string
         entity_id:
@@ -24314,7 +24974,7 @@ components:
         source_id:
           type: string
           pattern: '^dismech:'
-        source_revision: *id078
+        source_revision: *id084
       required:
       - id
       - source_id
@@ -24336,7 +24996,7 @@ components:
           type: string
         version_id:
           type: string
-        sha256: *id078
+        sha256: *id084
         size_bytes:
           type: integer
           minimum: 0
@@ -24361,7 +25021,7 @@ components:
         segment_count:
           type: integer
           minimum: 1
-        original_sha256: *id078
+        original_sha256: *id084
       required:
       - storage
       - format
@@ -24371,8 +25031,8 @@ components:
     Upload:
       type: object
       properties:
-        id: *id071
-        draft_id: *id071
+        id: *id073
+        draft_id: *id073
         filename:
           type: string
         media_type:
@@ -24381,7 +25041,7 @@ components:
           type: integer
           minimum: 1
           maximum: 8000000
-        sha256: *id078
+        sha256: *id084
         status:
           type: string
           enum:
@@ -24389,8 +25049,8 @@ components:
           - ready
           - failed
           - removed
-        created_at: *id075
-        expires_at: *id075
+        created_at: *id077
+        expires_at: *id077
         storage:
           anyOf:
           - $ref: '#/components/schemas/UploadStorage'
@@ -24420,7 +25080,7 @@ components:
     UploadCreate:
       type: object
       properties:
-        draft_id: *id071
+        draft_id: *id073
         filename:
           type: string
           minLength: 1
@@ -24432,7 +25092,7 @@ components:
           type: integer
           minimum: 1
           maximum: 8000000
-        sha256: *id078
+        sha256: *id084
       required:
       - draft_id
       - filename
@@ -24526,7 +25186,7 @@ components:
           - canonical_fixture
         fixture_version:
           type: string
-        content_sha256: *id078
+        content_sha256: *id084
         scientific_acceptance:
           type: string
           enum:
@@ -24544,7 +25204,7 @@ components:
           type: string
         source_pointer:
           type: string
-        payload_sha256: *id078
+        payload_sha256: *id084
         raw:
           type: object
           additionalProperties: true
@@ -24568,7 +25228,7 @@ components:
           enum:
           - public_exact_gap
           - owner_exact_gap
-        as_of: *id075
+        as_of: *id077
         ranking:
           type: string
           enum:
@@ -24693,7 +25353,7 @@ components:
           - type: 'null'
         artifact_sha256:
           anyOf:
-          - *id078
+          - *id084
           - type: 'null'
         duration_ms:
           anyOf:
@@ -24717,7 +25377,7 @@ components:
                 minimum: 0
               truncated:
                 type: boolean
-              snapshot_sha256: *id078
+              snapshot_sha256: *id084
             required:
             - scope
             - nodes
@@ -24761,7 +25421,7 @@ components:
           - not_requested
         job_id:
           anyOf:
-          - *id071
+          - *id073
           - type: 'null'
         paragraph_id:
           anyOf:
@@ -24788,11 +25448,11 @@ components:
           minimum: 0
         published_at:
           anyOf:
-          - *id075
+          - *id077
           - type: 'null'
         updated_at:
           anyOf:
-          - *id075
+          - *id077
           - type: 'null'
         can_manage:
           type: boolean
@@ -24837,8 +25497,8 @@ components:
         kind:
           type: string
           const: analysis_outcome
-        outcome_id: *id071
-        evidence_package_sha256: *id078
+        outcome_id: *id073
+        evidence_package_sha256: *id084
       required:
       - kind
       - outcome_id
@@ -24884,7 +25544,7 @@ components:
           - type: integer
             minimum: 1
           - type: 'null'
-        artifact_sha256: *id078
+        artifact_sha256: *id084
         download_url:
           anyOf:
           - type: string
@@ -24900,15 +25560,15 @@ components:
     OutcomeProvenance:
       type: object
       properties:
-        evidence_package_sha256: *id078
-        outcome_sha256: *id078
+        evidence_package_sha256: *id084
+        outcome_sha256: *id084
         runtime_sha256:
           anyOf:
-          - *id078
+          - *id084
           - type: 'null'
         ledger_sha256:
           anyOf:
-          - *id078
+          - *id084
           - type: 'null'
         execution_mode:
           type: string
@@ -24970,8 +25630,8 @@ components:
                 - failed
                 - denied
                 - interrupted
-              request_sha256: *id078
-              response_sha256: *id078
+              request_sha256: *id084
+              response_sha256: *id084
             required:
             - sequence
             - graph
@@ -24994,7 +25654,7 @@ components:
     AnalysisOutcome:
       type: object
       properties:
-        id: *id071
+        id: *id073
         outcome:
           type: string
           enum:
@@ -25034,7 +25694,7 @@ components:
             enum:
             - biomarkerkg
             - prokn
-        created_at: *id075
+        created_at: *id077
         attribution:
           anyOf:
           - $ref: '#/components/schemas/AttributionSnapshot'
@@ -25050,7 +25710,7 @@ components:
           $ref: '#/components/schemas/OutcomeProvenance'
         job_id:
           anyOf:
-          - *id071
+          - *id073
           - type: 'null'
         publication:
           $ref: '#/components/schemas/PublicationState'
@@ -25144,10 +25804,10 @@ components:
         claim_count:
           type: integer
           minimum: 1
-        created_at: *id075
+        created_at: *id077
         job_id:
           anyOf:
-          - *id071
+          - *id073
           - type: 'null'
         research_statement:
           $ref: '#/components/schemas/ParagraphState'
@@ -25244,13 +25904,13 @@ components:
     LeaderboardDirections:
       type: object
       properties:
-        SUPPORTS: &id079
+        SUPPORTS: &id085
           type: integer
           minimum: 0
-        DISPUTES: *id079
-        MIXED: *id079
-        NEUTRAL: *id079
-        UNKNOWN: *id079
+        DISPUTES: *id085
+        MIXED: *id085
+        NEUTRAL: *id085
+        UNKNOWN: *id085
       required:
       - SUPPORTS
       - DISPUTES
@@ -25261,14 +25921,14 @@ components:
     LeaderboardMetrics:
       type: object
       properties:
-        account_count: *id079
-        upvotes: *id079
-        downvotes: *id079
-        voter_count: *id079
-        account_gap_count: *id079
-        explored_gap_count: *id079
-        claim_count: *id079
-        researcher_count: *id079
+        account_count: *id085
+        upvotes: *id085
+        downvotes: *id085
+        voter_count: *id085
+        account_gap_count: *id085
+        explored_gap_count: *id085
+        claim_count: *id085
+        researcher_count: *id085
         net_votes:
           type: integer
         overall_score:
@@ -25373,23 +26033,23 @@ components:
     LeaderboardMetadata:
       type: object
       properties:
-        as_of: *id075
+        as_of: *id077
         score_version:
           type: string
           enum:
           - public-contribution-v1
-        cohort_size: *id079
-        voting_participants: *id079
+        cohort_size: *id085
+        voting_participants: *id085
         exclusions:
           type: object
           properties:
-            fixture_accounts: *id079
-            uncredited_accounts: *id079
-            conflicting_accounts: *id079
-            invalid_public_accounts: *id079
-            excluded_evidence_paths: *id079
-            fixture_explorations: *id079
-            uncredited_explorations: *id079
+            fixture_accounts: *id085
+            uncredited_accounts: *id085
+            conflicting_accounts: *id085
+            invalid_public_accounts: *id085
+            excluded_evidence_paths: *id085
+            fixture_explorations: *id085
+            uncredited_explorations: *id085
           required:
           - fixture_accounts
           - uncredited_accounts
@@ -25470,20 +26130,20 @@ components:
           type: string
           enum:
           - public-contribution-v1
-        cohort_size: &id080
+        cohort_size: &id086
           type: integer
           minimum: 0
-        voting_participants: *id080
+        voting_participants: *id086
         exclusions:
           type: object
           properties:
-            fixture_accounts: *id080
-            uncredited_accounts: *id080
-            conflicting_accounts: *id080
-            invalid_public_accounts: *id080
-            excluded_evidence_paths: *id080
-            fixture_explorations: *id080
-            uncredited_explorations: *id080
+            fixture_accounts: *id086
+            uncredited_accounts: *id086
+            conflicting_accounts: *id086
+            invalid_public_accounts: *id086
+            excluded_evidence_paths: *id086
+            fixture_explorations: *id086
+            uncredited_explorations: *id086
           required:
           - fixture_accounts
           - uncredited_accounts
@@ -25626,20 +26286,20 @@ components:
           type: string
           enum:
           - public-contribution-v1
-        cohort_size: &id081
+        cohort_size: &id087
           type: integer
           minimum: 0
-        voting_participants: *id081
+        voting_participants: *id087
         exclusions:
           type: object
           properties:
-            fixture_accounts: *id081
-            uncredited_accounts: *id081
-            conflicting_accounts: *id081
-            invalid_public_accounts: *id081
-            excluded_evidence_paths: *id081
-            fixture_explorations: *id081
-            uncredited_explorations: *id081
+            fixture_accounts: *id087
+            uncredited_accounts: *id087
+            conflicting_accounts: *id087
+            invalid_public_accounts: *id087
+            excluded_evidence_paths: *id087
+            fixture_explorations: *id087
+            uncredited_explorations: *id087
           required:
           - fixture_accounts
           - uncredited_accounts
@@ -25707,7 +26367,7 @@ components:
           $ref: '#/components/schemas/LeaderboardEvidence'
         entry:
           $ref: '#/components/schemas/LeaderboardEntry'
-        total: *id079
+        total: *id085
         items:
           type: array
           items:
@@ -25738,7 +26398,7 @@ components:
           $ref: '#/components/schemas/SelectedGap'
         draft_id:
           anyOf:
-          - *id071
+          - *id073
           - type: 'null'
       required:
       - source_gap
@@ -25753,10 +26413,10 @@ components:
           $ref: '#/components/schemas/SelectedGap'
         knowledge_gap:
           $ref: '#/components/schemas/DapperKnowledgeGap'
-        last_explored_at: *id075
+        last_explored_at: *id077
         draft_id:
           anyOf:
-          - *id071
+          - *id073
           - type: 'null'
         scientific_accounts:
           $ref: '#/components/schemas/AccountCount'
@@ -33170,8 +33830,8 @@ components:
     EvidencePackageResult:
       type: object
       properties:
-        job_id: *id071
-        package_sha256: *id078
+        job_id: *id073
+        package_sha256: *id084
         package:
           $ref: '#/components/schemas/EvidencePackage'
       required:
@@ -33237,7 +33897,7 @@ components:
     KpnTrait:
       type: object
       properties:
-        id: &id082
+        id: &id088
           type: string
           pattern: ^KPN\.TRAIT:[0-9]{7}$
         name:
@@ -33284,7 +33944,7 @@ components:
           - type: 'null'
         kpn_trait_id:
           anyOf:
-          - *id082
+          - *id088
           - type: 'null'
         label:
           anyOf:
@@ -33298,7 +33958,7 @@ components:
           anyOf:
           - type: string
           - type: 'null'
-        archived_reference_factor_id: &id085
+        archived_reference_factor_id: &id091
           type: string
           pattern: ^[a-f0-9]{64}$
       required:
@@ -33325,19 +33985,19 @@ components:
         reason:
           type: string
           const: reference_generation_superseded
-        archived_at: &id084
+        archived_at: &id090
           type: string
           format: date-time
-        from_reference_generation: *id083
-        to_reference_generation: *id083
+        from_reference_generation: *id089
+        to_reference_generation: *id089
         history:
           type: array
           items:
             type: object
             properties:
-              from_reference_generation: *id083
-              to_reference_generation: *id083
-              archived_at: *id084
+              from_reference_generation: *id089
+              to_reference_generation: *id089
+              archived_at: *id090
             required:
             - from_reference_generation
             - to_reference_generation
@@ -33377,7 +34037,7 @@ components:
                 - type: 'null'
               source_revision:
                 anyOf:
-                - *id085
+                - *id091
                 - type: 'null'
             required:
             - id
@@ -33390,17 +34050,17 @@ components:
           properties:
             job_id:
               anyOf:
-              - &id086
+              - &id092
                 type: string
                 format: uuid
               - type: 'null'
             request_id:
               anyOf:
-              - *id086
+              - *id092
               - type: 'null'
             evidence_package_sha256:
               anyOf:
-              - *id085
+              - *id091
               - type: 'null'
             account_id:
               anyOf:
@@ -33411,7 +34071,7 @@ components:
               - type: 'null'
             outcome_id:
               anyOf:
-              - *id086
+              - *id092
               - type: 'null'
           required:
           - job_id
@@ -33445,8 +34105,8 @@ components:
         format:
           type: string
           const: reveal.archived-reference-factor/1
-        archive_id: *id085
-        generation_id: *id083
+        archive_id: *id091
+        generation_id: *id089
         model:
           type: string
           enum:
@@ -33463,7 +34123,7 @@ components:
           type: string
         kpn_trait_id:
           anyOf:
-          - *id082
+          - *id088
           - type: 'null'
         label:
           type: string
@@ -33496,7 +34156,7 @@ components:
             properties:
               symbol:
                 type: string
-              loading: &id087
+              loading: &id093
                 type: number
             required:
             - symbol
@@ -33532,15 +34192,15 @@ components:
                 - type: 'null'
               joint_loading:
                 anyOf:
-                - *id087
+                - *id093
                 - type: 'null'
               marginal_loading:
                 anyOf:
-                - *id087
+                - *id093
                 - type: 'null'
               score:
                 anyOf:
-                - *id087
+                - *id093
                 - type: 'null'
             required:
             - rank
@@ -33553,8 +34213,8 @@ components:
             - marginal_loading
             - score
             additionalProperties: false
-        generation_manifest_sha256: *id085
-        captured_at: *id084
+        generation_manifest_sha256: *id091
+        captured_at: *id090
       required:
       - format
       - archive_id

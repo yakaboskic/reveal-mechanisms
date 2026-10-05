@@ -1,0 +1,42 @@
+{
+  "operation_id": "getCatalogGeneSet",
+  "case": "request",
+  "method": "GET",
+  "path_template": "/v1/catalog/gene-sets/{gene_set_id}",
+  "request": {
+    "url": "https://api.reveal.example.org/v1/catalog/gene-sets/dapper%3AGeneSet.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa?generation_id=d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c",
+    "path": {
+      "gene_set_id": "dapper:GeneSet.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "query": {
+      "generation_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c"
+    },
+    "headers": {
+      "Accept": "application/json"
+    },
+    "body": null
+  },
+  "responses": {
+    "200": {
+      "content_type": "application/json",
+      "examples": {
+        "unavailable_object": {
+          "id": "dapper:GeneSet.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "generation_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c",
+          "name": "Example imported gene set",
+          "library": "GO_BP",
+          "gene_count": 0,
+          "genes_in_universe": 0,
+          "object": null,
+          "metadata": {},
+          "provenance": {},
+          "collection": null,
+          "limitations": [
+            "Illustrative unavailable-object response; no provenance is fabricated."
+          ]
+        }
+      }
+    }
+  },
+  "curl": "curl -X GET 'https://api.reveal.example.org/v1/catalog/gene-sets/dapper%3AGeneSet.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa?generation_id=d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c' -H 'Accept: application/json'"
+}

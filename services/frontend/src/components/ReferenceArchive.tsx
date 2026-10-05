@@ -2,6 +2,8 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { factorHref } from "@/lib/factor-links";
 import { api, messageOf, type Schema } from "@/lib/client";
 import { archivedResearchInputs, currentAnalysisComposer, selectedGap, type CopiedResearchInputs } from "@/lib/composer";
 import { archivedDate, isArchived, outdatedFromAnchor, referenceFactorHref, referenceReloaded, referenceStateLabels, referenceStates, type ArchivedAnchor, type ArchivedFactor, type ReferenceArchive, type ReferenceState } from "@/lib/reference";
@@ -55,6 +57,7 @@ function ArchivedFactorDetails({ anchor }: { anchor: ArchivedAnchor }) {
         {!!genes.length && <div><dt>Top genes</dt><dd>{genes.join(", ")}</dd></div>}
         {!!geneSets.length && <div><dt>Top gene sets</dt><dd><ol>{geneSets.map(set => <li key={`${set.rank}:${set.name}`}>{set.name}</li>)}</ol></dd></div>}
       </dl>}
+      <Link href={factorHref(anchor.source_id, undefined, { archiveId: anchor.archived_reference_factor_id })}>View saved factor loadings</Link>{" · "}
       <a href={referenceFactorHref(anchor.archived_reference_factor_id)} target="_blank" rel="noopener noreferrer">Archived factor record (JSON) <span aria-hidden="true">↗</span></a>
     </div>
   </details>;

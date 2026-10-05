@@ -1,0 +1,84 @@
+{
+  "operation_id": "getFactorDetail",
+  "case": "request",
+  "method": "GET",
+  "path_template": "/v1/factors/{source_id}",
+  "request": {
+    "url": "https://api.reveal.example.org/v1/factors/factor%3Akpn%3A0000398%3Aeaggl-capped-v1%3AFactor1?generation_id=d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c&source_revision=191055aeb63ba725d7254b602556a76546a1857662c79f9e40da3eefbb8c2550",
+    "path": {
+      "source_id": "factor:kpn:0000398:eaggl-capped-v1:Factor1"
+    },
+    "query": {
+      "generation_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c",
+      "source_revision": "191055aeb63ba725d7254b602556a76546a1857662c79f9e40da3eefbb8c2550"
+    },
+    "headers": {
+      "Accept": "application/json"
+    },
+    "body": null
+  },
+  "responses": {
+    "200": {
+      "content_type": "application/json",
+      "examples": {
+        "factor": {
+          "factor": {
+            "source": "eaggl",
+            "source_id": "factor:kpn:0000398:eaggl-capped-v1:Factor1",
+            "source_revision": "191055aeb63ba725d7254b602556a76546a1857662c79f9e40da3eefbb8c2550",
+            "object_class": "Mechanism",
+            "object": {
+              "name": "Type 2 diabetes (T2D) mechanism Factor1",
+              "description": "EAGGL mechanism factor:kpn:0000398:eaggl-capped-v1:Factor1. KPN trait KPN.TRAIT:0000398 (Type 2 diabetes (T2D)). Source label: Metabolic Dysregulation Indicators.",
+              "id": "dapper:Mechanism.DDGbWvsSn5KPwztUH_htX778WdrO5Zan"
+            },
+            "cfde_anchor": {
+              "node_id": "factor:kpn:0000398:eaggl-capped-v1:Factor1",
+              "node_type": "factor",
+              "label": "Metabolic Dysregulation Indicators",
+              "subtitle": "Type 2 diabetes (T2D) (Factor1)"
+            },
+            "model": "eaggl-capped-v1",
+            "reference_generation_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c",
+            "kpn_trait": {
+              "id": "KPN.TRAIT:0000398",
+              "name": "Type 2 diabetes (T2D)",
+              "legacy_phenotype_id": "T2D",
+              "trait_group": "metabolic",
+              "trait_type": "phenotype"
+            },
+            "catalog_file": {
+              "filename": "cfde-factor.json",
+              "mime_type": "application/json",
+              "sha256": "0ed08e22513ecd1b9423e4b4886b683a2a2997a9772722c052ba0b5ce8f0a3bf",
+              "size_in_bytes": 1037,
+              "id": "dapper:File.JKQVhh9Y0Sq8mM8XQbdBAhGzwVCGNHe3"
+            }
+          },
+          "generation_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c",
+          "provenance": {
+            "eaggl_import_id": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+            "factor_id": "T2D::Factor1",
+            "factor_key": "KPN.TRAIT:0000398::Factor1",
+            "model": "eaggl-capped-v1"
+          },
+          "genes": {
+            "total": 633,
+            "min": 0.0001,
+            "max": 0.98,
+            "coverage": "All stored nonzero EAGGL gene loadings. Genes absent from this import are not assigned a zero loading.",
+            "available": true
+          },
+          "gene_sets": {
+            "total": 71,
+            "min": 0.0003,
+            "max": 0.24,
+            "coverage": "Retained per-trait projections: gene sets in the top 50 by joint or marginal loading. Search covers this retained subset, not every gene set in the source library.",
+            "available": true
+          }
+        }
+      }
+    }
+  },
+  "curl": "curl -X GET 'https://api.reveal.example.org/v1/factors/factor%3Akpn%3A0000398%3Aeaggl-capped-v1%3AFactor1?generation_id=d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c&source_revision=191055aeb63ba725d7254b602556a76546a1857662c79f9e40da3eefbb8c2550' -H 'Accept: application/json'"
+}

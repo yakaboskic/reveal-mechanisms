@@ -322,7 +322,10 @@
       "action": "Rank the complete public population and inspect the exact records behind each measure.",
       "incoming": "Researcher, account or dataset view; view-specific ranking; all or supporting evidence; signed continuation cursor.",
       "outgoing": "Shared ranks, raw measures, score components, public eligibility counts, methodology and paginated public records.",
-      "cases": ["getLeaderboard.request", "getLeaderboardRecords.request"],
+      "cases": [
+        "getLeaderboard.request",
+        "getLeaderboardRecords.request"
+      ],
       "rules": [
         "Only active frozen publications count. Private work and demo/test fixtures contribute nothing.",
         "Original registered attribution earns researcher credit; conflicting attribution remains uncredited. Researcher recognition excludes own ballots.",
@@ -352,6 +355,24 @@
         "Saved/frozen references prevent removal. Temporary metadata expires; shared immutable blobs are retained.",
         "User hypotheses are unverified context. Supplied evidence requires exact source locators and retains the existing CFDE requirements.",
         "Results based on private researcher inputs cannot be published until a deliberate disclosure workflow exists."
+      ]
+    },
+    {
+      "id": "factor-catalog",
+      "title": "Inspect factors and gene-set provenance",
+      "route": "GET /v1/factors/{source_id}; GET /v1/factor-loadings; GET /v1/catalog/gene-sets/{gene_set_id}",
+      "action": "Open an exact reference factor, search its retained loadings, and follow a gene set to imported collection provenance.",
+      "incoming": "Source identity and revision, generation pin, loading kind and metric, literal search text, offset and bounded page size.",
+      "outgoing": "Factor metadata, separate score ranges, loading pages and exact imported GeneSet with source provenance.",
+      "cases": [
+        "getFactorDetail.request",
+        "getFactorLoadings.request",
+        "getCatalogGeneSet.request"
+      ],
+      "rules": [
+        "Factor revision and generation mismatches return 409 before loadings are read.",
+        "Gene sets retain the top 50 projections by joint or marginal rank; absent weights are never treated as zero.",
+        "Public reference reads expose imported catalog data only; account gene-set permissions are unchanged."
       ]
     }
   ]

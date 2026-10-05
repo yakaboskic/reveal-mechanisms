@@ -3,7 +3,7 @@ import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState
 import { RevalidationCache } from "@/lib/revalidation-cache";
 import { loadWorkspaceData, workspaceTabs, workspaceKey, workspaceKeyParts, type WorkspaceData, type WorkspaceTab, type WorkspaceKey } from "@/lib/workspace-data";
 import type { ReferenceState } from "@/lib/reference";
-import { onWorkspaceChange, invalidateWorkspace, affectedWorkspaceTabs, connectWorkspaceEvents, type WorkspaceConnection } from "@/lib/workspace-events";
+import { onWorkspaceChange, invalidateWorkspace, resetWorkspaceCache, affectedWorkspaceTabs, connectWorkspaceEvents, type WorkspaceConnection } from "@/lib/workspace-events";
 import { terminal, type Schema } from "@/lib/client";
 
 type Store = RevalidationCache<WorkspaceKey, WorkspaceData>;
@@ -37,7 +37,7 @@ export function WorkspaceCacheProvider({ scope, children, checkIdentity }: { sco
         invalidateWorkspace(event);
         if (event?.collections.includes("identity")) void identityCheck.current();
       },
-      revoked: () => { cache.bind(null); void identityCheck.current(); },
+      revoked: () => { resetWorkspaceCache(); void identityCheck.current(); },
     });
     return () => controller.abort();
   }, [cache, scope]);

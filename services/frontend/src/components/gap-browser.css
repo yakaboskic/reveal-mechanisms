@@ -8,6 +8,7 @@
 .gap-scope-selector p{margin:3px 0 10px;font-size:11px;line-height:1.6;color:#8492a5}
 .gap-browser.trending{display:flex;flex-direction:column;min-height:0;flex:1;margin:0 -10px 0 0;padding:0;overflow:hidden}
 .gap-browser-list{height:100%;min-height:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;scrollbar-gutter:stable;padding-right:10px}
+.gap-browser-refresh{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:28px;padding-right:16px;flex:none;font-size:11px;color:#8492a5}.gap-browser-refresh button{padding:4px 0;color:#54779c;font:inherit;white-space:nowrap}.gap-browser-refresh button:hover{text-decoration:underline;text-underline-offset:3px}.gap-browser-refresh button:disabled{opacity:.6;cursor:wait}
 .gap-browser .trend{flex:none;overflow-wrap:anywhere}.gap-browser .loading-surface{margin:10px 0}.gap-browser-more{text-align:center;min-height:8px}
 .gap-sort{display:flex;align-items:center;gap:5px;margin-left:auto;color:#8492a5;flex:none;font-size:11px}
 .gap-scope-selector .gap-sort select{min-height:32px;padding:4px 18px 4px 0;font-size:12px;font-weight:400;color:#637994}

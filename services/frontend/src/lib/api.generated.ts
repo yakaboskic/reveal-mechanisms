@@ -145,7 +145,7 @@ export interface paths {
         };
         /**
          * Browse knowledge gaps
-         * @description Browse imported DisMech gaps ordered by distinct scientific-account count descending. Public scope (default) counts only explicitly published snapshots across users; workspace scope requires a session and counts owned saved accounts. Equal-count gaps shuffle on each new browse; a server seed in the signed continuation cursor preserves tie order across pages. Exact gap digests only: no text matching, attempts, paragraph jobs or implicit source-revision rollup. Invalid supplied credentials are rejected even for public reads. Filters apply before pagination; count or corpus changes expire cursors. sort=votes orders by net gap vote score, then account count, then the same seeded tie order. sort=accounts is the default. Vote changes, sort changes and registered-viewer changes expire cursors. Account votes do not contribute to gap vote totals. Counts include current accounts only: accounts archived by a reference reload stay listed but are not counted.
+         * @description Browse imported DisMech gaps using scientific-account or vote ranking. Public scope (default) counts only explicitly published snapshots across users; workspace scope requires a session and counts owned saved accounts. Gaps tied on all ranking measures shuffle on each new browse; a server seed in the signed continuation cursor preserves tie order across pages. Exact gap digests only: no text matching, attempts, paragraph jobs or implicit source-revision rollup. Invalid supplied credentials are rejected even for public reads. Filters apply before pagination; count or corpus changes expire cursors. sort=accounts (default) orders by current accessible account count, then the number of distinct resolved DisMech Mechanisms, then the same seeded tie order. sort=votes orders by net gap vote score, then the same mechanism count, then account count and seeded ties. Mechanism counts deduplicate canonical dapper:Mechanism identities and exclude unresolved, non-DisMech and non-Mechanism attachments. Vote changes, attachment changes, sort changes and registered-viewer changes expire cursors. Account votes do not contribute to gap vote totals. Counts include current accounts only: accounts archived by a reference reload stay listed but are not counted.
          */
         get: operations["listKnowledgeGaps"];
         put?: never;
@@ -960,6 +960,66 @@ export interface paths {
          * @description Public reference data. Returns the immutable snapshot of an EAGGL factor that archived work referenced: identity, model, trait, label, DAPPER Mechanism, source metadata, top genes and top gene sets. Snapshots are captured before a reference reload and never purged, so archived accounts and outcomes keep rendering after their generation is retired. archive_id is archive.reference.anchors[].archived_reference_factor_id. Unknown or malformed ids return 404. The example is illustrative: captured catalog and interactive loadings stand in for the EAGGL metadata and top-50 lists.
          */
         get: operations["getArchivedReferenceFactor"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/factors/{source_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Inspect a factor and its loading coverage
+         * @description Read the active imported factor and score ranges. Requests never run research or model inference. Pass source_revision from the anchor to prevent a same-id factor silently changing across reference reloads.
+         */
+        get: operations["getFactorDetail"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/factor-loadings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search and page factor loadings
+         * @description Search literal gene symbols or gene-set names, library and identifier. Gene scores are nonzero EAGGL weights; gene-set scores are joint/marginal projections retained in the top 50 by either rank. Gene scores and set scores have separate scales. Missing legacy set scores stay null.
+         */
+        get: operations["getFactorLoadings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/catalog/gene-sets/{gene_set_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Inspect imported gene-set provenance
+         * @description Returns exact imported reference GeneSet and collection provenance. This route does not expose private scientific-account objects; /v1/gene-sets retains its existing publication/owner permissions.
+         */
+        get: operations["getCatalogGeneSet"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3735,6 +3795,88 @@ export interface components {
         JobList: {
             items: components["schemas"]["Job"][];
             page: components["schemas"]["Page"];
+        };
+        /** @description Statistics over the entire retained factor loading set, unaffected by search or pagination. available means numeric scores are stored. Missing values are not zero. */
+        LoadingSummary: {
+            total: number;
+            min: number | null;
+            max: number | null;
+            coverage: string;
+            available: boolean;
+        };
+        /** @description One retained gene weight or gene-set projection. rank is the full factor gene rank or the original selected-metric gene-set projection rank, unchanged by search/pagination; legacy sets preserve imported rank. joint_rank and marginal_rank are original projection ranks. Legacy gene-set weights are null. */
+        FactorLoading: {
+            id: string;
+            label: string;
+            loading: number | null;
+            rank: number;
+            gene_set_id?: string | null;
+            library?: string;
+            gene_count?: number;
+            joint_loading?: number;
+            marginal_loading?: number;
+            joint_rank?: number;
+            marginal_rank?: number;
+        };
+        FactorDetail: {
+            factor: components["schemas"]["EagglFactor"];
+            generation_id: string | null;
+            provenance: {
+                eaggl_import_id: string;
+                factor_id: string;
+                factor_key: string | null;
+                model: string;
+            };
+            genes: components["schemas"]["LoadingSummary"];
+            gene_sets: components["schemas"]["LoadingSummary"];
+        };
+        /** @description Bounded loading page. sort=loading (default) orders by descending score; sort=alphabetical orders case-insensitive labels before pagination. Stable identifiers break ties. Ranks always remain original loading ranks, independent of sort. total counts search matches; summary.total counts all retained rows. Pin generation_id and source_revision returned by FactorDetail on subsequent requests. */
+        FactorLoadings: {
+            source_id: string;
+            generation_id: string | null;
+            /** @enum {string} */
+            kind: "gene" | "gene_set";
+            /** @enum {string} */
+            metric: "joint" | "marginal";
+            /** @enum {string} */
+            sort: "alphabetical" | "loading";
+            items: components["schemas"]["FactorLoading"][];
+            total: number;
+            offset: number;
+            limit: number;
+            next_offset: number | null;
+            summary: components["schemas"]["LoadingSummary"];
+        };
+        /** @description Imported public reference data, never an owner account graph. object is the exact stored GeneSet or null; provenance preserves imported collection prefixes, organizations, datasets, files and activities. Unknown/derived account aliases return 404. */
+        CatalogGeneSet: {
+            /** @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values. */
+            id: string;
+            generation_id: string | null;
+            name: string;
+            library: string | null;
+            gene_count: number | null;
+            genes_in_universe: number | null;
+            object: {
+                [key: string]: unknown;
+            } | null;
+            metadata: {
+                [key: string]: unknown;
+            };
+            provenance: {
+                [key: string]: unknown;
+            };
+            collection: {
+                /** @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values. */
+                id: string;
+                label: string;
+                library: string;
+                gene_set_count: number;
+                object: {
+                    [key: string]: unknown;
+                } | null;
+                payload_sha256: string | null;
+            } | null;
+            limitations: string[];
         };
         /** @description Committed invalidation event. SSE id is an opaque signed cursor bound to the principal and notification namespace; the envelope cursor is scope-local. Replay requires current authorization. */
         WorkspaceEvent: {
@@ -11485,6 +11627,234 @@ export interface operations {
                 headers: {
                     /** @example 30 */
                     "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getFactorDetail: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Pin the reference generation returned by factor detail. A changed active generation returns 409.
+                 * @example d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c
+                 */
+                generation_id?: string;
+                /**
+                 * @description Pin the factor source revision; a mismatch returns 409 without returning new-generation loadings.
+                 * @example 191055aeb63ba725d7254b602556a76546a1857662c79f9e40da3eefbb8c2550
+                 */
+                source_revision?: string;
+            };
+            header?: never;
+            path: {
+                /** @example factor:kpn:0000398:eaggl-capped-v1:Factor1 */
+                source_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FactorDetail"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Version Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid Input */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dependency Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getFactorLoadings: {
+        parameters: {
+            query: {
+                /** @example factor:kpn:0000398:eaggl-capped-v1:Factor1 */
+                source_id: string;
+                /** @example gene */
+                kind?: "gene" | "gene_set";
+                /** @example joint */
+                metric?: "joint" | "marginal";
+                /**
+                 * @description Case-insensitive alphabetical label order, or descending numeric loading. Applied to the full matched set before pagination; ranks remain loading ranks.
+                 * @example loading
+                 */
+                sort?: "alphabetical" | "loading";
+                /** @example LEPR */
+                q?: string;
+                /** @example 200 */
+                limit?: number;
+                /** @example 0 */
+                offset?: number;
+                /**
+                 * @description Pin the reference generation returned by factor detail. A changed active generation returns 409.
+                 * @example d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c
+                 */
+                generation_id?: string;
+                /**
+                 * @description Pin the factor source revision; a mismatch returns 409 without returning new-generation loadings.
+                 * @example 191055aeb63ba725d7254b602556a76546a1857662c79f9e40da3eefbb8c2550
+                 */
+                source_revision?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FactorLoadings"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Version Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid Input */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dependency Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getCatalogGeneSet: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Pin the reference generation returned by factor detail. A changed active generation returns 409.
+                 * @example d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c
+                 */
+                generation_id?: string;
+            };
+            header?: never;
+            path: {
+                /**
+                 * @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values.
+                 * @example dapper:GeneSet.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+                 */
+                gene_set_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogGeneSet"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Version Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid Input */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dependency Unavailable */
+            503: {
+                headers: {
                     [name: string]: unknown;
                 };
                 content: {

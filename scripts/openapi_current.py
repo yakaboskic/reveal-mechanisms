@@ -86,6 +86,8 @@ def fixtures(b, f):
 
 
 def schemas(b):
+    import openapi_factors
+    openapi_factors.schemas(b)
     S=b.SCHEMAS; ref=b.ref; obj=b.obj; array=b.array; string=b.string; enum=b.enum; null=b.nullable; did=b.did
     uuid=string(format='uuid'); digest=string(pattern='^[a-f0-9]{64}$'); time=string(format='date-time')
     b.add('WorkspaceEvent', obj({'schema_version':{'type':'integer','const':1},
@@ -477,8 +479,8 @@ def endpoints(b,f,e):
             if p['name']=='q':p['example']='CAD genetic risk'
             if p['name']=='disease_id':p['example']='MONDO:0021661'
     op('/v1/knowledge-gaps/search')['description']='Fuzzy lookup of imported DisMech gaps by default. Query text is not an authored inquiry or permission to launch research. Other explicit modes require their configured index and return 503 if unavailable. Rankings are retrieval signals. Example uses the exact CAD gap from the HTML study.'
-    op('/v1/knowledge-gaps')['description']='Browse imported DisMech gaps ordered by distinct scientific-account count descending. Public scope (default) counts only explicitly published snapshots across users; workspace scope requires a session and counts owned saved accounts. Equal-count gaps shuffle on each new browse; a server seed in the signed continuation cursor preserves tie order across pages. Exact gap digests only: no text matching, attempts, paragraph jobs or implicit source-revision rollup. Invalid supplied credentials are rejected even for public reads. Filters apply before pagination; count or corpus changes expire cursors.'
-    op('/v1/knowledge-gaps')['description']+=' sort=votes orders by net gap vote score, then account count, then the same seeded tie order. sort=accounts is the default. Vote changes, sort changes and registered-viewer changes expire cursors. Account votes do not contribute to gap vote totals.'
+    op('/v1/knowledge-gaps')['description']='Browse imported DisMech gaps using scientific-account or vote ranking. Public scope (default) counts only explicitly published snapshots across users; workspace scope requires a session and counts owned saved accounts. Gaps tied on all ranking measures shuffle on each new browse; a server seed in the signed continuation cursor preserves tie order across pages. Exact gap digests only: no text matching, attempts, paragraph jobs or implicit source-revision rollup. Invalid supplied credentials are rejected even for public reads. Filters apply before pagination; count or corpus changes expire cursors.'
+    op('/v1/knowledge-gaps')['description']+=' sort=accounts (default) orders by current accessible account count, then the number of distinct resolved DisMech Mechanisms, then the same seeded tie order. sort=votes orders by net gap vote score, then the same mechanism count, then account count and seeded ties. Mechanism counts deduplicate canonical dapper:Mechanism identities and exclude unresolved, non-DisMech and non-Mechanism attachments. Vote changes, attachment changes, sort changes and registered-viewer changes expire cursors. Account votes do not contribute to gap vote totals.'
     op('/v1/knowledge-gaps')['parameters'].append(b.parameter('sort','query',enum('accounts','votes',default='accounts'),'accounts'))
     op('/v1/knowledge-gaps/search')['description']+=' Account counts use the same optional-session visibility rules as gap browsing; relevance order remains unchanged.'
     op('/v1/knowledge-gaps/{gap_id}')['description']+=' Account counts use the same optional-session visibility rules as gap browsing.'
@@ -761,3 +763,6 @@ def reference_endpoints(b, f, e):
     describe('/v1/research-requests/{request_id}','get',' A request frozen on a superseded reference generation carries archive.')
     example('/v1/research-requests/{request_id}','archived',dict(deepcopy(e['research_request']),archive=R['request']))
     describe('/v1/knowledge-gaps','get',' Counts include current accounts only: accounts archived by a reference reload stay listed but are not counted.')
+
+    import openapi_factors
+    openapi_factors.endpoints(b, kpn)

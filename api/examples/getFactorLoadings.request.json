@@ -1,0 +1,59 @@
+{
+  "operation_id": "getFactorLoadings",
+  "case": "request",
+  "method": "GET",
+  "path_template": "/v1/factor-loadings",
+  "request": {
+    "url": "https://api.reveal.example.org/v1/factor-loadings?source_id=factor%3Akpn%3A0000398%3Aeaggl-capped-v1%3AFactor1&kind=gene&metric=joint&sort=loading&q=LEPR&limit=200&offset=0&generation_id=d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c&source_revision=191055aeb63ba725d7254b602556a76546a1857662c79f9e40da3eefbb8c2550",
+    "path": {},
+    "query": {
+      "source_id": "factor:kpn:0000398:eaggl-capped-v1:Factor1",
+      "kind": "gene",
+      "metric": "joint",
+      "sort": "loading",
+      "q": "LEPR",
+      "limit": 200,
+      "offset": 0,
+      "generation_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c",
+      "source_revision": "191055aeb63ba725d7254b602556a76546a1857662c79f9e40da3eefbb8c2550"
+    },
+    "headers": {
+      "Accept": "application/json"
+    },
+    "body": null
+  },
+  "responses": {
+    "200": {
+      "content_type": "application/json",
+      "examples": {
+        "genes": {
+          "source_id": "factor:kpn:0000398:eaggl-capped-v1:Factor1",
+          "generation_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c",
+          "kind": "gene",
+          "metric": "joint",
+          "sort": "loading",
+          "items": [
+            {
+              "id": "LEPR",
+              "label": "LEPR",
+              "loading": 0.98,
+              "rank": 1
+            }
+          ],
+          "total": 1,
+          "offset": 0,
+          "limit": 200,
+          "next_offset": null,
+          "summary": {
+            "total": 633,
+            "min": 0.0001,
+            "max": 0.98,
+            "coverage": "All stored nonzero EAGGL gene loadings. Genes absent from this import are not assigned a zero loading.",
+            "available": true
+          }
+        }
+      }
+    }
+  },
+  "curl": "curl -X GET 'https://api.reveal.example.org/v1/factor-loadings?source_id=factor%3Akpn%3A0000398%3Aeaggl-capped-v1%3AFactor1&kind=gene&metric=joint&sort=loading&q=LEPR&limit=200&offset=0&generation_id=d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c&source_revision=191055aeb63ba725d7254b602556a76546a1857662c79f9e40da3eefbb8c2550' -H 'Accept: application/json'"
+}

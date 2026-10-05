@@ -362,8 +362,24 @@ Upload exact bytes directly to a short-lived S3 staging destination, then verify
 - User hypotheses are unverified context. Supplied evidence requires exact source locators and retains the existing CFDE requirements.
 - Results based on private researcher inputs cannot be published until a deliberate disclosure workflow exists.
 
+### Inspect factors and gene-set provenance
+
+Open an exact reference factor, search its retained loadings, and follow a gene set to imported collection provenance.
+
+**Request:** Source identity and revision, generation pin, loading kind and metric, literal search text, offset and bounded page size.
+
+**Response:** Factor metadata, separate score ranges, loading pages and exact imported GeneSet with source provenance.
+
+- `GET /v1/factors/{source_id}` — [request request/response](examples/getFactorDetail.request.json)
+- `GET /v1/factor-loadings` — [request request/response](examples/getFactorLoadings.request.json)
+- `GET /v1/catalog/gene-sets/{gene_set_id}` — [request request/response](examples/getCatalogGeneSet.request.json)
+
+- Factor revision and generation mismatches return 409 before loadings are read.
+- Gene sets retain the top 50 projections by joint or marginal rank; absent weights are never treated as zero.
+- Public reference reads expose imported catalog data only; account gene-set permissions are unchanged.
+
 ## Evidence and validation
 
 Requests/responses are taken from the existing validated OpenAPI exchange library. The CADinT2D analysis/paragraph sequence is internally linked. The CAD source-selected gap now frames the request and account. The evidence package is a separate captured input; the authored account is not its validated agent output. Semantic scores and agent outputs remain illustrative fixtures.
 
-The mapping covers 57 operations and all 75 exchanges. OpenAPI SHA-256: `601ed010b984e9860cde7d53347ad0c381902762bd3b7e0445cdadabab56cb95`. No endpoints or payloads were changed to build this diagram.
+The mapping covers 60 operations and all 78 exchanges. OpenAPI SHA-256: `b776bd3040080a7b5f1d0de89d9f6695c460b1c9b15663eb1f39e732f0355b12`. No endpoints or payloads were changed to build this diagram.

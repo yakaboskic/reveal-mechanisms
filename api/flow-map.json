@@ -1,5 +1,5 @@
 {
-  "openapi_sha256": "601ed010b984e9860cde7d53347ad0c381902762bd3b7e0445cdadabab56cb95",
+  "openapi_sha256": "b776bd3040080a7b5f1d0de89d9f6695c460b1c9b15663eb1f39e732f0355b12",
   "steps": [
     {
       "id": "gap",
@@ -357,8 +357,26 @@
         "User hypotheses are unverified context. Supplied evidence requires exact source locators and retains the existing CFDE requirements.",
         "Results based on private researcher inputs cannot be published until a deliberate disclosure workflow exists."
       ]
+    },
+    {
+      "id": "factor-catalog",
+      "title": "Inspect factors and gene-set provenance",
+      "route": "GET /v1/factors/{source_id}; GET /v1/factor-loadings; GET /v1/catalog/gene-sets/{gene_set_id}",
+      "action": "Open an exact reference factor, search its retained loadings, and follow a gene set to imported collection provenance.",
+      "incoming": "Source identity and revision, generation pin, loading kind and metric, literal search text, offset and bounded page size.",
+      "outgoing": "Factor metadata, separate score ranges, loading pages and exact imported GeneSet with source provenance.",
+      "cases": [
+        "getFactorDetail.request",
+        "getFactorLoadings.request",
+        "getCatalogGeneSet.request"
+      ],
+      "rules": [
+        "Factor revision and generation mismatches return 409 before loadings are read.",
+        "Gene sets retain the top 50 projections by joint or marginal rank; absent weights are never treated as zero.",
+        "Public reference reads expose imported catalog data only; account gene-set permissions are unchanged."
+      ]
     }
   ],
-  "operation_count": 57,
-  "exchange_count": 75
+  "operation_count": 60,
+  "exchange_count": 78
 }

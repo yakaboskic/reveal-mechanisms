@@ -335,6 +335,17 @@ def filter_gaps(items,kind,status,disease_id):
         (not status or (x['source']['status'] or 'UNSPECIFIED')==status) and
         (not disease_id or disease_id in x['object'].get('about_entities',[]))]
 
+def resolved_mechanism_count(gap):
+    """Count canonical DisMech Mechanisms, not attachment rows or unresolved labels."""
+    identities=set()
+    for attachment in gap.get('attachments',[]):
+        target=attachment.get('target') or {}
+        identity=target.get('dapper_id','')
+        if (attachment.get('resolution')=='resolved' and target.get('source')=='dismech'
+                and target.get('source_id','').startswith('dismech:') and identity.startswith('dapper:Mechanism.')):
+            identities.add(identity)
+    return len(identities)
+
 @app.get('/v1/knowledge-gaps/search')
 def search_gaps(request:Request,q: str='', limit: int=20, mode: str='fuzzy',kind:str|None=None,status:str|None=None,cursor:str|None=None,source:str='dismech',disease_id:str|None=None,scope:str='public'):
     if mode not in ('lexical','fuzzy'): raise Problem(503,'SEARCH_MODE_UNAVAILABLE','Knowledge-gap discovery currently supports lexical and fuzzy modes; no semantic gap index is configured.')
@@ -377,8 +388,9 @@ def list_gaps(request:Request,limit: int=20,cursor:str|None=None,kind:str|None=N
     owner,accounts=discovery(request,scope); counts=counts_by_gap(accounts); observed=now(); seed=browse_seed(cursor)
     items=[counted_gap(gap,counts,owner,observed) for gap in items]
     viewer,items=gap_votes(request,items)
-    items.sort(key=lambda gap:((-gap['votes']['score'],) if sort=='votes' else ())+
-        (-gap['scientific_accounts']['count'],digest([seed,gap['object']['id']]),gap['source']['source_id'],gap['object']['id']))
+    items.sort(key=lambda gap:((-gap['votes']['score'],-resolved_mechanism_count(gap),-gap['scientific_accounts']['count'])
+        if sort=='votes' else (-gap['scientific_accounts']['count'],-resolved_mechanism_count(gap)))+
+        (digest([seed,gap['object']['id']]),gap['source']['source_id'],gap['object']['id']))
     return page(items,viewer or owner,limit,cursor,digest(['gaps',kind,status,disease_id,scope,sort]),snapshot_items=count_snapshot(items),seed=seed)
 
 def listing_scope(parts,reference_state):
@@ -514,6 +526,23 @@ def reference_factor(archive_id:str):
     record=lookup(archive_id) if lookup and re.fullmatch('[a-f0-9]{64}',archive_id) else None
     if not record: raise Problem(404,'NOT_FOUND','The archived reference factor is unavailable.')
     return record
+
+@app.get('/v1/factors/{source_id}')
+def get_factor_detail(source_id:str,generation_id:str|None=None,source_revision:str|None=None):
+    from .factor_details import factor_detail
+    return factor_detail(catalog,source_id,generation_id=generation_id,source_revision=source_revision)
+
+@app.get('/v1/factor-loadings')
+def get_factor_loadings(source_id:str,kind:str='gene',metric:str='joint',sort:str='loading',q:str='',limit:int=200,offset:int=0,
+                        generation_id:str|None=None,source_revision:str|None=None):
+    from .factor_details import factor_loadings
+    return factor_loadings(catalog,source_id,kind=kind,metric=metric,sort=sort,q=q,limit=limit,offset=offset,
+                           generation_id=generation_id,source_revision=source_revision)
+
+@app.get('/v1/catalog/gene-sets/{gene_set_id}')
+def get_catalog_gene_set(gene_set_id:str,generation_id:str|None=None):
+    from .factor_details import gene_set_detail
+    return gene_set_detail(catalog,gene_set_id,generation_id=generation_id)
 
 @app.get('/v1/mechanisms/{source_id:path}')
 def get_mechanism(source_id:str,source_revision:str|None=None):

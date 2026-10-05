@@ -2430,7 +2430,7 @@
           "Knowledge gaps"
         ],
         "summary": "Browse knowledge gaps",
-        "description": "Browse imported DisMech gaps ordered by distinct scientific-account count descending. Public scope (default) counts only explicitly published snapshots across users; workspace scope requires a session and counts owned saved accounts. Equal-count gaps shuffle on each new browse; a server seed in the signed continuation cursor preserves tie order across pages. Exact gap digests only: no text matching, attempts, paragraph jobs or implicit source-revision rollup. Invalid supplied credentials are rejected even for public reads. Filters apply before pagination; count or corpus changes expire cursors. sort=votes orders by net gap vote score, then account count, then the same seeded tie order. sort=accounts is the default. Vote changes, sort changes and registered-viewer changes expire cursors. Account votes do not contribute to gap vote totals. Counts include current accounts only: accounts archived by a reference reload stay listed but are not counted.",
+        "description": "Browse imported DisMech gaps using scientific-account or vote ranking. Public scope (default) counts only explicitly published snapshots across users; workspace scope requires a session and counts owned saved accounts. Gaps tied on all ranking measures shuffle on each new browse; a server seed in the signed continuation cursor preserves tie order across pages. Exact gap digests only: no text matching, attempts, paragraph jobs or implicit source-revision rollup. Invalid supplied credentials are rejected even for public reads. Filters apply before pagination; count or corpus changes expire cursors. sort=accounts (default) orders by current accessible account count, then the number of distinct resolved DisMech Mechanisms, then the same seeded tie order. sort=votes orders by net gap vote score, then the same mechanism count, then account count and seeded ties. Mechanism counts deduplicate canonical dapper:Mechanism identities and exclude unresolved, non-DisMech and non-Mechanism attachments. Vote changes, attachment changes, sort changes and registered-viewer changes expire cursors. Account votes do not contribute to gap vote totals. Counts include current accounts only: accounts archived by a reference reload stay listed but are not counted.",
         "parameters": [
           {
             "name": "kind",
@@ -25882,6 +25882,731 @@
           }
         ]
       }
+    },
+    "/v1/factors/{source_id}": {
+      "get": {
+        "operationId": "getFactorDetail",
+        "tags": [
+          "Mechanisms"
+        ],
+        "summary": "Inspect a factor and its loading coverage",
+        "description": "Read the active imported factor and score ranges. Requests never run research or model inference. Pass source_revision from the anchor to prevent a same-id factor silently changing across reference reloads.",
+        "parameters": [
+          {
+            "name": "source_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "factor:kpn:0000398:eaggl-capped-v1:Factor1",
+            "description": ""
+          },
+          {
+            "name": "generation_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "example": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c",
+            "description": "Pin the reference generation returned by factor detail. A changed active generation returns 409."
+          },
+          {
+            "name": "source_revision",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "example": "191055aeb63ba725d7254b602556a76546a1857662c79f9e40da3eefbb8c2550",
+            "description": "Pin the factor source revision; a mismatch returns 409 without returning new-generation loadings."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FactorDetail"
+                },
+                "examples": {
+                  "factor": {
+                    "summary": "Factor",
+                    "value": {
+                      "factor": {
+                        "source": "eaggl",
+                        "source_id": "factor:kpn:0000398:eaggl-capped-v1:Factor1",
+                        "source_revision": "191055aeb63ba725d7254b602556a76546a1857662c79f9e40da3eefbb8c2550",
+                        "object_class": "Mechanism",
+                        "object": {
+                          "name": "Type 2 diabetes (T2D) mechanism Factor1",
+                          "description": "EAGGL mechanism factor:kpn:0000398:eaggl-capped-v1:Factor1. KPN trait KPN.TRAIT:0000398 (Type 2 diabetes (T2D)). Source label: Metabolic Dysregulation Indicators.",
+                          "id": "dapper:Mechanism.DDGbWvsSn5KPwztUH_htX778WdrO5Zan"
+                        },
+                        "cfde_anchor": {
+                          "node_id": "factor:kpn:0000398:eaggl-capped-v1:Factor1",
+                          "node_type": "factor",
+                          "label": "Metabolic Dysregulation Indicators",
+                          "subtitle": "Type 2 diabetes (T2D) (Factor1)"
+                        },
+                        "model": "eaggl-capped-v1",
+                        "reference_generation_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c",
+                        "kpn_trait": {
+                          "id": "KPN.TRAIT:0000398",
+                          "name": "Type 2 diabetes (T2D)",
+                          "legacy_phenotype_id": "T2D",
+                          "trait_group": "metabolic",
+                          "trait_type": "phenotype"
+                        },
+                        "catalog_file": {
+                          "filename": "cfde-factor.json",
+                          "mime_type": "application/json",
+                          "sha256": "0ed08e22513ecd1b9423e4b4886b683a2a2997a9772722c052ba0b5ce8f0a3bf",
+                          "size_in_bytes": 1037,
+                          "id": "dapper:File.JKQVhh9Y0Sq8mM8XQbdBAhGzwVCGNHe3"
+                        }
+                      },
+                      "generation_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c",
+                      "provenance": {
+                        "eaggl_import_id": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                        "factor_id": "T2D::Factor1",
+                        "factor_key": "KPN.TRAIT:0000398::Factor1",
+                        "model": "eaggl-capped-v1"
+                      },
+                      "genes": {
+                        "total": 633,
+                        "min": 0.0001,
+                        "max": 0.98,
+                        "coverage": "All stored nonzero EAGGL gene loadings. Genes absent from this import are not assigned a zero loading.",
+                        "available": true
+                      },
+                      "gene_sets": {
+                        "total": 71,
+                        "min": 0.0003,
+                        "max": 0.24,
+                        "coverage": "Retained per-trait projections: gene sets in the top 50 by joint or marginal loading. Search covers this retained subset, not every gene set in the source library.",
+                        "available": true
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "description": "Correlation ID for this HTTP request.",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "not_found": {
+                    "summary": "Not found",
+                    "value": {
+                      "type": "urn:reveal:problem:not-found",
+                      "title": "Not Found",
+                      "status": 404,
+                      "code": "NOT_FOUND",
+                      "detail": "No accessible record exists for the supplied identifier or exact revision.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Version Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "version_conflict": {
+                    "summary": "Version conflict",
+                    "value": {
+                      "type": "urn:reveal:problem:version-conflict",
+                      "title": "Version Conflict",
+                      "status": 409,
+                      "code": "VERSION_CONFLICT",
+                      "detail": "The saved draft has changed. Reload and reconcile before retrying.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false,
+                      "current_version": 3
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid Input",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "invalid_input": {
+                    "summary": "Invalid input",
+                    "value": {
+                      "type": "urn:reveal:problem:invalid-input",
+                      "title": "Invalid Input",
+                      "status": 422,
+                      "code": "INVALID_INPUT",
+                      "detail": "The request does not satisfy the operation contract.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false,
+                      "field_errors": [
+                        {
+                          "pointer": "/inquiry",
+                          "message": "A valid DAPPER inquiry is required."
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Dependency Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "dependency_unavailable": {
+                    "summary": "Dependency unavailable",
+                    "value": {
+                      "type": "urn:reveal:problem:dependency-unavailable",
+                      "title": "Dependency Unavailable",
+                      "status": 503,
+                      "code": "DEPENDENCY_UNAVAILABLE",
+                      "detail": "A required dependency is temporarily unavailable; no replacement ranking or scientific result was fabricated.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {},
+          {
+            "ApplicationBearer": []
+          }
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "label": "request",
+            "source": "curl -X GET 'https://api.reveal.example.org/v1/factors/factor%3Akpn%3A0000398%3Aeaggl-capped-v1%3AFactor1?generation_id=d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c&source_revision=191055aeb63ba725d7254b602556a76546a1857662c79f9e40da3eefbb8c2550' -H 'Accept: application/json'"
+          }
+        ]
+      }
+    },
+    "/v1/factor-loadings": {
+      "get": {
+        "operationId": "getFactorLoadings",
+        "tags": [
+          "Mechanisms"
+        ],
+        "summary": "Search and page factor loadings",
+        "description": "Search literal gene symbols or gene-set names, library and identifier. Gene scores are nonzero EAGGL weights; gene-set scores are joint/marginal projections retained in the top 50 by either rank. Gene scores and set scores have separate scales. Missing legacy set scores stay null.",
+        "parameters": [
+          {
+            "name": "source_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "factor:kpn:0000398:eaggl-capped-v1:Factor1",
+            "description": ""
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "gene",
+                "gene_set"
+              ]
+            },
+            "example": "gene",
+            "description": ""
+          },
+          {
+            "name": "metric",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "joint",
+                "marginal"
+              ]
+            },
+            "example": "joint",
+            "description": ""
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "alphabetical",
+                "loading"
+              ],
+              "default": "loading"
+            },
+            "example": "loading",
+            "description": "Case-insensitive alphabetical label order, or descending numeric loading. Applied to the full matched set before pagination; ranks remain loading ranks."
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "example": "LEPR",
+            "description": ""
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500,
+              "default": 200
+            },
+            "example": 200,
+            "description": ""
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            },
+            "example": 0,
+            "description": ""
+          },
+          {
+            "name": "generation_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "example": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c",
+            "description": "Pin the reference generation returned by factor detail. A changed active generation returns 409."
+          },
+          {
+            "name": "source_revision",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "example": "191055aeb63ba725d7254b602556a76546a1857662c79f9e40da3eefbb8c2550",
+            "description": "Pin the factor source revision; a mismatch returns 409 without returning new-generation loadings."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FactorLoadings"
+                },
+                "examples": {
+                  "genes": {
+                    "summary": "Genes",
+                    "value": {
+                      "source_id": "factor:kpn:0000398:eaggl-capped-v1:Factor1",
+                      "generation_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c",
+                      "kind": "gene",
+                      "metric": "joint",
+                      "sort": "loading",
+                      "items": [
+                        {
+                          "id": "LEPR",
+                          "label": "LEPR",
+                          "loading": 0.98,
+                          "rank": 1
+                        }
+                      ],
+                      "total": 1,
+                      "offset": 0,
+                      "limit": 200,
+                      "next_offset": null,
+                      "summary": {
+                        "total": 633,
+                        "min": 0.0001,
+                        "max": 0.98,
+                        "coverage": "All stored nonzero EAGGL gene loadings. Genes absent from this import are not assigned a zero loading.",
+                        "available": true
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "description": "Correlation ID for this HTTP request.",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "not_found": {
+                    "summary": "Not found",
+                    "value": {
+                      "type": "urn:reveal:problem:not-found",
+                      "title": "Not Found",
+                      "status": 404,
+                      "code": "NOT_FOUND",
+                      "detail": "No accessible record exists for the supplied identifier or exact revision.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Version Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "version_conflict": {
+                    "summary": "Version conflict",
+                    "value": {
+                      "type": "urn:reveal:problem:version-conflict",
+                      "title": "Version Conflict",
+                      "status": 409,
+                      "code": "VERSION_CONFLICT",
+                      "detail": "The saved draft has changed. Reload and reconcile before retrying.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false,
+                      "current_version": 3
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid Input",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "invalid_input": {
+                    "summary": "Invalid input",
+                    "value": {
+                      "type": "urn:reveal:problem:invalid-input",
+                      "title": "Invalid Input",
+                      "status": 422,
+                      "code": "INVALID_INPUT",
+                      "detail": "The request does not satisfy the operation contract.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false,
+                      "field_errors": [
+                        {
+                          "pointer": "/inquiry",
+                          "message": "A valid DAPPER inquiry is required."
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Dependency Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "dependency_unavailable": {
+                    "summary": "Dependency unavailable",
+                    "value": {
+                      "type": "urn:reveal:problem:dependency-unavailable",
+                      "title": "Dependency Unavailable",
+                      "status": 503,
+                      "code": "DEPENDENCY_UNAVAILABLE",
+                      "detail": "A required dependency is temporarily unavailable; no replacement ranking or scientific result was fabricated.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {},
+          {
+            "ApplicationBearer": []
+          }
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "label": "request",
+            "source": "curl -X GET 'https://api.reveal.example.org/v1/factor-loadings?source_id=factor%3Akpn%3A0000398%3Aeaggl-capped-v1%3AFactor1&kind=gene&metric=joint&sort=loading&q=LEPR&limit=200&offset=0&generation_id=d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c&source_revision=191055aeb63ba725d7254b602556a76546a1857662c79f9e40da3eefbb8c2550' -H 'Accept: application/json'"
+          }
+        ]
+      }
+    },
+    "/v1/catalog/gene-sets/{gene_set_id}": {
+      "get": {
+        "operationId": "getCatalogGeneSet",
+        "tags": [
+          "Mechanisms"
+        ],
+        "summary": "Inspect imported gene-set provenance",
+        "description": "Returns exact imported reference GeneSet and collection provenance. This route does not expose private scientific-account objects; /v1/gene-sets retains its existing publication/owner permissions.",
+        "parameters": [
+          {
+            "name": "gene_set_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values.",
+              "pattern": "^dapper:GeneSet\\.[A-Za-z0-9_-]{32}$"
+            },
+            "example": "dapper:GeneSet.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "description": "Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values."
+          },
+          {
+            "name": "generation_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "example": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c",
+            "description": "Pin the reference generation returned by factor detail. A changed active generation returns 409."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogGeneSet"
+                },
+                "examples": {
+                  "unavailable_object": {
+                    "summary": "Unavailable object",
+                    "value": {
+                      "id": "dapper:GeneSet.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                      "generation_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c",
+                      "name": "Example imported gene set",
+                      "library": "GO_BP",
+                      "gene_count": 0,
+                      "genes_in_universe": 0,
+                      "object": null,
+                      "metadata": {},
+                      "provenance": {},
+                      "collection": null,
+                      "limitations": [
+                        "Illustrative unavailable-object response; no provenance is fabricated."
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "description": "Correlation ID for this HTTP request.",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "not_found": {
+                    "summary": "Not found",
+                    "value": {
+                      "type": "urn:reveal:problem:not-found",
+                      "title": "Not Found",
+                      "status": 404,
+                      "code": "NOT_FOUND",
+                      "detail": "No accessible record exists for the supplied identifier or exact revision.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Version Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "version_conflict": {
+                    "summary": "Version conflict",
+                    "value": {
+                      "type": "urn:reveal:problem:version-conflict",
+                      "title": "Version Conflict",
+                      "status": 409,
+                      "code": "VERSION_CONFLICT",
+                      "detail": "The saved draft has changed. Reload and reconcile before retrying.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false,
+                      "current_version": 3
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid Input",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "invalid_input": {
+                    "summary": "Invalid input",
+                    "value": {
+                      "type": "urn:reveal:problem:invalid-input",
+                      "title": "Invalid Input",
+                      "status": 422,
+                      "code": "INVALID_INPUT",
+                      "detail": "The request does not satisfy the operation contract.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false,
+                      "field_errors": [
+                        {
+                          "pointer": "/inquiry",
+                          "message": "A valid DAPPER inquiry is required."
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Dependency Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "dependency_unavailable": {
+                    "summary": "Dependency unavailable",
+                    "value": {
+                      "type": "urn:reveal:problem:dependency-unavailable",
+                      "title": "Dependency Unavailable",
+                      "status": 503,
+                      "code": "DEPENDENCY_UNAVAILABLE",
+                      "detail": "A required dependency is temporarily unavailable; no replacement ranking or scientific result was fabricated.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {},
+          {
+            "ApplicationBearer": []
+          }
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "label": "request",
+            "source": "curl -X GET 'https://api.reveal.example.org/v1/catalog/gene-sets/dapper%3AGeneSet.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa?generation_id=d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c' -H 'Accept: application/json'"
+          }
+        ]
+      }
     }
   },
   "components": {
@@ -36556,6 +37281,421 @@
           "page"
         ],
         "additionalProperties": false
+      },
+      "LoadingSummary": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "min": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "max": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "coverage": {
+            "type": "string"
+          },
+          "available": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "total",
+          "min",
+          "max",
+          "coverage",
+          "available"
+        ],
+        "additionalProperties": false,
+        "description": "Statistics over the entire retained factor loading set, unaffected by search or pagination. available means numeric scores are stored. Missing values are not zero."
+      },
+      "FactorLoading": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "loading": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rank": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "gene_set_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values.",
+                "pattern": "^dapper:GeneSet\\.[A-Za-z0-9_-]{32}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "library": {
+            "type": "string"
+          },
+          "gene_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "joint_loading": {
+            "type": "number"
+          },
+          "marginal_loading": {
+            "type": "number"
+          },
+          "joint_rank": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "marginal_rank": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "loading",
+          "rank"
+        ],
+        "additionalProperties": false,
+        "description": "One retained gene weight or gene-set projection. rank is the full factor gene rank or the original selected-metric gene-set projection rank, unchanged by search/pagination; legacy sets preserve imported rank. joint_rank and marginal_rank are original projection ranks. Legacy gene-set weights are null."
+      },
+      "FactorDetail": {
+        "type": "object",
+        "properties": {
+          "factor": {
+            "$ref": "#/components/schemas/EagglFactor"
+          },
+          "generation_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "provenance": {
+            "type": "object",
+            "properties": {
+              "eaggl_import_id": {
+                "type": "string"
+              },
+              "factor_id": {
+                "type": "string"
+              },
+              "factor_key": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "model": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "eaggl_import_id",
+              "factor_id",
+              "factor_key",
+              "model"
+            ],
+            "additionalProperties": false
+          },
+          "genes": {
+            "$ref": "#/components/schemas/LoadingSummary"
+          },
+          "gene_sets": {
+            "$ref": "#/components/schemas/LoadingSummary"
+          }
+        },
+        "required": [
+          "factor",
+          "generation_id",
+          "provenance",
+          "genes",
+          "gene_sets"
+        ],
+        "additionalProperties": false
+      },
+      "FactorLoadings": {
+        "type": "object",
+        "properties": {
+          "source_id": {
+            "type": "string"
+          },
+          "generation_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "gene",
+              "gene_set"
+            ]
+          },
+          "metric": {
+            "type": "string",
+            "enum": [
+              "joint",
+              "marginal"
+            ]
+          },
+          "sort": {
+            "type": "string",
+            "enum": [
+              "alphabetical",
+              "loading"
+            ]
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FactorLoading"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500
+          },
+          "next_offset": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "summary": {
+            "$ref": "#/components/schemas/LoadingSummary"
+          }
+        },
+        "required": [
+          "source_id",
+          "generation_id",
+          "kind",
+          "metric",
+          "sort",
+          "items",
+          "total",
+          "offset",
+          "limit",
+          "next_offset",
+          "summary"
+        ],
+        "additionalProperties": false,
+        "description": "Bounded loading page. sort=loading (default) orders by descending score; sort=alphabetical orders case-insensitive labels before pagination. Stable identifiers break ties. Ranks always remain original loading ranks, independent of sort. total counts search matches; summary.total counts all retained rows. Pin generation_id and source_revision returned by FactorDetail on subsequent requests."
+      },
+      "CatalogGeneSet": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values.",
+            "pattern": "^dapper:GeneSet\\.[A-Za-z0-9_-]{32}$"
+          },
+          "generation_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "library": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "gene_count": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "genes_in_universe": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "object": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": true
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "provenance": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "collection": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values.",
+                    "pattern": "^dapper:GeneSetCollection\\.[A-Za-z0-9_-]{32}$"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "library": {
+                    "type": "string"
+                  },
+                  "gene_set_count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "object": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "payload_sha256": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "id",
+                  "label",
+                  "library",
+                  "gene_set_count",
+                  "object",
+                  "payload_sha256"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "limitations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "generation_id",
+          "name",
+          "library",
+          "gene_count",
+          "genes_in_universe",
+          "object",
+          "metadata",
+          "provenance",
+          "collection",
+          "limitations"
+        ],
+        "additionalProperties": false,
+        "description": "Imported public reference data, never an owner account graph. object is the exact stored GeneSet or null; provenance preserves imported collection prefixes, organizations, datasets, files and activities. Unknown/derived account aliases return 404."
       },
       "WorkspaceEvent": {
         "type": "object",

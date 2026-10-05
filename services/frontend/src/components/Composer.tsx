@@ -7,7 +7,8 @@ import { applySuggestions, composerEqual, createSubmissionDraft, dropOutdatedAnc
 import { ProviderButtons, useIdentity } from "./Session";
 import { Activity } from "./Activity";
 import { AccountPreview, Record } from "./Scientific";
-import { GapBrowser, DiscoverySelector, TrendingAccounts, type GapSort } from "./GapBrowser";
+import { GapBrowser, DiscoverySelector, TrendingAccounts } from "./GapBrowser";
+import { useGapDiscovery } from "./GapDiscoveryCache";
 import type { DiscoveryView, AccountSort } from "@/lib/community-discovery";
 import { GapAccounts } from "./GapAccounts";
 import { VoteControls } from "./VoteControls";
@@ -19,6 +20,7 @@ import { withRequestDeadline } from "@/lib/request-deadline";
 import { providerRedirect } from "@/lib/provider-redirect";
 import { MechanismLabel } from "./MechanismLabel";
 import { mechanismName, mechanismTrait } from "@/lib/mechanism-display";
+import { factorHref } from "@/lib/factor-links";
 import { composerSelection, followsSelection, hasSelection, questionSelection, selectionKey, selectionUrl, type AdoptedSelection, type ComposerSelection } from "@/lib/composer-navigation";
 import { anchorKey, isReferenceReload, observedReferenceModel, outdatedFromAnchor, outdatedFromFactor, referenceRechecker, type OutdatedAnchor, type ReferenceArchive } from "@/lib/reference";
 import { ReferenceArchiveBanner } from "./ReferenceArchive";
@@ -71,7 +73,7 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
   const [jobRestoreError, setJobRestoreError] = useState("");
   const [restoreAttempt, setRestoreAttempt] = useState(0);
   const [discoveryView, setDiscoveryView] = useState<DiscoveryView>("gaps");
-  const [gapSort, setGapSort] = useState<GapSort>("accounts");
+  const { sort: gapSort, setSort: setGapSort } = useGapDiscovery();
   const [accountSort, setAccountSort] = useState<AccountSort>("votes");
   const searchLabel = discoveryView === "accounts" ? "Search published scientific accounts" : "Search DisMech knowledge gaps";
   const [query, setQuery] = useState(""); const [searching, setSearching] = useState(false);
@@ -633,11 +635,10 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
   };
   const outdatedAnchor = (anchor: Schema<"Selection">) => outdated[anchorKey(anchor.reference)];
   const anchorName = (anchor: Schema<"Selection">) => outdatedAnchor(anchor)?.name || mechanismName(selectedFactor(anchor.reference.source_id));
-  const inspectAnchor = (anchor: Schema<"Selection">) => {
-    const old = outdatedAnchor(anchor), factor = selectedFactor(anchor.reference.source_id);
-    if (old) setInspection({ title: old.name, description: "This anchor belongs to an outdated EAGGL reference generation. It is shown from its archived record and can no longer be analysed.", value: { ...old, reference: anchor.reference } });
-    else setInspection({ title: factor?.cfde_anchor.label || "Mechanism anchor", description: factor?.object.description, value: factor || anchor });
-  };
+  const anchorHref = (anchor: Schema<"Selection">) => factorHref(anchor.reference.source_id, anchor.reference.source_revision, {
+    archiveId: outdatedAnchor(anchor)?.archive_id,
+    from: job ? `/runs/${encodeURIComponent(job.id)}` : draft ? `/drafts/${encodeURIComponent(draft.id)}` : "/",
+  });
   const frozenGap = runRequest?.document?.knowledge_gaps?.find(value => value.id === runRequest.question_id);
   const displayGap = job && frozenGap ? frozenGap : gap?.object;
   const uncertainSubmission = !!pendingSubmission.current?.submitKey;
@@ -674,7 +675,7 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
           <fieldset className="draft-input-lock" disabled={editorLocked}>
           <section className="draft-mechanisms" aria-label={job ? "Submitted mechanisms and evidence sources" : "Mechanisms and evidence sources"}>
           {!job && <><div className="chip-group-label">Mechanisms <span>{composer.eaggl_anchors.length}</span>{suggesting && <LoadingStatus>Finding anchors…</LoadingStatus>}{!!limitations.length && <button className="matching-note" onClick={() => setInspection({ title: "About mechanism matching", description: limitations.join(" "), value: { model: composer.model, automatic_anchors: composer.eaggl_anchors.filter(anchor => anchor.origin === "automatic").length } })}>About matching</button>}</div></>}
-          <div className="anchor-chips" aria-label="Selected mechanism anchors">{composer.eaggl_anchors.map(anchor => <span className="chip" key={anchor.reference.source_id}><button className="label" title={(outdatedAnchor(anchor) ? [anchorName(anchor), outdatedAnchor(anchor)!.trait, "Outdated reference"] : [anchorName(anchor), selectedFactor(anchor.reference.source_id)?.cfde_anchor.subtitle]).filter(Boolean).join(" · ")} onClick={() => inspectAnchor(anchor)}><MechanismLabel factor={selectedFactor(anchor.reference.source_id)} sourceId={anchor.reference.source_id} outdated={outdatedAnchor(anchor)} /></button>{!job && <button className="remove" aria-label={`Remove ${anchorName(anchor)}`} onClick={() => setComposer(current => removeAnchor(current, anchor.reference.source_id))}>×</button>}</span>)}{!job && <button className="chip-add" aria-expanded={adding} aria-controls="factor-picker" aria-label="Add a mechanism anchor" onClick={() => { setAdding(!adding); if (!adding) requestAnimationFrame(() => document.getElementById("mechanism-search")?.focus()); }}>+</button>}</div>
+          <div className="anchor-chips" aria-label="Selected mechanism anchors">{composer.eaggl_anchors.map(anchor => <span className="chip" key={anchor.reference.source_id}><Link className="label" href={anchorHref(anchor)} target="_blank" rel="noopener noreferrer" title={`${anchorName(anchor)} — view factor loadings in a new tab`}><MechanismLabel factor={selectedFactor(anchor.reference.source_id)} sourceId={anchor.reference.source_id} outdated={outdatedAnchor(anchor)} /><span className="sr-only"> (opens in a new tab)</span></Link>{!job && <button className="remove" aria-label={`Remove ${anchorName(anchor)}`} onClick={() => setComposer(current => removeAnchor(current, anchor.reference.source_id))}>×</button>}</span>)}{!job && <button className="chip-add" aria-expanded={adding} aria-controls="factor-picker" aria-label="Add a mechanism anchor" onClick={() => { setAdding(!adding); if (!adding) requestAnimationFrame(() => document.getElementById("mechanism-search")?.focus()); }}>+</button>}</div>
           {!job && <>
             {!!outdatedAnchors.length && <div className="conflict reference-outdated" role="status"><p>{outdatedAnchors.length === 1 ? "One mechanism anchor comes" : `${outdatedAnchors.length} mechanism anchors come`} from an outdated EAGGL reference and can’t be analysed. Replace {outdatedAnchors.length === 1 ? "it" : "them"} with current factors to continue.</p><button disabled={suggesting} onClick={replaceOutdated}>Replace with current factors</button></div>}
             {!composer.eaggl_anchors.length && !suggesting && <p className="anchor-required" role="status">Add at least one mechanism anchor to continue.</p>}
