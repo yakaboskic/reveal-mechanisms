@@ -1,12 +1,16 @@
 # Prisma schema for REVEAL
 
-`schema.prisma` has 38 models: the 11 original Aurora tables for DAPPER GeneSets
+`schema.prisma` has 47 models: the 11 original Aurora tables for DAPPER GeneSets
 and EAGGL, three crosswalk tables from migration 004, nine DisMech source tables
 from migration 003, two application tables from migration 005, three
-persistent DisMech embedding tables from migration 006, and ten
-reference-generation tables from migration 008. The crosswalk is
-described in [EAGGL → CFDE links](../../docs/eaggl-cfde-links.md); reference
-generations in [Reference reload](../../docs/reference-reload.md).
+persistent DisMech embedding tables from migration 006, ten
+reference-generation tables from migration 008, and the nine reference release
+tables (`reveal_ref_*`). The crosswalk is described in
+[EAGGL → CFDE links](../../docs/eaggl-cfde-links.md); reference generations in
+[Reference reload](../../docs/reference-reload.md). The reference release tables
+are not a migration: the publisher creates them per environment
+([Reference release](../../docs/reference-release.md)). Migration 008's tables,
+except `archived_reference_factors`, are dropped by the one-time cleanup.
 
 The original tables were read with `SHOW CREATE TABLE` over verified TLS. Those
 definitions and migrations 003/004 were recreated and checked in disposable
@@ -14,8 +18,10 @@ MySQL 8.0.42; the historical 23-model schema passed validation, generation, and
 database comparison. The 28-model schema before migration 008 passed Prisma
 validation; that check alone does not apply a migration or establish a new live
 schema diff. The ten migration-008 models were added by hand from
-`schema/migrations/008_reference_generation.sql` and have not yet been through
-`prisma validate`.
+`schema/migrations/008_reference_generation.sql`, and the nine reference release
+models from the publisher's DDL template in
+`services/backend/src/reveal_backend/reference_release.py`; neither set has been
+through `prisma validate` yet.
 The [DisMech readback report](../../data/validation/local-stack/dismech-verification.json)
 records the completed source import, including all 19,959 mechanisms and 3,367
 knowledge gaps.

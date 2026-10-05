@@ -666,3 +666,124 @@ model ArchivedReferenceFactor {
   @@unique([generation_id, source_id_sha256], map: "archived_factor_source")
   @@map("archived_reference_factors")
 }
+
+// Reference release tables (docs/reference-release.md). Not a migration: the publisher
+// (python -m reveal_backend.reference_release publish) creates them from its DDL template
+// and swaps them in with one RENAME. Mapped to the prod names; local and QA prefix them
+// like reveal_records (reveal_workflow_local_ref_*, reveal_workflow_qa_ref_*).
+model RefRelease {
+  release_id   String   @id @db.Char(64)
+  published_at DateTime @db.Timestamp(6)
+  manifest     Json
+
+  @@map("reveal_ref_release")
+}
+
+model RefTrait {
+  kpn_trait_id         String  @id @db.VarChar(32)
+  legacy_phenotype_id  String  @db.VarChar(191)
+  phenotype_name       String  @db.Text
+  gwas_source_category String  @db.VarChar(32)
+  trait_group          String? @db.VarChar(64)
+  legacy_trait_group   String? @db.VarChar(64)
+  trait_type           String? @db.VarChar(32)
+  description          String? @db.Text
+  is_dichotomous       Int?    @db.TinyInt
+  is_complex           Int?    @db.TinyInt
+  n_factors            Int     @db.UnsignedInt
+  metadata             Json
+
+  @@unique([legacy_phenotype_id], map: "ref_trait_legacy")
+  @@map("reveal_ref_traits")
+}
+
+model RefFactor {
+  factor_key      String @id @db.VarChar(64)
+  public_id       String @db.VarChar(128)
+  eaggl_factor_id String @db.VarChar(255)
+  kpn_trait_id    String @db.VarChar(32)
+  factor_number   Int    @db.UnsignedInt
+  label           String @db.Text
+  input_sha256    String @db.Char(64)
+  source_revision String @db.Char(64)
+  metadata        Json
+
+  @@unique([public_id], map: "ref_factor_public")
+  @@unique([eaggl_factor_id], map: "ref_factor_eaggl")
+  @@index([kpn_trait_id, factor_number], map: "ref_factor_trait")
+  @@map("reveal_ref_factors")
+}
+
+model RefFactorGene {
+  factor_key String @db.VarChar(64)
+  gene       String @db.VarChar(64)
+  loading    Float  @db.Double
+
+  @@id([factor_key, gene])
+  @@index([gene], map: "ref_factor_gene")
+  @@map("reveal_ref_factor_genes")
+}
+
+model RefCollection {
+  collection_id String @id @db.VarChar(64)
+  cfde_label    String @db.VarChar(128)
+  library       String @db.VarChar(64)
+  n_sets        Int    @db.UnsignedInt
+  payload       Json
+
+  @@unique([cfde_label], map: "ref_collection_label")
+  @@map("reveal_ref_collections")
+}
+
+model RefGeneSet {
+  gene_set_id               String  @id @db.VarChar(64)
+  collection_id             String  @db.VarChar(64)
+  gene_set_name             String  @db.Text
+  library                   String  @db.VarChar(64)
+  n_genes                   Int     @db.UnsignedInt
+  n_genes_in_eaggl_universe Int     @db.UnsignedInt
+  legacy_source_key         String? @db.Text
+  metadata                  Json
+
+  @@index([collection_id], map: "ref_gene_set_collection")
+  @@map("reveal_ref_gene_sets")
+}
+
+// Joint and marginal loadings; ranks are within the gene set's library.
+model RefProjection {
+  factor_key            String @db.VarChar(64)
+  gene_set_id           String @db.VarChar(64)
+  library               String @db.VarChar(64)
+  joint_loading         Float  @db.Double
+  marginal_loading      Float  @db.Double
+  joint_loading_text    String @db.VarChar(32)
+  marginal_loading_text String @db.VarChar(32)
+  joint_rank            Int    @db.UnsignedInt
+  marginal_rank         Int    @db.UnsignedInt
+  is_joint_top_factor   Int    @db.TinyInt
+
+  @@id([factor_key, gene_set_id])
+  @@index([gene_set_id], map: "ref_projection_gene_set")
+  @@index([factor_key, library, joint_rank], map: "ref_projection_library")
+  @@map("reveal_ref_projections")
+}
+
+// The DAPPER provenance graph of the CFDE collections.
+model RefDapperNode {
+  id         String @id @db.VarChar(128)
+  class_name String @db.VarChar(64)
+  payload    Json
+
+  @@map("reveal_ref_dapper_nodes")
+}
+
+model RefDapperEdge {
+  subject   String  @db.VarChar(128)
+  predicate String  @db.VarChar(64)
+  object    String  @db.VarChar(128)
+  edge_role String? @db.VarChar(64)
+
+  @@id([subject, predicate, object])
+  @@index([object], map: "ref_dapper_edge_object")
+  @@map("reveal_ref_dapper_edges")
+}

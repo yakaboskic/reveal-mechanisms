@@ -29,7 +29,8 @@ def application_prefix(value=None):
     return value
 
 def application_sql(sql, prefix):
-    return re.sub(r'\breveal_(records|transaction_lock)\b', lambda match: prefix+'_'+match[1], sql)
+    # Per-environment tables: records, the write fence and the reference release tables reveal_ref_<name>.
+    return re.sub(r'\breveal_(records|transaction_lock|ref_[a-z0-9_]+)\b', lambda match: prefix+'_'+match[1], sql)
 
 class Transaction:
     def __init__(self, connection, sqlite=False, table_prefix='reveal'):
