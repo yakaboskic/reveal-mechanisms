@@ -47,14 +47,26 @@ def safe_path(value):
 
 def urls(work_id):
     api = public_base()
-    web = setting('REVEAL_PUBLIC_WEB_URL', '').rstrip('/')
+    # Deployment-owned configuration only: a tunneled API can legitimately use
+    # a loopback browser frontend. Never infer reconnect URLs from request headers.
+    web = next((setting(name) for name in ('REVEAL_PUBLIC_WEB_URL', 'REVEAL_CANONICAL_URL',
+        'NEXTAUTH_URL') if setting(name)), '').rstrip('/')
     if not web and urlsplit(api).hostname in ('localhost', '127.0.0.1', '::1'):
         web = 'http://localhost:3000'
-    parsed = urlsplit(web)
-    if (parsed.scheme not in ('http', 'https') or not parsed.hostname or parsed.username or parsed.password
-            or parsed.query or parsed.fragment or (parsed.scheme == 'http'
-                and parsed.hostname not in ('localhost', '127.0.0.1', '::1'))):
-        raise Problem(503, 'SETUP_NOT_CONFIGURED', 'Configure a canonical REVEAL_PUBLIC_WEB_URL.')
+    try:
+        parsed = urlsplit(web)
+        invalid_web = (parsed.scheme not in ('http', 'https') or not parsed.hostname
+            or parsed.username is not None or parsed.password is not None
+            or parsed.query or parsed.fragment or '\\' in web
+            or any(char.isspace() or ord(char) < 32 or ord(char) == 127 for char in web)
+            or '%' in (parsed.hostname or '') or parsed.netloc.endswith(':')
+            or (parsed.port is not None and not 1 <= parsed.port <= 65535)
+            or (parsed.scheme == 'http' and parsed.hostname not in ('localhost', '127.0.0.1', '::1')))
+    except ValueError:
+        invalid_web = True
+    if invalid_web:
+        raise Problem(503, 'SETUP_NOT_CONFIGURED',
+            'Configure a valid canonical browser URL with REVEAL_PUBLIC_WEB_URL, REVEAL_CANONICAL_URL or NEXTAUTH_URL.')
     return {'mcp_url': api+'/mcp', 'device_authorization_url': api+'/oauth/device_authorization',
         'token_url': api+'/oauth/token', 'revocation_url': api+'/oauth/revoke',
         'return_url': web+'/local-runs/'+quote(work_id, safe='')}

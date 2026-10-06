@@ -392,6 +392,90 @@ class LocalLauncherTests(unittest.TestCase):
             with self.assertRaises(launcher.HTTPFailure) as error: launcher.post_json(base+'/error', {}, 'private-bearer')
             self.assertNotIn('sensitive', str(error.exception)); self.assertEqual(hits, ['/redirect', '/error'])
         finally: server.shutdown(); server.server_close(); thread.join()
+
+
+class LauncherTLSTests(unittest.TestCase):
+    def context(self, roots=0):
+        # A real TLS client context retains its required certificate and hostname
+        # checks; only the trust-store I/O is replaced by this isolated fixture.
+        class Context(launcher.ssl.SSLContext):
+            def __new__(cls): return super().__new__(cls, launcher.ssl.PROTOCOL_TLS_CLIENT)
+            def __init__(self): self.roots = roots; self.loaded = []
+            def cert_store_stats(self): return {'x509_ca': self.roots}
+            def load_verify_locations(self, *, cafile):
+                self.loaded.append(cafile); self.roots = 1
+        return Context()
+
+    def test_existing_default_trust_is_not_replaced(self):
+        context = self.context(roots=2)
+        with patch.object(launcher.ssl, 'create_default_context', return_value=context), \
+             patch.object(launcher.sys, 'platform', 'darwin'), patch.dict(os.environ, {}, clear=True):
+            self.assertIs(launcher.https_context(), context)
+        self.assertEqual(context.loaded, [])
+        self.assertTrue(context.check_hostname)
+        self.assertEqual(context.verify_mode, launcher.ssl.CERT_REQUIRED)
+
+    def test_empty_macos_default_store_loads_system_bundle_and_keeps_verification(self):
+        context = self.context()
+        with patch.object(launcher.ssl, 'create_default_context', return_value=context), \
+             patch.object(launcher.sys, 'platform', 'darwin'), patch.dict(os.environ, {}, clear=True):
+            self.assertIs(launcher.https_context(), context)
+        self.assertEqual(context.loaded, ['/etc/ssl/cert.pem'])
+        self.assertTrue(context.check_hostname)
+        self.assertEqual(context.verify_mode, launcher.ssl.CERT_REQUIRED)
+
+    def test_explicit_certificate_configuration_is_never_augmented(self):
+        for key in ('SSL_CERT_FILE', 'SSL_CERT_DIR'):
+            for value in ('/user/selected/trust', ''):
+                context = self.context()
+                with self.subTest(key=key, value=value), \
+                     patch.object(launcher.ssl, 'create_default_context', return_value=context), \
+                     patch.object(launcher.sys, 'platform', 'darwin'), patch.dict(os.environ, {key: value}, clear=True):
+                    self.assertIs(launcher.https_context(), context)
+                self.assertEqual(context.loaded, [])
+                self.assertTrue(context.check_hostname)
+                self.assertEqual(context.verify_mode, launcher.ssl.CERT_REQUIRED)
+
+    def test_non_macos_trust_is_unchanged_including_lazy_certificate_directories(self):
+        context = self.context()
+        with patch.object(launcher.ssl, 'create_default_context', return_value=context), \
+             patch.object(launcher.sys, 'platform', 'linux'), patch.dict(os.environ, {}, clear=True):
+            self.assertIs(launcher.https_context(), context)
+        self.assertEqual(context.loaded, [])
+
+    def test_missing_or_empty_system_certificates_fail_before_network(self):
+        for failure in (FileNotFoundError('private system detail'), None):
+            context = self.context()
+            with self.subTest(failure=type(failure).__name__), \
+                 patch.object(launcher.ssl, 'create_default_context', return_value=context), \
+                 patch.object(launcher.sys, 'platform', 'darwin'), patch.dict(os.environ, {}, clear=True), \
+                 patch.object(context, 'load_verify_locations', side_effect=failure), \
+                 patch.object(launcher, 'build_opener') as opener:
+                with self.assertRaisesRegex(launcher.SetupError, 'SSL_CERT_FILE') as error:
+                    launcher.request_http('https://reveal.example/mcp')
+                self.assertNotIn('private system detail', str(error.exception))
+                opener.assert_not_called()
+            self.assertTrue(context.check_hostname)
+            self.assertEqual(context.verify_mode, launcher.ssl.CERT_REQUIRED)
+
+    def test_certificate_verification_failure_is_actionable_without_exposing_details(self):
+        failure = launcher.ssl.SSLCertVerificationError('private TLS details')
+        for wrapped in (failure, launcher.URLError(failure)):
+            context = self.context(roots=1)
+            with self.subTest(wrapped=type(wrapped).__name__), \
+                 patch.object(launcher, 'https_context', return_value=context), \
+                 patch.object(launcher, 'build_opener') as opener:
+                opener.return_value.open.side_effect = wrapped
+                with self.assertRaisesRegex(launcher.SetupError, 'Certificate verification remains required') as error:
+                    launcher.request_http('https://reveal.example/mcp', token='private-bearer')
+                self.assertIn('SSL_CERT_FILE', str(error.exception))
+                self.assertNotIn('private', str(error.exception))
+                handlers = opener.call_args.args
+                self.assertTrue(any(isinstance(handler, launcher.NoRedirect) for handler in handlers))
+                tls = next(handler for handler in handlers if isinstance(handler, launcher.HTTPSHandler))
+                self.assertIs(tls._context, context)
+
+
 @unittest.skipUnless(os.environ.get('REVEAL_TEST_NATIVE_KEYCHAIN') == '1' and launcher.sys.platform == 'darwin',
                      'Opt-in native Keychain smoke; ordinary tests never access real credentials')
 class NativeKeychainSmokeTests(unittest.TestCase):

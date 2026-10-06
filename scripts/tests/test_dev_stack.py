@@ -63,6 +63,13 @@ class StackLifecycleTests(unittest.TestCase):
         self.assertIn('Starting containers: done (', finished)
         self.assertEqual(output.getvalue(), finished)
 
+    def test_browser_url_uses_selected_port_and_preserves_explicit_override(self):
+        with patch.dict(m.os.environ, {'REVEAL_FRONTEND_PORT': '3100', 'REVEAL_PUBLIC_WEB_URL': ''}, clear=True):
+            self.assertEqual(m.environment()['REVEAL_PUBLIC_WEB_URL'], 'http://localhost:3100')
+        with patch.dict(m.os.environ, {'REVEAL_FRONTEND_PORT': '3100',
+                'REVEAL_PUBLIC_WEB_URL': 'https://public.example.org'}, clear=True):
+            self.assertEqual(m.environment()['REVEAL_PUBLIC_WEB_URL'], 'https://public.example.org')
+
     def test_status_outputs_only_allowed_container_fields(self):
         rows = [{'Service': 'api', 'State': 'running', 'Health': 'starting', 'Command': 'secret-command'},
                 {'Service': 'worker', 'State': 'created', 'Health': ''},

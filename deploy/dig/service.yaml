@@ -58,6 +58,7 @@ env:
   REVEAL_GATEWAY_ISSUER: reveal-nextjs
   REVEAL_GATEWAY_AUDIENCE: reveal-api
   REVEAL_CANONICAL_URL: https://reveal-mechanisms.vercel.app
+  REVEAL_PUBLIC_WEB_URL: https://reveal-mechanisms.vercel.app
   NEXTAUTH_URL: https://reveal-mechanisms.vercel.app
   REVEAL_MAPPING_RUN_ID: 272cfa19d093257863d7e7134776229dbc9b9b018d974e6b311285686833ec31
   EMBEDDING_SERVICE_URL: https://embedding-service-27386110942.us-east1.run.app

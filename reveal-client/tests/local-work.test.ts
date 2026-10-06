@@ -149,3 +149,48 @@ test("download URLs are released on abort and cannot be created after navigation
   assert.throws(() => downloadLocalBlob(new Blob(), "never.zip", controller.signal), { name: "AbortError" });
   assert.equal(created, 1);
 });
+
+test("workspace download reports real preparation and transfer stages without invented percentages", async () => {
+  const progress: { phase: string; receivedBytes: number; totalBytes?: number }[] = [];
+  let completeHeaders: (response: Response) => void = () => {};
+  let body: ReadableStreamDefaultController<Uint8Array>;
+  const stream = new ReadableStream<Uint8Array>({ start(controller) { body = controller; } });
+  const client = createLocalWorkClient(async () => new Promise<Response>(resolve => { completeHeaders = resolve; }));
+  const pending = client.setupKit("work", "codex", undefined, update => progress.push(update));
+  assert.deepEqual(progress, [{ phase: "preparing", receivedBytes: 0 }]);
+  completeHeaders(new Response(stream, { headers: { "Content-Type": "application/zip" } }));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(progress.at(-1), { phase: "downloading", receivedBytes: 0, totalBytes: undefined });
+  body!.enqueue(new Uint8Array([80, 75]));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(progress.at(-1)?.receivedBytes, 2);
+  body!.enqueue(new Uint8Array([3, 4])); body!.close();
+  assert.deepEqual(new Uint8Array(await (await pending).arrayBuffer()), new Uint8Array([80, 75, 3, 4]));
+  assert.equal(progress.at(-1)?.receivedBytes, 4);
+});
+
+test("a failed ZIP transfer can be retried without retaining partial bytes", async () => {
+  let attempts = 0;
+  const client = createLocalWorkClient(async () => {
+    attempts++;
+    if (attempts === 1) return new Response(new ReadableStream<Uint8Array>({ start(controller) { controller.enqueue(new Uint8Array([80, 75])); controller.error(new Error("Connection lost")); } }), { headers: { "Content-Type": "application/zip" } });
+    return new Response(new Uint8Array([80, 75, 3, 4]), { headers: { "Content-Type": "application/zip", "Content-Length": "4" } });
+  });
+  await assert.rejects(client.setupKit("work", "codex"), /Connection lost/);
+  const progress: { phase: string; receivedBytes: number; totalBytes?: number }[] = [];
+  const result = await client.setupKit("work", "codex", undefined, value => progress.push(value));
+  assert.equal(result.size, 4);
+  assert.deepEqual(progress[0], { phase: "preparing", receivedBytes: 0 });
+  assert.deepEqual(progress.at(-1), { phase: "downloading", receivedBytes: 4, totalBytes: 4 });
+});
+
+test("cancelling a stalled ZIP body releases the read and never returns a partial download", async () => {
+  const controller = new AbortController(); let cancelled = false;
+  const stream = new ReadableStream<Uint8Array>({ start(body) { body.enqueue(new Uint8Array([80, 75])); }, cancel() { cancelled = true; } });
+  const client = createLocalWorkClient(async () => new Response(stream, { headers: { "Content-Type": "application/zip" } }));
+  const pending = client.setupKit("work", "codex", controller.signal);
+  await new Promise(resolve => setImmediate(resolve));
+  controller.abort();
+  await assert.rejects(pending, { name: "AbortError" });
+  assert.equal(cancelled, true);
+});

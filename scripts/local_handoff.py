@@ -17,6 +17,7 @@ PORTABLE = {
     'REVEAL_DISMECH_SOURCE': '.runtime/dismech',
     'REVEAL_MYSQL_CA_FILE': '.runtime/certs/rds-ca.pem',
     'REVEAL_CANONICAL_URL': 'http://localhost:3000',
+    'REVEAL_PUBLIC_WEB_URL': 'http://localhost:3000',
     'NEXTAUTH_URL': 'http://localhost:3000',
     'REVEAL_API_URL': 'http://127.0.0.1:18000',
     'REVEAL_ENVIRONMENT': 'development',

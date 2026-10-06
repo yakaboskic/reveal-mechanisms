@@ -140,7 +140,7 @@ def prepare():
         **storage, 'REVEAL_GATEWAY_SECRET': keys['gateway'],
         'REVEAL_GATEWAY_SERVICE_TOKEN': keys['service'], 'REVEAL_GATEWAY_ISSUER': 'reveal-nextjs',
         'REVEAL_GATEWAY_AUDIENCE': 'reveal-api', 'NEXTAUTH_URL': FRONTEND_URL,
-        'REVEAL_CANONICAL_URL': FRONTEND_URL,
+        'REVEAL_CANONICAL_URL': FRONTEND_URL, 'REVEAL_PUBLIC_WEB_URL': FRONTEND_URL,
     })
     frontend = {key: value for key, value in env.items() if key.startswith(('AUTH_GOOGLE_', 'AUTH_ORCID_')) or key == 'ADMIN_EMAILS'}
     frontend.update({key: backend[key] for key in ('REVEAL_GATEWAY_SECRET', 'REVEAL_GATEWAY_SERVICE_TOKEN',

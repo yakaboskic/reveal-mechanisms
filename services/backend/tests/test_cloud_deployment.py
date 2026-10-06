@@ -42,6 +42,7 @@ def test_cloud_handoff_preserves_database_and_identity_without_copying_aws_crede
     assert 'REVEAL_API_KEY_SHA256' not in frontend and 'REVEAL_API_KEY_USER_ID' not in frontend
     assert 'UPSTASH_BOX_API_KEY' not in frontend and 'REVEAL_MYSQL_PASSWORD' not in frontend
     assert frontend['REVEAL_GATEWAY_SECRET'] == backend['REVEAL_GATEWAY_SECRET']
+    assert backend['REVEAL_PUBLIC_WEB_URL'] == backend['REVEAL_CANONICAL_URL'] == frontend['NEXTAUTH_URL'] == 'https://reveal-mechanisms.vercel.app'
     assert frontend['AUTH_GOOGLE_ID'] == 'same-identity-provider'
     assert frontend['DISABLE_ADMIN_LOGIN'] == 'false'
     assert compose['REVEAL_RUNTIME_DIR'] == '/run/reveal'

@@ -7,7 +7,7 @@ No paid worker/Box execution is created by this module.
 from __future__ import annotations
 
 import base64
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, wait
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 import hashlib
@@ -24,8 +24,25 @@ from .runtime_config import ROOT, CURRENT_DAPPER_SNAPSHOT, setting
 from . import user_inputs
 
 POOL = ThreadPoolExecutor(max_workers=4, thread_name_prefix='reveal-research')
+RETAINERS = ThreadPoolExecutor(max_workers=4, thread_name_prefix='reveal-seed-retention')
 TERMINAL = {'succeeded', 'accepted', 'rejected', 'failed', 'cancelled'}
 MAX_ARTIFACT_BYTES = 8_000_000
+
+
+def work_records(tx, kind, owner, work_id):
+    """Read this work's children without transferring an owner's other captures.
+
+    Export/query records can contain large evidence contexts. Filtering them in
+    Python made every status poll download those unrelated payloads from MySQL.
+    Ownership and the frozen local-work boundary both remain in the SQL filter.
+    """
+    field = "JSON_EXTRACT(payload, '$.local_work_id')"
+    if not tx.sqlite: field = 'JSON_UNQUOTE('+field+')'
+    rows = tx.execute('SELECT id,owner_id,version,payload,updated_at FROM reveal_records '
+        'WHERE kind=%s AND owner_id=%s AND '+field+'=%s', (kind, owner, work_id)).fetchall()
+    rows = sorted(rows, key=lambda row: row[0])
+    rows.sort(key=lambda row: row[4], reverse=True)
+    return [{'id': row[0], 'owner': row[1], 'version': row[2], 'data': json.loads(row[3])} for row in rows]
 
 
 def deadline(seconds):
@@ -215,10 +232,11 @@ class ResearchWorkService:
             upload.pop('storage', None)
             if isinstance(upload.get('extraction'), dict):
                 upload['extraction'].pop('storage', None); upload['extraction'].pop('content', None)
-        work['submissions'] = [self.operation_view(r['data'], tx=tx, owner=owner) for r in tx.list('research_operation', owner)
-            if r['data']['local_work_id'] == work_id and r['data']['kind'] in ('validate', 'submit')]
+        work['submissions'] = [self.operation_view(r['data'], tx=tx, owner=owner)
+            for r in work_records(tx, 'research_operation', owner, work_id)
+            if r['data']['kind'] in ('validate', 'submit')]
         connections = {}
-        grants = tx.list('research_access', owner)
+        grants = work_records(tx, 'research_access', owner, work_id)
         families = tx.get_many('research_oauth_family', sorted({row['data']['oauth_family_id'] for row in grants
             if row['data'].get('oauth_family_id') and row['data']['local_work_id'] == work_id}))
         for row in grants:
@@ -240,7 +258,7 @@ class ResearchWorkService:
     def release_pin_if_idle(tx, work):
         if work['state'] != 'closed': return
         if any(r['data']['local_work_id'] == work['id'] and r['data']['state'] not in TERMINAL
-               for r in tx.list('research_operation', work['owner_user_id'])): return
+               for r in work_records(tx, 'research_operation', work['owner_user_id'], work['id'])): return
         pin = tx.get('research_pin', work['research_request_id'])
         if pin:
             pin['data'].update(state='released', released_at=now())
@@ -273,9 +291,9 @@ class ResearchWorkService:
         with self.repo.read_transaction() as tx:
             work = tx.get('local_work', work_id)
             if not work: return
-            pending = [r['id'] for r in tx.list('research_operation', work['owner'])
-                if r['data']['local_work_id'] == work_id and (r['data']['state'] == 'received'
-                or (r['data']['state'] == 'running' and r['data'].get('lease_until', '') <= now()))]
+            pending = [r['id'] for r in work_records(tx, 'research_operation', work['owner'], work_id)
+                if r['data']['state'] == 'received'
+                or (r['data']['state'] == 'running' and r['data'].get('lease_until', '') <= now())]
         for operation_id in pending: POOL.submit(self.run_operation, operation_id)
 
     def reconcile(self):
@@ -306,8 +324,8 @@ class ResearchWorkService:
             if existing:
                 if existing['owner'] != owner: raise Problem(404, 'NOT_FOUND', 'Artifact is unavailable.')
                 return existing['data']
-            matching = next((r['data'] for r in tx.list('research_artifact', owner)
-                if r['data']['local_work_id'] == work_id and r['data']['sha256'] == checksum
+            matching = next((r['data'] for r in work_records(tx, 'research_artifact', owner, work_id)
+                if r['data']['sha256'] == checksum
                 and not r['data'].get('retained_record')), None)
         storage = matching['storage'] if matching else user_inputs.retain(data,
             user_inputs.TYPES.get(Path(filename).suffix, 'application/octet-stream'))
@@ -318,12 +336,73 @@ class ResearchWorkService:
             owned(tx, 'local_work', work_id, owner)
             existing = tx.get('research_artifact', identity)
             if existing: return existing['data']
-            blobs = {r['data']['sha256']: r['data']['size_bytes'] for r in tx.list('research_artifact', owner)
-                if r['data']['local_work_id'] == work_id}
+            blobs = {r['data']['sha256']: r['data']['size_bytes']
+                for r in work_records(tx, 'research_artifact', owner, work_id)}
             if checksum not in blobs and sum(blobs.values()) + len(data) > 128_000_000:
                 raise Problem(429, 'RESEARCH_STORAGE_LIMIT', 'This research work reached its retained artifact budget.')
             tx.put('research_artifact', identity, owner, value)
         return value
+
+    def retain_seed(self, owner, work_id, files):
+        """Retain a bounded seed with two transactions, not two per artifact.
+
+        Only immutable blob transfers run concurrently, outside the database
+        lock. The final transaction rechecks ownership, existing identities and
+        the combined quota before committing the complete descriptor batch.
+        Retries retain the original artifact IDs and reuse verified blob refs.
+        """
+        if not 1 <= len(files) <= 256:
+            raise Problem(413, 'ARTIFACT_TOO_LARGE', 'The research seed exceeds its artifact count limit.')
+        values, contents = {}, {}
+        for filename, data in files.items():
+            if isinstance(data, Path): data = data.read_bytes()
+            if isinstance(data, str): data = data.encode()
+            if not isinstance(data, bytes) or len(data) > 32_000_000:
+                raise Problem(413, 'ARTIFACT_TOO_LARGE', 'A research artifact exceeds its limit.')
+            checksum = hashlib.sha256(data).hexdigest()
+            identity = digest([work_id, 'seed', checksum, filename, {}])
+            values[identity] = {'id': identity, 'local_work_id': work_id, 'filename': filename,
+                'sha256': checksum, 'size_bytes': len(data), 'purpose': 'seed', 'metadata': {}}
+            contents.setdefault(checksum, (data, user_inputs.TYPES.get(Path(filename).suffix,
+                'application/octet-stream')))
+
+        def inspect(tx):
+            owned(tx, 'local_work', work_id, owner)
+            existing = tx.get_many('research_artifact', list(values))
+            if any(row['owner'] != owner for row in existing.values()):
+                raise Problem(404, 'NOT_FOUND', 'Artifact is unavailable.')
+            retained = work_records(tx, 'research_artifact', owner, work_id)
+            sizes = {row['data']['sha256']: row['data']['size_bytes'] for row in retained}
+            sizes.update({value['sha256']: value['size_bytes'] for value in values.values()})
+            if sum(sizes.values()) > 128_000_000:
+                raise Problem(429, 'RESEARCH_STORAGE_LIMIT', 'This research work reached its retained artifact budget.')
+            storage = {row['data']['sha256']: row['data']['storage'] for row in retained
+                if not row['data'].get('retained_record')}
+            return existing, storage
+
+        with self.repo.read_transaction() as tx:
+            existing, storage = inspect(tx)
+        if len(existing) == len(values):
+            return [existing[identity]['data'] for identity in values]
+        pending = {checksum: RETAINERS.submit(user_inputs.retain, *content)
+            for checksum, content in contents.items() if checksum not in storage}
+        try:
+            for checksum, future in pending.items(): storage[checksum] = future.result()
+        finally:
+            for future in pending.values(): future.cancel()
+            wait(pending.values())
+        with self.repo.transaction() as tx:
+            existing, current_storage = inspect(tx)
+            storage.update(current_storage)
+            additions = []
+            for identity, value in values.items():
+                if identity in existing:
+                    values[identity] = existing[identity]['data']
+                else:
+                    value.update(storage=storage[value['sha256']], created_at=now())
+                    additions.append(('research_artifact', identity, owner, value))
+            tx.insert_many(additions)
+        return list(values.values())
 
     @staticmethod
     def artifact_view(value):
@@ -363,14 +442,9 @@ class ResearchWorkService:
             built.manifest['package_sha256'] = hashlib.sha256(raw).hexdigest()
             built.manifest['files']['evidence-package.json'] = hashlib.sha256(raw).hexdigest()
             built.files['manifest.json'] = canonical_json(built.manifest)
-            artifacts = []
-            for filename, data in built.files.items():
-                if isinstance(data, Path): data = data.read_bytes()
-                if isinstance(data, str): data = data.encode()
-                value = self.retain(owner, work_id, data, filename, purpose='seed')
-                artifacts.append(self.artifact_view(value))
-            value = self.retain(owner, work_id, canonical_json(built.package), 'evidence-package.json', purpose='seed')
-            if value['id'] not in {a['id'] for a in artifacts}: artifacts.append(self.artifact_view(value))
+            retained = self.retain_seed(owner, work_id, built.files)
+            artifacts = [self.artifact_view(value) for value in retained]
+            value = next(value for value in retained if value['filename'] == 'evidence-package.json')
             result = {'id': digest([work_id, value['sha256']]), 'package': built.package,
                 'sha256': value['sha256'], 'manifest': built.manifest, 'artifacts': artifacts}
         return result

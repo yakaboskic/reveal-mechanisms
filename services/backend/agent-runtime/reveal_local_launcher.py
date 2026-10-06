@@ -14,6 +14,7 @@ from pathlib import Path, PurePosixPath
 import re
 import secrets
 import shutil
+import ssl
 import stat
 import subprocess
 import sys
@@ -24,7 +25,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit, urlencode
-from urllib.request import HTTPRedirectHandler, Request, build_opener
+from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_opener
 
 
 SERVICE = 'org.reveal.local-mcp'
@@ -352,8 +353,30 @@ class NoRedirect(HTTPRedirectHandler):
         raise SetupError('Reveal redirected a request; redirects are refused.')
 
 
+TLS_HELP = ('Python could not verify Reveal\'s TLS certificate. Repair this Python installation\'s CA certificates '
+            'or configure SSL_CERT_FILE / SSL_CERT_DIR with a trusted CA bundle or directory, then retry. '
+            'Certificate verification remains required. Local files remain available with --offline.')
+
+
+def https_context():
+    """Keep Python's trust policy; repair only an empty macOS default store."""
+    try:
+        context = ssl.create_default_context()
+        if (sys.platform == 'darwin' and context.cert_store_stats()['x509_ca'] == 0
+                and not any(key in os.environ for key in ('SSL_CERT_FILE', 'SSL_CERT_DIR'))):
+            # Some python.org installs omit their CA bundle until their separate
+            # certificate installer is run. The OS bundle is a trusted local
+            # fallback, never downloaded and never used to bypass verification.
+            context.load_verify_locations(cafile='/etc/ssl/cert.pem')
+            if context.cert_store_stats()['x509_ca'] == 0:
+                raise SetupError(TLS_HELP)
+        return context
+    except (OSError, ValueError):
+        raise SetupError(TLS_HELP) from None
+
+
 def request_http(url, *, body=None, method='POST', token=None, protocol=None, form=False, raw=False):
-    checked_url(url)
+    origin = checked_url(url)
     headers = {'Accept': 'application/json, text/event-stream'}
     if token:
         headers['Authorization'] = 'Bearer ' + token
@@ -371,7 +394,10 @@ def request_http(url, *, body=None, method='POST', token=None, protocol=None, fo
     else:
         data = None
     try:
-        with build_opener(NoRedirect()).open(Request(url, data=data, headers=headers, method=method), timeout=45) as response:
+        handlers = [NoRedirect()]
+        if origin[0] == 'https':
+            handlers.append(HTTPSHandler(context=https_context()))
+        with build_opener(*handlers).open(Request(url, data=data, headers=headers, method=method), timeout=45) as response:
             if response.geturl() != url:
                 raise SetupError('Reveal returned a different endpoint.')
             value = response.read(MAX_RESPONSE + 1)
@@ -401,7 +427,9 @@ def request_http(url, *, body=None, method='POST', token=None, protocol=None, fo
         status = error.code
         error.close()
         raise HTTPFailure(status, code) from None
-    except (URLError, TimeoutError, OSError):
+    except (URLError, TimeoutError, OSError) as error:
+        if isinstance(error, ssl.SSLCertVerificationError) or isinstance(getattr(error, 'reason', None), ssl.SSLCertVerificationError):
+            raise SetupError(TLS_HELP) from None
         raise SetupError('Could not contact Reveal. Local files remain available; retry when connected.') from None
     except (ValueError, UnicodeError):
         raise SetupError('Reveal returned invalid JSON.') from None

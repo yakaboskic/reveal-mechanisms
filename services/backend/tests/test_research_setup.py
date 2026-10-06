@@ -364,7 +364,8 @@ class ResearchSetupTests(unittest.TestCase):
         for path in ('../secret', '/absolute', 'C:/secret', 'a\\b', 'a//b', 'a/./b', 'CON.txt', 'a/NUL', 'a/end.'):
             with self.subTest(path=path), self.assertRaises(Problem): setup.safe_path(path)
         self.assertEqual(setup.safe_path('docs/research.md'), 'docs/research.md')
-        with patch.dict('os.environ', {'REVEAL_PUBLIC_API_URL': 'https://api.example.org', 'REVEAL_PUBLIC_WEB_URL': ''}):
+        with patch.dict('os.environ', {'REVEAL_PUBLIC_API_URL': 'https://api.example.org',
+                'REVEAL_PUBLIC_WEB_URL': '', 'REVEAL_CANONICAL_URL': '', 'NEXTAUTH_URL': ''}):
             with self.assertRaises(Problem): setup.urls('work')
         with patch.dict('os.environ', {'REVEAL_PUBLIC_WEB_URL': 'https://reveal.example.org'}):
             self.assertEqual(setup.urls('work')['return_url'], 'https://reveal.example.org/local-runs/work')

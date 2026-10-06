@@ -1,6 +1,7 @@
 /** Browser contracts for local research. Workspace archives contain no credentials. */
 export type LocalWorkState = "preparing" | "ready" | "preparation_failed" | "closed";
 export type LocalAgentClient = "codex" | "claude_code";
+export type LocalSetupProgress = { phase: "preparing" | "downloading"; receivedBytes: number; totalBytes?: number };
 export const localClientPreferenceKey = "reveal.local-agent-client";
 export const localClientPreference = (value: string | null): LocalAgentClient => value === "claude_code" ? value : "codex";
 export const localLaunchCommand = (client: LocalAgentClient, mode?: "--login" | "--logout" | "--check-only" | "--offline") => `python3 start.py ${client === "claude_code" ? "claude" : "codex"}${mode ? ` ${mode}` : ""}`;
@@ -85,9 +86,10 @@ export function createLocalWorkClient(fetcher: typeof fetch = fetch) {
   }
   const workPath = (id: string) => `${base}/${encodeURIComponent(id)}`;
   return {
-    setupKit: async (id: string, client: LocalAgentClient, caller?: AbortSignal) => {
+    setupKit: async (id: string, client: LocalAgentClient, caller?: AbortSignal, onProgress?: (progress: LocalSetupProgress) => void) => {
       const timeout = AbortSignal.timeout(120_000), signal = caller ? AbortSignal.any([timeout, caller]) : timeout;
       signal.throwIfAborted();
+      onProgress?.({ phase: "preparing", receivedBytes: 0 });
       const response = await fetcher(`${workPath(id)}/setup-kit`, { method: "POST", credentials: "same-origin", cache: "no-store", redirect: "error",
         headers: { Accept: "application/zip", "Content-Type": "application/json" }, body: JSON.stringify({ client }), signal });
       if (!response.ok) {
@@ -95,7 +97,28 @@ export function createLocalWorkClient(fetcher: typeof fetch = fetch) {
         throw new LocalWorkError(response.status, problem.code || "API_ERROR", problem.detail || problem.message || `Workspace download failed (${response.status}).`);
       }
       if (response.headers.get("Content-Type")?.split(";")[0].trim().toLowerCase() !== "application/zip") throw new Error("Reveal did not return a workspace ZIP. Please try again.");
-      const blob = await response.blob(); signal.throwIfAborted();
+      const contentLength = Number(response.headers.get("Content-Length"));
+      const totalBytes = Number.isSafeInteger(contentLength) && contentLength > 0 ? contentLength : undefined;
+      onProgress?.({ phase: "downloading", receivedBytes: 0, totalBytes });
+      const reader = response.body?.getReader();
+      let blob: Blob;
+      if (reader) {
+        const chunks: Uint8Array<ArrayBuffer>[] = []; let receivedBytes = 0;
+        const cancelRead = () => { void reader.cancel().catch(() => {}); };
+        signal.addEventListener("abort", cancelRead, { once: true });
+        try {
+          signal.throwIfAborted();
+          while (true) {
+            const { done, value } = await reader.read(); signal.throwIfAborted();
+            if (done) break;
+            chunks.push(new Uint8Array(value)); receivedBytes += value.byteLength;
+            onProgress?.({ phase: "downloading", receivedBytes, totalBytes });
+          }
+          blob = new Blob(chunks, { type: "application/zip" });
+        } catch (error) { await reader.cancel().catch(() => {}); throw error; }
+        finally { signal.removeEventListener("abort", cancelRead); reader.releaseLock(); }
+      } else { blob = await response.blob(); }
+      signal.throwIfAborted();
       if (!blob.size) throw new Error("The workspace ZIP was empty. Please try again.");
       return blob;
     },
