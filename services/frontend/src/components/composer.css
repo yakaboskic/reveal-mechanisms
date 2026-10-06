@@ -89,6 +89,8 @@
 .prototype-composer .gap-result{font-size:14px;line-height:1.65;color:#40536f;padding:17px 20px}
 .prototype-composer .gap-result:hover,.prototype-composer .gap-result:focus-visible{background:#f8faff}
 .prototype-composer .gap-result small{font-size:11px;color:#72829a;margin-top:5px}
+.query-highlight{background:#fff0ac;color:#443707;border-radius:2px;padding:0}
+@media(forced-colors:active){.query-highlight{background:Highlight;color:HighlightText}}
 .prototype-composer .submitted{flex-shrink:0;box-shadow:none;animation:question-collapse .3s ease-out}
 .prototype-composer .submitted .selected-question-row{padding:20px 24px 0}
 .prototype-composer .submitted .selected-question{font-size:16px;line-height:1.6}

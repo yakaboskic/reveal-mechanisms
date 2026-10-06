@@ -6,6 +6,7 @@ import { followJob, followWorkspace } from "../lib/events";
 import { createMutationKeys } from "../lib/mutations";
 import { analysisAccountResults, localWorkApi, localWorkHref } from "../lib/local-work";
 import { ResearchModeMenu } from "../components/ResearchModeMenu";
+import { QueryHighlight } from "../components/QueryHighlight";
 import { emptyComposer, terminal, withFactors, type AnalysisInput, type Composer, type Draft, type Factor, type Gap, type Job, type JobEvent, type Me, type Schema } from "../lib/types";
 
 type PendingSubmission = { body: AnalysisInput; key: string; mode?: "online" | "local" };
@@ -40,6 +41,7 @@ export default function Home() {
   const [gap, setGap] = useState<Gap | null>(null);
   const [query, setQuery] = useState("coronary artery disease");
   const [gaps, setGaps] = useState<Gap[]>([]);
+  const [resultsQuery, setResultsQuery] = useState("");
   const [searching, setSearching] = useState(false);
   const [searched, setSearched] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
@@ -181,7 +183,7 @@ export default function Home() {
   async function search() {
     searchAbort.current?.abort(); const controller = new AbortController(); searchAbort.current = controller;
     setSearching(true); setError("");
-    try { const values = await api.gaps(query, controller.signal); if (!controller.signal.aborted) { setGaps(values); setSearched(true); } }
+    try { const values = await api.gaps(query, controller.signal); if (!controller.signal.aborted) { setGaps(values); setResultsQuery(query); setSearched(true); } }
     catch (error) { if (!controller.signal.aborted) setError(errorMessage(error)); }
     finally { if (!controller.signal.aborted) setSearching(false); }
   }
@@ -267,7 +269,7 @@ export default function Home() {
             <div className="saved-drafts"><label htmlFor="saved-draft">Saved drafts</label><div className="inline-control"><select id="saved-draft" value={draft?.id || ""} disabled={!mutable} onChange={event => { if (event.target.value && (!dirty || window.confirm("Load the saved draft and discard unsaved changes?"))) void openDraft(event.target.value); }}><option value="">Choose a saved draft</option>{drafts.map(value => <option key={value.id} value={value.id}>{value.name || "Untitled draft"} — {date(value.updated_at)}</option>)}</select>{draft && <button className="quiet" disabled={!mutable} onClick={() => { if (!dirty || window.confirm("Reload the server version and discard unsaved changes?")) void openDraft(draft.id); }}>Reload</button>}</div><span className="small muted">{draft ? `Version ${draft.version}${dirty ? " · Unsaved changes" : " · Saved"}` : `${drafts.length} saved drafts in this workspace`}</span></div>
             <label htmlFor="draft-name">Draft name</label><input id="draft-name" value={name} maxLength={120} onChange={event => setName(event.target.value)} disabled={!mutable} placeholder="Name this investigation" />
             <section className="editor-section"><h3><span className="step-number">1</span> Choose a knowledge gap</h3><form className="search-control" onSubmit={event => { event.preventDefault(); void search(); }}><label className="sr-only" htmlFor="gap-search">Search knowledge gaps</label><input id="gap-search" type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search a disease or research question" /><button type="submit" className="secondary" disabled={searching}>{searching ? "Searching…" : "Search"}</button></form>
-              {gaps.length > 0 && <div className="gap-list" aria-label="Knowledge gap search results">{gaps.map(value => <button key={value.source.source_id} className={composer.source_gap?.source_id === value.source.source_id ? "gap-option selected" : "gap-option"} onClick={() => selectGap(value)} disabled={!mutable}><strong>{gapTitle(value)}</strong><span>{value.object.gap_description || value.object.text || value.source.source_id}</span><small>{composer.source_gap?.source_id === value.source.source_id ? "Selected" : "Select gap"}</small></button>)}</div>}
+              {gaps.length > 0 && <div className="gap-list" aria-label="Knowledge gap search results">{gaps.map(value => <button key={value.source.source_id} className={composer.source_gap?.source_id === value.source.source_id ? "gap-option selected" : "gap-option"} onClick={() => selectGap(value)} disabled={!mutable}><strong><QueryHighlight text={gapTitle(value)} query={resultsQuery} /></strong><span><QueryHighlight text={value.object.gap_description || value.object.text || value.source.source_id} query={resultsQuery} /></span><small>{composer.source_gap?.source_id === value.source.source_id ? "Selected" : "Select gap"}</small></button>)}</div>}
               {searched && !searching && !gaps.length && <p className="empty">No matching gaps. Try a broader disease name.</p>}
               {composer.source_gap && <div className="selected-question"><span className="small muted">Selected question</span><p>{gap ? gap.object.text || gapTitle(gap) : composer.source_gap.id}</p>{gap?.object.gap_description && <details><summary>Source context</summary><p>{gap.object.gap_description}</p></details>}</div>}
             </section>

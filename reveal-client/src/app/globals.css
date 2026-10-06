@@ -68,6 +68,8 @@ button.gap-option:hover:not(:disabled),button.gap-option.selected { background:#
 .gap-option strong { display:block; font-size:14px; line-height:1.4; }
 .gap-option > span { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; font-size:13px; color:var(--muted); margin-top:.35rem; }
 .gap-option small { display:block; color:var(--teal); font-weight:600; margin-top:.45rem; }
+.query-highlight { background:#fff0ac; color:#443707; border-radius:2px; padding:0; }
+@media (forced-colors:active) { .query-highlight { background:Highlight; color:HighlightText; } }
 .selected-question { border-left:3px solid var(--teal); padding:.65rem 0 .65rem 1rem; margin-top:1rem; }
 .selected-question > p { margin-top:.25rem; line-height:1.6; }
 .anchor-list { margin-top:.7rem; }
