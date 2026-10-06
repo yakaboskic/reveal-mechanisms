@@ -206,12 +206,8 @@ def register(app, repository, *, freeze, preload, reload_gate, service_factory=R
         try:
             args = params.arguments or {}
             result = await asyncio.to_thread(dispatch, runner, authorization, params.name, args,
-                rate_key=context.request.client.host if context.request.client else 'unknown')
-            if not public_call(params.name, args):
-                def resume():
-                    with runner.repo.read_transaction() as tx: work_id = authenticate(tx, authorization)['work']['id']
-                    runner.kick(work_id)
-                await asyncio.to_thread(resume)
+                rate_key=context.request.client.host if context.request.client else 'unknown',
+                on_operation=runner.resume_operation)
             return types.CallToolResult(content=[types.TextContent(type='text', text=json.dumps(result))], structuredContent=result)
         except Problem as error:
             result = {'code': error.code, 'detail': error.detail, **error.extra}

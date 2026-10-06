@@ -2,7 +2,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { activityProgress, activityRows, groupedWarnings, stageLabels, type ActivityRow } from "@/lib/activity";
 import { elapsedLabel, operationalStep, timedActivitySections, toolElapsed, type StepState } from "@/lib/activity-timing";
-import { prettyRecordedValue, toolInvocation } from "@/lib/tool-display";
+import { prettyRecordedValue, recordedToolArguments, toolInvocation } from "@/lib/tool-display";
 import { api, ApiError, messageOf, readEvents, terminal, type Schema } from "@/lib/client";
 import { JobOutcome } from "./AnalysisOutcome";
 import { invalidateWorkspace } from "@/lib/workspace-events";
@@ -15,7 +15,7 @@ function ToolActivity({ row, active, now, onInspect }: { row: ActivityRow; activ
   const state = result?.state || (active ? "started" : "unavailable");
   const output = result?.output_excerpt;
   const name = detail.tool_name || result?.tool_name || "Tool";
-  const args = detail.display_arguments || result?.display_arguments;
+  const { argumentsText: args, notice: argumentsNotice } = recordedToolArguments(detail.display_arguments, result?.display_arguments);
   const elapsed = toolElapsed(row, active, now);
   return <details className="activity-tool activity-tool-details" data-state={state}>
     <summary className="tool-heading" onClick={onInspect}>
@@ -25,7 +25,7 @@ function ToolActivity({ row, active, now, onInspect }: { row: ActivityRow; activ
     </summary>
     <div className="tool-details-body">
       <dl className="tool-metadata"><div><dt>Tool</dt><dd>{name}</dd></div>{detail.call_id && <div><dt>Call ID</dt><dd>{detail.call_id}</dd></div>}</dl>
-      <div className="tool-arguments"><span className="tool-detail-label">Recorded arguments</span><pre>{args ? toolInvocation(name, args, false) : "Arguments were not recorded."}</pre></div>
+      <div className="tool-arguments"><span className="tool-detail-label">Recorded arguments</span>{args ? <pre>{toolInvocation(name, args, false)}</pre> : <p>{argumentsNotice}</p>}</div>
       {result && <div className="tool-output"><span className="tool-detail-label">Result excerpt</span>{output ? <pre>{prettyRecordedValue(output)}</pre> : <p>{state === "failed" ? row.result?.message || row.event.message : "Tool completed. No result preview was recorded."}</p>}
         {result.artifact_sha256 && <small className="tool-artifact">Result SHA-256: {result.artifact_sha256}</small>}
       </div>}

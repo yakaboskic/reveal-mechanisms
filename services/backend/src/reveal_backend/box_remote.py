@@ -22,6 +22,7 @@ import time
 
 from .box_mcp import DraftValidationError, Ledger, PolicyError, ScopedTools, canonical, serve, stamp
 from .box_stream import ClaudeStream, SecretFilter, StreamProtocolError
+from .public_tool_activity import DURABLE_TOOLS, durable_operation, tool_kind
 from .box_research import HostedResearchClient, ResearchAccessError, validate_context
 from .dispatch_view import (FILE_INPUT_FILENAME, FILE_INPUT_FORMAT, research_authoring_requirements,
                             research_prompt, validate_file_input)
@@ -301,10 +302,27 @@ def lint_tool(filename, ledger):
 
 
 def deadline_reason(request, last_activity=None):
-    stage = 'authoring the account' if request['kind'] == 'research' else 'writing the research statement'
-    last_tool = (last_activity or {}).get('tool_name')
+    last_activity = last_activity or {}
+    stage = 'during research' if request['kind'] == 'research' else 'while writing the research statement'
+    last_tool = last_activity.get('tool_name')
+    operation = last_activity.get('operation') or {}
+    if (operation.get('state') in ('received', 'running') or
+            last_tool and tool_kind(last_tool) == 'get_operation' and last_activity.get('kind') == 'tool_call'):
+        stage = 'while waiting for a durable evidence operation'
+    elif last_activity.get('kind') == 'tool_call' and last_tool and tool_kind(last_tool) == 'lint_account':
+        stage = 'while checking the draft account and sources'
     suffix = '; last observed tool: ' + last_tool if last_tool else ''
-    return f"Agent reached its {request['timeout_seconds']}-second execution limit while {stage}{suffix}. No output was accepted."
+    return f"Agent reached its {request['timeout_seconds']}-second execution limit {stage}{suffix}. No output was accepted."
+
+
+def observable_activity(kind, payload, call):
+    """Record actual public tool progress for timeout diagnostics, never reasoning."""
+    value = {'kind': kind, 'tool_name': payload.get('tool_name')}
+    if kind == 'tool_result' and tool_kind(value['tool_name'] or '') in DURABLE_TOOLS:
+        operation = durable_operation(call.get('result'), SECRETS)
+        if operation:
+            value['operation'] = operation
+    return value
 
 
 def provider_failure_reason(request, result):
@@ -494,7 +512,7 @@ def main():
                         trace.write(trace_filter.feed(chunk)); trace.flush()
                         for kind, payload in parser.feed(chunk):
                             if kind in ('tool_call', 'tool_result'):
-                                last_activity = {'kind': kind, 'tool_name': payload.get('tool_name')}
+                                last_activity = observable_activity(kind, payload, parser.tools[payload['call_id']])
                             if kind == 'tool_call':
                                 call = parser.tools[payload['call_id']]
                                 entry = ledger.start(call['name'], call['input'], None)

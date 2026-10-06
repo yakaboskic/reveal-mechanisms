@@ -10,7 +10,7 @@ from jsonschema import Draft202012Validator
 
 from .auth import Problem, owned
 from .repository import digest, now, uid
-from .research_work import authenticate, idempotent, public_base, MAX_ARTIFACT_BYTES
+from .research_work import authenticate, idempotent, public_base, work_records, MAX_ARTIFACT_BYTES
 from . import user_inputs
 
 STRING = {'type': 'string', 'minLength': 1, 'maxLength': 1000}
@@ -191,6 +191,8 @@ def data_capabilities(service, authorization, name, arguments):
     """Resolve the actual pinned source without holding an app transaction."""
     with service.repo.read_transaction() as tx:
         authority=authenticate(tx,authorization)
+        from .research_oauth import require_registered_local
+        require_registered_local(authority)
         work=authority['work']
         if arguments['research_request_id'] != work['research_request_id']:
             raise Problem(404,'NOT_FOUND','The requested research context is unavailable.')
@@ -218,7 +220,7 @@ def data_capabilities(service, authorization, name, arguments):
     return catalog
 
 
-def dispatch(service, authorization, name, arguments, *, rate_key=None):
+def dispatch(service, authorization, name, arguments, *, rate_key=None, on_operation=None):
     tools = {t['name']: t for t in definitions()}
     if name not in tools: raise Problem(404, 'UNKNOWN_TOOL', 'Unknown research tool.')
     errors = list(Draft202012Validator(tools[name]['inputSchema']).iter_errors(arguments))
@@ -231,8 +233,6 @@ def dispatch(service, authorization, name, arguments, *, rate_key=None):
         from .research_public import public_dispatch
         return public_dispatch(service, name, arguments, rate_key=rate_key)
     from .research_oauth import require_registered_local
-    with service.repo.read_transaction() as tx:
-        require_registered_local(authenticate(tx, authorization))
     if name in ('list_data_operations','describe_data_operation'):
         return data_capabilities(service,authorization,name,arguments)
     if name == 'read_evidence':
@@ -240,6 +240,7 @@ def dispatch(service, authorization, name, arguments, *, rate_key=None):
         from .evidence_reader import read_artifact
         with service.repo.read_transaction() as tx:
             authority = authenticate(tx, authorization)
+            require_registered_local(authority)
             if arguments['local_work_id'] != authority['work']['id']:
                 raise Problem(404, 'NOT_FOUND', 'The requested research context is unavailable.')
             artifact = resolve_reader_artifact(tx, authority, arguments['artifact_id'], arguments['sha256'])
@@ -264,15 +265,19 @@ def dispatch(service, authorization, name, arguments, *, rate_key=None):
                 raise Problem(404, 'NOT_FOUND', 'The requested research context is unavailable.')
         from .research_public import prepare_capture_attachments
         prepared_captures = prepare_capture_attachments(service, arguments['capture_ids'], authority=authority)
-    with service.repo.transaction() as tx:
+    transaction = service.repo.transaction if mutation else service.repo.read_transaction
+    with transaction() as tx:
         authority = authenticate(tx, authorization, write=mutation)
+        require_registered_local(authority)
         owner, work = authority['owner'], authority['work']
         if arguments.get('local_work_id', work['id']) != work['id'] or arguments.get('research_request_id', work['research_request_id']) != work['research_request_id']:
             raise Problem(404, 'NOT_FOUND', 'The requested research context is unavailable.')
         if authority['grant']['kind'] == 'hosted' and name in ('submit_accounts', 'prepare_artifact_upload', 'complete_artifact_upload', 'import_evidence'):
             raise Problem(403, 'HOSTED_TOOL_SCOPE', 'Hosted results must pass through the trusted output capture and worker acceptance.')
-        if name == 'get_local_work': return service.view(tx, owner, work['id'])
-        if name == 'get_research_package': return service.package(tx, owner, work['id'])
+        if name in ('get_local_work', 'get_research_package'):
+            if on_operation and work['state'] == 'preparing':
+                on_operation(work['preparation_operation_id'])
+            return service.view(tx, owner, work['id']) if name == 'get_local_work' else service.package(tx, owner, work['id'])
         if name == 'list_knowledge_graphs':
             from .research_graphs import catalog
             request = owned(tx, 'request', work['research_request_id'], owner)['data']
@@ -285,7 +290,12 @@ def dispatch(service, authorization, name, arguments, *, rate_key=None):
                 'method': 'GET', 'authentication': 'Use the same Authorization bearer credential as MCP; never include it in the URL.'}
         if name in ('get_operation', 'get_submission'):
             identity = arguments.get('operation_id') or arguments['submission_id']
-            return service.operation_view(check_child(tx, 'research_operation', identity, authority), tx=tx, owner=owner, strict=True)
+            operation = check_child(tx, 'research_operation', identity, authority)
+            result = service.operation_view(operation, tx=tx, owner=owner, strict=True)
+            if on_operation and operation['state'] == 'received': on_operation(identity)
+            elif on_operation and operation['state'] == 'running' and operation.get('lease_until', '') <= now():
+                on_operation(identity, lease_token=operation.get('lease_token'))
+            return result
         if name == 'get_evidence_result':
             return check_child(tx, 'evidence_receipt', arguments['receipt_id'], authority)
         if name == 'get_evidence_import':
@@ -347,8 +357,8 @@ def dispatch(service, authorization, name, arguments, *, rate_key=None):
             if name == 'retry_operation':
                 operation = check_child(tx, 'research_operation', arguments['operation_id'], authority)
                 if operation['state'] != 'failed': raise Problem(409, 'RETRY_NOT_AVAILABLE', 'Only failed infrastructure operations can retry the same input.')
-                pending = sum(r['data']['local_work_id'] == work['id'] and r['data']['state'] in ('received','running')
-                              for r in tx.list('research_operation', owner))
+                pending = sum(r['data']['state'] in ('received','running')
+                              for r in work_records(tx, 'research_operation', owner, work['id']))
                 if pending >= 8: raise Problem(429, 'RESEARCH_BUSY', 'Wait for pending operations to finish.')
                 operation.update(state='received', error=None, grant_id=authority['grant']['grant_id'], owner_user_id=owner)
                 operation.pop('lease_token', None); operation.pop('lease_until', None)
@@ -384,7 +394,7 @@ def dispatch(service, authorization, name, arguments, *, rate_key=None):
                     request = owned(tx, 'request', work['research_request_id'], owner)['data']
                     validate_graph(body['operation_id'], body['arguments'],
                         selected_graphs=request.get('composer', {}).get('selected_kgs', []))
-            operations = [r for r in tx.list('research_operation', owner) if r['data']['local_work_id'] == work['id']]
+            operations = work_records(tx, 'research_operation', owner, work['id'])
             if len(operations) >= 300: raise Problem(429, 'RESEARCH_BUDGET_EXCEEDED', 'This work reached its operation budget.')
             if sum(r['data']['state'] in ('received', 'running') for r in operations) >= 8:
                 raise Problem(429, 'RESEARCH_BUSY', 'Wait for pending operations to finish.')
@@ -392,4 +402,5 @@ def dispatch(service, authorization, name, arguments, *, rate_key=None):
             work.update(last_activity=now(), last_action=name); tx.put('local_work', work['id'], owner, work)
             return {'operation_id': operation['id'], 'submission_id': operation['id'] if kind in ('validate', 'submit') else None, 'state': 'received'}
         result = idempotent(tx, owner, work['id']+':'+name, key, body, action)
+    if on_operation and result.get('operation_id'): on_operation(result['operation_id'])
     return result

@@ -13,6 +13,7 @@ from .repository import digest, now
 from .evidence_package import canonical_json, sha256
 from .runtime_config import ROOT, artifacts_root, mysql_connection, setting
 from .research_work import authorize_commit, public_base
+from .runtime_metrics import measure
 from . import user_inputs
 
 
@@ -94,7 +95,7 @@ def capture_query(service, operation):
     from .acceptance import public_runtime
     from .research_data import ReferenceQueryService, SmallModelBioIndex
     args = operation['arguments']; owner = operation['owner_user_id']
-    with service.repo.read_transaction() as tx:
+    with measure('research_query', 'context_read'), service.repo.read_transaction() as tx:
         work = owned(tx, 'local_work', operation['local_work_id'], owner)['data']
         previous = tx.get('evidence_receipt', operation['id'])
         request = owned(tx, 'request', work['research_request_id'], owner)['data']
@@ -111,18 +112,22 @@ def capture_query(service, operation):
     if name in SmallModelBioIndex.INDEXES:
         query_service = SmallModelBioIndex(verified=setting('REVEAL_SMALL_PHENOTYPE_VERIFIED', 'false').lower() == 'true')
     from .research_graphs import OPERATIONS as GRAPH_OPERATIONS, GraphQueryService
-    if name in GRAPH_OPERATIONS:
-        query_service = service.graph_service or GraphQueryService()
-        capture = query_service.query(name, args.get('arguments', {}),
-            selected_graphs=request.get('composer', {}).get('selected_kgs', []))
-    else:
-        capture = query_service.query(name, args.get('arguments', {}), generation_id=work['reference_generation_id'])
-    context = retain_context(service, operation, capture.materialize(public_runtime()))
+    with measure('research_query', 'source'):
+        if name in GRAPH_OPERATIONS:
+            query_service = service.graph_service or GraphQueryService()
+            capture = query_service.query(name, args.get('arguments', {}),
+                selected_graphs=request.get('composer', {}).get('selected_kgs', []))
+        else:
+            capture = query_service.query(name, args.get('arguments', {}), generation_id=work['reference_generation_id'])
+    with measure('research_query', 'materialization'):
+        context = capture.materialize(public_runtime())
+    with measure('research_query', 'retention'):
+        context = retain_context(service, operation, context)
     receipt = {'id': operation['id'], 'local_work_id': work['id'], 'research_request_id': work['research_request_id'],
         'operation': name, 'arguments': args.get('arguments', {}), 'source_mode': capture.source_mode,
         'source': capture.source, 'result': capture.result, 'context': context, 'created_at': now(),
         'sha256': sha256(capture.raw)}
-    with service.repo.transaction() as tx:
+    with measure('research_query', 'receipt_commit'), service.repo.transaction() as tx:
         authorize_commit(tx, operation)
         current = owned(tx, 'research_operation', operation['id'], owner)['data']
         if current.get('lease_token') != operation.get('lease_token') or current['state'] != 'running':

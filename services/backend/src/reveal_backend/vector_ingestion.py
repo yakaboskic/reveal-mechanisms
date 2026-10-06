@@ -96,6 +96,43 @@ class VectorRegistry:
                 batches = tx.get_many('vector_batch', [digest([identity, key]) for key in state['batches']])
                 for result in batches.values(): state['verified_batches'][result['data']['batch']] = result['data']['checksums']
         return state
+    def serving(self, identity, *, summary=False, context_ids=None):
+        """Read only serving fields, projecting large import-only arrays on the DB.
+
+        Counts come from the same immutable verified row as the run pins. Full
+        manifests remain available through get() for import, audit and export.
+        """
+        fields = ('snapshot_id', 'status', 'environment', 'run', 'mapping_run', 'geneset_import',
+            'dismech_import', 'context_run_id', 'context_config', 'policy_version', 'embedding_space',
+            'id_scheme', 'reference_generation_id', 'gene_set_embedding_space', 'export_ref',
+            *NAMESPACE_KEYS.values(), *(('factors', 'contexts') if not summary else ()))
+        pairs = [f"'{key}',JSON_EXTRACT(payload,'$.{key}')" for key in fields]
+        counts = ','.join(f"'{kind}',JSON_LENGTH(JSON_EXTRACT(payload,'$.{kind}'))" for kind in KINDS)
+        with self.repo.read_transaction() as tx:
+            # SQLite's JSON extension spells the array-length function differently.
+            if tx.sqlite: counts = counts.replace('JSON_LENGTH(', 'JSON_ARRAY_LENGTH(')
+            parameters = []
+            if context_ids is not None and not summary:
+                # Contexts of unrelated diseases dominate the full manifest.
+                # Select exact required source IDs in SQL, retaining full rows.
+                selected = json.dumps(sorted(set(context_ids)), separators=(',', ':'))
+                if tx.sqlite:
+                    contexts = "(SELECT JSON_GROUP_ARRAY(JSON(c.value)) FROM JSON_EACH(payload,'$.contexts') c WHERE JSON_EXTRACT(c.value,'$.binding.source_id') IN (SELECT value FROM JSON_EACH(%s)))"
+                else:
+                    contexts = "(SELECT JSON_ARRAYAGG(c.item) FROM JSON_TABLE(payload,'$.contexts[*]' COLUMNS(item JSON PATH '$')) c WHERE BINARY JSON_UNQUOTE(JSON_EXTRACT(c.item,'$.binding.source_id')) IN (SELECT BINARY JSON_UNQUOTE(chosen.item) FROM JSON_TABLE(%s,'$[*]' COLUMNS(item JSON PATH '$')) chosen))"
+                pairs[pairs.index("'contexts',JSON_EXTRACT(payload,'$.contexts')")] = "'contexts',COALESCE("+contexts+",JSON_ARRAY())"
+                parameters.append(selected)
+            pairs.extend([f"'_serving_counts',JSON_OBJECT({counts})",
+                "'_serving_verified',JSON_EXTRACT(payload,'$.verification.passed')"])
+            row = tx.execute('SELECT JSON_OBJECT('+','.join(pairs)+') FROM reveal_records WHERE kind=%s AND id=%s',
+                (*parameters, 'vector_snapshot', identity)).fetchone()
+        state = json.loads(row[0]) if row else None
+        if (not state or state['snapshot_id'] != identity or state['status'] != 'complete'
+                or state['environment'] != self.scope or state['_serving_verified'] != True):
+            raise VectorUnavailable('No verified Vector snapshot in this environment')
+        state = {key: value for key, value in state.items() if value is not None}
+        state['_serving_counts'] = {key: value for key, value in state['_serving_counts'].items() if value is not None}
+        return state
     def batch_done(self, identity, key):
         with self.repo.read_transaction() as tx:
             return tx.get('vector_batch', digest([identity, key])) is not None

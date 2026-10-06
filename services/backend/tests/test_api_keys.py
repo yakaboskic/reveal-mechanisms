@@ -39,7 +39,9 @@ def service(monkeypatch, tmp_path):
         for identity in (owner, other):
             me = {**api.fresh_principal('anonymous'), 'user_id': identity}
             tx.put('principal', identity, identity, {'me': me, 'retired': False})
-    catalog = SimpleNamespace(load=lambda: None, validate_composer=lambda *args, **kwargs: None,
+    catalog = SimpleNamespace(load=lambda: None, readiness=lambda: {
+        'dismech_import': 'test-dismech', 'mapping_run': 'test-mapping', 'embedding_run': 'test-embedding',
+        'gaps': 0, 'mapped_factors': 0}, validate_composer=lambda *args, **kwargs: None,
         selected=lambda reference: reference, dismech_import='source', gaps={}, mapping_run='mapping', factors={}, embedding_run='embedding')
     monkeypatch.setattr(api, 'repo', repo); monkeypatch.setattr(api, 'catalog', catalog)
     with TestClient(api.app) as client:

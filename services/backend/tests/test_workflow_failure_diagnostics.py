@@ -98,6 +98,29 @@ class WorkflowFailureDiagnosticsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(files['validated/account-0.json'], b'{"assembled":"draft"}')
         self.assertEqual(files['attempt-2/output/output/account-1.json'], b'{"original":"draft"}')
 
+    async def test_agent_timeout_never_announces_scientific_validation(self):
+        job, payload = self.seed()
+        reason = 'Agent reached its 900-second execution limit while waiting for a durable evidence operation. No output was accepted.'
+        async def validate(payload, token, job, execution, root):
+            _, queue, current = self.engine.context(payload)
+            request = ExecutionRequest(job_id=job['id'], attempt=2, kind='research',
+                input_path=root/'input.json', output_dir=root/'attempt-2/output', selected_graphs=())
+            result = ExecutionResult('failed', request.output_dir, reason=reason)
+            with (patch.object(self.engine, 'verified_capture', return_value={}),
+                  patch('reveal_backend.workflow_execution.captured_result', return_value=result),
+                  patch('reveal_backend.workflow_execution.validate_execution_ledger', side_effect=AssertionError('Failed authoring cannot validate'))):
+                return await self.engine.validate(payload, token, job, queue, current, root, request, {})
+        with patch.object(self.engine, 'operate', side_effect=validate):
+            result = await self.engine.step(payload, 0)
+        current, _, _ = self.saved(job)
+        self.assertTrue(result['done'])
+        self.assertEqual(current['stage'], 'authoring_account')
+        self.assertEqual(current['failure']['message'], reason)
+        with self.repo.read_transaction() as tx:
+            events = [row['data'] for row in tx.list('event') if row['data']['job_id'] == job['id']]
+        self.assertNotIn('validating', [event['stage'] for event in events])
+        self.assertTrue(any(event['stage'] == 'collecting_output' for event in events))
+
     async def test_diagnostic_message_is_redacted_then_bounded_and_phase_is_classified(self):
         for phase, error, code in (
                 ('prepare', ValueError('source preparation'), 'EVIDENCE_PREPARATION_FAILED'),

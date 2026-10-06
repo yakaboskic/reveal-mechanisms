@@ -19,7 +19,7 @@
 .local-workspace-setup{text-align:center}
 .local-workspace-opening{display:flex;align-items:center;justify-content:center;gap:10px;margin:90px 0;color:var(--muted,#6b7e94)}
 .local-work-download-page .local-agent-choice{display:inline-flex;gap:0;margin:0 0 22px;border:1px solid var(--line,#dce4ef);border-radius:9px;padding:4px;background:var(--soft,#f3f6fa)}
-.local-work-download-page .local-agent-choice label{position:relative;justify-content:center;min-width:144px;padding:9px 22px;border-color:transparent;border-radius:6px;background:transparent;font-size:14px}
+.local-work-download-page .local-agent-choice label{position:relative;justify-content:center;min-width:144px;padding:9px 12px;border-color:transparent;border-radius:6px;background:transparent;font-size:14px}
 .local-work-download-page .local-agent-choice label.selected{border-color:var(--line,#dce4ef);background:var(--paper,#fff);box-shadow:0 1px 3px #25364d0b;color:var(--teal,#3568b4)}
 .local-work-download-page .local-agent-choice input,.local-sr-only{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .local-work-download-page .local-agent-choice label:has(input:focus-visible){outline:2px solid var(--teal,#3568b4);outline-offset:2px}
@@ -45,4 +45,9 @@
 .local-additional-content h2{font-size:15px}
 @keyframes local-workspace-spin{to{transform:rotate(360deg)}}
 @media(prefers-reduced-motion:reduce){.local-workspace-spinner{animation:none}}
-@media(max-width:600px){.local-work-download-page>nav{margin-bottom:42px}.local-work-download-page .local-workspace-question h1{font-size:17px}.local-work-download-page .local-agent-choice label{min-width:132px;padding:9px 18px}.local-work-download-page .local-download-primary{width:274px}}
+@media(max-width:600px){.local-work-download-page>nav{margin-bottom:42px}.local-work-download-page .local-workspace-question h1{font-size:17px}.local-work-download-page .local-agent-choice label{min-width:132px;padding:9px 10px}.local-work-download-page .local-download-primary{width:274px}}
+
+.local-launch-command{display:flex;align-items:center;gap:8px;margin-top:12px;padding:8px 8px 8px 12px;border:1px solid var(--line,#e0e7f0);border-radius:8px;background:var(--paper,#fff)}
+.local-work-download-page .local-launch-command pre{flex:1;min-width:0;margin:0;padding:0;border:0;background:none;font-size:13px;overflow-wrap:anywhere}
+.local-work-download-page .local-launch-command button{display:flex;align-items:center;gap:5px;flex-shrink:0;border:0;padding:6px 8px;font-size:11px;min-height:32px;color:var(--muted,#6b7e94)}
+.local-agent-logo{display:block;width:20px;height:20px;object-fit:contain;flex-shrink:0}

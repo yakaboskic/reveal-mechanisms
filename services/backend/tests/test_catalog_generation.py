@@ -156,11 +156,19 @@ class Provider:
 class Vectors:
     """The environment's Vector registry: immutable snapshots plus the active pointer."""
     def __init__(self): self.snapshots, self.active, self.provider = {}, None, Provider()
-    def registry(self):
+    def registry(self, repo=None):
         vectors = self
         class Registry:
             def active_identity(self): return vectors.active
             def get(self, identity): return deepcopy(vectors.snapshots[identity])
+            def serving(self, identity, *, summary=False, context_ids=None):
+                state = self.get(identity)
+                state['_serving_counts'] = {kind: len(state[kind]) for kind in ('factors', 'contexts', 'gene_sets', 'collections') if kind in state}
+                state['_serving_verified'] = True
+                if context_ids is not None: state['contexts'] = [row for row in state['contexts'] if row['binding']['source_id'] in context_ids]
+                for kind in ('factors', 'contexts', 'gene_sets', 'collections') if summary else ('gene_sets', 'collections'):
+                    state.pop(kind, None)
+                return state
         return Registry()
     def index_class(self):
         provider = self.provider
@@ -241,6 +249,8 @@ class CatalogGenerationTests(unittest.TestCase):
         environment = patch.dict(os.environ, {'REVEAL_RETRIEVAL_BACKEND': 'upstash'})
         environment.start(); self.addCleanup(environment.stop)
         for name in PINS: os.environ.pop(name, None)
+        vector_client = patch('reveal_backend.vector_retrieval.client_from_environment', return_value=self.vectors.provider)
+        vector_client.start(); self.addCleanup(vector_client.stop)
         for target, value in [('mysql_connection', self.db), ('Repository', lambda: self.repo), ('DapperRuntime', runtime),
                               ('VectorRegistry', self.vectors.registry), ('UpstashFactorIndex', self.vectors.index_class()),
                               ('monotonic', self.clock)]:
@@ -309,6 +319,134 @@ class CatalogGenerationTests(unittest.TestCase):
         return catalog
 
     def queried(self, table): return any(table in statement for statement in self.db.statements)
+
+    def test_readiness_verifies_pins_and_counts_without_loading_catalog_or_vectors(self):
+        self.activate(KPN1, KPN_MODEL, self.kpn1_snapshot)
+        self.db.statements.clear()
+        catalog = Catalog()
+        with patch('reveal_backend.vector_retrieval.client_from_environment', return_value=self.vectors.provider), \
+             patch.object(catalog, 'load', side_effect=AssertionError('readiness must not preload')):
+            result = catalog.readiness()
+            calls = len(self.db.statements)
+            self.assertEqual(catalog.readiness(), result)
+            self.clock.now += GENERATION_TTL_SECONDS + 1
+            with patch.object(self.vectors.provider, 'info', side_effect=AssertionError('unchanged pins need no Vector call')):
+                self.assertEqual(catalog.readiness(), result)
+        self.assertEqual(result, {'dismech_import': DISMECH_IMPORT, 'gaps': 2, 'mapping_run': KPN1,
+            'mapped_factors': 3, 'embedding_run': EMBEDDING_RUN})
+        self.assertEqual(len(self.db.statements), calls)
+        self.assertFalse(catalog.loaded)
+        self.assertEqual(self.runtimes, [])
+        self.assertFalse(any('payload' in sql or 'f.factor_key' in sql for sql in self.db.statements))
+
+    def test_plain_browse_and_selected_bindings_do_not_load_semantic_corpora(self):
+        self.activate(KPN1, KPN_MODEL, self.kpn1_snapshot)
+        original = self.vectors.registry
+        calls = []
+        def registry(*args):
+            result = original(*args); serving = result.serving
+            def project(identity, **kwargs):
+                calls.append(kwargs)
+                return serving(identity, **kwargs)
+            result.serving = project
+            return result
+        with patch.object(catalog_module, 'VectorRegistry', registry):
+            catalog = self.load()
+            catalog.search_gaps('insulin')
+            catalog.search_factors('insulin', 'lexical')
+            catalog.selected(catalog.by_source[LINKED_GAP['id']]['source'] | {'id': LINKED_GAP['id']})
+            self.assertIsNone(catalog.index)
+            self.assertTrue(all(call.get('summary') for call in calls))
+            catalog.suggest_factors([(MECHANISM['id'], MECHANISM['description'])], 'semantic', 2, (), precomputed=True)
+            self.assertIsNotNone(catalog.index)
+            self.assertEqual(sum(not call.get('summary', False) for call in calls), 1)
+
+    def test_lazy_index_checks_exact_source_revisions_before_semantic_use(self):
+        self.activate(KPN1, KPN_MODEL, self.kpn1_snapshot)
+        snapshot = self.vectors.snapshots[self.kpn1_snapshot]
+        for kind, key in (('factors', 'source_revision'), ('contexts', 'input_text')):
+            binding = snapshot[kind][0]['binding']; original = binding[key]
+            try:
+                binding[key] = 'changed'
+                catalog = self.load()
+                self.assertIsNone(catalog.index)
+                with self.assertRaises(Problem) as error: catalog.retrieval_index()
+                self.assertEqual(error.exception.code, 'SEMANTIC_SEARCH_UNAVAILABLE')
+                self.assertIsNone(catalog.index)
+            finally: binding[key] = original
+
+    def test_catalog_registry_uses_explicit_repository_and_wraps_missing_snapshot(self):
+        original = self.vectors.registry
+        with patch.object(catalog_module, 'VectorRegistry', side_effect=original) as registry:
+            catalog = Catalog(self.repo); catalog.load(); catalog.retrieval_index()
+        self.assertTrue(all(call.args == (self.repo,) for call in registry.call_args_list))
+        with patch.object(catalog_module, 'VectorRegistry', side_effect=catalog_module.VectorUnavailable('missing')):
+            with self.assertRaises(Problem) as error: Catalog(self.repo).load()
+        self.assertEqual(error.exception.status, 503)
+        self.assertEqual(error.exception.code, 'SEMANTIC_SEARCH_UNAVAILABLE')
+
+    def test_generation_cutover_cannot_publish_old_lazy_index(self):
+        self.activate(KPN1, KPN_MODEL, self.kpn1_snapshot)
+        catalog = self.load()
+        self.insert_generation(KPN2, KPN_KIND, KPN_MODEL, factors=KPN_FACTORS)
+        second = self.kpn_snapshot(KPN2, KPN_FACTORS)
+        entered, release = threading.Event(), threading.Event()
+        original = self.vectors.registry; failures = []
+        def registry(*args):
+            result = original(*args); serving = result.serving
+            def project(identity, **kwargs):
+                if not kwargs.get('summary'):
+                    entered.set()
+                    if not release.wait(5): raise AssertionError('cutover test did not release')
+                return serving(identity, **kwargs)
+            result.serving = project
+            return result
+        def initialize():
+            try: catalog.retrieval_index()
+            except Exception as error: failures.append(error)
+        with patch.object(catalog_module, 'VectorRegistry', registry):
+            worker = threading.Thread(target=initialize); worker.start()
+            try:
+                self.assertTrue(entered.wait(5))
+                self.activate(KPN2, KPN_MODEL, second, previous=KPN1)
+                self.clock.now += GENERATION_TTL_SECONDS + 1
+                self.assertTrue(catalog.refresh_if_changed())
+            finally: release.set(); worker.join(5)
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(len(failures), 1)
+        self.assertIsInstance(failures[0], Problem)
+        self.assertEqual(catalog.reference_generation_id, KPN2)
+        self.assertIsNone(catalog.index)
+        self.assertEqual(catalog.vector_indexes, {})
+        self.assertEqual(catalog.retrieval_index().snapshot['reference_generation_id'], KPN2)
+
+    def test_readiness_fails_closed_on_generation_snapshot_or_provider_mismatch(self):
+        self.activate(KPN1, KPN_MODEL)
+        with patch('reveal_backend.vector_retrieval.client_from_environment', return_value=self.vectors.provider):
+            with self.assertRaises(Problem) as error: Catalog().readiness()
+            self.assertEqual(error.exception.code, 'SEMANTIC_SEARCH_UNAVAILABLE')
+            self.vectors.active = self.kpn1_snapshot
+            self.vectors.provider.rows[self.vectors.snapshots[self.kpn1_snapshot]['gene_set_namespace']].clear()
+            with self.assertRaises(Problem) as error: Catalog().readiness()
+            self.assertEqual(error.exception.code, 'SEMANTIC_SEARCH_UNAVAILABLE')
+
+    def test_readiness_refreshes_pins_after_bounded_cache_lifetime(self):
+        catalog = Catalog()
+        with patch('reveal_backend.vector_retrieval.client_from_environment', return_value=self.vectors.provider):
+            self.assertEqual(catalog.readiness()['mapping_run'], MAPPING_RUN)
+            self.activate(KPN1, KPN_MODEL, self.kpn1_snapshot)
+            self.clock.now += GENERATION_TTL_SECONDS + 1
+            self.assertEqual(catalog.readiness()['mapping_run'], KPN1)
+        self.assertFalse(catalog.loaded)
+
+    def test_readiness_rechecks_provider_with_unchanged_pins(self):
+        catalog = Catalog()
+        with patch('reveal_backend.vector_retrieval.client_from_environment', return_value=self.vectors.provider):
+            catalog.readiness()
+            self.clock.now += catalog_module.READINESS_VERIFICATION_TTL_SECONDS + 1
+            with patch.object(self.vectors.provider, 'info', side_effect=TimeoutError('provider unavailable')):
+                with self.assertRaises(Problem) as error: catalog.readiness()
+            self.assertEqual(error.exception.code, 'SEMANTIC_SEARCH_UNAVAILABLE')
 
     # Legacy mode --------------------------------------------------------------------------
 

@@ -253,7 +253,7 @@ class WorkflowExecution:
                     async with asyncio.timeout(int(setting('REVEAL_WORKFLOW_STEP_TIMEOUT_SECONDS', '360'))):
                         if execution['phase'] == 'validate':
                             await run_sync(self.activity, payload, token, 'stage',
-                                {'stage':'validating','message':'Restoring saved evidence for validation.'})
+                                {'stage':'collecting_output','message':'Restoring the saved execution result and evidence.'})
                         if execution.get('workspace') and scratch:
                             await self.restore_workspace(execution['workspace'], root)
                         workspace_ready = True
@@ -499,12 +499,16 @@ class WorkflowExecution:
     async def validate(self, payload, token, job, queue, execution, root, request, inputs):
         marker = await run_sync(self.verified_capture, payload, execution, request)
         result = captured_result(request, execution['box'], marker)
-        await run_sync(self.activity, payload, token, 'stage', {'stage': 'validating', 'message': 'Checking source fidelity, identities and captured provenance.'})
         if result.status not in ('succeeded', 'insufficient_evidence'):
             from .job_failures import authoring_failure
+            if result.status == 'failed':
+                await run_sync(self.activity, payload, token, 'stage', {
+                    'stage': 'authoring_paragraph' if job['kind'] == 'paragraph' else 'authoring_account',
+                    'state': 'failed', 'message': 'Agent execution stopped before a completed output was available.'})
             await run_sync(jobs.finish, self.repository, job['id'], token, result.status,
                                    failure=authoring_failure(result, request) if result.status == 'failed' else None)
             return {'next_phase': 'complete', 'done': True}
+        await run_sync(self.activity, payload, token, 'stage', {'stage': 'validating', 'message': 'Checking source fidelity, identities and captured provenance.'})
         await run_sync(validate_execution_ledger, result, request, queue['dispatch_input']['model'])
         if result.status == 'insufficient_evidence': return {'next_phase': 'commit', 'outcome': True}
         if job['kind'] == 'analysis':

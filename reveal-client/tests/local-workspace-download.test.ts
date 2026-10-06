@@ -15,6 +15,8 @@ test("ready workspace centers the question, two agent choices and a single enabl
   const html = render();
   assert.match(html, /<h1>Do these mechanisms converge\?<\/h1>/);
   assert.equal((html.match(/type="radio"/g) || []).length, 2);
+  assert.match(html, /src="\/agent-logos\/codex.png"/);
+  assert.match(html, /src="\/agent-logos\/claude.svg"/);
   assert.equal((html.match(/<button /g) || []).length, 1);
   assert.match(html, /<button class="local-download-primary">Download workspace<\/button>/);
   assert.doesNotMatch(html, /role="status"|disabled|spinner|manual setup|frozen inputs/i);
@@ -47,6 +49,8 @@ test("success gives the command for the actual downloaded agent and a closed wor
   const success = render({ client: "codex", downloadedClient: "claude_code" });
   assert.match(success, /Workspace downloaded/);
   assert.match(success, /python3 start.py claude/);
+  assert.match(success, /aria-label="Copy launch command"/);
+  assert.match(success, /class="local-launch-command"/);
   assert.doesNotMatch(success, /python3 start.py codex/);
   const closed = render({ state: "closed" });
   assert.match(closed, /<button class="local-download-primary" disabled="">Workspace closed/);

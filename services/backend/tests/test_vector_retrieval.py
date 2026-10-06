@@ -12,7 +12,7 @@ from reveal_backend.catalog import Catalog, check_vector_readiness
 from reveal_backend.auth import Problem
 from reveal_backend.repository import Repository, digest
 from reveal_backend.vector_ingestion import VectorRegistry, import_batch, save_export, verify_snapshot
-from reveal_backend.vector_retrieval import (POLICY_VERSION, UpstashFactorIndex, VectorUnavailable,
+from reveal_backend.vector_retrieval import (POLICY_VERSION, UpstashFactorIndex, VectorUnavailable, check_snapshot_readiness,
     cosine_score, embedding_space, metadata, retrieve_native, vector_checksum)
 
 
@@ -72,6 +72,35 @@ def fixture(*, many=False):
 
 
 class RetrievalTests(unittest.TestCase):
+    def test_registry_serving_projects_large_import_fields_and_preserves_exact_bindings(self):
+        snapshot, provider, _ = fixture()
+        snapshot.update(verification={'passed': True, 'large_audit': 'a'*100_000},
+            verified_batches={'large_bookkeeping': 'b'*100_000}, batches={'large_inventory': 'c'*100_000})
+        with TemporaryDirectory() as directory:
+            repo = Repository(Path(directory) / 'registry.sqlite3'); repo.migrate()
+            with repo.transaction() as tx: tx.put('vector_snapshot', snapshot['snapshot_id'], 'catalog', snapshot)
+            registry = VectorRegistry(repo, environment_name='local')
+            with patch.object(registry, 'get', side_effect=AssertionError('must not read full snapshot')):
+                serving = registry.serving(snapshot['snapshot_id'])
+                summary = registry.serving(snapshot['snapshot_id'], summary=True)
+                none = registry.serving(snapshot['snapshot_id'], context_ids=[])
+                selected = registry.serving(snapshot['snapshot_id'], context_ids=['context'])
+            self.assertEqual(serving['factors'], snapshot['factors'])
+            self.assertEqual(serving['contexts'], snapshot['contexts'])
+            self.assertEqual(selected['contexts'], snapshot['contexts'])
+            self.assertEqual(none['contexts'], [])
+            self.assertEqual(none['_serving_counts']['contexts'], 1)
+            self.assertEqual(summary['_serving_counts'], {'factors': 4, 'contexts': 1})
+            self.assertFalse({'verification', 'verified_batches', 'batches'} & serving.keys())
+            self.assertFalse({'factors', 'contexts', 'gene_sets', 'collections'} & summary.keys())
+            check_snapshot_readiness(summary, client=provider)
+            UpstashFactorIndex(serving, client=provider).check()
+            provider.rows[snapshot['context_namespace']].clear()
+            with self.assertRaises(VectorUnavailable): check_snapshot_readiness(summary, client=provider)
+            snapshot['verification']['passed'] = False
+            with repo.transaction() as tx: tx.put('vector_snapshot', snapshot['snapshot_id'], 'catalog', snapshot)
+            with self.assertRaises(VectorUnavailable): registry.serving(snapshot['snapshot_id'])
+
     def test_embedding_space_tolerates_mysql_json_float_presentation_only(self):
         snapshot, _, _ = fixture()
         run = deepcopy(snapshot['run'])

@@ -58,6 +58,7 @@ class ResearchAnonymousTests(unittest.TestCase):
         self.service = ResearchWorkService(self.repo, data_service=self.data.service)
         # Durable processing is invoked explicitly below, without agent execution.
         self.service.kick = lambda work_id: None
+        self.service.resume_operation = lambda operation_id, **options: None
         self.app = self.make_app()
         self.client = TestClient(self.app, base_url=BASE)
         self.client.__enter__(); self.addCleanup(self.client.__exit__, None, None, None)

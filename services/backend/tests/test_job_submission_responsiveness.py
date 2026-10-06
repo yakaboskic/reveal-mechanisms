@@ -22,6 +22,10 @@ class CachedCatalog:
 
     def load(self): pass
 
+    def readiness(self):
+        return {'dismech_import': self.dismech_import, 'gaps': len(self.gaps), 'mapping_run': self.mapping_run,
+            'mapped_factors': len(self.factors), 'embedding_run': self.embedding_run}
+
     def selected(self, reference): return reference
 
 

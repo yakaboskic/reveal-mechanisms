@@ -254,15 +254,14 @@ def admin_cell(table: str, key: str = Query(..., max_length=4096), column: str =
 def ready():
     from .api_keys import configuration as api_key_configuration
     api_key_configuration()
-    database = repo.readiness(); catalog.load()
+    database = repo.readiness(); sources = catalog.readiness()
     from .artifact_store import s3_enabled, store
     if s3_enabled(): store().check()
     # Health probes must never generate recurring Redis commands. Notifications
     # are observed from subscriber state; authoritative API writes survive a
     # notification outage and retain their durable publication intent.
     from .redis_notifications import configuration
-    return {'status': 'ready', **database, 'sources': {'dismech_import': catalog.dismech_import, 'gaps': len(catalog.gaps),
-        'mapping_run': catalog.mapping_run, 'mapped_factors': len(catalog.factors), 'embedding_run': catalog.embedding_run},
+    return {'status': 'ready', **database, 'sources': sources,
         'execution_mode': os.getenv('REVEAL_EXECUTION_MODE','box'), 'job_transport':jobs.transport(),
         'notifications':{'transport':configuration()[0], 'delivery':'pubsub', 'polling':False}}
 

@@ -42,6 +42,11 @@ class InlinePreparation(ResearchWorkService):
                      if r['data']['local_work_id']==work_id and r['data']['kind']=='prepare' and r['data']['state']=='received']
         for identity in pending: self.run_operation(identity)
 
+    def resume_operation(self, operation_id, *, lease_token=None):
+        with self.repo.read_transaction() as tx:
+            row = tx.get('research_operation', operation_id)
+        if row and row['data']['kind'] == 'prepare': self.run_operation(operation_id)
+
 
 class ResearchHTTPTests(unittest.TestCase):
     def setUp(self):

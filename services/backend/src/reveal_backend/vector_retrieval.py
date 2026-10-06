@@ -143,6 +143,37 @@ class StoredContextVectors(Mapping):
     def __getitem__(self, identity): return self.index.context_vectors([identity])[0]
 
 
+def check_snapshot_readiness(snapshot, *, client=None):
+    """Check pinned serving metadata and provider coverage without loading corpora."""
+    run = snapshot['run']; kinds = snapshot_kinds(snapshot)
+    counts = snapshot.get('_serving_counts') or {kind: len(snapshot[kind]) for kind in kinds}
+    if (snapshot.get('status') != 'complete' or snapshot.get('policy_version') != POLICY_VERSION
+            or snapshot.get('embedding_space') != embedding_space(run, snapshot['context_config'])
+            or any(type(counts.get(kind)) is not int or counts[kind] <= 0 for kind in kinds)
+            or any(not isinstance(snapshot.get(NAMESPACE_KEYS[kind]), str)
+                or not NAMESPACE_RE.fullmatch(snapshot[NAMESPACE_KEYS[kind]]) for kind in kinds)):
+        raise VectorUnavailable('Vector snapshot is incomplete or incompatible')
+    if 'id_scheme' in snapshot or len(kinds) > 2:
+        if (snapshot.get('id_scheme') != ID_SCHEME or kinds != list(KINDS)
+                or len({snapshot[NAMESPACE_KEYS[kind]] for kind in kinds}) != len(KINDS)
+                or not all(re.fullmatch('[a-f0-9]{64}', str(snapshot.get(key) or ''))
+                    for key in ('reference_generation_id', 'gene_set_embedding_space'))):
+            raise VectorUnavailable('Vector snapshot reference corpus is incomplete or incompatible')
+    try:
+        info = (client if client is not None else client_from_environment()).info()
+        if value(info, 'dimension') != run['dimensions'] or str(value(info, 'similarity_function')).upper() != 'COSINE':
+            raise VectorUnavailable('Vector index dimensions or metric are incompatible')
+        namespaces = value(info, 'namespaces', {})
+        for kind in kinds:
+            record = namespaces.get(snapshot[NAMESPACE_KEYS[kind]])
+            if record is None or value(record, 'vector_count') != counts[kind] or value(record, 'pending_vector_count', 0):
+                raise VectorUnavailable('Vector namespace coverage is not ready')
+    except VectorUnavailable:
+        raise
+    except Exception as error:
+        raise VectorUnavailable('Upstash Vector readiness check failed') from error
+
+
 class UpstashFactorIndex:
     candidate_limit = MAX_CANDIDATES
 
@@ -161,7 +192,10 @@ class UpstashFactorIndex:
             namespaces = {snapshot[NAMESPACE_KEYS[kind]] for kind in self.kinds}
             valid = (snapshot.get('id_scheme') == ID_SCHEME and self.kinds == list(KINDS) and len(namespaces) == len(KINDS)
                      and all(re.fullmatch('[a-f0-9]{64}', str(snapshot.get(key) or '')) for key in ('reference_generation_id', 'gene_set_embedding_space'))
-                     and all(snapshot.get(kind) and len({row['id'] for row in snapshot[kind]}) == len(snapshot[kind]) for kind in REFERENCE_KINDS))
+                     and all((snapshot.get('_serving_verified') == True and
+                         type(snapshot.get('_serving_counts', {}).get(kind)) is int and snapshot['_serving_counts'][kind] > 0)
+                         if kind not in snapshot else (snapshot[kind] and len({row['id'] for row in snapshot[kind]}) == len(snapshot[kind]))
+                         for kind in REFERENCE_KINDS))
             if not valid: raise VectorUnavailable('Vector snapshot reference corpus is incomplete or incompatible')
         self.client = client if client is not None else client_from_environment()
         self.factors = [row['binding'] for row in snapshot['factors']]
@@ -182,20 +216,7 @@ class UpstashFactorIndex:
                          for identity, row in self.context_by_id.items()}, 'vectors': StoredContextVectors(self)}
 
     def check(self):
-        try:
-            info = self.client.info()
-            if value(info, 'dimension') != self.run['dimensions'] or str(value(info, 'similarity_function')).upper() != 'COSINE':
-                raise VectorUnavailable('Vector index dimensions or metric are incompatible')
-            namespaces = value(info, 'namespaces', {})
-            for kind in self.kinds:
-                record = namespaces.get(self.snapshot[NAMESPACE_KEYS[kind]])
-                expected = len(self.snapshot[kind])
-                if record is None or value(record, 'vector_count') != expected or value(record, 'pending_vector_count', 0):
-                    raise VectorUnavailable('Vector namespace coverage is not ready')
-        except VectorUnavailable:
-            raise
-        except Exception as error:
-            raise VectorUnavailable('Upstash Vector readiness check failed') from error
+        check_snapshot_readiness(self.snapshot, client=self.client)
 
     def _fetch(self, rows, namespace):
         if not rows: return np.empty((0, self.run['dimensions']))

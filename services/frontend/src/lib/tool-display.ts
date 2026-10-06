@@ -82,9 +82,20 @@ function argumentFields(raw: string): [string, string][] | null {
   return fields;
 }
 
+const unavailableArguments = "Arguments unavailable for this tool.";
+
+/** Historical display placeholders are status text, never tool input. */
+export function recordedToolArguments(...candidates: (string | null | undefined)[]) {
+  const argumentsText = candidates.find(value => value && value.trim() !== unavailableArguments) || null;
+  const notice = argumentsText ? null : candidates.some(value => value?.trim() === unavailableArguments)
+    ? "This saved event did not include display arguments."
+    : "Arguments were not recorded.";
+  return { argumentsText, notice };
+}
+
 export function toolInvocation(name: string, argumentsText: string | null | undefined, compact = true) {
   const title = prettyToolName(name);
-  if (!argumentsText) return `${title}(…)`;
+  if (!argumentsText || argumentsText.trim() === unavailableArguments) return `${title}(…)`;
   const fields = argumentFields(argumentsText);
   if (!fields) return `${title}(\n  ${compact ? shorten(argumentsText.replace(/\s+/g, " ")) : argumentsText}\n)`;
   if (!fields.length) return `${title}()`;

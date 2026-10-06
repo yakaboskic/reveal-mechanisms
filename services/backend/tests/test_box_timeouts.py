@@ -203,6 +203,24 @@ class KGTimeoutTests(unittest.TestCase):
 
 
 class DraftAndRuntimeTests(unittest.TestCase):
+    def test_timeout_reason_tracks_observable_polling_without_guessing_authoring(self):
+        request = {'kind': 'research', 'timeout_seconds': 900}
+        tool = {'tool_name': 'mcp__reveal__get_operation'}
+        waiting = box_remote.observable_activity('tool_call', tool, {'input': {'operation_id': 'operation-1'}})
+        self.assertIn('waiting for a durable evidence operation', box_remote.deadline_reason(request, waiting))
+        result = {'structuredContent': {'operation_id': 'operation-1', 'state': 'running', 'detail': 'PRIVATE'}}
+        waiting = box_remote.observable_activity('tool_result', tool, {'result': result})
+        self.assertEqual(waiting['operation'], {'operation_id': 'operation-1', 'state': 'running'})
+        self.assertNotIn('PRIVATE', json.dumps(waiting))
+        self.assertIn('waiting for a durable evidence operation', box_remote.deadline_reason(request, waiting))
+        result['structuredContent']['state'] = 'succeeded'
+        done = box_remote.observable_activity('tool_result', tool, {'result': result})
+        self.assertNotIn('waiting', box_remote.deadline_reason(request, done))
+        self.assertIn('during research', box_remote.deadline_reason(request, done))
+        lint = {'kind': 'tool_call', 'tool_name': 'mcp__reveal__lint_account'}
+        self.assertIn('checking the draft account and sources', box_remote.deadline_reason(request, lint))
+        self.assertIn('writing the research statement', box_remote.deadline_reason({'kind': 'paragraph', 'timeout_seconds': 900}))
+
     def test_prose_mentions_do_not_hydrate_unreachable_nodes_but_exact_links_do(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary); state = root / 'state'; state.mkdir(); output = root / 'output'; output.mkdir()

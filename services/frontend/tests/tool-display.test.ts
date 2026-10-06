@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { prettyRecordedValue, prettyToolName, toolInvocation } from "../src/lib/tool-display";
+import { prettyRecordedValue, prettyToolName, recordedToolArguments, toolInvocation } from "../src/lib/tool-display";
 import { groupedWarnings } from "../src/lib/activity";
 import type { Schema } from "../src/lib/client";
 
@@ -49,4 +49,23 @@ test("repeated snapshot and streamed warnings have unique identities and are cou
   const events = ["same", "same", "live"].map((message, i) => ({id:String(i), message, event_type:"warning"}) as Schema<"JobEvent">);
   assert.deepEqual(groupedWarnings(saved, events), [{message:"first",count:1}, {message:"same",count:3}, {message:"live",count:1}]);
   assert.deepEqual(saved, ["first", "same", "same", "same"]);
+});
+
+
+test("historical unavailable-argument messages stay explanatory text instead of invented tool inputs", () => {
+  const placeholder = "Arguments unavailable for this tool.";
+  const original = { display_arguments: placeholder };
+  assert.equal(toolInvocation("mcp__reveal__get_operation", placeholder), "GetOperation(…)");
+  assert.deepEqual(recordedToolArguments(original.display_arguments), {
+    argumentsText: null, notice: "This saved event did not include display arguments.",
+  });
+  assert.deepEqual(original, { display_arguments: placeholder });
+  assert.deepEqual(recordedToolArguments(null), { argumentsText: null, notice: "Arguments were not recorded." });
+});
+
+test("an available result argument preview wins over an earlier historical placeholder", () => {
+  const args = '{"operation_id":"b7ae2764-1936-4c3b-b984-9b32bae379eb"}';
+  assert.deepEqual(recordedToolArguments("Arguments unavailable for this tool.", args), { argumentsText: args, notice: null });
+  const literal = '{"query":"Arguments unavailable for this tool."}';
+  assert.deepEqual(recordedToolArguments(literal), { argumentsText: literal, notice: null });
 });

@@ -16,15 +16,19 @@ import os
 from pathlib import Path
 import secrets
 import tempfile
+import threading
 from urllib.parse import urlsplit
 
-from .auth import Problem, owned
+from .auth import Problem, owned, require_owned
 from .repository import canonical, digest, now, uid
 from .runtime_config import ROOT, CURRENT_DAPPER_SNAPSHOT, setting
+from .runtime_metrics import measure
 from . import user_inputs
 
 POOL = ThreadPoolExecutor(max_workers=4, thread_name_prefix='reveal-research')
 RETAINERS = ThreadPoolExecutor(max_workers=4, thread_name_prefix='reveal-seed-retention')
+_scheduled_operations = set()
+_scheduled_operations_lock = threading.Lock()
 TERMINAL = {'succeeded', 'accepted', 'rejected', 'failed', 'cancelled'}
 MAX_ARTIFACT_BYTES = 8_000_000
 
@@ -63,7 +67,10 @@ def public_base():
 
 
 def valid_principal(tx, owner):
-    row = tx.get('principal', owner)
+    return principal_record(tx.get('principal', owner))
+
+
+def principal_record(row):
     if not row or row['data'].get('retired'):
         raise Problem(401, 'SESSION_EXPIRED', 'This workspace is no longer active.')
     me = row['data']['me']
@@ -151,22 +158,28 @@ def authenticate(tx, authorization, *, write=False, delegated=False):
         raise Problem(401, 'MCP_AUTH_REQUIRED', 'Connect using a Reveal research credential.')
     row = tx.get('research_access', hashlib.sha256(authorization[7:].encode()).hexdigest())
     if not row: raise Problem(401, 'MCP_AUTH_REQUIRED', 'The research credential is invalid.')
-    grant = row['data']; owner = row['owner']; me = valid_principal(tx, owner)
+    grant = row['data']; owner = row['owner']
+    records = tx.get_records((('principal', owner), ('local_work', grant['local_work_id']),
+        ('request', grant['research_request_id'])))
+    me = principal_record(records.get(('principal', owner)))
     if grant.get('revoked_at') or (not delegated and grant['expires_at'] <= now()):
         raise Problem(401, 'MCP_GRANT_EXPIRED', 'The research credential expired or was revoked; reconnect in Reveal.')
     from .research_oauth import check_grant_scope, require_registered_local
     check_grant_scope(tx, owner, grant, write=write)
     if write: require_registered_local({'grant': grant, 'principal_kind': me.get('principal_kind')})
-    work = owned(tx, 'local_work', grant['local_work_id'], owner)['data']
+    work = require_owned(tx, 'local_work', grant['local_work_id'], owner,
+        records.get(('local_work', grant['local_work_id'])))['data']
     if ((grant['kind'] == 'hosted') != bool(work.get('job_id'))
             or work['research_request_id'] != grant['research_request_id']):
         raise Problem(403, 'RESEARCH_SCOPE_MISMATCH', 'The research credential does not match its execution context.')
-    request = owned(tx, 'request', grant['research_request_id'], owner)['data']
+    request = require_owned(tx, 'request', grant['research_request_id'], owner,
+        records.get(('request', grant['research_request_id'])))['data']
     if write and (work['state'] == 'closed' or work['expires_at'] <= now()):
         raise Problem(409, 'WORK_CLOSED', 'This research work is closed or its data lifetime expired.')
     if grant['kind'] == 'hosted':
-        job = owned(tx, 'job', work['job_id'], owner)['data']
-        queue = owned(tx, 'queue', work['job_id'], owner)['data']
+        execution = tx.get_records((('job', work['job_id']), ('queue', work['job_id'])))
+        job = require_owned(tx, 'job', work['job_id'], owner, execution.get(('job', work['job_id'])))['data']
+        queue = require_owned(tx, 'queue', work['job_id'], owner, execution.get(('queue', work['job_id'])))['data']
         if job['status'] in ('succeeded', 'failed', 'cancelled', 'insufficient_evidence', 'cancel_requested') or str(queue.get('attempt')) != str(grant['execution_id']):
             raise Problem(403, 'EXECUTION_EXPIRED', 'This hosted execution no longer has research authority.')
     return {'owner': owner, 'principal_kind': me.get('principal_kind'), 'grant': grant, 'work': work, 'request': request}
@@ -291,10 +304,34 @@ class ResearchWorkService:
         with self.repo.read_transaction() as tx:
             work = tx.get('local_work', work_id)
             if not work: return
-            pending = [r['id'] for r in work_records(tx, 'research_operation', work['owner'], work_id)
+            pending = [r for r in work_records(tx, 'research_operation', work['owner'], work_id)
                 if r['data']['state'] == 'received'
                 or (r['data']['state'] == 'running' and r['data'].get('lease_until', '') <= now())]
-        for operation_id in pending: POOL.submit(self.run_operation, operation_id)
+        for row in pending:
+            self.resume_operation(row['id'], lease_token=row['data'].get('lease_token')
+                if row['data']['state'] == 'running' else None)
+
+    def resume_operation(self, operation_id, *, lease_token=None):
+        """Schedule an already-authorized operation without delaying its reply.
+
+        The durable lease and commit authorization remain authoritative. This
+        process-local guard only prevents repeated polls filling the worker
+        queue with copies of the same operation while a replica is busy.
+        """
+        # An expired durable lease gets a distinct key: a hung older Future
+        # must not prevent recovery in this process, while repeated polls of
+        # the same expired lease still schedule at most one replacement.
+        key = (self.repo.sqlite_path, self.repo.table_prefix, operation_id, lease_token)
+        with _scheduled_operations_lock:
+            if key in _scheduled_operations: return
+            _scheduled_operations.add(key)
+        def finished(_):
+            with _scheduled_operations_lock: _scheduled_operations.discard(key)
+        try: future = POOL.submit(self.run_operation, operation_id)
+        except BaseException:
+            finished(None)
+            raise
+        future.add_done_callback(finished)
 
     def reconcile(self):
         """Recover short operations and release expired idle generation pins."""
@@ -318,7 +355,7 @@ class ResearchWorkService:
         if len(data) > 32_000_000: raise Problem(413, 'ARTIFACT_TOO_LARGE', 'A research artifact exceeds its limit.')
         checksum = hashlib.sha256(data).hexdigest()
         identity = digest([work_id, purpose, checksum, filename, metadata or {}])
-        with self.repo.read_transaction() as tx:
+        with measure('research_artifact', 'authorization_read'), self.repo.read_transaction() as tx:
             owned(tx, 'local_work', work_id, owner)
             existing = tx.get('research_artifact', identity)
             if existing:
@@ -327,12 +364,13 @@ class ResearchWorkService:
             matching = next((r['data'] for r in work_records(tx, 'research_artifact', owner, work_id)
                 if r['data']['sha256'] == checksum
                 and not r['data'].get('retained_record')), None)
-        storage = matching['storage'] if matching else user_inputs.retain(data,
-            user_inputs.TYPES.get(Path(filename).suffix, 'application/octet-stream'))
+        with measure('research_artifact', 'store'):
+            storage = matching['storage'] if matching else user_inputs.retain(data,
+                user_inputs.TYPES.get(Path(filename).suffix, 'application/octet-stream'))
         value = {'id': identity, 'local_work_id': work_id,
             'filename': filename, 'sha256': checksum, 'size_bytes': len(data), 'storage': storage,
             'purpose': purpose, 'metadata': metadata or {}, 'created_at': now()}
-        with self.repo.transaction() as tx:
+        with measure('research_artifact', 'commit'), self.repo.transaction() as tx:
             owned(tx, 'local_work', work_id, owner)
             existing = tx.get('research_artifact', identity)
             if existing: return existing['data']
