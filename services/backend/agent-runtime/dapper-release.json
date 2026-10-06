@@ -1,17 +1,18 @@
 {
-  "commit": "c0cfce549baded068aa9e82f81a1400025614b51",
-  "compatibility_note": "The v8 evidence-package snapshot retains its original pin. Release 0.2.0-a1 changes only version metadata in dapper.yaml and claims.yaml; its identity and scientific-account validation modules match that snapshot. Existing objects are verified, never silently reminted.",
+  "commit": "e44a913619c4c9832df6aeaac6a80dbf691ba120",
+  "compatibility_note": "New runtime, seed and authoring defaults use official DAPPER 0.2.0. Historical v8 snapshots retain their original bytes and pins. The release adds Embedding and an unhashable inverse has_embedding slot; existing scientific identity fields and claims validation are preserved. Compatibility is regression-tested; existing objects are verified, never silently reminted.",
   "compatible_input_snapshots": [
-    "801fb347c54c036c15345d132d302171fc6cd74c1f75a03a5c59c937f5ed7d11"
+    "801fb347c54c036c15345d132d302171fc6cd74c1f75a03a5c59c937f5ed7d11",
+    "bdbbc8d7583754a868a3bc22d7c976e21bccedd5ce24b600c2b43972e5b31a23"
   ],
   "files": {
     "schema/.linkml-lint.yaml": "6b0208b4e0cb24650c155e3739e6ada63d21a47835bdd75d65914cb593d6fd00",
     "schema/citation_metadata.py": "7309bca90b66367a81a205a77597dfb1677850c1f14a5c391836b25e6e4f7ff1",
     "schema/citations/citation-record.schema.json": "837800c598dc2d83189cf54e09d5506262ea6b6f013300dbc1b307a47a6055b1",
     "schema/citations/example-record.json": "54e0624893ed1ac1271b276643c747b064349573a9f4173279ec5bcd72d1b325",
-    "schema/claims.yaml": "4d1304f74edf5a9c44f3227caa991e39163159731f57bb50c320c11be54f0e55",
+    "schema/claims.yaml": "715e82f1b147e48b95781ddddef5a1bf6927edd79716fab2f28f7d5c136a7e6f",
     "schema/converter/geneset_to_dapper.py": "0962b48bfbdd26e30bf7e804c1ad490786e7fd1b3daeb3a78d5b75b90e6a1b34",
-    "schema/dapper.yaml": "fcb53e728f77c271e614738a63a08e16d2d2f0ced71117a43ec3542132f6ebd4",
+    "schema/dapper.yaml": "305fbd8f3a3ad01a7584892c1be2937b5a25a5741a8fef17851039ff8cf44e25",
     "schema/document_prefixes.py": "781e7c2dd2f759368a2d4dd33da5d10440001cdc8961afcf1cc5c6ac5d5973ee",
     "schema/examples/check_provenance_trace.py": "3bdfccbe52bf0f6f4d118e29ecbf4f23d42ee20fb3e8baf8a4bf793a0ae1ddac",
     "schema/examples/example_bottom_line_af_aa.yaml": "ea4b1f4642d5fb40e8f2e153f78f1f7e6962ea0531f45e4fa11d76c923b5f86e",
@@ -19,6 +20,7 @@
     "schema/examples/example_cell_state.yaml": "1c457edfe5ee8984451909026b7dfcda92de01d61f228671c642be89991aa791",
     "schema/examples/example_claim_provenance_trace.yaml": "6ebd25e5ad91e6b9b212b52380fab0afca9d430cab5b00fdae0829a7eed78c5b",
     "schema/examples/example_dataset.yaml": "e3d35b989985d07bcc5d48b1adcdb692867ab70b3b578b833472c53a6098a8e0",
+    "schema/examples/example_embedding_graph.yaml": "38526456e70b84ac1ab3743f6fa13bde209cc84ccd27529d7bda670d69b4b0f8",
     "schema/examples/example_file_graph.yaml": "0322f8ded6d004a916d2f8839bcd98d8fb53d99183b8dccec07494ee44a9228a",
     "schema/examples/example_gene_program.yaml": "ec3243678e7fc7a2c405f81891757da872eac23746f7a623127da4f46c1c34c2",
     "schema/examples/example_geneset_collection.yaml": "15fcc98862860b0a423e4149eb6ea4bcfd75e78979e77127a7f716596e7a04c4",
@@ -31,17 +33,17 @@
     "schema/examples/example_pigean_claims.yaml": "02c741a47b7a9faffac3d1c9b27a18c8c9ae5e9d684629936a79cb104e1e7523",
     "schema/examples/example_scientific_account.yaml": "c3be1a152ebcd454b8039fa467aeeff116330c5a85697143e06ebd968062685f",
     "schema/expand_prefixes.py": "bb57f3d748a98bc8b5821be776804f1f92c07e698b9f5ede4600643d71c5f561",
-    "schema/identity/dapper_identity.py": "502c6b976084e6b1e1bd7da2e03527c9a3e352d66c87984b5a9bfd202a266961",
-    "schema/identity/lint_identity.py": "d1c16fc61477b70e1b6eedf70c535a368e68d102da5bf2a142d232c58721427f",
+    "schema/identity/dapper_identity.py": "6fdc03d20d7fe6b7bb85ce0f766c9eddf4edb87c654f8d6696ea31a2f8eb1be5",
+    "schema/identity/lint_identity.py": "1395d33024208971e28aad3d9c149a7e37f305fb0d2488559d405a27d25ca884",
     "schema/identity/mint.py": "561fde54b96ce4342b7a2c845408fc5ec888c51def7794caa228d49d5aff5ea1",
-    "schema/identity/test_vectors.json": "525df8b511b67c28a795a43a5b12a944be3b9a0babbf96e30077bb6b3dfc05d8",
+    "schema/identity/test_vectors.json": "a550144e6d9856805ec36383a5747b7b4cc806db0c749f5e3d982591f2382f21",
     "schema/lint/lint_dig_ancestry.py": "9fde02a7a08eb4430c00365ff189c607cd5b4ff4880d5f6b18395f4167a8c06a",
     "schema/lint/lint_provenance.py": "5f30a204d7af57f3f07a41a3d005d2d79e729ce99de7152ca762b9d3c6af617d",
-    "schema/lint/profiles.yaml": "cb6a941bbadbc922cc25a34d8b797aefb3161a4d007ce5662a58c33bafb43d04",
+    "schema/lint/profiles.yaml": "cea9beed8b4aeac1e40e4818a925c7091784f8065afad5800693d1a3579f358b",
     "schema/scientific_claims.py": "1a53d0fdfe35e1396b30d8314655d6b6d73ca8a97d0ae00a48154dce1c4a5b0a"
   },
   "lock_version": "reveal.dapper-release/1",
   "repository": "https://github.com/broadinstitute/dapper.git",
-  "tag": "0.2.0-a1",
-  "tag_object": "9d986b9fbb9f5be29413714ae5211b77d262e4bc"
+  "tag": "0.2.0",
+  "tag_object": "e44a913619c4c9832df6aeaac6a80dbf691ba120"
 }

@@ -1,0 +1,4 @@
+row	node_id	text_template	text
+0	dapper:GeneSet.sKbhzueXIbO9Xms62_nyJxlZ13en1fRO	example-v1	First illustrative gene set
+1	dapper:GeneSet.w1bw7dosxdeYRx1V5p7UALgkxtTfdcKi	example-v1	Second illustrative gene set
+2	dapper:GeneSetCollection.1FoLv1ndB0HjzITZhThnn3w0TfQgGCOb	example-collection-v1	Illustrative collection of two overlapping gene sets

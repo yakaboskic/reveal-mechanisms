@@ -166,7 +166,8 @@ class EvidencePackageTests(unittest.TestCase):
     def setUpClass(cls):
         cls.temp = tempfile.TemporaryDirectory()
         cls.root = Path(cls.temp.name)
-        cls.runtime = DapperRuntime(ROOT / 'data/dapper/2026-09-24-v8')
+        from reveal_backend.runtime_config import CURRENT_DAPPER_SNAPSHOT
+        cls.runtime = DapperRuntime(CURRENT_DAPPER_SNAPSHOT)
         source = cls.root / 'dismech'
         (source / 'kb/disorders').mkdir(parents=True)
         (source / 'src/dismech/schema').mkdir(parents=True)

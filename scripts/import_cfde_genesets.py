@@ -12,6 +12,7 @@ import gzip
 import hashlib
 import importlib.util
 import json
+import os
 from pathlib import Path
 import re
 import shutil
@@ -99,6 +100,11 @@ def freeze_dapper(source, output):
             if file_hash(target / rel) != expected:
                 raise ValueError('Pinned DAPPER snapshot changed: ' + rel)
         return target, manifest
+    # New encodings use the current reviewed release. Existing encodings above
+    # replay their original dependency snapshot without rewriting its pin.
+    sys.path.insert(0, str(ROOT / 'services/backend/src'))
+    from reveal_backend.dapper_release import verify_release
+    release = verify_release(source, ROOT / 'services/backend/agent-runtime/dapper-release.json')
     paths = sorted((source / 'schema').glob('*.yaml')) + [
         source / 'schema/identity/dapper_identity.py', source / 'schema/identity/test_vectors.json']
     if (source / 'LICENSE').exists():
@@ -115,7 +121,7 @@ def freeze_dapper(source, output):
         raise ValueError('DAPPER changed during capture; use a fresh output directory')
     manifest = {'base_commit': subprocess.check_output(['git', '-C', str(source), 'rev-parse', 'HEAD'], text=True).strip(),
                 'working_tree_modified': bool(subprocess.check_output(['git', '-C', str(source), 'status', '--porcelain', '--', 'schema'], text=True).strip()),
-                'files': files, 'snapshot_hash': digest(canonical(files))}
+                'files': files, 'snapshot_hash': digest(canonical(files)), 'release': release}
     write_json(manifest_path, manifest)
     return target, manifest
 
@@ -383,7 +389,9 @@ def main():
     parser.add_argument('command', choices=['encode', 'load'])
     parser.add_argument('--output', type=Path, default=ROOT / 'data/cfde-genesets/2026-09-24')
     parser.add_argument('--model', default='cfde-inc-v2')
-    parser.add_argument('--dapper-source', type=Path, default=Path.home() / 'src/research/dapper')
+    parser.add_argument('--dapper-source', type=Path,
+                        default=Path(os.environ.get('REVEAL_DAPPER_ROOT', ROOT / '.runtime/dapper')),
+                        help='Checkout matching the current DAPPER release lock; existing encodings retain their original snapshot')
     parser.add_argument('--workers', type=int, default=4)
     parser.add_argument('--batch-size', type=int, default=1000)
     parser.add_argument('--host', default='aurora-giant-bioindex.cluster-cxrzznxifeib.us-east-1.rds.amazonaws.com')

@@ -1,0 +1,267 @@
+# Illustrative full DAPPER graph for the HuBMAP HZ2 gene set — the nodes and
+# reified edges that example_geneset_collection.yaml's CURIEs resolve to. Transcribed from
+# the REAL provenance graph at
+#   tests/fixtures/geneset-hubmap-hz2/geneset.provenance.json
+# This is a reference document (a mixed set of node/edge types), not a
+# single-class instance; validate individual nodes with `linkml-validate -C
+# <ClassName>` if desired.
+#
+# It shows the genuine two-Activity DAG:
+#   input_matrix + human_gene_info --[hubmap_asctb_augmented]--> unsigned_term_gene.tsv
+#   unsigned_term_gene.tsv --[unsigned_term_gene converter]--> GeneSet (+ .gmt, .tsv, ...)
+# and maps the dig.geneset edge labels:
+#   "data input"  -> Used   (prov:used;         edge_role: data_input)
+#   "data output" -> WasGeneratedBy (prov:wasGeneratedBy)
+#
+# Everything here is transcribed from the real provenance EXCEPT the
+# `agentic_workspaces` block near the bottom, which is illustrative and marked
+# as such — dig.geneset carries no agentic workspace today.
+
+# ---- C2M2 source / intermediate / output files (dig.geneset File nodes) ----
+# Nodes that are ILLUSTRATIVE rather than transcribed from a real run.
+# Identifiers are content digests now, so the old `nih:hypothesis/` style prefix
+# no longer signals this — the portal reads this list instead.
+_illustrative:
+  - dapper:AgenticWorkspace._T8w34F1J1K-OE4-e7bT-_tdqjj8Zb_H
+
+c2m2_files:
+  - id: dapper:C2M2File.GC5Rm7rh8JsWUNVGx7dIuvu8DmCO7Yji
+    name: gene_attribute_matrix.txt.gz
+    filename: gene_attribute_matrix.txt.gz
+    persistent_id: 6b757af6-b9b0-583e-8846-b0e16b3e57c4
+    c2m2_uuid: 1579915c-f3a0-536d-ad25-3e04a593a050
+    local_id: s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ1/workflow/gene_attribute_matrix.txt.gz
+    md5: 96aZvXyRQHqydJoeaC351g==
+    size_in_bytes: 31222
+    dcc_url: s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ1/workflow/gene_attribute_matrix.txt.gz
+    drc_url: s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ1/workflow/gene_attribute_matrix.txt.gz
+
+  - id: dapper:C2M2File.K-ku9xiAMkowcxSHCZdEOYSQ15q6Vq5I
+    name: human_gene_info
+    filename: human_gene_info
+    persistent_id: 48b9abef-1545-5e87-9e26-bef6dbd36c09
+    c2m2_uuid: d90c5919-caf8-53e4-abe6-71f854bf4301
+    local_id: https://ftp.ncbi.nih.gov/gene/DATA/GENE_INFO/Mammalia/Homo_sapiens.gene_info.gz
+    md5: hvzbVLFaJJSRJutxecW6lQ==
+    size_in_bytes: 34989436
+    dcc_url: https://ftp.ncbi.nih.gov/gene/DATA/GENE_INFO/Mammalia/Homo_sapiens.gene_info.gz
+    drc_url: https://ftp.ncbi.nih.gov/gene/DATA/GENE_INFO/Mammalia/Homo_sapiens.gene_info.gz
+
+  - id: dapper:C2M2File.CXfIyIocwZWUCAERcmhJDfH8ZVtfVIF9
+    name: hubmap_unsigned_term_gene.tsv
+    filename: hubmap_unsigned_term_gene.tsv
+    persistent_id: c5da16f0-d42c-52c4-ba9e-9221acb9effd
+    c2m2_uuid: f3bf9c73-7184-582d-ac2b-b39fa6f4baad
+    local_id: s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ2/workflow/hubmap_unsigned_term_gene.tsv
+    md5: /a9nJVKGLpwp/A+RP0F6xQ==
+    size_in_bytes: 385544
+    dcc_url: s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ2/workflow/hubmap_unsigned_term_gene.tsv
+    drc_url: s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ2/workflow/hubmap_unsigned_term_gene.tsv
+
+  - id: dapper:C2M2File.U9_ScfeqzGcdLkJC__frh396mPwO6yWo
+    name: genesets.gmt
+    filename: genesets.gmt
+    persistent_id: 576cdadd-7d0b-55d8-917f-a9ea29456f28
+    c2m2_uuid: 0f08d646-3f2a-5870-90b4-498f7c72a724
+    local_id: s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ2/extractor/genesets.gmt
+    md5: lpgmArYDypVqkRWP/KQ9Zw==
+    size_in_bytes: 55157
+    dcc_url: s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ2/extractor/genesets.gmt
+    drc_url: s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ2/extractor/genesets.gmt
+
+  # Remaining outputs of the two activities. The converter emits a whole
+  # bundle, not just the .gmt — every one is a C2M2 file with its own
+  # checksum, and every one is part of the gene set's provenance.
+  - id: dapper:C2M2File.Ar46DjfZNYvNDdrp9ayp6amQ1swHCClu
+    name: asctb_geneshot_augmented_genes.tsv
+    filename: asctb_geneshot_augmented_genes.tsv
+    persistent_id: 62453e36-d5b8-5fb5-8fe8-76bc77ae806f
+    c2m2_uuid: 913fc28e-c10f-5529-83cc-412abfafdb89
+    local_id: s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ2/workflow/asctb_geneshot_augmented_genes.tsv
+    md5: TuCrBzqQGNv+HtCqJCZ1QA==
+    size_in_bytes: 22026266
+
+  - id: dapper:C2M2File.xso09-EbHyvR3wWHYz_NYBEbGGbwhPTn
+    name: geneset.tsv
+    filename: geneset.tsv
+    persistent_id: 3f9cfc06-3275-594d-a1cf-1af3cd14539e
+    c2m2_uuid: 98519f9e-070d-5a60-af1e-be2ab6e8c33f
+    local_id: s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ2/extractor/geneset.tsv
+    md5: i+RX9V+qA0HHxRjgJW4g6A==
+    size_in_bytes: 520234
+
+  - id: dapper:C2M2File.fdGaORD8yU_jB6Kd6FcGGuo4JHBXyPKj
+    name: geneset.full.tsv
+    filename: geneset.full.tsv
+    persistent_id: 0ddb17ca-f9a0-5e82-baf9-7ca1475eba80
+    c2m2_uuid: 9c043e8b-7369-5bf4-8a66-cbb2d4b13dd6
+    local_id: s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ2/extractor/geneset.full.tsv
+    md5: i+RX9V+qA0HHxRjgJW4g6A==
+    size_in_bytes: 520234
+
+  - id: dapper:C2M2File.YYtxcmZxlq08XfVKp3AVnVeW8eIT5V0V
+    name: signature_summary.tsv
+    filename: signature_summary.tsv
+    persistent_id: ef8f04dd-1c8c-5c37-ac69-d9d493d7c2d5
+    c2m2_uuid: 25e9a396-c5ed-536e-aedd-c543f4cfd890
+    local_id: s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ2/extractor/signature_summary.tsv
+    md5: Zqbcc0HXE3PZdxemBkbY9w==
+    size_in_bytes: 30480
+
+  - id: dapper:C2M2File.YkoSyNeV0Y-cQELnJVI5yaTHjKobkrLU
+    name: geneset.meta.json
+    filename: geneset.meta.json
+    persistent_id: f06b158a-d13c-5827-9d7b-d787e01e9cc9
+    c2m2_uuid: b3b0b7b6-c253-5aaf-9606-2eaf45b30a34
+    local_id: s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ2/extractor/geneset.meta.json
+    md5: s5a0fBfnlNslvsPtWCNr0A==
+    size_in_bytes: 10332
+
+# ---- Analysis steps (dig.geneset AnalysisType -> DAPPER Activity) ----
+activities:
+  # upstream workflow step
+  - id: dapper:Activity.05pPafZhEiT_hub-b_WKAgdOs8rFR1QR
+    name: prepare_hubmap_unsigned_term_gene
+    activity_type: workflow
+    command: >-
+      python -m geneset_extractors.cli workflows hubmap_asctb_augmented
+      --input_matrix s3://.../HZ1/workflow/gene_attribute_matrix.txt.gz
+      --human_gene_info https://ftp.ncbi.nih.gov/.../Homo_sapiens.gene_info.gz
+      --augmentation_threshold 0.67 --cap_multiplier 4
+    entrypoint: geneset-extractors workflows hubmap_asctb_augmented
+    repo_url: https://github.com/flannick/dig-gene-set-extractors
+    script_url: https://github.com/flannick/dig-gene-set-extractors
+    code_version: 2fb57130136a8fa25211ef1e77fe13d220e4b115
+    has_agentic_workspace:
+      - dapper:AgenticWorkspace._T8w34F1J1K-OE4-e7bT-_tdqjj8Zb_H
+    dcc_url: https://github.com/flannick/dig-gene-set-extractors
+    drc_url: https://github.com/flannick/dig-gene-set-extractors
+
+  # converter step that emits the gene set
+  - id: dapper:Activity.hyXTofaQO9E8PnynkwQJt_KVxHGTAYFd
+    name: generate_402cf4a1f3682a2e5bf1b002
+    activity_type: converter_invocation
+    command: >-
+      python -m geneset_extractors.cli convert unsigned_term_gene
+      --emit_small_gene_sets false --gene_id_column gene_id
+      --gene_symbol_column gene_symbol --gmt_min_genes 5 --score_column score
+      --term_column term --term_prefix HuBMAP
+    observed_command: >-
+      python -m geneset_extractors.cli convert unsigned_term_gene
+      --table_tsv s3://.../HZ2/workflow/hubmap_unsigned_term_gene.tsv
+      --out_dir s3://.../HZ2/extractor --organism human --genome_build hg38
+    entrypoint: geneset-extractors convert unsigned_term_gene
+    repo_url: https://github.com/flannick/dig-gene-set-extractors
+    script_url: https://github.com/flannick/dig-gene-set-extractors
+    code_version: 2fb57130136a8fa25211ef1e77fe13d220e4b115
+    has_agentic_workspace:
+      - dapper:AgenticWorkspace._T8w34F1J1K-OE4-e7bT-_tdqjj8Zb_H
+    container_image: null
+    dcc_url: https://github.com/flannick/dig-gene-set-extractors
+    drc_url: https://github.com/flannick/dig-gene-set-extractors
+
+# ===========================================================================
+# ILLUSTRATIVE — the agentic replay path for the gene-set pipeline.
+#
+# ONE workspace serves BOTH activities: they are two steps of the same
+# dig-gene-set-extractors run, so a single fork regenerates the pair. The
+# Activities keep their own `command` and `code_version` for exact machine
+# replay; this is the "ask an agent to redo it" path alongside them.
+#
+# The fork slug is a placeholder — no such fork exists yet. The pipeline
+# parameters inside the prompt are REAL, taken from the two activities below.
+# ===========================================================================
+agentic_workspaces:
+  - id: dapper:AgenticWorkspace._T8w34F1J1K-OE4-e7bT-_tdqjj8Zb_H
+    name: dig-gene-set-extractors — HuBMAP HZ2
+    platform: akleao
+    workspace_url: https://www.akleao.com/fork/dig-geneset-hubmap-hz2
+    workspace_key: dig-geneset-hubmap-hz2
+    agent_model: claude-fable-5
+    regeneration_prompt: >-
+      Regenerate HuBMAP gene-set library 402cf4a1f3682a2e5bf1b002 (ASCT+B
+      augmented markers, model HZ2, human, hg38) by re-running both steps of
+      the dig-gene-set-extractors pipeline pinned to commit
+      2fb57130136a8fa25211ef1e77fe13d220e4b115.
+
+      Step 1 — `geneset-extractors workflows hubmap_asctb_augmented`: take the
+      released ASCT+B marker table (gene_attribute_matrix.txt.gz) and NCBI
+      human_gene_info as inputs, with augmentation_threshold 0.67 and
+      cap_multiplier 4. It should emit hubmap_unsigned_term_gene.tsv and
+      asctb_geneshot_augmented_genes.tsv.
+
+      Step 2 — `geneset-extractors convert unsigned_term_gene` over that table,
+      with emit_small_gene_sets false, gene_id_column gene_id,
+      gene_symbol_column gene_symbol, gmt_min_genes 5, score_column score,
+      term_column term, term_prefix HuBMAP. It should emit the gene set plus
+      genesets.gmt, geneset.tsv, geneset.full.tsv, signature_summary.tsv and
+      geneset.meta.json.
+
+      Record each step as a NEW Activity with its own C2M2 file outputs and
+      checksums. Do not overwrite the existing provenance. Then compare the
+      regenerated checksums against the originals and report any that differ —
+      any claim of divergence should include the differing checksums.
+
+# ---- The derived gene-set collection (see example_geneset_collection.yaml for the full node) ----
+used_edges:
+  - subject: dapper:Activity.05pPafZhEiT_hub-b_WKAgdOs8rFR1QR
+    predicate: prov:used
+    object: dapper:C2M2File.GC5Rm7rh8JsWUNVGx7dIuvu8DmCO7Yji
+    edge_role: data_input
+  - subject: dapper:Activity.05pPafZhEiT_hub-b_WKAgdOs8rFR1QR
+    predicate: prov:used
+    object: dapper:C2M2File.K-ku9xiAMkowcxSHCZdEOYSQ15q6Vq5I
+    edge_role: data_input
+  - subject: dapper:Activity.hyXTofaQO9E8PnynkwQJt_KVxHGTAYFd
+    predicate: prov:used
+    object: dapper:C2M2File.CXfIyIocwZWUCAERcmhJDfH8ZVtfVIF9
+    edge_role: data_input
+
+# "data output" edges -> WasGeneratedBy (prov:wasGeneratedBy)
+was_generated_by_edges:
+  - subject: dapper:C2M2File.CXfIyIocwZWUCAERcmhJDfH8ZVtfVIF9
+    predicate: prov:wasGeneratedBy
+    object: dapper:Activity.05pPafZhEiT_hub-b_WKAgdOs8rFR1QR
+  - subject: dapper:GeneSetCollection.DLyinzh-eee_daEShnIt7vnUbDoGmK91
+    predicate: prov:wasGeneratedBy
+    object: dapper:Activity.hyXTofaQO9E8PnynkwQJt_KVxHGTAYFd
+  - subject: dapper:C2M2File.U9_ScfeqzGcdLkJC__frh396mPwO6yWo
+    predicate: prov:wasGeneratedBy
+    object: dapper:Activity.hyXTofaQO9E8PnynkwQJt_KVxHGTAYFd
+  - subject: dapper:C2M2File.Ar46DjfZNYvNDdrp9ayp6amQ1swHCClu
+    predicate: prov:wasGeneratedBy
+    object: dapper:Activity.05pPafZhEiT_hub-b_WKAgdOs8rFR1QR
+  - subject: dapper:C2M2File.xso09-EbHyvR3wWHYz_NYBEbGGbwhPTn
+    predicate: prov:wasGeneratedBy
+    object: dapper:Activity.hyXTofaQO9E8PnynkwQJt_KVxHGTAYFd
+  - subject: dapper:C2M2File.fdGaORD8yU_jB6Kd6FcGGuo4JHBXyPKj
+    predicate: prov:wasGeneratedBy
+    object: dapper:Activity.hyXTofaQO9E8PnynkwQJt_KVxHGTAYFd
+  - subject: dapper:C2M2File.YYtxcmZxlq08XfVKp3AVnVeW8eIT5V0V
+    predicate: prov:wasGeneratedBy
+    object: dapper:Activity.hyXTofaQO9E8PnynkwQJt_KVxHGTAYFd
+  - subject: dapper:C2M2File.YkoSyNeV0Y-cQELnJVI5yaTHjKobkrLU
+    predicate: prov:wasGeneratedBy
+    object: dapper:Activity.hyXTofaQO9E8PnynkwQJt_KVxHGTAYFd
+
+# activities -> the one workspace that can re-run them both
+has_agentic_workspace_edges:
+  - subject: dapper:Activity.05pPafZhEiT_hub-b_WKAgdOs8rFR1QR
+    predicate: dapper:hasAgenticWorkspace
+    object: dapper:AgenticWorkspace._T8w34F1J1K-OE4-e7bT-_tdqjj8Zb_H
+  - subject: dapper:Activity.hyXTofaQO9E8PnynkwQJt_KVxHGTAYFd
+    predicate: dapper:hasAgenticWorkspace
+    object: dapper:AgenticWorkspace._T8w34F1J1K-OE4-e7bT-_tdqjj8Zb_H
+gene_set_collections:
+  - id: dapper:GeneSetCollection.DLyinzh-eee_daEShnIt7vnUbDoGmK91
+    name: HuBMAP ASCT+B augmented marker gene-set library (model HZ2)
+    member_type: gene_set
+    n_genes: 1747
+    n_sets: 487
+    organism: human
+    genome_build: hg38
+
+# ---- Reified provenance edges (dig.geneset edges -> DAPPER Edge classes) ----
+# "data input" edges -> Used (prov:used). Edge instances carry
+# subject/predicate/object (+ edge_role) — the Dock Edge base defines no `id`.
+    has_gmt_file: dapper:C2M2File.U9_ScfeqzGcdLkJC__frh396mPwO6yWo

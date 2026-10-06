@@ -91,6 +91,16 @@
             "null"
           ]
         },
+        "has_embedding": {
+          "description": "Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
         "has_lineage_step": {
           "description": "LineageStep CURIEs making up this activity's ordered provenance lineage.",
           "items": {
@@ -183,6 +193,16 @@
           "description": "The software agent acting in this workspace — an npx:SoftwareAgent, which is also how a nanopublication attributes an assertion to a non-human author.",
           "type": [
             "string",
+            "null"
+          ]
+        },
+        "has_embedding": {
+          "description": "Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
             "null"
           ]
         },
@@ -348,6 +368,16 @@
             "null"
           ]
         },
+        "has_embedding": {
+          "description": "Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
         "id": {
           "description": "Unique identifier for a node — a CURIE shorthand or a full URI. For a Dataset this is its persistent identifier (e.g. a DOI).",
           "type": "string"
@@ -409,6 +439,16 @@
           "description": "Reference to the BCO's execution domain (script, software prerequisites, environment).",
           "type": [
             "string",
+            "null"
+          ]
+        },
+        "has_embedding": {
+          "description": "Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
             "null"
           ]
         },
@@ -507,6 +547,16 @@
           "description": "The file's name.",
           "type": [
             "string",
+            "null"
+          ]
+        },
+        "has_embedding": {
+          "description": "Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
             "null"
           ]
         },
@@ -628,6 +678,16 @@
           "format": "uri",
           "type": [
             "string",
+            "null"
+          ]
+        },
+        "has_embedding": {
+          "description": "Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
             "null"
           ]
         },
@@ -871,6 +931,16 @@
         },
         "has_creator": {
           "description": "Authoritative creators (Person/Organization CURIEs).",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "has_embedding": {
+          "description": "Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree.",
           "items": {
             "type": "string"
           },
@@ -1352,6 +1422,16 @@
             "null"
           ]
         },
+        "has_embedding": {
+          "description": "Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
         "has_evidence": {
           "description": "Evidence uses bearing on this claim's proposition. Each evidence item's target_proposition must match this proposition when supplied. Source claims, rationale and assumptions describe an explicit interpretation; computational input lineage remains in PROV links.",
           "items": {
@@ -1523,6 +1603,16 @@
       ],
       "description": "One explicitly typed quantitative assessment. A Claim links the score to its proposition and provenance. Values are not interchangeable across metrics, and a factor loading must not be relabeled as a probability.",
       "properties": {
+        "has_embedding": {
+          "description": "Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
         "id": {
           "description": "Unique identifier for a node — a CURIE shorthand or a full URI. For a Dataset this is its persistent identifier (e.g. a DOI).",
           "type": "string"
@@ -1698,6 +1788,16 @@
             "null"
           ]
         },
+        "has_embedding": {
+          "description": "Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
         "id": {
           "description": "Unique identifier for a node — a CURIE shorthand or a full URI. For a Dataset this is its persistent identifier (e.g. a DOI).",
           "type": "string"
@@ -1831,6 +1931,16 @@
         },
         "has_drs_object": {
           "description": "GA4GH DrsObject CURIEs (file-level identity) making up this dataset.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "has_embedding": {
+          "description": "Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree.",
           "items": {
             "type": "string"
           },
@@ -2051,6 +2161,16 @@
           "description": "GA4GH DRS object identifier.",
           "type": [
             "string",
+            "null"
+          ]
+        },
+        "has_embedding": {
+          "description": "Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
             "null"
           ]
         },
@@ -2706,6 +2826,15 @@
         "drs_objects": {
           "items": {
             "$ref": "#/$defs/DrsObject"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "embeddings": {
+          "items": {
+            "$ref": "#/$defs/Embedding"
           },
           "type": [
             "array",
@@ -5016,6 +5145,290 @@
       "title": "Edge",
       "type": "object"
     },
+    "Embedding": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "has_vector_file": {}
+            },
+            "required": [
+              "has_vector_file"
+            ]
+          },
+          "then": {
+            "properties": {
+              "vector_row": {}
+            },
+            "required": [
+              "vector_row"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "vector_row": {}
+            },
+            "required": [
+              "vector_row"
+            ]
+          },
+          "then": {
+            "properties": {
+              "has_vector_file": {}
+            },
+            "required": [
+              "has_vector_file"
+            ]
+          }
+        }
+      ],
+      "description": "A fixed-length numeric vector representing another DAPPER node, computed by an embedding model from text derived from that node. `embedding_of` names the represented node; the target's inverse `has_embedding` list is unhashable, so embedding a node never changes the node's own identifier. The vector itself is stored as a row of a shared matrix File and located by `has_vector_file` plus `vector_row`; those locators are unhashable and must be supplied together. `vector_sha256` binds the identifier to the stored bytes; `was_generated_by` (ProvenancedResource) names the Activity that ran the model.",
+      "properties": {
+        "access_level": {
+          "$ref": "#/$defs/AccessLevelEnum",
+          "description": "Access tier for the resource (e.g. public, controlled)."
+        },
+        "alternate_identifier": {
+          "description": "Externally-assigned persistent identifiers for this resource — a DOI, an accession, a Handle, an ARK. `id` is DAPPER's own computed content address (`dapper:{ClassName}.{digest}`), which answers \"what exactly is this record?\". A DOI answers \"what does the publisher call this, and how do I cite it?\". Both are worth keeping, so neither displaces the other. `identifier_type` names the scheme.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "controlled_access": {
+          "description": "Whether obtaining this resource requires a controlled-access request/review.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "dimensions": {
+          "description": "Number of elements in the vector.",
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "dtype": {
+          "$ref": "#/$defs/EmbeddingDtypeEnum",
+          "description": "Element type of the stored vector; the type `vector_sha256` was computed over."
+        },
+        "embedded_text": {
+          "description": "The exact text given to the model. Recording it makes the embedding reproducible and lets a reader judge what the vector represents.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "embedding_model": {
+          "description": "Model identifier as published by its provider, e.g. a Hugging Face repository id such as `pritamdeka/BioBERT-mnli-snli-scinli-scitail-mednli-stsb`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "embedding_model_version": {
+          "description": "Model revision, tag, or commit, if known.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "embedding_of": {
+          "description": "Identifier of the node this vector represents (a GeneSet, GeneSetCollection, Dataset, Claim, ...). Contributes to identity: the same text embedded on behalf of a different node is a different embedding.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "embedding_provider": {
+          "description": "Provider or runtime that served the model, e.g. huggingface, openai.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "funded_by": {
+          "description": "Authoritative Award CURIEs supporting this resource.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "has_contributor": {
+          "description": "Contributing agents (Person/Organization CURIEs), distinct from the authoritative creators.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "has_creator": {
+          "description": "Authoritative creators (Person/Organization CURIEs).",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "has_embedding": {
+          "description": "Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "has_license": {
+          "description": "CURIE/URI of the License node.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "has_mirror_provenance": {
+          "description": "Mirror-appended provenance records. Append-only; mirrors add these but must not touch authoritative fields.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "has_recommended_citation": {
+          "description": "The authoritative RecommendedCitation node.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "has_vector_file": {
+          "description": "File holding the matrix this vector is a row of. Reference the local File record by its DAPPER identifier; the File's description should state the array layout (e.g. NumPy `.npy`, rows x dimensions, dtype).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "description": "Unique identifier for a node — a CURIE shorthand or a full URI. For a Dataset this is its persistent identifier (e.g. a DOI).",
+          "type": "string"
+        },
+        "is_described_by": {
+          "description": "Authoritative primary Publication CURIEs.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "name": {
+          "description": "Human-readable name/label for a node.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "normalization": {
+          "$ref": "#/$defs/EmbeddingNormalizationEnum",
+          "description": "Normalization applied before storage."
+        },
+        "text_template": {
+          "description": "Versioned name of the rule that built `embedded_text` from the target node, e.g. `cfde-geneset-v1`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "vector_row": {
+          "description": "Zero-based row index of this vector within `has_vector_file`.",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "vector_sha256": {
+          "description": "Hex SHA-256 of the vector's bytes in `dtype`, little-endian, C order. Two embeddings with different values are different records even when model and text agree.",
+          "pattern": "^[0-9a-f]{64}$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "was_attributed_to": {
+          "description": "Agent(s) (CURIEs) this resource is attributed to.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "was_derived_from": {
+          "description": "Upstream resource(s) (CURIEs) this one was derived from.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "was_generated_by": {
+          "description": "The Activity that generated/packaged this returned result.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "Embedding",
+      "type": "object"
+    },
+    "EmbeddingDtypeEnum": {
+      "description": "Element type of the stored embedding vector. Names follow NumPy dtype spelling; the bytes hashed into `Embedding.vector_sha256` are the row in this type, little-endian, C order.",
+      "enum": [
+        "float16",
+        "float32",
+        "float64",
+        "bfloat16",
+        "int8"
+      ],
+      "title": "EmbeddingDtypeEnum",
+      "type": "string"
+    },
+    "EmbeddingNormalizationEnum": {
+      "description": "Normalization applied to the stored vector after the model produced it. `none` stores the model output as returned; `l2` stores the unit-length vector, so a dot product is a cosine similarity.",
+      "enum": [
+        "none",
+        "l2"
+      ],
+      "title": "EmbeddingNormalizationEnum",
+      "type": "string"
+    },
     "EvidenceDirectionEnum": {
       "description": "Direction of an assessment relative to its target proposition.",
       "enum": [
@@ -5128,6 +5541,16 @@
         },
         "has_creator": {
           "description": "Authoritative creators (Person/Organization CURIEs).",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "has_embedding": {
+          "description": "Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree.",
           "items": {
             "type": "string"
           },
@@ -5404,6 +5827,16 @@
             "null"
           ]
         },
+        "has_embedding": {
+          "description": "Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
         "id": {
           "description": "Unique identifier for a node — a CURIE shorthand or a full URI. For a Dataset this is its persistent identifier (e.g. a DOI).",
           "type": "string"
@@ -5591,6 +6024,16 @@
         },
         "has_creator": {
           "description": "Authoritative creators (Person/Organization CURIEs).",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "has_embedding": {
+          "description": "Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree.",
           "items": {
             "type": "string"
           },
@@ -5949,6 +6392,16 @@
             "null"
           ]
         },
+        "has_embedding": {
+          "description": "Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
         "has_gmt_file": {
           "description": "Reference to a GMT file exporting this single gene set. For a row within a shared GMT use in_gmt_file and gmt_entry instead. Accepts File and any subclass, including C2M2File. Retrieval locations and checksums belong on the referenced file record. In a provenance document, use the local file record's content-derived DAPPER identifier (CURIE or full URI), not a bare checksum or retrieval URL.",
           "type": [
@@ -6202,6 +6655,16 @@
         },
         "has_creator": {
           "description": "Authoritative creators (Person/Organization CURIEs).",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "has_embedding": {
+          "description": "Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree.",
           "items": {
             "type": "string"
           },
@@ -6555,6 +7018,35 @@
       "title": "HasDrsObject",
       "type": "object"
     },
+    "HasEmbedding": {
+      "additionalProperties": false,
+      "description": "Any Node → an Embedding computed from it. Reifies the node's `has_embedding` list (the inverse of Embedding.embedding_of). This is a representation relationship, not a derivation: the embedded node is not upstream of anything by virtue of having been embedded.",
+      "properties": {
+        "object": {
+          "description": "The object node of an Edge (its `id`/CURIE).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "predicate": {
+          "description": "The predicate (relationship type) of an Edge.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "subject": {
+          "description": "The subject node of an Edge (its `id`/CURIE).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "title": "HasEmbedding",
+      "type": "object"
+    },
     "HasEvidence": {
       "additionalProperties": false,
       "description": "Claim → EvidenceItem.",
@@ -6791,6 +7283,16 @@
       "additionalProperties": false,
       "description": "A Node whose `id` is a computed content address of the form `dapper:{ClassName}.{digest}` — the full LinkML class name, a dot, then a GA4GH `sha512t24u` digest over the slots marked `hashable`.\nThe digest covers hashable slots ONLY. Timestamps, signatures, mirror observations, workspace locations, and back-references are marked `unhashable` so that re-running, re-signing, mirroring, or re-hosting an artifact never changes what it is. See schema/identity/README.md for the DAPPER-ID-1 profile and schema/trusty-identifiers.md for why this is deliberately NOT a Trusty URI `RA` code.",
       "properties": {
+        "has_embedding": {
+          "description": "Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
         "id": {
           "description": "Unique identifier for a node — a CURIE shorthand or a full URI. For a Dataset this is its persistent identifier (e.g. a DOI).",
           "type": "string"
@@ -6924,6 +7426,16 @@
             "null"
           ]
         },
+        "has_embedding": {
+          "description": "Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
         "has_license": {
           "description": "CURIE/URI of the License node.",
           "type": [
@@ -7021,6 +7533,16 @@
       "additionalProperties": false,
       "description": "License and usage terms for the dataset.",
       "properties": {
+        "has_embedding": {
+          "description": "Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
         "id": {
           "description": "Unique identifier for a node — a CURIE shorthand or a full URI. For a Dataset this is its persistent identifier (e.g. a DOI).",
           "type": "string"
@@ -7061,6 +7583,16 @@
           "description": "What happened in this step.",
           "type": [
             "string",
+            "null"
+          ]
+        },
+        "has_embedding": {
+          "description": "Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
             "null"
           ]
         },
@@ -7142,6 +7674,16 @@
           "format": "uri",
           "type": [
             "string",
+            "null"
+          ]
+        },
+        "has_embedding": {
+          "description": "Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
             "null"
           ]
         },
@@ -7271,6 +7813,16 @@
             "null"
           ]
         },
+        "has_embedding": {
+          "description": "Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
         "has_license": {
           "description": "CURIE/URI of the License node.",
           "type": [
@@ -7376,6 +7928,16 @@
       "additionalProperties": false,
       "description": "Provenance appended by a mirror/cache. APPEND-ONLY: a mirror may add a MirrorProvenance record but must never rewrite authoritative NIH provenance (see the mirroring invariant at the top of this schema).",
       "properties": {
+        "has_embedding": {
+          "description": "Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
         "id": {
           "description": "Unique identifier for a node — a CURIE shorthand or a full URI. For a Dataset this is its persistent identifier (e.g. a DOI).",
           "type": "string"
@@ -7455,6 +8017,16 @@
             "null"
           ]
         },
+        "has_embedding": {
+          "description": "Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
         "id": {
           "description": "Unique identifier for a node — a CURIE shorthand or a full URI. For a Dataset this is its persistent identifier (e.g. a DOI).",
           "type": "string"
@@ -7491,6 +8063,16 @@
           "description": "DAPPER Activity id that produced the assertion.",
           "type": [
             "string",
+            "null"
+          ]
+        },
+        "has_embedding": {
+          "description": "Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
             "null"
           ]
         },
@@ -7533,6 +8115,16 @@
       "additionalProperties": false,
       "description": "The publication-info graph — metadata about the NANOPUB itself: who published it, when, under what licence, with what signature. Overlaps almost exactly with the DAPPER attribution core.",
       "properties": {
+        "has_embedding": {
+          "description": "Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
         "id": {
           "description": "Unique identifier for a node — a CURIE shorthand or a full URI. For a Dataset this is its persistent identifier (e.g. a DOI).",
           "type": "string"
@@ -7566,6 +8158,16 @@
           "description": "Signature algorithm, e.g. \"RSA\".",
           "type": [
             "string",
+            "null"
+          ]
+        },
+        "has_embedding": {
+          "description": "Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
             "null"
           ]
         },
@@ -7664,6 +8266,16 @@
           "description": "The assertion graph. REQUIRED: nanopublication well-formedness demands exactly one `np:hasAssertion` quad in the Head.",
           "type": [
             "string",
+            "null"
+          ]
+        },
+        "has_embedding": {
+          "description": "Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
             "null"
           ]
         },
@@ -7766,6 +8378,16 @@
       "additionalProperties": false,
       "description": "Abstract base for all DAPPER entities (datasets, agents, awards, publications, licenses, activities, mirror records, ...). Not used directly.",
       "properties": {
+        "has_embedding": {
+          "description": "Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
         "id": {
           "description": "Unique identifier for a node — a CURIE shorthand or a full URI. For a Dataset this is its persistent identifier (e.g. a DOI).",
           "type": "string"
@@ -7795,6 +8417,16 @@
         "creator_role": {
           "$ref": "#/$defs/CreatorRoleEnum",
           "description": "The role this agent played as a creator of the resource."
+        },
+        "has_embedding": {
+          "description": "Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
         },
         "id": {
           "description": "Unique identifier for a node — a CURIE shorthand or a full URI. For a Dataset this is its persistent identifier (e.g. a DOI).",
@@ -7907,6 +8539,16 @@
         },
         "has_creator": {
           "description": "Authoritative creators (Person/Organization CURIEs).",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "has_embedding": {
+          "description": "Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree.",
           "items": {
             "type": "string"
           },
@@ -8062,6 +8704,16 @@
             "null"
           ]
         },
+        "has_embedding": {
+          "description": "Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
         "id": {
           "description": "Unique identifier for a node — a CURIE shorthand or a full URI. For a Dataset this is its persistent identifier (e.g. a DOI).",
           "type": "string"
@@ -8175,6 +8827,16 @@
       ],
       "description": "The content being asserted or evaluated, independent of a particular assessment, score, or execution. A text statement is required; a structured subject-predicate-object form is optional. DAPPER identifiers address the representation, not a guarantee of semantic equivalence between paraphrases.",
       "properties": {
+        "has_embedding": {
+          "description": "Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
         "id": {
           "description": "Unique identifier for a node — a CURIE shorthand or a full URI. For a Dataset this is its persistent identifier (e.g. a DOI).",
           "type": "string"
@@ -8403,6 +9065,16 @@
             "null"
           ]
         },
+        "has_embedding": {
+          "description": "Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
         "id": {
           "description": "Unique identifier for a node — a CURIE shorthand or a full URI. For a Dataset this is its persistent identifier (e.g. a DOI).",
           "type": "string"
@@ -8516,6 +9188,16 @@
             "null"
           ]
         },
+        "has_embedding": {
+          "description": "Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
         "has_license": {
           "description": "CURIE/URI of the License node.",
           "type": [
@@ -8619,6 +9301,16 @@
             "null"
           ]
         },
+        "has_embedding": {
+          "description": "Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
         "id": {
           "description": "Unique identifier for a node — a CURIE shorthand or a full URI. For a Dataset this is its persistent identifier (e.g. a DOI).",
           "type": "string"
@@ -8670,6 +9362,16 @@
           "description": "RO-Crate spec/profile the crate conforms to.",
           "type": [
             "string",
+            "null"
+          ]
+        },
+        "has_embedding": {
+          "description": "Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
             "null"
           ]
         },
@@ -8800,6 +9502,16 @@
         },
         "has_creator": {
           "description": "Authoritative creators (Person/Organization CURIEs).",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "has_embedding": {
+          "description": "Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree.",
           "items": {
             "type": "string"
           },
@@ -8996,6 +9708,16 @@
         },
         "has_creator": {
           "description": "Authoritative creators (Person/Organization CURIEs).",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "has_embedding": {
+          "description": "Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree.",
           "items": {
             "type": "string"
           },

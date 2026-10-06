@@ -64,178 +64,42 @@ def child_pointer(parent, key):
     return parent + '/' + str(key).replace('~', '~0').replace('/', '~1')
 
 
-def record_path(namespace, location, kind='record', number=0):
-    key = json.dumps([namespace, location, kind, number], ensure_ascii=False, separators=(',', ':')).encode()
-    return 'input/evidence-records/' + sha256(key) + '.json'
-
-
-def display_label(value):
-    if not isinstance(value, dict):
-        return {}
-    for field in ('name', 'display_name', 'filename', 'id'):
-        label = value.get(field)
-        if type(label) is str:
-            return {'label': label[:160], **({'label_truncated': True} if len(label) > 160 else {})}
-    return {}
-
-
-class _Files:
-    def __init__(self, page_size):
-        self.files = {}
-        self.page_size = page_size
-        self.links = {}
-        self.force_collections = set()
-
-    def write(self, path, value):
-        data = readable(value)
-        require(len(data) <= MAX_RECORD_BYTES, 'Evidence reader record exceeds its byte bound')
-        previous = self.files.get(path)
-        require(previous is None or previous == data, 'Conflicting evidence reader record')
-        self.files[path] = data
-        return path
-
-    def pages(self, entries, namespace, location, origin):
-        if not entries:
-            return {'page_count': 0, 'first_page': None}
-        groups, pending = [], []
-        for entry in entries:
-            trial = pending + [entry]
-            # Reserve the real next-page path when checking the byte bound.
-            probe = {'format': PAGE_FORMAT, **origin, 'pointer': location, 'entries': trial,
-                     'next_page': record_path(namespace, location, 'page', len(groups) + 1)}
-            if pending and (len(trial) > self.page_size or len(readable(probe)) > MAX_RECORD_BYTES):
-                groups.append(pending)
-                pending = [entry]
-            else:
-                pending = trial
-        if pending:
-            groups.append(pending)
-        for index, group in enumerate(groups):
-            self.write(record_path(namespace, location, 'page', index),
-                       {'format': PAGE_FORMAT, **origin, 'pointer': location, 'entries': group,
-                        'next_page': record_path(namespace, location, 'page', index + 1)
-                                     if index + 1 < len(groups) else None})
-        return {'page_count': len(groups), 'first_page': record_path(namespace, location, 'page')}
-
-    def store(self, value, namespace, location, origin):
-        path = record_path(namespace, location)
-        if path in self.files:
-            return path
-        envelope = {'format': RECORD_FORMAT, **origin, 'pointer': location, 'value': value}
-        links = self.links.get((namespace, location))
-        if links:
-            envelope['links'] = links
-        force = (namespace, location) in self.force_collections
-        if not force and len(readable(envelope)) <= MAX_RECORD_BYTES:
-            return self.write(path, envelope)
-        entries = []
-        if isinstance(value, dict):
-            kind = 'object'
-            for key in sorted(value):
-                entries.append({'key': key, 'path': self.store(value[key], namespace, child_pointer(location, key), origin),
-                                **display_label(value[key])})
-        elif isinstance(value, list):
-            kind = 'array'
-            for key, item in enumerate(value):
-                entries.append({'key': key, 'path': self.store(item, namespace, child_pointer(location, key), origin),
-                                **display_label(item)})
-        elif type(value) is str:
-            kind = 'string'
-            # At most 4096 UTF-8 payload bytes per exact character chunk.
-            for key, offset in enumerate(range(0, len(value), 1024)):
-                chunk_path = record_path(namespace, location, 'text', key)
-                self.write(chunk_path, {'format': RECORD_FORMAT, **origin, 'pointer': location,
-                                       'text_chunk': key, 'value': value[offset:offset + 1024]})
-                entries.append({'key': key, 'path': chunk_path})
-        else:
-            require(False, 'Oversized scalar cannot be represented by the evidence reader')
-        record = {'format': RECORD_FORMAT, **origin, 'pointer': location, 'kind': kind,
-                  'count': len(value), **self.pages(entries, namespace, location, origin)}
-        if kind == 'string':
-            record.update(chunk_count=len(entries), instruction='Concatenate chunk values in numeric key order without separators; each chunk refers to this same source string pointer.')
-        if links:
-            record['links'] = links
-        return self.write(path, record)
+def build_evidence_index(package_bytes, source_bytes=None):
+    """Small navigation inventory; never expands arrays, vectors or records."""
+    from .evidence_reader import READER_VERSION, MAX_RESPONSE_BYTES, MAX_ITEMS, MAX_TEXT_CHARACTERS
+    package = decode(package_bytes)
+    package_sha = sha256(package_bytes)
+    identity = 'package:' + package_sha
+    artifacts = package.get('source_artifacts', {})
+    if source_bytes is not None:
+        require(set(source_bytes) == set(artifacts), 'Reader sources differ from declared artifacts')
+        for key, descriptor in artifacts.items():
+            require(sha256(source_bytes[key]) == descriptor['sha256'] and
+                    len(source_bytes[key]) == descriptor['size_bytes'], 'Evidence reader source checksum mismatch')
+    def selection(location):
+        return {'artifact_id': identity, 'sha256': package_sha, 'pointer': location}
+    anchors = []
+    for key in package.get('selection', {}).get('eaggl_mechanism_ids', []):
+        node = package.get('pigean', {}).get('mechanisms', {}).get(key, {})
+        anchors.append({'id': key, 'dapper_id': node.get('dapper_id'),
+                        'read': selection(child_pointer('/pigean/mechanisms', key))})
+    return readable({'format': 'reveal.evidence-index/2', 'reader_version': READER_VERSION,
+        'canonical_package': {'artifact_id': identity, 'path': 'input/evidence-package.json',
+                              'sha256': package_sha, 'size_bytes': len(package_bytes)},
+        'selected_gap': {'id': package.get('selection', {}).get('knowledge_gap_id'),
+                         'read': selection('/dismech/knowledge_gap')},
+        'anchors': anchors,
+        'sections': {key: selection(child_pointer('', key)) for key in sorted(package)
+                     if key not in ('source_artifacts', 'dapper_context')},
+        'source_inventory': {key: {k: value[k] for k in ('path', 'sha256', 'size_bytes', 'format', 'dapper_file_id') if k in value}
+                             for key, value in artifacts.items()},
+        'trusted_objects': selection('/dapper_context'),
+        'reader': {'tool': 'read_evidence', 'response_bytes': MAX_RESPONSE_BYTES, 'max_items': MAX_ITEMS,
+                   'max_text_characters': MAX_TEXT_CHARACTERS, 'default_items': 20,
+                   'exact_numbers': 'content_json preserves original numeric tokens'},
+        'instruction': 'Read selected JSON Pointers or bounded text ranges with read_evidence. Inspection paging does not alter scientific coverage. Original artifacts are authoritative. Embeddings and retrieval diagnostics are audit data; read only on explicit need. No recursive record files are generated.'})
 
 
 def build_evidence_files(package_bytes, page_size=20, source_bytes=None):
-    """Return path→bytes for a small index and bounded lossless reading files.
-
-    Paths are relative to the agent working directory. ``source_bytes`` optionally
-    supplies all declared artifacts, keyed by artifact_id, for hash-verified
-    parsed views of minified JSON/YAML. Text artifacts retain their raw files.
-    Every value remains retrievable through the root record and linked pages.
-    """
-    require(type(page_size) is int and 1 <= page_size <= 100, 'Invalid evidence reader page size')
-    package = decode(package_bytes)
-    package_sha = sha256(package_bytes)
-    namespace = 'package:' + package_sha
-    origin = {'package_sha256': package_sha}
-    files = _Files(page_size)
-    # These are entry catalogues, even if a small instance would fit in one file.
-    catalogue_locations = ('', '/source_artifacts', '/dapper_context/files', '/pigean/candidates',
-                           '/pigean/mechanisms', '/pigean/traits', '/dismech/mechanisms')
-    files.force_collections.update((namespace, location) for location in catalogue_locations)
-    artifacts = package.get('source_artifacts', {})
-    require(isinstance(artifacts, dict), 'Source artifacts must be an indexed mapping')
-    if source_bytes is not None:
-        require(set(source_bytes) == set(artifacts), 'Reader source bytes differ from declared artifacts')
-    parsed_sources = 0
-    for identity, artifact in artifacts.items():
-        links = {'raw_path': 'input/' + artifact['path']}
-        if source_bytes is not None:
-            raw = source_bytes[identity]
-            require(sha256(raw) == artifact['sha256'], 'Evidence reader source checksum mismatch')
-            if artifact['format'] in ('json', 'yaml'):
-                source_namespace = 'source:' + artifact['sha256'] + ':' + artifact['format']
-                source_origin = {'artifact_sha256': artifact['sha256'], 'source_format': artifact['format']}
-                parsed = parse_source(raw, artifact['format'])
-                links['parsed_record_path'] = files.store(parsed, source_namespace, '', source_origin)
-                parsed_sources += 1
-        files.links[(namespace, child_pointer('/source_artifacts', identity))] = links
-
-    root_path = files.store(package, namespace, '', origin)
-
-    def catalogue(location):
-        try:
-            value = pointer(package, location)
-        except (KeyError, IndexError, ValueError):
-            return None
-        entry = {'path': files.store(value, namespace, location, origin)}
-        if isinstance(value, (dict, list)):
-            entry['count'] = len(value)
-        return entry
-
-    gap = package.get('dismech', {}).get('knowledge_gap', {})
-    selection = package.get('selection', {})
-    selected_gap = {'id': selection.get('knowledge_gap_id'), 'record_path': catalogue('/dismech/knowledge_gap')}
-    if selected_gap['record_path']:
-        selected_gap['record_path'] = selected_gap['record_path']['path']
-    if isinstance(gap.get('prompt'), str):
-        if len(gap['prompt']) <= 600:
-            selected_gap['prompt'] = gap['prompt']
-        else:
-            selected_gap.update(prompt_preview=gap['prompt'][:600], prompt_truncated=True)
-    anchors = []
-    for identity in selection.get('eaggl_mechanism_ids', []):
-        location = child_pointer('/pigean/mechanisms', identity)
-        value = pointer(package, location)
-        row = {'id': identity, 'dapper_id': value['dapper_id'],
-               'record_path': files.store(value, namespace, location, origin)}
-        if isinstance(value.get('display_name'), str):
-            row.update(name=value['display_name'][:160], name_truncated=len(value['display_name']) > 160)
-        anchors.append(row)
-    sections = {key: catalogue(child_pointer('', key)) for key in sorted(package)}
-    catalogues = {name: catalogue(location) for name, location in {
-        'candidates': '/pigean/candidates', 'mechanisms': '/pigean/mechanisms', 'traits': '/pigean/traits',
-        'dismech_mechanisms': '/dismech/mechanisms', 'source_artifacts': '/source_artifacts',
-        'dapper_files': '/dapper_context/files'}.items()}
-    index = {'format': 'reveal.evidence-index/1',
-             'canonical_package': {'path': 'input/evidence-package.json', 'sha256': package_sha, 'size_bytes': len(package_bytes)},
-             'root_record_path': root_path, 'selected_gap': selected_gap, 'anchors': anchors,
-             'sections': sections, 'catalogues': catalogues,
-             'source_views': {'provided': source_bytes is not None, 'parsed_artifact_count': parsed_sources},
-             'reader_limits': {'record_bytes': MAX_RECORD_BYTES, 'page_entries': page_size},
-             'instruction': 'Read only relevant records. A value is exact source data. Larger values use kind/count/first_page; follow entries by key and next_page only as needed. Catalogue counts describe captured membership, not biological absence. Source-artifact records link unchanged raw files and optional parsed views with exact source pointers. Display labels and previews are navigation only.'}
-    files.write(INDEX_PATH, index)
-    return files.files
+    """Compatibility API for callers; new workspaces contain only the small index."""
+    return {INDEX_PATH: build_evidence_index(package_bytes, source_bytes)}

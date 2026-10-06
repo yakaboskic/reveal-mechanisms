@@ -98,14 +98,23 @@ def model_of_source_id(identity: str) -> str | None:
     return None
 
 
-def mechanism_node(public: str, phenotype_name: str, kpn_trait_id: str, factor: str, label: str) -> dict:
+def mechanism_node(public: str, phenotype_name: str, kpn_trait_id: str, factor: str, label: str,
+                   *, identity_version=1, eaggl_import_id=None) -> dict:
     """The DAPPER Mechanism node of a KPN factor. Callers compute its content-addressed id.
 
     The catalog and the evidence collector must mint the same node, so both use this.
-    The description embeds the public id, so ids never collide across generations.
+    Version 1 is retained for historical generations. New import manifests opt
+    into version 2, which binds the fitted object to its immutable EAGGL import;
+    a routing public id by itself does not identify a fit across imports.
     """
-    return {'name': f'{phenotype_name} mechanism {factor}',
+    if identity_version not in (1, 2): raise ReferenceError('Unsupported Mechanism identity version')
+    node = {'name': f'{phenotype_name} mechanism {factor}',
             'description': f'EAGGL mechanism {public}. KPN trait {kpn_trait_id} ({phenotype_name}). Source label: {label}.'}
+    if identity_version == 2:
+        if not isinstance(eaggl_import_id, str) or not GENERATION_RE.fullmatch(eaggl_import_id):
+            raise ReferenceError('Version 2 Mechanism identity requires a pinned EAGGL import')
+        node['description'] += f' Fitted EAGGL import: {eaggl_import_id}.'
+    return node
 
 
 def archive_id(generation_id: str, source_id: str) -> str:

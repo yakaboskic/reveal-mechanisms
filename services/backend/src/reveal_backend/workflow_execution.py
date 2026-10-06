@@ -24,7 +24,7 @@ from .agent_execution import ExecutionRequest
 from .artifact_store import store as artifact_store, StorageUnavailable
 from .box_adapter import CAPTURE_MARKER, atomic_capture_marker, read_capture_marker, captured_result, BoxTransportError
 from .box_lifecycle import BoxLifecycle
-from .evidence_package import canonical_json, decode, require, sha256
+from .evidence_package import EvidenceBuildError, canonical_json, decode, require, sha256
 from .repository import Repository, now, digest
 from .runtime_config import ROOT, setting
 from .worker import (Worker, collect, read_preparation_inputs, restore_dispatch_input, fit_input_budget,
@@ -183,6 +183,56 @@ class WorkflowExecution:
             queue = tx.get('queue', payload['job_id'])['data']; queue['remote_handle'] = handle
             tx.update_existing('queue', payload['job_id'], owner, queue)
 
+    def retain_failure(self, payload, token, root, phase, exc):
+        """Save diagnostics before scratch cleanup, using the current write fence."""
+        from .admin_jobs import redact
+        try:
+            _, queue, execution = self.context(payload)
+            path = f'attempt-{queue["attempt"]}/failure.json'
+            diagnostic = {'phase': phase, 'error_type': type(exc).__name__,
+                          'message': redact(str(exc))[:3000]}
+            audit = getattr(exc, 'audit', None)
+            if isinstance(audit, dict):
+                summary = {}
+                # Never retain provider responses, headers or arbitrary nested
+                # audit content here. The complete response has its own private
+                # review checkpoint; admins need bounded failure categories.
+                if isinstance(audit.get('response_error_type'), str):
+                    summary['response_error_type'] = redact(audit['response_error_type'])[:160]
+                def number(value):
+                    return type(value) in (int, float) and 0 <= value <= 10**15
+                for name in ('actual_cost_usd', 'configured_max_usd'):
+                    if number(audit.get(name)): summary[name] = audit[name]
+                blocked = audit.get('blocked_call')
+                if isinstance(blocked, dict):
+                    values = {}
+                    if isinstance(blocked.get('reason'), str): values['reason'] = redact(blocked['reason'])[:160]
+                    for name in ('limit', 'observed', 'reserved_max_usd'):
+                        if number(blocked.get(name)): values[name] = blocked[name]
+                    if values: summary['blocked_call'] = values
+                if summary: diagnostic['review_audit'] = summary
+            raw = canonical_json(diagnostic)
+            if root is not None:
+                target = root/path; target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(raw)
+                self.checkpoint(payload, token, root)
+            elif execution.get('workspace'):
+                # Review may already have checkpointed a paid response. Merge
+                # into that latest reference, never the phase's stale input.
+                reference = self.store().replace_workspace_files(execution['workspace'], {path: raw})
+                self.commit_checkpoint(payload, token, reference)
+            else:
+                with tempfile.TemporaryDirectory(prefix='reveal-failure-') as temporary:
+                    directory = Path(temporary); target = directory/path
+                    target.parent.mkdir(parents=True); target.write_bytes(raw)
+                    self.checkpoint(payload, token, directory)
+        except state.StaleExecution:
+            raise
+        except Exception as storage_error:
+            # Losing the diagnostic must not turn a storage outage into a
+            # terminal science rejection or release scratch while a writer runs.
+            raise StorageUnavailable('Workflow failure diagnostics could not be retained') from storage_error
+
     async def step(self, payload, index):
         job, execution, replay = await run_sync(state.acquire, self.repository, payload, index)
         if replay is not None: return replay
@@ -198,13 +248,25 @@ class WorkflowExecution:
             scratch = state.needs_scratch(execution)
             with tempfile.TemporaryDirectory(prefix='reveal-step-') if scratch else nullcontext(None) as temporary:
                 root = Path(temporary) if temporary is not None else None
-                async with asyncio.timeout(int(setting('REVEAL_WORKFLOW_STEP_TIMEOUT_SECONDS', '360'))):
-                    if execution['phase'] == 'validate':
-                        await run_sync(self.activity, payload, token, 'stage',
-                            {'stage':'validating','message':'Restoring saved evidence for validation.'})
-                    if execution.get('workspace') and scratch:
-                        await self.restore_workspace(execution['workspace'], root)
-                    result = await self.operate(payload, token, job, execution, root)
+                workspace_ready = False
+                try:
+                    async with asyncio.timeout(int(setting('REVEAL_WORKFLOW_STEP_TIMEOUT_SECONDS', '360'))):
+                        if execution['phase'] == 'validate':
+                            await run_sync(self.activity, payload, token, 'stage',
+                                {'stage':'collecting_output','message':'Restoring the saved execution result and evidence.'})
+                        if execution.get('workspace') and scratch:
+                            await self.restore_workspace(execution['workspace'], root)
+                        workspace_ready = True
+                        result = await self.operate(payload, token, job, execution, root)
+                except (state.StepBusy, state.RecoveryRequired, state.StaleExecution,
+                        BoxTransportError, StorageUnavailable, TimeoutError, OSError):
+                    raise
+                except Exception as exc:
+                    # An incomplete restore must never replace the saved source
+                    # workspace with the partial contents of this scratch dir.
+                    await run_sync(self.retain_failure, payload, token, root if workspace_ready else None,
+                                   execution['phase'], exc)
+                    raise
                 return await run_sync(state.complete, self.repository, payload, token, **result)
         except state.StepBusy:
             return await run_sync(state.complete, self.repository, payload, token,
@@ -219,9 +281,13 @@ class WorkflowExecution:
             raise
         except Exception as exc:
             from .scientific_grounding import ScientificReviewUnavailable
+            from .scientific_account_lint import AccountValidationError
             from .job_failures import review_failure
+            validation_error = (execution['phase'] in ('validate', 'review_tools', 'commit')
+                                and isinstance(exc, (EvidenceBuildError, AccountValidationError)))
             failure = review_failure(exc) if isinstance(exc, ScientificReviewUnavailable) else {
-                'code': 'EVIDENCE_PREPARATION_FAILED' if execution['phase'] == 'prepare' else 'VALIDATION_FAILED',
+                'code': 'EVIDENCE_PREPARATION_FAILED' if execution['phase'] == 'prepare' else
+                        'VALIDATION_FAILED' if validation_error else 'WORKER_FAILED',
                 'message': 'The workflow phase could not be completed. Saved output and source captures are preserved.', 'retryable': True}
             # Uncaptured remote work cannot be orphaned. A committed cleanup
             # obligation owns deletion independently of the scientific outcome.
@@ -253,6 +319,11 @@ class WorkflowExecution:
                 return {'next_phase': 'complete', 'done': True}
         if job['kind'] == 'deployment_probe': return await self.probe(payload, token, job, queue, execution, root)
         if phase == 'prepare': return await self.prepare(payload, token, job, queue, execution, root)
+        # Retired model-review checkpoints can exist across deployments. Move
+        # them through the current deterministic gates without restoring or
+        # resuming the old paid reviewer session. Keep its files for audit.
+        if phase in ('review_init', 'review_call', 'review_tools'):
+            return {'next_phase': 'validate', 'validated_paths': None}
         adapter = self.box_adapter(queue)
         if phase == 'create':
             if box: return {'next_phase': 'bootstrap'}
@@ -300,14 +371,16 @@ class WorkflowExecution:
                 cleanup_capture=capture_sha256,
                 **({'review_capture':source} if handle['state']['status']=='succeeded' else {}))
             return {'next_phase':'validate'}
-        if phase in ('review_call','review_tools') and execution['workspace'].get('store') == 's3':
-            return await self.review_from_store(payload,token,execution)
         if phase == 'bootstrap' and state.stored_bootstrap(execution):
             descriptor = queue['dispatch_input']
             require(descriptor == execution['dispatch_input'], 'Bootstrap dispatch checkpoint differs from execution')
             self.bootstrap_config(job, execution, descriptor)
             if box['phase'] == 'prepared': return {'next_phase': 'launch'}
-            handle = await adapter.prepare_from_store(descriptor['bootstrap'], box, self.store())
+            research_access = None
+            if descriptor['bootstrap'].get('config', {}).get('research_context'):
+                from .research_hosted import access
+                research_access = await run_sync(access, self.repository, job, queue['attempt'])
+            handle = await adapter.prepare_from_store(descriptor['bootstrap'], box, self.store(), **({'research_access': research_access} if research_access else {}))
             require(handle.get('phase') == 'prepared' and all(handle.get(key) == box.get(key)
                 for key in ('box_id', 'job_id', 'attempt')), 'Bootstrap cannot replace its assigned Box')
             await run_sync(self.commit_checkpoint, payload, token, execution['workspace'], box=handle)
@@ -315,6 +388,10 @@ class WorkflowExecution:
         request, inputs = self.request(job, queue, execution, root)
         if phase == 'bootstrap':
             if box['phase'] == 'prepared': return {'next_phase': 'launch'}
+            if inputs.get('retrieval_mode') == 'progressive':
+                from dataclasses import replace
+                from .research_hosted import access
+                request = replace(request, research_access=await run_sync(access, self.repository, job, queue['attempt']))
             handle = await adapter.prepare_once(request, box)
             await run_sync(self.checkpoint, payload, token, root, box=handle,
                 dispatch_input={**queue['dispatch_input'],'selected_graphs':list(request.selected_graphs)})
@@ -348,8 +425,6 @@ class WorkflowExecution:
                 return {'next_phase': 'complete', 'done': True}
             return {'next_phase': 'validate'}
         if phase == 'validate': return await self.validate(payload, token, job, queue, execution, root, request, inputs)
-        if phase in ('review_init', 'review_call', 'review_tools'):
-            return await self.review(payload, token, job, queue, execution, root, request, inputs)
         if phase == 'commit': return await self.commit(payload, token, job, queue, execution, root, request, inputs)
         raise ValueError('Unknown workflow phase')
 
@@ -396,7 +471,7 @@ class WorkflowExecution:
         source = await run_sync(read_preparation_inputs, self.repository, job)
         if job['kind'] == 'analysis':
             frozen, binding = source
-            path, package = await run_sync(collect, job, frozen, binding, queue['inputs'].get('budgets', {}), root/'evidence')
+            path, package = await run_sync(collect, job, frozen, binding, queue['inputs'].get('budgets', {}), root/'evidence', **({'repository': self.repository} if frozen.get('retrieval_mode') == 'progressive' else {}))
             path, package, measurement = await run_sync(fit_input_budget, path, mode, queue['inputs'].get('budgets', {}).get('evidence_tokens', 24000))
             (root/'token-budget.json').write_bytes(canonical_json(measurement))
         else:
@@ -423,74 +498,48 @@ class WorkflowExecution:
 
     async def validate(self, payload, token, job, queue, execution, root, request, inputs):
         marker = await run_sync(self.verified_capture, payload, execution, request)
-        if execution.get('validated_paths'): return {'next_phase': 'review_init'}
         result = captured_result(request, execution['box'], marker)
-        await run_sync(self.activity, payload, token, 'stage', {'stage': 'validating', 'message': 'Checking source fidelity, identities and captured provenance.'})
         if result.status not in ('succeeded', 'insufficient_evidence'):
             from .job_failures import authoring_failure
+            if result.status == 'failed':
+                await run_sync(self.activity, payload, token, 'stage', {
+                    'stage': 'authoring_paragraph' if job['kind'] == 'paragraph' else 'authoring_account',
+                    'state': 'failed', 'message': 'Agent execution stopped before a completed output was available.'})
             await run_sync(jobs.finish, self.repository, job['id'], token, result.status,
                                    failure=authoring_failure(result, request) if result.status == 'failed' else None)
             return {'next_phase': 'complete', 'done': True}
+        await run_sync(self.activity, payload, token, 'stage', {'stage': 'validating', 'message': 'Checking source fidelity, identities and captured provenance.'})
         await run_sync(validate_execution_ledger, result, request, queue['dispatch_input']['model'])
         if result.status == 'insufficient_evidence': return {'next_phase': 'commit', 'outcome': True}
         if job['kind'] == 'analysis':
             frozen, _ = await run_sync(read_preparation_inputs, self.repository, job)
-            require(0 < len(result.account_paths) <= queue['inputs'].get('budgets', {}).get('max_accounts', 3), 'Invalid account count')
+            from .research_hosted import captured_context
+            validation_path, _, existing = await run_sync(captured_context, self.repository, job, result, request.input_path, root/'research-context')
+            require(0 < len(result.account_paths)+len(existing) <= queue['inputs'].get('budgets', {}).get('max_accounts', 3), 'Invalid account count')
             directory = root/'validated'; directory.mkdir(exist_ok=True)
+            diagnostics = root/f'attempt-{queue["attempt"]}'; diagnostics.mkdir(exist_ok=True)
             paths = []
+            from .scientific_account_lint import AccountValidationError
+            from .admin_jobs import redact
             for index, path in enumerate(result.account_paths):
                 target = directory/f'account-{index}.json'
-                document, report = await run_sync(assemble_account, assert_artifact(path, request.output_dir), request.input_path,
-                    target, frozen['attribution'], job, request.attempt, 'box', result.ledger_manifest_path)
+                try:
+                    document, report = await run_sync(assemble_account, assert_artifact(path, request.output_dir), validation_path,
+                        target, frozen['attribution'], job, request.attempt, 'box', result.ledger_manifest_path)
+                except AccountValidationError as exc:
+                    (diagnostics/f'validation-{index+1}.json').write_bytes(canonical_json(redact(exc.report)))
+                    raise
+                (diagnostics/f'validation-{index+1}.json').write_bytes(canonical_json(redact(report)))
                 (directory/f'report-{index}.json').write_bytes(canonical_json(report)); paths.append(str(target.relative_to(root)))
         else:
             from .box_paragraph import validate_paragraph_segments
             require(result.paragraph_path is not None, 'Missing paragraph')
-            validate_paragraph_segments(decode(result.paragraph_path.read_bytes()), inputs)
+            try:
+                validate_paragraph_segments(decode(result.paragraph_path.read_bytes()), inputs)
+            except ValueError as exc:
+                raise EvidenceBuildError(str(exc)) from exc
             paths = [str(result.paragraph_path.relative_to(root))]
-        await run_sync(self.checkpoint, payload, token, root, validated_paths=paths, review_index=0, review_checkpoint=None)
-        return {'next_phase': 'review_init'}
-
-    async def review(self, payload, token, job, queue, execution, root, request, inputs):
-        from . import durable_review
-        index = execution['review_index']; path = root/'review'/f'{execution["review_attempt"]}-{index}.json'
-        path.parent.mkdir(exist_ok=True)
-        def checkpoint(value):
-            path.write_bytes(canonical_json(value))
-            self.checkpoint(payload, token, root, review_checkpoint=str(path.relative_to(root)))
-        if execution['phase'] == 'review_init':
-            document = decode((root/execution['validated_paths'][index]).read_bytes())
-            marker = read_capture_marker(request, execution['box']); result = captured_result(request, execution['box'], marker)
-            review = await run_sync(durable_review.initial, job['kind'], document, inputs,
-                ledger_path=result.ledger_manifest_path, budget=float(setting('REVEAL_GROUNDING_MAX_BUDGET_USD', '0.30')))
-            await run_sync(checkpoint, review)
-            return {'next_phase': 'review_call'}
-        review = decode((root/execution['review_checkpoint']).read_bytes())
-        return await self.advance_review(execution,review,checkpoint)
-
-    async def review_from_store(self,payload,token,execution):
-        """Review checkpoints already contain frozen inputs and evidence."""
-        path=execution['review_checkpoint']; reference=execution['workspace']
-        review=decode(await run_sync(self.store().read_workspace_file,reference,path))
-        def checkpoint(value):
-            nonlocal reference
-            updated=self.store().replace_workspace_files(reference,{path:canonical_json(value)})
-            self.commit_checkpoint(payload,token,updated,review_checkpoint=path)
-            reference=updated
-        return await self.advance_review(execution,review,checkpoint)
-
-    async def advance_review(self,execution,review,checkpoint):
-        from . import durable_review
-        index=execution['review_index']
-        if execution['phase'] == 'review_call':
-            await run_sync(durable_review.call_one, review, setting('ANTHROPIC_API_KEY'), checkpoint)
-            return {'next_phase': 'review_tools'}
-        review = await run_sync(durable_review.process_response, review)
-        await run_sync(checkpoint, review)
-        if not review['complete']: return {'next_phase': 'review_call'}
-        require(review['result']['accepted'], 'Independent source-grounding review rejected scientific content')
-        if index + 1 < len(execution['validated_paths']):
-            return {'next_phase': 'review_init', 'review_index': index + 1, 'review_checkpoint': None}
+        await run_sync(self.checkpoint, payload, token, root, validated_paths=paths)
         return {'next_phase': 'commit'}
 
     async def commit(self, payload, token, job, queue, execution, root, request, inputs):
@@ -500,7 +549,7 @@ class WorkflowExecution:
             def save_workspace(self, _job, _token, _root):
                 engine.checkpoint(payload, token, root)
         worker = AcceptanceWorker(self.repository)
-        if not await worker.begin_persistence(job, token, 'Saving the independently validated research outcome.'):
+        if not await worker.begin_persistence(job, token, 'Saving the validated research outcome.'):
             return {'next_phase': 'complete', 'done': True}
         directory = root/'validated'; directory.mkdir(exist_ok=True)
         result = captured_result(request, execution['box'], marker)
@@ -515,7 +564,9 @@ class WorkflowExecution:
             else:
                 accepted = [(decode((root/path).read_bytes()), decode((directory/f'report-{index}.json').read_bytes()), root/path)
                             for index, path in enumerate(execution['validated_paths'])]
-                await drain_on_cancel(worker.accept_accounts(job, token, accepted, frozen, request.input_path, result, directory, 'box'))
+                from .research_hosted import captured_context
+                validation_path, _, _ = await run_sync(captured_context, self.repository, job, result, request.input_path, root/'research-context')
+                await drain_on_cancel(worker.accept_accounts(job, token, accepted, frozen, validation_path, result, directory, 'box'))
         else:
             await drain_on_cancel(worker.accept_paragraph(job, token, decode((root/execution['validated_paths'][0]).read_bytes()), inputs, directory))
         current, _, _ = await run_sync(self.context, payload)

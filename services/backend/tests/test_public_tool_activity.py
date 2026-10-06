@@ -3,7 +3,7 @@ import json
 import unittest
 
 from reveal_backend.box_stream import ClaudeStream
-from reveal_backend.public_tool_activity import (ARGUMENT_BYTES, PREVIEW_BYTES, display_arguments,
+from reveal_backend.public_tool_activity import (ARGUMENTS, ARGUMENT_BYTES, PREVIEW_BYTES, display_arguments, durable_operation,
                                                  result_preview, tool_call_payload, tool_result_payload)
 from reveal_backend.worker import public_activity
 
@@ -13,6 +13,50 @@ def encoded(value):
 
 
 class PublicToolActivityTests(unittest.TestCase):
+    def test_hosted_catalog_has_explicit_safe_argument_projection(self):
+        from reveal_backend.box_research import ALLOWED_TOOLS
+        from reveal_backend.research_tools import private_definitions
+        self.assertFalse(ALLOWED_TOOLS - ARGUMENTS.keys())
+        hidden = {'local_work_id', 'research_request_id', 'idempotency_key'}
+        for tool in private_definitions():
+            if tool['name'] in ALLOWED_TOOLS:
+                with self.subTest(tool=tool['name']):
+                    self.assertEqual(set(ARGUMENTS[tool['name']]),
+                        set(tool['inputSchema']['properties']) - hidden)
+        inputs = {'arguments': {'factor_id': 'pinned-factor', 'kind': 'genes', 'limit': 25,
+                               'api_key': 'NEVER SHOW', 'thinking': 'PRIVATE THOUGHT'},
+                  'research_request_id': 'PRIVATE SCOPE', 'idempotency_key': 'PRIVATE RETRY',
+                  'authorization': 'PRIVATE TOKEN'}
+        shown = display_arguments('mcp__reveal__get_factor_loadings', inputs)
+        self.assertEqual(json.loads(shown)['arguments']['factor_id'], 'pinned-factor')
+        for private in ('NEVER SHOW', 'PRIVATE THOUGHT', 'PRIVATE SCOPE', 'PRIVATE RETRY', 'PRIVATE TOKEN'):
+            self.assertNotIn(private, shown)
+        self.assertEqual(json.loads(display_arguments('mcp__reveal__get_operation',
+            {'operation_id': 'operation-1'})), {'operation_id': 'operation-1'})
+
+    def test_pending_operation_is_identified_without_claiming_scientific_completion(self):
+        value = {'operation_id': 'operation-1', 'state': 'received', 'detail': 'PRIVATE UNSTRUCTURED DETAIL'}
+        for result in ({'structuredContent': value}, {'content': json.dumps(value)},
+                       {'content': [{'type': 'text', 'text': json.dumps(value)}]}):
+            with self.subTest(result=result):
+                projected = tool_result_payload('call-1', 'mcp__reveal__get_factor_loadings', {}, result)
+                self.assertIn('scientific result is not ready', projected['message'])
+                self.assertIn('operation-1', projected['message'])
+                self.assertNotIn('PRIVATE', projected['message'])
+                self.assertEqual(durable_operation(result), {'operation_id': 'operation-1', 'state': 'received'})
+        self.assertIsNone(durable_operation({'content': 'unstructured output'}))
+        self.assertIsNone(durable_operation({'structuredContent': {'operation_id': 'unsafe\ntext', 'state': 'running'}}))
+        completed = tool_result_payload('call-2', 'mcp__reveal__get_operation', {},
+            {'structuredContent': {'operation_id': 'operation-1', 'state': 'succeeded'}})
+        self.assertNotIn('not ready', completed['message'])
+        for secret in ('configured-secret-value', 'sk-ant-fixture-secret-0123456789abcdef'):
+            result = {'structuredContent': {'operation_id': secret, 'state': 'running'}}
+            projected = tool_result_payload('call-3', 'mcp__reveal__get_operation', {}, result, (secret,))
+            self.assertNotIn(secret, json.dumps(projected))
+            self.assertIsNone(durable_operation(result, (secret,)))
+        unrelated = tool_result_payload('read-1', 'Read', {}, {'structuredContent': value})
+        self.assertNotIn('scientific result', unrelated['message'])
+
     def test_read_arguments_result_correlation_and_observed_duration(self):
         clock = iter((1.0, 2.234))
         parser = ClaudeStream(clock=lambda: next(clock))

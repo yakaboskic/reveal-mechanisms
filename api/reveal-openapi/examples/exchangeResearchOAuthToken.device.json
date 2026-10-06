@@ -1,0 +1,41 @@
+{
+  "operation_id": "exchangeResearchOAuthToken",
+  "case": "device",
+  "method": "POST",
+  "path_template": "/oauth/token",
+  "request": {
+    "url": "https://api.reveal.example.org/oauth/token",
+    "path": {},
+    "query": {},
+    "headers": {
+      "Content-Type": "application/x-www-form-urlencoded",
+      "Accept": "application/json"
+    },
+    "body": {
+      "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
+      "client_id": "reveal-local-launcher",
+      "resource": "https://api.reveal.example.org/mcp",
+      "device_code": "rvld_FICTIONAL_DEVICE_SECRET"
+    }
+  },
+  "responses": {
+    "200": {
+      "content_type": "application/json",
+      "examples": {
+        "tokens": {
+          "access_token": "rvlm_FICTIONAL_ACCESS",
+          "refresh_token": "rvlrt_FICTIONAL_REFRESH",
+          "token_type": "Bearer",
+          "expires_in": 900,
+          "scope": "research:read research:write",
+          "resource": "https://api.reveal.example.org/mcp",
+          "local_work_id": "77777777-7777-4777-8777-777777777777",
+          "package_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "mcp_url": "https://api.reveal.example.org/mcp",
+          "grant_id": "99999999-9999-4999-8999-999999999999"
+        }
+      }
+    }
+  },
+  "curl": "curl -X POST https://api.reveal.example.org/oauth/token -H 'Content-Type: application/x-www-form-urlencoded' -H 'Accept: application/json' --data-raw 'grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Adevice_code&client_id=reveal-local-launcher&resource=https%3A%2F%2Fapi.reveal.example.org%2Fmcp&device_code=rvld_FICTIONAL_DEVICE_SECRET'"
+}

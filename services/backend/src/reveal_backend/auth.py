@@ -5,6 +5,8 @@ import time
 import jwt
 from .repository import now
 
+_UNREAD = object()
+
 class Problem(Exception):
     def __init__(self, status, code, detail, **extra):
         self.status, self.code, self.detail, self.extra = status, code, detail, extra
@@ -62,7 +64,7 @@ def publication_principal(tx, authorization, visibility):
         raise Problem(403, 'SIGN_IN_REQUIRED', 'Sign in to publish a scientific account or exploration.')
     return me
 
-def require_owned(tx, kind, identity, user, row):
+def require_owned(tx, kind, identity, user, row, *, dependency=_UNREAD):
     """Authorize one exact row from this transaction, including batched reads."""
     from .repository import digest
     shared = False
@@ -71,9 +73,23 @@ def require_owned(tx, kind, identity, user, row):
         grant = tx.get('grant',digest([user,target])); shared = bool(grant and grant['owner']==user)
     if row is None or (row['owner'] != user and not shared):
         raise Problem(404, 'NOT_FOUND', 'The requested resource is unavailable.')
+    if kind in ('object', 'account', 'paragraph', 'citation', 'artifact'):
+        from .scientific_reuse import authorize_object
+        target = row['data'].get('file', {}).get('id') if kind == 'artifact' else identity
+        if kind == 'citation': target = row['data'].get('target_id', identity.rsplit(':', 1)[0])
+        if target:
+            if dependency is _UNREAD: authorize_object(tx, user, target)
+            else: authorize_object(tx, user, target, dependency=dependency)
+    elif kind == 'scientific_document':
+        from .scientific_reuse import authorize_document
+        authorize_document(tx, user, row['data'].get('document', {}))
     return row
 
 def owned(tx, kind, identity, user):
     from .repository import digest
     key = digest([user,identity]) if kind in ('object','account','paragraph') else identity
+    if kind in ('object','account','paragraph') and hasattr(tx, 'get_records'):
+        records = tx.get_records(((kind, key), ('scientific_dependencies', key)))
+        return require_owned(tx, kind, identity, user, records.get((kind, key)),
+                             dependency=records.get(('scientific_dependencies', key)))
     return require_owned(tx, kind, identity, user, tx.get(kind, key))

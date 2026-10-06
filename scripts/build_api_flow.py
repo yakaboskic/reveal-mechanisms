@@ -30,6 +30,11 @@ MERMAID = '''flowchart TB
   C["10. Copy/export paragraph + citations<br/>POST /v1/citations/render; GET /v1/citations/{id}<br/>200 bibliography / citation export"]
   U["Private documents<br/>POST /v1/uploads → direct S3 upload<br/>POST /v1/uploads/{id}/complete"] -. verified originals + extracted text .-> D
   G --> M --> D --> A --> J
+  L["Local workspace<br/>POST /v1/local-work; /setup-kit<br/>credential-free ZIP; Codex or Claude Code"]
+  R["Anonymous public research<br/>exact generation and portable captures<br/>offline files remain available"]
+  O["Explicit registered browser consent<br/>device or S256 PKCE<br/>scoped private reads and contribution"]
+  D -->|Use my local agent| L --> R -->|when ready to contribute| O
+  O -->|validate and submit private accounts| S
   J -->|accepted accounts| S
   J -->|automatic outbox fan-out| P --> Q
   Q -->|succeeded| T --> C
@@ -43,7 +48,7 @@ MERMAID = '''flowchart TB
   F["Show insufficient evidence / failed / cancelled<br/>Inspect saved inputs and diagnostics"]
   J -->|other terminal state| F
   Q -->|failed or cancelled| F
-  W["Worker behind the analysis job<br/>CFDE connections ×4 with frozen anchors → contextual edges<br/>bounded evidence → Claude Code + selected Proto-OKN<br/>validate/mint/save DAPPER accounts"]
+  W["Worker behind the analysis job<br/>small frozen seed → shared loaded-data/reuse MCP<br/>retained receipts → Claude Code + selected Proto-OKN<br/>validate/mint/save DAPPER accounts"]
   A -. asynchronous work .-> W
   W -. persisted status/results .-> J
   V["Paragraph worker<br/>saved account → Claude Code expression<br/>validate spans/revisions → mint/save Paragraph"]
@@ -72,7 +77,7 @@ def main():
     for key, op in operations.items():
         operation_data[key] = {'summary': op['summary'], 'description': op['description'], 'responses': op['responses'],
             'reference': 'index.html#/' + quote(op['tags'][0], safe='') + '/' + key,
-            'request_schema': op.get('requestBody', {}).get('content', {}).get('application/json', {}).get('schema')}
+            'request_schema': next(iter(op.get('requestBody', {}).get('content', {}).values()), {}).get('schema')}
     mapping = {'openapi_sha256': checksum, 'steps': STEPS, 'support': SUPPORT,
                'operation_count': len(mapped), 'exchange_count': len(examples)}
     (API / 'flow-map.json').write_text(json.dumps(mapping, indent=2) + '\n')
@@ -83,7 +88,7 @@ def main():
     (API / 'flow.mmd').write_text(MERMAID)
     lines = ['# User interaction and endpoint flow', '',
         'Open [the interactive diagram](flow.html) to select any step and inspect its exact request/response or error examples. The diagram is documentation, not a running research interface.', '',
-        'The ten numbered steps are the main path. Login, saved history, cancellation and recovery are supporting paths. Backend worker calls appear separately from the public REST contract.', '',
+        'The numbered steps describe online research. Local workspaces, public captures, OAuth, history and recovery are supporting paths. Backend worker calls appear separately from the public REST contract.', '',
         '```mermaid', MERMAID.rstrip(), '```', '', '## Complete endpoint and exchange mapping', '']
     for i, node in enumerate(STEPS + SUPPORT):
         title = (str(i + 1) + '. ' if i < len(STEPS) else '') + node['title']

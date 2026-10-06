@@ -1,5 +1,6 @@
 """Bounded, process-local latency summaries; no SQL text, parameters or URLs."""
 from collections import deque
+from contextlib import contextmanager
 from threading import Lock
 import os
 import time
@@ -7,6 +8,20 @@ import time
 _lock = Lock()
 _started = time.time()
 _samples = {}
+
+
+@contextmanager
+def measure(category, name):
+    """Time one fixed-name phase, including failures, without recording inputs."""
+    started = time.perf_counter()
+    failed = False
+    try:
+        yield
+    except BaseException:
+        failed = True
+        raise
+    finally:
+        observe(category, name, (time.perf_counter()-started)*1000, failed)
 
 
 def observe(category, name, duration_ms, failed=False):

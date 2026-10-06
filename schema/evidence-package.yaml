@@ -16,7 +16,7 @@ default_prefix: reveal_ep
 default_range: string
 imports:
 - linkml:types
-- ../data/dapper/2026-09-24-v8/snapshot/schema/dapper
+- ../data/dapper/0.2.0/snapshot/schema/dapper
 types:
   EPSha256:
     typeof: string
@@ -1201,6 +1201,11 @@ classes:
         inlined_as_list: true
       gene_set_collections:
         range: GeneSetCollection
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+      embeddings:
+        range: Embedding
         multivalued: true
         inlined: true
         inlined_as_list: true

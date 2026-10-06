@@ -24,7 +24,8 @@ def service(monkeypatch, tmp_path):
     repository = Repository(str(tmp_path / 'application.sqlite'))
     repository.migrate()
     monkeypatch.setattr(api, 'repo', repository)
-    monkeypatch.setattr(api, 'catalog', SimpleNamespace(load=lambda: None, dismech_import='dismech',
+    monkeypatch.setattr(api, 'catalog', SimpleNamespace(load=lambda: None, readiness=lambda: {
+        'dismech_import': 'dismech', 'gaps': 0, 'mapping_run': 'mapping', 'mapped_factors': 0, 'embedding_run': 'embedding'}, dismech_import='dismech',
         gaps={}, mapping_run='mapping', factors={}, embedding_run='embedding'))
     monkeypatch.setenv('REVEAL_GATEWAY_SECRET', 's' * 40)
     monkeypatch.setenv('REVEAL_GATEWAY_SERVICE_TOKEN', 't' * 40)

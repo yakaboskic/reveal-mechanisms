@@ -5,5 +5,6 @@ export default async function Resolver({ params }: { params: Promise<{ id: strin
   const exact = decodeURIComponent(id);
   if (exact.startsWith("dapper:Claim.")) redirect(`/claims/${encodeURIComponent(exact)}`);
   if (exact.startsWith("dapper:ScientificAccount.")) redirect(`/accounts/${encodeURIComponent(exact)}`);
+  if (exact.startsWith("dapper:GeneSet.")) redirect(`/gene-sets/${encodeURIComponent(exact)}`);
   return <ObjectView id={exact} />;
 }

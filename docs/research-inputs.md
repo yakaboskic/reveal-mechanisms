@@ -19,7 +19,7 @@ Pending transfers have a separate five-file/16 MB allowance so a researcher can 
 
 ## Evidence and disclosure
 
-The evidence package includes researcher direction, context, hypotheses, upload metadata, exact original and extraction DAPPER File IDs, and extracted segments with page, paragraph or line locators. The agent's file reader and the independent scientific reviewer receive the same content. Original and extraction bytes are bundled and checksum verified. Recovery rejects changes to the submitted text or pinned upload descriptors.
+The evidence package includes researcher direction, context, hypotheses, upload metadata, exact original and extraction DAPPER File IDs, and extracted segments with page, paragraph or line locators. The agent's file reader receives this content, and final validation checks returned output against the frozen sources. Original and extraction bytes are bundled and checksum verified. Recovery rejects changes to the submitted text or pinned upload descriptors.
 
 Researcher hypotheses are unverified proposals. Supplied observations can support auxiliary evidence only when the exact content supports the claim; required CFDE ancestry is unchanged. Citations use the extraction File and an exact JSON Pointer such as `/segments/0`, together with its human-readable locator. The deterministic source checker verifies segment resolution and verbatim snippets, including when an account cites the original PDF or DOCX File.
 

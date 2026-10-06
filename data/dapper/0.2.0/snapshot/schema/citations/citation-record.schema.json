@@ -1,0 +1,733 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "REVEAL citation metadata record, version 1",
+  "description": "External registry contract keyed by (target_id, metadata_revision). Not a DAPPER scientific node. Metadata revisions never alter target identity. Unknown dates and names must not be fabricated.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "target_id": {
+      "type": "string",
+      "pattern": "^dapper:(Claim|Question|KnowledgeGap)\\.[A-Za-z0-9_-]{32}$"
+    },
+    "target_class": {
+      "enum": [
+        "Claim",
+        "Question",
+        "KnowledgeGap"
+      ]
+    },
+    "dapper_schema_version": {
+      "type": "string",
+      "pattern": "\\S",
+      "description": "Pinned schema release, commit, or content checksum; never a moving branch name."
+    },
+    "dapper_identity_profile": {
+      "const": "DAPPER-ID-1"
+    },
+    "object_payload_ref": {
+      "type": "string",
+      "format": "uri"
+    },
+    "metadata_revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "citation_profile_version": {
+      "const": "reveal-citation-v1"
+    },
+    "metadata_checksum": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "\\S"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "title": {
+      "type": "string",
+      "pattern": "\\S"
+    },
+    "title_derivation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "method": {
+          "type": "string",
+          "pattern": "\\S"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "\\S"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "source": {
+          "$ref": "#/$defs/provenance"
+        }
+      },
+      "required": [
+        "method",
+        "source"
+      ]
+    },
+    "language": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "\\S"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "byline": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/contributor"
+      }
+    },
+    "origin": {
+      "enum": [
+        "native",
+        "imported"
+      ]
+    },
+    "generated_at": {
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "first_minted_at": {
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "published_at": {
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "original_issued_date": {
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "date"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "imported_at": {
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "issued_date": {
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "date"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "issued_basis": {
+      "enum": [
+        "first_minted_at",
+        "original_issued_date",
+        "unknown"
+      ]
+    },
+    "date_provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "generated_at": {
+          "$ref": "#/$defs/provenance"
+        },
+        "first_minted_at": {
+          "$ref": "#/$defs/provenance"
+        },
+        "published_at": {
+          "$ref": "#/$defs/provenance"
+        },
+        "original_issued_date": {
+          "$ref": "#/$defs/provenance"
+        },
+        "imported_at": {
+          "$ref": "#/$defs/provenance"
+        }
+      },
+      "required": []
+    },
+    "publisher": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "\\S"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "repository": {
+      "type": "string",
+      "pattern": "\\S"
+    },
+    "canonical_url": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https?://"
+    },
+    "doi": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^10\\.\\d{4,9}/\\S+$",
+          "description": "Only a registered DOI for this exact object/version. Registration is checked by the application, not this syntax rule."
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "accession": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "\\S"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "generation_activity": {
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "uri"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "responsible_agents": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uri"
+      },
+      "uniqueItems": true
+    },
+    "source_revisions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "source_ref": {
+            "type": "string",
+            "format": "uri"
+          },
+          "revision": {
+            "type": "string",
+            "pattern": "\\S"
+          },
+          "source": {
+            "$ref": "#/$defs/provenance"
+          }
+        },
+        "required": [
+          "source_ref",
+          "revision"
+        ]
+      }
+    },
+    "prior_objects": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "target_id": {
+            "type": "string",
+            "pattern": "^dapper:(Claim|Question|KnowledgeGap)\\.[A-Za-z0-9_-]{32}$"
+          },
+          "relation": {
+            "enum": [
+              "revision_of",
+              "correction_of",
+              "derived_from"
+            ]
+          }
+        },
+        "required": [
+          "target_id",
+          "relation"
+        ]
+      }
+    },
+    "access_level": {
+      "enum": [
+        "private",
+        "restricted",
+        "public"
+      ]
+    },
+    "publication_state": {
+      "enum": [
+        "unpublished",
+        "published",
+        "withdrawn"
+      ]
+    },
+    "notices": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "enum": [
+              "correction",
+              "withdrawal"
+            ]
+          },
+          "text": {
+            "type": "string",
+            "pattern": "\\S"
+          },
+          "recorded_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "Z$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source": {
+            "$ref": "#/$defs/provenance"
+          }
+        },
+        "required": [
+          "kind",
+          "text",
+          "source"
+        ]
+      }
+    }
+  },
+  "required": [
+    "target_id",
+    "target_class",
+    "dapper_schema_version",
+    "dapper_identity_profile",
+    "object_payload_ref",
+    "metadata_revision",
+    "citation_profile_version",
+    "title",
+    "title_derivation",
+    "language",
+    "byline",
+    "origin",
+    "first_minted_at",
+    "published_at",
+    "issued_date",
+    "issued_basis",
+    "date_provenance",
+    "publisher",
+    "repository",
+    "canonical_url",
+    "access_level",
+    "publication_state"
+  ],
+  "$defs": {
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "source_ref": {
+          "type": "string",
+          "format": "uri"
+        },
+        "source_revision": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "\\S"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "recorded_by": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "uri"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "recorded_at": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "Z$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "source_ref"
+      ]
+    },
+    "contributor": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "agent_id": {
+          "type": "string",
+          "format": "uri"
+        },
+        "kind": {
+          "enum": [
+            "person",
+            "software",
+            "organization"
+          ]
+        },
+        "display_name": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "\\S"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "given_name": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "\\S"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "family_name": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "\\S"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "roles": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "author",
+              "ai_generator",
+              "agent_operator",
+              "publisher",
+              "curator"
+            ]
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "source": {
+          "$ref": "#/$defs/provenance"
+        },
+        "orcid": {
+          "anyOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^https://orcid\\.org/\\d{4}-\\d{4}-\\d{4}-\\d{3}[\\dX]$"
+                },
+                "status": {
+                  "enum": [
+                    "supplied",
+                    "verified"
+                  ]
+                },
+                "source": {
+                  "$ref": "#/$defs/provenance"
+                }
+              },
+              "required": [
+                "id",
+                "status",
+                "source"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "provider": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "\\S"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "agent_version": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "\\S"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "model_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "\\S"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "model_version": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "\\S"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "harness_name": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "\\S"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "harness_version": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "\\S"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "generation_activity": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "uri"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "agent_id",
+        "kind",
+        "roles",
+        "source"
+      ],
+      "description": "An ordered attribution snapshot. Array position is byline order; names and versions remain absent or null when unknown. Source credit and operator/publisher roles are distinct.",
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "software",
+                  "organization"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "orcid": {
+                "type": "null"
+              },
+              "given_name": {
+                "type": "null"
+              },
+              "family_name": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "roles": {
+                "contains": {
+                  "const": "ai_generator"
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "kind": {
+                "const": "software"
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "target_class": {
+            "const": "Claim"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "target_id": {
+            "pattern": "^dapper:Claim\\."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "target_class": {
+            "const": "Question"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "target_id": {
+            "pattern": "^dapper:Question\\."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "target_class": {
+            "const": "KnowledgeGap"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "target_id": {
+            "pattern": "^dapper:KnowledgeGap\\."
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "origin": {
+            "const": "imported"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "original_issued_date",
+          "imported_at"
+        ]
+      }
+    }
+  ]
+}

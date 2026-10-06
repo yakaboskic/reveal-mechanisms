@@ -18,7 +18,7 @@ type Event = Schema<"JobEvent">;
 export type ActivityStage = "preparation" | "setup" | "research" | "collection" | "validation" | "saving";
 export const stageLabels: Record<ActivityStage, string> = {
   preparation: "Evidence preparation", setup: "Runtime setup", research: "Research agent",
-  collection: "Collecting results", validation: "Scientific validation", saving: "Saving results",
+  collection: "Collecting results", validation: "Checking account and sources", saving: "Saving results",
 };
 
 export function activityStage(stage: Schema<"Job">["stage"]): ActivityStage {

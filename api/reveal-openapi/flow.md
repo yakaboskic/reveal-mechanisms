@@ -2,7 +2,7 @@
 
 Open [the interactive diagram](flow.html) to select any step and inspect its exact request/response or error examples. The diagram is documentation, not a running research interface.
 
-The ten numbered steps are the main path. Login, saved history, cancellation and recovery are supporting paths. Backend worker calls appear separately from the public REST contract.
+The numbered steps describe online research. Local workspaces, public captures, OAuth, history and recovery are supporting paths. Backend worker calls appear separately from the public REST contract.
 
 ```mermaid
 flowchart TB
@@ -18,6 +18,11 @@ flowchart TB
   C["10. Copy/export paragraph + citations<br/>POST /v1/citations/render; GET /v1/citations/{id}<br/>200 bibliography / citation export"]
   U["Private documents<br/>POST /v1/uploads → direct S3 upload<br/>POST /v1/uploads/{id}/complete"] -. verified originals + extracted text .-> D
   G --> M --> D --> A --> J
+  L["Local workspace<br/>POST /v1/local-work; /setup-kit<br/>credential-free ZIP; Codex or Claude Code"]
+  R["Anonymous public research<br/>exact generation and portable captures<br/>offline files remain available"]
+  O["Explicit registered browser consent<br/>device or S256 PKCE<br/>scoped private reads and contribution"]
+  D -->|Use my local agent| L --> R -->|when ready to contribute| O
+  O -->|validate and submit private accounts| S
   J -->|accepted accounts| S
   J -->|automatic outbox fan-out| P --> Q
   Q -->|succeeded| T --> C
@@ -31,7 +36,7 @@ flowchart TB
   F["Show insufficient evidence / failed / cancelled<br/>Inspect saved inputs and diagnostics"]
   J -->|other terminal state| F
   Q -->|failed or cancelled| F
-  W["Worker behind the analysis job<br/>CFDE connections ×4 with frozen anchors → contextual edges<br/>bounded evidence → Claude Code + selected Proto-OKN<br/>validate/mint/save DAPPER accounts"]
+  W["Worker behind the analysis job<br/>small frozen seed → shared loaded-data/reuse MCP<br/>retained receipts → Claude Code + selected Proto-OKN<br/>validate/mint/save DAPPER accounts"]
   A -. asynchronous work .-> W
   W -. persisted status/results .-> J
   V["Paragraph worker<br/>saved account → Claude Code expression<br/>validate spans/revisions → mint/save Paragraph"]
@@ -109,10 +114,10 @@ Freeze the current editor snapshot and queue analysis; unsaved edits do not over
 
 **Worker processing behind the job:**
 
-- Resolve frozen DisMech context; four same-seed CFDE connections plus contextual edges and BioIndex queries.
-- Build, validate and freeze the evidence package with exact source artifacts and supplied documents for the agent and independent reviewer.
-- Fresh verified DAPPER clone, Claude Code in Box, selected Proto-OKN tools.
-- Trusted assembly, minting, final lint plus grounding/ledger/ownership checks.
+- Prepare a small immutable seed from frozen selections and authoring-kit bytes; no eager source crawl.
+- Hosted agent uses the shared loaded-reference/reuse MCP service and exact work/request-scoped evidence receipts. Only the gated small-model phenotype tools may query BioIndex.
+- Verified DAPPER runtime and Claude Code in Box with an execution-fenced trusted proxy.
+- Trusted assembly, minting, final lint/source/ledger/ownership checks; persist eligible new or reused accounts.
 
 ### 5. Prepare evidence and observe research
 
@@ -131,7 +136,7 @@ Evidence preparation followed by public agent/tool activity; Stop stays availabl
 - One active loading state; no private reasoning.
 - Package is the schema-current captured input; account fixture is separately authored, not its accepted agent output.
 - Completed activity compresses into Gap analysis complete.
-- Budget failures expose phase, cap and recorded spend. Incomplete independent review can be retried against verified saved output, without launching the research agent.
+- Budget failures expose phase, cap and recorded spend. Output retained after an incomplete legacy review can be validated and saved without launching another research agent or AI reviewer.
 
 ### 6. Read the scientific account
 
@@ -159,7 +164,7 @@ Read closing remarks; open associated claims on demand.
 
 ### 7. Generate the cited statement automatically
 
-Each accepted account independently queues a paragraph; explicit endpoint supports retry/alternate focus.
+New accepted online accounts queue paragraphs; local submissions and reused accounts require an explicit request.
 
 **Request:** Saved account payload, citation revisions, settings and skill version.
 
@@ -362,8 +367,100 @@ Upload exact bytes directly to a short-lived S3 staging destination, then verify
 - User hypotheses are unverified context. Supplied evidence requires exact source locators and retains the existing CFDE requirements.
 - Results based on private researcher inputs cannot be published until a deliberate disclosure workflow exists.
 
+### Inspect factors and gene-set provenance
+
+Open an exact reference factor, search its retained loadings, and follow a gene set to imported collection provenance.
+
+**Request:** Source identity and revision, generation pin, loading kind and metric, literal search text, offset and bounded page size.
+
+**Response:** Factor metadata, separate score ranges, loading pages and exact imported GeneSet with source provenance.
+
+- `GET /v1/factors/{source_id}` — [request request/response](examples/getFactorDetail.request.json)
+- `GET /v1/factor-loadings` — [request request/response](examples/getFactorLoadings.request.json)
+- `GET /v1/catalog/gene-sets/{gene_set_id}` — [request request/response](examples/getCatalogGeneSet.request.json)
+
+- Factor revision and generation mismatches return 409 before loadings are read.
+- Gene sets retain the top 50 projections by joint or marginal rank; absent weights are never treated as zero.
+- Public reference reads expose imported catalog data only; account gene-set permissions are unchanged.
+
+### Download and resume local research
+
+Prepare a frozen workspace, explore public science anonymously and inspect accepted/reused results in Research runs.
+
+**Request:** Owned exact draft revision; selected Codex or Claude Code client; idempotency key for lifecycle writes.
+
+**Response:** Frozen local work, package/manifest metadata, credential-free ZIP and durable submission summaries.
+
+- `POST /v1/local-work` — [saved draft request/response](examples/createLocalWork.saved_draft.json)
+- `GET /v1/local-work` — [request request/response](examples/listLocalWork.request.json)
+- `GET /v1/local-work/{work_id}` — [request request/response](examples/getLocalWork.request.json)
+- `GET /v1/local-work/{work_id}/package` — [request request/response](examples/getLocalWorkPackage.request.json)
+- `POST /v1/local-work/{work_id}/close` — [close request/response](examples/closeLocalWork.close.json)
+- `DELETE /v1/local-work/{work_id}/grants/{grant_id}` — [request request/response](examples/revokeLocalResearchGrant.request.json)
+- `POST /v1/local-work/{work_id}/setup-kit` — [codex request/response](examples/downloadLocalWorkspace.codex.json)
+- `POST /v1/local-work/{work_id}/setup-kit` — [claude code request/response](examples/downloadLocalWorkspace.claude_code.json)
+
+- Both clients start from exact retained inputs using the same local stdio helper; no credential or hosted job is issued by download.
+- Default launch is anonymous; offline mode uses downloaded files. Explicit sign-in is required for private reads, server validation, uploads and submission.
+- Local accepted accounts stay private, optional paragraph generation is explicit and validation-only candidate IDs are not saved accounts.
+
+### Approve scoped agent access
+
+Use registered browser identity to explicitly approve one agent connection for one owned open research run.
+
+**Request:** Public-client resource binding; S256 PKCE or device code; registered Google/ORCID browser identity and explicit work selection.
+
+**Response:** Trusted consent details, exact registered callback or device approval, scoped access/rotating refresh tokens, revocation.
+
+- `GET /.well-known/oauth-authorization-server` — [request request/response](examples/getResearchAuthorizationMetadata.request.json)
+- `GET /.well-known/oauth-protected-resource` — [request request/response](examples/getResearchProtectedResourceMetadata.request.json)
+- `GET /.well-known/oauth-protected-resource/mcp` — [request request/response](examples/getResearchMcpProtectedResourceMetadata.request.json)
+- `POST /oauth/register` — [public client request/response](examples/registerResearchOAuthClient.public_client.json)
+- `GET /oauth/authorize` — [request request/response](examples/authorizeResearchOAuthClient.request.json)
+- `POST /oauth/device_authorization` — [launcher request/response](examples/startResearchDeviceAuthorization.launcher.json)
+- `POST /oauth/token` — [authorization code request/response](examples/exchangeResearchOAuthToken.authorization_code.json)
+- `POST /oauth/token` — [device request/response](examples/exchangeResearchOAuthToken.device.json)
+- `POST /oauth/token` — [refresh request/response](examples/exchangeResearchOAuthToken.refresh.json)
+- `POST /oauth/revoke` — [refresh request/response](examples/revokeResearchOAuthConnection.refresh.json)
+- `GET /v1/research-oauth/consent` — [request request/response](examples/getResearchOAuthConsent.request.json)
+- `POST /v1/research-oauth/consent` — [approve request/response](examples/decideResearchOAuthConsent.approve.json)
+- `POST /v1/research-oauth/consent` — [decline request/response](examples/decideResearchOAuthConsent.decline.json)
+
+- Reading or refreshing consent never grants access; provider sign-in is not approval.
+- An anonymous browser may explicitly move its own workspace after verified sign-in; device codes and work IDs are not ownership proofs.
+- Names are self-reported; show the device code, resource, scopes, callback and work. Never forward provider tokens.
+- Device/token/revoke requests use form encoding directly to the backend. Access lasts at most 15 minutes; rotating refresh families are bounded by work lifetime and 30 days.
+
+### Download retained public reference evidence
+
+Download exact bytes from an anonymous MCP reference query before its stated expiry.
+
+**Request:** Public capture ID and artifact hash returned by get_public_capture; no bearer.
+
+**Response:** Verified public reference bytes with explicit content disposition and no-store.
+
+- `GET /v1/public-research/captures/{capture_id}/artifacts/{artifact_sha256}` — [request request/response](examples/downloadPublicResearchArtifact.request.json)
+
+- Default public retention is 7 days; each capture states its expiry. No private research, uploaded evidence or scientific reuse closure is served here.
+- After sign-in, attach_public_captures verifies same frozen generation and server-retained exact bytes without a source query. Existing authenticated attachments outlive public expiry.
+
+### Legacy connection compatibility
+
+Retain deprecated compatibility only where existing issuance records prove registered authorization; anonymous-issued or unmarked credentials require fresh consent.
+
+**Request:** Owned legacy grant request or already-issued setup ticket.
+
+**Response:** Legacy scoped bearer/connection metadata or ticket revocation.
+
+- `POST /v1/local-work/{work_id}/grants` — [connect request/response](examples/issueLocalResearchGrant.connect.json)
+- `POST /v1/research-setup/exchange` — [redeem request/response](examples/exchangeResearchSetup.redeem.json)
+- `DELETE /v1/local-work/{work_id}/setup-tickets` — [request request/response](examples/revokeLocalSetupTickets.request.json)
+
+- Deprecated for new setup: v2 archives issue neither setup tickets nor manual bearer credentials.
+- New clients use anonymous public access and explicit browser OAuth consent.
+
 ## Evidence and validation
 
 Requests/responses are taken from the existing validated OpenAPI exchange library. The CADinT2D analysis/paragraph sequence is internally linked. The CAD source-selected gap now frames the request and account. The evidence package is a separate captured input; the authored account is not its validated agent output. Semantic scores and agent outputs remain illustrative fixtures.
 
-The mapping covers 57 operations and all 75 exchanges. OpenAPI SHA-256: `1a05e6bf54cee6a15f46010d7985ce36236c2bd90582babf45f764fc37275619`. No endpoints or payloads were changed to build this diagram.
+The mapping covers 81 operations and all 103 exchanges. OpenAPI SHA-256: `f22b3fbc2475b0b3791bc757b0218b03a3227eb237bb706b0a86d32803a227e2`. No endpoints or payloads were changed to build this diagram.

@@ -312,6 +312,10 @@ class ImportTests(Environment):
         with registry.repo.read_transaction() as tx: self.assertEqual(read_active(tx)['vector_snapshot_id'], identity)
         index = UpstashFactorIndex(registry.active(), client=provider)
         index.check()
+        projected = registry.serving(identity)
+        self.assertNotIn('gene_sets', projected); self.assertNotIn('collections', projected)
+        self.assertEqual(projected['_serving_counts'], {'factors': 5, 'contexts': 2, 'gene_sets': 3, 'collections': 2})
+        UpstashFactorIndex(projected, client=provider).check()
         self.assertEqual(index.provenance()['reference_generation_id'], GENERATION)
         self.assertEqual(index.provenance()['id_scheme'], ID_SCHEME)
         records = {row['factor_id']: {'source_id': row['native_id']} for row in index.factors}

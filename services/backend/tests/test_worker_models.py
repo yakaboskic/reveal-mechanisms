@@ -1,6 +1,5 @@
-"""Authoring model selection must not change the reviewer's priced model."""
+"""Frozen authoring models remain verified without launching another model."""
 import asyncio
-import json
 from pathlib import Path
 import tempfile
 from types import SimpleNamespace
@@ -11,7 +10,6 @@ from reveal_backend import jobs
 from reveal_backend.agent_execution import ExecutionResult
 from reveal_backend.evidence_package import sha256
 from reveal_backend.repository import Repository, digest, uid
-from reveal_backend.scientific_grounding import MODEL as REVIEW_MODEL
 from reveal_backend.worker import Worker, persist_dispatch_input
 
 
@@ -65,24 +63,23 @@ class WorkerModelTests(unittest.TestCase):
                     patch('reveal_backend.box_adapter.BoxExecutionAdapter', return_value=adapter) as factory, \
                     patch('reveal_backend.worker.validate_execution_ledger') as validate, \
                     patch('reveal_backend.worker.assemble_account', return_value=({}, {'errors': [], 'warnings': []})), \
-                    patch('reveal_backend.scientific_grounding.' + review_name, return_value={
-                        'accepted': True, 'model': REVIEW_MODEL}) as review:
+                    patch('reveal_backend.scientific_grounding.' + review_name,
+                          side_effect=AssertionError('A second model must not run')) as review:
                 asyncio.run(worker.process(job, queue))
             self.assertEqual(factory.call_args.kwargs['environ']['REVEAL_CLAUDE_MODEL'], author_model)
             validate.assert_called_once()
             self.assertEqual(validate.call_args.args[2], author_model)
-            review.assert_called_once()
-            self.assertEqual(review.call_args.kwargs['model'], REVIEW_MODEL)
+            review.assert_not_called()
             accepted = worker.accept_accounts if kind == 'analysis' else worker.accept_paragraph
             accepted.assert_awaited_once()
             if recovering:
                 collect.assert_not_called()
             report = output.parent / ('grounding-1.json' if kind == 'analysis' else 'paragraph-grounding.json')
-            self.assertEqual(json.loads(report.read_text())['model'], REVIEW_MODEL)
+            self.assertFalse(report.exists())
             with repository.read_transaction() as tx:
                 self.assertEqual(tx.get('queue', job['id'])['data']['dispatch_input']['model'], author_model)
 
-    def test_configured_author_models_use_the_independent_pinned_reviewer(self):
+    def test_configured_author_models_save_without_an_independent_reviewer(self):
         for kind in ('analysis', 'paragraph'):
             for model in ('claude-opus-5-5', 'claude-fable-5-1'):
                 with self.subTest(kind=kind, model=model):

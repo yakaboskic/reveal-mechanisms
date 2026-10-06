@@ -13,7 +13,7 @@ import httpx
 import jwt
 
 from reveal_backend import app as api
-from reveal_backend.repository import Repository, now, uid
+from reveal_backend.repository import Repository, digest, now, uid
 
 
 class CachedCatalog:
@@ -21,6 +21,10 @@ class CachedCatalog:
     gaps, factors = {'gap': {}}, {'factor': {}}
 
     def load(self): pass
+
+    def readiness(self):
+        return {'dismech_import': self.dismech_import, 'gaps': len(self.gaps), 'mapping_run': self.mapping_run,
+            'mapped_factors': len(self.factors), 'embedding_run': self.embedding_run}
 
     def selected(self, reference): return reference
 
@@ -68,7 +72,7 @@ class JobSubmissionResponsivenessTests(unittest.IsolatedAsyncioTestCase):
                 'dismech_import_id': 'source-run', 'source_gap': {'object': gap, 'attachments': []},
                 'selections': {factor['source_id']: {
                     'record': {'object': {'id': 'dapper:Mechanism.' + 'm' * 32, 'name': 'Test factor'}},
-                    'binding': {'source_id': factor['source_id']}}}})
+                    'binding': {'source_id': factor['source_id'], 'reference_generation_id': digest('fixture')}}}})
         for target in (patch.object(api, 'repo', self.repo), patch.object(api, 'catalog', CachedCatalog()),
                        patch.dict(os.environ, {'REVEAL_GATEWAY_SECRET': 's' * 40,
                            'REVEAL_GATEWAY_ISSUER': 'reveal-nextjs', 'REVEAL_GATEWAY_AUDIENCE': 'reveal-api'})):

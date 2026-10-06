@@ -284,10 +284,10 @@ class WorkflowTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result['phase'],'prepare'); self.assertEqual(result['sleep'],10)
         self.assertIsNone(self.execution(second)['fence'])
 
-    async def test_scratch_limit_is_shared_across_preparation_review_and_capture(self):
+    async def test_scratch_limit_is_shared_across_preparation_validation_and_capture(self):
         _, first = self.new(); _, second = self.new(); _, third = self.new()
         with self.repo.transaction() as tx:
-            for payload, phase in ((second, 'review_call'), (third, 'capture')):
+            for payload, phase in ((second, 'validate'), (third, 'capture')):
                 row = tx.get('execution', payload['job_id']); row['data']['phase'] = phase
                 tx.put('execution', payload['job_id'], row['owner'], row['data'])
         with patch.dict('os.environ', {'REVEAL_MAX_SCRATCH_STEPS': '2'}):

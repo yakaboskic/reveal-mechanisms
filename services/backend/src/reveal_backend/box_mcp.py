@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from .box_literature import LiteratureInputError, request_spec
+from .box_research import ALLOWED_TOOLS, HostedResearchClient, ResearchAccessError
 
 GRAPHS = {'biomarkerkg': 'https://purl.org/okn/frink/kg/biomarkerkg',
           'prokn': 'https://purl.org/okn/frink/kg/prokn'}
@@ -177,8 +178,13 @@ class Ledger:
 
 
 def iri(value):
-    if not isinstance(value, str) or not re.fullmatch(r'(?:https?://|urn:)[^\s<>"{}|^`\\]+', value):
+    # CURIEs such as MONDO:0010017 need expansion, but are ordinary query
+    # feedback. Marking them denied poisons the entire execution ledger even
+    # if the agent corrects the query. SPARQL delimiters remain a policy denial.
+    if isinstance(value, str) and re.search(r'[<>"{}|^`\\]', value):
         raise PolicyError('Query terms must be absolute, syntactically safe IRIs')
+    if not isinstance(value, str) or not re.fullmatch(r'(?:https?://|urn:)[^\s<>"{}|^`\\]+', value):
+        raise QueryValidationError('Query terms must be absolute, syntactically safe IRIs; expand CURIEs to their schema-derived IRIs')
     return '<' + value + '>'
 
 
@@ -205,13 +211,13 @@ def query_arguments(arguments, selected_graphs):
     if arguments.get('contains'):
         term = arguments['contains']
         if not isinstance(term, str) or not 2 <= len(term) <= 100:
-            raise PolicyError('Search term must contain 2–100 characters')
+            raise QueryValidationError('Search term must contain 2–100 characters')
         if not arguments.get('subject') and not arguments.get('predicate'):
             raise QueryValidationError('Unbound whole-graph text scans are unavailable. Supply a schema-derived predicate or exact subject IRI; prefer predicate plus literal for an exact label/symbol lookup. An unavailable query is not evidence of absence.')
         search_literal = json.dumps(term.lower(), ensure_ascii=True)
         filters = f' FILTER(CONTAINS(LCASE(STR(?o)), {search_literal})) '
         if arguments.get('object'):
-            raise PolicyError('Text search and fixed object cannot be combined')
+            raise QueryValidationError('Text search and fixed object cannot be combined')
     # Include bound terms in the result so every assertion retains all three positions.
     bindings = ' '.join(f'BIND({iri(arguments[k])} AS ?{alias})' for k, alias in [('subject', 's'), ('predicate', 'p'), ('object', 'o')] if arguments.get(k))
     if literal is not None:
@@ -233,16 +239,19 @@ def response_payloads(result):
 
 class ScopedTools:
     def __init__(self, selected_graphs, ledger, client=None, max_calls=30, lint=None, write_draft=None,
-                 read_timeout=35, max_parallel_reads=2, literature=None, write_outcome=None):
+                 read_timeout=35, max_parallel_reads=2, literature=None, write_outcome=None, research=None, max_research_calls=80, read_evidence=None):
         if set(selected_graphs) - set(GRAPHS):
             raise PolicyError('Unsupported selected graph')
         self.selected_graphs, self.ledger = tuple(selected_graphs), ledger
         if not 0 < read_timeout < 60 or not 1 <= max_parallel_reads <= 4:
             raise ValueError('Evidence transport limits are out of bounds')
+        self.read_evidence = read_evidence
+        self.inspection_calls = 0
         self.client = client
         self.max_calls, self.lint = max_calls, lint
         self.write_draft = write_draft
         self.literature, self.write_outcome = literature, write_outcome
+        self.research, self.max_research_calls, self.research_calls = research, max_research_calls, 0
         self.literature_calls = {'search_papers': 0, 'read_paper': 0}
         self.tool_calls = 0
         self.call_lock = threading.Lock()
@@ -256,10 +265,13 @@ class ScopedTools:
         if not self.read_slots.acquire(blocking=False):
             raise EvidenceReadTimeout('Evidence service has outstanding reads; no additional query was started')
         outcome = queue.Queue(maxsize=1)
+        upstream_client = client or self.client or MCPClient(timeout=self.read_timeout)
+        invocation = (upstream_client.begin_bounded_call(tool, arguments, self.read_timeout)
+                      if isinstance(upstream_client, HostedResearchClient) else None)
         def run():
             try:
-                upstream_client = client or self.client or MCPClient(timeout=self.read_timeout)
-                outcome.put((True, upstream_client.call(tool, arguments), getattr(upstream_client, 'server_info', None)))
+                value = invocation.run() if invocation else upstream_client.call(tool, arguments)
+                outcome.put((True, value, getattr(upstream_client, 'server_info', None)))
             except Exception as exc:
                 outcome.put((False, exc, None))
             finally:
@@ -270,11 +282,24 @@ class ScopedTools:
         except queue.Empty:
             # A late network response cannot update this call or its ledger.
             # The occupied slot remains reserved until that network read ends.
+            if invocation:
+                invocation.cancel()
+                return invocation.recovery(), getattr(upstream_client, 'server_info', None)
             raise EvidenceReadTimeout(f'Evidence read exceeded {self.read_timeout:g} seconds; result unavailable, not empty') from None
         if not success:
+            if invocation and (time.monotonic() >= invocation.deadline or
+                    isinstance(value, ResearchAccessError) and 'research service unavailable' in str(value)):
+                invocation.cancel()
+                return invocation.recovery(), getattr(upstream_client, 'server_info', None)
             raise value
         if not isinstance(value, dict):
             raise ValueError('Evidence service returned an invalid tool envelope')
+        if invocation:
+            try: invocation.accept(value)
+            except ResearchAccessError:
+                if time.monotonic() < invocation.deadline: raise
+                invocation.cancel()
+                return invocation.recovery(), source_version
         return value, source_version
 
     def definitions(self):
@@ -296,14 +321,42 @@ class ScopedTools:
             tools.extend([
                 {'name': 'search_papers', 'description': 'Search Europe PMC scholarly literature (maximum three searches per attempt). Discovery metadata only; read the exact record before interpreting findings. No arbitrary web URLs.',
                  'inputSchema': {'type': 'object', 'properties': {'query': {'type': 'string', 'minLength': 2, 'maxLength': 300}, 'limit': {'type': 'integer', 'minimum': 1, 'maximum': 5}}, 'required': ['query'], 'additionalProperties': False}},
-                {'name': 'read_paper', 'description': 'Read a bounded abstract or available open-access PMC full-text excerpt with exact captured provenance (maximum four reads). MED IDs are numeric PMIDs; PMC IDs start PMC. Literature is auxiliary and cannot replace CFDE lineage. Follow next_offset only when needed; abstracts do not imply full-paper review.',
+                {'name': 'read_paper', 'description': 'Read a bounded abstract or available open-access PMC full-text excerpt with exact captured provenance (maximum four reads). MED IDs are numeric PMIDs; PMC IDs start PMC. Exact captured literature can support eligible scientific evidence. Follow next_offset only when needed; abstracts do not imply full-paper review.',
                  'inputSchema': {'type': 'object', 'properties': {'source': {'type': 'string', 'enum': ['MED', 'PMC']}, 'id': {'type': 'string'}, 'section': {'type': 'string', 'enum': ['abstract', 'full_text']}, 'offset': {'type': 'integer', 'minimum': 0}, 'limit': {'type': 'integer', 'minimum': 1, 'maximum': 12000}}, 'required': ['source', 'id'], 'additionalProperties': False}}])
+        if self.research:
+            tools.extend(self.research.definitions())
+        if self.read_evidence:
+            from .evidence_reader import TOOL_DEFINITION
+            tools = [t for t in tools if t['name'] != 'read_evidence'] + [TOOL_DEFINITION]
         return tools
 
     def call(self, tool, arguments):
+        if tool == 'read_evidence' and self.read_evidence:
+            from .evidence_reader import EvidenceReadError
+            with self.call_lock:
+                self.inspection_calls += 1
+                if self.inspection_calls > 500:
+                    raise PolicyError('Evidence inspection resource limit reached')
+            try:
+                result = self.read_evidence(**arguments)
+                return {'content': [{'type': 'text', 'text': json.dumps(result)}], 'structuredContent': result}
+            except (EvidenceReadError, ValueError, TypeError) as error:
+                return {'content': [{'type': 'text', 'text': str(error)}], 'isError': True}
         with self.call_lock:
-            self.tool_calls += 1
-            within_budget = self.tool_calls <= self.max_calls
+            # Catalog lookup occurs inside the bounded invocation, never while
+            # holding the shared call-budget lock ahead of its deadline.
+            is_research = self.research is not None and tool in ALLOWED_TOOLS
+            if is_research and tool == 'get_operation':
+                # Status observation starts no scientific query. Explicit async
+                # polling shares the bounded inspection allowance with reads.
+                self.inspection_calls += 1
+                within_budget = self.inspection_calls <= 500
+            elif is_research:
+                self.research_calls += 1
+                within_budget = self.research_calls <= self.max_research_calls
+            else:
+                self.tool_calls += 1
+                within_budget = self.tool_calls <= self.max_calls
             entry = self.ledger.start(tool, arguments, arguments.get('graph') if isinstance(arguments, dict) else None)
         status = 'failed'
         source_version = upstream_response = None
@@ -315,19 +368,28 @@ class ScopedTools:
                 raise PolicyError('Credentials cannot be sent as tool arguments')
             if not within_budget:
                 raise PolicyError('Attempt tool-call budget exhausted')
-            if tool == 'lint_account' and self.lint:
+            if is_research:
+                result, source_version = self.upstream_call(tool, arguments, client=self.research)
+            elif tool == 'lint_account' and self.lint:
                 if set(arguments) != {'filename'} or not re.fullmatch(r'account-[1-3]\.(json|yaml|yml)', arguments['filename']):
                     raise PolicyError('Only one account output filename may be linted')
-                with self.author_lock:
-                    result = self.lint(arguments['filename'])
+                if not self.author_lock.acquire(blocking=False):
+                    raise DraftValidationError('Another draft operation is still running; retry this call when it finishes')
+                try: result = self.lint(arguments['filename'])
+                finally: self.author_lock.release()
             elif tool == 'write_account_draft' and self.write_draft:
                 if set(arguments) != {'filename', 'document'} or arguments['filename'] not in ('account-1.json', 'account-2.json', 'account-3.json'):
                     raise PolicyError('Invalid draft output arguments')
-                with self.author_lock:
-                    result = self.write_draft(arguments['filename'], arguments['document'])
+                if not self.author_lock.acquire(blocking=False):
+                    raise DraftValidationError('Another draft operation is still running; retry this call when it finishes')
+                try: result = self.write_draft(arguments['filename'], arguments['document'])
+                finally: self.author_lock.release()
             elif tool == 'write_outcome' and self.write_outcome:
                 if set(arguments) != {'outcome'}: raise DraftValidationError('Expected one outcome object')
-                with self.author_lock: result = self.write_outcome(arguments['outcome'])
+                if not self.author_lock.acquire(blocking=False):
+                    raise DraftValidationError('Another draft operation is still running; retry this call when it finishes')
+                try: result = self.write_outcome(arguments['outcome'])
+                finally: self.author_lock.release()
             elif tool in ('search_papers', 'read_paper') and self.literature:
                 spec = request_spec(tool, arguments)
                 with self.call_lock:
@@ -368,7 +430,7 @@ class ScopedTools:
         except Exception as exc:
             # Exceptions may contain sensitive request headers; retain a safe typed diagnostic.
             status = 'denied' if isinstance(exc, PolicyError) else 'failed'
-            result = {'isError': True, 'content': [{'type': 'text', 'text': str(exc) if isinstance(exc, (PolicyError, DraftValidationError, QueryValidationError, EvidenceReadTimeout, LiteratureInputError)) else type(exc).__name__ + ': evidence service unavailable'}]}
+            result = {'isError': True, 'content': [{'type': 'text', 'text': str(exc) if isinstance(exc, (PolicyError, DraftValidationError, QueryValidationError, EvidenceReadTimeout, LiteratureInputError, ResearchAccessError)) else type(exc).__name__ + ': evidence service unavailable'}]}
         with self.ledger.lock:
             if self.ledger.frozen or entry['status'] != 'pending':
                 result = json.loads((self.ledger.root / entry['response']['path']).read_bytes())
@@ -393,7 +455,7 @@ class ScopedTools:
                                 'filename': artifact['sha256'] + '.json', 'mime_type': 'application/json',
                                 'sha256': artifact['sha256'], 'size_in_bytes': artifact['size_bytes']},
                        'source_locator': 'ledger_sequence=' + str(entry['sequence']) + ';pointer=/content',
-                       'usage': 'Only completed query_graph assertions or completed read_paper excerpts can support auxiliary biological claims. Search metadata, schemas, errors and empty searches do not establish biological presence or absence. Paper evidence retains its abstract/full-text scope and never replaces required CFDE lineage.'}
+                       'usage': 'Only completed query_graph assertions or completed read_paper excerpts can support auxiliary biological claims. Search metadata, schemas, errors and empty searches do not establish biological presence or absence. Paper evidence retains its abstract/full-text scope; its content must support the cited proposition.'}
             if tool == 'read_paper': capture['source_locator'] = 'ledger_sequence=' + str(entry['sequence']) + ';pointer=/structuredContent/data/text'
             result = {**result, 'content': [*result.get('content', []),
                       {'type': 'text', 'text': json.dumps(capture, ensure_ascii=False)}]}

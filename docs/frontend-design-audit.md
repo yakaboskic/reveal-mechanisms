@@ -16,7 +16,7 @@ browser resizes, a delayed question changes the panel position, or a disclosed
 tool excerpt changes the content height.
 
 Chronological sections distinguish **Evidence preparation**, **Runtime setup**,
-**Research agent**, **Scientific validation**, and **Saving results**. Only the
+**Research agent**, **Checking account and sources**, and **Saving results**. Only the
 active section has an animated progress pulse; completed, failed and stopped
 sections have explicit states. Incoming stream events advance the presentation
 without waiting for the connection to close. Reduced-motion preferences disable
@@ -31,7 +31,7 @@ an invocation reveals the full recorded arguments, raw tool name, call ID and
 **Result excerpt**; JSON formatting does not add output that was never recorded.
 Opening a tool pauses auto-follow for inspection; **Jump to latest** resumes it.
 Repeated identical saved warnings share one card with an occurrence count.
-Tool success does not imply scientific validation or account acceptance. Original
+Tool success does not imply that final account and source checks have passed. Original
 event IDs and replay data remain unchanged.
 
 The durable [activity browser regression](../services/frontend/scripts/check-activity.mjs)

@@ -39,13 +39,15 @@ def visible_accounts(tx, owner, *, attribution=False):
         # Authored canonical fixtures have explicit origin metadata and no fake
         # research job. Never mix null and UUID keys when batching discovery.
         jobs = tx.get_many('job', sorted({item['job_id'] for item in items if item.get('job_id')}))
-        request_ids = {row['data'].get('research_request_id') for row in jobs.values() if row['owner'] == owner}
+        local = tx.get_many('local_work', sorted({item.get('local_work_id') or item['job_id'] for item in items
+            if item.get('local_work_id') or item.get('job_id') and item['job_id'] not in jobs}))
+        request_ids = {row['data'].get('research_request_id') for row in [*jobs.values(), *local.values()] if row['owner'] == owner}
         requests = tx.get_many('request', sorted(identity for identity in request_ids if identity))
         for item in items:
             item['publication'] = state(tx, owner, item['account']['id'], can_manage=True,
                 record=publications.get(digest([owner, item['account']['id']])),
                 account_result={'research_statement': item.get('research_statement', {})})
-            job = jobs.get(item.get('job_id'))
+            job = jobs.get(item.get('job_id')) or local.get(item.get('local_work_id') or item.get('job_id'))
             request = requests.get(job['data'].get('research_request_id')) if job and job['owner'] == owner else None
             # Transfers preserve historical authorship. Current owner/profile is
             # deliberately not used as a substitute for a missing snapshot.

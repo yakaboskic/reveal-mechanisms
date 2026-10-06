@@ -148,6 +148,91 @@ class WorkspaceEventsTests(unittest.TestCase):
             job['status']='running'; jobs.event(tx,job,'status','Started')
         self.assertEqual([item['event_type'] for item in self.replay(positions=before)[1]],['job.updated'])
 
+    def test_local_work_lifecycle_invalidates_runs_for_its_owner_only(self):
+        before, other = self.replay()[2], self.replay('bob')[2]
+        work = {'id': 'local-run', 'state': 'preparing', 'package_id': None,
+            'package_sha256': None, 'last_error': None, 'last_activity': 'created'}
+        with self.repo.transaction() as tx:
+            tx.put('local_work', work['id'], 'alice', work)
+            tx.put('research_operation', 'prepare', 'alice', {'id': 'prepare',
+                'kind': 'prepare', 'local_work_id': work['id'], 'state': 'received'})
+        for update in (
+                {'state': 'preparation_failed', 'last_error': {'detail': 'private failure'}},
+                {'state': 'preparing', 'last_error': None},
+                {'state': 'ready', 'package_id': 'private-package', 'package_sha256': 'private-hash'},
+                {'state': 'closed', 'closed_at': 'closed'}):
+            work.update(update)
+            with self.repo.transaction() as tx: tx.put('local_work', work['id'], 'alice', work)
+        replay = self.replay(positions=before)[1]
+        self.assertEqual(len(replay), 5)
+        self.assertTrue(all(item['event_type'] == 'workspace.changed' and item['collections'] == ['jobs']
+            and item['entity_id'] == work['id'] and item['scope'] == 'workspace' for item in replay))
+        self.assertEqual(self.replay('bob', positions=other)[1], [])
+        for private in ('private failure', 'private-package', 'private-hash'):
+            self.assertNotIn(private, json.dumps(replay))
+
+    def test_local_activity_and_tool_records_do_not_invalidate_runs(self):
+        work = {'id': 'local-run', 'state': 'ready', 'last_activity': 'created'}
+        with self.repo.transaction() as tx: tx.put('local_work', work['id'], 'alice', work)
+        before = self.replay()[2]
+        with patch.object(notifications, 'publish') as publish:
+            with self.repo.transaction() as tx:
+                work.update(last_activity='later', last_action='data_query')
+                tx.put('local_work', work['id'], 'alice', work)
+                for kind in ('query', 'import', 'prepare'):
+                    tx.put('research_operation', kind, 'alice', {'id': kind,
+                        'kind': kind, 'local_work_id': work['id'], 'state': 'succeeded'})
+                for kind in ('research_access', 'evidence_receipt', 'reuse_receipt'):
+                    tx.put(kind, kind, 'alice', {'local_work_id': work['id'], 'token': 'private-token'})
+            publish.assert_not_called()
+        self.assertEqual(self.replay(positions=before)[1], [])
+
+    def test_local_submissions_invalidate_runs_without_exposing_payloads_or_lease_heartbeats(self):
+        with self.repo.transaction() as tx:
+            tx.put('local_work', 'local-run', 'alice', {'id': 'local-run', 'state': 'ready'})
+        before, other = self.replay()[2], self.replay('bob')[2]
+        for kind, terminal in (('validate', 'rejected'), ('submit', 'accepted')):
+            operation = {'id': kind, 'kind': kind, 'local_work_id': 'local-run', 'state': 'received',
+                'arguments': {'token': 'private-token', 'content': 'private-science'}, 'grant_id': 'private-grant'}
+            for state in ('received', 'running', terminal):
+                operation['state'] = state
+                if state == terminal:
+                    operation.update(report={'detail': 'private-report'}, account_ids=['private-account'])
+                with self.repo.transaction() as tx: tx.put('research_operation', kind, 'alice', operation)
+                cursor = self.replay()[2]
+                with patch.object(notifications, 'publish') as publish:
+                    operation.update(lease_token='private-lease', lease_until=state, attempt=3)
+                    with self.repo.transaction() as tx: tx.put('research_operation', kind, 'alice', operation)
+                    publish.assert_not_called()
+                self.assertEqual(self.replay(positions=cursor)[1], [])
+        replay = self.replay(positions=before)[1]
+        self.assertEqual([item['entity_id'] for item in replay], ['validate'] * 3 + ['submit'] * 3)
+        self.assertTrue(all(item['collections'] == ['jobs'] and item['scope'] == 'workspace' for item in replay))
+        self.assertEqual(self.replay('bob', positions=other)[1], [])
+        for private in ('private-token', 'private-science', 'private-grant', 'private-report', 'private-account', 'private-lease'):
+            self.assertNotIn(private, json.dumps(replay))
+
+    def test_hosted_or_unowned_research_operations_do_not_emit_local_run_events(self):
+        before, other = self.replay()[2], self.replay('bob')[2]
+        with patch.object(notifications, 'publish') as publish:
+            with self.repo.transaction() as tx:
+                tx.put('local_work', 'hosted', 'alice', {'id': 'hosted', 'job_id': 'job', 'state': 'preparing'})
+                tx.put('research_operation', 'hosted-submission', 'alice', {'id': 'hosted-submission',
+                    'local_work_id': 'hosted', 'kind': 'submit', 'state': 'accepted'})
+                tx.put('research_operation', 'missing-parent', 'alice', {'id': 'missing-parent',
+                    'local_work_id': 'missing', 'kind': 'submit', 'state': 'accepted'})
+            publish.assert_not_called()
+        self.assertEqual(self.replay(positions=before)[1], [])
+        self.assertEqual(self.replay('bob', positions=other)[1], [])
+        with self.repo.transaction() as tx:
+            tx.put('local_work', 'bob-run', 'bob', {'id': 'bob-run', 'state': 'ready'})
+        before, other = self.replay()[2], self.replay('bob')[2]
+        with self.repo.transaction() as tx:
+            tx.put('research_operation', 'foreign-parent', 'alice', {'id': 'foreign-parent',
+                'local_work_id': 'bob-run', 'kind': 'submit', 'state': 'accepted'})
+        self.assertEqual(self.replay(positions=before)[1], [])
+        self.assertEqual(self.replay('bob', positions=other)[1], [])
+
     def test_retired_identity_cannot_replay_previously_authorized_cursor(self):
         with self.repo.transaction() as tx:
             row=tx.get('principal','alice'); row['data']['retired']=True

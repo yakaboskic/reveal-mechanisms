@@ -1,0 +1,349 @@
+Upstream official tag 0.2.0 targeted tests
+PYTHONDONTWRITEBYTECODE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1
+Command: python -m pytest -p no:cacheprovider --basetemp <isolated temporary directory> -q --disable-warnings tests/test_identity.py tests/test_embeddings.py tests/test_claims.py tests/test_lint_provenance.py tests/test_examples.py tests/test_gene_set_collections.py
+
+..........................FFFFF...F..................................... [ 24%]
+........................................................................ [ 48%]
+........................................................................ [ 73%]
+........................................................................ [ 97%]
+......                                                                   [100%]
+=================================== FAILURES ===================================
+__________ test_assign_cli_does_not_overwrite_an_external_identifier ___________
+
+tmp_path = PosixPath('/private/var/folders/x7/6z7r3y9d1slf3b8trz4_grhr0000gn/T/reveal-dapper-020-pytest-v34ea7my/test_assign_cli_does_not_overw0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10c87cc20>
+
+    def test_assign_cli_does_not_overwrite_an_external_identifier(tmp_path, monkeypatch):
+        """The file on disk gets the same protection assign_ids gives in memory.
+    
+        The text rewriter replaced every occurrence of the old id, so a Person whose
+        id was their ORCID had the `orcid` field overwritten with the new digest.
+        `verify` could not catch it: `_blank_self` neutralised that field on both
+        sides, so the tool reported `0 mismatch(es)` over destroyed data.
+        """
+        doc = tmp_path / "doc.yaml"
+        doc.write_text(DOC_WITH_COMMENTS)
+>       _run_assign(doc, monkeypatch)
+
+tests/test_identity.py:328: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_identity.py:315: in _run_assign
+    assert dapper_identity.main() == 0
+           ^^^^^^^^^^^^^^^^^^^^^^
+schema/identity/dapper_identity.py:703: in main
+    rt = _round_trip_yaml()
+         ^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def _round_trip_yaml():
+        """A YAML round-tripper that preserves comments, quoting and layout.
+    
+        `assign` used to write its result by running `str.replace(old, new)` over the
+        raw file text, because `yaml.safe_dump` discards the curated comments in
+        schema/examples. That made a SECOND rewrite rule, and unlike `_rewrite_node`
+        it had no idea what a slot meant, so it rewrote ids that the first rule had
+        deliberately left alone. Two demonstrated consequences:
+    
+          * a Person whose id was their ORCID had the `orcid` field overwritten with
+            the new digest, destroying the only globally resolvable name on the
+            record — and `verify` still reported 0 mismatches, because `_blank_self`
+            neutralises that field on both sides;
+          * a literal scalar embedding a reference (`script_url`) was rewritten on
+            disk but not in the digest input, so a freshly minted file failed its own
+            `verify` and `assign` only converged on the second run.
+    
+        Round-tripping keeps the comments AND writes exactly the document that
+        `assign_ids` produced, so there is only one rewrite rule again.
+        """
+>       from ruamel.yaml import YAML
+E       ModuleNotFoundError: No module named 'ruamel'
+
+schema/identity/dapper_identity.py:637: ModuleNotFoundError
+______________________ test_assign_cli_preserves_comments ______________________
+
+tmp_path = PosixPath('/private/var/folders/x7/6z7r3y9d1slf3b8trz4_grhr0000gn/T/reveal-dapper-020-pytest-v34ea7my/test_assign_cli_preserves_comm0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10c5dc6e0>
+
+    def test_assign_cli_preserves_comments(tmp_path, monkeypatch):
+        """Comments survive the write — the requirement the text rewriter existed for.
+    
+        Preserving them is why the file was rewritten as text in the first place, so
+        a fix that dropped them would trade one regression for another. The
+        round-tripper keeps them without a second rewrite rule.
+        """
+        doc = tmp_path / "doc.yaml"
+        doc.write_text(DOC_WITH_COMMENTS)
+>       _run_assign(doc, monkeypatch)
+
+tests/test_identity.py:344: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_identity.py:315: in _run_assign
+    assert dapper_identity.main() == 0
+           ^^^^^^^^^^^^^^^^^^^^^^
+schema/identity/dapper_identity.py:703: in main
+    rt = _round_trip_yaml()
+         ^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def _round_trip_yaml():
+        """A YAML round-tripper that preserves comments, quoting and layout.
+    
+        `assign` used to write its result by running `str.replace(old, new)` over the
+        raw file text, because `yaml.safe_dump` discards the curated comments in
+        schema/examples. That made a SECOND rewrite rule, and unlike `_rewrite_node`
+        it had no idea what a slot meant, so it rewrote ids that the first rule had
+        deliberately left alone. Two demonstrated consequences:
+    
+          * a Person whose id was their ORCID had the `orcid` field overwritten with
+            the new digest, destroying the only globally resolvable name on the
+            record — and `verify` still reported 0 mismatches, because `_blank_self`
+            neutralises that field on both sides;
+          * a literal scalar embedding a reference (`script_url`) was rewritten on
+            disk but not in the digest input, so a freshly minted file failed its own
+            `verify` and `assign` only converged on the second run.
+    
+        Round-tripping keeps the comments AND writes exactly the document that
+        `assign_ids` produced, so there is only one rewrite rule again.
+        """
+>       from ruamel.yaml import YAML
+E       ModuleNotFoundError: No module named 'ruamel'
+
+schema/identity/dapper_identity.py:637: ModuleNotFoundError
+_________________ test_assign_cli_output_passes_its_own_verify _________________
+
+sv = SchemaView(schema=SchemaDefinition({
+  'name': 'dapper',
+  'description': ('A LinkML data model for DAPPER, the NIH Da...types.yaml'
+})}, importmap={}, modifications=0, uuid='78e1aa06-7387-4695-914e-cd50dd294b80', _hash=6599659430857546114)
+tmp_path = PosixPath('/private/var/folders/x7/6z7r3y9d1slf3b8trz4_grhr0000gn/T/reveal-dapper-020-pytest-v34ea7my/test_assign_cli_output_passes_0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10c87f4d0>
+
+    def test_assign_cli_output_passes_its_own_verify(sv, tmp_path, monkeypatch):
+        """A freshly minted file is immediately valid.
+    
+        It was not: because the digest was computed from one document and the file
+        written from another, `assign` emitted files that failed `verify` on the very
+        next command — which the troubleshooting table reads as "the content was
+        edited after minting", pointing at a cause that never happened.
+        """
+        doc = tmp_path / "doc.yaml"
+        doc.write_text(DOC_WITH_COMMENTS)
+>       _run_assign(doc, monkeypatch)
+
+tests/test_identity.py:361: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_identity.py:315: in _run_assign
+    assert dapper_identity.main() == 0
+           ^^^^^^^^^^^^^^^^^^^^^^
+schema/identity/dapper_identity.py:703: in main
+    rt = _round_trip_yaml()
+         ^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def _round_trip_yaml():
+        """A YAML round-tripper that preserves comments, quoting and layout.
+    
+        `assign` used to write its result by running `str.replace(old, new)` over the
+        raw file text, because `yaml.safe_dump` discards the curated comments in
+        schema/examples. That made a SECOND rewrite rule, and unlike `_rewrite_node`
+        it had no idea what a slot meant, so it rewrote ids that the first rule had
+        deliberately left alone. Two demonstrated consequences:
+    
+          * a Person whose id was their ORCID had the `orcid` field overwritten with
+            the new digest, destroying the only globally resolvable name on the
+            record — and `verify` still reported 0 mismatches, because `_blank_self`
+            neutralises that field on both sides;
+          * a literal scalar embedding a reference (`script_url`) was rewritten on
+            disk but not in the digest input, so a freshly minted file failed its own
+            `verify` and `assign` only converged on the second run.
+    
+        Round-tripping keeps the comments AND writes exactly the document that
+        `assign_ids` produced, so there is only one rewrite rule again.
+        """
+>       from ruamel.yaml import YAML
+E       ModuleNotFoundError: No module named 'ruamel'
+
+schema/identity/dapper_identity.py:637: ModuleNotFoundError
+__________ test_assign_cli_leaves_a_document_it_cannot_mint_untouched __________
+
+tmp_path = PosixPath('/private/var/folders/x7/6z7r3y9d1slf3b8trz4_grhr0000gn/T/reveal-dapper-020-pytest-v34ea7my/test_assign_cli_leaves_a_docum0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10c5dd430>
+
+    def test_assign_cli_leaves_a_document_it_cannot_mint_untouched(tmp_path, monkeypatch):
+        """A file with nothing to mint is not rewritten at all.
+    
+        Only grouped node lists are mintable, so a single-instance document like
+        example_nanopub.yaml yields no ids. Rewriting it anyway still pushed it
+        through the dumper, which unwrapped a long `statement:` scalar and expanded a
+        flow sequence to block style — a diff on a curated example in exchange for
+        nothing. Byte comparison, because the point is that no write happened.
+        """
+        original = "# a single instance, not a graph document\nid: dapper:Nanopublication.x\nname: one\n"
+        doc = tmp_path / "instance.yaml"
+        doc.write_text(original)
+>       _run_assign(doc, monkeypatch)
+
+tests/test_identity.py:378: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_identity.py:315: in _run_assign
+    assert dapper_identity.main() == 0
+           ^^^^^^^^^^^^^^^^^^^^^^
+schema/identity/dapper_identity.py:703: in main
+    rt = _round_trip_yaml()
+         ^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def _round_trip_yaml():
+        """A YAML round-tripper that preserves comments, quoting and layout.
+    
+        `assign` used to write its result by running `str.replace(old, new)` over the
+        raw file text, because `yaml.safe_dump` discards the curated comments in
+        schema/examples. That made a SECOND rewrite rule, and unlike `_rewrite_node`
+        it had no idea what a slot meant, so it rewrote ids that the first rule had
+        deliberately left alone. Two demonstrated consequences:
+    
+          * a Person whose id was their ORCID had the `orcid` field overwritten with
+            the new digest, destroying the only globally resolvable name on the
+            record — and `verify` still reported 0 mismatches, because `_blank_self`
+            neutralises that field on both sides;
+          * a literal scalar embedding a reference (`script_url`) was rewritten on
+            disk but not in the digest input, so a freshly minted file failed its own
+            `verify` and `assign` only converged on the second run.
+    
+        Round-tripping keeps the comments AND writes exactly the document that
+        `assign_ids` produced, so there is only one rewrite rule again.
+        """
+>       from ruamel.yaml import YAML
+E       ModuleNotFoundError: No module named 'ruamel'
+
+schema/identity/dapper_identity.py:637: ModuleNotFoundError
+____________________ test_assign_cli_is_idempotent_on_disk _____________________
+
+tmp_path = PosixPath('/private/var/folders/x7/6z7r3y9d1slf3b8trz4_grhr0000gn/T/reveal-dapper-020-pytest-v34ea7my/test_assign_cli_is_idempotent_0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10c5980e0>
+
+    def test_assign_cli_is_idempotent_on_disk(tmp_path, monkeypatch):
+        """Running it twice on unchanged data reproduces the file byte for byte.
+    
+        The headline guarantee in schema/identity/README.md, and the reason a changed
+        id can be read as a real signal about changed content. In-memory idempotence
+        is covered above; this asserts it survives the round trip through the file,
+        which is where it was actually broken — `assign` converged only on run two.
+        """
+        doc = tmp_path / "doc.yaml"
+        doc.write_text(DOC_WITH_COMMENTS)
+>       _run_assign(doc, monkeypatch)
+
+tests/test_identity.py:392: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_identity.py:315: in _run_assign
+    assert dapper_identity.main() == 0
+           ^^^^^^^^^^^^^^^^^^^^^^
+schema/identity/dapper_identity.py:703: in main
+    rt = _round_trip_yaml()
+         ^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def _round_trip_yaml():
+        """A YAML round-tripper that preserves comments, quoting and layout.
+    
+        `assign` used to write its result by running `str.replace(old, new)` over the
+        raw file text, because `yaml.safe_dump` discards the curated comments in
+        schema/examples. That made a SECOND rewrite rule, and unlike `_rewrite_node`
+        it had no idea what a slot meant, so it rewrote ids that the first rule had
+        deliberately left alone. Two demonstrated consequences:
+    
+          * a Person whose id was their ORCID had the `orcid` field overwritten with
+            the new digest, destroying the only globally resolvable name on the
+            record — and `verify` still reported 0 mismatches, because `_blank_self`
+            neutralises that field on both sides;
+          * a literal scalar embedding a reference (`script_url`) was rewritten on
+            disk but not in the digest input, so a freshly minted file failed its own
+            `verify` and `assign` only converged on the second run.
+    
+        Round-tripping keeps the comments AND writes exactly the document that
+        `assign_ids` produced, so there is only one rewrite rule again.
+        """
+>       from ruamel.yaml import YAML
+E       ModuleNotFoundError: No module named 'ruamel'
+
+schema/identity/dapper_identity.py:637: ModuleNotFoundError
+__________ test_assign_cli_refuses_a_document_it_can_only_partly_mint __________
+
+tmp_path = PosixPath('/private/var/folders/x7/6z7r3y9d1slf3b8trz4_grhr0000gn/T/reveal-dapper-020-pytest-v34ea7my/test_assign_cli_refuses_a_docu0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10c87d5b0>
+
+    def test_assign_cli_refuses_a_document_it_can_only_partly_mint(tmp_path, monkeypatch):
+        """`assign` writes nothing when some nodes are unreachable.
+    
+        Half-minting is worse than not minting: the recognised nodes get ids while
+        the unrecognised ones get rewritten contents and no id, and the file records
+        nothing about which is which. Asserted byte-for-byte, because the guarantee
+        is that the file is left alone.
+        """
+        import dapper_identity
+    
+        original = (
+            "persons:\n"
+            "  - id: orcid:0000-0002-1825-0097\n"
+            "    name: Jane A. Smith\n"
+            "agents:\n"
+            "  - id: orcid:0000-0003-1234-5678\n"
+            "    name: Alex R. Lee\n"
+        )
+        doc = tmp_path / "doc.yaml"
+        doc.write_text(original)
+    
+        monkeypatch.setattr(sys, "argv", ["dapper_identity.py", "assign", str(doc)])
+>       assert dapper_identity.main() == 1, "a partly mintable document must be refused"
+               ^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_identity.py:477: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+schema/identity/dapper_identity.py:703: in main
+    rt = _round_trip_yaml()
+         ^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def _round_trip_yaml():
+        """A YAML round-tripper that preserves comments, quoting and layout.
+    
+        `assign` used to write its result by running `str.replace(old, new)` over the
+        raw file text, because `yaml.safe_dump` discards the curated comments in
+        schema/examples. That made a SECOND rewrite rule, and unlike `_rewrite_node`
+        it had no idea what a slot meant, so it rewrote ids that the first rule had
+        deliberately left alone. Two demonstrated consequences:
+    
+          * a Person whose id was their ORCID had the `orcid` field overwritten with
+            the new digest, destroying the only globally resolvable name on the
+            record — and `verify` still reported 0 mismatches, because `_blank_self`
+            neutralises that field on both sides;
+          * a literal scalar embedding a reference (`script_url`) was rewritten on
+            disk but not in the digest input, so a freshly minted file failed its own
+            `verify` and `assign` only converged on the second run.
+    
+        Round-tripping keeps the comments AND writes exactly the document that
+        `assign_ids` produced, so there is only one rewrite rule again.
+        """
+>       from ruamel.yaml import YAML
+E       ModuleNotFoundError: No module named 'ruamel'
+
+schema/identity/dapper_identity.py:637: ModuleNotFoundError
+=========================== short test summary info ============================
+FAILED tests/test_identity.py::test_assign_cli_does_not_overwrite_an_external_identifier
+FAILED tests/test_identity.py::test_assign_cli_preserves_comments - ModuleNot...
+FAILED tests/test_identity.py::test_assign_cli_output_passes_its_own_verify
+FAILED tests/test_identity.py::test_assign_cli_leaves_a_document_it_cannot_mint_untouched
+FAILED tests/test_identity.py::test_assign_cli_is_idempotent_on_disk - Module...
+FAILED tests/test_identity.py::test_assign_cli_refuses_a_document_it_can_only_partly_mint
+6 failed, 288 passed in 26.03s
+
+
+Repeat targeted suite with upstream CLI dependency ruamel.yaml==0.19.1 installed only in an isolated temporary PYTHONPATH directory. Repository .venv and source checkout unchanged.
+
+........................................................................ [ 24%]
+........................................................................ [ 48%]
+........................................................................ [ 73%]
+........................................................................ [ 97%]
+......                                                                   [100%]
+294 passed in 24.58s

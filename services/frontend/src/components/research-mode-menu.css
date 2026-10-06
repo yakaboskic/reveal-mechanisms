@@ -1,0 +1,5 @@
+.research-mode-menu{position:relative}
+.research-mode-options{position:absolute;right:0;bottom:calc(100% + 10px);z-index:15;width:280px;max-width:calc(100vw - 48px);padding:5px;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 28px #253b571a}
+.research-mode-options>button{display:block;width:100%;padding:12px;text-align:left;border-radius:6px;color:#405b80;font-size:13px;line-height:1.5}
+.research-mode-options>button:hover,.research-mode-options>button:focus{background:#f4f7fc;outline-offset:-2px}
+.research-mode-options small{margin-top:3px;font-size:11px;line-height:1.5;color:var(--muted)}

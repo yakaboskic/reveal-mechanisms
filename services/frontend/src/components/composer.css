@@ -45,6 +45,8 @@
 .prototype-composer .anchor-chips{gap:7px;margin:0;display:flex;flex-wrap:wrap;align-items:center}
 .prototype-composer .chip{display:inline-flex;min-width:0;max-width:100%;background:#f1f5ff;border:1px solid #e5edff;border-radius:8px;line-height:1.45;align-items:center}
 .prototype-composer .chip .label{min-width:0;max-width:min(470px,100%);padding:7px 0 7px 10px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;color:#4c6eab;font-size:11px;text-align:left;border:0;min-height:34px}
+.prototype-composer .chip a.label{display:block;padding-right:10px;white-space:normal}
+.prototype-composer .chip a.label:hover{background:#e7efff;text-decoration:none;border-radius:7px}
 .prototype-composer .chip .remove{border:0;flex-shrink:0;font-size:16px;min-width:32px;min-height:34px;color:#98a5b8;padding:0}
 .prototype-composer .chip .remove:hover{background:#2563eb08}
 .prototype-composer .chip-add{width:34px;min-height:34px;border:1px dashed #d8e0eb;border-radius:8px;color:#8695ab;background:#fff;font-size:18px}

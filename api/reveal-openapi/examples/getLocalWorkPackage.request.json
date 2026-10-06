@@ -1,0 +1,46 @@
+{
+  "operation_id": "getLocalWorkPackage",
+  "case": "request",
+  "method": "GET",
+  "path_template": "/v1/local-work/{work_id}/package",
+  "request": {
+    "url": "https://api.reveal.example.org/v1/local-work/77777777-7777-4777-8777-777777777777/package",
+    "path": {
+      "work_id": "77777777-7777-4777-8777-777777777777"
+    },
+    "query": {},
+    "headers": {
+      "Authorization": "Bearer <api-key-or-gateway-assertion>",
+      "Accept": "application/json"
+    },
+    "body": null
+  },
+  "responses": {
+    "200": {
+      "content_type": "application/json",
+      "examples": {
+        "preparing": {
+          "state": "preparing",
+          "operation_id": "88888888-8888-4888-8888-888888888888"
+        },
+        "ready": {
+          "package_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "package_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "package": {
+            "package_version": "reveal.evidence-package/0.2-draft",
+            "seed_version": "reveal.research-seed/1",
+            "retrieval_mode": "progressive",
+            "research_request_id": "33333333-3333-4333-8333-333333333333",
+            "reference_generation_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "manifest": {
+            "format": "illustrative contract metadata; hashes are placeholders"
+          },
+          "artifacts": [],
+          "authoring_instructions": "Use the downloaded frozen seed and anonymous public MCP tools. Sign in and explicitly approve access before private reads, uploads, validation or submission."
+        }
+      }
+    }
+  },
+  "curl": "curl -X GET https://api.reveal.example.org/v1/local-work/77777777-7777-4777-8777-777777777777/package -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
+}

@@ -1,9 +1,9 @@
 "use client";
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { RevalidationCache } from "@/lib/revalidation-cache";
-import { loadWorkspaceData, workspaceTabs, workspaceKey, workspaceKeyParts, type WorkspaceData, type WorkspaceTab, type WorkspaceKey } from "@/lib/workspace-data";
+import { loadWorkspaceData, workspaceTabs, workspaceKey, workspaceKeyParts, workspaceSize, type WorkspaceData, type WorkspaceTab, type WorkspaceKey } from "@/lib/workspace-data";
 import type { ReferenceState } from "@/lib/reference";
-import { onWorkspaceChange, invalidateWorkspace, affectedWorkspaceTabs, connectWorkspaceEvents, type WorkspaceConnection } from "@/lib/workspace-events";
+import { onWorkspaceChange, invalidateWorkspace, resetWorkspaceCache, affectedWorkspaceTabs, connectWorkspaceEvents, type WorkspaceConnection } from "@/lib/workspace-events";
 import { terminal, type Schema } from "@/lib/client";
 
 type Store = RevalidationCache<WorkspaceKey, WorkspaceData>;
@@ -37,7 +37,7 @@ export function WorkspaceCacheProvider({ scope, children, checkIdentity }: { sco
         invalidateWorkspace(event);
         if (event?.collections.includes("identity")) void identityCheck.current();
       },
-      revoked: () => { cache.bind(null); void identityCheck.current(); },
+      revoked: () => { resetWorkspaceCache(); void identityCheck.current(); },
     });
     return () => controller.abort();
   }, [cache, scope]);
@@ -76,7 +76,7 @@ export function useWorkspaceData(tab: WorkspaceTab, query = "", reference: Refer
   const listed = workspaceKey(tab, "", reference);
   for (const value of workspaceTabs) {
     const data = cache.read(scope, value === tab ? listed : value).data;
-    if (data) counts[value] = `${(value === "gaps" ? data.gaps : value === "drafts" ? data.drafts : value === "runs" ? data.jobs.filter(job => job.kind === "analysis") : value === "accounts" ? data.accounts : data.outcomes).length}${data.cursor ? "+" : ""}`;
+    if (data) counts[value] = `${workspaceSize(value, data)}${data.cursor ? "+" : ""}`;
   }
   return { ...snapshot, counts, connection, refresh: () => cache.revalidate(scope, key, true), loadMore: () => cache.revalidate(scope, key, true, "append") };
 }

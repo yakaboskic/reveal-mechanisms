@@ -76,7 +76,9 @@ def _fit_input_budget_locked(package_path, mode, budget, validation_feedback=())
             reference = saved['file_input']
             metadata = contained(reference['path']).read_bytes()
             require(sha256(metadata) == reference['sha256'], 'Frozen evidence input manifest changed')
-            validate_file_input(raw, decode(metadata), research_prompt(package['external_evidence']['selected_graphs'], validation_feedback))
+            from .dispatch_view import pinned_contract_sha256
+            validate_file_input(raw, decode(metadata), research_prompt(package['external_evidence']['selected_graphs'], validation_feedback, progressive=package.get('retrieval_mode') == 'progressive',
+                                contract_sha256=pinned_contract_sha256(package)))
             return chosen, package, saved['measurement']
         # Honor older jobs' exact captures without relabeling their token counts
         # as measurements of the new file reader or recollecting source evidence.
@@ -96,7 +98,11 @@ def _fit_input_budget_locked(package_path, mode, budget, validation_feedback=())
             require(not validation_feedback, 'Legacy frozen input needs fresh preparation for review feedback')
         return chosen, package, {**saved['measurement'], 'scope': 'legacy frozen input; file-reader context was not measured'}
 
-    validate_package_shape(original, load_generated_schema(ROOT / 'schema/evidence-package.schema.json'))
+    if original.get('retrieval_mode') == 'progressive':
+        from .research_seed import validate_seed_shape
+        validate_seed_shape(original)
+    else:
+        validate_package_shape(original, load_generated_schema(ROOT / 'schema/evidence-package.schema.json'))
     metadata = file_input_manifest(original_data, validation_feedback)
     measurement = {'method': 'file-backed-evidence', 'enforced': False,
                    'scope': 'artifact storage; evidence read on demand', 'model': model,

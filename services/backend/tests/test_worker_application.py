@@ -1,5 +1,6 @@
 """Actual collector fixture → adapter → trusted validator → persistence → Paragraph."""
 import asyncio
+import os
 from pathlib import Path
 import tempfile
 import shutil
@@ -10,12 +11,14 @@ from reveal_backend import jobs
 from reveal_backend.worker import Worker
 from reveal_backend.agent_execution import ExecutionResult
 from reveal_backend.auth import owned
-from reveal_backend.acceptance import validate_observations,replace_authored_attribution,validate_new_files
+from reveal_backend.acceptance import validate_observations,replace_authored_attribution,validate_new_files,release_root
 from reveal_backend.evidence_package import sha256
 from reveal_backend.evidence_package import EvidenceBuildError
 from reveal_backend.citations import export
 from reveal_backend.app import validate
 import test_evidence_package as fixtures
+
+TEST_RELEASE = Path(os.environ.get('REVEAL_TEST_DAPPER_RELEASE', str(release_root())))
 
 class WorkerStreamMappingTests(unittest.TestCase):
     def test_persistence_boundary_is_durable_and_refuses_stale_or_cancelled_lease(self):
@@ -153,7 +156,7 @@ class SourceMetricTests(unittest.TestCase):
         doc['claim_scores'][0]['score_kind']='PROBABILITY'
         with self.assertRaises(EvidenceBuildError): validate_observations(doc,source)
 
-@unittest.skipUnless((fixtures.ROOT/'.runtime/dapper/.git').exists(),'Trusted DAPPER checkout requires explicit one-time setup')
+@unittest.skipUnless((TEST_RELEASE/'.git').exists(),'Trusted DAPPER checkout requires explicit one-time setup')
 class WorkerJourneyTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -183,7 +186,8 @@ class WorkerJourneyTests(unittest.TestCase):
             source=capture/'package/evidence-package.json'
             with ExitStack() as stack:
                 stack.enter_context(patch.dict('os.environ',{'REVEAL_EXECUTION_MODE':'deterministic','REVEAL_ARTIFACTS_DIR':temp,
-                    'REVEAL_ARTIFACT_STORE':'s3' if s3 else 'filesystem','REVEAL_WORK_DIR':temp}))
+                    'REVEAL_ARTIFACT_STORE':'s3' if s3 else 'filesystem','REVEAL_WORK_DIR':temp,
+                    'REVEAL_DAPPER_ROOT':str(TEST_RELEASE)}))
                 stack.enter_context(patch('reveal_backend.worker.collect',return_value=(source,package)))
                 stack.enter_context(patch('reveal_backend.worker.artifact_store',return_value=storage))
                 stack.enter_context(patch('reveal_backend.artifact_store.store',return_value=storage))

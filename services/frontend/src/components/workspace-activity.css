@@ -58,6 +58,7 @@
 .workspace-delete-draft{color:#a94432;border:1px solid #e9c2bb;border-radius:7px}
 @media(max-width:600px){.workspace-drafts select{flex:1 1 210px}.workspace-drafts .workspace-new-draft{margin-left:0}}
 .workspace-dashboard .workspace-account-row>.workspace-item-meta:first-child{margin:0 0 12px}
+.workspace-dashboard .workspace-run-mode{border:1px solid #dce5f1;border-radius:5px;padding:1px 7px;color:#526b8e;font-size:11px}
 .workspace-dashboard .workspace-account-conclusion{color:#62758e;font-size:13px;line-height:1.85;max-width:80ch;margin:10px 0 0;white-space:pre-wrap;overflow-wrap:anywhere}
 .workspace-dashboard .workspace-account-summary-link{font-size:13px;line-height:1.85;white-space:pre-wrap;text-decoration-thickness:1px;text-underline-offset:3px}.workspace-dashboard .workspace-account-summary-link:hover,.workspace-dashboard .workspace-account-summary-link:focus-visible{text-decoration-line:underline}
 .workspace-dashboard .workspace-account-question{display:block;max-width:80ch;font-size:12px;line-height:1.75;color:#657c9c;margin-top:14px;overflow-wrap:anywhere}

@@ -61,7 +61,7 @@ Startup preserves the original `reveal_*` tables, accounts, publications and S3 
 
 The Next.js gateway owns browser sessions and signs short-lived assertions for FastAPI. RDS owns users, drafts, jobs, scientific records, execution fences and dispatch intent. Upstash Workflow delivers bounded execution steps over signed HTTP requests. Artifacts and recovery checkpoints are versioned and checksum-verified in S3. Containers use bounded scratch space. Managed Redis Pub/Sub wakes durable event replay and frontend invalidation without Redis polling.
 
-Workflow steps collect frozen evidence, launch Claude in Upstash Box, capture output, and apply structural/source checks followed by checkpointed independent scientific review. Scientific identifiers and provenance survive publication and deployment changes. Upstash Vector retrieves candidate mechanisms; embeddings do not establish scientific support.
+Workflow steps collect frozen evidence, launch Claude in Upstash Box, capture output, and apply trusted identity, provenance, source, and tool-policy checks, then save passing accounts. No second AI review runs. Scientific identifiers and provenance survive publication and deployment changes. Upstash Vector retrieves candidate mechanisms; embeddings do not establish scientific support.
 
 ## Deployment status — September 30, 2026
 

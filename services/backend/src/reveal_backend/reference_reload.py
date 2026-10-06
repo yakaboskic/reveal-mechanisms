@@ -32,6 +32,7 @@ from decimal import Decimal
 import gzip
 import hashlib
 import importlib
+from .mapping_identity import POLICY_VERSION as MAPPING_POLICY_VERSION, interpreted_mappings
 import io
 import itertools
 import json
@@ -49,7 +50,7 @@ from urllib.parse import urlparse
 
 from . import reference_generation as rg
 from .repository import Repository, application_prefix, canonical, digest, now
-from .runtime_config import ROOT
+from .runtime_config import ROOT, CURRENT_DAPPER_SNAPSHOT
 
 BUNDLE_FORMAT = 'reveal.reference-bundle/1'
 VECTORS_FORMAT = 'reveal.reference-vectors/1'
@@ -62,7 +63,7 @@ EXPORT_FORMAT = 'reveal.reference-cold-export/2'
 BUNDLE_SCHEMA_VERSION = 2  # 2: cfde_gene_sets.metadata.dapper_gene_set holds the exact CFDE GeneSet node
 DEFAULT_LAP_PROJECT = ROOT / 'lap/out/projects/eaggl_capped__cfde_2026_09_28'
 DEFAULT_EMBEDDINGS = Path('/humgen/diabetes/users/chase/data/dig-s3/gene_sets/cfde/2026-09-28/embeddings')
-DEFAULT_DAPPER = ROOT / 'data/dapper/2026-09-24-v8'
+DEFAULT_DAPPER = CURRENT_DAPPER_SNAPSHOT
 DEFAULT_EAGGL_SOURCE_VERSION = 'legacy-711-trait-capped-union'
 TARGETS_FILE = ROOT / 'config/reference_reload.targets.yaml'
 LOCK_NAME = 'reveal:reference-reload'
@@ -469,7 +470,8 @@ def build_bundle(project_dir, out_dir, *, kpn_release=None):
                   'description': extras[0].get('description') or None, 'is_dichotomous': _flag(extras[0].get('is_dichotomous')),
                   'is_complex': _flag(extras[0].get('is_complex')), 'n_factors': _number(row['n_factors'], trait),
                   'metadata': {'kpn_release': release, 'kpn_release_commit': release_commit, 'pigean_id': entry.get('pigean_id') or None,
-                               'ontology_mappings': mappings}}
+                               'ontology_mappings': mappings,
+                               'mapping_interpretations': interpreted_mappings(mappings)}}
         if kpn in by_trait.values(): raise Refused(f'KPN trait {kpn} maps to several EAGGL traits')
         by_trait[trait] = kpn; traits.append(record)
     metadata_rows = {row['factor_id']: row for row in table['factor_metadata']}
@@ -540,7 +542,8 @@ def build_bundle(project_dir, out_dir, *, kpn_release=None):
     identity = {'format': BUNDLE_FORMAT, 'schema_version': BUNDLE_SCHEMA_VERSION, 'kind': rg.KPN_KIND, 'model': rg.KPN_MODEL,
                 'projection_scope': rg.PROJECTION_SCOPE, 'kpn_release': release, 'kpn_release_commit': release_commit,
                 'pigean_commit': pigean_commit, 'inputs': {role: _sha256_file(path) for role, path in sorted(paths.items())},
-                'collections': dict(sorted(documents.items()))}
+                'collections': dict(sorted(documents.items())), 'mechanism_identity_version': 2,
+                'mapping_policy_version': MAPPING_POLICY_VERSION}
     generation_id = digest(identity)
     out_dir = Path(out_dir); out_dir.mkdir(parents=True, exist_ok=True)
     final = out_dir / generation_id
@@ -600,6 +603,9 @@ def open_bundle(bundle):
     if manifest.get('format') != BUNDLE_FORMAT: raise Refused(f'{bundle}: not a reference bundle')
     identity = {key: manifest[key] for key in ('format', 'schema_version', 'kind', 'model', 'projection_scope', 'kpn_release',
                                                 'kpn_release_commit', 'pigean_commit', 'inputs', 'collections')}
+    # The policy is part of new generation identity; old bundles replay unchanged.
+    for key in ('mechanism_identity_version', 'mapping_policy_version'):
+        if key in manifest: identity[key] = manifest[key]
     if digest(identity) != manifest['generation_id'] or bundle.name != manifest['generation_id']: raise Refused(f'{bundle}: invalid generation identity')
     for name, sha in manifest['files'].items():
         if _sha256_file(bundle / name) != sha: raise Refused(f'{bundle}: checksum mismatch in {name}')
@@ -1782,6 +1788,52 @@ def open_jobs(repo, generation_id):
     return result
 
 
+def active_research_pins(repo, generation_id):
+    """Expiry revokes querying, not retention of unfinished durable operations.
+
+    A pin is releasable only after its research context closes and all pending
+    operations settle. Missing identity fails closed for the purge decision.
+    """
+    with repo.read_transaction() as tx:
+        return [row['data'] for row in tx.list('research_pin')
+                if row['data'].get('state') != 'released'
+                and row['data'].get('generation_id') in (generation_id, None)]
+
+
+@contextmanager
+def research_purge_guard(services, targets, generation_ids):
+    """Serialize the final pin check with request freeze in every app prefix.
+
+    Request creation checks this gate and inserts its pin under the same app
+    transaction mutex. Closing all gates before rechecking makes a prior pin
+    visible and prevents a subsequent one racing the destructive SQL phase.
+    """
+    saved = []
+    try:
+        for prefix in allow_listed_prefixes(targets):
+            repo = services.repository(prefix)
+            with repo.transaction() as tx:
+                prior = tx.get(rg.CONTROL_KIND, rg.CONTROL_ID)
+                gate = rg.set_gate(tx, True, reason='reference_purge', generations=list(generation_ids))
+                saved.append((repo, prior, gate))
+        for repo, _, _ in saved:
+            for identity in generation_ids:
+                if active_research_pins(repo, identity):
+                    raise Refused(f'{repo.table_prefix} has active research pins of {identity[:12]}')
+                if open_jobs(repo, identity):
+                    raise Refused(f'{repo.table_prefix} has non-terminal jobs of {identity[:12]}')
+        yield
+    finally:
+        for repo, prior, gate in reversed(saved):
+            with repo.transaction() as tx:
+                current = tx.get(rg.CONTROL_KIND, rg.CONTROL_ID)
+                # Preserve a later operator gate change instead of silently
+                # replacing it after a long purge.
+                if current and current['data'] == gate:
+                    if prior: tx.put(rg.CONTROL_KIND, rg.CONTROL_ID, prior['owner'], prior['data'])
+                    else: tx.remove(rg.CONTROL_KIND, rg.CONTROL_ID)
+
+
 def drain_jobs(services, repo, generation_id, *, cancel_active, drain_seconds, poll_seconds=5):
     from .jobs import cancel
     archive = services.module('reference_archive')
@@ -2263,6 +2315,9 @@ def build_purge_plan(services, generation_id=None, *, client=None):
             if not any(audit.get('generation_id') == generation_id and (audit.get('verification') or {}).get('passed') for audit in audits[name]):
                 blockers.append(f'{name} has no recorded passing verification of {generation_id[:12]}')
         for g in retired:
+            for prefix in allow_listed_prefixes(targets):
+                pins = active_research_pins(services.repository(prefix), g['generation_id'])
+                if pins: blockers.append(f'{prefix} has {len(pins)} active research pins of {g["generation_id"][:12]}')
             if g['status'] != 'superseded': continue
             ref = g.get('cold_export_ref')
             if not ref or not ref.get('root'): blockers.append(f"{g['generation_id'][:12]} has no cold export (`capture --cold-export --apply`)")
@@ -2326,34 +2381,35 @@ def purge_retired(services, plan_path, approval_path, *, allow_production=False,
     try:
         if scalar(lock, 'SELECT GET_LOCK(%s,%s)', (LOCK_NAME, 0)) != 1: raise Refused('Another reference reload holds the global lock')
         locked = True
-        connection = services.connect()
-        try:
-            for item in fresh['deletes']:  # steps 1-5, children first
-                emit(services, f"purge step {item['step']}: {item['table']}")
-                report['deleted'].append({'step': item['step'], 'table': item['table'],
-                                          'rows': delete_batches(connection, item['table'], item['where'], item['params'])})
-            for prefix in allow_listed_prefixes(targets):  # step 6
-                environments = {t['vector_environment'] for t in targets.values() if t['prefix'] == prefix}
-                repo = services.repository(prefix)
-                with repo.read_transaction() as tx: doomed = _prefix_deletes(tx, environments)
-                for kind in ('vector_batch', 'vector_snapshot', 'suggestion'):
-                    for offset in range(0, len(doomed[kind]), 500):
-                        with repo.transaction() as tx:
-                            for identity in doomed[kind][offset:offset + 500]: tx.remove(kind, identity)
-                report['records'][prefix] = {kind: len(ids) for kind, ids in doomed.items()}
-            active = _active_namespaces(services, targets)  # step 7
-            for environment, names in fresh['namespace_deletes'].items():
-                report['namespaces'][environment] = []
-                for name in names:
-                    if not vi.deletable_namespace(name, environment) or name in active.get(environment, set()):
-                        raise Refused(f'Refusing to delete namespace {name}')
-                    vi.delete_namespace(client, name, environment=environment, protected=active.get(environment, set()))
-                    delete_batches(connection, 'vector_bindings', 'environment=%s AND namespace=%s', (environment, name))
-                    report['namespaces'][environment].append(name)
-            for identity in fresh['retired']:  # step 8
-                rg.set_generation_status(connection, identity, 'retired', expected=('superseded', 'failed', 'retired'))
-                report['retired'].append(identity)
-        finally: connection.close()
+        with research_purge_guard(services, targets, fresh['retired']):
+            connection = services.connect()
+            try:
+                for item in fresh['deletes']:  # steps 1-5, children first
+                    emit(services, f"purge step {item['step']}: {item['table']}")
+                    report['deleted'].append({'step': item['step'], 'table': item['table'],
+                                              'rows': delete_batches(connection, item['table'], item['where'], item['params'])})
+                for prefix in allow_listed_prefixes(targets):  # step 6
+                    environments = {t['vector_environment'] for t in targets.values() if t['prefix'] == prefix}
+                    repo = services.repository(prefix)
+                    with repo.read_transaction() as tx: doomed = _prefix_deletes(tx, environments)
+                    for kind in ('vector_batch', 'vector_snapshot', 'suggestion'):
+                        for offset in range(0, len(doomed[kind]), 500):
+                            with repo.transaction() as tx:
+                                for identity in doomed[kind][offset:offset + 500]: tx.remove(kind, identity)
+                    report['records'][prefix] = {kind: len(ids) for kind, ids in doomed.items()}
+                active = _active_namespaces(services, targets)  # step 7
+                for environment, names in fresh['namespace_deletes'].items():
+                    report['namespaces'][environment] = []
+                    for name in names:
+                        if not vi.deletable_namespace(name, environment) or name in active.get(environment, set()):
+                            raise Refused(f'Refusing to delete namespace {name}')
+                        vi.delete_namespace(client, name, environment=environment, protected=active.get(environment, set()))
+                        delete_batches(connection, 'vector_bindings', 'environment=%s AND namespace=%s', (environment, name))
+                        report['namespaces'][environment].append(name)
+                for identity in fresh['retired']:  # step 8
+                    rg.set_generation_status(connection, identity, 'retired', expected=('superseded', 'failed', 'retired'))
+                    report['retired'].append(identity)
+            finally: connection.close()
     finally:
         try:
             if locked:

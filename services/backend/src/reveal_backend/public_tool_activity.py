@@ -27,7 +27,31 @@ ARGUMENTS = {
     'search_papers': ('query', 'limit'),
     'read_paper': ('source', 'id', 'section', 'offset', 'limit'),
     'write_outcome': (),
+    'get_local_work': (),
+    'get_research_package': (),
+    'get_operation': ('operation_id',),
+    'list_data_operations': (),
+    'describe_data_operation': ('operation_id',),
+    'query_data': ('operation_id', 'arguments'),
+    'find_propositions': ('query', 'filters', 'limit', 'offset'),
+    'find_claims': ('query', 'filters', 'limit', 'offset'),
+    'find_scientific_accounts': ('query', 'filters', 'limit', 'offset'),
+    'get_scientific_object': ('selection',),
+    'reuse_scientific_objects': ('selections',),
+    'get_evidence_result': ('receipt_id',),
+    'export_evidence_context': ('receipt_ids', 'import_ids', 'reuse_receipt_ids'),
+    'read_evidence': ('artifact_id', 'sha256', 'pointer', 'mode', 'offset', 'limit', 'continuation'),
 }
+# Deliberate allowlist: new tools need an explicit public-display review. Work
+# identities and proxy-supplied credentials/idempotency keys stay private.
+for _name in (
+        'search_factors', 'get_factor', 'get_factor_loadings', 'search_genes', 'resolve_gene',
+        'get_gene_factors', 'search_gene_sets', 'get_gene_set', 'get_gene_set_members',
+        'get_gene_set_factors', 'search_traits', 'get_trait', 'get_connections', 'get_imported_graph',
+        'get_pigean_gene_phenotype', 'get_pigean_gene_set_phenotype'):
+    ARGUMENTS[_name] = ('arguments',)
+DURABLE_TOOLS = {name for name, fields in ARGUMENTS.items() if fields == ('arguments',)} | {
+    'get_operation', 'query_data', 'export_evidence_context', 'reuse_scientific_objects'}
 
 
 def bounded(text, limit):
@@ -168,4 +192,33 @@ def tool_result_payload(call_id, name, arguments, result, secrets=()):
     payload.update(status='error' if failed else 'completed',
                    message=payload['tool_name'] + (' failed' if failed else ' completed'),
                    output_excerpt=result_preview(result, arguments, secrets))
+    operation = durable_operation(result, secrets) if tool_kind(payload['tool_name']) in DURABLE_TOOLS else None
+    if not failed and operation and operation['state'] in ('received', 'running'):
+        payload['message'] = (payload['tool_name'] + ': evidence operation ' + operation['operation_id']
+                              + ' is ' + operation['state'] + '; scientific result is not ready')
     return payload
+
+
+def durable_operation(result, secrets=()):
+    """Only bounded operation identity/state, never scientific or private text."""
+    if not isinstance(result, dict):
+        return None
+    value = result.get('structuredContent')
+    if not isinstance(value, dict):
+        content = result.get('content')
+        text = content if isinstance(content, str) else None
+        if isinstance(content, list):
+            text = next((block.get('text') for block in content
+                if isinstance(block, dict) and block.get('type') == 'text'), None)
+        try:
+            value = json.loads(text) if isinstance(text, str) and len(text) <= 100_000 else None
+        except ValueError:
+            return None
+    if not isinstance(value, dict):
+        return None
+    identity, state = value.get('operation_id'), value.get('state')
+    if (isinstance(identity, str) and re.fullmatch(r'[A-Za-z0-9_-]{1,100}', identity)
+            and redact_text(identity, secrets) == identity
+            and state in ('received', 'running', 'succeeded', 'failed', 'cancelled')):
+        return {'operation_id': identity, 'state': state}
+    return None

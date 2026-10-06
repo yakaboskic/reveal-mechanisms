@@ -1,4 +1,4 @@
-"""An explicit review retry must never relaunch authoring or trust changed output."""
+"""Historical review retries validate saved output without another model run."""
 import asyncio
 from copy import deepcopy
 import json
@@ -13,6 +13,7 @@ from reveal_backend.evidence_package import canonical_json, sha256
 from reveal_backend.job_failures import authoring_failure, review_failure
 from reveal_backend.repository import uid, digest
 from reveal_backend.scientific_grounding import ScientificReviewUnavailable, _ReviewSession, MODEL
+from reveal_backend.scientific_account_lint import AccountValidationError
 from reveal_backend.worker import Worker, LOCK
 from test_application import ApplicationTests
 
@@ -99,33 +100,33 @@ class ReviewRetryTests(unittest.TestCase):
         self.assertEqual(self.retry(owner, job).json()['code'], 'REVIEW_CAPTURE_UNAVAILABLE')
         with self.repo.read_transaction() as tx: self.assertEqual(tx.get('job', job['id'])['data']['status'], 'failed')
 
-    def exercise_worker(self, verdict, tamper=False):
+    def exercise_worker(self, lint_error=None, tamper=False):
         owner, job, root = self.saved_job()
         response = self.retry(owner, job); self.assertEqual(response.status_code, 202, response.text)
         if tamper: (root / 'attempt-1/output/output/account-1.json').write_text('{"changed":true}')
         adapter = SimpleNamespace(execute=AsyncMock(side_effect=AssertionError('Authoring must not execute')))
         worker = Worker(self.repo, adapter); worker.accept_accounts = AsyncMock()
         with patch('reveal_backend.worker.collect', side_effect=AssertionError('Must not recollect')) as collect, \
-                patch('reveal_backend.worker.assemble_account', return_value=({'claims': []}, {'valid': True})) as assemble, \
-                patch('reveal_backend.scientific_grounding.review_account', return_value={'accepted': verdict}) as review:
+                patch('reveal_backend.worker.assemble_account', side_effect=lint_error, return_value=({'claims': []}, {'valid': True})) as assemble, \
+                patch('reveal_backend.scientific_grounding.review_account', side_effect=AssertionError('No second model')) as review:
             asyncio.run(worker.process(*jobs.claim(self.repo, 'review-only-worker')))
-        adapter.execute.assert_not_awaited(); collect.assert_not_called()
-        if tamper: review.assert_not_called(); worker.accept_accounts.assert_not_awaited()
+        adapter.execute.assert_not_awaited(); collect.assert_not_called(); review.assert_not_called()
+        if tamper: assemble.assert_not_called(); worker.accept_accounts.assert_not_awaited()
         else:
             self.assertEqual(assemble.call_args.args[5], 1, 'Retain original authoring attempt in provenance')
-            self.assertEqual(review.call_args.kwargs['model'], MODEL)
-            self.assertEqual(review.call_args.kwargs['max_budget_usd'], 10)
-            self.assertTrue((root / 'attempt-2/grounding-1.json').exists())
-            if verdict: worker.accept_accounts.assert_awaited_once()
+            self.assertFalse((root / 'attempt-2/grounding-1.json').exists())
+            self.assertTrue((root / 'attempt-2/validation-1.json').exists())
+            if not lint_error: worker.accept_accounts.assert_awaited_once()
             else:
                 worker.accept_accounts.assert_not_awaited()
                 with self.repo.read_transaction() as tx:
                     self.assertEqual(tx.get('job', job['id'])['data']['failure']['code'], 'VALIDATION_FAILED')
         self.assertEqual((root / 'attempt-1/failure.json').read_text(), '{"original_failure":true}')
 
-    def test_review_success_can_persist_without_running_agent(self): self.exercise_worker(True)
-    def test_negative_review_does_not_accept(self): self.exercise_worker(False)
-    def test_tampering_after_queueing_is_checked_again(self): self.exercise_worker(True, tamper=True)
+    def test_saved_output_can_persist_without_running_either_agent(self): self.exercise_worker()
+    def test_saved_output_still_requires_final_lint(self):
+        self.exercise_worker(AccountValidationError({'valid': False, 'findings': [{'check': 'source-file', 'message': 'Unknown file'}]}))
+    def test_tampering_after_queueing_is_checked_again(self): self.exercise_worker(tamper=True)
 
     def test_s3_review_retry_restores_empty_worker_without_relaunching_author(self):
         import shutil
@@ -147,39 +148,45 @@ class ReviewRetryTests(unittest.TestCase):
                 patch('reveal_backend.worker.artifact_store', return_value=storage), \
                 patch('reveal_backend.worker.collect', side_effect=AssertionError('No recollection')), \
                 patch('reveal_backend.worker.assemble_account', return_value=({'claims': []}, {'valid': True})), \
-                patch('reveal_backend.scientific_grounding.review_account', return_value={'accepted': True}) as review:
+                patch('reveal_backend.scientific_grounding.review_account', side_effect=AssertionError('No second model')) as review:
             self.assertEqual(self.retry(owner, job).status_code, 202)
             asyncio.run(worker.process(*jobs.claim(self.repo, 'fresh-worker')))
-        adapter.execute.assert_not_awaited(); worker.accept_accounts.assert_awaited_once(); review.assert_called_once()
+        adapter.execute.assert_not_awaited(); worker.accept_accounts.assert_awaited_once(); review.assert_not_called()
         self.assertFalse(root.exists(), 'Worker scratch must be removed after durable capture')
         with self.repo.read_transaction() as tx: saved = tx.get('queue', job['id'])['data']['workspace']
         restored = Path(self.temp.name) / 'audit'
         storage.restore(saved, restored)
         self.assertEqual((restored / 'attempt-1/failure.json').read_text(), '{"original_failure":true}')
 
-    def test_paragraph_review_also_reuses_its_own_saved_output(self):
+    def test_paragraph_retry_also_reuses_its_own_saved_output_without_review(self):
         owner, job, root = self.saved_job('paragraph')
         self.assertEqual(self.retry(owner, job).status_code, 202)
         adapter = SimpleNamespace(execute=AsyncMock(side_effect=AssertionError('No authoring')))
         worker = Worker(self.repo, adapter); worker.accept_paragraph = AsyncMock()
-        with patch('reveal_backend.scientific_grounding.review_paragraph', return_value={'accepted': True}) as review:
+        with patch('reveal_backend.scientific_grounding.review_paragraph', side_effect=AssertionError('No second model')) as review:
             asyncio.run(worker.process(*jobs.claim(self.repo, 'paragraph-review')))
         adapter.execute.assert_not_awaited(); worker.accept_paragraph.assert_awaited_once()
-        self.assertEqual(review.call_args.kwargs['max_budget_usd'], 10)
-        self.assertTrue((root / 'attempt-2/paragraph-grounding.json').exists())
+        review.assert_not_called()
+        self.assertFalse((root / 'attempt-2/paragraph-grounding.json').exists())
 
-    def test_second_review_retry_keeps_the_original_capture(self):
+    def test_multiple_historical_review_failures_keep_the_original_capture(self):
         owner, job, root = self.saved_job()
         self.assertEqual(self.retry(owner, job).status_code, 202)
-        worker = Worker(self.repo)
-        with patch('reveal_backend.worker.assemble_account', return_value=({'claims': []}, {'valid': True})), \
-                patch('reveal_backend.scientific_grounding.review_account', side_effect=ScientificReviewUnavailable('Service unavailable')):
-            asyncio.run(worker.process(*jobs.claim(self.repo, 'review-unavailable')))
+        previous, queue = jobs.claim(self.repo, 'historical-review-worker')
+        jobs.finish(self.repo, job['id'], queue['token'], 'failed', failure={
+            'code': 'REVIEW_UNAVAILABLE', 'message': 'Historical reviewer was unavailable', 'retryable': True})
         with self.repo.read_transaction() as tx: again = tx.get('job', job['id'])['data']
         self.assertEqual(self.retry(owner, again).status_code, 202)
         with self.repo.read_transaction() as tx: source = tx.get('queue', job['id'])['data']['review_source']
         self.assertEqual(source['attempt'], 1)
-        self.assertTrue((root / 'attempt-2/failure.json').exists())
+        adapter = SimpleNamespace(execute=AsyncMock(side_effect=AssertionError('No authoring')))
+        worker = Worker(self.repo, adapter); worker.accept_accounts = AsyncMock()
+        with (patch('reveal_backend.worker.assemble_account', return_value=({'claims': []}, {'valid': True})) as assemble,
+              patch('reveal_backend.scientific_grounding.review_account', side_effect=AssertionError('No second model')) as review):
+            asyncio.run(worker.process(*jobs.claim(self.repo, 'validate-saved-output')))
+        adapter.execute.assert_not_awaited(); review.assert_not_called(); worker.accept_accounts.assert_awaited_once()
+        self.assertEqual(assemble.call_args.args[5], 1)
+        self.assertTrue((root / 'attempt-3/validation-1.json').exists())
 
 
 class BudgetFailureTests(unittest.TestCase):

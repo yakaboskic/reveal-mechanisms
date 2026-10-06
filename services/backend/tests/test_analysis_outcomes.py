@@ -39,7 +39,7 @@ class AnalysisOutcomeTests(unittest.TestCase):
             mechanism=self.package['pigean']['mechanisms'][native]
             reference={'source':'eaggl','source_id':native,'dapper_id':mechanism['dapper_id'],'source_revision':'e'*64}
             selected.append({'reference':reference,'origin':'automatic','suggestion_id':uid()})
-            bound.append({'cfde_node_id':native,'embedding_run_id':'embedding-run','mapping_run_id':'mapping-run'})
+            bound.append({'cfde_node_id':native,'reference_generation_id':digest('fixture'),'embedding_run_id':'embedding-run','mapping_run_id':'mapping-run'})
             named.append({'id':mechanism['dapper_id'],'name':'Frozen human mechanism '+str(index)})
         source={'source_id':self.gap['source']['source_id'],'id':self.gap['object']['id'],
             'source_revision':self.package['dismech']['source_revision']['source_sha256']}

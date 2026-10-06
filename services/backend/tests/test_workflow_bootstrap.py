@@ -1,6 +1,7 @@
 """Frozen bootstrap survives replacement without a second API workspace copy."""
 from copy import deepcopy
 import hashlib
+import json
 from pathlib import Path
 import tempfile
 import unittest
@@ -9,7 +10,7 @@ from unittest.mock import AsyncMock, Mock, patch
 from reveal_backend import jobs, workflow_state as state
 from reveal_backend.box_lifecycle import BoxLifecycle
 from reveal_backend.evidence_package import canonical_json
-from reveal_backend.repository import Repository, Transaction
+from reveal_backend.repository import Repository, Transaction, digest
 from reveal_backend.runtime_config import ROOT
 from reveal_backend.workflow_execution import WorkflowExecution
 from test_durable_workflow import MemoryStore
@@ -27,6 +28,11 @@ class BootstrapStore(MemoryStore):
             'key': 'test/artifacts/sha256/' + checksum[:2] + '/' + checksum,
             'version_id': 'immutable-' + checksum, 'sha256': checksum,
             'size_bytes': len(content), 'content_type': content_type}
+
+    def replace_workspace_files(self, reference, updates):
+        files = {**self.values[reference['sha256']], **{name: raw.hex() for name, raw in updates.items()}}
+        key = digest(files); self.values[key] = files
+        return {'sha256': key, 'store': reference['store']}
 
 
 class BootstrapWorkflowTests(unittest.IsolatedAsyncioTestCase):
@@ -129,7 +135,7 @@ class BootstrapWorkflowTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn('dispatch_input', rows['queue']); self.assertNotIn('dispatch_input', rows['execution'])
         self.assertIsNone(rows['execution']['workspace']); self.adapter.create_once.assert_not_awaited()
 
-    async def test_invalid_scientific_bundle_fails_before_s3_upload_or_box_allocation(self):
+    async def test_invalid_scientific_bundle_retains_diagnostics_without_bootstrap_upload_or_box_allocation(self):
         with self.repo.transaction() as tx: job = jobs.enqueue(tx, 'owner', 'analysis', request_id='request')
         payload = {'job_id': job['id'], 'generation': 1, 'namespace': 'bootstrap-test'}
         incomplete = {'external_evidence': {'selected_graphs': []}}
@@ -143,7 +149,11 @@ class BootstrapWorkflowTests(unittest.IsolatedAsyncioTestCase):
             result = await self.engine.step(payload, 0)
         rows = self.rows(payload)
         self.assertTrue(result['done']); self.assertEqual(rows['job']['failure']['code'], 'EVIDENCE_PREPARATION_FAILED')
-        self.assertNotIn('dispatch_input', rows['queue']); self.assertIsNone(rows['execution']['workspace'])
+        self.assertNotIn('dispatch_input', rows['queue'])
+        saved = self.store.values[rows['execution']['workspace']['sha256']]
+        diagnostic = json.loads(bytes.fromhex(saved['attempt-1/failure.json']))
+        self.assertEqual(diagnostic['phase'], 'prepare')
+        self.assertEqual(diagnostic['error_type'], 'ValidationError')
         self.assertEqual(self.store.puts, 0); self.adapter.create_once.assert_not_awaited()
 
     async def test_bootstrap_uses_saved_bundle_without_scratch_and_keeps_frozen_launch_limits(self):

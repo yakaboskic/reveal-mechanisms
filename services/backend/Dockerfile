@@ -21,6 +21,8 @@ COPY services/backend/agent-runtime /app/services/backend/agent-runtime
 COPY services/backend/agent-skills /app/services/backend/agent-skills
 COPY services/backend/csl /app/services/backend/csl
 COPY data/dapper/2026-09-24-v8 /app/data/dapper/2026-09-24-v8
+COPY data/dapper/0.2.0 /app/data/dapper/0.2.0
+COPY data/gene-identity/hgnc-2026-10-06 /app/data/gene-identity/hgnc-2026-10-06
 COPY data/dismech-gaps/2026-09-24 /app/data/dismech-gaps/2026-09-24
 COPY data/cfde-genesets/2026-09-24/manifest.json data/cfde-genesets/2026-09-24/activity.json /app/data/cfde-genesets/2026-09-24/
 ENV PYTHONPATH=/app/services/backend/src REVEAL_DAPPER_ROOT=/app/.runtime/dapper REVEAL_DISMECH_SOURCE=/app/dismech REVEAL_ARTIFACTS_DIR=/app/.runtime/artifacts

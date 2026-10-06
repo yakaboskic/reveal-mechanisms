@@ -1,5 +1,5 @@
 """Transport-neutral worker boundary. Results are untrusted until backend acceptance."""
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import json
 from pathlib import Path
 from typing import Awaitable, Callable, Literal, Protocol, Sequence
@@ -42,6 +42,8 @@ class ExecutionRequest:
     max_turns: int = 100
     remote_handle: dict | None = None
     validation_feedback: tuple[str, ...] = ()
+    # Trusted transport only. Never serialize this credential into frozen inputs or public events.
+    research_access: dict | None = field(default=None, repr=False, compare=False)
 
 
 @dataclass(frozen=True)
@@ -55,6 +57,7 @@ class ExecutionResult:
     reason: str | None = None
     remote_handle: dict | None = None
     outcome_path: Path | None = None
+    research_receipts_path: Path | None = None
 
 
 class ExecutionAdapter(Protocol):

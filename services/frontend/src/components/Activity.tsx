@@ -2,7 +2,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { activityProgress, activityRows, groupedWarnings, stageLabels, type ActivityRow } from "@/lib/activity";
 import { elapsedLabel, operationalStep, timedActivitySections, toolElapsed, type StepState } from "@/lib/activity-timing";
-import { prettyRecordedValue, toolInvocation } from "@/lib/tool-display";
+import { prettyRecordedValue, recordedToolArguments, toolInvocation } from "@/lib/tool-display";
 import { api, ApiError, messageOf, readEvents, terminal, type Schema } from "@/lib/client";
 import { JobOutcome } from "./AnalysisOutcome";
 import { invalidateWorkspace } from "@/lib/workspace-events";
@@ -15,7 +15,7 @@ function ToolActivity({ row, active, now, onInspect }: { row: ActivityRow; activ
   const state = result?.state || (active ? "started" : "unavailable");
   const output = result?.output_excerpt;
   const name = detail.tool_name || result?.tool_name || "Tool";
-  const args = detail.display_arguments || result?.display_arguments;
+  const { argumentsText: args, notice: argumentsNotice } = recordedToolArguments(detail.display_arguments, result?.display_arguments);
   const elapsed = toolElapsed(row, active, now);
   return <details className="activity-tool activity-tool-details" data-state={state}>
     <summary className="tool-heading" onClick={onInspect}>
@@ -25,7 +25,7 @@ function ToolActivity({ row, active, now, onInspect }: { row: ActivityRow; activ
     </summary>
     <div className="tool-details-body">
       <dl className="tool-metadata"><div><dt>Tool</dt><dd>{name}</dd></div>{detail.call_id && <div><dt>Call ID</dt><dd>{detail.call_id}</dd></div>}</dl>
-      <div className="tool-arguments"><span className="tool-detail-label">Recorded arguments</span><pre>{args ? toolInvocation(name, args, false) : "Arguments were not recorded."}</pre></div>
+      <div className="tool-arguments"><span className="tool-detail-label">Recorded arguments</span>{args ? <pre>{toolInvocation(name, args, false)}</pre> : <p>{argumentsNotice}</p>}</div>
       {result && <div className="tool-output"><span className="tool-detail-label">Result excerpt</span>{output ? <pre>{prettyRecordedValue(output)}</pre> : <p>{state === "failed" ? row.result?.message || row.event.message : "Tool completed. No result preview was recorded."}</p>}
         {result.artifact_sha256 && <small className="tool-artifact">Result SHA-256: {result.artifact_sha256}</small>}
       </div>}
@@ -45,7 +45,7 @@ function ActivityEntry({ row, active, now, step, onInspect }: { row: ActivityRow
     {event.detail?.counts && <small>{event.detail.counts.nodes} nodes, {event.detail.counts.edges} edges ({event.detail.counts.scope})</small>}
   </div>;
 }
-/** `archived`: the analysis was frozen on a superseded reference generation, so review cannot be retried. */
+/** `archived`: the analysis was frozen on a superseded reference generation, so its saved output cannot be accepted. */
 export function Activity({ initial, onJob, archived = false }: { initial: Schema<"Job">; onJob: (job: Schema<"Job">) => void; archived?: boolean }) {
   const paragraph = initial.kind === "paragraph";
   const labels = paragraph ? { ...stageLabels, preparation: "Statement preparation", research: "Writing statement", collection: "Collecting statement", validation: "Checking claims and citations", saving: "Saving statement" } : stageLabels;
@@ -189,8 +189,8 @@ export function Activity({ initial, onJob, archived = false }: { initial: Schema
       <div className="activity-follow">{following ? <span>{active ? "Following live activity" : "End of activity"}</span> : <><span>Auto-follow paused</span><button onClick={jumpToLatest}>Jump to latest <span aria-hidden="true">↓</span></button></>}</div>
     </>}
     {job.failure && <p className="error" role="alert">{job.failure.message === "Claude execution failed: error_max_turns" ? "The agent reached its turn limit before completing the result. No scientific result was accepted. Your draft and activity are saved; retry to start a new analysis." : job.failure.message}</p>}
-    {canRetryReview && <div className="review-retry"><button className="text-button" disabled={retryingReview} onClick={() => void retryReview()}>{retryingReview ? "Queueing review…" : "Retry scientific review"}</button><p className="muted">Uses the saved output. The research agent will not run again. Review uses the currently configured review budget.</p></div>}
-    {archived && job.status === "failed" && job.failure?.retryable && ["REVIEW_UNAVAILABLE", "REVIEW_BUDGET_EXCEEDED"].includes(job.failure.code) && <p className="notice">This analysis used an outdated EAGGL reference, so its review can’t be retried. Start a new analysis on this knowledge gap with current factors instead.</p>}
+    {canRetryReview && <div className="review-retry"><button className="text-button" disabled={retryingReview} onClick={() => void retryReview()}>{retryingReview ? "Queueing validation…" : "Save existing output"}</button><p className="muted">Checks the saved output and sources, then saves the result if validation passes. No new research or AI review runs.</p></div>}
+    {archived && job.status === "failed" && job.failure?.retryable && ["REVIEW_UNAVAILABLE", "REVIEW_BUDGET_EXCEEDED"].includes(job.failure.code) && <p className="notice">This analysis used an outdated EAGGL reference, so its saved output can’t be accepted. Start a new analysis on this knowledge gap with current factors instead.</p>}
     {reviewRetryError && <p className="error" role="alert">{reviewRetryError}</p>}
     {progress.status === "insufficient_evidence" && (paragraph ? <p className="notice">The saved account did not support a faithful research statement. The account and activity are retained.</p> : <JobOutcome key={job.id} jobId={job.id} />)}
     {error && <div className="error" role="alert">{error} <button onClick={() => { setError(""); setRetry(n => n + 1); }}>Reconnect</button></div>}

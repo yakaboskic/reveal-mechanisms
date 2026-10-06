@@ -1,6 +1,10 @@
-# Independent scientific review — 28 September 2026
+# Retired independent scientific review — 28 September 2026
 
-Account acceptance still requires trusted DAPPER assembly, source-observation
+> **Historical design, retired 4 October 2026.** Account and paragraph acceptance no longer run a second AI review. The worker applies trusted deterministic validation and saves passing output. Research and paragraph authoring remain separate jobs. The former reviewer implementation and audit records are retained for historical diagnostics; the limits and acceptance policy below no longer describe the live flow.
+>
+> For a historical job stopped by `REVIEW_UNAVAILABLE` or `REVIEW_BUDGET_EXCEEDED`, **Save existing output** uses the compatible `/retry-review` route to revalidate the captured authoring output and save it if deterministic checks pass. It does not rerun research or call an AI reviewer. Capture checksums, ownership, execution policy, and current-reference guards still apply. Historical scientific rejections are not eligible for this action. See [current acceptance policy](local-development.md).
+
+At the time of this design, account acceptance required trusted DAPPER assembly, source-observation
 checks, and an independent verdict covering every Claim and the complete closing
 synthesis. The reviewer now reads captured evidence through a bounded local
 JSON-pointer tool. It does not receive the author's conversation or gain external

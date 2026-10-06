@@ -10,6 +10,7 @@ sys.path.insert(0, str(ROOT / 'services/backend/src'))
 
 from reveal_backend.evidence_package import DapperRuntime, EvidenceBuildError, decode
 from reveal_backend.evidence_schema import generate_schema, validate_package_shape
+from reveal_backend.runtime_config import dapper_snapshot_for_pin
 
 
 def main(argv=None):
@@ -36,11 +37,7 @@ def main(argv=None):
         else:
             package = decode(args.package.read_bytes(), 'yaml' if args.package.suffix in ('.yaml', '.yml') else 'json')
             validate_package_shape(package, schema)
-            runtime = DapperRuntime(ROOT / 'data/dapper/2026-09-24-v8')
-            if package['dapper_pin']['snapshot_sha256'] != runtime.manifest['snapshot_sha256']:
-                raise EvidenceBuildError('Package DAPPER snapshot differs from the schema import')
-            if package['dapper_pin']['snapshot_manifest_sha256'] != runtime.manifest_sha256:
-                raise EvidenceBuildError('Package DAPPER manifest differs from the schema import')
+            runtime = DapperRuntime(dapper_snapshot_for_pin(package['dapper_pin']))
             runtime.resolver(package['prefixes'])
             if package['dapper_context']['prefixes'] != package['prefixes']:
                 raise EvidenceBuildError('Embedded DAPPER prefix map differs from the package')

@@ -1,0 +1,55 @@
+{
+  "operation_id": "registerResearchOAuthClient",
+  "case": "public_client",
+  "method": "POST",
+  "path_template": "/oauth/register",
+  "request": {
+    "url": "https://api.reveal.example.org/oauth/register",
+    "path": {},
+    "query": {},
+    "headers": {
+      "Content-Type": "application/json",
+      "Accept": "application/json"
+    },
+    "body": {
+      "client_name": "Illustrative local client",
+      "redirect_uris": [
+        "http://127.0.0.1:8765/callback"
+      ],
+      "grant_types": [
+        "authorization_code",
+        "refresh_token"
+      ],
+      "response_types": [
+        "code"
+      ],
+      "token_endpoint_auth_method": "none",
+      "scope": "research:read research:write"
+    }
+  },
+  "responses": {
+    "201": {
+      "content_type": "application/json",
+      "examples": {
+        "registered": {
+          "client_name": "Illustrative local client",
+          "redirect_uris": [
+            "http://127.0.0.1:8765/callback"
+          ],
+          "grant_types": [
+            "authorization_code",
+            "refresh_token"
+          ],
+          "response_types": [
+            "code"
+          ],
+          "token_endpoint_auth_method": "none",
+          "scope": "research:read research:write",
+          "client_id": "rvlc_FICTIONAL_PUBLIC_CLIENT",
+          "client_id_issued_at": 1791244800
+        }
+      }
+    }
+  },
+  "curl": "curl -X POST https://api.reveal.example.org/oauth/register -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"client_name\":\"Illustrative local client\",\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"redirect_uris\":[\"http://127.0.0.1:8765/callback\"],\"response_types\":[\"code\"],\"scope\":\"research:read research:write\",\"token_endpoint_auth_method\":\"none\"}'"
+}

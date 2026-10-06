@@ -80,6 +80,12 @@ def test_fetch_export_is_allowlisted_hashed_and_self_contained(source, tmp_path)
     assert 'RUN python scripts/platform_assets.py --output /assets' in dockerfile
     assert 'COPY --from=assets /assets/dapper /app/.runtime/dapper' in dockerfile
     assert 'COPY .deployment-assets' not in dockerfile
+    assert 'COPY data/dapper/0.2.0 /app/data/dapper/0.2.0' in dockerfile
+    assert 'COPY data/dapper/2026-09-24-v8 /app/data/dapper/2026-09-24-v8' in dockerfile
+    assert all(name in manifest['files'] for name in ('data/dapper/0.2.0/snapshot.json', 'data/dapper/2026-09-24-v8/snapshot.json'))
+    assert 'COPY data/gene-identity/hgnc-2026-10-06 /app/data/gene-identity/hgnc-2026-10-06' in dockerfile
+    assert all('data/gene-identity/hgnc-2026-10-06/' + name in manifest['files']
+               for name in ('manifest.json', 'hgnc_complete_set.tsv.gz', 'withdrawn.tsv.gz'))
     assert (output / 'services/backend/Dockerfile').read_text() == (source / 'services/backend/Dockerfile').read_text()
     # A second clean export has the same manifest, regardless of output path.
     assert bundle.export(tmp_path / 'again', root=source, fetch_assets=True) == manifest

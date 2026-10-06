@@ -1,10 +1,32 @@
 """Runtime configuration. Secrets are read only from the environment."""
 from pathlib import Path
 import hashlib
+import json
 import os
 import threading
 
 ROOT = Path(__file__).resolve().parents[4]
+CURRENT_DAPPER_SNAPSHOT = ROOT / 'data/dapper/0.2.0'
+
+
+def dapper_snapshot_for_pin(pin, *, root=ROOT):
+    """Select an installed, approved immutable snapshot without changing its pin."""
+    root = Path(root)
+    lock = json.loads((root / 'services/backend/agent-runtime/dapper-release.json').read_bytes())
+    wanted = pin.get('snapshot_sha256')
+    if wanted not in lock['compatible_input_snapshots']:
+        raise ValueError('Package DAPPER snapshot is not approved for the current release')
+    for relative in ('data/dapper/0.2.0', 'data/dapper/2026-09-24-v8'):
+        directory = root / relative
+        manifest = directory / 'snapshot.json'
+        if not manifest.is_file(): continue
+        raw = manifest.read_bytes()
+        if json.loads(raw).get('snapshot_sha256') != wanted: continue
+        if (pin.get('snapshot_manifest_sha256') is not None and
+                hashlib.sha256(raw).hexdigest() != pin['snapshot_manifest_sha256']):
+            raise ValueError('Package DAPPER snapshot manifest differs from its original pin')
+        return directory
+    raise ValueError('The approved DAPPER snapshot is not installed')
 
 def setting(name, default=None):
     return os.environ.get(name, default)

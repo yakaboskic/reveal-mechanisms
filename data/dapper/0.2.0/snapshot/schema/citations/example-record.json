@@ -1,0 +1,31 @@
+{
+  "target_id": "dapper:KnowledgeGap.dvL4cOp3O-yhGn3s5PK63aAuMagUmARz",
+  "target_class": "KnowledgeGap",
+  "dapper_schema_version": "0.2.0-a1",
+  "dapper_identity_profile": "DAPPER-ID-1",
+  "object_payload_ref": "https://example.org/fixtures/example_scientific_account.yaml#dapper:KnowledgeGap.dvL4cOp3O-yhGn3s5PK63aAuMagUmARz",
+  "metadata_revision": 1,
+  "citation_profile_version": "reveal-citation-v1",
+  "title": "What role does Gene X play in insulin secretion?",
+  "title_derivation": {
+    "method": "inquiry_text",
+    "version": "1",
+    "source": {
+      "source_ref": "https://example.org/fixtures/example_scientific_account.yaml"
+    }
+  },
+  "language": "en",
+  "byline": [],
+  "origin": "native",
+  "generated_at": null,
+  "first_minted_at": null,
+  "published_at": null,
+  "issued_date": null,
+  "issued_basis": "unknown",
+  "date_provenance": {},
+  "publisher": null,
+  "repository": "Illustrative REVEAL repository; not an issued record",
+  "canonical_url": "https://example.org/id/dapper:KnowledgeGap.dvL4cOp3O-yhGn3s5PK63aAuMagUmARz",
+  "access_level": "private",
+  "publication_state": "unpublished"
+}

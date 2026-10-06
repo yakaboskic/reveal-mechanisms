@@ -16,6 +16,8 @@ export function VoteControls({ kind, id, initial, onChange, compact = false, ver
   const retry = useRef<{ vote: Vote; key: string } | null>(null);
   const binding = `${kind}:${id}:${me?.user_id || "visitor"}`;
   const current = useRef(binding); current.current = binding;
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const pending = useRef(false);
   useEffect(() => { setValue(initial); }, [initial]);
   useEffect(() => { retry.current = null; setError(""); setBusy(false); pending.current = false; }, [binding]);
@@ -32,14 +34,14 @@ export function VoteControls({ kind, id, initial, onChange, compact = false, ver
     try {
       if (kind === "gap") await api.setGapVote(id, vote, request.key);
       else await api.setAccountVote(id, vote, request.key);
-      if (current.current !== binding) return;
+      if (!mounted.current || current.current !== binding) return;
       // A recovered idempotent response may predate a vote changed in another
       // tab. Read the committed ballot once after this mutation/retry.
       const result = kind === "gap" ? await api.gapVote(id) : await api.accountVote(id);
-      if (current.current !== binding) return;
+      if (!mounted.current || current.current !== binding) return;
       setValue(result); retry.current = null; onChange?.(result);
-    } catch (failure) { if (current.current === binding) setError(messageOf(failure)); }
-    finally { if (current.current === binding) { pending.current = false; setBusy(false); } }
+    } catch (failure) { if (mounted.current && current.current === binding) setError(messageOf(failure)); }
+    finally { if (mounted.current && current.current === binding) { pending.current = false; setBusy(false); } }
   };
   return <div className={`vote-control${compact ? " is-compact" : ""}${vertical ? " is-vertical" : ""}`}>
     <div className="vote-buttons" role="group" aria-label={`Vote on this ${noun}`} aria-busy={busy}>

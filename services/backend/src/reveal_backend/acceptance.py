@@ -6,7 +6,7 @@ from pathlib import Path
 import subprocess
 import sys
 from functools import lru_cache
-from .runtime_config import ROOT, setting
+from .runtime_config import ROOT, CURRENT_DAPPER_SNAPSHOT, setting
 from .repository import digest, now
 from .evidence_package import canonical_json, decode, require, sha256
 from .dapper_release import verify_release
@@ -15,12 +15,89 @@ from .source_validation import ledger_sources, validate_new_files, validate_obse
 
 LOCK=ROOT/'services/backend/agent-runtime/dapper-release.json'
 
+
+def build_validation_context(seed, *, contexts=(), source_artifacts=None):
+    """Merge server-resolved observations without changing the frozen seed.
+
+    Contexts are produced by authorized data/import/reuse services, never taken
+    from an agent's submitted JSON. Their byte maps are materialized by the
+    caller beside the resulting package before assembly/linting.
+    """
+    result = deepcopy(seed)
+    require(isinstance(result.get('selection'), dict) and result['selection'].get('knowledge_gap_id'),
+            'Validation context requires the frozen selected gap')
+    result.setdefault('source_artifacts', {})
+    result.setdefault('dapper_context', {})
+    previous = result.get('validation_context', {})
+    eligible = set(result.get('eligible_source_ids', [])) | set(previous.get('eligible_source_ids', []))
+    cfde = set(result.get('cfde_source_ids', [])) | set(previous.get('cfde_source_ids', []))
+    nodes = {node['id']: (group, node) for group, rows in result['dapper_context'].items()
+             if isinstance(rows, list) for node in rows if isinstance(node, dict) and 'id' in node}
+    for context in contexts:
+        for artifact in context.get('source_artifacts', {}).values():
+            capture = artifact.get('research_capture', {})
+            if (context.get('source_ref') and 'artifact_records' not in context
+                    and capture.get('generation_id') and result.get('reference_generation_id')):
+                require(capture['generation_id'] == result['reference_generation_id'],
+                        'Retained observation belongs to a different frozen reference generation')
+        for resolution in context.get('reference_objects', context.get('object_resolution', [])):
+            if resolution.get('reference_generation_id') and result.get('reference_generation_id'):
+                require(resolution['reference_generation_id'] == result['reference_generation_id'],
+                        'Resolved scientific object belongs to a different frozen reference generation')
+            target = result.setdefault('reference_objects', [])
+            if resolution not in target: target.append(deepcopy(resolution))
+        for group, rows in context.get('dapper_context', {}).items():
+            if group == 'prefixes':
+                prefixes = result['dapper_context'].setdefault('prefixes', {})
+                for prefix, value in rows.items():
+                    require(prefix not in prefixes or prefixes[prefix] == value, 'Conflicting source prefix binding')
+                    prefixes[prefix] = value
+                continue
+            require(isinstance(rows, list), 'Context document groups must be lists')
+            target = result['dapper_context'].setdefault(group, [])
+            for node in rows:
+                require(isinstance(node, dict), 'Context objects must be mappings')
+                identity = node.get('id')
+                if identity in nodes:
+                    require(nodes[identity] == (group, node), 'Conflicting retained scientific payload')
+                    continue
+                if node not in target:
+                    target.append(deepcopy(node))
+                if identity:
+                    nodes[identity] = (group, node)
+        for key, artifact in context.get('source_artifacts', {}).items():
+            prior = result['source_artifacts'].get(key)
+            require(prior is None or prior == artifact, 'Conflicting retained source artifact')
+            result['source_artifacts'][key] = deepcopy(artifact)
+        eligible.update(context.get('eligible_source_ids', []))
+        cfde.update(context.get('cfde_source_ids', []))
+        for upload in context.get('user_inputs', {}).get('uploads', []):
+            uploads = result.setdefault('user_inputs', {}).setdefault('uploads', [])
+            if upload not in uploads:
+                uploads.append(deepcopy(upload))
+    for key, artifact in (source_artifacts or {}).items():
+        prior = result['source_artifacts'].get(key)
+        require(prior is None or prior == artifact, 'Conflicting retained source artifact')
+        result['source_artifacts'][key] = deepcopy(artifact)
+    captured = {artifact['dapper_file_id'] for artifact in result['source_artifacts'].values()}
+    require((eligible | cfde) <= captured, 'Eligible evidence must have retained source bytes')
+    for artifact in result['source_artifacts'].values():
+        entry = nodes.get(artifact['dapper_file_id'])
+        require(entry is not None and entry[0] == 'files', 'Source artifact lacks its canonical File')
+        require(entry[1].get('sha256') == artifact['sha256'], 'Source File checksum differs from retained bytes')
+        if 'size_bytes' in artifact:
+            require(entry[1].get('size_in_bytes') == artifact['size_bytes'], 'Source File size differs from retained bytes')
+    result['validation_context'] = {'format': 'reveal.validation-context/1',
+        'acceptance_policy': 'reveal.scientific-account/2', 'seed_sha256': sha256(canonical_json(seed)),
+        'eligible_source_ids': sorted(eligible | cfde), 'cfde_source_ids': sorted(cfde)}
+    return result
+
 def release_root(): return Path(setting('REVEAL_DAPPER_ROOT',str(ROOT/'.runtime/dapper')))
 
 @lru_cache(maxsize=1)
 def public_runtime():
     from .evidence_package import DapperRuntime
-    return DapperRuntime(ROOT/'data/dapper/2026-09-24-v8')
+    return DapperRuntime(CURRENT_DAPPER_SNAPSHOT)
 
 def mint(document,path):
     root=release_root(); verify_release(root,LOCK)
@@ -76,13 +153,16 @@ print(json.dumps(fields))
     return decode(result.stdout.encode())
 
 
-def hydrate_inputs(document,trusted):
+def hydrate_inputs(document,trusted,edges=()):
     """Hydrate exact schema-declared references, never IDs mentioned in prose."""
     root=release_root(); release=verify_release(root,LOCK)
     fields=_reference_fields(str(root.resolve()),release['lock_sha256'])
     for _ in range(len(trusted)+1):
         present={node['id'] for rows in document.values() if isinstance(rows,list)
                  for node in rows if isinstance(node,dict) and 'id' in node}
+        for group, edge in edges:
+            if edge.get('subject') in present and edge not in document.setdefault(group, []):
+                document[group].append(deepcopy(edge))
         references=set()
         for group,names in fields.items():
             rows=document.get(group,[])
@@ -108,7 +188,9 @@ def assemble_account(raw_path,package_path,output_path,attribution,job,attempt,e
         if isinstance(rows,list):
             for node in rows:
                 if isinstance(node,dict) and node.get('id') in trusted: require(node==trusted[node['id']][1],'Agent altered a trusted input payload')
-    doc=hydrate_inputs(doc,trusted)
+    retained_edges=[(group,edge) for group,rows in package['dapper_context'].items()
+                    if group.endswith('_edges') and isinstance(rows,list) for edge in rows]
+    doc=hydrate_inputs(doc,trusted,retained_edges)
     # Operational attribution comes from the frozen submitting principal and
     # actual worker, never an agent-authored Person or runtime declaration.
     actor_id='urn:reveal:actor:'+digest(['scientific-actor',attribution['user_id']])
@@ -116,8 +198,11 @@ def assemble_account(raw_path,package_path,output_path,attribution,job,attempt,e
     person={'id':actor_id,'name':(label or 'Registered researcher')+' [actor '+digest(['scientific-actor',attribution['user_id']])[:20]+']'}
     if attribution.get('orcid_authenticated') and attribution.get('orcid'): person['orcid']=attribution['orcid']
     activity_id='urn:reveal:execution:'+job['id']+':'+str(attempt)
-    activity={'id':activity_id,'name':'REVEAL deterministic development execution' if execution=='deterministic' else 'REVEAL Claude Code account construction',
-        'command':'reveal-worker '+execution,'software_name':'REVEAL Mechanisms worker','software_version':'0.2.0',
+    local = execution in ('local', 'local-agent')
+    activity={'id':activity_id,'name':'REVEAL local account submission' if local else
+        'REVEAL deterministic development execution' if execution=='deterministic' else 'REVEAL Claude Code account construction',
+        'command':('reveal-local-submit' if local else 'reveal-worker '+execution)+' '+job['id']+' --attempt '+str(attempt),
+        'software_name':'REVEAL acceptance service' if local else 'REVEAL Mechanisms worker','software_version':'0.2.0',
         'generated_at_time':now()}
     doc=replace_authored_attribution(doc,trusted,person,activity)
     for group in ('claims','scientific_accounts'):
@@ -126,6 +211,22 @@ def assemble_account(raw_path,package_path,output_path,attribution,job,attempt,e
     sources=sorted({ref for item in doc.get('evidence_items',[]) for ref in item.get('was_derived_from',[]) if ref in trusted})
     doc.setdefault('used_edges',[]).extend({'subject':activity_id,'predicate':'prov:used','object':ref} for ref in sources)
     document=mint(doc,output_path)
+    # An authored reference may converge on an already retained scientific
+    # identity (for example the same Proposition or submitting Person). Keep
+    # one exact payload; never merge different observations under one identity.
+    observed = {}
+    for group, rows in document.items():
+        if not isinstance(rows, list): continue
+        unique = []
+        for node in rows:
+            identity = node.get('id') if isinstance(node, dict) else None
+            if identity in observed:
+                require(observed[identity] == (group, node), 'Conflicting scientific payloads share a minted identity')
+                continue
+            if identity: observed[identity] = (group, node)
+            if node not in unique: unique.append(node)
+        document[group] = unique
+    Path(output_path).write_bytes(canonical_json(document))
     report=validate_scientific_account(output_path,dapper_root=release_root(),release_lock=LOCK,
         evidence_package=package_path,ledger_path=ledger_path)
     return document,report

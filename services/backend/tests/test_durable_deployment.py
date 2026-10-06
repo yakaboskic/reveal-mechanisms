@@ -28,7 +28,8 @@ def test_default_stack_has_no_queue_consumers_or_self_hosted_redis():
 
 
 @pytest.mark.parametrize('local_api_key', [False, True])
-def test_prepare_separates_application_state_and_backend_secrets(tmp_path, monkeypatch, local_api_key):
+@pytest.mark.parametrize('frontend_port', [3000, 3100])
+def test_prepare_separates_application_state_and_backend_secrets(tmp_path, monkeypatch, local_api_key, frontend_port):
     root = tmp_path
     runtime = root/'.runtime/workflow'
     runtime.mkdir(parents=True)
@@ -47,9 +48,10 @@ def test_prepare_separates_application_state_and_backend_secrets(tmp_path, monke
         'QSTASH_CURRENT_SIGNING_KEY=local-current\nQSTASH_NEXT_SIGNING_KEY=local-next\n')
     monkeypatch.setattr(module,'ROOT',root); monkeypatch.setattr(module,'RUNTIME',runtime)
     monkeypatch.setattr(module,'storage_config',lambda path:({'REVEAL_S3_BUCKET':'test','REVEAL_S3_PREFIX':'local/'},'https://test.example/local/'))
-    result=module.prepare()
+    result=module.prepare(frontend_port=frontend_port)
     backend=module.read_env(runtime/'backend.env'); frontend=module.read_env(runtime/'frontend.env')
     assert backend['REVEAL_APPLICATION_TABLE_PREFIX']=='reveal_workflow_local'
+    assert backend['REVEAL_PUBLIC_WEB_URL'] == backend['REVEAL_CANONICAL_URL'] == frontend['NEXTAUTH_URL'] == f'http://localhost:{frontend_port}'
     assert backend['REVEAL_JOB_TRANSPORT']=='workflow'
     assert backend['REVEAL_RETRIEVAL_BACKEND']=='upstash'
     assert backend['TMPDIR'] == backend['REVEAL_WORK_DIR'] == '/work'
@@ -93,12 +95,18 @@ def test_platform_qa_isolates_authoritative_state_and_callbacks():
     assert config['env']['REVEAL_MAX_ACTIVE_BOXES']=='2'
     assert config['qa']['env']['REVEAL_S3_PREFIX']=='qa/'
     assert 'api-qa.' in config['qa']['env']['REVEAL_WORKFLOW_URL']
+    assert config['qa']['env']['REVEAL_PUBLIC_API_URL'] == 'https://api-qa.hugeampkpnbi.org/api/reveal'
     required = {'REVEAL_MYSQL_PASSWORD', 'REVEAL_GATEWAY_SECRET', 'REVEAL_GATEWAY_SERVICE_TOKEN',
         'REVEAL_API_KEY_SHA256', 'REVEAL_API_KEY_USER_ID',
         'UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN',
         'UPSTASH_VECTOR_REST_URL', 'UPSTASH_VECTOR_REST_TOKEN', 'UPSTASH_VECTOR_WRITE_TOKEN',
         'QSTASH_TOKEN', 'QSTASH_CURRENT_SIGNING_KEY', 'QSTASH_NEXT_SIGNING_KEY'}
     for environment in ('qa', 'prod'):
+        public_settings = {**config['env'], **config[environment].get('env', {})}
+        assert public_settings['REVEAL_PUBLIC_WEB_URL'] == public_settings['REVEAL_CANONICAL_URL'] == public_settings['NEXTAUTH_URL']
+        assert public_settings['REVEAL_PUBLIC_WEB_URL'].startswith('https://')
+        expected_web = 'https://reveal-mechanisms-qa.vercel.app' if environment == 'qa' else 'https://reveal-mechanisms.vercel.app'
+        assert public_settings['REVEAL_PUBLIC_WEB_URL'] == expected_web
         secrets = config[environment]['secrets']
         assert 'REVEAL_REDIS_URL' not in secrets
         assert required <= secrets.keys()

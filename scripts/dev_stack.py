@@ -117,6 +117,8 @@ def environment():
     result.setdefault('REVEAL_API_PORT', '8000')
     result.setdefault('REVEAL_API_URL', 'http://127.0.0.1:' + result['REVEAL_API_PORT'])
     result.setdefault('NEXTAUTH_URL', 'http://localhost:' + result['REVEAL_FRONTEND_PORT'])
+    if not result.get('REVEAL_PUBLIC_WEB_URL'):
+        result['REVEAL_PUBLIC_WEB_URL'] = result.get('REVEAL_CANONICAL_URL') or result['NEXTAUTH_URL']
     result.setdefault('REVEAL_ENVIRONMENT', 'development')
     result.setdefault('REVEAL_EXECUTION_MODE', 'box')
     return result

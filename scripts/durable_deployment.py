@@ -85,7 +85,7 @@ def prepare(*, scheduler='local', api_port=18001, frontend_port=3000, callback_u
         REVEAL_MAX_SCRATCH_STEPS='2', REVEAL_WORKSPACE_MAX_BYTES='268435456',
         REVEAL_GATEWAY_SECRET=keys['gateway'], REVEAL_GATEWAY_SERVICE_TOKEN=keys['service'],
         REVEAL_GATEWAY_ISSUER='reveal-nextjs', REVEAL_GATEWAY_AUDIENCE='reveal-api',
-        NEXTAUTH_URL=origin, REVEAL_CANONICAL_URL=origin)
+        NEXTAUTH_URL=origin, REVEAL_CANONICAL_URL=origin, REVEAL_PUBLIC_WEB_URL=origin)
     backend.pop('SERVICE_PATH_PREFIX', None)
     frontend = {k:v for k,v in source.items() if k.startswith(('AUTH_GOOGLE_','AUTH_ORCID_')) or k == 'ADMIN_EMAILS'}
     frontend.update({k:backend[k] for k in ('REVEAL_GATEWAY_SECRET','REVEAL_GATEWAY_SERVICE_TOKEN',

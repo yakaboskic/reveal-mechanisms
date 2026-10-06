@@ -40,9 +40,9 @@ class BoxLifecycle(BoxExecutionAdapter):
         from .direct_bootstrap import freeze_bootstrap
         return freeze_bootstrap(self, request, storage)
 
-    async def prepare_from_store(self, descriptor, handle, storage):
+    async def prepare_from_store(self, descriptor, handle, storage, *, research_access=None):
         from .direct_bootstrap import prepare_from_store
-        return await prepare_from_store(self, descriptor, handle, storage)
+        return await prepare_from_store(self, descriptor, handle, storage, research_access=research_access)
 
     async def launch_once(self, handle):
         box = await self.connect(handle)

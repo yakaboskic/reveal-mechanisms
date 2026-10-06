@@ -1,4 +1,4 @@
-"""Review-only retries reuse a checksum-verified, completed authoring capture."""
+"""Legacy review retries validate and save a checksum-verified authoring capture."""
 from copy import deepcopy
 
 from .agent_execution import ExecutionRequest
@@ -16,7 +16,7 @@ def replay_capture(request, source):
     handle = {'box_id': source['box_id']}
     marker = read_capture_marker(request, handle)
     require(marker and marker['cleanup_complete'] and marker['state']['status'] == 'succeeded',
-            'Review retry requires a completed, cleaned-up authoring capture')
+            'Saved-output validation requires a completed, cleaned-up authoring capture')
     result = captured_result(request, handle, marker)
     require(bool(result.account_paths) if request.kind == 'research' else result.paragraph_path is not None,
             'Saved authoring output is unavailable')
@@ -66,11 +66,11 @@ def prepare_source(tx, job, queue):
         return source
     except (OSError, ValueError, KeyError, TypeError, RuntimeError) as exc:
         raise Problem(409, 'REVIEW_CAPTURE_UNAVAILABLE',
-            'The saved authoring output could not be verified. Review was not started; no research agent was launched.') from exc
+            'The saved authoring output could not be verified. Validation was not started; no research agent was launched.') from exc
 
 
 def require_current_reference(tx, job):
-    """Retrying review would mint new accounts from the job's frozen reference data.
+    """Accepting saved output would mint accounts from the job's frozen reference data.
 
     Blocked while a reference reload holds the gate, and for analysis jobs whose
     request was frozen on a superseded generation. Legacy mode (no active
@@ -79,7 +79,7 @@ def require_current_reference(tx, job):
     if job['kind'] != 'analysis': return
     from .reference_generation import ReferenceError, generation_of_anchors, read_gate
     if read_gate(tx):
-        raise Problem(503, 'REFERENCE_RELOAD_IN_PROGRESS', 'Reference data is being reloaded. Retry review shortly.')
+        raise Problem(503, 'REFERENCE_RELOAD_IN_PROGRESS', 'Reference data is being reloaded. Retry validation shortly.')
     from .analysis_outcomes import active_reference_generation
     active = active_reference_generation(tx)
     if not active: return
@@ -96,9 +96,9 @@ def require_current_reference(tx, job):
 def enqueue_review(tx, job, expected_event_id):
     from . import jobs
     if job['status'] != 'failed' or (job.get('failure') or {}).get('code') not in REVIEW_FAILURES:
-        raise Problem(409, 'REVIEW_RETRY_UNAVAILABLE', 'Only an incomplete independent review can be retried on saved output.')
+        raise Problem(409, 'REVIEW_RETRY_UNAVAILABLE', 'Only output retained after an incomplete legacy review can be validated and saved through this action.')
     if job['last_event_id'] != expected_event_id:
-        raise Problem(409, 'JOB_CHANGED', 'This job changed. Refresh its status before retrying review.')
+        raise Problem(409, 'JOB_CHANGED', 'This job changed. Refresh its status before validating saved output.')
     require_current_reference(tx, job)
     row = tx.get('queue', job['id'])
     if not row or row['owner'] != job['owner_user_id']:
@@ -109,5 +109,5 @@ def enqueue_review(tx, job, expected_event_id):
     jobs.dispatch(tx,job,queue)
     job.update(status='queued', stage='validating', failure=None, result=None, completed_at=None)
     jobs.update_paragraph_state(tx, job)
-    jobs.event(tx, job, 'status', 'Independent review queued using saved research output. The research agent will not run again.')
+    jobs.event(tx, job, 'status', 'Validation queued using saved output. No new research or AI review will run.')
     return job

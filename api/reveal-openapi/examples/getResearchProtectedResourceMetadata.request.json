@@ -1,0 +1,37 @@
+{
+  "operation_id": "getResearchProtectedResourceMetadata",
+  "case": "request",
+  "method": "GET",
+  "path_template": "/.well-known/oauth-protected-resource",
+  "request": {
+    "url": "https://api.reveal.example.org/.well-known/oauth-protected-resource",
+    "path": {},
+    "query": {},
+    "headers": {
+      "Accept": "application/json"
+    },
+    "body": null
+  },
+  "responses": {
+    "200": {
+      "content_type": "application/json",
+      "examples": {
+        "metadata": {
+          "resource": "https://api.reveal.example.org/mcp",
+          "authorization_servers": [
+            "https://api.reveal.example.org"
+          ],
+          "scopes_supported": [
+            "research:read",
+            "research:write"
+          ],
+          "bearer_methods_supported": [
+            "header"
+          ],
+          "resource_name": "Reveal research"
+        }
+      }
+    }
+  },
+  "curl": "curl -X GET https://api.reveal.example.org/.well-known/oauth-protected-resource -H 'Accept: application/json'"
+}

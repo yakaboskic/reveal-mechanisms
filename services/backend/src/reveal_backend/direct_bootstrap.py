@@ -8,6 +8,7 @@ from urllib.parse import parse_qs, unquote, urlsplit
 
 from .box_adapter import BoxConfigurationError, make_bundle
 from .box_mcp import GRAPHS
+from .box_research import validate_context, network_policy
 from .direct_capture import canonical, remote_session, require, storage_hosts
 
 FORMAT = 'reveal.box-bootstrap/1'
@@ -18,9 +19,12 @@ CONFIG_KEYS = {'job_id','attempt','kind','selected_graphs','timeout_seconds','ma
 
 
 def validate_config(config):
-    require(isinstance(config, dict) and set(config) == CONFIG_KEYS, 'Invalid frozen bootstrap configuration')
+    require(isinstance(config, dict) and (set(config) == CONFIG_KEYS or set(config) == CONFIG_KEYS | {'research_context'}), 'Invalid frozen bootstrap configuration')
     require(isinstance(config['job_id'], str) and 0 < len(config['job_id']) <= 256
         and type(config['attempt']) is int and config['attempt'] > 0, 'Invalid bootstrap execution identity')
+    if 'research_context' in config:
+        require(config['kind'] == 'research', 'Only research may use a shared data context')
+        validate_context(config['research_context'])
     graphs = config['selected_graphs']
     require(isinstance(graphs, list) and all(isinstance(graph, str) for graph in graphs)
         and len(graphs) == len(set(graphs)) and not set(graphs) - set(GRAPHS)
@@ -75,7 +79,7 @@ def download_ticket(storage, reference):
     return {'url':url, 'host':parsed.netloc}
 
 
-async def prepare_from_store(adapter, descriptor, handle, storage):
+async def prepare_from_store(adapter, descriptor, handle, storage, *, research_access=None):
     validate_descriptor(descriptor, handle, storage)
     box = await adapter.connect(handle)
     try:
@@ -84,7 +88,11 @@ async def prepare_from_store(adapter, descriptor, handle, storage):
         if marker.strip():
             if marker.strip() != fingerprint:
                 raise BoxConfigurationError('Existing Box bootstrap belongs to different frozen input or harness')
-            await box.update_network_policy(POLICY)
+            context = descriptor['config'].get('research_context')
+            if context:
+                await adapter.finish_prepare(box, fingerprint, research_context=context, research_access=research_access)
+            else:
+                await box.update_network_policy(POLICY)
         else:
             from .workflow_execution import run_sync
             ticket = await run_sync(download_ticket, storage, descriptor['bundle'])
@@ -96,7 +104,11 @@ async def prepare_from_store(adapter, descriptor, handle, storage):
             script = adapter.bootstrap_script(descriptor['config']['claude_version'], unpack=False)
             await box.files.write(path='/tmp/reveal-bootstrap.sh', content=script)
             await adapter.command(box, 'sh /tmp/reveal-bootstrap.sh')
-            await adapter.finish_prepare(box, fingerprint)
+            context = descriptor['config'].get('research_context')
+            if context:
+                await adapter.finish_prepare(box, fingerprint, research_context=context, research_access=research_access)
+            else:
+                await adapter.finish_prepare(box, fingerprint)
         return dict(handle, phase='prepared', capture_protocol='s3-v1',
             timings={**handle.get('timings', {}), 'prepared_at':time.time()})
     finally:

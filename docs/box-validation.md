@@ -1,5 +1,7 @@
 # Box / Claude / selected-graph validation
 
+> The live acceptance policy changed on 4 October 2026: account and paragraph output is saved after deterministic validation, without a second AI review. References to reviewer verdicts below describe historical tests; see [the current policy](local-development.md).
+
 Workstream C owns `agent_execution.py`, `box_*.py`, the paragraph skill,
 `agent-runtime/box-requirements.txt`, standalone scripts and transport tests.
 Backend acceptance alone can publish an account. A successful Box result is raw
@@ -216,7 +218,7 @@ The Box was deleted. Exact authorized citation revisions passed; pinned DAPPER
 assembly produced three text segments and two citations whose Unicode spans
 round-trip to their exact text. The remote runtime directly observed Claude
 Code `2.1.282` and model `claude-sonnet-4-6`, and verified all 34 locked DAPPER
-files. Independent paragraph faithfulness review is a separate final gate.
+files. Final paragraph validation checks exact citation targets, revisions and spans, immutable account content, and the Paragraph profile.
 That live review passed all three segments, with 2,716 input and 378 output
 tokens; its report is `faithfulness-validation.json`. The accepted account is
 `dapper:ScientificAccount.Smdrksps39W1VqpQfK2tGcPOJZL5iT98`, with Claim

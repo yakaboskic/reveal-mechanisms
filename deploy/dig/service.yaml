@@ -58,6 +58,7 @@ env:
   REVEAL_GATEWAY_ISSUER: reveal-nextjs
   REVEAL_GATEWAY_AUDIENCE: reveal-api
   REVEAL_CANONICAL_URL: https://reveal-mechanisms.vercel.app
+  REVEAL_PUBLIC_WEB_URL: https://reveal-mechanisms.vercel.app
   NEXTAUTH_URL: https://reveal-mechanisms.vercel.app
   REVEAL_MAPPING_RUN_ID: 272cfa19d093257863d7e7134776229dbc9b9b018d974e6b311285686833ec31
   EMBEDDING_SERVICE_URL: https://embedding-service-27386110942.us-east1.run.app
@@ -67,10 +68,6 @@ env:
   REVEAL_CLAUDE_MODEL: claude-sonnet-4-6
   REVEAL_AGENT_TIMEOUT_SECONDS: '900'
   REVEAL_AGENT_MAX_BUDGET_USD: '3'
-  REVEAL_GROUNDING_MAX_BUDGET_USD: '0.30'
-  REVEAL_GROUNDING_MAX_TURNS: '8'
-  REVEAL_GROUNDING_MAX_REQUEST_BYTES: '98304'
-  REVEAL_GROUNDING_MAX_INPUT_TOKENS: '64000'
   REVEAL_AGENT_MAX_TURNS: '100'
   REVEAL_RETRIEVAL_BACKEND: upstash
   REVEAL_VECTOR_ENVIRONMENT: prod
@@ -80,6 +77,7 @@ env:
   REVEAL_MAX_ACTIVE_BOXES: '2'
   REVEAL_MAX_SCRATCH_STEPS: '2'
   REVEAL_MAX_PREPARATION_STEPS: '2'
+  # Legacy setting name retained for the deterministic validation concurrency cap.
   REVEAL_MAX_REVIEW_STEPS: '2'
   REVEAL_WORKFLOW_STEP_TIMEOUT_SECONDS: '360'
   REVEAL_WORKFLOW_DELIVERY_TIMEOUT: 420s
@@ -89,6 +87,10 @@ qa:
   on_demand_base: 1
   env:
     REVEAL_APPLICATION_TABLE_PREFIX: reveal_workflow_qa
+    REVEAL_PUBLIC_API_URL: https://api-qa.hugeampkpnbi.org/api/reveal
+    REVEAL_PUBLIC_WEB_URL: https://reveal-mechanisms-qa.vercel.app
+    REVEAL_CANONICAL_URL: https://reveal-mechanisms-qa.vercel.app
+    NEXTAUTH_URL: https://reveal-mechanisms-qa.vercel.app
     EMBEDDING_SERVICE_URL: https://embedding-service-848707719401.us-east1.run.app
     REVEAL_QUERY_EMBEDDING_SERVICE_URL: https://embedding-service-848707719401.us-east1.run.app
     REVEAL_MAX_ACTIVE_JOBS: '10'

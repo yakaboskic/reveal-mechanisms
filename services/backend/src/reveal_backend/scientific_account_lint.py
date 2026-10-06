@@ -9,6 +9,7 @@ from dataclasses import asdict
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import tempfile
@@ -18,7 +19,9 @@ if __package__ in (None, ''):
 
 from reveal_backend.dapper_release import verify_release
 from reveal_backend.evidence_package import EvidenceBuildError, canonical_json, decode, require, sha256
-from reveal_backend.source_validation import source_findings
+from reveal_backend.source_validation import source_findings, ledger_sources, exact_document
+
+ACCEPTANCE_POLICY = 'reveal.scientific-account/2'
 
 
 class AccountValidationError(ValueError):
@@ -27,7 +30,85 @@ class AccountValidationError(ValueError):
         super().__init__('Scientific account failed validation; inspect report.findings')
 
 
-def lint_scientific_account(document, *, dapper_root, release_lock, evidence_package=None, ledger_path=None, mode='draft', strict=False):
+def cfde_source_files(package, package_path):
+    """Recognize frozen reference evidence across the HTTP and SQL collectors.
+
+    A SQL-looking origin alone is not evidence. Bind its verified capture to the
+    package's reference generation and source envelope, and follow derived
+    captures only when all their inputs are captured reference observations.
+    """
+    sources = package['source_artifacts']
+    accepted = {key for key, source in sources.items() if isinstance(source.get('origin'), str)
+                and source['origin'].startswith(('https://dev.cfdeknowledge.org/api/',
+                                                  'https://cfde-dev.hugeampkpnbi.org/api/'))}
+    pigean = package.get('pigean', {})
+    generations = {node.get('fit', {}).get('upstream_build') for node in pigean.get('mechanisms', {}).values()}
+    if pigean.get('model') == 'eaggl-capped-v1' and len(generations) == 1:
+        generation = next(iter(generations))
+        if isinstance(generation, str) and re.fullmatch(r'[a-f0-9]{64}', generation):
+            tables = {'reference_factors', 'kpn_traits', 'eaggl_factors', 'eaggl_genes',
+                      'eaggl_gene_loadings', 'factor_gene_set_projections', 'cfde_gene_sets',
+                      'cfde_gene_set_collections'}
+            reference, derived = set(), {}
+            root = Path(package_path).resolve().parent
+            for key, source in sources.items():
+                origin = source.get('origin')
+                if source.get('format') != 'json' or not isinstance(origin, str) or not origin.startswith(('mysql:', 'mysql-derived:')):
+                    continue
+                path = (root / source['path']).resolve()
+                require(path.is_relative_to(root), 'Source artifact path escape')
+                raw = path.read_bytes()
+                require(sha256(raw) == source['sha256'], 'Captured source checksum changed')
+                capture = decode(raw)
+                provenance = capture.get('source', {})
+                kind = provenance.get('kind')
+                names = provenance.get('tables' if kind == 'mysql' else 'derived_from')
+                if (capture.get('generation_id') != generation or capture.get('model') != 'eaggl-capped-v1'
+                        or not isinstance(names, list) or not names or not all(isinstance(name, str) for name in names)
+                        or origin != f"{kind}:{'+'.join(names)}?generation_id={generation}"):
+                    continue
+                if kind == 'mysql' and capture.get('format') == 'reveal.reference-evidence.mysql-capture/1' and set(names) <= tables:
+                    reference.add(key)
+                elif kind == 'mysql-derived' and capture.get('format') == 'reveal.reference-evidence.derived-capture/1':
+                    derived[key] = set(names)
+            while added := {key for key, dependencies in derived.items() if key not in reference and dependencies <= reference}:
+                reference.update(added)
+            accepted.update(reference)
+    result = {sources[key]['dapper_file_id'] for key in accepted}
+    context = package.get('validation_context', {})
+    if context.get('format') == 'reveal.validation-context/1':
+        captured = {value['dapper_file_id'] for value in sources.values()}
+        result.update(set(context.get('cfde_source_ids', [])) & captured)
+    return result
+
+
+def eligible_source_files(package, package_path, ledger_path=None):
+    """Authoritative source inventory, excluding the bundled authoring kit.
+
+    The backend constructs this inventory; a submitted document cannot extend
+    it. Legacy packages retain their captured CFDE and uploaded source paths.
+    """
+    result = cfde_source_files(package, package_path)
+    artifacts = package['source_artifacts']
+    captured = {value['dapper_file_id'] for value in artifacts.values()}
+    # Frozen seeds already contain independent scientific captures, including
+    # selected DisMech records, before any progressive receipt is requested.
+    result.update(set(package.get('eligible_source_ids', [])) & captured)
+    context = package.get('validation_context', {})
+    if context.get('format') == 'reveal.validation-context/1':
+        result.update(set(context.get('eligible_source_ids', [])) & captured)
+    for upload in package.get('user_inputs', {}).get('uploads', []):
+        result.update(value for value in (upload.get('original_file_id'), upload.get('extraction_file_id')) if value in captured)
+    authoring = package.get('authoring', {})
+    instructions = [authoring.get('skill', {}), authoring.get('contract', {}), *authoring.get('references', []),
+                    *package.get('authoring_kit', {}).get('files', [])]
+    excluded = {artifacts[item['artifact_id']]['dapper_file_id'] for item in instructions
+                if isinstance(item, dict) and item.get('artifact_id') in artifacts}
+    result.difference_update(excluded)
+    return result, ledger_sources(ledger_path or None)
+
+
+def lint_scientific_account(document, *, dapper_root, release_lock, evidence_package=None, ledger_path=None, mode='draft', strict=False, timeout=120):
     """Return a machine-readable report. Files are read, never minted or edited."""
     command = [sys.executable, '-I', '-B', str(Path(__file__).resolve()), '--internal',
                str(Path(document).resolve()), str(Path(dapper_root).resolve()), str(Path(release_lock).resolve()),
@@ -36,7 +117,7 @@ def lint_scientific_account(document, *, dapper_root, release_lock, evidence_pac
     environment = dict(os.environ)
     environment.pop('PYTHONPATH', None); environment['PYTHONDONTWRITEBYTECODE'] = '1'
     try:
-        process = subprocess.run(command, capture_output=True, text=True, timeout=120, env=environment)
+        process = subprocess.run(command, capture_output=True, text=True, timeout=timeout, env=environment)
         require(process.returncode == 0, f'Account linter process failed: {process.stderr.strip()}')
         report = decode(process.stdout.encode())
         require(report.get('report_version') == 'reveal.account-lint/1', 'Unexpected account linter report')
@@ -79,6 +160,7 @@ def _lint(document_path, dapper_root, lock_path, package_path, mode, strict, led
         frozen = Path(directory) / 'account.json'; frozen.write_bytes(canonical_json(document))
         upstream = lint(frozen, vocabulary, sv, validator, profile_name='scientific-account')
     findings = [asdict(f) for f in upstream.findings]
+    advisories = []
     def error(check, where, message):
         findings.append({'severity': 'error', 'check': check, 'where': where, 'message': message, 'why': ''})
     package_hash = None
@@ -108,14 +190,21 @@ def _lint(document_path, dapper_root, lock_path, package_path, mode, strict, led
                 error('selected-gap', identity, 'Hydrate the selected KnowledgeGap in this account document')
             if not isinstance(account.get('closing_remarks'), str) or not account['closing_remarks'].strip():
                 error('account-synthesis', identity, 'A nonempty closing_remarks synthesis is required')
-        # Structural CFDE ancestry is explicit evidence lineage, not shared Activity inputs.
-        cfde_files = set()
-        for source in package['source_artifacts'].values():
-            origin = source.get('origin')
-            if isinstance(origin, str) and origin.startswith(('https://dev.cfdeknowledge.org/api/', 'https://cfde-dev.hugeampkpnbi.org/api/')):
-                cfde_files.add(source['dapper_file_id'])
-        def evidence_lineage(identity, seen):
-            if identity in cfde_files:
+        # Source ancestry is explicit evidence lineage, not shared Activity inputs.
+        cfde_files = cfde_source_files(package, package_path)
+        eligible, captured = eligible_source_files(package, package_path, ledger_path)
+        for identity, (cls, node) in nodes.items():
+            source = captured.get(node.get('sha256')) if cls == 'File' else None
+            if source and node.get('size_in_bytes') == source['size_bytes']:
+                eligible.add(identity)
+        derivations = {}
+        for edge in document.get('was_derived_from_edges', []):
+            if isinstance(edge, dict) and isinstance(edge.get('object'), str):
+                derivations.setdefault(edge.get('subject'), []).append(edge['object'])
+        def evidence_lineage(identity, seen, allowed):
+            if identity in allowed:
+                if identity not in trusted:
+                    return identity in nodes and identity in eligible and identity not in cfde_files
                 return identity in nodes and identity in trusted and nodes[identity][1] == trusted[identity]
             if identity in seen or identity not in nodes:
                 return False
@@ -124,16 +213,19 @@ def _lint(document_path, dapper_root, lock_path, package_path, mode, strict, led
             for field in ('has_evidence', 'source_claims', 'was_derived_from'):
                 value = node.get(field, [])
                 if isinstance(value, list): refs.extend(r for r in value if isinstance(r, str))
-            return any(evidence_lineage(r, seen) for r in refs)
+            refs.extend(derivations.get(identity, []))
+            return any(evidence_lineage(r, seen, allowed) for r in refs)
         for account in document.get('scientific_accounts', []) if isinstance(document.get('scientific_accounts'), list) else []:
             if not isinstance(account, dict): continue
+            grounded = False
             for claim_id in account.get('component_claims', []) if isinstance(account.get('component_claims'), list) else []:
                 if not isinstance(claim_id, str) or claim_id not in nodes: continue
                 claim = nodes[claim_id][1]
                 if not isinstance(claim.get('has_evidence'), list) or not claim['has_evidence']:
                     error('claim-evidence', claim_id, 'Account Claims require explicit EvidenceItems assessing their proposition')
-                if not evidence_lineage(claim_id, set()):
-                    error('cfde-ancestry', claim_id, 'Account Claim lacks explicit evidence lineage to an unchanged captured CFDE File')
+                if not evidence_lineage(claim_id, set(), eligible):
+                    error('source-ancestry', claim_id, 'Account Claim lacks explicit evidence lineage to an unchanged eligible scientific source')
+                grounded = grounded or evidence_lineage(claim_id, set(), cfde_files)
                 for evidence_id in claim.get('has_evidence', []) if isinstance(claim.get('has_evidence'), list) else []:
                     if not isinstance(evidence_id, str) or evidence_id not in nodes: continue
                     item = nodes[evidence_id][1]
@@ -142,7 +234,15 @@ def _lint(document_path, dapper_root, lock_path, package_path, mode, strict, led
                     for field in ('direction', 'context', 'explanation'):
                         if not isinstance(item.get(field), str) or not item[field].strip():
                             error('evidence-interpretation', evidence_id, f'EvidenceItem requires nonempty {field}')
-        findings.extend(source_findings(document, package, package_path, ledger_path or None))
+            if not grounded:
+                advisories.append({'severity': 'advisory', 'check': 'cfde-grounding-missing',
+                    'where': account.get('id', 'scientific_accounts'),
+                    'message': 'Consider a relevant CFDE evidence connection, or explain why none is defensible. CFDE grounding is encouraged, not required.',
+                    'why': 'This guidance does not affect validation, including strict mode.'})
+        findings.extend(source_findings(document, package, package_path, ledger_path or None,
+            authored_exact=exact_document(raw, 'yaml' if Path(document_path).suffix in ('.yaml', '.yml') else 'json')))
+        from reveal_backend.relationship_provenance import relationship_advisories
+        advisories.extend(relationship_advisories(document, package, package_path))
         if mode == 'final':
             for identity, (cls, _) in nodes.items():
                 if cls in ('ScientificAccount', 'Claim', 'Proposition', 'EvidenceItem', 'KnowledgeGap') and not identity.startswith('dapper:' + cls + '.'):
@@ -153,9 +253,10 @@ def _lint(document_path, dapper_root, lock_path, package_path, mode, strict, led
             'valid': errors == 0 and (not strict or warnings == 0), 'strict': strict,
             'document_sha256': sha256(raw), 'evidence_package_sha256': package_hash,
             'dapper_release': release, 'counts': {**upstream.counts, 'errors': errors, 'warnings': warnings},
-            'findings': findings, 'scientific_grounding_evaluated': False,
+            'findings': findings, 'advisories': advisories, 'acceptance_policy': ACCEPTANCE_POLICY,
+            'scientific_grounding_evaluated': False,
             'remaining_acceptance_checks': ['trusted attribution and job ownership',
-                                           'external-evidence ledger and tool policy', 'scientific support and synthesis review']}
+                                           'external-evidence ledger and tool policy']}
 
 
 if __name__ == '__main__':

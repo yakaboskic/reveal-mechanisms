@@ -11,23 +11,22 @@ The local Workflow pilot runs Next.js and FastAPI in Docker at **http://localhos
 - Anonymous and registered sessions, Google/ORCID integrations, durable identities, owner-scoped drafts/history, publication and workspace recovery. Local Google identity recovery preserves the original broad-email account; a new cloud callback still needs provider configuration.
 - RDS dispatch intent, signed Workflow callbacks, namespace-scoped concurrency controls, fencing, checkpoint recovery and graceful shutdown. Redis Pub/Sub wakes authorized SSE replay and workspace invalidations without Redis polling.
 - Versioned S3 artifacts, checksum verification, authorized downloads and bounded RAM scratch across Workflow phases.
-- Frozen evidence collection, Box/Claude authoring, shared agent/backend structural and source validation, trusted reference-based assembly and independent scientific review.
-- Accepted ScientificAccounts, cited statements/exports, explicit insufficient-evidence explorations, publication and review-retry workflows.
+- Frozen evidence collection, Box/Claude authoring, shared agent/backend structural and source validation, trusted reference-based assembly and immediate saving after deterministic validation. Account and paragraph acceptance do not call a second AI reviewer.
+- Accepted ScientificAccounts, cited statements/exports, explicit insufficient-evidence explorations, publication and recovery of output retained after historical review failures.
 - Administrator telemetry and authorized table/job inspection; see [admin telemetry](admin-telemetry.md).
 - Encrypted colleague configuration, automatic pinned-source setup and separate per-clone queues over the same RDS tables.
 
 ## Validation and limits
 
 The direct-transfer implementation adds direct Box/S3 transfers, independent
-signed cleanup and review steps that update only their checkpoint JSON and
-immutable manifest. Initial preparation still builds and validates the input
+signed cleanup and immutable capture manifests. Historical review checkpoints
+remain available for diagnostics; second AI review is retired. Initial preparation still builds and validates the input
 bundle in API scratch, then atomically saves its S3 reference and frozen settings
 before Box allocation. New bootstrap steps download that exact version directly
 into Box, with no API checkpoint restore or temporary directory. Old descriptors
-keep their existing bootstrap path. Direct capture and review call/tool steps
-also use no temporary directory; the API streams captured objects for hash,
-credential and ledger validation. Initial preparation, validation, review
-initialization and acceptance still use bounded file-based scratch. No workspace
+keep their existing bootstrap path. Direct capture uses no temporary directory;
+the API streams captured objects for hash, credential and ledger validation.
+Initial preparation, validation and acceptance use bounded file-based scratch. No workspace
 cache was added. Cleanup survives main-workflow completion and generation
 changes, retaining remote capacity until deletion is acknowledged; rollback
 must drain its durable obligations or keep the cleanup consumer available.

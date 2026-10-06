@@ -1,0 +1,34 @@
+{
+  "operation_id": "exchangeResearchSetup",
+  "case": "redeem",
+  "method": "POST",
+  "path_template": "/v1/research-setup/exchange",
+  "request": {
+    "url": "https://api.reveal.example.org/v1/research-setup/exchange",
+    "path": {},
+    "query": {},
+    "headers": {
+      "Content-Type": "application/json",
+      "Accept": "application/json"
+    },
+    "body": {
+      "ticket": "rvls_FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+      "token_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    }
+  },
+  "responses": {
+    "200": {
+      "content_type": "application/json",
+      "examples": {
+        "connected": {
+          "grant_id": "99999999-9999-4999-8999-999999999999",
+          "expires_at": "2026-11-01T00:00:00Z",
+          "local_work_id": "77777777-7777-4777-8777-777777777777",
+          "package_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "mcp_url": "https://api.reveal.example.org/mcp"
+        }
+      }
+    }
+  },
+  "curl": "curl -X POST https://api.reveal.example.org/v1/research-setup/exchange -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"ticket\":\"rvls_FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF\",\"token_sha256\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\"}'"
+}

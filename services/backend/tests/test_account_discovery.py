@@ -97,6 +97,75 @@ class AccountDiscoveryTests(unittest.TestCase):
         self.assertEqual([item['scientific_accounts']['count'] for item in public['items']], [0, 0, 0])
         self.assertEqual(self.get('/v1/knowledge-gaps/' + b['object']['id'] + '/accounts')['items'], [])
 
+    @staticmethod
+    def mechanism_attachment(letter, **changes):
+        target={'source':'dismech','source_id':'dismech:mechanism-'+letter,'source_revision':'a'*64,
+                'dapper_id':'dapper:Mechanism.'+letter*32}
+        attachment={'source_reference':letter,'target_kind':'pathophysiology','resolution':'resolved',
+                    'target':target,'label':'Mechanism '+letter}
+        attachment.update(changes)
+        return attachment
+
+    def test_mechanism_tiebreaker_counts_distinct_resolved_dismech_identities(self):
+        valid=self.mechanism_attachment('a')
+        alias=deepcopy(valid); alias['target']['source_id']='dismech:another-source-alias'
+        nonmechanism=deepcopy(valid); nonmechanism['target']['dapper_id']='dapper:GeneSet.'+'b'*32
+        foreign=deepcopy(valid); foreign['target']['source']='eaggl'; foreign['target']['source_id']='factor:other'
+        unbound=deepcopy(valid); unbound['target']['source_id']='another:source'
+        attachments=[valid,deepcopy(valid),alias,nonmechanism,foreign,unbound,
+            self.mechanism_attachment('b',resolution='unresolved'), self.mechanism_attachment('c',target=None),
+            # The resolved target identity, not a display kind label, establishes a Mechanism.
+            self.mechanism_attachment('d',target_kind='other')]
+        self.assertEqual(api.resolved_mechanism_count({'attachments':attachments}),2)
+        self.assertEqual(api.resolved_mechanism_count({'attachments':[]}),0)
+
+    def test_account_ranking_prefers_more_mechanisms_only_after_account_count(self):
+        a,b,c=self.gaps
+        a['attachments']=[self.mechanism_attachment('a')]
+        b['attachments']=[self.mechanism_attachment(letter) for letter in 'ab']
+        c['attachments']=[self.mechanism_attachment(letter) for letter in 'abc']
+        self.accepted(self.owner,a,'d'); self.accepted(self.owner,b,'e')
+        result=self.get('/v1/knowledge-gaps?sort=accounts',self.owner)
+        self.assertEqual([item['object']['id'] for item in result['items']], [b['object']['id'],a['object']['id'],c['object']['id']])
+        self.accepted(self.owner,a,'f')
+        result=self.get('/v1/knowledge-gaps?sort=accounts',self.owner)
+        self.assertEqual([item['object']['id'] for item in result['items']], [a['object']['id'],b['object']['id'],c['object']['id']])
+
+    def test_vote_ranking_prefers_mechanisms_before_accounts_after_vote_score(self):
+        a,b,c=self.gaps
+        for gap,letters in zip(self.gaps,('a','ab','abc')):
+            gap['attachments']=[self.mechanism_attachment(letter) for letter in letters]
+        self.accepted(self.owner,a,'d'); self.accepted(self.owner,a,'e'); self.accepted(self.owner,b,'f')
+        with self.repo.transaction() as tx:
+            for gap in (a,b): api.votes.change(tx,'gap',gap['object']['id'],gap['object']['id'],self.owner,1)
+        result=self.get('/v1/knowledge-gaps?sort=votes',self.owner)
+        self.assertEqual([item['object']['id'] for item in result['items']], [b['object']['id'],a['object']['id'],c['object']['id']])
+        with self.repo.transaction() as tx:
+            for owner in (self.owner,self.other): api.votes.change(tx,'gap',c['object']['id'],c['object']['id'],owner,1)
+        result=self.get('/v1/knowledge-gaps?sort=votes',self.owner)
+        self.assertEqual([item['object']['id'] for item in result['items']], [c['object']['id'],b['object']['id'],a['object']['id']])
+        # Account count remains the next tie break when votes and mechanism counts match.
+        b['attachments']=deepcopy(a['attachments'])
+        result=self.get('/v1/knowledge-gaps?sort=votes',self.owner)
+        self.assertEqual([item['object']['id'] for item in result['items']], [c['object']['id'],a['object']['id'],b['object']['id']])
+
+    def test_mechanism_ties_keep_seeded_pages_stable_and_attachment_changes_expire_cursor(self):
+        for gap in self.gaps: gap['attachments']=[self.mechanism_attachment('a')]
+        with patch.object(api,'browse_seed',return_value='11111111-1111-4111-8111-111111111111'):
+            for sort in ('accounts','votes'):
+                with self.subTest(sort=sort):
+                    route='/v1/knowledge-gaps?sort='+sort
+                    complete=self.get(route,self.owner)
+                    first=self.get(route+'&limit=1',self.owner)
+                    cursor=first['page']['next_cursor']
+                    next_path=route+'&limit=2&scope=workspace&cursor='+cursor
+                    second=self.get(next_path,self.owner)
+                    self.assertEqual([item['object']['id'] for item in first['items']+second['items']],
+                                     [item['object']['id'] for item in complete['items']])
+                    self.gaps[2]['attachments'].append(self.mechanism_attachment('b'))
+                    self.assertEqual(self.client.get(next_path,headers=self.headers(self.owner)).status_code,409)
+                    self.gaps[2]['attachments'].pop()
+
     def test_archived_accounts_are_counted_apart_and_never_rank(self):
         from reveal_backend.account_discovery import counted_gap, counts_by_gap
         from reveal_backend.reference_generation import ARCHIVE_STATUS

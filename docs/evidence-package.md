@@ -1,5 +1,9 @@
 # Evidence package for ScientificAccount generation
 
+Current local/hosted authoring rules: [shared contract v2](authoring-contract.md). Its mode-specific tool and evidence rules govern new workspaces; historical examples below retain their original scope.
+
+> New online and local runs use the [progressive MCP workflow](local-agent-mcp.md): a small seed plus on-demand retained data and evidence receipts. Eager collector descriptions below apply to historical full packages. For CFDE queries, use loaded CFDE/PIGEAN/EAGGL data or the two explicitly offered small/sigma2 BioIndex phenotype operations. Independent imported evidence and authorized reuse remain supported; never infer evidence from unqueried data.
+
 **Current wire contract: `reveal.evidence-package/0.2-draft` · September 25, 2026.** The [LinkML/JSON schema](../schema/README.md), [collector guide](evidence-package-builder.md) and [portable captured example](../api/examples/evidence-package/evidence-package.yaml) are authoritative for new inputs. The `0.1-draft` packets below remain earlier illustrative fixtures; shared scientific semantics still apply.
 
 The package gives the research agent **the selected knowledge gap, the mechanisms chosen to investigate it, and the source observations it can use to assess propositions**. It is frozen before the agent starts. The agent reads this material, retrieves permitted additional evidence, and authors one or more DAPPER ScientificAccounts around the original gap.
@@ -294,7 +298,7 @@ Initial graph choices are BiomarkerKG (`biomarkerkg`) and ProKN (`prokn`). The w
 
 Append each request and response, including failures and no matches, to an immutable enrichment ledger: tool, arguments/query, graph and exposed version, identity mappings, returned assertions/qualifiers, publications, time, checksum and exact row locators. Enrichment can support, dispute or contextualize a Proposition. Do not mutate the initial package or count repeated upstream assertions as independent evidence. A final manifest binds the initial package hash, ledger artifacts and authored output.
 
-Every account finding must trace to CFDE input directly or through its source assessments. Auxiliary KG source Claims may lack CFDE lineage, but their inclusion alone does not make them account findings. An unavailable KG can leave an explicitly unenriched CFDE account; an empty result does not demonstrate biological absence.
+Every account finding must trace through explicit EvidenceItems to eligible scientific source Files. Seek a relevant CFDE connection, but its absence is an account-level advisory and does not prevent acceptance, including strict lint. Imported independent evidence and authorized prior science can support findings within their recorded scope. An empty or unavailable query does not demonstrate biological absence.
 
 ## 9. Freeze and validation requirements
 
@@ -306,7 +310,7 @@ Before a real dispatch:
    Validate document prefixes and resolve declared CURIE fields before matching identifiers; keep opaque source aliases and existing hashed payloads intact.
 4. Upload the complete immutable package and captured sources as files. Point the agent to the parsing skill and a bounded index, then let it inspect relevant records and exact source rows progressively. Apply collection, upload and runtime limits without treating the entire stored package as an inline prompt or cutting scientific records to meet a context threshold.
 5. Pin DAPPER, the skill and its referenced instruction files, model/harness versions and actual input hash. Record real trusted attribution; never inherit the UI fixture's designer as an author.
-6. After generation, hydrate all dependencies per account; run closed DAPPER schema, identity, provenance/scientific-content and application-grounding checks. Verify that each claim's evidence targets its Proposition and every substantive closing assertion is represented. The [independent scientific reviewer](scientific-review.md) uses bounded exact pointer reads over captured evidence and requires read source references for every verdict; unavailable review never implies acceptance. Exactly one account per scientific-account validation document.
+6. After generation, hydrate all dependencies per account; run closed DAPPER schema, identity, provenance/scientific-content and application-grounding checks. Verify that each claim's evidence targets its Proposition and every substantive closing assertion is represented. Save accounts after these deterministic checks and the trusted ownership and tool-policy checks pass. No second AI review runs; this validates structure and source fidelity, not experimental truth. Exactly one account per scientific-account validation document.
 
 The illustrative design limits were 10 DisMech mechanisms, 10 EAGGL anchors, 100 candidates per target, 250 retained nodes, 1,000 edges, 24,000 total context tokens, 20 MCP calls, 100 rows per query and 5,000 retained external tokens within the total. The live worker now uses [file-backed agent reading](evidence-package-builder.md#file-backed-agent-reading): the 24,000-token inline-package gate is removed, while configured collection, upload, runtime duration, cost and tool limits remain. The example has no runtime/model launch and does not claim token-budget validation.
 

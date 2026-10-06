@@ -58,6 +58,9 @@ def event(tx, job, event_type, message, detail=None):
     item = event_record(job, event_type, message, detail)
     tx.put('event', job['id']+':'+item['id'].zfill(12), job['owner_user_id'], item)
     tx.put('job', job['id'], job['owner_user_id'], job)
+    if job['status'] in TERMINAL:
+        from .research_hosted import release
+        release(tx, job)
     return item
 
 def enqueue(tx, owner, kind, request_id=None, account_id=None, inputs=None):

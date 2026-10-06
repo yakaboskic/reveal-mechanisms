@@ -197,11 +197,23 @@ class ResearchPromptTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp); state = root / 'state'; state.mkdir()
             work = root / 'workspace/reveal'; (work / 'input').mkdir(parents=True)
+            (work / 'docs').mkdir()
+            (work / 'docs/authoring-contract.md').write_bytes(
+                (Path(__file__).resolve().parents[3] / 'docs/authoring-contract.md').read_bytes())
             package = work / 'input/evidence-package.json'
             package.write_text(json.dumps({'selection': {}, 'pigean': {}, 'source_artifacts': {},
                 'dapper_context': {}, 'external_evidence': {'selected_graphs': list(selected_graphs)}}))
             schema = root / 'workspace/dapper/schema'; schema.mkdir(parents=True)
             for name in ('dapper.yaml', 'claims.yaml'): (schema / name).write_text('{}')
+            # Current bootstrap bundles the pinned schema/example aids independently of evidence.
+            project = root / 'bundle'
+            for relative in ('services/backend/agent-runtime/dapper-release.json',
+                             'services/backend/agent-runtime/authoring-schema-dependencies.json',
+                             'services/backend/agent-runtime/linkml-types-1.11.1.yaml',
+                             'services/backend/agent-runtime/authoring-schema-excerpt.yaml',
+                             'services/backend/agent-runtime/authoring-examples.json'):
+                target = project / relative; target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes((Path(__file__).resolve().parents[3] / relative).read_bytes())
             runtime = {'working_directory': str(work), 'evidence_package': str(package), 'dapper_root': str(schema.parent)}
             request = {'kind': 'research', 'job_id': 'arbitrary-job', 'attempt': 1,
                 'selected_graphs': list(selected_graphs), 'model': 'test-model', 'claude_version': 'test-version',
@@ -296,7 +308,7 @@ class ResearchPromptTests(unittest.TestCase):
 
     def test_remote_honors_frozen_file_input_including_feedback(self):
         _, manifest = self.prepared_prompt(('prokn',), ('Previously rejected directional assertion.',), frozen_input=True)
-        self.assertEqual(manifest['file_input']['format'], 'reveal.file-backed-evidence/1')
+        self.assertEqual(manifest['file_input']['format'], 'reveal.file-backed-evidence/2')
         self.assertEqual(manifest['file_input']['package']['sha256'], manifest['evidence_reader']['package_sha256'])
 
     def test_remote_rejects_changed_input_binding_before_model_execution(self):

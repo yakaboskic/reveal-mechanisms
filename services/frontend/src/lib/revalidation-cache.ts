@@ -32,6 +32,17 @@ export class RevalidationCache<K extends string, T> {
   invalidateWhere(matches: (key: K) => boolean) {
     this.invalidate([...this.entries.keys()].filter(matches));
   }
+  update(scope: string | null, key: K, change: (data: T) => T) {
+    if (!scope || scope !== this.scope) return;
+    const entry = this.entries.get(key);
+    if (entry?.snapshot.data === undefined) return;
+    const data = change(entry.snapshot.data);
+    if (data === entry.snapshot.data) return;
+    // A committed local edit wins over reads already in flight. Ranking may
+    // have changed, but retained rows stay in place until an explicit refresh.
+    entry.revision++; entry.snapshot = { ...entry.snapshot, data, stale: true };
+    this.emit();
+  }
   revalidate(scope: string | null, key: K, force = false, mode: LoadMode = "refresh"): Promise<void> {
     if (!scope || scope !== this.scope) return Promise.resolve();
     let entry = this.entries.get(key);

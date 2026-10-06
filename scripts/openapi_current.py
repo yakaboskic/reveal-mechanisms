@@ -86,6 +86,8 @@ def fixtures(b, f):
 
 
 def schemas(b):
+    import openapi_factors
+    openapi_factors.schemas(b)
     S=b.SCHEMAS; ref=b.ref; obj=b.obj; array=b.array; string=b.string; enum=b.enum; null=b.nullable; did=b.did
     uuid=string(format='uuid'); digest=string(pattern='^[a-f0-9]{64}$'); time=string(format='date-time')
     b.add('WorkspaceEvent', obj({'schema_version':{'type':'integer','const':1},
@@ -287,6 +289,10 @@ def reference_schemas(b):
     model=lambda:enum(*rg.MODELS,description='EAGGL reference model: cfde-inc-v2 (legacy CFDE-linked factors) or eaggl-capped-v1 (KPN reference generations).')
     b.add('KpnTrait',obj({'id':kpn,'name':string(),'legacy_phenotype_id':string(),'trait_group':null(string()),'trait_type':null(string())},
         description='KPN trait (kpn-data-models portal_id) of a factor in an eaggl-capped-v1 reference generation. legacy_phenotype_id is the EAGGL/portal phenotype code.'))
+    S['KpnTrait']['properties'].update(ontology_mappings=array({'type':'object','additionalProperties':True}),
+        mapping_interpretations=array({'type':'object','additionalProperties':True}), mapping_policy_version=string())
+    S['DismechMechanism']['properties']['source_detail'] = {'type':'object','additionalProperties':True,
+        'description':'Pinned imported pathophysiology record, source locator, hash and import/commit provenance; omitted when not materialized.'}
     S['EagglFactor']['properties'].update(model=model(),reference_generation_id=generation,kpn_trait=null(ref('KpnTrait')))
     S['EagglFactor']['description']+=' Each deployment serves the factors of one active reference generation. In an eaggl-capped-v1 generation, source_id is factor:kpn:{NNNNNNN}:eaggl-capped-v1:{FactorN}, the record adds reference_generation_id and kpn_trait, cfde_anchor.label is the EAGGL factor label, and catalog_file identifies the canonical factor metadata bytes. Legacy cfde-inc-v2 records omit both fields.'
     for name in ('Composer','SuggestInput'): S[name]['properties']['model']=model()
@@ -477,8 +483,8 @@ def endpoints(b,f,e):
             if p['name']=='q':p['example']='CAD genetic risk'
             if p['name']=='disease_id':p['example']='MONDO:0021661'
     op('/v1/knowledge-gaps/search')['description']='Fuzzy lookup of imported DisMech gaps by default. Query text is not an authored inquiry or permission to launch research. Other explicit modes require their configured index and return 503 if unavailable. Rankings are retrieval signals. Example uses the exact CAD gap from the HTML study.'
-    op('/v1/knowledge-gaps')['description']='Browse imported DisMech gaps ordered by distinct scientific-account count descending. Public scope (default) counts only explicitly published snapshots across users; workspace scope requires a session and counts owned saved accounts. Equal-count gaps shuffle on each new browse; a server seed in the signed continuation cursor preserves tie order across pages. Exact gap digests only: no text matching, attempts, paragraph jobs or implicit source-revision rollup. Invalid supplied credentials are rejected even for public reads. Filters apply before pagination; count or corpus changes expire cursors.'
-    op('/v1/knowledge-gaps')['description']+=' sort=votes orders by net gap vote score, then account count, then the same seeded tie order. sort=accounts is the default. Vote changes, sort changes and registered-viewer changes expire cursors. Account votes do not contribute to gap vote totals.'
+    op('/v1/knowledge-gaps')['description']='Browse imported DisMech gaps using scientific-account or vote ranking. Public scope (default) counts only explicitly published snapshots across users; workspace scope requires a session and counts owned saved accounts. Gaps tied on all ranking measures shuffle on each new browse; a server seed in the signed continuation cursor preserves tie order across pages. Exact gap digests only: no text matching, attempts, paragraph jobs or implicit source-revision rollup. Invalid supplied credentials are rejected even for public reads. Filters apply before pagination; count or corpus changes expire cursors.'
+    op('/v1/knowledge-gaps')['description']+=' sort=accounts (default) orders by current accessible account count, then the number of distinct resolved DisMech Mechanisms, then the same seeded tie order. sort=votes orders by net gap vote score, then the same mechanism count, then account count and seeded ties. Mechanism counts deduplicate canonical dapper:Mechanism identities and exclude unresolved, non-DisMech and non-Mechanism attachments. Vote changes, attachment changes, sort changes and registered-viewer changes expire cursors. Account votes do not contribute to gap vote totals.'
     op('/v1/knowledge-gaps')['parameters'].append(b.parameter('sort','query',enum('accounts','votes',default='accounts'),'accounts'))
     op('/v1/knowledge-gaps/search')['description']+=' Account counts use the same optional-session visibility rules as gap browsing; relevance order remains unchanged.'
     op('/v1/knowledge-gaps/{gap_id}')['description']+=' Account counts use the same optional-session visibility rules as gap browsing.'
@@ -498,8 +504,8 @@ def endpoints(b,f,e):
         'next_call_max_usd':null({'type':'number','minimum':0})})
     S['JobFailure']['properties']['budget']=ref('JobBudgetFailure')
     S['ReviewRetryInput']=obj({'expected_last_event_id':string(pattern='^[0-9]+$')})
-    b.operation('/v1/jobs/{job_id}/retry-review','post','retryJobReview','Jobs','Retry independent review on saved output',
-        'Owner-only, idempotent retry for REVIEW_UNAVAILABLE or REVIEW_BUDGET_EXCEEDED. Require the latest job event ID and a checksum-verified completed authoring capture. Requeue the same job with a new validation attempt; preserve original evidence, authoring model, artifacts and activity. Never launch the research agent. Scientific rejection, incomplete capture and active or successful jobs cannot use this route. Current configured review budget applies to each explicit retry. Normal account acceptance and paragraph generation follow a passing review.',
+    b.operation('/v1/jobs/{job_id}/retry-review','post','retryJobReview','Jobs','Validate and save retained output',
+        'Owner-only, idempotent retry for REVIEW_UNAVAILABLE or REVIEW_BUDGET_EXCEEDED. Require the latest job event ID and a checksum-verified completed authoring capture. Requeue the same job with a new validation attempt; preserve original evidence, authoring model, artifacts and activity. Run deterministic validation and normal saving, without another research or AI review call. Historical scientific rejection, incomplete capture and active or successful jobs cannot use this route. Normal account acceptance and paragraph generation follow passing validation.',
         'Job',{'queued':dict(e['complete'],status='queued',stage='validating',failure=None,result=None,completed_at=None)},
         request_schema='ReviewRetryInput',request_examples={'saved_output':{'expected_last_event_id':'2'}},
         parameters=[b.parameter('job_id','path',uuid,b.JOB_ID,True)],status=202,idempotent=True,errors=('401','404','409','422','429'))
@@ -753,11 +759,14 @@ def reference_endpoints(b, f, e):
     describe('/v1/jobs','post',' Analysis anchors must belong to the active reference generation (409 REFERENCE_GENERATION_SUPERSEDED: start a new analysis on the gap with current factors), and analysis submission waits while a reference reload is in progress (503 REFERENCE_RELOAD_IN_PROGRESS). Paragraph jobs, including on archived accounts, are not affected.')
     problem('/v1/jobs','post',409,'REFERENCE_GENERATION_SUPERSEDED','This draft uses factors from a superseded reference generation; start a new analysis on this gap with current factors.')
     problem('/v1/jobs','post',503,'REFERENCE_RELOAD_IN_PROGRESS',reload)
-    describe('/v1/jobs/{job_id}/retry-review','post',' An analysis frozen on a superseded reference generation cannot retry review (409 REFERENCE_GENERATION_SUPERSEDED: start a new analysis on the gap with current factors). Analysis review retry waits while a reference reload is in progress (503 REFERENCE_RELOAD_IN_PROGRESS).')
+    describe('/v1/jobs/{job_id}/retry-review','post',' An analysis frozen on a superseded reference generation cannot validate and save retained output (409 REFERENCE_GENERATION_SUPERSEDED: start a new analysis on the gap with current factors). Saved-output validation waits while a reference reload is in progress (503 REFERENCE_RELOAD_IN_PROGRESS).')
     problem('/v1/jobs/{job_id}/retry-review','post',409,'REFERENCE_GENERATION_SUPERSEDED','This analysis used a superseded reference generation. Start a new analysis on this gap with current factors.')
-    problem('/v1/jobs/{job_id}/retry-review','post',503,'REFERENCE_RELOAD_IN_PROGRESS','Reference data is being reloaded. Retry review shortly.')
+    problem('/v1/jobs/{job_id}/retry-review','post',503,'REFERENCE_RELOAD_IN_PROGRESS','Reference data is being reloaded. Retry validation shortly.')
     describe('/v1/accounts/{dapper_id}','get',' An account built on a superseded reference generation carries archive (public copies null its job and request ids); it stays readable, downloadable and publishable, and paragraph jobs still run.')
     example('/v1/accounts/{dapper_id}','archived',dict(deepcopy(e['account']),archive=R['account']))
     describe('/v1/research-requests/{request_id}','get',' A request frozen on a superseded reference generation carries archive.')
     example('/v1/research-requests/{request_id}','archived',dict(deepcopy(e['research_request']),archive=R['request']))
     describe('/v1/knowledge-gaps','get',' Counts include current accounts only: accounts archived by a reference reload stay listed but are not counted.')
+
+    import openapi_factors
+    openapi_factors.endpoints(b, kpn)

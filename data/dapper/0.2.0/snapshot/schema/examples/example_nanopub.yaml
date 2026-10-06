@@ -1,0 +1,25 @@
+# A single Nanopublication instance, EXTRACTED VERBATIM from
+# example_claim_provenance_trace.yaml.
+#
+# All three graph links are present and are real `dapper:` ids — the
+# well-formedness rules require exactly one each of hasAssertion, hasProvenance
+# and hasPublicationInfo, so a nanopublication carrying only an assertion is
+# malformed. Follow the ids into the trace document to see the graphs.
+#
+#   uv run --with linkml linkml-validate \
+#     -s schema/dapper.yaml -C Nanopublication schema/examples/example_nanopub.yaml
+
+id: dapper:Nanopublication.DgWZJuP2B5fR112cJx88fnPuS7PTpd5q
+name: 'Claim: HuBMAP proximal tubule markers are enriched among Dent disease genes'
+label: PT marker enrichment in Dent disease
+has_assertion: dapper:NanopubAssertion.x6P_QpSIKWWO23d7BoBP7HOlL0yGIERi
+has_provenance: dapper:NanopubProvenance.YFQrbw8L3AWEQd_riveyKvlOhALve1uD
+has_publication_info: dapper:NanopubPublicationInfo.6a4hNgtNOBllXBFNOj9sixyn7Afw3qjw
+nanopub_type:
+- draft_nanopub
+created: '2026-08-04T20:05:00Z'
+creator:
+- orcid:0000-0002-1825-0097
+nanopub_license: https://creativecommons.org/licenses/by/4.0/
+was_created_at: https://nanodash.knowledgepixels.com/
+has_signature_element: dapper:NanopubSignature.VflWc_Nf8F2KZNzQf7MGzQUgUuU9c-p8

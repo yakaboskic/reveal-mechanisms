@@ -9,6 +9,45 @@ and retain its ownership, expiry and quotas. The backend stores a hash/owner pai
 gateway provisioning, administrator access and Workflow callbacks retain their
 separate credentials. The browser login flows below continue to use gateway JWTs.
 
+## Local agents and MCP OAuth
+
+Public reference-data reads do not require sign-in. Private local research reads
+through MCP and contributing findings require registered Reveal identity and
+authorization for that run. The existing Google/ORCID browser login supplies the gateway assertion
+used by the consent page; provider tokens are never sent to the research MCP.
+Anonymous work can be promoted or explicitly moved through the existing claim
+flow below. A downloaded workspace, work ID, or OAuth device code does not prove
+ownership and cannot claim another workspace.
+
+The authorization server exposes discovery at
+`/.well-known/oauth-authorization-server` and protected-resource metadata at
+`/.well-known/oauth-protected-resource/mcp`. The resource is the exact canonical
+`REVEAL_PUBLIC_API_URL` plus `/mcp`. Generic public clients register through
+`POST /oauth/register` and use authorization codes with S256 PKCE and an exact
+registered HTTPS or HTTP loopback callback. The local launcher uses the fixed
+public client `reveal-local-launcher` with device authorization and refresh.
+Both flows open `/research/connect`; consent requires a registered browser
+session and selects an owned, ready, open local run. The requested scopes are
+`research:read` for its private context and `research:write` for evidence capture,
+validation and submission. Read-only consent is supported; write also requires read.
+
+Authorization requests expire after ten minutes, codes after one minute, and
+access tokens after fifteen minutes. Refresh tokens rotate on use and last up
+to thirty days, bounded by the work's lifetime. Reusing a consumed refresh token
+revokes its entire connection. Browser revocation, principal retirement and
+ownership transfer also fence further access or renewal. Existing hosted
+execution credentials retain their separate attempt-based authority.
+Signing in does not upgrade an older anonymous or unmarked local credential:
+the researcher must authorize that connection again while registered. Manual
+local credentials also require a registered session when issued.
+
+Only hashes of opaque code, device, access and refresh secrets are retained.
+OAuth responses use `no-store`; registration and exchange have durable rate
+limits, and device polls enforce the advertised interval and `slow_down`.
+This implementation follows [OAuth security best practices](https://www.rfc-editor.org/info/rfc9700/)
+and the [device authorization grant](https://www.rfc-editor.org/info/rfc8628/).
+Deployed Google/ORCID provider configuration is unchanged by these routes.
+
 **Status, September 30, 2026:** anonymous sessions, Google/ORCID integrations, gateway assertions, durable principal mapping, workspace claims and publication sign-in are implemented. See [colleague startup](../README.local.md), [API walkthrough](api-quickstart.md) and [gateway contract](gateway-contract.md). Sections below retain design rationale and explicit future features such as provider linking; the HTML study is a historical simulation, not the running application. Live callback validity depends on the configured provider and origin.
 
 ## 1. Initial scope

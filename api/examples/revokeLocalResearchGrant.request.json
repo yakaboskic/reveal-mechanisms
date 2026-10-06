@@ -1,0 +1,26 @@
+{
+  "operation_id": "revokeLocalResearchGrant",
+  "case": "request",
+  "method": "DELETE",
+  "path_template": "/v1/local-work/{work_id}/grants/{grant_id}",
+  "request": {
+    "url": "https://api.reveal.example.org/v1/local-work/77777777-7777-4777-8777-777777777777/grants/99999999-9999-4999-8999-999999999999",
+    "path": {
+      "work_id": "77777777-7777-4777-8777-777777777777",
+      "grant_id": "99999999-9999-4999-8999-999999999999"
+    },
+    "query": {},
+    "headers": {
+      "Authorization": "Bearer <api-key-or-gateway-assertion>",
+      "Accept": "application/json"
+    },
+    "body": null
+  },
+  "responses": {
+    "204": {
+      "content_type": null,
+      "examples": {}
+    }
+  },
+  "curl": "curl -X DELETE https://api.reveal.example.org/v1/local-work/77777777-7777-4777-8777-777777777777/grants/99999999-9999-4999-8999-999999999999 -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
+}

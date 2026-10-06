@@ -1,0 +1,74 @@
+# Illustrative two-row GMT with overlapping genes.
+# See data/example_gene_sets.gmt and ../docs/geneset-authoring.md.
+prefixes:
+  EXGENE: 'urn:example:gene:'
+files:
+  - id: dapper:File.71tWGS-PbGUXPR1jD_ZsXMJDbsnWtr3N
+    name: Illustrative gene annotations
+    filename: annotations.tsv
+  - id: dapper:File.Iqc65CYAo3V1EyGSICJjdzEXWY1k6woG
+    name: Two-set GMT library
+    filename: example_gene_sets.gmt
+    location: data/example_gene_sets.gmt
+    sha256: 7919a3e2e675fe1733033e79ff7ec58caa4cae2cdf1e310fd803c9194a645697
+    size_in_bytes: 78
+activities:
+  - id: dapper:Activity.f3NvLfo3qeBImT1Iqolj0z3sdOc_mAnX
+    name: Assemble illustrative gene-set library
+    description: Fictional assembly step demonstrating two overlapping gene sets.
+gene_sets:
+  - id: dapper:GeneSet.sKbhzueXIbO9Xms62_nyJxlZ13en1fRO
+    name: First illustrative gene set
+    alternate_identifier:
+      - geneset_1
+    member_type: gene
+    members:
+      - EXGENE:Gene1
+      - EXGENE:Gene2
+    n_genes: 2
+    in_gmt_file: dapper:File.Iqc65CYAo3V1EyGSICJjdzEXWY1k6woG
+    gmt_entry: geneset_1
+    was_generated_by: dapper:Activity.f3NvLfo3qeBImT1Iqolj0z3sdOc_mAnX
+    in_gene_set_collection:
+      - dapper:GeneSetCollection.1FoLv1ndB0HjzITZhThnn3w0TfQgGCOb
+  - id: dapper:GeneSet.w1bw7dosxdeYRx1V5p7UALgkxtTfdcKi
+    name: Second illustrative gene set
+    alternate_identifier:
+      - geneset_2
+    member_type: gene
+    members:
+      - EXGENE:Gene2
+      - EXGENE:Gene3
+    n_genes: 2
+    in_gmt_file: dapper:File.Iqc65CYAo3V1EyGSICJjdzEXWY1k6woG
+    gmt_entry: geneset_2
+    was_generated_by: dapper:Activity.f3NvLfo3qeBImT1Iqolj0z3sdOc_mAnX
+    in_gene_set_collection:
+      - dapper:GeneSetCollection.1FoLv1ndB0HjzITZhThnn3w0TfQgGCOb
+gene_set_collections:
+  - id: dapper:GeneSetCollection.1FoLv1ndB0HjzITZhThnn3w0TfQgGCOb
+    name: Illustrative collection of two overlapping gene sets
+    member_type: gene_set
+    members:
+      - dapper:GeneSet.sKbhzueXIbO9Xms62_nyJxlZ13en1fRO
+      - dapper:GeneSet.w1bw7dosxdeYRx1V5p7UALgkxtTfdcKi
+    n_sets: 2
+    n_members: 2
+    n_genes: 3
+    has_gmt_file: dapper:File.Iqc65CYAo3V1EyGSICJjdzEXWY1k6woG
+    was_generated_by: dapper:Activity.f3NvLfo3qeBImT1Iqolj0z3sdOc_mAnX
+used_edges:
+  - subject: dapper:Activity.f3NvLfo3qeBImT1Iqolj0z3sdOc_mAnX
+    predicate: prov:used
+    object: dapper:File.71tWGS-PbGUXPR1jD_ZsXMJDbsnWtr3N
+_illustrative:
+  - dapper:File.71tWGS-PbGUXPR1jD_ZsXMJDbsnWtr3N
+  - dapper:File.Iqc65CYAo3V1EyGSICJjdzEXWY1k6woG
+  - dapper:Activity.f3NvLfo3qeBImT1Iqolj0z3sdOc_mAnX
+  - dapper:GeneSet.sKbhzueXIbO9Xms62_nyJxlZ13en1fRO
+  - dapper:GeneSet.w1bw7dosxdeYRx1V5p7UALgkxtTfdcKi
+  - dapper:GeneSetCollection.1FoLv1ndB0HjzITZhThnn3w0TfQgGCOb
+was_generated_by_edges:
+  - subject: dapper:File.Iqc65CYAo3V1EyGSICJjdzEXWY1k6woG
+    predicate: prov:wasGeneratedBy
+    object: dapper:Activity.f3NvLfo3qeBImT1Iqolj0z3sdOc_mAnX

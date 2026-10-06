@@ -1,0 +1,31 @@
+{
+  "operation_id": "authorizeResearchOAuthClient",
+  "case": "request",
+  "method": "GET",
+  "path_template": "/oauth/authorize",
+  "request": {
+    "url": "https://api.reveal.example.org/oauth/authorize?client_id=rvlc_FICTIONAL_PUBLIC_CLIENT&redirect_uri=http%3A%2F%2F127.0.0.1%3A8765%2Fcallback&response_type=code&code_challenge=FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF&code_challenge_method=S256&resource=https%3A%2F%2Fapi.reveal.example.org%2Fmcp&scope=research%3Aread+research%3Awrite&state=client-state",
+    "path": {},
+    "query": {
+      "client_id": "rvlc_FICTIONAL_PUBLIC_CLIENT",
+      "redirect_uri": "http://127.0.0.1:8765/callback",
+      "response_type": "code",
+      "code_challenge": "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+      "code_challenge_method": "S256",
+      "resource": "https://api.reveal.example.org/mcp",
+      "scope": "research:read research:write",
+      "state": "client-state"
+    },
+    "headers": {
+      "Accept": "application/json"
+    },
+    "body": null
+  },
+  "responses": {
+    "303": {
+      "content_type": null,
+      "examples": {}
+    }
+  },
+  "curl": "curl -X GET 'https://api.reveal.example.org/oauth/authorize?client_id=rvlc_FICTIONAL_PUBLIC_CLIENT&redirect_uri=http%3A%2F%2F127.0.0.1%3A8765%2Fcallback&response_type=code&code_challenge=FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF&code_challenge_method=S256&resource=https%3A%2F%2Fapi.reveal.example.org%2Fmcp&scope=research%3Aread+research%3Awrite&state=client-state' -H 'Accept: application/json'"
+}

@@ -1,13 +1,14 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { api, ApiError, messageOf, supersededReference, terminal, type Schema } from "@/lib/client";
 import { applySuggestions, composerEqual, createSubmissionDraft, dropOutdatedAnchors, emptyComposer, normalizedComposer, factorSelection, persistDraft, removeAnchor, selectedGap } from "@/lib/composer";
 import { ProviderButtons, useIdentity } from "./Session";
 import { Activity } from "./Activity";
 import { AccountPreview, Record } from "./Scientific";
-import { GapBrowser, DiscoverySelector, TrendingAccounts, type GapSort } from "./GapBrowser";
+import { GapBrowser, DiscoverySelector, TrendingAccounts } from "./GapBrowser";
+import { useGapDiscovery } from "./GapDiscoveryCache";
 import type { DiscoveryView, AccountSort } from "@/lib/community-discovery";
 import { GapAccounts } from "./GapAccounts";
 import { VoteControls } from "./VoteControls";
@@ -19,6 +20,7 @@ import { withRequestDeadline } from "@/lib/request-deadline";
 import { providerRedirect } from "@/lib/provider-redirect";
 import { MechanismLabel } from "./MechanismLabel";
 import { mechanismName, mechanismTrait } from "@/lib/mechanism-display";
+import { factorHref } from "@/lib/factor-links";
 import { composerSelection, followsSelection, hasSelection, questionSelection, selectionKey, selectionUrl, type AdoptedSelection, type ComposerSelection } from "@/lib/composer-navigation";
 import { anchorKey, isReferenceReload, observedReferenceModel, outdatedFromAnchor, outdatedFromFactor, referenceRechecker, type OutdatedAnchor, type ReferenceArchive } from "@/lib/reference";
 import { ReferenceArchiveBanner } from "./ReferenceArchive";
@@ -26,10 +28,15 @@ import { onWorkspaceChange } from "@/lib/workspace-events";
 import { ResearchInputs } from "./ResearchInputs";
 import { DraftNavigation } from "./DraftNavigation";
 import { rememberDraftSave, restoreDraftSave, type DraftSaveAttempt } from "@/lib/draft-save";
+import { analysisAccountResults, localWorkApi, localWorkHref, LocalWorkError } from "@/lib/local-work";
+import { ResearchModeMenu } from "./ResearchModeMenu";
 import "./draft-editor.css";
+import "./local-work.css";
 
 const browserSelection = () => composerSelection(new URLSearchParams(window.location.search), window.location.pathname);
 export function Composer({ initialJobId, initialDraftId }: { initialJobId?: string; initialDraftId?: string } = {}) {
+  const router = useRouter();
+  const requestedMode = useRef<"online" | "local">("online");
   const params = useSearchParams();
   const pathname = usePathname();
   const selection = composerSelection(params, pathname);
@@ -71,7 +78,7 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
   const [jobRestoreError, setJobRestoreError] = useState("");
   const [restoreAttempt, setRestoreAttempt] = useState(0);
   const [discoveryView, setDiscoveryView] = useState<DiscoveryView>("gaps");
-  const [gapSort, setGapSort] = useState<GapSort>("accounts");
+  const { sort: gapSort, setSort: setGapSort } = useGapDiscovery();
   const [accountSort, setAccountSort] = useState<AccountSort>("votes");
   const searchLabel = discoveryView === "accounts" ? "Search published scientific accounts" : "Search DisMech knowledge gaps";
   const [query, setQuery] = useState(""); const [searching, setSearching] = useState(false);
@@ -473,7 +480,7 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
     if (submissionRunning.current || attachmentsBlocked || outdatedAnchors.length || !currentRef.current.source_gap || !currentRef.current.eaggl_anchors.length) return null;
     if (pendingSubmission.current) return pendingSubmission.current;
     const attempt: SubmissionAttempt = {
-      method, question: gap?.object.text || "", gap, composer: structuredClone(currentRef.current),
+      method, mode: requestedMode.current, question: gap?.object.text || "", gap, composer: structuredClone(currentRef.current),
       draft: draftRef.current, owner: me?.user_id || loadedOwner.current,
       anonymousKey: crypto.randomUUID(), requestKeys: [...requestKeys.current], submitKey: submitKey.current,
     };
@@ -529,10 +536,18 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
       if (!current()) return;
       if (!saved) throw new Error("Your draft changed while it was being saved. Please try again.");
       attempt.draft = saved; draftRef.current = saved; setDraft(saved); rememberSubmission(attempt);
-      const binding = `${saved.id}:${saved.version}`;
+      const binding = `${attempt.mode === "local" ? "local:" : ""}${saved.id}:${saved.version}`;
       if (submitKey.current?.binding !== binding) submitKey.current = { binding, key: crypto.randomUUID() };
       attempt.submitKey = submitKey.current; rememberSubmission(attempt);
       setSubmission({ stage: "submitting" });
+      if (attempt.mode === "local") {
+        const work = await localWorkApi.create({ draft_id: saved.id, draft_version: saved.version }, submitKey.current.key);
+        if (!current()) return;
+        draftRef.current = null; setDraft(null); pendingSubmission.current = null; rememberSubmission(null);
+        setSubmission(null); submitKey.current = null;
+        router.push(localWorkHref(work.id));
+        return;
+      }
       const result = await api.submit({ kind: "analysis", draft_id: saved.id, draft_version: saved.version }, submitKey.current.key);
       if (!current()) return;
       setJob(result);
@@ -543,25 +558,26 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
       // Recording the visit is bookkeeping; it must not delay or block a research job.
       void api.explore({ source_gap: saved.composer.source_gap! }).catch(() => {});
     } catch (failure) {
+      const submissionFailure = failure instanceof LocalWorkError ? new ApiError(failure.status, failure.code, failure.message) : failure;
       let draftGone = false;
-      if (current() && failure instanceof ApiError && failure.status === 404 && attempt.draft) {
+      if (current() && submissionFailure instanceof ApiError && submissionFailure.status === 404 && attempt.draft) {
         try { await api.draft(attempt.draft.id); }
         catch (readFailure) { draftGone = readFailure instanceof ApiError && readFailure.status === 404; }
       }
       if (current()) {
-        if (supersededReference(failure) || draftGone) {
+        if (supersededReference(submissionFailure) || draftGone) {
           if (draftGone && attempt.draft) droppedDrafts.current.add(attempt.draft.id);
           pendingSubmission.current = null; submitKey.current = null; rememberSubmission(null); setSubmission(null);
-          setError(draftGone ? "This draft was removed while the research inputs were being prepared. Your inputs remain here; replace any outdated anchors, then try again." : messageOf(failure));
+          setError(draftGone ? "This draft was removed while the research inputs were being prepared. Your inputs remain here; replace any outdated anchors, then try again." : messageOf(submissionFailure));
           const target = questionSelection(draftRef.current?.id, currentRef.current.source_gap?.id);
           freshSelection.current = selectionKey(target); navigateSelection(target);
           void verifyAnchors();
-        } else submissionFailed(failure);
+        } else submissionFailed(submissionFailure);
       }
     }
     finally { submissionRunning.current = false; }
   }
-  const launch = () => { const attempt = beginSubmission("session"); if (attempt) void provision(attempt); };
+  const launch = (mode: "online" | "local" = "online") => { requestedMode.current = mode; const attempt = beginSubmission("session"); if (attempt) void provision(attempt); };
   const anonymous = () => { const attempt = beginSubmission("anonymous"); if (attempt) void provision(attempt); };
   const redirectToProvider = async (provider: "google" | "orcid") => {
     if (submissionRunning.current) return;
@@ -606,7 +622,7 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
     setJob(null); submitKey.current = null;
     await selectGap(gap, false, false, frozenInputs);
   };
-  const accountIds = job?.result?.kind === "analysis" ? job.result.account_ids : [];
+  const accountResults = job?.result?.kind === "analysis" ? analysisAccountResults(job.result) : [];
   const clearGap = () => {
     discardTemporary();
     setDraftView(false);
@@ -633,11 +649,10 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
   };
   const outdatedAnchor = (anchor: Schema<"Selection">) => outdated[anchorKey(anchor.reference)];
   const anchorName = (anchor: Schema<"Selection">) => outdatedAnchor(anchor)?.name || mechanismName(selectedFactor(anchor.reference.source_id));
-  const inspectAnchor = (anchor: Schema<"Selection">) => {
-    const old = outdatedAnchor(anchor), factor = selectedFactor(anchor.reference.source_id);
-    if (old) setInspection({ title: old.name, description: "This anchor belongs to an outdated EAGGL reference generation. It is shown from its archived record and can no longer be analysed.", value: { ...old, reference: anchor.reference } });
-    else setInspection({ title: factor?.cfde_anchor.label || "Mechanism anchor", description: factor?.object.description, value: factor || anchor });
-  };
+  const anchorHref = (anchor: Schema<"Selection">) => factorHref(anchor.reference.source_id, anchor.reference.source_revision, {
+    archiveId: outdatedAnchor(anchor)?.archive_id,
+    from: job ? `/runs/${encodeURIComponent(job.id)}` : draft ? `/drafts/${encodeURIComponent(draft.id)}` : "/",
+  });
   const frozenGap = runRequest?.document?.knowledge_gaps?.find(value => value.id === runRequest.question_id);
   const displayGap = job && frozenGap ? frozenGap : gap?.object;
   const uncertainSubmission = !!pendingSubmission.current?.submitKey;
@@ -674,7 +689,7 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
           <fieldset className="draft-input-lock" disabled={editorLocked}>
           <section className="draft-mechanisms" aria-label={job ? "Submitted mechanisms and evidence sources" : "Mechanisms and evidence sources"}>
           {!job && <><div className="chip-group-label">Mechanisms <span>{composer.eaggl_anchors.length}</span>{suggesting && <LoadingStatus>Finding anchors…</LoadingStatus>}{!!limitations.length && <button className="matching-note" onClick={() => setInspection({ title: "About mechanism matching", description: limitations.join(" "), value: { model: composer.model, automatic_anchors: composer.eaggl_anchors.filter(anchor => anchor.origin === "automatic").length } })}>About matching</button>}</div></>}
-          <div className="anchor-chips" aria-label="Selected mechanism anchors">{composer.eaggl_anchors.map(anchor => <span className="chip" key={anchor.reference.source_id}><button className="label" title={(outdatedAnchor(anchor) ? [anchorName(anchor), outdatedAnchor(anchor)!.trait, "Outdated reference"] : [anchorName(anchor), selectedFactor(anchor.reference.source_id)?.cfde_anchor.subtitle]).filter(Boolean).join(" · ")} onClick={() => inspectAnchor(anchor)}><MechanismLabel factor={selectedFactor(anchor.reference.source_id)} sourceId={anchor.reference.source_id} outdated={outdatedAnchor(anchor)} /></button>{!job && <button className="remove" aria-label={`Remove ${anchorName(anchor)}`} onClick={() => setComposer(current => removeAnchor(current, anchor.reference.source_id))}>×</button>}</span>)}{!job && <button className="chip-add" aria-expanded={adding} aria-controls="factor-picker" aria-label="Add a mechanism anchor" onClick={() => { setAdding(!adding); if (!adding) requestAnimationFrame(() => document.getElementById("mechanism-search")?.focus()); }}>+</button>}</div>
+          <div className="anchor-chips" aria-label="Selected mechanism anchors">{composer.eaggl_anchors.map(anchor => <span className="chip" key={anchor.reference.source_id}><Link className="label" href={anchorHref(anchor)} target="_blank" rel="noopener noreferrer" title={`${anchorName(anchor)} — view factor loadings in a new tab`}><MechanismLabel factor={selectedFactor(anchor.reference.source_id)} sourceId={anchor.reference.source_id} outdated={outdatedAnchor(anchor)} /><span className="sr-only"> (opens in a new tab)</span></Link>{!job && <button className="remove" aria-label={`Remove ${anchorName(anchor)}`} onClick={() => setComposer(current => removeAnchor(current, anchor.reference.source_id))}>×</button>}</span>)}{!job && <button className="chip-add" aria-expanded={adding} aria-controls="factor-picker" aria-label="Add a mechanism anchor" onClick={() => { setAdding(!adding); if (!adding) requestAnimationFrame(() => document.getElementById("mechanism-search")?.focus()); }}>+</button>}</div>
           {!job && <>
             {!!outdatedAnchors.length && <div className="conflict reference-outdated" role="status"><p>{outdatedAnchors.length === 1 ? "One mechanism anchor comes" : `${outdatedAnchors.length} mechanism anchors come`} from an outdated EAGGL reference and can’t be analysed. Replace {outdatedAnchors.length === 1 ? "it" : "them"} with current factors to continue.</p><button disabled={suggesting} onClick={replaceOutdated}>Replace with current factors</button></div>}
             {!composer.eaggl_anchors.length && !suggesting && <p className="anchor-required" role="status">Add at least one mechanism anchor to continue.</p>}
@@ -690,7 +705,7 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
           </fieldset>
           {!job && <>
             <p className="draft-notice">{draft?.lifecycle !== "temporary" && draft ? "Changes are kept only when you save." : "Save a named draft to keep it. Unsaved work is discarded when you leave."}</p>
-            <div className="submit-row"><div className="draft-save-group"><button type="button" className="draft-save-button" aria-label="Save draft" title="Save a named draft" disabled={!draft || saving || attachmentsBlocked || uncertainSubmission || conflict || !!outdatedAnchors.length} onClick={requestSave}><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M5 3h12l4 4v14H3V3h2Z"/><path d="M7 3v7h10V3M7 21v-7h10v7M14 5v3"/></svg><span className="sr-only">Save draft</span></button><span className="draft-save-state" role="status">{saveState}</span></div><button className="gap-submit" aria-label={uncertainSubmission ? "Check submission" : "Let’s close this gap"} disabled={submitDisabled} onClick={() => uncertainSubmission ? void retrySubmission() : me ? void launch() : dialog.current?.showModal()}><span>{uncertainSubmission ? "Check submission" : "Let’s close this gap"}</span><span className="send" aria-hidden="true"><span>↑</span></span></button></div>
+            <div className="submit-row"><div className="draft-save-group"><button type="button" className="draft-save-button" aria-label="Save draft" title="Save a named draft" disabled={!draft || saving || attachmentsBlocked || uncertainSubmission || conflict || !!outdatedAnchors.length} onClick={requestSave}><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M5 3h12l4 4v14H3V3h2Z"/><path d="M7 3v7h10V3M7 21v-7h10v7M14 5v3"/></svg><span className="sr-only">Save draft</span></button><span className="draft-save-state" role="status">{saveState}</span></div>{uncertainSubmission ? <button type="button" className="gap-submit" disabled={submitDisabled} onClick={() => void retrySubmission()}><span>Check submission</span><span className="send" aria-hidden="true"><span>↑</span></span></button> : <ResearchModeMenu disabled={submitDisabled} onSelect={mode => { requestedMode.current = mode; if (me) void launch(mode); else dialog.current?.showModal(); }} />}</div><p className="local-research-link"><Link href="/workspace?tab=runs">Your research runs</Link></p>
           </>}
         </div>
       </>}
@@ -703,7 +718,7 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
     {error && <div className="error" role="alert">{error}{saveRecovery && !saving && <button type="button" onClick={() => void save(saveRecovery.composer, saveRecovery.name, saveRecovery).catch(failure => setError(messageOf(failure)))}>Retry save</button>}{gap && !draft && !job && openingAttempt.current && <button type="button" onClick={() => void selectGap(gap, false, true)}>Retry opening editor</button>}</div>}
     {conflict && <div className="conflict"><p>This draft changed in another session. Your edits are retained here.</p><button onClick={async () => { if (!draftRef.current) return; const latest = await api.draft(draftRef.current.id); rememberDraftSave(null); draftRef.current = latest; setDraft(latest); setComposer(latest.composer); setConflict(false); setError(""); }}>Load saved version</button><button onClick={() => { saveAsCopy.current = true; setError(""); setSaveName(""); namingDialog.current?.showModal(); }}>Save my edits as a new draft</button></div>}
     {job && requestArchive && <ReferenceArchiveBanner compact archive={requestArchive} subject="analysis" gapId={requestArchive.gap?.id || composer.source_gap?.id} anchorsOpen={false} settings={async () => composer} />}
-    {job && <><Activity key={job.id} initial={job} onJob={setJob} archived={!!requestArchive} />{accountIds.map(id => <AccountPreview key={id} id={id} />)}{terminal(job.status) && gap && !requestArchive && <button className="text-button return-to-question" onClick={() => void reset()}>Edit these inputs</button>}</>}
+    {job && <><Activity key={job.id} initial={job} onJob={setJob} archived={!!requestArchive} />{accountResults.map(({ id, reused }) => reused ? <section key={id} aria-label="Reused scientific account"><p className="local-research-link">Reused accepted account · original authorship retained</p><AccountPreview id={id} /></section> : <AccountPreview key={id} id={id} />)}{terminal(job.status) && gap && !requestArchive && <button className="text-button return-to-question" onClick={() => void reset()}>Edit these inputs</button>}</>}
     <dialog ref={inspectionDialog} className="inspection-dialog" aria-labelledby="inspection-title" onClose={() => setInspection(null)}><div className="inspection-heading"><h2 id="inspection-title">{inspection?.title}</h2><button aria-label="Close record" onClick={() => inspectionDialog.current?.close()}>×</button></div><div className="inspection-body">{inspection?.title === "About this knowledge gap" && <p>{gap?.object.text}</p>}{inspection?.description && <><h3>{inspection.title === "About this knowledge gap" ? "What remains unknown" : "Context"}</h3><p>{inspection.description}</p></>}<details open={!inspection?.description}><summary>Source evidence and record</summary><Record value={inspection?.value} /></details></div></dialog>
     <dialog ref={namingDialog} className="auth-dialog draft-name-dialog" aria-labelledby="draft-name-title" onClose={() => { saveAsCopy.current = false; }} onCancel={event => { if (saving) event.preventDefault(); }}><form onSubmit={event => { event.preventDefault(); void save(currentRef.current, saveName).catch(failure => setError(messageOf(failure))); }}><h2 id="draft-name-title">Save your draft</h2><label htmlFor="draft-name">Draft name</label><input autoFocus className="field" id="draft-name" required maxLength={120} value={saveName} disabled={saving} onChange={event => setSaveName(event.target.value)} placeholder="e.g. Endothelial insulin signaling" />{error && <p className="error" role="alert">{error}</p>}<div className="draft-name-actions"><button type="button" disabled={saving} onClick={() => namingDialog.current?.close()}>Cancel</button><button type="submit" className="primary" disabled={saving || !saveName.trim()}>{saving ? "Saving…" : "Save draft"}</button></div></form></dialog>
     <dialog ref={dialog} className="auth-dialog" aria-labelledby="auth-title"><button className="dialog-close" aria-label="Close sign-in choices" onClick={() => dialog.current?.close()}>×</button><h2 id="auth-title">Continue your exploration</h2><p>Sign in to keep your work, or continue anonymously.</p><ProviderButtons onLogin={oauth} /><div className="or">or</div><button className="provider" onClick={anonymous}>Continue anonymously</button><small>Your selected question and anchors stay with you. Anonymous access depends on this browser session.</small>{error && <p role="alert" className="error">{error}</p>}</dialog>

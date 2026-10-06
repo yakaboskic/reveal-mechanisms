@@ -19,7 +19,7 @@ from .evidence_database import geneset_resolver
 from .evidence_budget import fit_input_budget
 from .reference_generation import KPN_MODEL, LEGACY_MODEL, MODELS, generation_of_anchors
 from .repository import Repository, now, uid, digest
-from .runtime_config import ROOT, setting, artifacts_root, mysql_connection
+from .runtime_config import ROOT, CURRENT_DAPPER_SNAPSHOT, setting, artifacts_root, mysql_connection
 from . import jobs
 from .artifact_store import s3_enabled, store as artifact_store, retained_file, StorageUnavailable
 
@@ -48,7 +48,7 @@ def public_activity(job,kind,payload):
             detail=activity('preparation','completed','harness')
         else:
             # A provider result ends authoring, not the job. Output still needs
-            # durable capture and independent validation before acceptance.
+            # durable capture and deterministic validation before acceptance.
             job['stage']='collecting_output'
             # This is a completion notice, not the start of a timed capture
             # operation. The job remains running in its collection stage.
@@ -129,7 +129,12 @@ def prepare_source_artifacts(package_path,job_id):
         if not file: continue
         path=assert_artifact(package_path.parent/source['path'],package_path.parent)
         data=path.read_bytes(); require(sha256(data)==source['sha256'],'Source artifact changed before persistence')
-        records.append({'sha256':source['sha256'],'file':file,**retained_file(path,source['sha256']),'job_id':job_id})
+        record = {'sha256':source['sha256'],'file':file,**retained_file(path,source['sha256']),'job_id':job_id}
+        context = package.get('validation_context')
+        if context:
+            record['research_source'] = {**source, 'eligible_evidence': file['id'] in context['eligible_source_ids'],
+                'cfde_evidence': file['id'] in context['cfde_source_ids']}
+        records.append(record)
         access[file['id']]={'file':file,'download_url':base+source['sha256'],'expires_at':None,
                             'availability':'available','verification':'checksum_verified'}
     return records,access
@@ -220,10 +225,16 @@ def check_user_inputs(package,frozen):
         require(actual.get(key)==expected.get(key),'Frozen researcher text changed')
     require(len(actual.get('uploads',[]))==len(expected['uploads']),'Frozen researcher attachments changed')
     for captured,submitted in zip(actual.get('uploads',[]),expected['uploads']):
+        if package.get('retrieval_mode') == 'progressive':
+            require(captured.get('id') == submitted['id'] and captured.get('sha256') == submitted['sha256'], 'Frozen research attachment changed')
+            continue
         require({key:captured.get(key) for key in submitted}==submitted,'Frozen researcher attachment changed')
 
 
-def collect(job,frozen,binding,budgets,directory):
+def collect(job,frozen,binding,budgets,directory,repository=None):
+    if frozen.get('retrieval_mode') == 'progressive':
+        from .research_hosted import collect as collect_seed
+        return collect_seed(repository or Repository(), job, directory)
     package_path=directory/'package/evidence-package.json'
     if not package_path.exists():
         completed=sorted(directory.parent.glob(directory.name+'-recovery-*/package/evidence-package.json'))
@@ -236,7 +247,7 @@ def collect(job,frozen,binding,budgets,directory):
         if directory.exists() and any(directory.iterdir()):
             directory=directory.parent/(directory.name+'-recovery-'+uid())
             package_path=directory/'package/evidence-package.json'
-        runtime=DapperRuntime(ROOT/'data/dapper/2026-09-24-v8')
+        runtime=DapperRuntime(CURRENT_DAPPER_SNAPSHOT)
         requested_limit=budgets.get('candidates_per_type',100)
         runs={a.get('embedding_run_id') for a in binding['anchors'] if a.get('embedding_run_id')}
         retrieval=binding.get('retrieval',{})
@@ -376,7 +387,7 @@ class Worker:
             snapshot=queue.get('dispatch_input')
             review_source=queue.get('review_source')
             if review_source:
-                require(snapshot and mode=='box','Review retry requires the original frozen Box input')
+                require(snapshot and mode=='box','Saved-output retry requires the original frozen Box input')
             if queue.get('remote_handle') and not snapshot:
                 # Backward-compatible recovery of already launched attempts:
                 # locate a frozen manifest, never recollect or choose new bytes.
@@ -400,7 +411,7 @@ class Worker:
                 else: paragraph_input=restored; selected=()
             elif job['kind']=='analysis':
                 await emit('stage',{'stage':'preparing_evidence','message':'Collecting the frozen DisMech question and native CFDE mechanism evidence.'})
-                input_path,package=await asyncio.to_thread(collect,job,frozen,binding,queue['inputs'].get('budgets',{}),root/'evidence')
+                input_path,package=await asyncio.to_thread(collect,job,frozen,binding,queue['inputs'].get('budgets',{}),root/'evidence',**({'repository': self.repository} if frozen.get('retrieval_mode') == 'progressive' else {}))
                 input_path,package,measurement=await asyncio.to_thread(fit_input_budget,input_path,mode,queue['inputs'].get('budgets',{}).get('evidence_tokens',24000))
                 (directory/'token-budget.json').write_bytes(canonical_json(measurement))
                 prepared_package=package
@@ -421,13 +432,17 @@ class Worker:
             if await cancelled() and not queue.get('remote_handle'):
                 jobs.finish(self.repository,job['id'],token,'cancelled'); return
             execution_attempt=review_source['attempt'] if review_source else queue['attempt']
+            research_access = None
+            if job['kind'] == 'analysis' and package.get('retrieval_mode') == 'progressive' and not review_source:
+                from .research_hosted import access
+                research_access = await asyncio.to_thread(access, self.repository, job, queue['attempt'])
             request=ExecutionRequest(job_id=job['id'],attempt=execution_attempt,kind='research' if job['kind']=='analysis' else 'paragraph',input_path=input_path,
                 output_dir=root/f'attempt-{execution_attempt}'/'output',selected_graphs=selected,timeout_seconds=int(setting('REVEAL_AGENT_TIMEOUT_SECONDS','900')),
-                max_budget_usd=float(setting('REVEAL_AGENT_MAX_BUDGET_USD','3')),max_turns=int(setting('REVEAL_AGENT_MAX_TURNS','100')),remote_handle=queue.get('remote_handle'))
+                max_budget_usd=float(setting('REVEAL_AGENT_MAX_BUDGET_USD','3')),max_turns=int(setting('REVEAL_AGENT_MAX_TURNS','100')),remote_handle=queue.get('remote_handle'),research_access=research_access)
             if review_source:
                 phase='scientific_validation'
                 from .review_retry import replay_capture
-                await emit('stage',{'stage':'validating','message':'Verifying saved research output before retrying independent review. No research agent is being launched.'})
+                await emit('stage',{'stage':'validating','message':'Validating saved research output before saving. The research agent will not run again.'})
                 result=await asyncio.to_thread(replay_capture,request,review_source)
             else:
                 phase='agent_execution'
@@ -464,39 +479,27 @@ class Worker:
             await emit('stage',{'stage':'validating','message':'Validating scientific identities, source fidelity and provenance.'})
             if mode=='box': await asyncio.to_thread(validate_execution_ledger,result,request,snapshot['model'])
             if job['kind']=='analysis':
-                require(0<len(result.account_paths)<=queue['inputs'].get('budgets',{}).get('max_accounts',3),'Execution returned an invalid account count')
+                from .research_hosted import captured_context
+                validation_path, _, existing = await asyncio.to_thread(captured_context, self.repository, job, result, input_path, directory/'research-context')
+                require(0<len(result.account_paths)+len(existing)<=queue['inputs'].get('budgets',{}).get('max_accounts',3),'Execution returned an invalid account count')
                 accepted=[]
                 for index,path in enumerate(result.account_paths):
                     raw=assert_artifact(path,request.output_dir); final_path=directory/f'accepted-{index+1}.json'
                     from .scientific_account_lint import AccountValidationError
                     try:
-                        doc,report=await asyncio.to_thread(assemble_account,raw,input_path,final_path,frozen['attribution'],job,execution_attempt,mode,
+                        doc,report=await asyncio.to_thread(assemble_account,raw,validation_path,final_path,frozen['attribution'],job,execution_attempt,mode,
                             result.ledger_manifest_path if mode=='box' else None)
                     except AccountValidationError as exc:
                         (directory/f'validation-{index+1}.json').write_bytes(canonical_json(exc.report))
                         raise
                     (directory/f'validation-{index+1}.json').write_bytes(canonical_json(report))
-                    if mode=='box':
-                        from .scientific_grounding import MODEL as REVIEW_MODEL, review_account
-                        grounding=await asyncio.to_thread(review_account,doc,package,result.ledger_manifest_path,
-                            model=REVIEW_MODEL,api_key=setting('ANTHROPIC_API_KEY'),
-                            max_budget_usd=float(setting('REVEAL_GROUNDING_MAX_BUDGET_USD','0.30')))
-                        (directory/f'grounding-{index+1}.json').write_bytes(canonical_json(grounding))
-                        require(grounding['accepted'],'Independent source-grounding review rejected unsupported or overstated scientific content')
                     accepted.append((doc,report,final_path))
                 if await self.begin_persistence(job,token,'Saving validated scientific accounts and their source provenance.'):
-                    await self.accept_accounts(job,token,accepted,frozen,input_path,result,directory,mode)
+                    await self.accept_accounts(job,token,accepted,frozen,validation_path,result,directory,mode)
             else:
                 require(result.paragraph_path is not None,'Paragraph execution returned no segments')
                 raw=assert_artifact(result.paragraph_path,request.output_dir)
                 segments=decode(raw.read_bytes())
-                if mode=='box':
-                    from .scientific_grounding import MODEL as REVIEW_MODEL, review_paragraph
-                    grounding=await asyncio.to_thread(review_paragraph,segments,paragraph_input,
-                        model=REVIEW_MODEL,api_key=setting('ANTHROPIC_API_KEY'),
-                        max_budget_usd=float(setting('REVEAL_GROUNDING_MAX_BUDGET_USD','0.30')))
-                    (directory/'paragraph-grounding.json').write_bytes(canonical_json(grounding))
-                    require(grounding['accepted'],'Independent source-grounding review rejected unsupported or overstated paragraph content')
                 await self.accept_paragraph(job,token,segments,paragraph_input,directory)
             if await cancelled(): jobs.finish(self.repository,job['id'],token,'cancelled')
         except Exception as exc:
@@ -514,19 +517,11 @@ class Worker:
                         return
             # Scientific exceptions are retained as bounded local diagnostics;
             # API errors do not echo third-party headers/URLs/credentials.
-            from .scientific_grounding import ScientificReviewUnavailable
             diagnostic={'phase':phase,'error_type':type(exc).__name__,'message':str(exc)[:3000] if not isinstance(exc,OSError) else 'Operating system error'}
-            if isinstance(exc,ScientificReviewUnavailable): diagnostic['review_audit']=exc.audit
             (directory/'failure.json').write_bytes(canonical_json(diagnostic))
             await asyncio.to_thread(self.save_workspace,job,token,root)
             if phase=='evidence_preparation':
                 code,message='EVIDENCE_PREPARATION_FAILED','The source evidence could not be prepared.'
-            elif isinstance(exc,ScientificReviewUnavailable):
-                from .job_failures import review_failure
-                failure=review_failure(exc)
-                failure['message']+=' The saved draft and existing accounts are preserved.'
-                jobs.finish(self.repository,job['id'],token,'failed',failure=failure)
-                return
             elif phase=='scientific_validation' and isinstance(exc,ValueError):
                 code,message='VALIDATION_FAILED','The attempt failed scientific validation.'
             else:
@@ -574,11 +569,23 @@ class Worker:
                 source['retained']=await asyncio.to_thread(retained_file,source['path'],checksum)
         await asyncio.to_thread(self.save_workspace,job,token,artifacts_root()/job['id'])
         evidence_sha256=sha256(package_path.read_bytes())
+        package = decode(package_path.read_bytes())
+        validation = package.get('validation_context', {})
         from .analysis_outcomes import creation_stamp, stamp_gap, stamped
         with self.repository.transaction() as tx:
             pair=jobs.fenced(tx,job['id'],token)
             if not pair or pair[0]['status']=='cancel_requested': return
             current,_=pair; owner=current['owner_user_id']; accounts=[]; paragraphs=[]; manifest_accounts=[]
+            reused = {'contexts': [], 'borrowed_ids': [], 'citation_metadata': []}
+            existing = validation.get('existing_account_ids', [])
+            if validation:
+                from .scientific_reuse import record_dependencies
+                reused = record_dependencies(tx, owner, frozen['id'], validation.get('reuse_receipt_ids', []),
+                    [doc['scientific_accounts'][0]['id'] for doc, _, _ in accepted] + existing)
+                require(set(existing) <= {a['account_id'] for a in reused['existing_accounts']}, 'Reused result authority changed')
+            retained_ids = {n['id'] for c in reused['contexts'] for rows in c['dapper_context'].values() if isinstance(rows, list)
+                for n in rows if isinstance(n, dict) and 'id' in n}
+            borrowed_ids = set(reused['borrowed_ids'])
             persist_source_artifacts(tx,owner,source_artifacts)
             for doc,report,path in accepted:
                 if mode=='box':
@@ -591,7 +598,8 @@ class Worker:
                 runtime=decode(Path(result.runtime_manifest_path).read_bytes()) if result.runtime_manifest_path else {'model_id':None,'harness_version':None}
                 runtime['model_id']=runtime.get('model_id') or runtime.get('model')
                 actor=doc['scientific_accounts'][0].get('was_attributed_to',[None])[0]
-                metadata=register(tx,owner,doc,{**frozen['attribution'],'person_id':actor},now(),runtime=runtime)
+                metadata=register(tx,owner,doc,{**frozen['attribution'],'person_id':actor},now(),runtime=runtime,
+                    retained_citation_metadata=reused['citation_metadata'], retained_object_ids=retained_ids)
                 account=doc['scientific_accounts'][0]; identity=account['id']; gap=next(g for g in doc['knowledge_gaps'] if g['id']==account['question'])
                 outbox_key=digest([owner,identity,'default-paragraph']); previous=tx.get('outbox',outbox_key)
                 if previous:
@@ -616,7 +624,8 @@ class Worker:
                     if isinstance(rows,list):
                         for node in rows:
                             if isinstance(node,dict) and str(node.get('id','')).startswith('dapper:'):
-                                tx.put('grant',digest([owner,node['id']]),owner,{'target_id':node['id']})
+                                if node['id'] not in borrowed_ids:
+                                    tx.put('grant',digest([owner,node['id']]),owner,{'target_id':node['id']})
                                 projection=object_envelope(doc,node['id'],metadata,artifact_access)
                                 tx.put('object_observation',digest([owner,node['id'],sha256(canonical_json(node))]),owner,{'object_id':node['id'],'payload':node,'document_sha256':document_sha})
                                 if not tx.get('object',digest([owner,node['id']])):
@@ -627,6 +636,7 @@ class Worker:
                 manifest_accounts.append({'path':str(path.resolve().relative_to(directory.resolve())),'sha256':sha256(path.read_bytes()),'account_id':identity,'lint_report_sha256':sha256(canonical_json(report))})
             public={'kind':'analysis','request_id':job['research_request_id'],'account_ids':accounts,'enrichment':enrichment_status(result,frozen['composer']['selected_kgs'],mode),
                 'paragraph_job_ids':paragraphs,'evidence_package_sha256':evidence_sha256}
+            if validation: public.update(reused_account_ids=existing, seed_sha256=validation['seed_sha256'])
             current.update(status='succeeded',stage='complete',result=public,completed_at=now())
             jobs.event(tx,current,'result','Gap analysis complete.' if mode=='box' else 'Development simulation complete — not a scientific result.')
             manifest={'format':'reveal.agent-output/1','job_id':job['id'],'attempt':pair[1]['attempt'],'status':'succeeded','input_package_sha256':public['evidence_package_sha256'],

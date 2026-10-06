@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 import jwt
 
 from reveal_backend import app as api, publication
-from reveal_backend.acceptance import object_envelope
+from reveal_backend.acceptance import object_envelope, release_root
 from reveal_backend.auth import Problem
 from reveal_backend.citations import register, revise
 from reveal_backend.repository import Repository, digest, uid
@@ -237,6 +237,28 @@ class PublicationSecurityTests(unittest.TestCase):
         self.publish(owner=self.other, visibility='private', version=1)
         self.get('/v1/accounts/' + ACCOUNT, status=404)
         self.get('/v1/accounts/' + ACCOUNT, owner=self.other)
+
+    def test_owned_copy_artifact_endpoint_rechecks_borrowed_source_after_withdrawal(self):
+        from reveal_backend import scientific_reuse
+        with self.repo.transaction() as tx:
+            key=digest([self.owner,self.source_sha]); record=tx.get('artifact',key)['data']
+            record.update(research_source={'sha256':self.source_sha,'dapper_file_id':FILE,
+                'format':'json','origin':'retained-test-source'},eligible_evidence=True)
+            tx.put('artifact',key,self.owner,record)
+        self.publish()
+        runtime = Path(os.environ.get('REVEAL_TEST_DAPPER_RELEASE', str(release_root())))
+        with patch('reveal_backend.acceptance._reference_fields',return_value={'claims':['was_derived_from'],'files':[]}), \
+                patch('reveal_backend.acceptance.release_root', return_value=runtime):
+            with self.repo.transaction() as tx:
+                tx.put('request','reuse-request',self.other,{'question_id':GAP})
+                selected=scientific_reuse.search(tx,self.other,'claim')['items'][0]
+                receipt=scientific_reuse.create_receipt(tx,self.other,'reuse-request',[selected],'artifact-read')
+                scientific_reuse.record_dependencies(tx,self.other,'reuse-request',[receipt['id']],[])
+                tx.put('artifact',digest([self.other,self.source_sha]),self.other,record)
+            self.assertEqual(self.get('/v1/artifacts/'+self.source_sha,owner=self.other).content,self.source_bytes)
+            self.publish(visibility='private',version=1)
+            result=self.get('/v1/artifacts/'+self.source_sha,owner=self.other,status=409)
+            self.assertEqual(result.json()['code'],'REUSE_AUTHORITY_UNAVAILABLE')
 
     def test_partial_account_without_full_document_fails_closed_without_snapshot(self):
         with self.repo.transaction() as tx:

@@ -64,7 +64,19 @@ npm --prefix services/frontend run build
 
 Scientific accounts foreground closing synthesis, leave claims collapsed, and provide dedicated assessment/proposition/evidence/provenance inspection. Paragraph status is independent of accepted account status. UI citations use Unicode code-point spans and target+metadata-revision pins. Numbered references follow first occurrence order across UI and exports. Rich-text copy requests both HTML and plain text for Word; exports use the backend's Markdown, LaTeX, and BibTeX content. Canonical `/id/{id}` links resolve to authorized records.
 
+## Factors and gene sets
+
+Mechanism chips open `/factors/{source_id}?source_revision=...` in a new tab, preserving the research editor. The factor page places metadata in collapsed **Factor details**, with KPN trait links to their catalog pages. Gene and gene-set tabs retain their loaded rows and search when switching. Heatmap and table views default to global alphabetical order; **Strongest first** remains available, and **Load more** appends the next page (200 genes or 50 gene sets). Heatmap colors use the full factor's numeric range even while filtering. Gene-set projections offer joint and marginal metrics and retain their original projection ranks. The catalog includes all stored nonzero gene weights and the union of the top 50 gene sets by either projection; missing observations are never displayed as zero.
+
+The gene view can overlay a gene set from this factor, or **Overlay on genes** can be selected from a gene-set tile or table row. Exact `HGNC.SYMBOL:` members (or recorded bare symbols) are outlined without changing their loading colors. Unsupported identifier namespaces remain unknown; missing membership is explicitly unavailable. Membership requests pin the same reference generation, and members absent from this factor's stored loadings are never invented as zero-weight genes.
+
+`/gene-sets/{id}?generation_id=...` shows the exact imported gene set, collection, source datasets, construction activities, files, attribution, and searchable members. Unknown membership and provenance remain explicitly unavailable. Requests carry the factor revision and reference generation so a catalog reload cannot silently substitute another fit. Archived factor links render only the retained snapshot. Unpinned gene sets missing from the reference catalog may resolve through the existing authorized scientific-object API; pinned reference requests never do.
+
 Component validation does not certify OAuth login, Aurora persistence, a live Box result, or a full-stack browser journey. Those require the configured providers and the backend/integration acceptance gates.
+
+## Trending knowledge gaps
+
+Homepage trending knowledge gaps retain loaded pages, the Accounts/Votes selection, and each sort's scroll position in session memory across client navigation. Returning to the homepage does not refetch or reorder the list. Relevant events show an update notice; **Refresh rankings** loads a new first page while retaining existing rows until it succeeds. A full reload or identity change clears the cached rows. Tied account counts or vote scores favor more distinct, resolved DisMech mechanisms (Votes uses account count as the next tie-breaker).
 
 ## Workspace drafts
 

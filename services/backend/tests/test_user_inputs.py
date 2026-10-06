@@ -254,7 +254,8 @@ def test_run_freezes_inputs_independently_and_private_publication_blocked(client
     with client.repo.transaction() as tx:
         draft['composer']=composer; tx.put('draft',draft['id'],owner,draft)
         tx.put('draft_binding',draft['id'],owner,{'dismech_import_id':'test','source_gap':gap,'selections':{native:{
-            'record':{'object':{'id':composer['eaggl_anchors'][0]['reference']['dapper_id']}},'binding':{'cfde_node_id':native}}}})
+            'record':{'object':{'id':composer['eaggl_anchors'][0]['reference']['dapper_id']}},
+            'binding':{'cfde_node_id':native,'reference_generation_id':'a'*64}}}})
     with patch.object(api,'catalog',SimpleNamespace(selected=lambda _:gap)):
         response=client.client.post('/v1/jobs',json={'kind':'analysis','draft_id':draft['id'],'draft_version':1},headers=client.headers(owner))
     assert response.status_code==202,response.text

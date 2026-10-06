@@ -30,6 +30,7 @@ def test_import_preserves_secret_bytes_and_isolates_only_queue(tmp_path, monkeyp
     assert env['REVEAL_JOB_NAMESPACE'].startswith('reveal-local-')
     assert 'REVEAL_APPLICATION_TABLE_PREFIX' not in env
     assert 'AUTH_SECRET' not in env
+    assert env['REVEAL_PUBLIC_WEB_URL'] == env['REVEAL_CANONICAL_URL'] == env['NEXTAUTH_URL'] == 'http://localhost:3000'
     assert (first / '.env').stat().st_mode & 0o777 == 0o600
     original = (first / '.env').read_bytes()
     with pytest.raises(RuntimeError, match='overwrite'): handoff.import_bundle(bundle, 'password', root=first)

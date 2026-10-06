@@ -78,6 +78,7 @@ async function harness(name, { mobile = false, visitor = false, clock = false, r
     const respond = json => route.fulfill({ status: 200, json });
     if (path === '/api/session/status') return respond({ principal: state.principal ? { user_id: state.principal } : null, canClaim: state.canClaim, providers: { google: false, orcid: false } });
     if (path === '/api/backend/v1/me') return respond({ user_id: state.principal, display_name: 'Current workspace owner', email: null, email_verified: null, orcid: null, orcid_authenticated: false, person: null, principal_kind: 'registered', workspace_expires_at: null });
+    if (path === '/api/backend/v1/me/workspace/events') return route.fulfill({ status: 200, contentType: 'text/event-stream', body: 'event: ready\ndata: {}\n\n' });
     if (path === '/api/session/claim') { state.principal = '33333333-3333-4333-8333-333333333333'; state.canClaim = false; return respond({ claimed: true }); }
     if (method === 'GET' && path === '/api/backend/v1/knowledge-gaps') {
       const scope = url.searchParams.get('scope'); assert.ok(['public', 'workspace'].includes(scope));
@@ -206,17 +207,19 @@ async function infiniteScrolling() {
     } finally { await h.close(); }
   }
 }
-async function cursorExpiry() {
+async function gapCursorExpiry() {
   const h = await harness('cursor-expiry-fallback', { paging: true, disableObserver: true });
   try {
     const firstCalls = h.state.requests.filter(request => request.path === '/api/backend/v1/knowledge-gaps').length;
     await h.page.evaluate(() => window.__gapResponseOverrides.push({ status: 409, body: { code: 'CURSOR_EXPIRED', detail: 'Reload the first page to start a new browse session.' } }));
-    await h.page.getByRole('button', { name: 'Load more questions', exact: true }).click(); await h.page.getByText('Reload the first page to start a new browse session.').waitFor();
-    assert.equal(await h.page.locator('.trend').count(), 0);
-    await h.page.locator('.gap-browser').getByRole('button', { name: 'Retry', exact: true }).click(); await until(async () => await h.page.locator('.trend').count() === 20, 'fresh first page after expired gap cursor');
+    await h.page.getByRole('button', { name: 'Load more questions', exact: true }).click(); await h.page.getByText('Refresh the rankings to continue browsing. Your loaded questions are still shown.').waitFor();
+    assert.equal(await h.page.locator('.trend').count(), 20);
+    await h.page.locator('.gap-browser').getByRole('button', { name: 'Retry', exact: true }).click(); await until(async () => !await h.page.getByText('Refresh the rankings to continue browsing. Your loaded questions are still shown.').count(), 'fresh first page after expired gap cursor');
     const calls = h.state.requests.filter(request => request.path === '/api/backend/v1/knowledge-gaps'); assert.equal(calls.length, firstCalls + 1); assert.ok(!calls.at(-1).query.includes('cursor='));
-    h.result.checks.push('Accessible load-more works without IntersectionObserver', 'Expired gap cursor clears snapshot and retries first page without expired cursor');
+    h.result.checks.push('Accessible load-more works without IntersectionObserver', 'Expired gap cursor retains loaded rows and retries first page without expired cursor');
   } finally { await h.close(); }
+}
+async function accountCursorExpiry() {
   const a = await harness('account-cursor-expiry');
   try {
     await a.select(); await a.respond(0, { items: [account(gaps[0])], page: pageInfo(true) });
@@ -258,7 +261,7 @@ async function mismatchedResponse() {
   } finally { await h.close(); }
 }
 try {
-  const scenarios = { rankedPagination, mobileSlow, deadlineRecovery, visitorPrivacy, infiniteScrolling, cursorExpiry, staleSelection, identityPrivacy, mismatchedResponse };
+  const scenarios = { rankedPagination, mobileSlow, deadlineRecovery, visitorPrivacy, infiniteScrolling, gapCursorExpiry, accountCursorExpiry, staleSelection, identityPrivacy, mismatchedResponse };
   for (const [name, run] of Object.entries(scenarios)) if (!process.env.GAP_ACCOUNTS_SCENARIO_FILTER || name.includes(process.env.GAP_ACCOUNTS_SCENARIO_FILTER)) await run();
   for (const scenario of report.scenarios) { assert.deepEqual(scenario.pageErrors, []); assert.deepEqual(scenario.consoleErrors, []); assert.deepEqual(scenario.unexpected, []); assert.ok(!scenario.requests.some(request => request.path.includes('/jobs'))); }
   report.status = 'passed'; console.log(JSON.stringify({ status: report.status, scenarios: report.scenarios.length, output }));

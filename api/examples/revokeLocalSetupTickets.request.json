@@ -1,0 +1,25 @@
+{
+  "operation_id": "revokeLocalSetupTickets",
+  "case": "request",
+  "method": "DELETE",
+  "path_template": "/v1/local-work/{work_id}/setup-tickets",
+  "request": {
+    "url": "https://api.reveal.example.org/v1/local-work/77777777-7777-4777-8777-777777777777/setup-tickets",
+    "path": {
+      "work_id": "77777777-7777-4777-8777-777777777777"
+    },
+    "query": {},
+    "headers": {
+      "Authorization": "Bearer <api-key-or-gateway-assertion>",
+      "Accept": "application/json"
+    },
+    "body": null
+  },
+  "responses": {
+    "204": {
+      "content_type": null,
+      "examples": {}
+    }
+  },
+  "curl": "curl -X DELETE https://api.reveal.example.org/v1/local-work/77777777-7777-4777-8777-777777777777/setup-tickets -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
+}

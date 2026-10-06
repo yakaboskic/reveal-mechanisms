@@ -6,6 +6,7 @@ export type SubmissionMethod = "anonymous" | "google" | "orcid" | "session";
 export type SubmissionStage = "signing-in" | "saving" | "submitting";
 export type SubmissionAttempt = {
   method: SubmissionMethod;
+  mode?: "online" | "local";
   question: string;
   gap: Schema<"GapRecord"> | null;
   composer: Schema<"Composer">;
@@ -33,7 +34,7 @@ export function rememberSubmission(attempt: SubmissionAttempt | null) {
 export function restoreSubmission(): SubmissionAttempt | null {
   try {
     const value = JSON.parse(sessionStorage.getItem(submissionStorageKey) || "null") as SubmissionAttempt | null;
-    if (value && ["anonymous", "google", "orcid", "session"].includes(value.method) && value.composer?.source_gap && value.composer.eaggl_anchors.length && Array.isArray(value.requestKeys) && value.requestKeys.every(entry => Array.isArray(entry) && entry.length === 2 && entry.every(part => typeof part === "string")) && typeof value.anonymousKey === "string"
+    if (value && (value.mode === undefined || ["online", "local"].includes(value.mode)) && ["anonymous", "google", "orcid", "session"].includes(value.method) && value.composer?.source_gap && value.composer.eaggl_anchors.length && Array.isArray(value.requestKeys) && value.requestKeys.every(entry => Array.isArray(entry) && entry.length === 2 && entry.every(part => typeof part === "string")) && typeof value.anonymousKey === "string"
       // An uncertain dispatch may already have committed. Preserve its exact receipt so a retry
       // reconciles that job even after a reference cutover; unsubmitted stale inputs are discarded.
       && (value.submitKey || currentComposer(value.composer))) return value;

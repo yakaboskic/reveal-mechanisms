@@ -10,6 +10,8 @@ installed browser/runtime.
 DRAFT_LIFECYCLE_BASE_URL=http://127.0.0.1:3017 node scripts/check-draft-lifecycle.mjs
 NAVIGATION_BASE_URL=http://127.0.0.1:3017 node scripts/check-composer-navigation.mjs
 ACCOUNT_GRAPH_BASE_URL=http://127.0.0.1:3017 node scripts/check-account-graph.mjs
+FACTOR_PAGES_BASE_URL=http://127.0.0.1:3017 node scripts/check-factor-pages.mjs
+GAP_NAVIGATION_BASE_URL=http://127.0.0.1:3017 node scripts/check-gap-navigation-cache.mjs
 ```
 
 The lifecycle harness keeps mutable mocked drafts, frozen research requests,
@@ -54,3 +56,25 @@ checks real Cytoscape canvas hit testing, nested dataset inspection, keyboard
 list navigation, snapshot-bound page continuation, stale-source reload and
 mobile layout. These mocked checks complement a local seeded-database smoke
 test; they do not prove real storage access or extraction.
+
+The factor-page harness checks encoded reference identities, exact hover values,
+keyboard navigation, collapsed metadata, retained tabs, alphabetical ordering,
+append pagination, fixed color scales under search and membership overlays,
+late search/member response protection, generation-pinned exact membership,
+joint/marginal switching, provenance navigation, member search, gene-only gnomAD
+constraint ordering and exact metric/source display, and import-pinned pagination
+that refuses mixed annotations. It also covers unknown values, archived snapshots,
+retry states, and mobile layout. It uses
+intercepted API examples and illustrative rows, never a research submission.
+
+The gap-navigation cache harness verifies that About and gap-information routes
+preserve loaded trending questions, pagination, nested scroll and the selected
+Accounts/Votes sort without extra list requests. It advances the fixture clock
+past the normal cache freshness window, checks both sort caches independently,
+and verifies that a full page reload fetches again. Controlled event streams
+exercise explicit refresh while retaining visible rows, and viewer changes clear
+cached vote state. It also holds an old vote response across navigation to verify
+that it cannot overwrite a newer ballot in either cached sort, and checks that an
+anonymous visitor's focus event preserves loaded pages. All reads, vote writes,
+and events are mocked. Reports and screenshots
+go to `.runtime/gap-navigation-cache/`; `GAP_NAVIGATION_AUDIT_DIR` overrides it.

@@ -8,6 +8,7 @@ import { api, ApiError, messageOf, type Schema } from "@/lib/client";
 import { withRequestDeadline } from "@/lib/request-deadline";
 import { continuityPromptDismissed, dismissContinuityPrompt } from "@/lib/continuity-prompt";
 import { WorkspaceCacheProvider } from "./WorkspaceCache";
+import { GapDiscoveryProvider } from "./GapDiscoveryCache";
 import { invalidateWorkspace, resetWorkspaceCache } from "@/lib/workspace-events";
 import "./session-menu.css";
 
@@ -51,7 +52,7 @@ export function Session({ children }: { children: ReactNode }) {
       }));
       if (sequence !== refreshSequence.current) return null;
       setStatus(state);
-      if (!state.principal || state.principal.user_id !== identityRef.current?.user_id) {
+      if (state.principal?.user_id !== identityRef.current?.user_id) {
         resetWorkspaceCache(); identityRef.current = null; setMe(null); setReady(false);
       }
       const identity = state.principal ? await api.me() : null;
@@ -118,7 +119,7 @@ export function Session({ children }: { children: ReactNode }) {
   const claimPromptKnown = claimPrompt?.owner === claimOwner;
   const claimDismissed = claimPromptKnown && claimPrompt?.dismissed;
   const workspaceScope = ready && me ? `${me.user_id}:${me.principal_kind}:${me.workspace_expires_at || ""}:${status.canClaim}` : null;
-  return <SessionContext.Provider value={{ me, ready, status, refresh }}><WorkspaceCacheProvider scope={workspaceScope} checkIdentity={refresh}>
+  return <SessionContext.Provider value={{ me, ready, status, refresh }}><WorkspaceCacheProvider scope={workspaceScope} checkIdentity={refresh}><GapDiscoveryProvider viewer={ready ? workspaceScope || "visitor" : null}>
     <a className="skip" href="#main">Skip to content</a>
     <header className="site-nav workspace-chrome">
       <nav className="site-information" aria-label="Community"><Link href="/about" aria-current={pathname === "/about" ? "page" : undefined}>About</Link><span className="site-information-divider" aria-hidden="true">|</span><Link href="/leaderboard" aria-current={pathname === "/leaderboard" ? "page" : undefined}>Leaderboard</Link></nav>
@@ -134,10 +135,10 @@ export function Session({ children }: { children: ReactNode }) {
         </div>}
       </div>
     </header>
-    {canClaim && claimPromptKnown && !claimDismissed && <div className="continuity continuity-prompt"><button type="button" className="continuity-dismiss" aria-label="Dismiss anonymous work prompt" title="Dismiss for this session" onClick={dismissClaim}><span aria-hidden="true">×</span></button><p>Keep the work from your anonymous session in this signed-in workspace?</p><button type="button" onClick={claim}>Move my anonymous work</button><small>Existing scientific identities and attribution stay unchanged. You can also move this work later from your workspace menu.</small></div>}
+    {pathname !== "/research/connect" && canClaim && claimPromptKnown && !claimDismissed && <div className="continuity continuity-prompt"><button type="button" className="continuity-dismiss" aria-label="Dismiss anonymous work prompt" title="Dismiss for this session" onClick={dismissClaim}><span aria-hidden="true">×</span></button><p>Keep the work from your anonymous session in this signed-in workspace?</p><button type="button" onClick={claim}>Move my anonymous work</button><small>Existing scientific identities and attribution stay unchanged. You can also move this work later from your workspace menu.</small></div>}
     {claimMessage && <p role="status" className="notice">{claimMessage}</p>}
     {children}
-  </WorkspaceCacheProvider></SessionContext.Provider>;
+  </GapDiscoveryProvider></WorkspaceCacheProvider></SessionContext.Provider>;
 }
 export function ProviderButtons({ disabled = false, onLogin, compact = false }: { disabled?: boolean; onLogin?: (provider: "google" | "orcid") => void; compact?: boolean }) {
   const { status, ready } = useIdentity(); const noteId = useId();
