@@ -1,5 +1,7 @@
 # PIGEAN/EAGGL claim templates — biological propositions and result evidence
 
+Current local/hosted authoring rules: [shared contract v2](authoring-contract.md). Its mode-specific tool and evidence rules govern new workspaces; historical examples below retain their original scope.
+
 **Working design, September 25, 2026.** The four templates connect PIGEAN/EAGGL results to biological propositions. The **Proposition** states the biological involvement being assessed. **EvidenceItems** connect the observed results to that proposition. The **Claim** records the attributed assessment and summarizes its evidence in natural language. [ScientificAccount construction](scientific-account-construction.md) explains how several such claims form an account and a final synthesis addressing a selected KnowledgeGap.
 
 These templates use existing DAPPER classes. They are design examples, not executed or minted scientific assessments. The numerical source observations remain inspectable in the appendices. No graph-path object or evidence-field extension is introduced.

@@ -39,6 +39,9 @@ Updated October 1, 2026. Start with the [Workflow runtime](durable-workflow-runt
 
 ## Deployment and proposed follow-up work
 
+- [Local and online research through MCP — setup and verification](local-agent-mcp.md)
+- [Stateless Reveal MCP and progressive research — implementation design](local-agent-mcp-design.md)
+- [Agent instructions and evidence packages — proposed improvements from a local run](agent-authoring-improvement-plan.md)
 - [Issue #7 UI design plan — explicit drafts, research runs, uploads, and account bubbles](issue-7-ui-design-plan.md)
 - [Community leaderboard — researchers, scientific accounts and dataset reuse](leaderboard-design-plan.md)
 - [DIG service platform deployment](platform-deployment.md)

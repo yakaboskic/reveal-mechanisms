@@ -82,7 +82,8 @@ class ReferenceEvidenceTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.temp = tempfile.TemporaryDirectory(); cls.root = Path(cls.temp.name)
-        cls.runtime = DapperRuntime(ROOT / 'data/dapper/2026-09-24-v8')
+        from reveal_backend.runtime_config import CURRENT_DAPPER_SNAPSHOT
+        cls.runtime = DapperRuntime(CURRENT_DAPPER_SNAPSHOT)
         cls.source, cls.index = cls.dismech_fixture(cls.root)
         cls.database = cls.root / 'reference.sqlite3'
         cls.gene_sets = cls.write_database(cls.database)

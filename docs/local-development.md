@@ -18,7 +18,7 @@ python3 -m venv .venv
 npm ci --prefix services/frontend
 ```
 
-Prepare the trusted DAPPER checkout once. The existing release verifier checks repository, annotated tag, exact commit, file inventory and checksums. New remote agent attempts still make their own fresh verified clone.
+Prepare the trusted DAPPER checkout once. For an existing older checkout, follow the [0.2.0 upgrade steps](scientific-account-linting.md#updating-an-existing-host-to-020) to create a separate directory and update its configured path. The existing release verifier checks repository, tag object, exact commit, file inventory and checksums. New remote agent attempts still make their own fresh verified clone.
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=services/backend/src .venv/bin/python - <<'PY'

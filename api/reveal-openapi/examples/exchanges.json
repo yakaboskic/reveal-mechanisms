@@ -1982,8 +1982,8 @@
           "document": {
             "root_id": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
             "schema": {
-              "schema_sha256": "219769c9874a3c0a7d6972360d5847a8b344e412a8b9f4e2648f059682440345",
-              "dependency_snapshot_sha256": "801fb347c54c036c15345d132d302171fc6cd74c1f75a03a5c59c937f5ed7d11",
+              "schema_sha256": "305fbd8f3a3ad01a7584892c1be2937b5a25a5741a8fef17851039ff8cf44e25",
+              "dependency_snapshot_sha256": "bdbbc8d7583754a868a3bc22d7c976e21bccedd5ce24b600c2b43972e5b31a23",
               "identity_profile": "DAPPER-ID-1"
             },
             "document": {
@@ -3612,8 +3612,8 @@
           "archived": {
             "root_id": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
             "schema": {
-              "schema_sha256": "219769c9874a3c0a7d6972360d5847a8b344e412a8b9f4e2648f059682440345",
-              "dependency_snapshot_sha256": "801fb347c54c036c15345d132d302171fc6cd74c1f75a03a5c59c937f5ed7d11",
+              "schema_sha256": "305fbd8f3a3ad01a7584892c1be2937b5a25a5741a8fef17851039ff8cf44e25",
+              "dependency_snapshot_sha256": "bdbbc8d7583754a868a3bc22d7c976e21bccedd5ce24b600c2b43972e5b31a23",
               "identity_profile": "DAPPER-ID-1"
             },
             "document": {
@@ -5313,8 +5313,8 @@
           "document": {
             "root_id": "dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km",
             "schema": {
-              "schema_sha256": "219769c9874a3c0a7d6972360d5847a8b344e412a8b9f4e2648f059682440345",
-              "dependency_snapshot_sha256": "801fb347c54c036c15345d132d302171fc6cd74c1f75a03a5c59c937f5ed7d11",
+              "schema_sha256": "305fbd8f3a3ad01a7584892c1be2937b5a25a5741a8fef17851039ff8cf44e25",
+              "dependency_snapshot_sha256": "bdbbc8d7583754a868a3bc22d7c976e21bccedd5ce24b600c2b43972e5b31a23",
               "identity_profile": "DAPPER-ID-1"
             },
             "document": {
@@ -6957,8 +6957,8 @@
           "document": {
             "root_id": "dapper:GeneSet.I1UZhVhKU-YDerPLIxtnZOGlTXNAlrgD",
             "schema": {
-              "schema_sha256": "219769c9874a3c0a7d6972360d5847a8b344e412a8b9f4e2648f059682440345",
-              "dependency_snapshot_sha256": "801fb347c54c036c15345d132d302171fc6cd74c1f75a03a5c59c937f5ed7d11",
+              "schema_sha256": "305fbd8f3a3ad01a7584892c1be2937b5a25a5741a8fef17851039ff8cf44e25",
+              "dependency_snapshot_sha256": "bdbbc8d7583754a868a3bc22d7c976e21bccedd5ce24b600c2b43972e5b31a23",
               "identity_profile": "DAPPER-ID-1"
             },
             "document": {
@@ -7042,8 +7042,8 @@
           "document": {
             "root_id": "dapper:Paragraph.uSYa1LdXNPuwlSgsCz3oZ7IfrVoztroD",
             "schema": {
-              "schema_sha256": "219769c9874a3c0a7d6972360d5847a8b344e412a8b9f4e2648f059682440345",
-              "dependency_snapshot_sha256": "801fb347c54c036c15345d132d302171fc6cd74c1f75a03a5c59c937f5ed7d11",
+              "schema_sha256": "305fbd8f3a3ad01a7584892c1be2937b5a25a5741a8fef17851039ff8cf44e25",
+              "dependency_snapshot_sha256": "bdbbc8d7583754a868a3bc22d7c976e21bccedd5ce24b600c2b43972e5b31a23",
               "identity_profile": "DAPPER-ID-1"
             },
             "document": {
@@ -8853,8 +8853,8 @@
           "question": {
             "root_id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
             "schema": {
-              "schema_sha256": "219769c9874a3c0a7d6972360d5847a8b344e412a8b9f4e2648f059682440345",
-              "dependency_snapshot_sha256": "801fb347c54c036c15345d132d302171fc6cd74c1f75a03a5c59c937f5ed7d11",
+              "schema_sha256": "305fbd8f3a3ad01a7584892c1be2937b5a25a5741a8fef17851039ff8cf44e25",
+              "dependency_snapshot_sha256": "bdbbc8d7583754a868a3bc22d7c976e21bccedd5ce24b600c2b43972e5b31a23",
               "identity_profile": "DAPPER-ID-1"
             },
             "document": {
@@ -15973,6 +15973,1334 @@
       }
     },
     "curl": "curl -X GET 'https://api.reveal.example.org/v1/catalog/gene-sets/dapper%3AGeneSet.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa?generation_id=d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c' -H 'Accept: application/json'"
+  },
+  {
+    "operation_id": "createLocalWork",
+    "case": "saved_draft",
+    "method": "POST",
+    "path_template": "/v1/local-work",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/local-work",
+      "path": {},
+      "query": {},
+      "headers": {
+        "Idempotency-Key": "66666666-6666-4666-8666-666666666666",
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      },
+      "body": {
+        "draft_id": "22222222-2222-4222-8222-222222222222",
+        "draft_version": 2
+      }
+    },
+    "responses": {
+      "201": {
+        "content_type": "application/json",
+        "examples": {
+          "preparing": {
+            "id": "77777777-7777-4777-8777-777777777777",
+            "research_request_id": "33333333-3333-4333-8333-333333333333",
+            "request": {
+              "id": "33333333-3333-4333-8333-333333333333",
+              "owner_user_id": "11111111-1111-4111-8111-111111111111",
+              "source_draft_id": "22222222-2222-4222-8222-222222222222",
+              "source_draft_version": 2,
+              "composer": {
+                "source_gap": {
+                  "id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+                  "source_id": "dismech:disorders/Coronary_Artery_Disease#discussion:cad_pgsxc_reverse_causation",
+                  "source_revision": "8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd"
+                },
+                "eaggl_anchors": [
+                  {
+                    "reference": {
+                      "source": "eaggl",
+                      "source_id": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                      "source_revision": "5797893b517def4fdc82f285c9bf835195f9f88eddfb6409cbf3b1e31dd63d83",
+                      "dapper_id": "dapper:Mechanism.MyhahXB55tDUS667sJzeJZ40BeeQBWOR"
+                    },
+                    "origin": "manual",
+                    "suggestion_id": null
+                  }
+                ],
+                "dismissed_source_ids": [],
+                "mechanism_subquery": "CADinT2D",
+                "model": "cfde-inc-v2",
+                "selected_kgs": [
+                  "biomarkerkg",
+                  "prokn"
+                ]
+              },
+              "question_id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+              "document": {
+                "knowledge_gaps": [
+                  {
+                    "text": "Are the CAD PGS×context interactions driven by adverse exposures causally amplifying genetic risk, or are some \"contexts\" actually downstream readouts of incipient disease (reverse causation)?",
+                    "gap_description": "Population PGS×context analyses (Nagpal & Gibson 2026, PMID:42443528) are largely unable to establish the causality of specific contexts. dismech separates true environmental exposures (smoking, high-fat diet, sedentary lifestyle) from biochemical readouts (LDL, HDL, C-reactive protein); the biochemical \"contexts\" are prime reverse-causation suspects, since they may be partly downstream of the atherosclerotic process rather than upstream drivers, and behavioural contexts such as reduced physical activity may be rapid responses to incipient angina rather than causes. Distinguishing genuine amplification of genetic effects from reverse causation determines whether the modelled interventions (e.g. lowering cholesterol in high-PGS smokers) would actually reduce risk.",
+                    "gap_kind": "KNOWLEDGE_GAP",
+                    "scope": "Coronary Artery Disease",
+                    "about_entities": [
+                      "http://purl.obolibrary.org/obo/MONDO_0021661"
+                    ],
+                    "id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk"
+                  }
+                ]
+              },
+              "attribution": {
+                "user_id": "11111111-1111-4111-8111-111111111111",
+                "person_id": "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he",
+                "display_name": "Example Researcher",
+                "orcid": null,
+                "orcid_authenticated": false,
+                "observed_at": "2026-09-24T16:00:00Z",
+                "principal_kind": "registered"
+              },
+              "submitted_at": "2026-09-24T16:01:00Z",
+              "linked_dismech_context": [
+                {
+                  "source": "dismech",
+                  "source_id": "dismech:disorders/Coronary_Artery_Disease#/pathophysiology/0",
+                  "source_revision": "d7ea32f7d5b2101e19136522bece815085f1aee34898ab451acda840ae5809dc",
+                  "dapper_id": "dapper:Mechanism.Tbd3TXttvLnVp5rlCDkdPYOWlFOfRUG2"
+                }
+              ]
+            },
+            "state": "preparing",
+            "created_at": "2026-09-24T16:00:00Z",
+            "last_activity": "2026-09-24T16:00:00Z",
+            "last_action": "created",
+            "expires_at": "2026-12-01T00:00:00Z",
+            "reference_generation_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "package_id": null,
+            "package_sha256": null,
+            "last_error": null,
+            "preparation_operation_id": "88888888-8888-4888-8888-888888888888",
+            "submissions": [],
+            "grants": [],
+            "mcp_url": "https://api.reveal.example.org/mcp",
+            "prompt": "Use the downloaded frozen seed and anonymous public MCP tools. Sign in and explicitly approve access before private reads, uploads, validation or submission.",
+            "instructions": {
+              "codex": "Run python3 start.py codex in the downloaded folder. Add --login only when ready to connect.",
+              "claude_code": "Run python3 start.py claude in the downloaded folder. Add --login only when ready to connect."
+            },
+            "local_work_id": "77777777-7777-4777-8777-777777777777"
+          }
+        }
+      }
+    },
+    "curl": "curl -X POST https://api.reveal.example.org/v1/local-work -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"draft_id\":\"22222222-2222-4222-8222-222222222222\",\"draft_version\":2}'"
+  },
+  {
+    "operation_id": "listLocalWork",
+    "case": "request",
+    "method": "GET",
+    "path_template": "/v1/local-work",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/local-work",
+      "path": {},
+      "query": {},
+      "headers": {
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
+        "Accept": "application/json"
+      },
+      "body": null
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/json",
+        "examples": {
+          "owned": {
+            "items": [
+              {
+                "id": "77777777-7777-4777-8777-777777777777",
+                "research_request_id": "33333333-3333-4333-8333-333333333333",
+                "request": {
+                  "id": "33333333-3333-4333-8333-333333333333",
+                  "owner_user_id": "11111111-1111-4111-8111-111111111111",
+                  "source_draft_id": "22222222-2222-4222-8222-222222222222",
+                  "source_draft_version": 2,
+                  "composer": {
+                    "source_gap": {
+                      "id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+                      "source_id": "dismech:disorders/Coronary_Artery_Disease#discussion:cad_pgsxc_reverse_causation",
+                      "source_revision": "8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd"
+                    },
+                    "eaggl_anchors": [
+                      {
+                        "reference": {
+                          "source": "eaggl",
+                          "source_id": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                          "source_revision": "5797893b517def4fdc82f285c9bf835195f9f88eddfb6409cbf3b1e31dd63d83",
+                          "dapper_id": "dapper:Mechanism.MyhahXB55tDUS667sJzeJZ40BeeQBWOR"
+                        },
+                        "origin": "manual",
+                        "suggestion_id": null
+                      }
+                    ],
+                    "dismissed_source_ids": [],
+                    "mechanism_subquery": "CADinT2D",
+                    "model": "cfde-inc-v2",
+                    "selected_kgs": [
+                      "biomarkerkg",
+                      "prokn"
+                    ]
+                  },
+                  "question_id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+                  "document": {
+                    "knowledge_gaps": [
+                      {
+                        "text": "Are the CAD PGS×context interactions driven by adverse exposures causally amplifying genetic risk, or are some \"contexts\" actually downstream readouts of incipient disease (reverse causation)?",
+                        "gap_description": "Population PGS×context analyses (Nagpal & Gibson 2026, PMID:42443528) are largely unable to establish the causality of specific contexts. dismech separates true environmental exposures (smoking, high-fat diet, sedentary lifestyle) from biochemical readouts (LDL, HDL, C-reactive protein); the biochemical \"contexts\" are prime reverse-causation suspects, since they may be partly downstream of the atherosclerotic process rather than upstream drivers, and behavioural contexts such as reduced physical activity may be rapid responses to incipient angina rather than causes. Distinguishing genuine amplification of genetic effects from reverse causation determines whether the modelled interventions (e.g. lowering cholesterol in high-PGS smokers) would actually reduce risk.",
+                        "gap_kind": "KNOWLEDGE_GAP",
+                        "scope": "Coronary Artery Disease",
+                        "about_entities": [
+                          "http://purl.obolibrary.org/obo/MONDO_0021661"
+                        ],
+                        "id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk"
+                      }
+                    ]
+                  },
+                  "attribution": {
+                    "user_id": "11111111-1111-4111-8111-111111111111",
+                    "person_id": "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he",
+                    "display_name": "Example Researcher",
+                    "orcid": null,
+                    "orcid_authenticated": false,
+                    "observed_at": "2026-09-24T16:00:00Z",
+                    "principal_kind": "registered"
+                  },
+                  "submitted_at": "2026-09-24T16:01:00Z",
+                  "linked_dismech_context": [
+                    {
+                      "source": "dismech",
+                      "source_id": "dismech:disorders/Coronary_Artery_Disease#/pathophysiology/0",
+                      "source_revision": "d7ea32f7d5b2101e19136522bece815085f1aee34898ab451acda840ae5809dc",
+                      "dapper_id": "dapper:Mechanism.Tbd3TXttvLnVp5rlCDkdPYOWlFOfRUG2"
+                    }
+                  ]
+                },
+                "state": "ready",
+                "created_at": "2026-09-24T16:00:00Z",
+                "last_activity": "2026-09-24T16:00:00Z",
+                "last_action": "created",
+                "expires_at": "2026-12-01T00:00:00Z",
+                "reference_generation_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "package_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "package_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "last_error": null,
+                "preparation_operation_id": "88888888-8888-4888-8888-888888888888",
+                "submissions": [],
+                "grants": [],
+                "mcp_url": "https://api.reveal.example.org/mcp",
+                "prompt": "Use the downloaded frozen seed and anonymous public MCP tools. Sign in and explicitly approve access before private reads, uploads, validation or submission.",
+                "instructions": {
+                  "codex": "Run python3 start.py codex in the downloaded folder. Add --login only when ready to connect.",
+                  "claude_code": "Run python3 start.py claude in the downloaded folder. Add --login only when ready to connect."
+                },
+                "local_work_id": "77777777-7777-4777-8777-777777777777"
+              }
+            ]
+          },
+          "empty": {
+            "items": []
+          }
+        }
+      }
+    },
+    "curl": "curl -X GET https://api.reveal.example.org/v1/local-work -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
+  },
+  {
+    "operation_id": "getLocalWork",
+    "case": "request",
+    "method": "GET",
+    "path_template": "/v1/local-work/{work_id}",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/local-work/77777777-7777-4777-8777-777777777777",
+      "path": {
+        "work_id": "77777777-7777-4777-8777-777777777777"
+      },
+      "query": {},
+      "headers": {
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
+        "Accept": "application/json"
+      },
+      "body": null
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/json",
+        "examples": {
+          "ready": {
+            "id": "77777777-7777-4777-8777-777777777777",
+            "research_request_id": "33333333-3333-4333-8333-333333333333",
+            "request": {
+              "id": "33333333-3333-4333-8333-333333333333",
+              "owner_user_id": "11111111-1111-4111-8111-111111111111",
+              "source_draft_id": "22222222-2222-4222-8222-222222222222",
+              "source_draft_version": 2,
+              "composer": {
+                "source_gap": {
+                  "id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+                  "source_id": "dismech:disorders/Coronary_Artery_Disease#discussion:cad_pgsxc_reverse_causation",
+                  "source_revision": "8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd"
+                },
+                "eaggl_anchors": [
+                  {
+                    "reference": {
+                      "source": "eaggl",
+                      "source_id": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                      "source_revision": "5797893b517def4fdc82f285c9bf835195f9f88eddfb6409cbf3b1e31dd63d83",
+                      "dapper_id": "dapper:Mechanism.MyhahXB55tDUS667sJzeJZ40BeeQBWOR"
+                    },
+                    "origin": "manual",
+                    "suggestion_id": null
+                  }
+                ],
+                "dismissed_source_ids": [],
+                "mechanism_subquery": "CADinT2D",
+                "model": "cfde-inc-v2",
+                "selected_kgs": [
+                  "biomarkerkg",
+                  "prokn"
+                ]
+              },
+              "question_id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+              "document": {
+                "knowledge_gaps": [
+                  {
+                    "text": "Are the CAD PGS×context interactions driven by adverse exposures causally amplifying genetic risk, or are some \"contexts\" actually downstream readouts of incipient disease (reverse causation)?",
+                    "gap_description": "Population PGS×context analyses (Nagpal & Gibson 2026, PMID:42443528) are largely unable to establish the causality of specific contexts. dismech separates true environmental exposures (smoking, high-fat diet, sedentary lifestyle) from biochemical readouts (LDL, HDL, C-reactive protein); the biochemical \"contexts\" are prime reverse-causation suspects, since they may be partly downstream of the atherosclerotic process rather than upstream drivers, and behavioural contexts such as reduced physical activity may be rapid responses to incipient angina rather than causes. Distinguishing genuine amplification of genetic effects from reverse causation determines whether the modelled interventions (e.g. lowering cholesterol in high-PGS smokers) would actually reduce risk.",
+                    "gap_kind": "KNOWLEDGE_GAP",
+                    "scope": "Coronary Artery Disease",
+                    "about_entities": [
+                      "http://purl.obolibrary.org/obo/MONDO_0021661"
+                    ],
+                    "id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk"
+                  }
+                ]
+              },
+              "attribution": {
+                "user_id": "11111111-1111-4111-8111-111111111111",
+                "person_id": "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he",
+                "display_name": "Example Researcher",
+                "orcid": null,
+                "orcid_authenticated": false,
+                "observed_at": "2026-09-24T16:00:00Z",
+                "principal_kind": "registered"
+              },
+              "submitted_at": "2026-09-24T16:01:00Z",
+              "linked_dismech_context": [
+                {
+                  "source": "dismech",
+                  "source_id": "dismech:disorders/Coronary_Artery_Disease#/pathophysiology/0",
+                  "source_revision": "d7ea32f7d5b2101e19136522bece815085f1aee34898ab451acda840ae5809dc",
+                  "dapper_id": "dapper:Mechanism.Tbd3TXttvLnVp5rlCDkdPYOWlFOfRUG2"
+                }
+              ]
+            },
+            "state": "ready",
+            "created_at": "2026-09-24T16:00:00Z",
+            "last_activity": "2026-09-24T16:00:00Z",
+            "last_action": "created",
+            "expires_at": "2026-12-01T00:00:00Z",
+            "reference_generation_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "package_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "package_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "last_error": null,
+            "preparation_operation_id": "88888888-8888-4888-8888-888888888888",
+            "submissions": [],
+            "grants": [],
+            "mcp_url": "https://api.reveal.example.org/mcp",
+            "prompt": "Use the downloaded frozen seed and anonymous public MCP tools. Sign in and explicitly approve access before private reads, uploads, validation or submission.",
+            "instructions": {
+              "codex": "Run python3 start.py codex in the downloaded folder. Add --login only when ready to connect.",
+              "claude_code": "Run python3 start.py claude in the downloaded folder. Add --login only when ready to connect."
+            },
+            "local_work_id": "77777777-7777-4777-8777-777777777777"
+          },
+          "closed": {
+            "id": "77777777-7777-4777-8777-777777777777",
+            "research_request_id": "33333333-3333-4333-8333-333333333333",
+            "request": {
+              "id": "33333333-3333-4333-8333-333333333333",
+              "owner_user_id": "11111111-1111-4111-8111-111111111111",
+              "source_draft_id": "22222222-2222-4222-8222-222222222222",
+              "source_draft_version": 2,
+              "composer": {
+                "source_gap": {
+                  "id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+                  "source_id": "dismech:disorders/Coronary_Artery_Disease#discussion:cad_pgsxc_reverse_causation",
+                  "source_revision": "8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd"
+                },
+                "eaggl_anchors": [
+                  {
+                    "reference": {
+                      "source": "eaggl",
+                      "source_id": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                      "source_revision": "5797893b517def4fdc82f285c9bf835195f9f88eddfb6409cbf3b1e31dd63d83",
+                      "dapper_id": "dapper:Mechanism.MyhahXB55tDUS667sJzeJZ40BeeQBWOR"
+                    },
+                    "origin": "manual",
+                    "suggestion_id": null
+                  }
+                ],
+                "dismissed_source_ids": [],
+                "mechanism_subquery": "CADinT2D",
+                "model": "cfde-inc-v2",
+                "selected_kgs": [
+                  "biomarkerkg",
+                  "prokn"
+                ]
+              },
+              "question_id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+              "document": {
+                "knowledge_gaps": [
+                  {
+                    "text": "Are the CAD PGS×context interactions driven by adverse exposures causally amplifying genetic risk, or are some \"contexts\" actually downstream readouts of incipient disease (reverse causation)?",
+                    "gap_description": "Population PGS×context analyses (Nagpal & Gibson 2026, PMID:42443528) are largely unable to establish the causality of specific contexts. dismech separates true environmental exposures (smoking, high-fat diet, sedentary lifestyle) from biochemical readouts (LDL, HDL, C-reactive protein); the biochemical \"contexts\" are prime reverse-causation suspects, since they may be partly downstream of the atherosclerotic process rather than upstream drivers, and behavioural contexts such as reduced physical activity may be rapid responses to incipient angina rather than causes. Distinguishing genuine amplification of genetic effects from reverse causation determines whether the modelled interventions (e.g. lowering cholesterol in high-PGS smokers) would actually reduce risk.",
+                    "gap_kind": "KNOWLEDGE_GAP",
+                    "scope": "Coronary Artery Disease",
+                    "about_entities": [
+                      "http://purl.obolibrary.org/obo/MONDO_0021661"
+                    ],
+                    "id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk"
+                  }
+                ]
+              },
+              "attribution": {
+                "user_id": "11111111-1111-4111-8111-111111111111",
+                "person_id": "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he",
+                "display_name": "Example Researcher",
+                "orcid": null,
+                "orcid_authenticated": false,
+                "observed_at": "2026-09-24T16:00:00Z",
+                "principal_kind": "registered"
+              },
+              "submitted_at": "2026-09-24T16:01:00Z",
+              "linked_dismech_context": [
+                {
+                  "source": "dismech",
+                  "source_id": "dismech:disorders/Coronary_Artery_Disease#/pathophysiology/0",
+                  "source_revision": "d7ea32f7d5b2101e19136522bece815085f1aee34898ab451acda840ae5809dc",
+                  "dapper_id": "dapper:Mechanism.Tbd3TXttvLnVp5rlCDkdPYOWlFOfRUG2"
+                }
+              ]
+            },
+            "state": "closed",
+            "created_at": "2026-09-24T16:00:00Z",
+            "last_activity": "2026-09-24T16:00:00Z",
+            "last_action": "created",
+            "expires_at": "2026-12-01T00:00:00Z",
+            "reference_generation_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "package_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "package_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "last_error": null,
+            "preparation_operation_id": "88888888-8888-4888-8888-888888888888",
+            "submissions": [],
+            "grants": [],
+            "mcp_url": "https://api.reveal.example.org/mcp",
+            "prompt": "Use the downloaded frozen seed and anonymous public MCP tools. Sign in and explicitly approve access before private reads, uploads, validation or submission.",
+            "instructions": {
+              "codex": "Run python3 start.py codex in the downloaded folder. Add --login only when ready to connect.",
+              "claude_code": "Run python3 start.py claude in the downloaded folder. Add --login only when ready to connect."
+            },
+            "local_work_id": "77777777-7777-4777-8777-777777777777",
+            "closed_at": "2026-09-24T16:00:00Z"
+          }
+        }
+      }
+    },
+    "curl": "curl -X GET https://api.reveal.example.org/v1/local-work/77777777-7777-4777-8777-777777777777 -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
+  },
+  {
+    "operation_id": "getLocalWorkPackage",
+    "case": "request",
+    "method": "GET",
+    "path_template": "/v1/local-work/{work_id}/package",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/local-work/77777777-7777-4777-8777-777777777777/package",
+      "path": {
+        "work_id": "77777777-7777-4777-8777-777777777777"
+      },
+      "query": {},
+      "headers": {
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
+        "Accept": "application/json"
+      },
+      "body": null
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/json",
+        "examples": {
+          "preparing": {
+            "state": "preparing",
+            "operation_id": "88888888-8888-4888-8888-888888888888"
+          },
+          "ready": {
+            "package_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "package_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "package": {
+              "package_version": "reveal.evidence-package/0.2-draft",
+              "seed_version": "reveal.research-seed/1",
+              "retrieval_mode": "progressive",
+              "research_request_id": "33333333-3333-4333-8333-333333333333",
+              "reference_generation_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            "manifest": {
+              "format": "illustrative contract metadata; hashes are placeholders"
+            },
+            "artifacts": [],
+            "authoring_instructions": "Use the downloaded frozen seed and anonymous public MCP tools. Sign in and explicitly approve access before private reads, uploads, validation or submission."
+          }
+        }
+      }
+    },
+    "curl": "curl -X GET https://api.reveal.example.org/v1/local-work/77777777-7777-4777-8777-777777777777/package -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
+  },
+  {
+    "operation_id": "closeLocalWork",
+    "case": "close",
+    "method": "POST",
+    "path_template": "/v1/local-work/{work_id}/close",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/local-work/77777777-7777-4777-8777-777777777777/close",
+      "path": {
+        "work_id": "77777777-7777-4777-8777-777777777777"
+      },
+      "query": {},
+      "headers": {
+        "Idempotency-Key": "66666666-6666-4666-8666-666666666666",
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      },
+      "body": {}
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/json",
+        "examples": {
+          "closed": {
+            "id": "77777777-7777-4777-8777-777777777777",
+            "research_request_id": "33333333-3333-4333-8333-333333333333",
+            "request": {
+              "id": "33333333-3333-4333-8333-333333333333",
+              "owner_user_id": "11111111-1111-4111-8111-111111111111",
+              "source_draft_id": "22222222-2222-4222-8222-222222222222",
+              "source_draft_version": 2,
+              "composer": {
+                "source_gap": {
+                  "id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+                  "source_id": "dismech:disorders/Coronary_Artery_Disease#discussion:cad_pgsxc_reverse_causation",
+                  "source_revision": "8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd"
+                },
+                "eaggl_anchors": [
+                  {
+                    "reference": {
+                      "source": "eaggl",
+                      "source_id": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                      "source_revision": "5797893b517def4fdc82f285c9bf835195f9f88eddfb6409cbf3b1e31dd63d83",
+                      "dapper_id": "dapper:Mechanism.MyhahXB55tDUS667sJzeJZ40BeeQBWOR"
+                    },
+                    "origin": "manual",
+                    "suggestion_id": null
+                  }
+                ],
+                "dismissed_source_ids": [],
+                "mechanism_subquery": "CADinT2D",
+                "model": "cfde-inc-v2",
+                "selected_kgs": [
+                  "biomarkerkg",
+                  "prokn"
+                ]
+              },
+              "question_id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+              "document": {
+                "knowledge_gaps": [
+                  {
+                    "text": "Are the CAD PGS×context interactions driven by adverse exposures causally amplifying genetic risk, or are some \"contexts\" actually downstream readouts of incipient disease (reverse causation)?",
+                    "gap_description": "Population PGS×context analyses (Nagpal & Gibson 2026, PMID:42443528) are largely unable to establish the causality of specific contexts. dismech separates true environmental exposures (smoking, high-fat diet, sedentary lifestyle) from biochemical readouts (LDL, HDL, C-reactive protein); the biochemical \"contexts\" are prime reverse-causation suspects, since they may be partly downstream of the atherosclerotic process rather than upstream drivers, and behavioural contexts such as reduced physical activity may be rapid responses to incipient angina rather than causes. Distinguishing genuine amplification of genetic effects from reverse causation determines whether the modelled interventions (e.g. lowering cholesterol in high-PGS smokers) would actually reduce risk.",
+                    "gap_kind": "KNOWLEDGE_GAP",
+                    "scope": "Coronary Artery Disease",
+                    "about_entities": [
+                      "http://purl.obolibrary.org/obo/MONDO_0021661"
+                    ],
+                    "id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk"
+                  }
+                ]
+              },
+              "attribution": {
+                "user_id": "11111111-1111-4111-8111-111111111111",
+                "person_id": "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he",
+                "display_name": "Example Researcher",
+                "orcid": null,
+                "orcid_authenticated": false,
+                "observed_at": "2026-09-24T16:00:00Z",
+                "principal_kind": "registered"
+              },
+              "submitted_at": "2026-09-24T16:01:00Z",
+              "linked_dismech_context": [
+                {
+                  "source": "dismech",
+                  "source_id": "dismech:disorders/Coronary_Artery_Disease#/pathophysiology/0",
+                  "source_revision": "d7ea32f7d5b2101e19136522bece815085f1aee34898ab451acda840ae5809dc",
+                  "dapper_id": "dapper:Mechanism.Tbd3TXttvLnVp5rlCDkdPYOWlFOfRUG2"
+                }
+              ]
+            },
+            "state": "closed",
+            "created_at": "2026-09-24T16:00:00Z",
+            "last_activity": "2026-09-24T16:00:00Z",
+            "last_action": "created",
+            "expires_at": "2026-12-01T00:00:00Z",
+            "reference_generation_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "package_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "package_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "last_error": null,
+            "preparation_operation_id": "88888888-8888-4888-8888-888888888888",
+            "submissions": [],
+            "grants": [],
+            "mcp_url": "https://api.reveal.example.org/mcp",
+            "prompt": "Use the downloaded frozen seed and anonymous public MCP tools. Sign in and explicitly approve access before private reads, uploads, validation or submission.",
+            "instructions": {
+              "codex": "Run python3 start.py codex in the downloaded folder. Add --login only when ready to connect.",
+              "claude_code": "Run python3 start.py claude in the downloaded folder. Add --login only when ready to connect."
+            },
+            "local_work_id": "77777777-7777-4777-8777-777777777777",
+            "closed_at": "2026-09-24T16:00:00Z"
+          }
+        }
+      }
+    },
+    "curl": "curl -X POST https://api.reveal.example.org/v1/local-work/77777777-7777-4777-8777-777777777777/close -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{}'"
+  },
+  {
+    "operation_id": "issueLocalResearchGrant",
+    "case": "connect",
+    "method": "POST",
+    "path_template": "/v1/local-work/{work_id}/grants",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/local-work/77777777-7777-4777-8777-777777777777/grants",
+      "path": {
+        "work_id": "77777777-7777-4777-8777-777777777777"
+      },
+      "query": {},
+      "headers": {
+        "Idempotency-Key": "66666666-6666-4666-8666-666666666666",
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      },
+      "body": {}
+    },
+    "responses": {
+      "201": {
+        "content_type": "application/json",
+        "examples": {
+          "connection": {
+            "grant_id": "99999999-9999-4999-8999-999999999999",
+            "expires_at": "2026-11-01T00:00:00Z",
+            "local_work_id": "77777777-7777-4777-8777-777777777777",
+            "token": "rvlm_FICTIONAL_EXAMPLE_DO_NOT_USE",
+            "mcp_url": "https://api.reveal.example.org/mcp",
+            "prompt": "Use the downloaded frozen seed and anonymous public MCP tools. Sign in and explicitly approve access before private reads, uploads, validation or submission.",
+            "instructions": {
+              "codex": "Run python3 start.py codex in the downloaded folder. Add --login only when ready to connect.",
+              "claude_code": "Run python3 start.py claude in the downloaded folder. Add --login only when ready to connect."
+            }
+          }
+        }
+      }
+    },
+    "curl": "curl -X POST https://api.reveal.example.org/v1/local-work/77777777-7777-4777-8777-777777777777/grants -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{}'"
+  },
+  {
+    "operation_id": "revokeLocalResearchGrant",
+    "case": "request",
+    "method": "DELETE",
+    "path_template": "/v1/local-work/{work_id}/grants/{grant_id}",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/local-work/77777777-7777-4777-8777-777777777777/grants/99999999-9999-4999-8999-999999999999",
+      "path": {
+        "work_id": "77777777-7777-4777-8777-777777777777",
+        "grant_id": "99999999-9999-4999-8999-999999999999"
+      },
+      "query": {},
+      "headers": {
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
+        "Accept": "application/json"
+      },
+      "body": null
+    },
+    "responses": {
+      "204": {
+        "content_type": null,
+        "examples": {}
+      }
+    },
+    "curl": "curl -X DELETE https://api.reveal.example.org/v1/local-work/77777777-7777-4777-8777-777777777777/grants/99999999-9999-4999-8999-999999999999 -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
+  },
+  {
+    "operation_id": "downloadLocalWorkspace",
+    "case": "codex",
+    "method": "POST",
+    "path_template": "/v1/local-work/{work_id}/setup-kit",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/local-work/77777777-7777-4777-8777-777777777777/setup-kit",
+      "path": {
+        "work_id": "77777777-7777-4777-8777-777777777777"
+      },
+      "query": {},
+      "headers": {
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
+        "Content-Type": "application/json",
+        "Accept": "application/zip"
+      },
+      "body": {
+        "client": "codex"
+      }
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/zip",
+        "examples": {}
+      }
+    },
+    "curl": "curl -X POST https://api.reveal.example.org/v1/local-work/77777777-7777-4777-8777-777777777777/setup-kit -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/zip' --data-raw '{\"client\":\"codex\"}' --output workspace.zip"
+  },
+  {
+    "operation_id": "downloadLocalWorkspace",
+    "case": "claude_code",
+    "method": "POST",
+    "path_template": "/v1/local-work/{work_id}/setup-kit",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/local-work/77777777-7777-4777-8777-777777777777/setup-kit",
+      "path": {
+        "work_id": "77777777-7777-4777-8777-777777777777"
+      },
+      "query": {},
+      "headers": {
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
+        "Content-Type": "application/json",
+        "Accept": "application/zip"
+      },
+      "body": {
+        "client": "claude_code"
+      }
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/zip",
+        "examples": {}
+      }
+    },
+    "curl": "curl -X POST https://api.reveal.example.org/v1/local-work/77777777-7777-4777-8777-777777777777/setup-kit -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/zip' --data-raw '{\"client\":\"claude_code\"}' --output workspace.zip"
+  },
+  {
+    "operation_id": "exchangeResearchSetup",
+    "case": "redeem",
+    "method": "POST",
+    "path_template": "/v1/research-setup/exchange",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/research-setup/exchange",
+      "path": {},
+      "query": {},
+      "headers": {
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      },
+      "body": {
+        "ticket": "rvls_FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+        "token_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+      }
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/json",
+        "examples": {
+          "connected": {
+            "grant_id": "99999999-9999-4999-8999-999999999999",
+            "expires_at": "2026-11-01T00:00:00Z",
+            "local_work_id": "77777777-7777-4777-8777-777777777777",
+            "package_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "mcp_url": "https://api.reveal.example.org/mcp"
+          }
+        }
+      }
+    },
+    "curl": "curl -X POST https://api.reveal.example.org/v1/research-setup/exchange -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"ticket\":\"rvls_FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF\",\"token_sha256\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\"}'"
+  },
+  {
+    "operation_id": "revokeLocalSetupTickets",
+    "case": "request",
+    "method": "DELETE",
+    "path_template": "/v1/local-work/{work_id}/setup-tickets",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/local-work/77777777-7777-4777-8777-777777777777/setup-tickets",
+      "path": {
+        "work_id": "77777777-7777-4777-8777-777777777777"
+      },
+      "query": {},
+      "headers": {
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
+        "Accept": "application/json"
+      },
+      "body": null
+    },
+    "responses": {
+      "204": {
+        "content_type": null,
+        "examples": {}
+      }
+    },
+    "curl": "curl -X DELETE https://api.reveal.example.org/v1/local-work/77777777-7777-4777-8777-777777777777/setup-tickets -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
+  },
+  {
+    "operation_id": "getResearchAuthorizationMetadata",
+    "case": "request",
+    "method": "GET",
+    "path_template": "/.well-known/oauth-authorization-server",
+    "request": {
+      "url": "https://api.reveal.example.org/.well-known/oauth-authorization-server",
+      "path": {},
+      "query": {},
+      "headers": {
+        "Accept": "application/json"
+      },
+      "body": null
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/json",
+        "examples": {
+          "metadata": {
+            "issuer": "https://api.reveal.example.org",
+            "authorization_endpoint": "https://api.reveal.example.org/oauth/authorize",
+            "token_endpoint": "https://api.reveal.example.org/oauth/token",
+            "registration_endpoint": "https://api.reveal.example.org/oauth/register",
+            "device_authorization_endpoint": "https://api.reveal.example.org/oauth/device_authorization",
+            "revocation_endpoint": "https://api.reveal.example.org/oauth/revoke",
+            "response_types_supported": [
+              "code"
+            ],
+            "grant_types_supported": [
+              "authorization_code",
+              "refresh_token",
+              "urn:ietf:params:oauth:grant-type:device_code"
+            ],
+            "token_endpoint_auth_methods_supported": [
+              "none"
+            ],
+            "revocation_endpoint_auth_methods_supported": [
+              "none"
+            ],
+            "code_challenge_methods_supported": [
+              "S256"
+            ],
+            "scopes_supported": [
+              "research:read",
+              "research:write"
+            ]
+          }
+        }
+      }
+    },
+    "curl": "curl -X GET https://api.reveal.example.org/.well-known/oauth-authorization-server -H 'Accept: application/json'"
+  },
+  {
+    "operation_id": "getResearchProtectedResourceMetadata",
+    "case": "request",
+    "method": "GET",
+    "path_template": "/.well-known/oauth-protected-resource",
+    "request": {
+      "url": "https://api.reveal.example.org/.well-known/oauth-protected-resource",
+      "path": {},
+      "query": {},
+      "headers": {
+        "Accept": "application/json"
+      },
+      "body": null
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/json",
+        "examples": {
+          "metadata": {
+            "resource": "https://api.reveal.example.org/mcp",
+            "authorization_servers": [
+              "https://api.reveal.example.org"
+            ],
+            "scopes_supported": [
+              "research:read",
+              "research:write"
+            ],
+            "bearer_methods_supported": [
+              "header"
+            ],
+            "resource_name": "Reveal research"
+          }
+        }
+      }
+    },
+    "curl": "curl -X GET https://api.reveal.example.org/.well-known/oauth-protected-resource -H 'Accept: application/json'"
+  },
+  {
+    "operation_id": "getResearchMcpProtectedResourceMetadata",
+    "case": "request",
+    "method": "GET",
+    "path_template": "/.well-known/oauth-protected-resource/mcp",
+    "request": {
+      "url": "https://api.reveal.example.org/.well-known/oauth-protected-resource/mcp",
+      "path": {},
+      "query": {},
+      "headers": {
+        "Accept": "application/json"
+      },
+      "body": null
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/json",
+        "examples": {
+          "metadata": {
+            "resource": "https://api.reveal.example.org/mcp",
+            "authorization_servers": [
+              "https://api.reveal.example.org"
+            ],
+            "scopes_supported": [
+              "research:read",
+              "research:write"
+            ],
+            "bearer_methods_supported": [
+              "header"
+            ],
+            "resource_name": "Reveal research"
+          }
+        }
+      }
+    },
+    "curl": "curl -X GET https://api.reveal.example.org/.well-known/oauth-protected-resource/mcp -H 'Accept: application/json'"
+  },
+  {
+    "operation_id": "registerResearchOAuthClient",
+    "case": "public_client",
+    "method": "POST",
+    "path_template": "/oauth/register",
+    "request": {
+      "url": "https://api.reveal.example.org/oauth/register",
+      "path": {},
+      "query": {},
+      "headers": {
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      },
+      "body": {
+        "client_name": "Illustrative local client",
+        "redirect_uris": [
+          "http://127.0.0.1:8765/callback"
+        ],
+        "grant_types": [
+          "authorization_code",
+          "refresh_token"
+        ],
+        "response_types": [
+          "code"
+        ],
+        "token_endpoint_auth_method": "none",
+        "scope": "research:read research:write"
+      }
+    },
+    "responses": {
+      "201": {
+        "content_type": "application/json",
+        "examples": {
+          "registered": {
+            "client_name": "Illustrative local client",
+            "redirect_uris": [
+              "http://127.0.0.1:8765/callback"
+            ],
+            "grant_types": [
+              "authorization_code",
+              "refresh_token"
+            ],
+            "response_types": [
+              "code"
+            ],
+            "token_endpoint_auth_method": "none",
+            "scope": "research:read research:write",
+            "client_id": "rvlc_FICTIONAL_PUBLIC_CLIENT",
+            "client_id_issued_at": 1791244800
+          }
+        }
+      }
+    },
+    "curl": "curl -X POST https://api.reveal.example.org/oauth/register -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"client_name\":\"Illustrative local client\",\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"redirect_uris\":[\"http://127.0.0.1:8765/callback\"],\"response_types\":[\"code\"],\"scope\":\"research:read research:write\",\"token_endpoint_auth_method\":\"none\"}'"
+  },
+  {
+    "operation_id": "authorizeResearchOAuthClient",
+    "case": "request",
+    "method": "GET",
+    "path_template": "/oauth/authorize",
+    "request": {
+      "url": "https://api.reveal.example.org/oauth/authorize?client_id=rvlc_FICTIONAL_PUBLIC_CLIENT&redirect_uri=http%3A%2F%2F127.0.0.1%3A8765%2Fcallback&response_type=code&code_challenge=FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF&code_challenge_method=S256&resource=https%3A%2F%2Fapi.reveal.example.org%2Fmcp&scope=research%3Aread+research%3Awrite&state=client-state",
+      "path": {},
+      "query": {
+        "client_id": "rvlc_FICTIONAL_PUBLIC_CLIENT",
+        "redirect_uri": "http://127.0.0.1:8765/callback",
+        "response_type": "code",
+        "code_challenge": "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+        "code_challenge_method": "S256",
+        "resource": "https://api.reveal.example.org/mcp",
+        "scope": "research:read research:write",
+        "state": "client-state"
+      },
+      "headers": {
+        "Accept": "application/json"
+      },
+      "body": null
+    },
+    "responses": {
+      "303": {
+        "content_type": null,
+        "examples": {}
+      }
+    },
+    "curl": "curl -X GET 'https://api.reveal.example.org/oauth/authorize?client_id=rvlc_FICTIONAL_PUBLIC_CLIENT&redirect_uri=http%3A%2F%2F127.0.0.1%3A8765%2Fcallback&response_type=code&code_challenge=FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF&code_challenge_method=S256&resource=https%3A%2F%2Fapi.reveal.example.org%2Fmcp&scope=research%3Aread+research%3Awrite&state=client-state' -H 'Accept: application/json'"
+  },
+  {
+    "operation_id": "startResearchDeviceAuthorization",
+    "case": "launcher",
+    "method": "POST",
+    "path_template": "/oauth/device_authorization",
+    "request": {
+      "url": "https://api.reveal.example.org/oauth/device_authorization",
+      "path": {},
+      "query": {},
+      "headers": {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Accept": "application/json"
+      },
+      "body": {
+        "client_id": "reveal-local-launcher",
+        "resource": "https://api.reveal.example.org/mcp",
+        "scope": "research:read research:write",
+        "local_work_id": "77777777-7777-4777-8777-777777777777"
+      }
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/json",
+        "examples": {
+          "pending": {
+            "device_code": "rvld_FICTIONAL_DEVICE_SECRET",
+            "user_code": "ABCD-EFGH",
+            "verification_uri": "https://reveal.example.org/research/connect",
+            "verification_uri_complete": "https://reveal.example.org/research/connect?user_code=ABCD-EFGH",
+            "expires_in": 600,
+            "interval": 5
+          }
+        }
+      }
+    },
+    "curl": "curl -X POST https://api.reveal.example.org/oauth/device_authorization -H 'Content-Type: application/x-www-form-urlencoded' -H 'Accept: application/json' --data-raw 'client_id=reveal-local-launcher&resource=https%3A%2F%2Fapi.reveal.example.org%2Fmcp&scope=research%3Aread+research%3Awrite&local_work_id=77777777-7777-4777-8777-777777777777'"
+  },
+  {
+    "operation_id": "exchangeResearchOAuthToken",
+    "case": "authorization_code",
+    "method": "POST",
+    "path_template": "/oauth/token",
+    "request": {
+      "url": "https://api.reveal.example.org/oauth/token",
+      "path": {},
+      "query": {},
+      "headers": {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Accept": "application/json"
+      },
+      "body": {
+        "grant_type": "authorization_code",
+        "client_id": "rvlc_FICTIONAL_PUBLIC_CLIENT",
+        "resource": "https://api.reveal.example.org/mcp",
+        "code": "rvlac_FICTIONAL_CODE",
+        "redirect_uri": "http://127.0.0.1:8765/callback",
+        "code_verifier": "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
+      }
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/json",
+        "examples": {
+          "tokens": {
+            "access_token": "rvlm_FICTIONAL_ACCESS",
+            "refresh_token": "rvlrt_FICTIONAL_REFRESH",
+            "token_type": "Bearer",
+            "expires_in": 900,
+            "scope": "research:read research:write",
+            "resource": "https://api.reveal.example.org/mcp",
+            "local_work_id": "77777777-7777-4777-8777-777777777777",
+            "package_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "mcp_url": "https://api.reveal.example.org/mcp",
+            "grant_id": "99999999-9999-4999-8999-999999999999"
+          }
+        }
+      }
+    },
+    "curl": "curl -X POST https://api.reveal.example.org/oauth/token -H 'Content-Type: application/x-www-form-urlencoded' -H 'Accept: application/json' --data-raw 'grant_type=authorization_code&client_id=rvlc_FICTIONAL_PUBLIC_CLIENT&resource=https%3A%2F%2Fapi.reveal.example.org%2Fmcp&code=rvlac_FICTIONAL_CODE&redirect_uri=http%3A%2F%2F127.0.0.1%3A8765%2Fcallback&code_verifier=FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF'"
+  },
+  {
+    "operation_id": "exchangeResearchOAuthToken",
+    "case": "device",
+    "method": "POST",
+    "path_template": "/oauth/token",
+    "request": {
+      "url": "https://api.reveal.example.org/oauth/token",
+      "path": {},
+      "query": {},
+      "headers": {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Accept": "application/json"
+      },
+      "body": {
+        "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
+        "client_id": "reveal-local-launcher",
+        "resource": "https://api.reveal.example.org/mcp",
+        "device_code": "rvld_FICTIONAL_DEVICE_SECRET"
+      }
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/json",
+        "examples": {
+          "tokens": {
+            "access_token": "rvlm_FICTIONAL_ACCESS",
+            "refresh_token": "rvlrt_FICTIONAL_REFRESH",
+            "token_type": "Bearer",
+            "expires_in": 900,
+            "scope": "research:read research:write",
+            "resource": "https://api.reveal.example.org/mcp",
+            "local_work_id": "77777777-7777-4777-8777-777777777777",
+            "package_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "mcp_url": "https://api.reveal.example.org/mcp",
+            "grant_id": "99999999-9999-4999-8999-999999999999"
+          }
+        }
+      }
+    },
+    "curl": "curl -X POST https://api.reveal.example.org/oauth/token -H 'Content-Type: application/x-www-form-urlencoded' -H 'Accept: application/json' --data-raw 'grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Adevice_code&client_id=reveal-local-launcher&resource=https%3A%2F%2Fapi.reveal.example.org%2Fmcp&device_code=rvld_FICTIONAL_DEVICE_SECRET'"
+  },
+  {
+    "operation_id": "exchangeResearchOAuthToken",
+    "case": "refresh",
+    "method": "POST",
+    "path_template": "/oauth/token",
+    "request": {
+      "url": "https://api.reveal.example.org/oauth/token",
+      "path": {},
+      "query": {},
+      "headers": {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Accept": "application/json"
+      },
+      "body": {
+        "grant_type": "refresh_token",
+        "client_id": "rvlc_FICTIONAL_PUBLIC_CLIENT",
+        "resource": "https://api.reveal.example.org/mcp",
+        "refresh_token": "rvlrt_FICTIONAL_REFRESH"
+      }
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/json",
+        "examples": {
+          "tokens": {
+            "access_token": "rvlm_FICTIONAL_ACCESS",
+            "refresh_token": "rvlrt_FICTIONAL_REFRESH",
+            "token_type": "Bearer",
+            "expires_in": 900,
+            "scope": "research:read research:write",
+            "resource": "https://api.reveal.example.org/mcp",
+            "local_work_id": "77777777-7777-4777-8777-777777777777",
+            "package_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "mcp_url": "https://api.reveal.example.org/mcp",
+            "grant_id": "99999999-9999-4999-8999-999999999999"
+          }
+        }
+      }
+    },
+    "curl": "curl -X POST https://api.reveal.example.org/oauth/token -H 'Content-Type: application/x-www-form-urlencoded' -H 'Accept: application/json' --data-raw 'grant_type=refresh_token&client_id=rvlc_FICTIONAL_PUBLIC_CLIENT&resource=https%3A%2F%2Fapi.reveal.example.org%2Fmcp&refresh_token=rvlrt_FICTIONAL_REFRESH'"
+  },
+  {
+    "operation_id": "revokeResearchOAuthConnection",
+    "case": "refresh",
+    "method": "POST",
+    "path_template": "/oauth/revoke",
+    "request": {
+      "url": "https://api.reveal.example.org/oauth/revoke",
+      "path": {},
+      "query": {},
+      "headers": {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Accept": "application/json"
+      },
+      "body": {
+        "client_id": "reveal-local-launcher",
+        "token": "rvlrt_FICTIONAL_REFRESH",
+        "token_type_hint": "refresh_token"
+      }
+    },
+    "responses": {
+      "200": {
+        "content_type": null,
+        "examples": {}
+      }
+    },
+    "curl": "curl -X POST https://api.reveal.example.org/oauth/revoke -H 'Content-Type: application/x-www-form-urlencoded' -H 'Accept: application/json' --data-raw 'client_id=reveal-local-launcher&token=rvlrt_FICTIONAL_REFRESH&token_type_hint=refresh_token'"
+  },
+  {
+    "operation_id": "getResearchOAuthConsent",
+    "case": "request",
+    "method": "GET",
+    "path_template": "/v1/research-oauth/consent",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/research-oauth/consent?request_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "path": {},
+      "query": {
+        "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+      },
+      "headers": {
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
+        "Accept": "application/json"
+      },
+      "body": null
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/json",
+        "examples": {
+          "device": {
+            "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "kind": "device",
+            "client_id": "reveal-local-launcher",
+            "client_name": "Reveal local launcher",
+            "scopes": [
+              "research:read",
+              "research:write"
+            ],
+            "resource": "https://api.reveal.example.org/mcp",
+            "requested_local_work_id": "77777777-7777-4777-8777-777777777777",
+            "redirect_uri": null,
+            "expires_at": "2026-10-06T12:10:00Z",
+            "status": "pending",
+            "requires_registered": true
+          }
+        }
+      }
+    },
+    "curl": "curl -X GET 'https://api.reveal.example.org/v1/research-oauth/consent?request_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
+  },
+  {
+    "operation_id": "decideResearchOAuthConsent",
+    "case": "approve",
+    "method": "POST",
+    "path_template": "/v1/research-oauth/consent",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/research-oauth/consent",
+      "path": {},
+      "query": {},
+      "headers": {
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      },
+      "body": {
+        "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "local_work_id": "77777777-7777-4777-8777-777777777777",
+        "approve": true
+      }
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/json",
+        "examples": {
+          "device_approved": {
+            "approved": true,
+            "local_work_id": "77777777-7777-4777-8777-777777777777"
+          },
+          "device_denied": {
+            "approved": false
+          },
+          "code_redirect": {
+            "redirect_url": "http://127.0.0.1:8765/callback?code=rvlac_FICTIONAL&state=client-state&iss=https://api.reveal.example.org"
+          }
+        }
+      }
+    },
+    "curl": "curl -X POST https://api.reveal.example.org/v1/research-oauth/consent -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"approve\":true,\"local_work_id\":\"77777777-7777-4777-8777-777777777777\",\"request_id\":\"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\"}'"
+  },
+  {
+    "operation_id": "decideResearchOAuthConsent",
+    "case": "decline",
+    "method": "POST",
+    "path_template": "/v1/research-oauth/consent",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/research-oauth/consent",
+      "path": {},
+      "query": {},
+      "headers": {
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      },
+      "body": {
+        "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "approve": false
+      }
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/json",
+        "examples": {
+          "device_approved": {
+            "approved": true,
+            "local_work_id": "77777777-7777-4777-8777-777777777777"
+          },
+          "device_denied": {
+            "approved": false
+          },
+          "code_redirect": {
+            "redirect_url": "http://127.0.0.1:8765/callback?code=rvlac_FICTIONAL&state=client-state&iss=https://api.reveal.example.org"
+          }
+        }
+      }
+    },
+    "curl": "curl -X POST https://api.reveal.example.org/v1/research-oauth/consent -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"approve\":false,\"request_id\":\"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\"}'"
+  },
+  {
+    "operation_id": "downloadPublicResearchArtifact",
+    "case": "request",
+    "method": "GET",
+    "path_template": "/v1/public-research/captures/{capture_id}/artifacts/{artifact_sha256}",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/public-research/captures/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/artifacts/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "path": {
+        "capture_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "artifact_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      "query": {},
+      "headers": {
+        "Accept": "application/json"
+      },
+      "body": null
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/json",
+        "examples": {}
+      }
+    },
+    "curl": "curl -X GET https://api.reveal.example.org/v1/public-research/captures/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/artifacts/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb -H 'Accept: application/json' --output public-capture.json"
   },
   {
     "operation_id": "getJob",

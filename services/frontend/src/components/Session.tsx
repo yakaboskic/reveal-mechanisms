@@ -135,7 +135,7 @@ export function Session({ children }: { children: ReactNode }) {
         </div>}
       </div>
     </header>
-    {canClaim && claimPromptKnown && !claimDismissed && <div className="continuity continuity-prompt"><button type="button" className="continuity-dismiss" aria-label="Dismiss anonymous work prompt" title="Dismiss for this session" onClick={dismissClaim}><span aria-hidden="true">×</span></button><p>Keep the work from your anonymous session in this signed-in workspace?</p><button type="button" onClick={claim}>Move my anonymous work</button><small>Existing scientific identities and attribution stay unchanged. You can also move this work later from your workspace menu.</small></div>}
+    {pathname !== "/research/connect" && canClaim && claimPromptKnown && !claimDismissed && <div className="continuity continuity-prompt"><button type="button" className="continuity-dismiss" aria-label="Dismiss anonymous work prompt" title="Dismiss for this session" onClick={dismissClaim}><span aria-hidden="true">×</span></button><p>Keep the work from your anonymous session in this signed-in workspace?</p><button type="button" onClick={claim}>Move my anonymous work</button><small>Existing scientific identities and attribution stay unchanged. You can also move this work later from your workspace menu.</small></div>}
     {claimMessage && <p role="status" className="notice">{claimMessage}</p>}
     {children}
   </GapDiscoveryProvider></WorkspaceCacheProvider></SessionContext.Provider>;

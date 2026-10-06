@@ -76,7 +76,7 @@ CREATE TABLE reference_generations(generation_id TEXT PRIMARY KEY, kind TEXT, mo
   eaggl_embedding_run_id TEXT, dismech_import_id TEXT, legacy_mapping_run_id TEXT, legacy_gene_set_import_id TEXT, manifest TEXT,
   cold_export_ref TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE kpn_traits(generation_id TEXT, kpn_trait_id TEXT, legacy_phenotype_id TEXT, phenotype_name TEXT, trait_group TEXT,
-  trait_type TEXT, PRIMARY KEY(generation_id, kpn_trait_id));
+  trait_type TEXT, metadata TEXT, PRIMARY KEY(generation_id, kpn_trait_id));
 CREATE TABLE reference_factors(generation_id TEXT, factor_key TEXT, public_id TEXT, eaggl_factor_id TEXT, kpn_trait_id TEXT,
   factor_number INTEGER, label TEXT, eaggl_import_id TEXT, source_revision TEXT, metadata TEXT, PRIMARY KEY(generation_id, factor_key));
 CREATE TABLE archived_reference_factors(archive_id TEXT PRIMARY KEY, generation_id TEXT, source_id TEXT, snapshot TEXT, captured_at TEXT);
@@ -269,7 +269,7 @@ class CatalogGenerationTests(unittest.TestCase):
                     (generation, kind, model, status, values['eaggl_import_id'], values['eaggl_embedding_run_id'], values['dismech_import_id'],
                      values.get('legacy_mapping_run_id'), values.get('legacy_gene_set_import_id'), canonical({'kind': kind, 'generation': generation})))
         if not factors: return
-        self.db.run('INSERT INTO kpn_traits VALUES (?,?,?,?,?,?)', *[(generation, trait, *TRAITS[trait]) for trait in sorted({row[0] for row in factors})])
+        self.db.run('INSERT INTO kpn_traits VALUES (?,?,?,?,?,?,?)', *[(generation, trait, *TRAITS[trait], '{}') for trait in sorted({row[0] for row in factors})])
         self.db.run('INSERT INTO reference_factors VALUES (?,?,?,?,?,?,?,?,?,?)', *[
             (generation, factor_key(trait, factor), public_id(trait, factor), eaggl, trait, int(factor[6:]), self.label(eaggl, labels),
              EAGGL_IMPORT, revision(generation, factor_key(trait, factor)), json.dumps(kpn_metadata(generation, trait, self.label(eaggl, labels))))
@@ -363,7 +363,8 @@ class CatalogGenerationTests(unittest.TestCase):
             'object_class': 'Mechanism', 'object': node,
             'cfde_anchor': {'node_id': native, 'node_type': 'factor', 'label': 'beta cell stress', 'subtitle': 'Type 2 diabetes (Factor2)'},
             'model': KPN_MODEL, 'reference_generation_id': KPN1,
-            'kpn_trait': {'id': trait, 'name': 'Type 2 diabetes', 'legacy_phenotype_id': 'T2D', 'trait_group': 'metabolic', 'trait_type': 'disease'},
+            'kpn_trait': {'id': trait, 'name': 'Type 2 diabetes', 'legacy_phenotype_id': 'T2D', 'trait_group': 'metabolic', 'trait_type': 'disease',
+                'ontology_mappings': [], 'mapping_interpretations': [], 'mapping_policy_version': 'reveal.trait-identity-eligibility/2'},
             'catalog_file': runtime.file('cfde-factor.json', canonical_json(meta), 'application/json')})
         self.assertIs(catalog.factor_legacy[key], catalog.factors[native])
         self.assertEqual(catalog.bindings[native], {'eaggl_factor_id': 'T2D::Factor2', 'factor_key': key, 'kpn_trait_id': trait,

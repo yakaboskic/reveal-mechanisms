@@ -10,6 +10,7 @@ sys.path.insert(0, str(ROOT / 'services/backend/src'))
 
 from reveal_backend.evidence_collector import collect_package
 from reveal_backend.evidence_package import DapperRuntime, EvidenceBuildError, build_package, load_build_input
+from reveal_backend.runtime_config import CURRENT_DAPPER_SNAPSHOT
 
 
 def main(argv=None):
@@ -29,7 +30,9 @@ def main(argv=None):
     replay.add_argument('--input', required=True, type=Path, help='Saved build-input.json')
     replay.add_argument('--source-root', type=Path, help='Artifact root; defaults to the input file directory')
     for command in [collect, replay]:
-        command.add_argument('--dapper-snapshot', type=Path, default=ROOT / 'data/dapper/2026-09-24-v8')
+        # Replay keeps the original explicitly selected historical default.
+        default = CURRENT_DAPPER_SNAPSHOT if command is collect else ROOT / 'data/dapper/2026-09-24-v8'
+        command.add_argument('--dapper-snapshot', type=Path, default=default)
         command.add_argument('--output', required=True, type=Path)
     args = parser.parse_args(argv)
     try:

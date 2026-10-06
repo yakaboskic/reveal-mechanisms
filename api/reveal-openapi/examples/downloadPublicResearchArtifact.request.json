@@ -1,0 +1,25 @@
+{
+  "operation_id": "downloadPublicResearchArtifact",
+  "case": "request",
+  "method": "GET",
+  "path_template": "/v1/public-research/captures/{capture_id}/artifacts/{artifact_sha256}",
+  "request": {
+    "url": "https://api.reveal.example.org/v1/public-research/captures/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/artifacts/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "path": {
+      "capture_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "artifact_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    "query": {},
+    "headers": {
+      "Accept": "application/json"
+    },
+    "body": null
+  },
+  "responses": {
+    "200": {
+      "content_type": "application/json",
+      "examples": {}
+    }
+  },
+  "curl": "curl -X GET https://api.reveal.example.org/v1/public-research/captures/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/artifacts/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb -H 'Accept: application/json' --output public-capture.json"
+}

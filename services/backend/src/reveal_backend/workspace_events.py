@@ -20,6 +20,7 @@ log = logging.getLogger(__name__)
 COLLECTIONS = {
     'draft': ['drafts', 'gaps'], 'exploration': ['gaps', 'explorations'],
     'request': ['requests', 'gaps'], 'job': ['jobs', 'gaps'],
+    'local_work': ['jobs'], 'research_operation': ['jobs'],
     'account': ['accounts', 'gaps'], 'account_membership': ['accounts', 'gaps'],
     'paragraph': ['accounts'], 'publication': ['accounts', 'gaps'],
     'analysis_outcome': ['explorations', 'gaps'], 'outcome_summary': ['explorations', 'gaps'],
@@ -50,6 +51,20 @@ def track(tx, kind, identity, owner, data, old=None, operation='upsert', revisio
         # must not repeatedly re-fetch every workspace list.
         keys = ('status', 'stage', 'result', 'failure', 'warnings')
         if all(old['data'].get(key) == data.get(key) for key in keys) and old['owner'] == owner: return
+    if kind in ('local_work', 'research_operation'):
+        # Research Runs includes local work and its submissions. Data retrieval,
+        # credentials and lease/activity heartbeats do not change that list.
+        if kind == 'local_work':
+            if data.get('job_id'): return  # Hosted runs already emit job events.
+            keys = ('state', 'package_id', 'package_sha256', 'last_error', 'expires_at', 'closed_at')
+        else:
+            if data.get('kind') not in ('validate', 'submit'): return
+            keys = ('state', 'result', 'error', 'report', 'account_ids', 'reused_account_ids',
+                'validation_only', 'completed_at')
+        if old and old['owner'] == owner and all(old['data'].get(key) == data.get(key) for key in keys): return
+        if kind == 'research_operation':
+            work = tx.get('local_work', data.get('local_work_id'))
+            if not work or work['owner'] != owner or work['data'].get('job_id'): return
     owners = {owner}
     if old: owners.add(old['owner'])
     for audience in owners:

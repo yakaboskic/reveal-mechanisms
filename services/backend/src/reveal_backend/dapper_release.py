@@ -65,12 +65,20 @@ def prepare_agent_workspace(workspace, project_root, package_path, lock_path):
     release = clone_release(workspace / 'dapper', lock_path)
     project = workspace / 'reveal'
     relative_files = ['scripts/lint_scientific_account.py', 'services/backend/agent-runtime/dapper-release.json',
+                     'services/backend/agent-runtime/authoring-schema-dependencies.json',
+                     'services/backend/agent-runtime/linkml-types-1.11.1.yaml',
                      'services/backend/src/reveal_backend/__init__.py',
                      'services/backend/src/reveal_backend/evidence_package.py',
                      'services/backend/src/reveal_backend/evidence_files.py',
+                     'services/backend/src/reveal_backend/evidence_reader.py',
+                     'services/backend/src/reveal_backend/authoring_contract.py',
+                     'services/backend/agent-runtime/authoring-schema-excerpt.yaml',
+                     'services/backend/agent-runtime/authoring-examples.json',
+                     'docs/authoring-contract.md', 'docs/local-agent-mcp.md', 'docs/local-workspaces-and-authentication.md',
                      'services/backend/src/reveal_backend/dapper_release.py',
                      'services/backend/src/reveal_backend/scientific_account_lint.py',
                      'services/backend/src/reveal_backend/source_validation.py',
+                     'services/backend/src/reveal_backend/relationship_provenance.py',
                      'services/backend/agent-skills/construct-scientific-account/SKILL.md',
                      'services/backend/agent-skills/read-evidence-package/SKILL.md',
                      'docs/evidence-package.md', 'docs/scientific-account-construction.md', 'docs/pigean-claim-model.md',
@@ -80,12 +88,6 @@ def prepare_agent_workspace(workspace, project_root, package_path, lock_path):
         target = project / relative; target.parent.mkdir(parents=True, exist_ok=True)
         data = lock_path.read_bytes() if relative.endswith('dapper-release.json') else (project_root / relative).read_bytes()
         target.write_bytes(data); copied[relative] = sha256(data)
-    for name in ('construct-scientific-account', 'read-evidence-package'):
-        skill = project / f'.claude/skills/{name}/SKILL.md'
-        skill.parent.mkdir(parents=True)
-        skill_source = project / f'services/backend/agent-skills/{name}/SKILL.md'
-        skill.write_text(skill_source.read_text().replace('../../../../docs/', '../../../docs/'))
-        copied[str(skill.relative_to(project))] = sha256(skill.read_bytes())
     inputs = project / 'input'; inputs.mkdir()
     (inputs / 'evidence-package.json').write_bytes(package_bytes)
     for source in package['source_artifacts'].values():
@@ -95,6 +97,44 @@ def prepare_agent_workspace(workspace, project_root, package_path, lock_path):
         data = origin.read_bytes()
         require(sha256(data) == source['sha256'], f'Source artifact checksum mismatch: {relative}')
         target.parent.mkdir(parents=True, exist_ok=True); target.write_bytes(data)
+    kit = package.get('authoring_kit', {})
+    pinned = kit.get('version') == 'reveal.research-authoring-kit/2'
+    if pinned:
+        entries = kit.get('files')
+        require(isinstance(entries, list) and sha256(canonical_json(entries)) == kit.get('kit_sha256'),
+                'Frozen authoring kit manifest changed')
+        # Pin scientific prose and schema/examples while keeping executable
+        # runtime code supplied by the trusted deployment. Do not execute an
+        # older copied implementation merely because it accompanies a seed.
+        allowed = {name for name in relative_files if name.endswith(('.md', '.yaml', 'authoring-examples.json'))}
+        allowed.update(('input/package-sections/authoring-schema-excerpt.yaml',
+                        'input/package-sections/authoring-examples.json',
+                        'services/backend/agent-runtime/authoring-schema-dependencies.json'))
+        installed = {}
+        for entry in entries:
+            relative = entry.get('path')
+            source = package['source_artifacts'].get(entry.get('artifact_id'), {})
+            require(source.get('sha256') == entry.get('sha256'), 'Frozen authoring source binding changed')
+            origin = (inputs / source.get('path', '')).resolve()
+            require(origin.is_relative_to(inputs) and origin.is_file(), 'Frozen authoring source is unavailable')
+            data = origin.read_bytes()
+            require(sha256(data) == entry['sha256'] and len(data) == source.get('size_bytes'), 'Frozen authoring source changed')
+            if relative == 'services/backend/agent-runtime/dapper-release.json':
+                require(data == lock_path.read_bytes(), 'Frozen authoring release differs from the hosted validator release')
+            if relative not in allowed: continue
+            require(relative not in installed or installed[relative] == entry['sha256'], 'Conflicting frozen authoring path')
+            target = project / relative
+            target.parent.mkdir(parents=True, exist_ok=True); target.write_bytes(data)
+            installed[relative] = copied[relative] = sha256(data)
+        for relative in ({name for name in relative_files if name.endswith('.md')} |
+                         {'input/package-sections/authoring-schema-excerpt.yaml', 'input/package-sections/authoring-examples.json'}):
+            require(relative in installed, 'Frozen authoring kit is missing required file: '+relative)
+    for name in ('construct-scientific-account', 'read-evidence-package'):
+        skill = project / f'.claude/skills/{name}/SKILL.md'
+        skill.parent.mkdir(parents=True)
+        skill_source = project / f'services/backend/agent-skills/{name}/SKILL.md'
+        skill.write_text(skill_source.read_text().replace('../../../../docs/', '../../../docs/'))
+        copied[str(skill.relative_to(project))] = sha256(skill.read_bytes())
     instruction_updates = []
     for instruction in [package['authoring']['skill'], package['authoring']['contract'], *package['authoring']['references']]:
         current_hash = copied.get(instruction['path'])
@@ -103,7 +143,8 @@ def prepare_agent_workspace(workspace, project_root, package_path, lock_path):
                                         'runtime_sha256': current_hash})
     manifest = {'runtime_version': 'reveal.agent-runtime/1', 'dapper': release, 'python_dependencies': dependencies,
                 'evidence_package_sha256': sha256(package_bytes), 'bundle_files': copied,
-                'authoring_instructions': {'source': 'trusted runtime bundle', 'updates_from_package': instruction_updates},
+                'authoring_instructions': {'source': 'frozen authoring kit' if pinned else 'trusted runtime bundle',
+                    'kit_sha256': kit.get('kit_sha256') if pinned else None, 'updates_from_package': instruction_updates},
                 'working_directory': str(project), 'dapper_root': str(workspace / 'dapper'),
                 'evidence_package': str(inputs / 'evidence-package.json'),
                 'release_lock': str(project / 'services/backend/agent-runtime/dapper-release.json')}

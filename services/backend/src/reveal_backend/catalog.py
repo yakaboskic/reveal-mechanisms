@@ -20,11 +20,12 @@ import threading
 from time import monotonic
 from .auth import Problem
 from .repository import Repository, canonical, digest, now
-from .runtime_config import ROOT, setting, mysql_connection
+from .runtime_config import ROOT, CURRENT_DAPPER_SNAPSHOT, setting, mysql_connection
 from .evidence_package import DapperRuntime, canonical_json, sha256
 from .eaggl_embeddings import database_search_index
 from .embedding_client import get_embeddings
 from .dismech_embeddings import context_input, load_context_vectors
+from .mapping_identity import POLICY_VERSION, interpreted_mappings, normalize_disease_id
 from .vector_retrieval import UpstashFactorIndex, VectorUnavailable, retrieve_native, query_vector_provenance
 from .vector_ingestion import VectorRegistry
 from .reference_generation import (GENERATION_RE, KPN_KIND, KPN_MODEL, LEGACY_KIND, LEGACY_MODEL, ReferenceError as ReferenceInvariant,
@@ -39,8 +40,8 @@ GENERATION_TTL_SECONDS = 5.0
 SERVED_STATUSES = ('complete', 'superseded')
 SERVED_KINDS = {LEGACY_KIND: LEGACY_MODEL, KPN_KIND: KPN_MODEL}
 KPN_FACTOR_COLUMNS = ('factor_key', 'label', 'public_id', 'eaggl_factor_id', 'kpn_trait_id', 'factor_number', 'eaggl_import_id',
-                      'source_revision', 'metadata', 'phenotype_name', 'legacy_phenotype_id', 'trait_group', 'trait_type')
-KPN_FACTORS = ('SELECT ' + ','.join('f.' + column for column in KPN_FACTOR_COLUMNS[:9]) + ',' + ','.join('t.' + column for column in KPN_FACTOR_COLUMNS[9:])
+                      'source_revision', 'metadata', 'phenotype_name', 'legacy_phenotype_id', 'trait_group', 'trait_type', 'trait_metadata')
+KPN_FACTORS = ('SELECT ' + ','.join('f.' + column for column in KPN_FACTOR_COLUMNS[:9]) + ',' + ','.join('t.' + column for column in KPN_FACTOR_COLUMNS[9:-1]) + ',t.metadata'
                + ' FROM reference_factors f JOIN kpn_traits t ON t.generation_id=f.generation_id AND t.kpn_trait_id=f.kpn_trait_id'
                ' WHERE f.generation_id=%s ORDER BY f.kpn_trait_id,f.factor_number')
 
@@ -222,7 +223,7 @@ class Catalog:
             if isinstance(row['metadata'], (str, bytes)): row['metadata'] = json.loads(row['metadata'])
         return rows
     def _load(self, generation_id):
-        runtime = getattr(self, 'runtime', None) or DapperRuntime(ROOT / 'data/dapper/2026-09-24-v8')
+        runtime = getattr(self, 'runtime', None) or DapperRuntime(CURRENT_DAPPER_SNAPSHOT)
         self.runtime = runtime
         connection = mysql_connection()
         try:
@@ -311,7 +312,11 @@ class Catalog:
             node = {'name': row['name'], 'description': row.get('description') or row['name']}
             node['id'] = runtime.compute_id(node, 'Mechanism', runtime.schema)
             self.mechanisms[row['id']] = {'source': 'dismech', 'source_id': row['id'], 'source_revision': self.file_hashes[row['source_file']],
-                'object_class': 'Mechanism', 'object': node, 'disease_label': row.get('document_name', '')}
+                'object_class': 'Mechanism', 'object': node, 'disease_label': row.get('document_name', ''),
+                'source_detail': {'source_file': row['source_file'],
+                    'source_pointer': row.get('source_pointer', row.get('json_pointer')),
+                    'import_id': self.dismech_import, 'source_commit': self.source_commit,
+                    'payload_sha256': sha256(canonical_json(row)), 'raw': deepcopy(row)}}
         for row in gap_rows:
             raw = row['raw']
             node = {'text': raw['prompt'], 'gap_description': raw.get('rationale') or raw['prompt'], 'gap_kind': row['kind'], 'scope': row['document_name']}
@@ -351,12 +356,19 @@ class Catalog:
         generation = self.reference_generation_id
         for row in rows:
             native, trait, factor, label, phenotype, metadata = (row[key] for key in ('public_id', 'kpn_trait_id', 'factor', 'label', 'phenotype_name', 'metadata'))
-            node = mechanism_node(native, phenotype, trait, factor, label)
+            trait_metadata = row.get('trait_metadata') or {}
+            if isinstance(trait_metadata, (str, bytes)): trait_metadata = json.loads(trait_metadata)
+            mappings = deepcopy(trait_metadata.get('ontology_mappings', []))
+            node = mechanism_node(native, phenotype, trait, factor, label,
+                identity_version=((getattr(self, 'generation_record', None) or {}).get('manifest') or {}).get('mechanism_identity_version', 1),
+                eaggl_import_id=self.eaggl_import)
             node['id'] = runtime.compute_id(node, 'Mechanism', runtime.schema)
             record = {'source': 'eaggl', 'source_id': native, 'source_revision': row['source_revision'], 'object_class': 'Mechanism', 'object': node,
                 'cfde_anchor': {'node_id': native, 'node_type': 'factor', 'label': label, 'subtitle': f'{phenotype} ({factor})'},
                 'model': KPN_MODEL, 'reference_generation_id': generation,
-                'kpn_trait': {'id': trait, 'name': phenotype, 'legacy_phenotype_id': row['legacy_phenotype_id'], 'trait_group': row['trait_group'], 'trait_type': row['trait_type']},
+                'kpn_trait': {'id': trait, 'name': phenotype, 'legacy_phenotype_id': row['legacy_phenotype_id'], 'trait_group': row['trait_group'], 'trait_type': row['trait_type'],
+                    'ontology_mappings': mappings, 'mapping_interpretations': interpreted_mappings(mappings),
+                    'mapping_policy_version': POLICY_VERSION},
                 'catalog_file': runtime.file('cfde-factor.json', canonical_json(metadata), 'application/json')}
             self.factors[native] = record; self.factor_legacy[row['factor_key']] = record
             self.bindings[native] = {'eaggl_factor_id': row['eaggl_factor_id'], 'factor_key': row['factor_key'], 'kpn_trait_id': trait,
@@ -587,6 +599,27 @@ class Catalog:
             fresh = index.query_vectors([texts[i] for i in missing], embedder=get_embeddings)
             resolved.update(zip(missing, fresh))
         return np.stack([resolved[i] for i in range(len(texts))])
+
+    def disease_factors(self, gap, remaining, exclude):
+        """Eligible exact disease identity is a retrieval reason, never scientific support."""
+        self.load()
+        diseases = {normalize_disease_id(value) for value in gap['object'].get('about_entities', [])} - {None}
+        if not diseases or remaining <= 0: return []
+        candidates = []
+        for native, factor in sorted(self.factors.items()):
+            if native in exclude: continue
+            trait = factor.get('kpn_trait', {})
+            # Re-evaluate raw mappings with this policy rather than trusting an old derived flag.
+            matches = [item for item in interpreted_mappings(trait.get('ontology_mappings', []))
+                       if item['identity_eligible'] and item['normalized_target_id'] in diseases]
+            if not matches: continue
+            matched = matches[0]
+            candidates.append({'record': factor, 'ranking': {'value': 1, 'metric': 'eligible_disease_identity', 'rank': len(candidates)+1},
+                'contexts': [gap['object']['id']], 'reason': 'Pinned trait mapping matches the selected disease '+matched['normalized_target_id']+'. Inspect for relevance; this is not biological support.',
+                'retrieval': {'strategy': 'disease_identity', 'policy_version': POLICY_VERSION,
+                    'reference_generation_id': factor.get('reference_generation_id'), 'trait_id': trait.get('id'),
+                    'mapping_index': matched['mapping_index'], 'normalized_target_id': matched['normalized_target_id']}})
+        return candidates[:remaining]
 
     def suggest_factors(self,contexts,mode,remaining,exclude,*,precomputed=False):
         self.load()

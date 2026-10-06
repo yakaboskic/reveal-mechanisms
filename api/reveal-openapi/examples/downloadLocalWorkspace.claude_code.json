@@ -1,0 +1,28 @@
+{
+  "operation_id": "downloadLocalWorkspace",
+  "case": "claude_code",
+  "method": "POST",
+  "path_template": "/v1/local-work/{work_id}/setup-kit",
+  "request": {
+    "url": "https://api.reveal.example.org/v1/local-work/77777777-7777-4777-8777-777777777777/setup-kit",
+    "path": {
+      "work_id": "77777777-7777-4777-8777-777777777777"
+    },
+    "query": {},
+    "headers": {
+      "Authorization": "Bearer <api-key-or-gateway-assertion>",
+      "Content-Type": "application/json",
+      "Accept": "application/zip"
+    },
+    "body": {
+      "client": "claude_code"
+    }
+  },
+  "responses": {
+    "200": {
+      "content_type": "application/zip",
+      "examples": {}
+    }
+  },
+  "curl": "curl -X POST https://api.reveal.example.org/v1/local-work/77777777-7777-4777-8777-777777777777/setup-kit -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/zip' --data-raw '{\"client\":\"claude_code\"}' --output workspace.zip"
+}

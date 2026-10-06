@@ -1,0 +1,29 @@
+{
+  "version": "reveal.gene-crosswalk/1",
+  "provider": "HGNC",
+  "taxon": "NCBITaxon:9606",
+  "source_release": "HGNC download captured 2026-10-06; exact bytes pinned by source_sha256",
+  "documentation_url": "https://www.genenames.org/download/statistics-and-files/",
+  "captured_at": "2026-10-06",
+  "files": [
+    {
+      "path": "hgnc_complete_set.tsv.gz",
+      "source_url": "https://storage.googleapis.com/public-download-files/hgnc/tsv/tsv/hgnc_complete_set.txt",
+      "last_modified": "Tue, 06 Oct 2026 13:38:36 GMT",
+      "sha256": "442e3c99073f5f590b5a0ec7355030dc3c2526ae2f79a0cacd95d550d32e41c1",
+      "source_sha256": "8bf6f686e640dbc864a346484626953621b0500d900d26cd085a35c2782d725d",
+      "size_bytes": 4059028,
+      "source_size_bytes": 16973125
+    },
+    {
+      "path": "withdrawn.tsv.gz",
+      "source_url": "https://storage.googleapis.com/public-download-files/hgnc/tsv/tsv/withdrawn.txt",
+      "last_modified": "Tue, 06 Oct 2026 13:38:35 GMT",
+      "sha256": "83d3620c2663c6ea623aec5a3a6eb2ab2a739a244a9e3e1a89908b705107e424",
+      "source_sha256": "9328a7361ed5149bf7901cae52c6c30b832b8ec55af22146ea296081278a3140",
+      "size_bytes": 58703,
+      "source_size_bytes": 258994
+    }
+  ],
+  "mapping_revision": "ab3d238c6ec7fee150e8199064a41fd2ef814165170a2429229706acbf8aafbb"
+}

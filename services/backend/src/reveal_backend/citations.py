@@ -39,6 +39,16 @@ def grant(tx, user, target):
 
 
 def get(tx, user, target, revision=1):
+    from .scientific_reuse import retained_citations
+    retained = retained_citations(tx, user, target)
+    if retained is not None:
+        pinned_revision = revision if revision is not None else max((item['metadata_revision'] for item in retained), default=1)
+        selected = [item for item in retained if item['metadata_revision'] == pinned_revision]
+        if selected:
+            if any(item != selected[0] for item in selected):
+                raise Problem(409, 'REUSE_PAYLOAD_CONFLICT', 'Conflicting retained citation revision.')
+            return deepcopy(selected[0])
+        raise Problem(404, 'CITATION_NOT_FOUND', 'The exact authorized citation revision is unavailable.')
     if revision is None:
         revisions = [r['data']['metadata_revision'] for r in tx.list('citation') if r['data']['target_id'] == target]
         revision = max(revisions, default=1)
@@ -63,7 +73,7 @@ def representation(tx, user, target, format='native', revision=None, locale='en-
     raise Problem(422, 'CITATION_FORMAT_UNAVAILABLE', 'Choose native, csl-json, bibtex, biblatex, apa or mla.')
 
 
-def register(tx, user, document, attribution, generated_at, *, runtime=None):
+def register(tx, user, document, attribution, generated_at, *, runtime=None, retained_citation_metadata=(), retained_object_ids=()):
     """Called inside trusted scientific acceptance, never from a browser body.
 
     Reusing a digest grants access to its unchanged first registry revision.
@@ -76,9 +86,27 @@ def register(tx, user, document, attribution, generated_at, *, runtime=None):
     provenance = {'source_ref': 'urn:reveal:registration:' + uid(), 'recorded_at': stamp}
     lock = json.loads((ROOT / 'services/backend/agent-runtime/dapper-release.json').read_text())
     records = []
+    retained = {}
+    for record in retained_citation_metadata:
+        validate_record(record)
+        key = record['target_id']
+        previous = retained.setdefault(key, {})
+        revision = record['metadata_revision']
+        if revision in previous and previous[revision] != record:
+            raise Problem(409,'REUSE_PAYLOAD_CONFLICT','Conflicting payloads for a pinned citation revision.')
+        previous[revision] = deepcopy(record)
     for group, cls in [('knowledge_gaps', 'KnowledgeGap'), ('questions', 'Question'), ('claims', 'Claim')]:
         for node in document.get(group, []):
             identity = node['id']
+            if identity in retained:
+                # These records arrived through a server-authorized reuse
+                # receipt. Retain the exact original attribution/revision;
+                # borrowing never issues the legacy permanent target grant.
+                records.extend(deepcopy(retained[identity][revision]) for revision in sorted(retained[identity]))
+                continue
+            if identity in retained_object_ids:
+                # Missing historical metadata is unknown, not current authorship.
+                continue
             existing = tx.get('citation', f'{identity}:1')
             grant(tx, user, identity)
             if existing:

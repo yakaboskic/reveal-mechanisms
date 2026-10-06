@@ -1,0 +1,231 @@
+{
+  "checked_at": "2026-10-06T15:26:46.529683+00:00",
+  "format": "reveal.dapper-release-compatibility/1",
+  "historical_snapshot": {
+    "all_manifested_file_hashes_match": true,
+    "base_commit": "ebfc471049240c23d6ce1d3d40cd2785b35e6443",
+    "manifested_file_count": 83,
+    "path": "data/dapper/2026-09-24-v8",
+    "root_schema_sha256": "219769c9874a3c0a7d6972360d5847a8b344e412a8b9f4e2648f059682440345",
+    "snapshot_sha256": "801fb347c54c036c15345d132d302171fc6cd74c1f75a03a5c59c937f5ed7d11"
+  },
+  "identity": {
+    "field_semantics_checked": [
+      "range",
+      "is_a",
+      "mixins",
+      "multivalued",
+      "inlined",
+      "inlined_as_list",
+      "identifier"
+    ],
+    "frozen_vectors": {
+      "all_match_frozen_expected_ids_in_both_processes": true,
+      "count": 9,
+      "results": [
+        {
+          "computed_id": "dapper:Activity.b4IAIg_sR6RfE5ZFf0zU_BNbfpz5A_2g",
+          "expected_id": "dapper:Activity.b4IAIg_sR6RfE5ZFf0zU_BNbfpz5A_2g",
+          "matches": true,
+          "name": "minimal-activity"
+        },
+        {
+          "computed_id": "dapper:Activity.b4IAIg_sR6RfE5ZFf0zU_BNbfpz5A_2g",
+          "expected_id": "dapper:Activity.b4IAIg_sR6RfE5ZFf0zU_BNbfpz5A_2g",
+          "matches": true,
+          "name": "activity-timestamp-changed"
+        },
+        {
+          "computed_id": "dapper:Activity.6lyFLWpOxTJk-OaihI-wkOBE8fcDlI0q",
+          "expected_id": "dapper:Activity.6lyFLWpOxTJk-OaihI-wkOBE8fcDlI0q",
+          "matches": true,
+          "name": "activity-command-changed"
+        },
+        {
+          "computed_id": "dapper:Dataset._TJalk13dpLd3WHGnBsv73tuiGlYZVXg",
+          "expected_id": "dapper:Dataset._TJalk13dpLd3WHGnBsv73tuiGlYZVXg",
+          "matches": true,
+          "name": "dataset-creators-ordered"
+        },
+        {
+          "computed_id": "dapper:Dataset._yYpAh_bIWZIwtjTQf1obCqGA19B8z2X",
+          "expected_id": "dapper:Dataset._yYpAh_bIWZIwtjTQf1obCqGA19B8z2X",
+          "matches": true,
+          "name": "dataset-creators-reversed"
+        },
+        {
+          "computed_id": "dapper:Dataset.UIypYwZSXzkH0bQAutCVyev07HmQZZp8",
+          "expected_id": "dapper:Dataset.UIypYwZSXzkH0bQAutCVyev07HmQZZp8",
+          "matches": true,
+          "name": "nested-reference-substitution"
+        },
+        {
+          "computed_id": "dapper:GeneProgram.TcCFYMbd8N6Usvp16eQAgQhWw0WPr4w0",
+          "expected_id": "dapper:GeneProgram.TcCFYMbd8N6Usvp16eQAgQhWw0WPr4w0",
+          "matches": true,
+          "name": "minimal-gene-program"
+        },
+        {
+          "computed_id": "dapper:GeneProgram.RkjL2cpmspK5ZuK6_fzESv-Sts0gHGKc",
+          "expected_id": "dapper:GeneProgram.RkjL2cpmspK5ZuK6_fzESv-Sts0gHGKc",
+          "matches": true,
+          "name": "gene-program-gene-count-changed"
+        },
+        {
+          "computed_id": "dapper:CellState.Odfn6Ab5WmbeI0CFX5gMLAaW1GpQHfD8",
+          "expected_id": "dapper:CellState.Odfn6Ab5WmbeI0CFX5gMLAaW1GpQHfD8",
+          "matches": true,
+          "name": "cell-state-references-program"
+        }
+      ]
+    },
+    "historical_class_count": 76,
+    "historical_document_groups_unchanged": true,
+    "historical_examples": {
+      "adding_has_embedding_preserves_all_585_historical_record_ids": true,
+      "all_original_graph_documents_verify_and_remain_identical_after_remint_in_both_processes": true,
+      "all_original_single_instance_ids_match_in_both_processes": true,
+      "graph_document_count": 11,
+      "graph_record_count": 579,
+      "graph_results_equal_between_processes": true,
+      "graph_results_sha256": "5f288262cff6793db7e2dac79f80fc55eb70d0a77254856acbe8d531687decc1",
+      "single_instance_count": 6,
+      "single_instance_results": [
+        {
+          "class": "CellState",
+          "computed_id": "dapper:CellState.IHQJzYsI_9y0ko81oIgyNSgdi15cOn85",
+          "expected_id": "dapper:CellState.IHQJzYsI_9y0ko81oIgyNSgdi15cOn85",
+          "has_embedding_identity_unchanged": true,
+          "matches": true,
+          "path": "schema/examples/example_cell_state.yaml"
+        },
+        {
+          "class": "Dataset",
+          "computed_id": "dapper:Dataset.5ljqZzdPKrXY_x2WjHFC896hzF7JSHGJ",
+          "expected_id": "dapper:Dataset.5ljqZzdPKrXY_x2WjHFC896hzF7JSHGJ",
+          "has_embedding_identity_unchanged": true,
+          "matches": true,
+          "path": "schema/examples/example_dataset.yaml"
+        },
+        {
+          "class": "GeneProgram",
+          "computed_id": "dapper:GeneProgram.c3BuK-YYanBJtDBVs3iPkQCWKVcX33Sv",
+          "expected_id": "dapper:GeneProgram.c3BuK-YYanBJtDBVs3iPkQCWKVcX33Sv",
+          "has_embedding_identity_unchanged": true,
+          "matches": true,
+          "path": "schema/examples/example_gene_program.yaml"
+        },
+        {
+          "class": "GeneSetCollection",
+          "computed_id": "dapper:GeneSetCollection.QF4WtSBZjQgVPIASB2-LFLet72zpOgGS",
+          "expected_id": "dapper:GeneSetCollection.QF4WtSBZjQgVPIASB2-LFLet72zpOgGS",
+          "has_embedding_identity_unchanged": true,
+          "matches": true,
+          "path": "schema/examples/example_geneset_collection.yaml"
+        },
+        {
+          "class": "MechanisticModel",
+          "computed_id": "dapper:MechanisticModel.swjcpBMoSp1bh5AoBhbA1mcZXGmk8PK4",
+          "expected_id": "dapper:MechanisticModel.swjcpBMoSp1bh5AoBhbA1mcZXGmk8PK4",
+          "has_embedding_identity_unchanged": true,
+          "matches": true,
+          "path": "schema/examples/example_mechanistic_model.yaml"
+        },
+        {
+          "class": "Nanopublication",
+          "computed_id": "dapper:Nanopublication.DgWZJuP2B5fR112cJx88fnPuS7PTpd5q",
+          "expected_id": "dapper:Nanopublication.DgWZJuP2B5fR112cJx88fnPuS7PTpd5q",
+          "has_embedding_identity_unchanged": true,
+          "matches": true,
+          "path": "schema/examples/example_nanopub.yaml"
+        }
+      ],
+      "single_instance_results_equal_between_processes": true
+    },
+    "historical_hashable_field_semantics_changed": [],
+    "historical_hashable_field_semantics_sha256": "45c6c89f04e9bdc87aed480594b96fdee2980e92813778bdc9c8d8f01e4d1502",
+    "historical_hashable_fields_changed": [],
+    "historical_hashable_fields_sha256": "2c3b844c2961585de21e4a9e8ccf4436a52e46a2179ff0b8ecd59ba3c63b6882",
+    "identity_source_equal_except_embedding_document_group": true,
+    "new_classes": [
+      "Embedding",
+      "HasEmbedding"
+    ],
+    "new_document_groups": {
+      "embeddings": "Embedding"
+    },
+    "profile_new": "DAPPER-ID-1",
+    "profile_old": "DAPPER-ID-1"
+  },
+  "limitations": [
+    "No full existing catalog or frozen researcher workspace was loaded, revalidated, reminted or modified. These checks cover the pinned schemas and supplied upstream fixtures, not every possible historical record.",
+    "No researcher account, hosted paid research, scientific-source re-query, submission, publication or deployment was used.",
+    "Embedding is additive in 0.2.0; historical workspaces pinned to v8 must continue using their own original release pins and cannot assume the new Embedding class is present.",
+    "The official identity CLI requires ruamel.yaml for on-disk YAML round trips. That upstream test dependency was installed only into a temporary directory; runtime requirements were not modified."
+  ],
+  "method": [
+    "Load each snapshot identity module and SchemaView in a distinct fresh Python subprocess; compare every historical class induced hashable slot and identity-relevant slot metadata.",
+    "Replay historical frozen vectors against both implementations. Verify and remint each historical graph example in memory, compare whole resulting documents, compute every standalone example identity with its self ID, and add synthetic inverse embedding references to verify unchanged target identities.",
+    "Compare normalized raw schema definitions and exact scientific/provenance validator bytes; run targeted official upstream tests using only temporary pytest output directories.",
+    "Recheck every manifested source file hash and the official checkout git status after testing."
+  ],
+  "release_snapshot": {
+    "all_manifested_file_hashes_match": true,
+    "base_commit": "e44a913619c4c9832df6aeaac6a80dbf691ba120",
+    "manifested_file_count": 84,
+    "path": "data/dapper/0.2.0",
+    "root_schema_sha256": "305fbd8f3a3ad01a7584892c1be2937b5a25a5741a8fef17851039ff8cf44e25",
+    "snapshot_sha256": "bdbbc8d7583754a868a3bc22d7c976e21bccedd5ce24b600c2b43972e5b31a23",
+    "source": "https://github.com/broadinstitute/dapper.git",
+    "tag": "0.2.0",
+    "tested_upstream_checkout_commit": "e44a913619c4c9832df6aeaac6a80dbf691ba120",
+    "tested_upstream_checkout_matches_all_manifested_files": true,
+    "upstream_checkout_status_after_tests": []
+  },
+  "scientific_contract": {
+    "base_schema_equal_after_removing_only_version_and_embedding_additions": true,
+    "claims_schema_equal_except_version": true,
+    "embedding_identity_semantics": "has_embedding is an unhashable inverse relationship. Embedding identities bind the target, model details, text, generated Activity and vector digest; matrix File and row are unhashable representation locators.",
+    "profile_changes": [
+      "Allow Embedding as a WasGeneratedBy subject.",
+      "Add HasEmbedding edge from Node (including descendants) to Embedding.",
+      "Change bottom-line-result canonical example path from example_bottom_line_result.yaml to example_bottom_line_af_aa.yaml."
+    ],
+    "provenance_linter_byte_identical": true,
+    "provenance_profiles_equal_except_documented_additions_and_example_path": true,
+    "scientific_claims_validator_byte_identical": true
+  },
+  "scope": "Historical v8 schema and fixture identity compatibility with official DAPPER 0.2.0; targeted upstream tests only. This is not a full catalog validation.",
+  "tests": {
+    "command": "python -m pytest -p no:cacheprovider --basetemp <isolated-temporary-directory> -q --disable-warnings tests/test_identity.py tests/test_embeddings.py tests/test_claims.py tests/test_lint_provenance.py tests/test_examples.py tests/test_gene_set_collections.py",
+    "environment": {
+      "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+      "PYTHONDONTWRITEBYTECODE": "1",
+      "PYTHONPATH": "Isolated temporary dependency directory containing ruamel.yaml 0.19.1; no repository environment changes."
+    },
+    "final_attempt": {
+      "failed": 0,
+      "passed": 294,
+      "seconds": 24.58,
+      "skipped": 0
+    },
+    "initial_attempt": {
+      "failed": 6,
+      "failure_cause": "Missing upstream test dependency ruamel.yaml in repository .venv; all six failures were identity CLI YAML round-trip tests.",
+      "passed": 288
+    },
+    "log": "compatibility-pytest.log",
+    "log_sha256": "2b8524b76fdb135036795f746e1d2d7196c6334ee9c7898558bb8b9dcc4dbdd8",
+    "runtime": {
+      "PyYAML": "6.0.2",
+      "jsonschema": "4.26.0",
+      "linkml": "1.11.1",
+      "linkml-runtime": "1.11.1",
+      "pytest": "9.1.1",
+      "python": "3.12.8",
+      "rdflib": "7.6.0",
+      "ruamel.yaml": "0.19.1 (isolated temporary installation)"
+    },
+    "source": "Official clean tag checkout, matching pinned snapshot test file hashes."
+  }
+}

@@ -6,6 +6,7 @@ import gzip
 import json
 from pathlib import Path
 import sys
+import subprocess
 
 from jsonschema import Draft202012Validator, FormatChecker, ValidationError
 from openapi_spec_validator import validate_spec
@@ -13,7 +14,9 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 API = ROOT / 'api'
-DAPPER = ROOT / 'data/dapper/2026-09-24-v8/snapshot/schema'
+sys.path.insert(0, str(ROOT / 'services/backend/src'))
+from reveal_backend.runtime_config import CURRENT_DAPPER_SNAPSHOT
+DAPPER = CURRENT_DAPPER_SNAPSHOT / 'snapshot/schema'
 sys.path[:0] = [str(DAPPER / 'identity'), str(DAPPER / 'lint'), str(DAPPER)]
 from dapper_identity import DOC_GROUPS, verify, load_schema
 from scientific_claims import check_scientific_content, index_document
@@ -55,6 +58,14 @@ def main():
                 for ex in media['examples'].values():
                     validate(ex['value'], media['schema']);request_count += 1
             for status, response in op['responses'].items():
+                if status == '204':
+                    assert not response.get('content'), 'No-content responses must not declare a body'
+                    continue
+                if status == '303' or (status == '200' and op['operationId'] == 'revokeResearchOAuthConnection'):
+                    assert op['operationId'] in ('authorizeResearchOAuthClient', 'revokeResearchOAuthConnection')
+                    assert not response.get('content'), 'OAuth redirect/revocation has no response body'
+                    if status == '303': assert response['headers']['Location']['schema']['type'] == 'string'
+                    continue
                 if status == '307':
                     assert op['operationId'] == 'downloadArtifact'
                     assert response['headers']['Location']['schema']['type'] == 'string'
@@ -62,6 +73,10 @@ def main():
                     continue
                 assert response.get('content'), (path, status)
                 for media_type, media in response['content'].items():
+                    if media.get('schema', {}).get('format') == 'binary' and not media.get('examples'):
+                        assert (media_type, op['operationId']) in (('application/zip','downloadLocalWorkspace'),('application/json','downloadPublicResearchArtifact'))
+                        assert not media.get('examples'), 'Binary archives are verified by endpoint tests, not JSON examples'
+                        continue
                     assert media.get('examples'), (path, status, media_type)
                     for ex in media['examples'].values():
                         try: validate(ex['value'], media['schema'])
@@ -116,13 +131,18 @@ def main():
     for ex in exchanges:
         op = spec['paths'][ex['path_template']][ex['method'].lower()]
         if 'requestBody' in op:
-            validate(ex['request']['body'], op['requestBody']['content']['application/json']['schema'])
+            media_type = ex['request']['headers']['Content-Type']
+            assert media_type in ('application/json','application/x-www-form-urlencoded')
+            validate(ex['request']['body'], op['requestBody']['content'][media_type]['schema'])
         for param in op['parameters']:
             where = {'path': 'path', 'query': 'query', 'header': 'headers'}[param['in']]
             values = ex['request'][where]
             if param['required']: assert param['name'] in values
             if param['name'] in values: validate(values[param['name']], param['schema'])
         for status, response in ex['responses'].items():
+            if status == '204' or (ex['operation_id'],status) in (('authorizeResearchOAuthClient','303'),('revokeResearchOAuthConnection','200')):
+                assert response['content_type'] is None and not response['examples']
+                continue
             schema = op['responses'][status]['content'][response['content_type']]['schema']
             for value in response['examples'].values(): validate(value, schema)
 
@@ -131,6 +151,28 @@ def main():
         try: validate(value, {'$ref': '#/components/schemas/' + schema})
         except ValidationError: rejected.append(label)
         else: raise AssertionError('Invalid example accepted: ' + label)
+    reject('OAuth consent without a selected work', {'request_id':'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','approve':True}, 'ResearchOAuthDecision')
+    reject('OAuth consent with ambiguous selectors', {'request_id':'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','user_code':'ABCD-EFGH','approve':False}, 'ResearchOAuthDecision')
+    reject('OAuth consent with caller-selected owner', {'request_id':'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','approve':False,'owner_user_id':'11111111-1111-4111-8111-111111111111'}, 'ResearchOAuthDecision')
+    reject('OAuth confidential-client registration', {'token_endpoint_auth_method':'client_secret_post'}, 'ResearchOAuthRegistration')
+    reject('workspace download with embedded credential', {'client':'codex','ticket':'secret'}, 'LocalWorkspaceSetup')
+    public_capture = {'format':'reveal.public-reference-capture/1','capture_id':'a'*64,'expires_at':'2026-10-13T12:00:00Z',
+        'reference_generation_id':None,'operation':'query_graph','arguments':{'graph':'biomarkerkg','subject':'https://example.org/entity','limit':5},
+        'reader_version':None,'source_mode':'external_kg','source':{'graph_id':'biomarkerkg','generation_id':None,'upstream_release':None},
+        'result':{'items':[]},'raw_sha256':'b'*64,'metric_definitions':{},'dapper_context':{},'source_artifacts':{},'source_ref':None,
+        'dapper_file_id':None,'object_resolution':[],'artifacts':[],'attachment_policy':'Authenticate and attach to a work with this graph selected.'}
+    validate(public_capture, {'$ref':'#/components/schemas/PublicResearchCapture'})
+    validate({**public_capture,'source_mode':'imported_reference','reference_generation_id':'c'*64}, {'$ref':'#/components/schemas/PublicResearchCapture'})
+    reject('external KG capture claiming an imported generation', {**public_capture,'reference_generation_id':'c'*64}, 'PublicResearchCapture')
+    reject('imported capture missing its generation', {**public_capture,'source_mode':'imported_reference'}, 'PublicResearchCapture')
+    reject('public capture with an unknown source mode', {**public_capture,'source_mode':'untrusted_remote'}, 'PublicResearchCapture')
+    assert spec['paths']['/oauth/token']['post']['security'] == []
+    assert spec['paths']['/oauth/token']['post']['requestBody']['content'].keys() == {'application/x-www-form-urlencoded'}
+    for path in ('/oauth/register','/oauth/token','/oauth/device_authorization','/oauth/revoke'):
+        assert 'ResearchOAuthError' in spec['paths'][path]['post']['responses']['400']['content']['application/json']['schema']['$ref']
+    assert spec['paths']['/v1/research-setup/exchange']['post']['deprecated'] is True
+    assert spec['paths']['/v1/local-work/{work_id}/grants']['post']['deprecated'] is True
+    assert spec['components']['schemas']['LocalWorkspaceManifest']['properties']['setup_version']['enum'] == ['reveal.local-setup/2']
     reject('client-selected draft owner', {'owner_user_id': '11111111-1111-4111-8111-111111111111'}, 'DraftCreate')
     reject('job kind mismatch', {'kind': 'paragraph', 'draft_id': '22222222-2222-4222-8222-222222222222', 'draft_version': 2}, 'JobCreate')
     reject('missing optimistic version', {'composer': {}}, 'DraftPatch')
@@ -163,6 +205,12 @@ def main():
     package_schema = json.loads((ROOT / 'schema/evidence-package.schema.json').read_text())
     validator_for(package_schema)(package_schema, format_checker=FormatChecker()).validate(package)
     validate(package, {'$ref':'#/components/schemas/EvidencePackage'})
+    # The immutable example is historical. Verify identities in an isolated
+    # runtime selected by its original approved pin, never relabel it as current.
+    pinned_check = subprocess.run([sys.executable, str(ROOT / 'scripts/evidence_package_schema.py'),
+        'validate', str(package_dir / 'evidence-package.json')], capture_output=True, text=True, check=True)
+    historical_validation = {**json.loads(pinned_check.stdout), 'package': 'examples/evidence-package/evidence-package.json',
+        'original_snapshot_sha256': package['dapper_pin']['snapshot_sha256']}
     assert package['selection']['knowledge_gap_id'] == composer['source_gap']['id']
     mechanism = next(x for x in exchanges if x['operation_id'] == 'getMechanism')['responses']['200']['examples']['eaggl_factor']
     assert package['pigean']['mechanisms'][mechanism['source_id']]['dapper_id'] == mechanism['object']['id']
@@ -175,6 +223,7 @@ def main():
         'parameter_examples_validated': parameter_count, 'request_exchanges_validated': len(exchanges),
         'dapper_documents': scientific, 'citation_records_validated': len(records), 'negative_cases_rejected': rejected,
         'cfde_artifact_checksum': 'passed', 'existing_geneset_payload_and_identity_preserved': gene_set['id'],
+        'historical_evidence_package': historical_validation,
         'no_live_backend_or_agent_executed': True, 'passed': True}
     (API / 'validation.json').write_text(json.dumps(report, indent=2) + '\n')
     print(json.dumps(report, indent=2))

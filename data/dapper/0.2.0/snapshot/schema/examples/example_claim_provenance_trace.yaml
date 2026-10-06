@@ -1,0 +1,389 @@
+# Real upstream dig.geneset provenance with illustrative scientific assessments.
+_illustrative:
+  - dapper:Activity.7BrKLe-sCkAvnEFRdETJfttL_u-MVYJ9
+  - dapper:Claim.TzNWzGw2cPtTCFox0lV0KhX7WxzEkzLP
+  - dapper:Claim.i4AzEVoCdL3lnlLOFbuJXOZcRqgoOtez
+  - dapper:Nanopublication.ASaAaiwJ--cZdCJBC3u4tYrBqb__RsGF
+  - dapper:Nanopublication.9H7jLaHsXBEEMgaYVBbt3SUz_9qGFpye
+  - dapper:NanopubAssertion.H1Q9QeQYXn9z0rnN4GIzGuWEB9o6WisQ
+  - dapper:NanopubAssertion.Uuy1VieV0WDpSPIvJvksi9FYiyixjXU9
+  - dapper:NanopubProvenance.Gb5pCGiB2dLVyN_zHoUXNpelHFZynryQ
+  - dapper:NanopubProvenance.5xqEdmT2Qw3_rFFadPF6yYfCvRgGZrHD
+  - dapper:NanopubPublicationInfo.6a4hNgtNOBllXBFNOj9sixyn7Afw3qjw
+  - dapper:NanopubPublicationInfo.-I-hMLIwXIOIFBF_exGTDdMqIUqVhEYn
+  - dapper:NanopubSignature.VflWc_Nf8F2KZNzQf7MGzQUgUuU9c-p8
+  - dapper:NanopubSignature.F_sFJ0T_9ynxRvjswYiiLZFYgPMgGlpd
+  - dapper:AgenticWorkspace._T8w34F1J1K-OE4-e7bT-_tdqjj8Zb_H
+  - dapper:AgenticWorkspace.ZkRMX4AJp5BqBQDoFK0H12bzTXwTRDKU
+  - dapper:Proposition.uzWQ_35VLw9U8Dg5ju9QaRxvzWVb0RyC
+  - dapper:Proposition.2Rz_JqeQJ1Rsr1N7khXSppi7fEtf9lda
+  - dapper:ClaimScore.IjAauu7qrxMQQkFfzRcxi0we289E1fyg
+  - dapper:MechanisticModel.swjcpBMoSp1bh5AoBhbA1mcZXGmk8PK4
+  - dapper:Activity.Z3Y4RUvk1X9_QE9m3lKAtjadRIB8qwwf
+  - dapper:EvidenceItem.USP7arIMscVljaH8XSciH2Ymq5Wfq15n
+  - dapper:ScientificAccount.nq-PjWsCbchEhDTX3ni0VqQ08mS8IRn7
+  - dapper:Question.F8aLp94gR_SDgAfTlitASsRZsPWVBIx8
+c2m2_files:
+  - id: dapper:C2M2File.zmm9HPij4ShMcqSp9FKSQJpjoZwnhPS7
+    name: gene_attribute_matrix.txt.gz
+    filename: gene_attribute_matrix.txt.gz
+    persistent_id: 6b757af6-b9b0-583e-8846-b0e16b3e57c4
+    c2m2_uuid: 1579915c-f3a0-536d-ad25-3e04a593a050
+    local_id: s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ1/workflow/gene_attribute_matrix.txt.gz
+    md5: 96aZvXyRQHqydJoeaC351g==
+    size_in_bytes: 31222
+  - id: dapper:C2M2File._3fjt8tpJj3hXLW2SLsAF2jiVf_MdA25
+    name: human_gene_info
+    filename: human_gene_info
+    persistent_id: 48b9abef-1545-5e87-9e26-bef6dbd36c09
+    c2m2_uuid: d90c5919-caf8-53e4-abe6-71f854bf4301
+    local_id: https://ftp.ncbi.nih.gov/gene/DATA/GENE_INFO/Mammalia/Homo_sapiens.gene_info.gz
+    md5: hvzbVLFaJJSRJutxecW6lQ==
+    size_in_bytes: 34989436
+  - id: dapper:C2M2File.lrxz_mf5zFwFtA16CBJZBjS2khG6ol5I
+    name: hubmap_unsigned_term_gene.tsv
+    filename: hubmap_unsigned_term_gene.tsv
+    persistent_id: c5da16f0-d42c-52c4-ba9e-9221acb9effd
+    c2m2_uuid: f3bf9c73-7184-582d-ac2b-b39fa6f4baad
+    local_id: s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ2/workflow/hubmap_unsigned_term_gene.tsv
+    md5: /a9nJVKGLpwp/A+RP0F6xQ==
+    size_in_bytes: 385544
+  - id: dapper:C2M2File.Ar46DjfZNYvNDdrp9ayp6amQ1swHCClu
+    name: asctb_geneshot_augmented_genes.tsv
+    filename: asctb_geneshot_augmented_genes.tsv
+    persistent_id: 62453e36-d5b8-5fb5-8fe8-76bc77ae806f
+    c2m2_uuid: 913fc28e-c10f-5529-83cc-412abfafdb89
+    local_id: s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ2/workflow/asctb_geneshot_augmented_genes.tsv
+    md5: TuCrBzqQGNv+HtCqJCZ1QA==
+    size_in_bytes: 22026266
+  - id: dapper:C2M2File.o3nliLvFvGExup49WZvoQbmupUnztc5e
+    name: genesets.gmt
+    filename: genesets.gmt
+    persistent_id: 576cdadd-7d0b-55d8-917f-a9ea29456f28
+    c2m2_uuid: 0f08d646-3f2a-5870-90b4-498f7c72a724
+    local_id: s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ2/extractor/genesets.gmt
+    md5: lpgmArYDypVqkRWP/KQ9Zw==
+    size_in_bytes: 55157
+  - id: dapper:C2M2File.xso09-EbHyvR3wWHYz_NYBEbGGbwhPTn
+    name: geneset.tsv
+    filename: geneset.tsv
+    persistent_id: 3f9cfc06-3275-594d-a1cf-1af3cd14539e
+    c2m2_uuid: 98519f9e-070d-5a60-af1e-be2ab6e8c33f
+    local_id: s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ2/extractor/geneset.tsv
+    md5: i+RX9V+qA0HHxRjgJW4g6A==
+    size_in_bytes: 520234
+  - id: dapper:C2M2File.fdGaORD8yU_jB6Kd6FcGGuo4JHBXyPKj
+    name: geneset.full.tsv
+    filename: geneset.full.tsv
+    persistent_id: 0ddb17ca-f9a0-5e82-baf9-7ca1475eba80
+    c2m2_uuid: 9c043e8b-7369-5bf4-8a66-cbb2d4b13dd6
+    local_id: s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ2/extractor/geneset.full.tsv
+    md5: i+RX9V+qA0HHxRjgJW4g6A==
+    size_in_bytes: 520234
+  - id: dapper:C2M2File.YYtxcmZxlq08XfVKp3AVnVeW8eIT5V0V
+    name: signature_summary.tsv
+    filename: signature_summary.tsv
+    persistent_id: ef8f04dd-1c8c-5c37-ac69-d9d493d7c2d5
+    c2m2_uuid: 25e9a396-c5ed-536e-aedd-c543f4cfd890
+    local_id: s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ2/extractor/signature_summary.tsv
+    md5: Zqbcc0HXE3PZdxemBkbY9w==
+    size_in_bytes: 30480
+  - id: dapper:C2M2File.YkoSyNeV0Y-cQELnJVI5yaTHjKobkrLU
+    name: geneset.meta.json
+    filename: geneset.meta.json
+    persistent_id: f06b158a-d13c-5827-9d7b-d787e01e9cc9
+    c2m2_uuid: b3b0b7b6-c253-5aaf-9606-2eaf45b30a34
+    local_id: s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ2/extractor/geneset.meta.json
+    md5: s5a0fBfnlNslvsPtWCNr0A==
+    size_in_bytes: 10332
+activities:
+  - id: dapper:Activity.PuCB8r1euohreUOudVf2p8-7TFPipARo
+    name: prepare_hubmap_unsigned_term_gene
+    activity_type: workflow
+    entrypoint: geneset-extractors workflows hubmap_asctb_augmented
+    repo_url: https://github.com/flannick/dig-gene-set-extractors
+    code_version: 2fb57130136a8fa25211ef1e77fe13d220e4b115
+    has_agentic_workspace:
+      - dapper:AgenticWorkspace._T8w34F1J1K-OE4-e7bT-_tdqjj8Zb_H
+  - id: dapper:Activity.SK8ZeM7KahCpHb0TkoCrRt9c-aBOXgYP
+    name: generate_402cf4a1f3682a2e5bf1b002
+    activity_type: converter_invocation
+    entrypoint: geneset-extractors convert unsigned_term_gene
+    repo_url: https://github.com/flannick/dig-gene-set-extractors
+    code_version: 2fb57130136a8fa25211ef1e77fe13d220e4b115
+    has_agentic_workspace:
+      - dapper:AgenticWorkspace._T8w34F1J1K-OE4-e7bT-_tdqjj8Zb_H
+  - id: dapper:Activity.7BrKLe-sCkAvnEFRdETJfttL_u-MVYJ9
+    name: reveal_enrichment_dent_disease
+    activity_type: enrichment_analysis
+    entrypoint: reveal enrichment
+    command: reveal enrichment --geneset dapper:GeneSetCollection.vvsPZPAngtszG8nlTsPoqLiDoJ08Yvne --disease MONDO:0015612 --method fishers-exact --fdr 0.05
+    code_version: <reveal-git-sha>
+    generated_at_time: '2026-08-04T20:00:00Z'
+    has_agentic_workspace:
+      - dapper:AgenticWorkspace.ZkRMX4AJp5BqBQDoFK0H12bzTXwTRDKU
+  - id: dapper:Activity.Z3Y4RUvk1X9_QE9m3lKAtjadRIB8qwwf
+    name: Illustrative mechanistic interpretation
+    description: A non-executed curation activity assembling the existing illustrative evidence interpretation.
+agentic_workspaces:
+  - id: dapper:AgenticWorkspace._T8w34F1J1K-OE4-e7bT-_tdqjj8Zb_H
+    name: "dig-gene-set-extractors — HuBMAP HZ2"
+    platform: akleao
+    workspace_url: https://www.akleao.com/fork/dig-geneset-hubmap-hz2
+    workspace_key: dig-geneset-hubmap-hz2
+    agent_model: claude-fable-5
+    regeneration_prompt: "Regenerate HuBMAP gene-set library 402cf4a1f3682a2e5bf1b002 (ASCT+B augmented markers, model HZ2, human, hg38) by re-running both steps of the dig-gene-set-extractors pipeline pinned to commit 2fb57130136a8fa25211ef1e77fe13d220e4b115.\nStep 1 — `geneset-extractors workflows hubmap_asctb_augmented`: take the released ASCT+B marker table (gene_attribute_matrix.txt.gz) and NCBI human_gene_info as inputs, with augmentation_threshold 0.67 and cap_multiplier 4. It should emit hubmap_unsigned_term_gene.tsv and asctb_geneshot_augmented_genes.tsv.\nStep 2 — `geneset-extractors convert unsigned_term_gene` over that table, with emit_small_gene_sets false, gene_id_column gene_id, gene_symbol_column gene_symbol, gmt_min_genes 5, score_column score, term_column term, term_prefix HuBMAP. It should emit the gene set plus genesets.gmt, geneset.tsv, geneset.full.tsv, signature_summary.tsv and geneset.meta.json.\nRecord each step as a NEW Activity with its own C2M2 file outputs and checksums. Do not overwrite the existing provenance. Then compare the regenerated checksums against the originals and report any that differ — any claim of divergence should include the differing checksums."
+  - id: dapper:AgenticWorkspace.ZkRMX4AJp5BqBQDoFK0H12bzTXwTRDKU
+    name: "REVEAL enrichment — Dent disease"
+    platform: akleao
+    workspace_url: https://www.akleao.com/fork/reveal-enrichment-dent
+    workspace_key: reveal-enrichment-dent
+    agent_model: claude-fable-5
+    last_run: '2026-08-04T20:00:00Z'
+    regeneration_prompt: "Re-run the REVEAL enrichment for Dent disease. Load gene set dapper:GeneSetCollection.vvsPZPAngtszG8nlTsPoqLiDoJ08Yvne (HuBMAP ASCT+B augmented marker library, model HZ2, human/hg38) from its C2M2 provenance. Test each named marker set for over-representation among genes implicated in Dent disease (MONDO:0015612) using Fisher's exact test with Benjamini-Hochberg FDR at 0.05. Report every set reaching significance with its odds ratio, raw and adjusted p-values, and overlapping genes. Emit the result as a DAPPER Claim assessing a Proposition about enrichment, preserve each metric in a typed ClaimScore, and record this run as a new Activity — do not overwrite the existing one."
+nanopublications:
+  - id: dapper:Nanopublication.ASaAaiwJ--cZdCJBC3u4tYrBqb__RsGF
+    name: 'Claim: HuBMAP proximal tubule markers are enriched among Dent disease genes'
+    label: PT marker enrichment in Dent disease
+    has_assertion: dapper:NanopubAssertion.H1Q9QeQYXn9z0rnN4GIzGuWEB9o6WisQ
+    has_provenance: dapper:NanopubProvenance.Gb5pCGiB2dLVyN_zHoUXNpelHFZynryQ
+    has_publication_info: dapper:NanopubPublicationInfo.6a4hNgtNOBllXBFNOj9sixyn7Afw3qjw
+    nanopub_type:
+      - draft_nanopub
+    created: '2026-08-04T20:05:00Z'
+    creator:
+      - orcid:0000-0002-1825-0097
+    nanopub_license: https://creativecommons.org/licenses/by/4.0/
+    was_created_at: https://nanodash.knowledgepixels.com/
+    has_signature_element: dapper:NanopubSignature.VflWc_Nf8F2KZNzQf7MGzQUgUuU9c-p8
+  - id: dapper:Nanopublication.9H7jLaHsXBEEMgaYVBbt3SUz_9qGFpye
+    name: 'Biological claim: CLCN5 loss of function causes Dent disease via proximal tubule dysfunction'
+    label: CLCN5 LOF -> PT dysfunction -> Dent disease
+    has_assertion: dapper:NanopubAssertion.Uuy1VieV0WDpSPIvJvksi9FYiyixjXU9
+    has_provenance: dapper:NanopubProvenance.5xqEdmT2Qw3_rFFadPF6yYfCvRgGZrHD
+    has_publication_info: dapper:NanopubPublicationInfo.-I-hMLIwXIOIFBF_exGTDdMqIUqVhEYn
+    has_signature_element: dapper:NanopubSignature.F_sFJ0T_9ynxRvjswYiiLZFYgPMgGlpd
+    nanopub_type:
+      - draft_nanopub
+    created: '2026-08-04T20:10:00Z'
+    creator:
+      - orcid:0000-0002-1825-0097
+    nanopub_license: https://creativecommons.org/licenses/by/4.0/
+nanopub_assertions:
+  - id: dapper:NanopubAssertion.H1Q9QeQYXn9z0rnN4GIzGuWEB9o6WisQ
+    name: "Assertion — the claim being made"
+    asserts: dapper:Claim.TzNWzGw2cPtTCFox0lV0KhX7WxzEkzLP
+    as_sentence: The HuBMAP ASCT+B marker gene set for epithelial cells of the proximal tubule is enriched among genes implicated in Dent disease.
+  - id: dapper:NanopubAssertion.Uuy1VieV0WDpSPIvJvksi9FYiyixjXU9
+    name: "Assertion — the claim being made"
+    asserts: dapper:Claim.i4AzEVoCdL3lnlLOFbuJXOZcRqgoOtez
+    as_sentence: Loss-of-function variants in CLCN5 impair endosomal acidification in proximal tubule epithelial cells, causing the proximal tubule dysfunction that manifests as Dent disease.
+nanopub_provenances:
+  - id: dapper:NanopubProvenance.Gb5pCGiB2dLVyN_zHoUXNpelHFZynryQ
+    name: "Provenance — where the claim came from"
+    provenance_of: dapper:NanopubAssertion.H1Q9QeQYXn9z0rnN4GIzGuWEB9o6WisQ
+    was_attributed_to:
+      - orcid:0000-0002-1825-0097
+    generated_by_activity: dapper:Activity.7BrKLe-sCkAvnEFRdETJfttL_u-MVYJ9
+    derived_from:
+      - dapper:GeneSetCollection.vvsPZPAngtszG8nlTsPoqLiDoJ08Yvne
+      - dapper:C2M2File.lrxz_mf5zFwFtA16CBJZBjS2khG6ol5I
+  - id: dapper:NanopubProvenance.5xqEdmT2Qw3_rFFadPF6yYfCvRgGZrHD
+    name: "Provenance — where the claim came from"
+    provenance_of: dapper:NanopubAssertion.Uuy1VieV0WDpSPIvJvksi9FYiyixjXU9
+    was_attributed_to:
+      - orcid:0000-0002-1825-0097
+    derived_from:
+      - dapper:Nanopublication.ASaAaiwJ--cZdCJBC3u4tYrBqb__RsGF
+      - PMID:25773607
+    generated_by_activity: dapper:Activity.Z3Y4RUvk1X9_QE9m3lKAtjadRIB8qwwf
+nanopub_publication_infos:
+  - id: dapper:NanopubPublicationInfo.6a4hNgtNOBllXBFNOj9sixyn7Afw3qjw
+    name: "Publication info — the PT marker enrichment claim"
+    pubinfo_of: dapper:Nanopublication.ASaAaiwJ--cZdCJBC3u4tYrBqb__RsGF
+  - id: dapper:NanopubPublicationInfo.-I-hMLIwXIOIFBF_exGTDdMqIUqVhEYn
+    name: "Publication info — the CLCN5 mechanism hypothesis"
+    pubinfo_of: dapper:Nanopublication.9H7jLaHsXBEEMgaYVBbt3SUz_9qGFpye
+nanopub_signatures:
+  - id: dapper:NanopubSignature.VflWc_Nf8F2KZNzQf7MGzQUgUuU9c-p8
+    name: "Signature — seals the PT marker enrichment claim"
+    has_algorithm: RSA
+    has_signature: <rsa-signature-over-reveal-hubmap-pt-dent-enrichment>
+    signed_by: orcid:0000-0002-1825-0097
+    has_signature_target: dapper:Nanopublication.ASaAaiwJ--cZdCJBC3u4tYrBqb__RsGF
+  - id: dapper:NanopubSignature.F_sFJ0T_9ynxRvjswYiiLZFYgPMgGlpd
+    name: "Signature — seals the CLCN5 mechanism hypothesis"
+    has_algorithm: RSA
+    has_signature: <rsa-signature-over-clcn5-pt-dysfunction-dent>
+    signed_by: orcid:0000-0002-1825-0097
+    has_signature_target: dapper:Nanopublication.9H7jLaHsXBEEMgaYVBbt3SUz_9qGFpye
+used_edges:
+  - subject: dapper:Activity.PuCB8r1euohreUOudVf2p8-7TFPipARo
+    predicate: prov:used
+    object: dapper:C2M2File.zmm9HPij4ShMcqSp9FKSQJpjoZwnhPS7
+    edge_role: data_input
+  - subject: dapper:Activity.PuCB8r1euohreUOudVf2p8-7TFPipARo
+    predicate: prov:used
+    object: dapper:C2M2File._3fjt8tpJj3hXLW2SLsAF2jiVf_MdA25
+    edge_role: data_input
+  - subject: dapper:Activity.SK8ZeM7KahCpHb0TkoCrRt9c-aBOXgYP
+    predicate: prov:used
+    object: dapper:C2M2File.lrxz_mf5zFwFtA16CBJZBjS2khG6ol5I
+    edge_role: data_input
+  - subject: dapper:Activity.7BrKLe-sCkAvnEFRdETJfttL_u-MVYJ9
+    predicate: prov:used
+    object: dapper:GeneSetCollection.vvsPZPAngtszG8nlTsPoqLiDoJ08Yvne
+    edge_role: data_input
+  - subject: dapper:Activity.Z3Y4RUvk1X9_QE9m3lKAtjadRIB8qwwf
+    predicate: prov:used
+    object: dapper:Claim.TzNWzGw2cPtTCFox0lV0KhX7WxzEkzLP
+was_generated_by_edges:
+  - subject: dapper:C2M2File.Ar46DjfZNYvNDdrp9ayp6amQ1swHCClu
+    predicate: prov:wasGeneratedBy
+    object: dapper:Activity.PuCB8r1euohreUOudVf2p8-7TFPipARo
+  - subject: dapper:C2M2File.o3nliLvFvGExup49WZvoQbmupUnztc5e
+    predicate: prov:wasGeneratedBy
+    object: dapper:Activity.SK8ZeM7KahCpHb0TkoCrRt9c-aBOXgYP
+  - subject: dapper:C2M2File.xso09-EbHyvR3wWHYz_NYBEbGGbwhPTn
+    predicate: prov:wasGeneratedBy
+    object: dapper:Activity.SK8ZeM7KahCpHb0TkoCrRt9c-aBOXgYP
+  - subject: dapper:C2M2File.fdGaORD8yU_jB6Kd6FcGGuo4JHBXyPKj
+    predicate: prov:wasGeneratedBy
+    object: dapper:Activity.SK8ZeM7KahCpHb0TkoCrRt9c-aBOXgYP
+  - subject: dapper:C2M2File.YYtxcmZxlq08XfVKp3AVnVeW8eIT5V0V
+    predicate: prov:wasGeneratedBy
+    object: dapper:Activity.SK8ZeM7KahCpHb0TkoCrRt9c-aBOXgYP
+  - subject: dapper:C2M2File.YkoSyNeV0Y-cQELnJVI5yaTHjKobkrLU
+    predicate: prov:wasGeneratedBy
+    object: dapper:Activity.SK8ZeM7KahCpHb0TkoCrRt9c-aBOXgYP
+  - subject: dapper:C2M2File.lrxz_mf5zFwFtA16CBJZBjS2khG6ol5I
+    predicate: prov:wasGeneratedBy
+    object: dapper:Activity.PuCB8r1euohreUOudVf2p8-7TFPipARo
+  - subject: dapper:GeneSetCollection.vvsPZPAngtszG8nlTsPoqLiDoJ08Yvne
+    predicate: prov:wasGeneratedBy
+    object: dapper:Activity.SK8ZeM7KahCpHb0TkoCrRt9c-aBOXgYP
+  - subject: dapper:Claim.TzNWzGw2cPtTCFox0lV0KhX7WxzEkzLP
+    predicate: prov:wasGeneratedBy
+    object: dapper:Activity.7BrKLe-sCkAvnEFRdETJfttL_u-MVYJ9
+has_agentic_workspace_edges:
+  - subject: dapper:Activity.PuCB8r1euohreUOudVf2p8-7TFPipARo
+    predicate: dapper:hasAgenticWorkspace
+    object: dapper:AgenticWorkspace._T8w34F1J1K-OE4-e7bT-_tdqjj8Zb_H
+  - subject: dapper:Activity.SK8ZeM7KahCpHb0TkoCrRt9c-aBOXgYP
+    predicate: dapper:hasAgenticWorkspace
+    object: dapper:AgenticWorkspace._T8w34F1J1K-OE4-e7bT-_tdqjj8Zb_H
+  - subject: dapper:Activity.7BrKLe-sCkAvnEFRdETJfttL_u-MVYJ9
+    predicate: dapper:hasAgenticWorkspace
+    object: dapper:AgenticWorkspace.ZkRMX4AJp5BqBQDoFK0H12bzTXwTRDKU
+asserted_in_edges:
+  - subject: dapper:Claim.TzNWzGw2cPtTCFox0lV0KhX7WxzEkzLP
+    predicate: hycl:claims
+    object: dapper:Nanopublication.ASaAaiwJ--cZdCJBC3u4tYrBqb__RsGF
+has_assertion_edges:
+  - subject: dapper:Nanopublication.ASaAaiwJ--cZdCJBC3u4tYrBqb__RsGF
+    predicate: np:hasAssertion
+    object: dapper:NanopubAssertion.H1Q9QeQYXn9z0rnN4GIzGuWEB9o6WisQ
+  - subject: dapper:Nanopublication.9H7jLaHsXBEEMgaYVBbt3SUz_9qGFpye
+    predicate: np:hasAssertion
+    object: dapper:NanopubAssertion.Uuy1VieV0WDpSPIvJvksi9FYiyixjXU9
+has_provenance_edges:
+  - subject: dapper:Nanopublication.ASaAaiwJ--cZdCJBC3u4tYrBqb__RsGF
+    predicate: np:hasProvenance
+    object: dapper:NanopubProvenance.Gb5pCGiB2dLVyN_zHoUXNpelHFZynryQ
+  - subject: dapper:Nanopublication.9H7jLaHsXBEEMgaYVBbt3SUz_9qGFpye
+    predicate: np:hasProvenance
+    object: dapper:NanopubProvenance.5xqEdmT2Qw3_rFFadPF6yYfCvRgGZrHD
+claims:
+  - id: dapper:Claim.TzNWzGw2cPtTCFox0lV0KhX7WxzEkzLP
+    name: Proximal tubule marker genes are enriched among Dent disease genes
+    status: proposed
+    was_generated_by: dapper:Activity.7BrKLe-sCkAvnEFRdETJfttL_u-MVYJ9
+    was_derived_from:
+      - dapper:GeneSetCollection.vvsPZPAngtszG8nlTsPoqLiDoJ08Yvne
+    access_level: public
+    has_license: https://creativecommons.org/licenses/by/4.0/
+    asserted_in:
+      - dapper:Nanopublication.ASaAaiwJ--cZdCJBC3u4tYrBqb__RsGF
+    proposition: dapper:Proposition.uzWQ_35VLw9U8Dg5ju9QaRxvzWVb0RyC
+    was_attributed_to:
+      - orcid:0000-0002-1825-0097
+    has_score:
+      - dapper:ClaimScore.IjAauu7qrxMQQkFfzRcxi0we289E1fyg
+    statement: 'Illustrative enrichment assessment: The HuBMAP ASCT+B marker gene set for epithelial cells of the proximal tubule is enriched among genes implicated in Dent disease.'
+  - id: dapper:Claim.i4AzEVoCdL3lnlLOFbuJXOZcRqgoOtez
+    name: CLCN5 loss of function causes Dent disease via proximal tubule dysfunction
+    status: canonical
+    access_level: public
+    asserted_in:
+      - dapper:Nanopublication.9H7jLaHsXBEEMgaYVBbt3SUz_9qGFpye
+    proposition: dapper:Proposition.2Rz_JqeQJ1Rsr1N7khXSppi7fEtf9lda
+    was_attributed_to: &id001
+      - orcid:0000-0002-1825-0097
+    was_generated_by: dapper:Activity.Z3Y4RUvk1X9_QE9m3lKAtjadRIB8qwwf
+    has_evidence:
+      - dapper:EvidenceItem.USP7arIMscVljaH8XSciH2Ymq5Wfq15n
+    statement: 'Illustrative curated biological assessment: Loss-of-function variants in CLCN5 impair endosomal acidification in proximal tubule epithelial cells, causing the proximal tubule dysfunction that manifests as Dent disease.'
+propositions:
+  - id: dapper:Proposition.uzWQ_35VLw9U8Dg5ju9QaRxvzWVb0RyC
+    name: Proximal tubule marker genes are enriched among Dent disease genes
+    statement: The HuBMAP ASCT+B marker gene set for epithelial cells of the proximal tubule is enriched among genes implicated in Dent disease.
+    proposition_kind: RESULT
+  - id: dapper:Proposition.2Rz_JqeQJ1Rsr1N7khXSppi7fEtf9lda
+    name: CLCN5 loss of function causes Dent disease via proximal tubule dysfunction
+    statement: Loss-of-function variants in CLCN5 impair endosomal acidification in proximal tubule epithelial cells, causing the proximal tubule dysfunction that manifests as Dent disease.
+    proposition_kind: BIOLOGICAL_INTERPRETATION
+    mechanistic_model: dapper:MechanisticModel.swjcpBMoSp1bh5AoBhbA1mcZXGmk8PK4
+claim_scores:
+  - id: dapper:ClaimScore.IjAauu7qrxMQQkFfzRcxi0we289E1fyg
+    score_kind: PROBABILITY
+    value: 0.78
+    metric: illustrative_reported_confidence
+    interpretation: "Legacy illustrative confidence in the enrichment proposition, retained on its original 0–1 scale. No analysis or calibration was performed for this example."
+mechanistic_models:
+  - id: dapper:MechanisticModel.swjcpBMoSp1bh5AoBhbA1mcZXGmk8PK4
+    name: CLCN5 LOF -> PT dysfunction -> Dent disease
+    description: Loss-of-function variants in CLCN5 impair endosomal acidification in proximal tubule epithelial cells, causing the proximal tubule dysfunction that manifests as Dent disease.
+    subject_entity: HGNC:2023
+    object_entity: MONDO:0015612
+    dismech_class: dismech:MechanisticHypothesis
+    dismech_disease_term: MONDO:0015612
+evidence_items:
+  - id: dapper:EvidenceItem.USP7arIMscVljaH8XSciH2Ymq5Wfq15n
+    source_claims:
+      - dapper:Claim.TzNWzGw2cPtTCFox0lV0KhX7WxzEkzLP
+    target_proposition: dapper:Proposition.2Rz_JqeQJ1Rsr1N7khXSppi7fEtf9lda
+    direction: SUPPORTS
+    from_nanopub: dapper:Nanopublication.ASaAaiwJ--cZdCJBC3u4tYrBqb__RsGF
+    context: Illustrative interpretation of cell-type enrichment under the proposed proximal-tubule mechanism.
+    assumptions:
+      - Cell-type marker enrichment is relevant to the affected tissue; it does not alone establish the specific causal mechanism.
+    explanation: The illustrative enrichment claim supplies contextual support for proximal-tubule involvement. It does not by itself establish the causal chain in the biological proposition.
+    was_attributed_to: *id001
+    was_generated_by: dapper:Activity.Z3Y4RUvk1X9_QE9m3lKAtjadRIB8qwwf
+scientific_accounts:
+  - id: dapper:ScientificAccount.nq-PjWsCbchEhDTX3ni0VqQ08mS8IRn7
+    name: Illustrative account of proximal-tubule involvement
+    question: dapper:Question.F8aLp94gR_SDgAfTlitASsRZsPWVBIx8
+    hypothesis: dapper:Proposition.2Rz_JqeQJ1Rsr1N7khXSppi7fEtf9lda
+    context: This graph combines real gene-set file provenance with illustrative enrichment and mechanistic assessments. The claims and nanopublications are illustrative, not published scientific claims.
+    component_claims:
+      - dapper:Claim.TzNWzGw2cPtTCFox0lV0KhX7WxzEkzLP
+      - dapper:Claim.i4AzEVoCdL3lnlLOFbuJXOZcRqgoOtez
+    conclusion_claims:
+      - dapper:Claim.i4AzEVoCdL3lnlLOFbuJXOZcRqgoOtez
+    was_generated_by: dapper:Activity.Z3Y4RUvk1X9_QE9m3lKAtjadRIB8qwwf
+    was_attributed_to:
+      - orcid:0000-0002-1825-0097
+questions:
+  - id: dapper:Question.F8aLp94gR_SDgAfTlitASsRZsPWVBIx8
+    name: Inquiry motivating the account
+    text: What evidence bears on proximal-tubule involvement in the proposed disease mechanism?
+gene_set_collections:
+  - id: dapper:GeneSetCollection.vvsPZPAngtszG8nlTsPoqLiDoJ08Yvne
+    name: HuBMAP ASCT+B augmented marker gene-set library (model HZ2)
+    member_type: gene_set
+    n_genes: 1747
+    n_sets: 487
+    organism: human
+    genome_build: hg38
+    has_gmt_file: dapper:C2M2File.o3nliLvFvGExup49WZvoQbmupUnztc5e

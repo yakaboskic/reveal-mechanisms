@@ -1,13 +1,13 @@
 {
   "openapi": "3.1.1",
-  "openapi_sha256": "f3aa4c2ad7275c67a409230a81fe1343e2b8ee6d8ed659cca140f3b4d2a59d27",
-  "paths": 49,
-  "operations": 60,
-  "local_refs_resolved": 826,
-  "request_body_examples_validated": 21,
-  "response_examples_validated": 357,
-  "parameter_examples_validated": 156,
-  "request_exchanges_validated": 78,
+  "openapi_sha256": "f22b3fbc2475b0b3791bc757b0218b03a3227eb237bb706b0a86d32803a227e2",
+  "paths": 68,
+  "operations": 81,
+  "local_refs_resolved": 962,
+  "request_body_examples_validated": 35,
+  "response_examples_validated": 466,
+  "parameter_examples_validated": 179,
+  "request_exchanges_validated": 103,
   "dapper_documents": {
     "scientific-account.dapper.json": {
       "nodes": 52,
@@ -39,6 +39,14 @@
   },
   "citation_records_validated": 13,
   "negative_cases_rejected": [
+    "OAuth consent without a selected work",
+    "OAuth consent with ambiguous selectors",
+    "OAuth consent with caller-selected owner",
+    "OAuth confidential-client registration",
+    "workspace download with embedded credential",
+    "external KG capture claiming an imported generation",
+    "imported capture missing its generation",
+    "public capture with an unknown source mode",
     "client-selected draft owner",
     "job kind mismatch",
     "missing optimistic version",
@@ -54,6 +62,13 @@
   ],
   "cfde_artifact_checksum": "passed",
   "existing_geneset_payload_and_identity_preserved": "dapper:GeneSet.I1UZhVhKU-YDerPLIxtnZOGlTXNAlrgD",
+  "historical_evidence_package": {
+    "package": "examples/evidence-package/evidence-package.json",
+    "package_version": "reveal.evidence-package/0.2-draft",
+    "schema_valid": true,
+    "checked_dapper_objects": 45,
+    "original_snapshot_sha256": "801fb347c54c036c15345d132d302171fc6cd74c1f75a03a5c59c937f5ed7d11"
+  },
   "no_live_backend_or_agent_executed": true,
   "passed": true
 }

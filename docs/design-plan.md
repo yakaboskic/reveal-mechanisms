@@ -148,7 +148,7 @@ Same frozen inputs + builder/dependency/policy pins produce identical bytes. A n
 
 ### Start and observe the agent
 
-Every new attempt invokes [start_research_agent.py](../scripts/start_research_agent.py), which freshly clones DAPPER **0.2.0-a1**, verifies tag/commit/runtime checksums against the [lock](../services/backend/agent-runtime/dapper-release.json), copies inputs/tools/skill and emits `runtime.json`. The lock explicitly allows the historical v8 input snapshot; do not rewrite old packages or remint their objects. Runtime instruction updates are recorded separately from original captured instructions.
+Every new attempt invokes [start_research_agent.py](../scripts/start_research_agent.py), which freshly clones DAPPER **0.2.0**, verifies tag/commit/runtime checksums against the [lock](../services/backend/agent-runtime/dapper-release.json), copies inputs/tools/skill and emits `runtime.json`. The lock explicitly allows the historical v8 input snapshot; do not rewrite old packages or remint their objects. Runtime instruction updates are recorded separately from original captured instructions.
 
 The worker must provision Box, pin Claude Code/model configuration, configure Anthropic/Box credentials and the [MCP template](../services/backend/agent-config/okn.mcp.example.json), enforce read-only mounts for trusted inputs/linter/release, and supply writable output separately. The local helper does not enforce filesystem isolation or create a Box.
 

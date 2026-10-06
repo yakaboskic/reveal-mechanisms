@@ -16,8 +16,8 @@ ROOT = Path(__file__).resolve().parents[1]
 DIRECTORIES = (
     'services/backend/src/', 'services/backend/agent-runtime/',
     'services/backend/agent-skills/', 'services/backend/csl/',
-    'api/', 'schema/', 'docs/', 'data/dapper/2026-09-24-v8/',
-    'data/dismech-gaps/2026-09-24/',
+    'api/', 'schema/', 'docs/', 'data/dapper/2026-09-24-v8/', 'data/dapper/0.2.0/',
+    'data/dismech-gaps/2026-09-24/', 'data/gene-identity/hgnc-2026-10-06/',
 )
 RUNTIME_SCRIPTS = (
     'scripts/lint_scientific_account.py', 'scripts/platform_assets.py',
@@ -27,6 +27,10 @@ FILES = ('.dockerignore', 'services/backend/Dockerfile', 'services/backend/pypro
     'data/cfde-genesets/2026-09-24/manifest.json', 'data/cfde-genesets/2026-09-24/activity.json',
     *RUNTIME_SCRIPTS)
 REQUIRED = (*FILES, 'services/backend/agent-runtime/dapper-release.json',
+    'data/dapper/0.2.0/snapshot.json', 'data/dapper/2026-09-24-v8/snapshot.json',
+    'data/gene-identity/hgnc-2026-10-06/manifest.json',
+    'data/gene-identity/hgnc-2026-10-06/hgnc_complete_set.tsv.gz',
+    'data/gene-identity/hgnc-2026-10-06/withdrawn.tsv.gz',
     'data/dismech-gaps/2026-09-24/manifest.json', 'data/dismech-gaps/2026-09-24/source-files.json')
 
 

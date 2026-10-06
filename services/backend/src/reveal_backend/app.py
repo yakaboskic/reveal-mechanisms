@@ -1,5 +1,6 @@
 """REVEAL public contract and separately authenticated gateway operations."""
 import asyncio
+from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 import hashlib
 import json
@@ -498,15 +499,20 @@ def build_suggestions(body):
     if not contexts: contexts=[(gap['object']['id'],gap['object']['text'])]
     remaining=max(0,5-len(body['manual_eaggl_anchors']))
     precomputed=not bool(body.get('subquery'))
-    items=catalog.suggest_factors(contexts,body.get('mode','semantic'),remaining,exclude,precomputed=precomputed)
+    disease_candidates=getattr(catalog,'disease_factors',lambda *_: [])(gap,remaining,exclude)
+    excluded=exclude | {item['record']['source_id'] for item in disease_candidates}
+    items=disease_candidates+catalog.suggest_factors(contexts,body.get('mode','semantic'),remaining-len(disease_candidates),excluded,precomputed=precomputed)
+    for rank,item in enumerate(items,1):
+        item['ranking']['rank']=rank
+        item.setdefault('reason','Similarity to selected source context; inspect for relevance, not biological support.')
     context_provenance=catalog.context_embedding_provenance(contexts) if precomputed else {'context_embedding_origin':'user_subquery'}
     suggestion_id=uid()
     with repo.transaction() as tx:
         tx.insert_many([('suggestion',suggestion_id,'catalog',{'mode':body.get('mode','semantic'),'embedding_run_id':catalog.embedding_run,'mapping_run_id':catalog.mapping_run,
-            **context_provenance,'hits':{x['record']['source_id']:{'ranking':x['ranking'],'matched_context_ids':x['contexts'],
+            **context_provenance,'hits':{x['record']['source_id']:{'ranking':x['ranking'],'matched_context_ids':x['contexts'],'reason':x['reason'],
                 **({'retrieval':x['retrieval']} if 'retrieval' in x else {}),
                 **({'context_similarities':x['context_similarities']} if 'context_similarities' in x else {})} for x in items}})])
-    return {'suggestion_id':suggestion_id,'automatic_anchors':[{'factor':x['record'],'ranking':x['ranking'],'matched_context_ids':x['contexts']} for x in items],
+    return {'suggestion_id':suggestion_id,'automatic_anchors':[{'factor':x['record'],'ranking':x['ranking'],'matched_context_ids':x['contexts'],'reason':x['reason']} for x in items],
         'automatic_target_count':5,'search':catalog.provenance(query,body.get('mode','semantic'),True),'limitations':['Retrieval similarity is not evidence of biological support.']}
 
 def archived_factor(source_id):
@@ -733,6 +739,40 @@ async def deliver_workflow_intents(job_id):
         import logging
         logging.getLogger('reveal.workflow').warning('Dispatch deferred to reconciliation (%s)', type(error).__name__)
 
+def freeze_research_request(tx, identity, body):
+    """Freeze one scientific request for either hosted or local execution."""
+    user = identity['user_id']
+    draft=user_inputs.available(owned(tx,'draft',body['draft_id'],user)['data'])
+    if draft['version']!=body['draft_version']: raise Problem(409,'VERSION_CONFLICT','Save the current draft before submitting.',current_version=draft['version'])
+    composer=draft['composer']
+    if not composer['source_gap'] or not composer['eaggl_anchors']: raise Problem(422,'ANCHOR_REQUIRED','Select a source question and at least one mechanism anchor.')
+    catalog.selected(composer['source_gap'])
+    saved=owned(tx,'draft_binding',draft['id'],user)['data']; gap=saved['source_gap']
+    if not all(current_binding(saved['selections'][s['reference']['source_id']]['binding']) for s in composer['eaggl_anchors']):
+        raise superseded('This draft uses factors from a superseded reference generation; start a new analysis on this gap with current factors.')
+    contexts=[a['target'] for a in gap['attachments'] if a['target']]
+    # Freeze selected attachment bodies once. Old requests retain their original references.
+    pinned_context=[]
+    for reference in contexts[:10]:
+        record=getattr(catalog,'mechanisms',{}).get(reference['source_id'])
+        if record and record['source_revision']==reference['source_revision']:
+            pinned_context.append(deepcopy(record))
+    document={'knowledge_gaps':[gap['object']], 'mechanisms':[saved['selections'][s['reference']['source_id']]['record']['object'] for s in composer['eaggl_anchors']]}
+    frozen={'id':uid(),'owner_user_id':user,'source_draft_id':draft['id'],'source_draft_version':draft['version'],'composer':composer,'question_id':gap['object']['id'],
+        'document':document,'attribution':{'user_id':user,'person_id':None,'display_name':identity['display_name'],'orcid':identity['orcid'],'orcid_authenticated':identity['orcid_authenticated'],'observed_at':now(),'principal_kind':identity['principal_kind']},
+        'submitted_at':now(),'linked_dismech_context':contexts,'user_inputs':user_inputs.resolve(tx,user,composer)}
+    if draft.get('source_draft_id'):
+        frozen.update(originating_saved_draft_id=draft['source_draft_id'],originating_saved_draft_version=draft['source_draft_version'])
+    tx.put('request',frozen['id'],user,frozen)
+    request_binding={'dismech_import_id':saved['dismech_import_id'],'source_gap':gap,
+        'pinned_dismech_context':pinned_context,
+        'anchors':[saved['selections'][s['reference']['source_id']]['binding'] for s in composer['eaggl_anchors']],
+        'retrieval':{s['reference']['source_id']:saved['selections'][s['reference']['source_id']].get('retrieval') for s in composer['eaggl_anchors']}}
+    request_binding['anchor_display']=analysis_outcomes.anchor_display(composer,request_binding,saved)
+    tx.put('request_binding',frozen['id'],user,request_binding)
+    return frozen, request_binding
+
+
 def create_job_transaction(body,authorization,idempotency_key):
     if body.get('kind')=='analysis': preload_catalog()
     with repo.transaction() as tx:
@@ -750,28 +790,11 @@ def create_job_transaction(body,authorization,idempotency_key):
                 account=owned(tx,'account',body['account_id'],user)
                 return jobs.enqueue(tx,user,'paragraph',account_id=body['account_id'],inputs=body)
             reload_gate(tx)
-            draft=user_inputs.available(owned(tx,'draft',body['draft_id'],user)['data'])
-            if draft['version']!=body['draft_version']: raise Problem(409,'VERSION_CONFLICT','Save the current draft before submitting.',current_version=draft['version'])
-            composer=draft['composer']
-            if not composer['source_gap'] or not composer['eaggl_anchors']: raise Problem(422,'ANCHOR_REQUIRED','Select a source question and at least one mechanism anchor.')
-            catalog.selected(composer['source_gap'])
-            saved=owned(tx,'draft_binding',draft['id'],user)['data']; gap=saved['source_gap']
-            if not all(current_binding(saved['selections'][s['reference']['source_id']]['binding']) for s in composer['eaggl_anchors']):
-                raise superseded('This draft uses factors from a superseded reference generation; start a new analysis on this gap with current factors.')
-            contexts=[a['target'] for a in gap['attachments'] if a['target']]
-            document={'knowledge_gaps':[gap['object']], 'mechanisms':[saved['selections'][s['reference']['source_id']]['record']['object'] for s in composer['eaggl_anchors']]}
-            frozen={'id':uid(),'owner_user_id':user,'source_draft_id':draft['id'],'source_draft_version':draft['version'],'composer':composer,'question_id':gap['object']['id'],
-                'document':document,'attribution':{'user_id':user,'person_id':None,'display_name':identity['display_name'],'orcid':identity['orcid'],'orcid_authenticated':identity['orcid_authenticated'],'observed_at':now(),'principal_kind':identity['principal_kind']},
-                'submitted_at':now(),'linked_dismech_context':contexts,'user_inputs':user_inputs.resolve(tx,user,composer)}
-            if draft.get('source_draft_id'):
-                frozen.update(originating_saved_draft_id=draft['source_draft_id'],originating_saved_draft_version=draft['source_draft_version'])
-            tx.put('request',frozen['id'],user,frozen)
-            request_binding={'dismech_import_id':saved['dismech_import_id'],'source_gap':gap,
-                'anchors':[saved['selections'][s['reference']['source_id']]['binding'] for s in composer['eaggl_anchors']],
-                'retrieval':{s['reference']['source_id']:saved['selections'][s['reference']['source_id']].get('retrieval') for s in composer['eaggl_anchors']}}
-            request_binding['anchor_display']=analysis_outcomes.anchor_display(composer,request_binding,saved)
-            tx.put('request_binding',frozen['id'],user,request_binding)
-            return jobs.enqueue(tx,user,'analysis',request_id=frozen['id'],inputs=body)
+            frozen, binding = freeze_research_request(tx, identity, body)
+            job = jobs.enqueue(tx,user,'analysis',request_id=frozen['id'],inputs=body)
+            from .research_hosted import create as create_hosted_research
+            create_hosted_research(tx, job, frozen, binding)
+            return job
         return idempotent(tx,user,'job',idempotency_key,body,create)
 
 @app.get('/v1/jobs')
@@ -973,10 +996,11 @@ def scientific(identity,request,kind='object'):
             try:
                 if not user: raise Problem(404,'NOT_FOUND','Scientific resource unavailable.')
                 key=digest([user,identity])
-                keys=[(kind,key),('object_document',key)]
+                keys=[(kind,key),('object_document',key),('scientific_dependencies',key)]
                 if kind=='account': keys.append(('publication',key))
                 records=tx.get_records(keys)
-                row=require_owned(tx,kind,identity,user,records.get((kind,key)))['data']
+                row=require_owned(tx,kind,identity,user,records.get((kind,key)),
+                    dependency=records.get(('scientific_dependencies',key)))['data']
                 reference=records.get(('object_document',key))
                 publication_record=records.get(('publication',key))
             except Problem as error:
@@ -1007,8 +1031,18 @@ def scientific(identity,request,kind='object'):
             stored=tx.get('scientific_document',digest([user,document_sha]))
             if stored and stored['owner']==user:
                 document=stored['data']['document']; metadata=stored['data'].get('citation_metadata',metadata); artifacts=stored['data'].get('artifact_access',artifacts)
+        withheld_dependencies = False
         if public is not None:
             document=snapshot['document']; metadata=snapshot['citation_metadata']; artifacts=snapshot['artifacts']
+        elif user:
+            from .scientific_reuse import readable_document
+            before_visibility = document
+            document = readable_document(tx, user, document)
+            withheld_dependencies = document != before_visibility
+            visible = {n['id'] for rows in document.values() if isinstance(rows, list)
+                for n in rows if isinstance(n, dict) and 'id' in n}
+            metadata = [item for item in metadata if item['target_id'] in visible]
+            artifacts = {key: item for key, item in artifacts.items() if key in visible}
         root_payload=next(p['payload_sha256'] for p in result['payloads'] if p['object_id']==identity)
         binding={'owner':user if public is None else 'publication:'+public['id']+':'+str(public['data']['version']),
             'kind':kind,'root':identity,'payload':root_payload,'document':digest(document)}
@@ -1029,6 +1063,10 @@ def scientific(identity,request,kind='object'):
             encoded=base64.urlsafe_b64encode(json.dumps(state,separators=(',',':')).encode()).decode().rstrip('=')
             return encoded+'.'+hmac.new(secret,encoded.encode(),hashlib.sha256).hexdigest()
         clipped=object_envelope(document,identity,metadata,artifacts,max_depth=depth,max_nodes=maximum,offset=offset,continuation=continuation)
+        if withheld_dependencies:
+            # Withdrawal is incomplete provenance, not an empty complete graph.
+            # Never add newly unauthorized identities to the public missing list.
+            clipped['coverage']['complete'] = False
         if 'research_statement' in result: clipped['research_statement']=result['research_statement']
         if 'fixture_origin' in result: clipped['fixture_origin']=result['fixture_origin']
         if kind=='account': clipped['publication']=publication.state(tx,public['owner'] if public else user,identity,
@@ -1129,6 +1167,8 @@ async def render_citations(request:Request):
 
 from .workspace_events import register as register_workspace_events
 register_workspace_events(app, lambda: repo)
+from .research_http import register as register_research
+register_research(app, lambda: repo, freeze=freeze_research_request, preload=preload_catalog, reload_gate=reload_gate)
 from .workflow_routes import mount_workflow
 mount_workflow(app, repo)
 from .vector_workflow import mount_vector_workflow

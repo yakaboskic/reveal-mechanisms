@@ -62,7 +62,7 @@ def seed_draft(service, owner=None):
         tx.put('draft_binding', identity, owner, {'dismech_import_id': 'source',
             'source_gap': {'object': {'id': 'dapper:KnowledgeGap.' + 'g' * 32, 'text': 'Bounded test'}, 'attachments': []},
             'selections': {factor: {'record': {'object': {'id': 'dapper:Mechanism.' + 'm' * 32, 'name': 'Test factor'}},
-                'binding': {'source_id': factor}}}})
+                'binding': {'source_id': factor, 'reference_generation_id': 'a' * 64}}}})
     return identity
 
 

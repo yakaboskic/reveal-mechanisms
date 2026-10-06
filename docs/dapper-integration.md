@@ -1,5 +1,7 @@
 # REVEAL integration with current DAPPER
 
+Current local/hosted authoring rules: [shared contract v2](authoring-contract.md). Its mode-specific tool and evidence rules govern new workspaces; historical examples below retain their original scope.
+
 **Current design: [v12](design-plan.md). Historical compatibility audit: September 24, 2026 · v8.** DAPPER now covers the scientific model required for the first REVEAL workflow. This document separates implemented DAPPER contracts from the adapters and services REVEAL still needs. It supersedes earlier audits where gap context and paragraph citations were missing. It does not change the selected frontend, backend, authentication, embedding, CFDE, or Box/MCP architecture.
 
 ## 1. Audited dependency and results
@@ -26,11 +28,11 @@ PYTHONDONTWRITEBYTECODE=1 python -m pytest -q -p no:cacheprovider \
 
 The schema changed during the audit: GMT file/row locators became unhashable, and the upstream examples were re-minted to match. The final snapshot and 287-test result include those updates. Earlier and intermediate captures remain available for audit history; the transition capture’s two stale-example failures are resolved in the final capture.
 
-New agent startups now use [locked DAPPER 0.2.0-a1](scientific-account-linting.md), verified against its immutable commit/runtime hashes. This release explicitly supports the captured v8 inputs; the bootstrap and linter are implemented, while Box provisioning and remaining acceptance gates are not. Existing imports retain their original dependency pins. This audit changed neither the sibling repository nor the database.
+New authoring, seed and validation defaults use [locked DAPPER 0.2.0](scientific-account-linting.md), commit `e44a913619c4c9832df6aeaac6a80dbf691ba120`. The [current immutable snapshot](../data/dapper/0.2.0/snapshot.json) contains the official release bytes. This release adds embedding representations without changing existing scientific identity fields; historical v8 snapshots and imported objects retain their original pins. The September 24 audit below remains a historical record, not evidence of a new full-catalog validation.
 
 ## 2. Question and DisMech gap adapter
 
-Authoritative fields are in [the captured claims schema](../data/dapper/2026-09-24-v8/snapshot/schema/claims.yaml).
+Current authoritative fields are in [the 0.2.0 claims schema](../data/dapper/0.2.0/snapshot/schema/claims.yaml).
 
 - **Question:** `text` is required; `scope` and `about_entities` are optional. It inherits provenance. Retain it for legacy records and DAPPER interoperability; the current REVEAL workflow accepts selected imported DisMech KnowledgeGaps only.
 - **KnowledgeGap:** inherits Question and requires `gap_description`; optional `gap_kind` accepts `KNOWLEDGE_GAP` and `HUMAN_MODEL_MISMATCH`. Neither is a lifecycle status. A KnowledgeGap is used directly through `ScientificAccount.question`, without minting a duplicate Question.
@@ -65,7 +67,7 @@ Underlying source Claims/Files may inform several Propositions. Create separate 
 
 A single factor result can therefore contribute to multiple gene-involvement and gene-set/program/readout assessments within one account. The synthesis can express signed regulation and process routes when these are represented by assessed Propositions. Biological inhibition/amplification belongs in Proposition content; `direction: SUPPORTS` can support either an inhibitory or an amplifying proposition. This uses the existing schema and does not infer regulatory direction from a factor loading.
 
-Every generated account finding/conclusion needs a CFDE evidence path. Source-only Claims capturing Proto-OKN assertions are auxiliary evidence and may lack CFDE ancestry. Their application role must be explicit, so the lineage gate does not reject all external evidence or silently accept Proto-OKN-only generated findings. Shared upstream publications are not independent corroboration.
+Every generated account finding/conclusion needs an eligible scientific evidence path. CFDE grounding is encouraged, not mandatory. Source Claims capturing independent or selected-graph observations may support findings within their recorded scope. Preserve their application role and original authorship. Shared upstream publications are not independent corroboration.
 
 `ClaimScore` requires `score_kind`, `value`, exact source `metric`, and `interpretation`. Supported kinds are PROBABILITY, POSTERIOR_PROBABILITY, EFFECT_ESTIMATE, LOADING, and SCORE. Only the first two have the [0,1] restriction. Similarity, rank, factor loading, and CFDE reducer outputs never become a biological probability by renaming them. Unknown metric semantics remain in raw retrieval metadata until a faithful interpretation is available. The upstream PIGEAN claims example explicitly uses fictional probabilities; it supplies object shapes, not production metric definitions.
 
@@ -77,7 +79,7 @@ Resolve each CFDE gene-set alias against the frozen import. A reference to its D
 
 ## 4. Agent output and validation contract
 
-**Implemented September 25:** the [agent startup and account-lint integration](scientific-account-linting.md) clones DAPPER release `0.2.0-a1` at its locked commit for each new agent, provides JSON lint feedback, and exposes `validate_scientific_account` as a backend gate over the same final-mode linter. Existing evidence-package snapshot pins remain intact; compatibility is explicit in the release lock. The future worker still owns trusted assembly and the acceptance checks below.
+**Updated October 6:** the [agent startup and account-lint integration](scientific-account-linting.md) clones DAPPER release `0.2.0` at its locked commit for each new hosted agent, provides JSON lint feedback, and exposes `validate_scientific_account` as a backend gate over the same final-mode linter. Existing evidence-package snapshot pins remain intact; compatibility is explicit in the release lock. The future worker still owns trusted assembly and the acceptance checks below.
 
 Define a versioned **REVEAL envelope** carrying one or more proposed accounts, temporary node references, evidence locators, and explicit empty/insufficient-evidence outcomes. This is an application transport format, not another scientific schema.
 
@@ -89,7 +91,7 @@ For each account:
 2. Validate shapes with closed LinkML/JSON Schema validation. Unknown fields fail. Assemble/mint new nodes with `assign_ids`; use `compute_id`/`verify` against the pinned dependency and reject changes to trusted nodes.
 3. Run the provenance linter with `--profile scientific-account`. Its terminal constraint is **exactly one account per document**. Split the proposed up-to-three accounts into separate provenance documents with shared IDs, not one invalid multi-account document. Keep complete edges and dependencies per document.
 4. Enforce references, correct endpoint types, activity inputs, distinct ordered component claims, a non-conclusion finding, conclusions as a subset, evidence-target agreement, and no circular source-claim support. DAPPER supplies these structural checks; warnings remain recorded with an explicit application policy.
-5. Apply REVEAL rules: every account’s `question` equals the frozen selected DisMech KnowledgeGap ID, and its resolved object matches the trusted gap payload; source locators resolve into authorized frozen artifacts; factors/model and gene-set import are pinned; generated account claims have CFDE ancestry; graph allowlists and budgets are honored; exact numeric values and metric names agree with captures.
+5. Apply REVEAL rules: every account’s `question` equals the frozen selected DisMech KnowledgeGap ID, and its resolved object matches the trusted gap payload; source locators resolve into authorized frozen artifacts; factors/model and gene-set import are pinned; generated account claims have eligible scientific source ancestry; CFDE grounding is encouraged, not required; graph allowlists and budgets are honored; exact numeric values and metric names agree with captures.
 6. Check scientific grounding separately: the cited span/assertion must actually support, dispute, or contextualize the authored proposition within the stated scope. Preserve the check's rationale/model/prompt version and outcome. Syntax/identity validation cannot establish this. Unsupported content is repaired within a bound or saved only as a failed/flagged attempt, not certified by a passing schema.
 7. Commit accepted scientific nodes, payload/provenance snapshots, membership, run links, and citation registration transactionally. Operational attempts remain distinct even when scientific identities deduplicate.
 

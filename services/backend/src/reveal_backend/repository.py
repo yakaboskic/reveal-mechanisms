@@ -116,6 +116,8 @@ class Transaction:
     def transfer(self, source, target):
         from .workspace_events import ownership_changed
         ownership_changed(self, source, target)
+        from .research_ownership import transfer_workspace
+        transfer_workspace(self, source, target)
         for kind in ('object','account','paragraph','grant','account_membership','publication','exploration','outbox','artifact','object_document','scientific_document','object_observation'):
             for row in self.list(kind,source):
                 data=row['data']

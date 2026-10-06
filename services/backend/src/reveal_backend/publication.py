@@ -37,6 +37,8 @@ def freeze(tx, owner, account_id):
     from .acceptance import object_envelope
     from .account_discovery import visible_accounts
     data = owned(tx, 'account', account_id, owner)['data']; result = data['result']
+    from .scientific_reuse import authorize_publication
+    authorize_publication(tx, owner, account_id)
     from .user_inputs import prevent_private_publication
     prevent_private_publication(tx, data.get('summary',{}).get('job_id'))
     summaries = [item for item in visible_accounts(tx, owner, attribution=True) if item['account']['id'] == account_id]
@@ -79,6 +81,7 @@ def freeze(tx, owner, account_id):
             if target not in nodes: raise Problem(409, 'PUBLICATION_INCOMPLETE', 'A cited scientific target is absent from the public closure.')
             citations[(target, revision)] = deepcopy(get(tx, owner, target, revision))
     summary = deepcopy(summaries[0]); summary['job_id'] = None
+    summary.pop('local_work_id', None); summary.pop('research_request_id', None)
     summary['research_statement'] = {'status': 'succeeded' if paragraph_id else 'not_requested', 'job_id': None, 'paragraph_id': paragraph_id}
     if summary.get('archive'):
         # Archived work stays publishable; public copies never name private jobs/requests.

@@ -1,0 +1,41 @@
+# Synthetic PR #27 review fixture; all names, checksums, and locations are illustrative.
+# Observed against PR head 6f606bff1411e3e7ed8ff876ac565c128adf68d5.
+# Fixed linter: FAIL; the intended validation error is reported.
+# Finding 4: add a Person with no relationship linking it into the provenance.
+# The Dataset description contains the Person id as literal text, not a relationship.
+# Expected: FAIL with a reachability error for the Person.
+# Before fix: PASS, 0 errors and 0 warnings. The description is traversed as a link.
+
+datasets:
+- id: dapper:Dataset.d-e7WMFVnsjGsq4pKrMc4kg_OzPclhxW
+  name: Synthetic final result
+  resource_type: dataset
+  description: dapper:Person.djQU8QfyqTjrKi4Nz_y4KPO3MqKeimMd
+activities:
+- id: dapper:Activity.N2ZGhLItamKdVSSbX1mQNpzIQEwmMxne
+  name: Analyze input
+  command: python analyze.py input.tsv
+files:
+- id: dapper:File.7uSMFgEazvyYU9HPfkEhdODpDwjqPrHM
+  filename: input.tsv
+  sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+drs_objects:
+- id: dapper:DrsObject.u9TZbI23plbenZHXFKk-yqNpWM_rDMzS
+  name: Result bytes
+  self_uri: drs://example.org/result
+  checksum_sha256: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+was_generated_by_edges:
+- subject: dapper:Dataset.d-e7WMFVnsjGsq4pKrMc4kg_OzPclhxW
+  predicate: prov:wasGeneratedBy
+  object: dapper:Activity.N2ZGhLItamKdVSSbX1mQNpzIQEwmMxne
+used_edges:
+- subject: dapper:Activity.N2ZGhLItamKdVSSbX1mQNpzIQEwmMxne
+  predicate: prov:used
+  object: dapper:File.7uSMFgEazvyYU9HPfkEhdODpDwjqPrHM
+has_drs_object_edges:
+- subject: dapper:Dataset.d-e7WMFVnsjGsq4pKrMc4kg_OzPclhxW
+  predicate: dapper:hasDrsObject
+  object: dapper:DrsObject.u9TZbI23plbenZHXFKk-yqNpWM_rDMzS
+persons:
+- name: Unconnected person
+  id: dapper:Person.djQU8QfyqTjrKi4Nz_y4KPO3MqKeimMd

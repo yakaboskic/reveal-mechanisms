@@ -66,6 +66,21 @@ class EvidenceSchemaTests(unittest.TestCase):
         package['dapper_context']['gene_sets'][0]['n_genes'] = 'many'
         with self.assertRaises(EvidenceBuildError): self.validate(package)
 
+    def test_embedding_matrix_locators_validate_without_expanding_coordinates(self):
+        package = deepcopy(self.package)
+        embedding = {'id': 'urn:test:embedding', 'embedding_of': package['dapper_context']['gene_sets'][0]['id'],
+                     'has_vector_file': 'urn:test:vector-matrix', 'vector_row': 0,
+                     'dimensions': 1536, 'vector_sha256': 'a' * 64}
+        package['dapper_context']['embeddings'] = [embedding]
+        self.validate(package)
+        for mutate in [lambda value: value.pop('vector_row'),
+                       lambda value: value.pop('has_vector_file'),
+                       lambda value: value.update(vector_row=-1),
+                       lambda value: value.update(coordinates=[0.1, 0.2])]:
+            invalid = deepcopy(package)
+            mutate(invalid['dapper_context']['embeddings'][0])
+            with self.subTest(mutation=mutate), self.assertRaises(EvidenceBuildError): self.validate(invalid)
+
     def test_upstream_records_are_extensible_with_typed_bindings(self):
         package = deepcopy(self.package)
         mechanism = next(iter(package['dismech']['mechanisms'].values()))

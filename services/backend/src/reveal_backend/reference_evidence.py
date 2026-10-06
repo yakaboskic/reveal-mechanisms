@@ -144,6 +144,10 @@ def _marks(values):
     return ','.join(['%s'] * len(values))
 
 
+def _json_manifest(value):
+    return json.loads(value) if isinstance(value, (str, bytes)) else value or {}
+
+
 def _value(column, value):
     if isinstance(value, (bytes, bytearray)): value = bytes(value).decode('utf-8')
     if column in JSON_COLUMNS and isinstance(value, str): value = json.loads(value)
@@ -426,7 +430,9 @@ class _Evidence:
         self.anchor_eaggl = {row['eaggl_factor_id'] for row in rows}
         for row in rows:
             identity, number = row['public_id'], kpn_number(row['kpn_trait_id'])
-            node = mechanism_node(identity, row['phenotype_name'], row['kpn_trait_id'], _factor_of(identity), row['label'])
+            node = mechanism_node(identity, row['phenotype_name'], row['kpn_trait_id'], _factor_of(identity), row['label'],
+                identity_version=_json_manifest(generation.get('manifest')).get('mechanism_identity_version', 1),
+                eaggl_import_id=self.import_id)
             node['id'] = self.dapper.compute_id(node, 'Mechanism', self.dapper.schema)
             self.mechanism_nodes[identity] = node
             self.mechanisms[identity] = {'dapper_id': node['id'], 'source_label': row['label'],

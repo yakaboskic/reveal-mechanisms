@@ -1,5 +1,9 @@
 # Claude Code, Upstash Box, and Proto-OKN evidence
 
+Current local/hosted authoring rules: [shared contract v2](authoring-contract.md). Its mode-specific tool and evidence rules govern new workspaces; historical examples below retain their original scope.
+
+> New online and local runs use the [progressive MCP workflow](local-agent-mcp.md): a small seed plus on-demand retained data and evidence receipts. Eager collector descriptions below apply to historical full packages. For CFDE queries, use loaded CFDE/PIGEAN/EAGGL data or the two explicitly offered small/sigma2 BioIndex phenotype operations. Independent imported evidence and authorized reuse remain supported; never infer evidence from unqueried data.
+
 **Current design:** [v12 consolidated plan](design-plan.md). Discovery observations: September 24, 2026. Runtime/API observations below are from the earlier live inventory; the current [DAPPER integration contract](dapper-integration.md) now specifies output assembly and validation. No paid Box/Claude run was started.
 
 **September 25 input/skill draft:** the [evidence-package design](evidence-package.md) defines the initial immutable input and separate enrichment ledger. The [project-local account-generation skill](../services/backend/agent-skills/construct-scientific-account/SKILL.md) connects that input to the scientific authoring workflow. The [fresh release bootstrap/shared linter](scientific-account-linting.md) is implemented. Box provisioning, read-only mounting, complete MCP output capture and live policy enforcement remain to be implemented. The [worker output contract](agent-output-contract.md) specifies per-account files and a worker-owned manifest.
@@ -64,13 +68,13 @@ The upstream SPARQL tool describes its own transcript log as omitting explorator
 
 Do not enable transcript publishing or other non-evidence tools for authoring merely because they appear in the server catalog. Preserve local provenance directly. The selected graph filter must be enforced by a policy/adapter; the MCP connection template itself cannot enforce it.
 
-Acceptance requires CFDE evidence lineage for every newly mined account claim, valid external assertion locators for added KG evidence, deduplication of shared underlying sources, and explicit empty/error outcomes. Auxiliary source Claims recording Proto-OKN assertions can be evidence without their own CFDE lineage; record their source-only role explicitly. The paragraph job uses saved account evidence and citation targets; fresh research creates a new account revision.
+Acceptance requires eligible scientific evidence lineage for every newly authored account Claim, valid external assertion locators for added KG evidence, deduplication of shared underlying sources, and explicit empty/error outcomes. Relevant CFDE grounding is encouraged; missing CFDE ancestry is a non-blocking account-level advisory. Auxiliary source Claims recording Proto-OKN assertions can be evidence without their own CFDE lineage; record their source-only role explicitly. The paragraph job uses saved account evidence and citation targets; fresh research creates a new account revision.
 
 ## DAPPER output integration
 
 Use the current Question/KnowledgeGap, Proposition, Claim, ClaimScore, EvidenceItem, ScientificAccount and Paragraph contracts. The agent returns authored content, temporary node references and exact evidence locators in a versioned application envelope. The backend supplies trusted source records, identity/runtime snapshots and activity metadata; minting and validation use the pinned DAPPER implementation.
 
-Prepare one complete provenance document per account, hydrating existing dependencies for the `scientific-account` linter. Shared references can reuse stored IDs across documents. Require the submitted question/gap on every account and a CFDE evidence path for every generated finding/conclusion. DAPPER validates structure and evidence cycles; a separate application grounding check evaluates whether the recorded source supports the authored interpretation.
+Prepare one complete provenance document per account, hydrating existing dependencies for the `scientific-account` linter. Shared references can reuse stored IDs across documents. Require the submitted question/gap on every account and an eligible scientific evidence path for every generated finding/conclusion. DAPPER validates structure and evidence cycles; a separate application grounding check evaluates whether the recorded source supports the authored interpretation.
 
 For Paragraph output, request authored segments with authorized Claim/Question/KnowledgeGap IDs and known citation metadata revisions. The backend uses `assemble_cited_text`, then validates code-point spans and exact registry revisions through the DAPPER validators. Keep rendered citation markers outside the saved Paragraph text. Runtime dates, authenticated human attribution and registry revisions are never invented by the model. See [the complete validation sequence](dapper-integration.md#4-agent-output-and-validation-contract).
 

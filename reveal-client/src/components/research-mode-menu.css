@@ -1,0 +1,8 @@
+.research-mode-menu { position:relative; display:inline-block; }
+.research-mode-menu > button { display:flex; align-items:center; gap:.8rem; }
+.research-mode-popup { position:absolute; right:0; bottom:calc(100% + .5rem); z-index:30; min-width:220px; max-width:calc(100vw - 48px); padding:.3rem; background:white; border:1px solid var(--line); border-radius:7px; box-shadow:0 8px 24px #18364626; }
+button.research-mode-item { display:block; width:100%; padding:.75rem .85rem; border:0; background:white; color:var(--ink); text-align:left; white-space:nowrap; }
+button.research-mode-item strong,button.research-mode-item span { display:block; }
+button.research-mode-item span { margin-top:.25rem; color:var(--muted); font-size:.8rem; font-weight:400; }
+button.research-mode-item:hover:not(:disabled),button.research-mode-item:focus-visible { background:var(--soft); color:var(--teal); }
+button.research-mode-item:focus-visible { outline:2px solid var(--teal); outline-offset:-2px; }

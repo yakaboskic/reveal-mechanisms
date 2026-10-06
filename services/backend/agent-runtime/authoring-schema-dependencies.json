@@ -1,0 +1,14 @@
+{
+  "format": "reveal.authoring-schema-dependencies/1",
+  "dependencies": {
+    "linkml:types": {
+      "path": "linkml-types-1.11.1.yaml",
+      "package": "linkml-runtime",
+      "version": "1.11.1",
+      "sha256": "1c79b264397bec0eadb404d22e9b163458f1b889809b3b482ecc39c98743fe00",
+      "source": "https://pypi.org/project/linkml-runtime/1.11.1/",
+      "license": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "package_path": "linkml_runtime/linkml_model/model/schema/types.yaml"
+    }
+  }
+}

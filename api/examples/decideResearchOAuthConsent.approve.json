@@ -1,0 +1,39 @@
+{
+  "operation_id": "decideResearchOAuthConsent",
+  "case": "approve",
+  "method": "POST",
+  "path_template": "/v1/research-oauth/consent",
+  "request": {
+    "url": "https://api.reveal.example.org/v1/research-oauth/consent",
+    "path": {},
+    "query": {},
+    "headers": {
+      "Authorization": "Bearer <api-key-or-gateway-assertion>",
+      "Content-Type": "application/json",
+      "Accept": "application/json"
+    },
+    "body": {
+      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "local_work_id": "77777777-7777-4777-8777-777777777777",
+      "approve": true
+    }
+  },
+  "responses": {
+    "200": {
+      "content_type": "application/json",
+      "examples": {
+        "device_approved": {
+          "approved": true,
+          "local_work_id": "77777777-7777-4777-8777-777777777777"
+        },
+        "device_denied": {
+          "approved": false
+        },
+        "code_redirect": {
+          "redirect_url": "http://127.0.0.1:8765/callback?code=rvlac_FICTIONAL&state=client-state&iss=https://api.reveal.example.org"
+        }
+      }
+    }
+  },
+  "curl": "curl -X POST https://api.reveal.example.org/v1/research-oauth/consent -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"approve\":true,\"local_work_id\":\"77777777-7777-4777-8777-777777777777\",\"request_id\":\"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\"}'"
+}

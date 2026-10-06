@@ -1,0 +1,40 @@
+{
+  "operation_id": "issueLocalResearchGrant",
+  "case": "connect",
+  "method": "POST",
+  "path_template": "/v1/local-work/{work_id}/grants",
+  "request": {
+    "url": "https://api.reveal.example.org/v1/local-work/77777777-7777-4777-8777-777777777777/grants",
+    "path": {
+      "work_id": "77777777-7777-4777-8777-777777777777"
+    },
+    "query": {},
+    "headers": {
+      "Idempotency-Key": "66666666-6666-4666-8666-666666666666",
+      "Authorization": "Bearer <api-key-or-gateway-assertion>",
+      "Content-Type": "application/json",
+      "Accept": "application/json"
+    },
+    "body": {}
+  },
+  "responses": {
+    "201": {
+      "content_type": "application/json",
+      "examples": {
+        "connection": {
+          "grant_id": "99999999-9999-4999-8999-999999999999",
+          "expires_at": "2026-11-01T00:00:00Z",
+          "local_work_id": "77777777-7777-4777-8777-777777777777",
+          "token": "rvlm_FICTIONAL_EXAMPLE_DO_NOT_USE",
+          "mcp_url": "https://api.reveal.example.org/mcp",
+          "prompt": "Use the downloaded frozen seed and anonymous public MCP tools. Sign in and explicitly approve access before private reads, uploads, validation or submission.",
+          "instructions": {
+            "codex": "Run python3 start.py codex in the downloaded folder. Add --login only when ready to connect.",
+            "claude_code": "Run python3 start.py claude in the downloaded folder. Add --login only when ready to connect."
+          }
+        }
+      }
+    }
+  },
+  "curl": "curl -X POST https://api.reveal.example.org/v1/local-work/77777777-7777-4777-8777-777777777777/grants -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{}'"
+}

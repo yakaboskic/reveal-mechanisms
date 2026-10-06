@@ -25,8 +25,8 @@
         "question": {
           "root_id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
           "schema": {
-            "schema_sha256": "219769c9874a3c0a7d6972360d5847a8b344e412a8b9f4e2648f059682440345",
-            "dependency_snapshot_sha256": "801fb347c54c036c15345d132d302171fc6cd74c1f75a03a5c59c937f5ed7d11",
+            "schema_sha256": "305fbd8f3a3ad01a7584892c1be2937b5a25a5741a8fef17851039ff8cf44e25",
+            "dependency_snapshot_sha256": "bdbbc8d7583754a868a3bc22d7c976e21bccedd5ce24b600c2b43972e5b31a23",
             "identity_profile": "DAPPER-ID-1"
           },
           "document": {

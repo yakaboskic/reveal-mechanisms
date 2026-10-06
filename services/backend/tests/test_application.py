@@ -285,7 +285,7 @@ class ApplicationTests(unittest.TestCase):
         class Source:
             dismech_import='original-dismech'
             factors={factor['source_id']:factor}
-            bindings={factor['source_id']:{'mapping_run_id':'original-mapping','embedding_run_id':'original-embedding','eaggl_import_id':'original-source','cfde_node_id':factor['source_id']}}
+            bindings={factor['source_id']:{'reference_generation_id':digest('fixture'),'mapping_run_id':'original-mapping','embedding_run_id':'original-embedding','eaggl_import_id':'original-source','cfde_node_id':factor['source_id']}}
             def selected(self,reference): return gap
             def validate_composer(self,composer,submit=False): return gap
         source=Source(); user=self.provision()
@@ -310,7 +310,7 @@ class ApplicationTests(unittest.TestCase):
         class Source:
             mechanisms={}; dismech_import='dismech'; embedding_run='embedding'; mapping_run='mapping'
             factors={factor['source_id']:factor}
-            bindings={factor['source_id']:{'cfde_node_id':factor['source_id'], 'embedding_run_id':'embedding', 'mapping_run_id':'mapping'}}
+            bindings={factor['source_id']:{'reference_generation_id':digest('fixture'),'cfde_node_id':factor['source_id'], 'embedding_run_id':'embedding', 'mapping_run_id':'mapping'}}
             def selected(self,reference): return gap
             def validate_composer(self,composer,submit=False): return gap
             def suggest_factors(self,*args,**kwargs):

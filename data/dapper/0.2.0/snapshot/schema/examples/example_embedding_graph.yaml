@@ -1,0 +1,184 @@
+# Illustrative embeddings over the two-row GMT collection
+# (example_geneset_collection_rows.yaml). All records are illustrative.
+#
+# The GeneSet and GeneSetCollection ids are the same as in that example:
+# `has_embedding` is unhashable, so attaching embeddings does not re-mint them.
+# The Embedding, File and Activity records were minted from temporary `urn:tmp:` ids
+# with:  uv run schema/identity/dapper_identity.py assign <this file>
+# The matrix data/example_embeddings.f16.npy holds 3 rows x 4 dims (float16);
+# each vector_sha256 is the SHA-256 of that row's bytes, and the File checksums
+# are those of the .npy file itself.
+prefixes:
+  EXGENE: 'urn:example:gene:'
+files:
+  - id: dapper:File.71tWGS-PbGUXPR1jD_ZsXMJDbsnWtr3N
+    name: Illustrative gene annotations
+    filename: annotations.tsv
+  - id: dapper:File.Iqc65CYAo3V1EyGSICJjdzEXWY1k6woG
+    name: Two-set GMT library
+    filename: example_gene_sets.gmt
+    location: data/example_gene_sets.gmt
+    sha256: 7919a3e2e675fe1733033e79ff7ec58caa4cae2cdf1e310fd803c9194a645697
+    size_in_bytes: 78
+  - id: dapper:File.-HXNRj0YfF9WsuIhx18IpFqAy6gp9D1L
+    name: Illustrative embedding matrix
+    description: >-
+      NumPy .npy array, 3 rows x 4 dimensions, float16, C order. Row 0 and 1
+      embed the two gene sets; row 2 embeds the collection.
+    filename: example_embeddings.f16.npy
+    location: data/example_embeddings.f16.npy
+    md5: H1Yvvz33vh3YofTUEW7pYA==
+    sha256: 48ba6c8a446d1429902698abda9514a4e849750ca9f0a019388602182630be41
+    size_in_bytes: 152
+  - id: dapper:File.r5wisYwS3B8VgngJLmOzifql--UGURFc
+    name: Illustrative embedding row index
+    description: Tab-separated row index for the matrix (row, node_id, text_template, text).
+    filename: example_embeddings.rows.tsv
+    location: data/example_embeddings.rows.tsv
+    sha256: 1bd65c64618428411922f0f6c5a6b2bd715f3f40a81e597c8c1c383feef47ef6
+    size_in_bytes: 345
+activities:
+  - id: dapper:Activity.f3NvLfo3qeBImT1Iqolj0z3sdOc_mAnX
+    name: Assemble illustrative gene-set library
+    description: Fictional assembly step demonstrating two overlapping gene sets.
+  - id: dapper:Activity.OnRSldU5CKQM1vVhiv4GDi7YwCIAn_kj
+    name: Embed gene-set descriptions
+    description: >-
+      Fictional embedding run: each gene set's readable name and the collection's
+      description were embedded with a 4-dimensional toy model.
+    activity_type: text_embedding
+    software_name: example-embedder
+    software_version: '0.0'
+    command: example-embedder --model toy-4d --template example-v1 --dtype float16
+    generated_at_time: '2026-09-27T12:00:00Z'
+gene_sets:
+  - id: dapper:GeneSet.sKbhzueXIbO9Xms62_nyJxlZ13en1fRO
+    name: First illustrative gene set
+    alternate_identifier:
+      - geneset_1
+    member_type: gene
+    members:
+      - EXGENE:Gene1
+      - EXGENE:Gene2
+    n_genes: 2
+    in_gmt_file: dapper:File.Iqc65CYAo3V1EyGSICJjdzEXWY1k6woG
+    gmt_entry: geneset_1
+    was_generated_by: dapper:Activity.f3NvLfo3qeBImT1Iqolj0z3sdOc_mAnX
+    in_gene_set_collection:
+      - dapper:GeneSetCollection.1FoLv1ndB0HjzITZhThnn3w0TfQgGCOb
+    has_embedding:
+      - dapper:Embedding.twgCaT2vtQxkDjoT6fBYDD9NvptutvLR
+  - id: dapper:GeneSet.w1bw7dosxdeYRx1V5p7UALgkxtTfdcKi
+    name: Second illustrative gene set
+    alternate_identifier:
+      - geneset_2
+    member_type: gene
+    members:
+      - EXGENE:Gene2
+      - EXGENE:Gene3
+    n_genes: 2
+    in_gmt_file: dapper:File.Iqc65CYAo3V1EyGSICJjdzEXWY1k6woG
+    gmt_entry: geneset_2
+    was_generated_by: dapper:Activity.f3NvLfo3qeBImT1Iqolj0z3sdOc_mAnX
+    in_gene_set_collection:
+      - dapper:GeneSetCollection.1FoLv1ndB0HjzITZhThnn3w0TfQgGCOb
+    has_embedding:
+      - dapper:Embedding.OKukz_QNlPu4J-uGUmIe8-xNZCpy74t6
+gene_set_collections:
+  - id: dapper:GeneSetCollection.1FoLv1ndB0HjzITZhThnn3w0TfQgGCOb
+    name: Illustrative collection of two overlapping gene sets
+    member_type: gene_set
+    members:
+      - dapper:GeneSet.sKbhzueXIbO9Xms62_nyJxlZ13en1fRO
+      - dapper:GeneSet.w1bw7dosxdeYRx1V5p7UALgkxtTfdcKi
+    n_sets: 2
+    n_members: 2
+    n_genes: 3
+    has_gmt_file: dapper:File.Iqc65CYAo3V1EyGSICJjdzEXWY1k6woG
+    was_generated_by: dapper:Activity.f3NvLfo3qeBImT1Iqolj0z3sdOc_mAnX
+    has_embedding:
+      - dapper:Embedding.BE5awT-6rd8S6OX6FxMZMDI3eqPiK8Ay
+embeddings:
+  - id: dapper:Embedding.twgCaT2vtQxkDjoT6fBYDD9NvptutvLR
+    name: Embedding of the first illustrative gene set
+    embedding_of: dapper:GeneSet.sKbhzueXIbO9Xms62_nyJxlZ13en1fRO
+    embedding_model: toy-4d
+    embedding_provider: example
+    dimensions: 4
+    dtype: float16
+    normalization: none
+    embedded_text: First illustrative gene set
+    text_template: example-v1
+    vector_sha256: 6566c469ce79b2bc95f3ffcff7ab1167e1e894aeb4f05aea78c2a95ff074e131
+    was_generated_by: dapper:Activity.OnRSldU5CKQM1vVhiv4GDi7YwCIAn_kj
+    has_vector_file: dapper:File.-HXNRj0YfF9WsuIhx18IpFqAy6gp9D1L
+    vector_row: 0
+  - id: dapper:Embedding.OKukz_QNlPu4J-uGUmIe8-xNZCpy74t6
+    name: Embedding of the second illustrative gene set
+    embedding_of: dapper:GeneSet.w1bw7dosxdeYRx1V5p7UALgkxtTfdcKi
+    embedding_model: toy-4d
+    embedding_provider: example
+    dimensions: 4
+    dtype: float16
+    normalization: none
+    embedded_text: Second illustrative gene set
+    text_template: example-v1
+    vector_sha256: 1fba96a0908b5376b7e06feb3203c3ea394bdd18e896196e56c8bbadb434b672
+    was_generated_by: dapper:Activity.OnRSldU5CKQM1vVhiv4GDi7YwCIAn_kj
+    has_vector_file: dapper:File.-HXNRj0YfF9WsuIhx18IpFqAy6gp9D1L
+    vector_row: 1
+  - id: dapper:Embedding.BE5awT-6rd8S6OX6FxMZMDI3eqPiK8Ay
+    name: Embedding of the illustrative collection
+    embedding_of: dapper:GeneSetCollection.1FoLv1ndB0HjzITZhThnn3w0TfQgGCOb
+    embedding_model: toy-4d
+    embedding_provider: example
+    dimensions: 4
+    dtype: float16
+    normalization: none
+    embedded_text: Illustrative collection of two overlapping gene sets
+    text_template: example-collection-v1
+    vector_sha256: 121ff4de4a9368c5a27e677214dd3d7bc4316a3106540b49f2af85d9add1b4d9
+    was_generated_by: dapper:Activity.OnRSldU5CKQM1vVhiv4GDi7YwCIAn_kj
+    has_vector_file: dapper:File.-HXNRj0YfF9WsuIhx18IpFqAy6gp9D1L
+    vector_row: 2
+used_edges:
+  - subject: dapper:Activity.f3NvLfo3qeBImT1Iqolj0z3sdOc_mAnX
+    predicate: prov:used
+    object: dapper:File.71tWGS-PbGUXPR1jD_ZsXMJDbsnWtr3N
+  - subject: dapper:Activity.OnRSldU5CKQM1vVhiv4GDi7YwCIAn_kj
+    predicate: prov:used
+    object: dapper:File.Iqc65CYAo3V1EyGSICJjdzEXWY1k6woG
+    edge_role: data_input
+was_generated_by_edges:
+  - subject: dapper:GeneSetCollection.1FoLv1ndB0HjzITZhThnn3w0TfQgGCOb
+    predicate: prov:wasGeneratedBy
+    object: dapper:Activity.f3NvLfo3qeBImT1Iqolj0z3sdOc_mAnX
+  - subject: dapper:File.-HXNRj0YfF9WsuIhx18IpFqAy6gp9D1L
+    predicate: prov:wasGeneratedBy
+    object: dapper:Activity.OnRSldU5CKQM1vVhiv4GDi7YwCIAn_kj
+  - subject: dapper:File.r5wisYwS3B8VgngJLmOzifql--UGURFc
+    predicate: prov:wasGeneratedBy
+    object: dapper:Activity.OnRSldU5CKQM1vVhiv4GDi7YwCIAn_kj
+has_embedding_edges:
+  - subject: dapper:GeneSet.sKbhzueXIbO9Xms62_nyJxlZ13en1fRO
+    predicate: dapper:hasEmbedding
+    object: dapper:Embedding.twgCaT2vtQxkDjoT6fBYDD9NvptutvLR
+  - subject: dapper:GeneSet.w1bw7dosxdeYRx1V5p7UALgkxtTfdcKi
+    predicate: dapper:hasEmbedding
+    object: dapper:Embedding.OKukz_QNlPu4J-uGUmIe8-xNZCpy74t6
+  - subject: dapper:GeneSetCollection.1FoLv1ndB0HjzITZhThnn3w0TfQgGCOb
+    predicate: dapper:hasEmbedding
+    object: dapper:Embedding.BE5awT-6rd8S6OX6FxMZMDI3eqPiK8Ay
+_illustrative:
+  - dapper:File.71tWGS-PbGUXPR1jD_ZsXMJDbsnWtr3N
+  - dapper:File.Iqc65CYAo3V1EyGSICJjdzEXWY1k6woG
+  - dapper:Activity.f3NvLfo3qeBImT1Iqolj0z3sdOc_mAnX
+  - dapper:GeneSet.sKbhzueXIbO9Xms62_nyJxlZ13en1fRO
+  - dapper:GeneSet.w1bw7dosxdeYRx1V5p7UALgkxtTfdcKi
+  - dapper:GeneSetCollection.1FoLv1ndB0HjzITZhThnn3w0TfQgGCOb
+  - dapper:File.-HXNRj0YfF9WsuIhx18IpFqAy6gp9D1L
+  - dapper:File.r5wisYwS3B8VgngJLmOzifql--UGURFc
+  - dapper:Activity.OnRSldU5CKQM1vVhiv4GDi7YwCIAn_kj
+  - dapper:Embedding.twgCaT2vtQxkDjoT6fBYDD9NvptutvLR
+  - dapper:Embedding.OKukz_QNlPu4J-uGUmIe8-xNZCpy74t6
+  - dapper:Embedding.BE5awT-6rd8S6OX6FxMZMDI3eqPiK8Ay

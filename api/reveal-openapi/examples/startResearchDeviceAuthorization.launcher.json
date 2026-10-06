@@ -1,0 +1,37 @@
+{
+  "operation_id": "startResearchDeviceAuthorization",
+  "case": "launcher",
+  "method": "POST",
+  "path_template": "/oauth/device_authorization",
+  "request": {
+    "url": "https://api.reveal.example.org/oauth/device_authorization",
+    "path": {},
+    "query": {},
+    "headers": {
+      "Content-Type": "application/x-www-form-urlencoded",
+      "Accept": "application/json"
+    },
+    "body": {
+      "client_id": "reveal-local-launcher",
+      "resource": "https://api.reveal.example.org/mcp",
+      "scope": "research:read research:write",
+      "local_work_id": "77777777-7777-4777-8777-777777777777"
+    }
+  },
+  "responses": {
+    "200": {
+      "content_type": "application/json",
+      "examples": {
+        "pending": {
+          "device_code": "rvld_FICTIONAL_DEVICE_SECRET",
+          "user_code": "ABCD-EFGH",
+          "verification_uri": "https://reveal.example.org/research/connect",
+          "verification_uri_complete": "https://reveal.example.org/research/connect?user_code=ABCD-EFGH",
+          "expires_in": 600,
+          "interval": 5
+        }
+      }
+    }
+  },
+  "curl": "curl -X POST https://api.reveal.example.org/oauth/device_authorization -H 'Content-Type: application/x-www-form-urlencoded' -H 'Accept: application/json' --data-raw 'client_id=reveal-local-launcher&resource=https%3A%2F%2Fapi.reveal.example.org%2Fmcp&scope=research%3Aread+research%3Awrite&local_work_id=77777777-7777-4777-8777-777777777777'"
+}

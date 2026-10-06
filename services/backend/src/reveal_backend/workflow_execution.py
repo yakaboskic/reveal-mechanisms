@@ -376,7 +376,11 @@ class WorkflowExecution:
             require(descriptor == execution['dispatch_input'], 'Bootstrap dispatch checkpoint differs from execution')
             self.bootstrap_config(job, execution, descriptor)
             if box['phase'] == 'prepared': return {'next_phase': 'launch'}
-            handle = await adapter.prepare_from_store(descriptor['bootstrap'], box, self.store())
+            research_access = None
+            if descriptor['bootstrap'].get('config', {}).get('research_context'):
+                from .research_hosted import access
+                research_access = await run_sync(access, self.repository, job, queue['attempt'])
+            handle = await adapter.prepare_from_store(descriptor['bootstrap'], box, self.store(), **({'research_access': research_access} if research_access else {}))
             require(handle.get('phase') == 'prepared' and all(handle.get(key) == box.get(key)
                 for key in ('box_id', 'job_id', 'attempt')), 'Bootstrap cannot replace its assigned Box')
             await run_sync(self.commit_checkpoint, payload, token, execution['workspace'], box=handle)
@@ -384,6 +388,10 @@ class WorkflowExecution:
         request, inputs = self.request(job, queue, execution, root)
         if phase == 'bootstrap':
             if box['phase'] == 'prepared': return {'next_phase': 'launch'}
+            if inputs.get('retrieval_mode') == 'progressive':
+                from dataclasses import replace
+                from .research_hosted import access
+                request = replace(request, research_access=await run_sync(access, self.repository, job, queue['attempt']))
             handle = await adapter.prepare_once(request, box)
             await run_sync(self.checkpoint, payload, token, root, box=handle,
                 dispatch_input={**queue['dispatch_input'],'selected_graphs':list(request.selected_graphs)})
@@ -463,7 +471,7 @@ class WorkflowExecution:
         source = await run_sync(read_preparation_inputs, self.repository, job)
         if job['kind'] == 'analysis':
             frozen, binding = source
-            path, package = await run_sync(collect, job, frozen, binding, queue['inputs'].get('budgets', {}), root/'evidence')
+            path, package = await run_sync(collect, job, frozen, binding, queue['inputs'].get('budgets', {}), root/'evidence', **({'repository': self.repository} if frozen.get('retrieval_mode') == 'progressive' else {}))
             path, package, measurement = await run_sync(fit_input_budget, path, mode, queue['inputs'].get('budgets', {}).get('evidence_tokens', 24000))
             (root/'token-budget.json').write_bytes(canonical_json(measurement))
         else:
@@ -501,7 +509,9 @@ class WorkflowExecution:
         if result.status == 'insufficient_evidence': return {'next_phase': 'commit', 'outcome': True}
         if job['kind'] == 'analysis':
             frozen, _ = await run_sync(read_preparation_inputs, self.repository, job)
-            require(0 < len(result.account_paths) <= queue['inputs'].get('budgets', {}).get('max_accounts', 3), 'Invalid account count')
+            from .research_hosted import captured_context
+            validation_path, _, existing = await run_sync(captured_context, self.repository, job, result, request.input_path, root/'research-context')
+            require(0 < len(result.account_paths)+len(existing) <= queue['inputs'].get('budgets', {}).get('max_accounts', 3), 'Invalid account count')
             directory = root/'validated'; directory.mkdir(exist_ok=True)
             diagnostics = root/f'attempt-{queue["attempt"]}'; diagnostics.mkdir(exist_ok=True)
             paths = []
@@ -510,7 +520,7 @@ class WorkflowExecution:
             for index, path in enumerate(result.account_paths):
                 target = directory/f'account-{index}.json'
                 try:
-                    document, report = await run_sync(assemble_account, assert_artifact(path, request.output_dir), request.input_path,
+                    document, report = await run_sync(assemble_account, assert_artifact(path, request.output_dir), validation_path,
                         target, frozen['attribution'], job, request.attempt, 'box', result.ledger_manifest_path)
                 except AccountValidationError as exc:
                     (diagnostics/f'validation-{index+1}.json').write_bytes(canonical_json(redact(exc.report)))
@@ -550,7 +560,9 @@ class WorkflowExecution:
             else:
                 accepted = [(decode((root/path).read_bytes()), decode((directory/f'report-{index}.json').read_bytes()), root/path)
                             for index, path in enumerate(execution['validated_paths'])]
-                await drain_on_cancel(worker.accept_accounts(job, token, accepted, frozen, request.input_path, result, directory, 'box'))
+                from .research_hosted import captured_context
+                validation_path, _, _ = await run_sync(captured_context, self.repository, job, result, request.input_path, root/'research-context')
+                await drain_on_cancel(worker.accept_accounts(job, token, accepted, frozen, validation_path, result, directory, 'box'))
         else:
             await drain_on_cancel(worker.accept_paragraph(job, token, decode((root/execution['validated_paths'][0]).read_bytes()), inputs, directory))
         current, _, _ = await run_sync(self.context, payload)

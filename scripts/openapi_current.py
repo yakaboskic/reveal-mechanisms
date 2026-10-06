@@ -289,6 +289,10 @@ def reference_schemas(b):
     model=lambda:enum(*rg.MODELS,description='EAGGL reference model: cfde-inc-v2 (legacy CFDE-linked factors) or eaggl-capped-v1 (KPN reference generations).')
     b.add('KpnTrait',obj({'id':kpn,'name':string(),'legacy_phenotype_id':string(),'trait_group':null(string()),'trait_type':null(string())},
         description='KPN trait (kpn-data-models portal_id) of a factor in an eaggl-capped-v1 reference generation. legacy_phenotype_id is the EAGGL/portal phenotype code.'))
+    S['KpnTrait']['properties'].update(ontology_mappings=array({'type':'object','additionalProperties':True}),
+        mapping_interpretations=array({'type':'object','additionalProperties':True}), mapping_policy_version=string())
+    S['DismechMechanism']['properties']['source_detail'] = {'type':'object','additionalProperties':True,
+        'description':'Pinned imported pathophysiology record, source locator, hash and import/commit provenance; omitted when not materialized.'}
     S['EagglFactor']['properties'].update(model=model(),reference_generation_id=generation,kpn_trait=null(ref('KpnTrait')))
     S['EagglFactor']['description']+=' Each deployment serves the factors of one active reference generation. In an eaggl-capped-v1 generation, source_id is factor:kpn:{NNNNNNN}:eaggl-capped-v1:{FactorN}, the record adds reference_generation_id and kpn_trait, cfde_anchor.label is the EAGGL factor label, and catalog_file identifies the canonical factor metadata bytes. Legacy cfde-inc-v2 records omit both fields.'
     for name in ('Composer','SuggestInput'): S[name]['properties']['model']=model()

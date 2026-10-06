@@ -213,7 +213,7 @@ const scenarios = [
     await h.page.locator('#research-direction').fill('Direction submitted for this run only');
     await h.page.locator('#research-hypotheses').fill(saved.composer.hypotheses);
     await h.page.locator('#research-context').fill('Frozen run-specific context');
-    await h.page.getByRole('button', { name: 'Let’s close this gap', exact: true }).click(); await h.page.waitForURL(/\/runs\//); await h.page.getByRole('region', { name: 'Submitted research inputs', exact: true }).waitFor();
+    await h.page.getByRole('button', { name: 'Let’s close this gap', exact: true }).click(); await h.page.getByRole('menuitem', { name: 'Run online', exact: false }).click(); await h.page.waitForURL(/\/runs\//); await h.page.getByRole('region', { name: 'Submitted research inputs', exact: true }).waitFor();
     assert.deepEqual(h.state.drafts.get(uuid(1)), saved);
     const create = h.state.calls.find(call => call.method === 'POST' && call.path === '/api/backend/v1/drafts'); assert.equal(create.body.lifecycle, 'temporary'); assert.equal(create.body.source_draft_id, uuid(1)); assert.equal(create.body.source_draft_version, saved.version);
     const frozen = [...h.state.frozen.values()][0].composer;
@@ -228,7 +228,7 @@ const scenarios = [
   }],
   ['lost-submission-retries-one-key-after-reload', async () => {
     const h = await harness('lost-submission-retries-one-key-after-reload', { saved: true, loseJob: true }); await h.openSaved(); await h.readyToSubmit();
-    await h.page.getByRole('button', { name: 'Let’s close this gap', exact: true }).click(); await h.page.locator('[data-submission-state="error"]').waitFor();
+    await h.page.getByRole('button', { name: 'Let’s close this gap', exact: true }).click(); await h.page.getByRole('menuitem', { name: 'Run online', exact: false }).click(); await h.page.locator('[data-submission-state="error"]').waitFor();
     assert.equal(h.state.jobs.size, 1); const before = h.state.calls.find(call => call.method === 'POST' && call.path === '/api/backend/v1/jobs');
     await h.page.reload(); await h.page.waitForURL(/\/runs\//); await h.page.getByRole('region', { name: 'Submitted research inputs', exact: true }).waitFor();
     const attempts = h.state.calls.filter(call => call.method === 'POST' && call.path === '/api/backend/v1/jobs'); assert.ok(attempts.length >= 2); assert.ok(attempts.every(call => call.key === before.key && JSON.stringify(call.body) === JSON.stringify(before.body)));
@@ -237,7 +237,7 @@ const scenarios = [
   }],
   ['frozen-run-survives-catalog-outage', async () => {
     const h = await harness('frozen-run-survives-catalog-outage', { saved: true }); await h.openSaved(); await h.readyToSubmit();
-    await h.page.getByRole('button', { name: 'Let’s close this gap', exact: true }).click(); await h.page.waitForURL(/\/runs\//);
+    await h.page.getByRole('button', { name: 'Let’s close this gap', exact: true }).click(); await h.page.getByRole('menuitem', { name: 'Run online', exact: false }).click(); await h.page.waitForURL(/\/runs\//);
     h.state.gapUnavailable = true; await h.page.reload(); await h.page.getByRole('region', { name: 'Submitted research inputs' }).waitFor();
     assert.equal(await h.page.locator('.selected-question').innerText(), gap.object.text);
     assert.equal(await h.page.getByText(savedComposer().research_direction, { exact: true }).count(), 1);
@@ -286,7 +286,7 @@ const scenarios = [
   }],
   ['uncertain-response-back-locks-inputs', async () => {
     const h = await harness('uncertain-response-back-locks-inputs', { saved: true, loseJob: true }); await h.openSaved(); await h.readyToSubmit();
-    await h.page.getByRole('button', { name: 'Let’s close this gap', exact: true }).click(); await h.page.locator('[data-submission-state="error"]').waitFor();
+    await h.page.getByRole('button', { name: 'Let’s close this gap', exact: true }).click(); await h.page.getByRole('menuitem', { name: 'Run online', exact: false }).click(); await h.page.locator('[data-submission-state="error"]').waitFor();
     await h.page.getByRole('button', { name: 'Back to question', exact: true }).click();
     await h.openLegacy();
     assert.equal(await h.page.locator('#research-direction').isDisabled(), true);
@@ -338,7 +338,7 @@ const scenarios = [
   }])),
   ['late-draft-restore-cannot-overwrite-run', async () => {
     const h = await harness('late-draft-restore-cannot-overwrite-run', { saved: true }); await h.openSaved(); await h.readyToSubmit();
-    await h.page.getByRole('button', { name: 'Let’s close this gap', exact: true }).click(); await h.page.waitForURL(/\/runs\//);
+    await h.page.getByRole('button', { name: 'Let’s close this gap', exact: true }).click(); await h.page.getByRole('menuitem', { name: 'Run online', exact: false }).click(); await h.page.waitForURL(/\/runs\//);
     const runUrl = h.page.url(); h.state.holds.add('restore');
     await h.page.evaluate(id => window.history.pushState(null, '', `/drafts/${id}`), uuid(1)); await until(() => h.state.gates.has('restore'), 'older draft restoration held');
     await h.page.evaluate(url => window.history.pushState(null, '', url), runUrl); await h.page.getByRole('region', { name: 'Submitted research inputs' }).waitFor();
@@ -360,7 +360,7 @@ const scenarios = [
   }]),
   ['boot-effect-replay-retains-recoverable-error', async () => {
     const h = await harness('boot-effect-replay-retains-recoverable-error', { saved: true, fail: 'job' }); await h.openSaved(); await h.readyToSubmit();
-    await h.page.getByRole('button', { name: 'Let’s close this gap', exact: true }).click(); const error = h.page.locator('[data-submission-state="error"]'); await error.waitFor();
+    await h.page.getByRole('button', { name: 'Let’s close this gap', exact: true }).click(); await h.page.getByRole('menuitem', { name: 'Run online', exact: false }).click(); const error = h.page.locator('[data-submission-state="error"]'); await error.waitFor();
     // This development-only check intentionally replays React's existing boot
     // effect with refs intact, matching Fast Refresh's former stuck-spinner bug.
     const count = await h.page.evaluate(() => {
@@ -377,7 +377,7 @@ const scenarios = [
   }],
   ['explicit-run-beats-stale-pending-intent', async () => {
     const h = await harness('explicit-run-beats-stale-pending-intent', { saved: true, loseJob: true }); await h.openSaved(); await h.readyToSubmit();
-    await h.page.getByRole('button', { name: 'Let’s close this gap', exact: true }).click(); await h.page.locator('[data-submission-state="error"]').waitFor();
+    await h.page.getByRole('button', { name: 'Let’s close this gap', exact: true }).click(); await h.page.getByRole('menuitem', { name: 'Run online', exact: false }).click(); await h.page.locator('[data-submission-state="error"]').waitFor();
     await h.page.goto(`${origin}/runs/${[...h.state.jobs.keys()][0]}`); await h.page.getByRole('region', { name: 'Submitted research inputs' }).waitFor();
     assert.equal(h.state.calls.filter(call => call.method === 'POST' && call.path.endsWith('/jobs')).length, 1);
     assert.equal(await h.page.locator('[data-submission-state]').count(), 0); await h.close(['explicit run URL wins over browser receipt', 'frozen request loaded without dispatch']);

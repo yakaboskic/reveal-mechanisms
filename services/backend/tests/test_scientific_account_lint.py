@@ -13,6 +13,7 @@ import test_evidence_package as fixtures
 from reveal_backend.dapper_release import clone_release, prepare_agent_workspace, verify_release
 from reveal_backend.evidence_package import EvidenceBuildError, canonical_json, decode, sha256
 from reveal_backend.scientific_account_lint import AccountValidationError, cfde_source_files, lint_scientific_account, validate_scientific_account
+from reveal_backend.runtime_config import CURRENT_DAPPER_SNAPSHOT
 
 ROOT = fixtures.ROOT
 
@@ -65,7 +66,7 @@ class ScientificAccountLintTests(unittest.TestCase):
         cls.package_path = fixtures.EvidencePackageTests.root / 'capture/package/evidence-package.json'
         # A local test release uses the vendored schema; no network or sibling checkout is required.
         cls.origin = cls.root / 'origin'
-        shutil.copytree(ROOT / 'data/dapper/2026-09-24-v8/snapshot/schema', cls.origin / 'schema')
+        shutil.copytree(CURRENT_DAPPER_SNAPSHOT / 'snapshot/schema', cls.origin / 'schema')
         for cache in cls.origin.rglob('__pycache__'): shutil.rmtree(cache)
         def git(*args):
             return subprocess.check_output(['git', '-C', str(cls.origin), *args], text=True, stderr=subprocess.DEVNULL).strip()
@@ -217,7 +218,7 @@ p.write_text(json.dumps(doc))
             if defect == 'target': broken['claims'][1]['has_evidence'] = [broken['evidence_items'][0]['id']]
             else: broken['evidence_items'][1].pop('was_derived_from')
             findings = {item['check'] for item in self.lint(broken, mode='draft')['findings']}
-            self.assertIn('evidence-target' if defect == 'target' else 'cfde-ancestry', findings)
+            self.assertIn('evidence-target' if defect == 'target' else 'source-ancestry', findings)
 
     def test_assembly_does_not_turn_prose_mentions_into_orphan_nodes(self):
         from reveal_backend import acceptance
@@ -345,9 +346,9 @@ p.write_text(json.dumps(doc))
     def test_activity_input_alone_is_not_claim_evidence(self):
         document = deepcopy(self.valid); document['evidence_items'][0]['was_derived_from'] = []
         result = self.lint(document)
-        self.assertIn('cfde-ancestry', {f['check'] for f in result['findings']})
+        self.assertIn('source-ancestry', {f['check'] for f in result['findings']})
 
-    def test_paper_only_lineage_does_not_replace_captured_cfde_evidence(self):
+    def test_uncaptured_paper_lineage_does_not_qualify_as_evidence(self):
         document = deepcopy(self.draft)
         paper_id = 'urn:test:captured-paper-response'
         document['files'].append({'id': paper_id, 'filename': 'paper-response.json',
@@ -356,7 +357,7 @@ p.write_text(json.dumps(doc))
         document['evidence_items'][0]['context'] = 'Captured paper abstract at /structuredContent/data/text.'
         path = self.root / 'paper-only.json'; path.write_bytes(canonical_json(document)); self.mint(path)
         result = self.lint(decode(path.read_bytes()))
-        self.assertIn('cfde-ancestry', {f['check'] for f in result['findings']})
+        self.assertIn('source-ancestry', {f['check'] for f in result['findings']})
         self.assertFalse(result['valid'])
 
     def test_missing_or_mistargeted_evidence_is_rejected(self):

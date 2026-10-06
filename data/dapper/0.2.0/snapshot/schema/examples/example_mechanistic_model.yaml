@@ -1,0 +1,9 @@
+# Extracted from example_claim_provenance_trace.yaml; assessment is on Claim.
+id: dapper:MechanisticModel.swjcpBMoSp1bh5AoBhbA1mcZXGmk8PK4
+name: CLCN5 LOF -> PT dysfunction -> Dent disease
+description: Loss-of-function variants in CLCN5 impair endosomal acidification in proximal tubule epithelial
+  cells, causing the proximal tubule dysfunction that manifests as Dent disease.
+subject_entity: HGNC:2023
+object_entity: MONDO:0015612
+dismech_class: dismech:MechanisticHypothesis
+dismech_disease_term: MONDO:0015612

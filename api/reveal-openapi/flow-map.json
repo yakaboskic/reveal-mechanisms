@@ -1,5 +1,5 @@
 {
-  "openapi_sha256": "f3aa4c2ad7275c67a409230a81fe1343e2b8ee6d8ed659cca140f3b4d2a59d27",
+  "openapi_sha256": "f22b3fbc2475b0b3791bc757b0218b03a3227eb237bb706b0a86d32803a227e2",
   "steps": [
     {
       "id": "gap",
@@ -75,10 +75,10 @@
         "Later edits, upload removal or draft deletion do not change the submitted request."
       ],
       "worker": [
-        "Resolve frozen DisMech context; four same-seed CFDE connections plus contextual edges and BioIndex queries.",
-        "Build, validate and freeze the evidence package with exact source artifacts and supplied documents for the research agent and final source validation.",
-        "Fresh verified DAPPER clone, Claude Code in Box, selected Proto-OKN tools.",
-        "Trusted assembly, minting, final lint plus source/ledger/ownership checks; save passing accounts without a second AI review."
+        "Prepare a small immutable seed from frozen selections and authoring-kit bytes; no eager source crawl.",
+        "Hosted agent uses the shared loaded-reference/reuse MCP service and exact work/request-scoped evidence receipts. Only the gated small-model phenotype tools may query BioIndex.",
+        "Verified DAPPER runtime and Claude Code in Box with an execution-fenced trusted proxy.",
+        "Trusted assembly, minting, final lint/source/ledger/ownership checks; persist eligible new or reused accounts."
       ]
     },
     {
@@ -132,7 +132,7 @@
       "id": "paragraph-job",
       "title": "Generate the cited statement automatically",
       "route": "Worker outbox \u2192 kind=paragraph job",
-      "action": "Each accepted account independently queues a paragraph; explicit endpoint supports retry/alternate focus.",
+      "action": "New accepted online accounts queue paragraphs; local submissions and reused accounts require an explicit request.",
       "incoming": "Saved account payload, citation revisions, settings and skill version.",
       "outgoing": "Paragraph Job; account remains usable independently.",
       "cases": [
@@ -375,8 +375,92 @@
         "Gene sets retain the top 50 projections by joint or marginal rank; absent weights are never treated as zero.",
         "Public reference reads expose imported catalog data only; account gene-set permissions are unchanged."
       ]
+    },
+    {
+      "id": "local-research",
+      "title": "Download and resume local research",
+      "route": "/v1/local-work; /v1/local-work/{id}; /package; /setup-kit; /close",
+      "action": "Prepare a frozen workspace, explore public science anonymously and inspect accepted/reused results in Research runs.",
+      "incoming": "Owned exact draft revision; selected Codex or Claude Code client; idempotency key for lifecycle writes.",
+      "outgoing": "Frozen local work, package/manifest metadata, credential-free ZIP and durable submission summaries.",
+      "cases": [
+        "createLocalWork.saved_draft",
+        "listLocalWork.request",
+        "getLocalWork.request",
+        "getLocalWorkPackage.request",
+        "closeLocalWork.close",
+        "revokeLocalResearchGrant.request",
+        "downloadLocalWorkspace.codex",
+        "downloadLocalWorkspace.claude_code"
+      ],
+      "rules": [
+        "Both clients start from exact retained inputs using the same local stdio helper; no credential or hosted job is issued by download.",
+        "Default launch is anonymous; offline mode uses downloaded files. Explicit sign-in is required for private reads, server validation, uploads and submission.",
+        "Local accepted accounts stay private, optional paragraph generation is explicit and validation-only candidate IDs are not saved accounts."
+      ]
+    },
+    {
+      "id": "research-oauth",
+      "title": "Approve scoped agent access",
+      "route": "/.well-known/oauth-*; /oauth/*; /v1/research-oauth/consent",
+      "action": "Use registered browser identity to explicitly approve one agent connection for one owned open research run.",
+      "incoming": "Public-client resource binding; S256 PKCE or device code; registered Google/ORCID browser identity and explicit work selection.",
+      "outgoing": "Trusted consent details, exact registered callback or device approval, scoped access/rotating refresh tokens, revocation.",
+      "cases": [
+        "getResearchAuthorizationMetadata.request",
+        "getResearchProtectedResourceMetadata.request",
+        "getResearchMcpProtectedResourceMetadata.request",
+        "registerResearchOAuthClient.public_client",
+        "authorizeResearchOAuthClient.request",
+        "startResearchDeviceAuthorization.launcher",
+        "exchangeResearchOAuthToken.authorization_code",
+        "exchangeResearchOAuthToken.device",
+        "exchangeResearchOAuthToken.refresh",
+        "revokeResearchOAuthConnection.refresh",
+        "getResearchOAuthConsent.request",
+        "decideResearchOAuthConsent.approve",
+        "decideResearchOAuthConsent.decline"
+      ],
+      "rules": [
+        "Reading or refreshing consent never grants access; provider sign-in is not approval.",
+        "An anonymous browser may explicitly move its own workspace after verified sign-in; device codes and work IDs are not ownership proofs.",
+        "Names are self-reported; show the device code, resource, scopes, callback and work. Never forward provider tokens.",
+        "Device/token/revoke requests use form encoding directly to the backend. Access lasts at most 15 minutes; rotating refresh families are bounded by work lifetime and 30 days."
+      ]
+    },
+    {
+      "id": "public-captures",
+      "title": "Download retained public reference evidence",
+      "route": "GET /v1/public-research/captures/{capture_id}/artifacts/{artifact_sha256}",
+      "action": "Download exact bytes from an anonymous MCP reference query before its stated expiry.",
+      "incoming": "Public capture ID and artifact hash returned by get_public_capture; no bearer.",
+      "outgoing": "Verified public reference bytes with explicit content disposition and no-store.",
+      "cases": [
+        "downloadPublicResearchArtifact.request"
+      ],
+      "rules": [
+        "Default public retention is 7 days; each capture states its expiry. No private research, uploaded evidence or scientific reuse closure is served here.",
+        "After sign-in, attach_public_captures verifies same frozen generation and server-retained exact bytes without a source query. Existing authenticated attachments outlive public expiry."
+      ]
+    },
+    {
+      "id": "legacy-local-connections",
+      "title": "Legacy connection compatibility",
+      "route": "POST /v1/local-work/{id}/grants; POST /v1/research-setup/exchange; DELETE /v1/local-work/{id}/setup-tickets",
+      "action": "Retain deprecated compatibility only where existing issuance records prove registered authorization; anonymous-issued or unmarked credentials require fresh consent.",
+      "incoming": "Owned legacy grant request or already-issued setup ticket.",
+      "outgoing": "Legacy scoped bearer/connection metadata or ticket revocation.",
+      "cases": [
+        "issueLocalResearchGrant.connect",
+        "exchangeResearchSetup.redeem",
+        "revokeLocalSetupTickets.request"
+      ],
+      "rules": [
+        "Deprecated for new setup: v2 archives issue neither setup tickets nor manual bearer credentials.",
+        "New clients use anonymous public access and explicit browser OAuth consent."
+      ]
     }
   ],
-  "operation_count": 60,
-  "exchange_count": 78
+  "operation_count": 81,
+  "exchange_count": 103
 }

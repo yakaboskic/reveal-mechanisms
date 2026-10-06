@@ -1,0 +1,36 @@
+# Synthetic PR #27 review fixture; all names, checksums, and locations are illustrative.
+# Observed against PR head 6f606bff1411e3e7ed8ff876ac565c128adf68d5.
+# Fixed linter: PASS, 0 errors and 0 warnings.
+# Finding 2: replace the raw input File with an upstream Dataset.
+# There is still only one final result; the other Dataset is consumed by the Activity.
+# Expected: PASS when the final result is selected independently of its class.
+# Before fix: FAIL; reports two terminals and requires provenance/DRS for the raw input.
+
+datasets:
+- id: dapper:Dataset.a_20OP9amdhJhqMqKfdEnLDTADUE_VxX
+  name: Synthetic final result
+  resource_type: dataset
+- id: dapper:Dataset.iryl6D-jQSAycLS9FOgIK4qxh3_ZQd3e
+  name: Raw upstream dataset
+  resource_type: dataset
+activities:
+- id: dapper:Activity.N2ZGhLItamKdVSSbX1mQNpzIQEwmMxne
+  name: Analyze input
+  command: python analyze.py input.tsv
+drs_objects:
+- id: dapper:DrsObject.u9TZbI23plbenZHXFKk-yqNpWM_rDMzS
+  name: Result bytes
+  self_uri: drs://example.org/result
+  checksum_sha256: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+was_generated_by_edges:
+- subject: dapper:Dataset.a_20OP9amdhJhqMqKfdEnLDTADUE_VxX
+  predicate: prov:wasGeneratedBy
+  object: dapper:Activity.N2ZGhLItamKdVSSbX1mQNpzIQEwmMxne
+used_edges:
+- subject: dapper:Activity.N2ZGhLItamKdVSSbX1mQNpzIQEwmMxne
+  predicate: prov:used
+  object: dapper:Dataset.iryl6D-jQSAycLS9FOgIK4qxh3_ZQd3e
+has_drs_object_edges:
+- subject: dapper:Dataset.a_20OP9amdhJhqMqKfdEnLDTADUE_VxX
+  predicate: dapper:hasDrsObject
+  object: dapper:DrsObject.u9TZbI23plbenZHXFKk-yqNpWM_rDMzS

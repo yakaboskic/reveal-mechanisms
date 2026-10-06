@@ -6,6 +6,7 @@ import { messageOf, type Schema } from "@/lib/client";
 import { useIdentity, ProviderButtons } from "@/components/Session";
 import { LoadingSurface } from "@/components/LoadingSurface";
 import { runHref, workspaceRuns } from "@/lib/workspace";
+import { localStateLabel, localWorkHref, localWorkTitle, submissionAccounts, type LocalWork } from "@/lib/local-work";
 import { WorkspaceDraftRow, WorkspaceGapRow } from "@/components/WorkspaceDrafts";
 import { useWorkspaceData } from "@/components/WorkspaceCache";
 import { searchableWorkspaceTab, workspaceTabs as tabs, type WorkspaceTab } from "@/lib/workspace-data";
@@ -31,12 +32,25 @@ function ResearchRun({ job, request }: { job: Schema<"Job">; request?: Schema<"R
   const title = gap?.text || preview || `Research run ${job.id.slice(0, 8)}`;
   const status = job.status === "insufficient_evidence" ? "Exploration saved" : job.status.replaceAll("_", " ");
   return <article className="workspace-run-row workspace-account-row" data-job-id={job.id}>
-    <div className="workspace-item-meta"><span className="workspace-visibility">{status}</span><time dateTime={job.created_at}>Submitted {shortDate(job.created_at)}</time></div>
+    <div className="workspace-item-meta"><span className="workspace-run-mode">Online</span><span className="workspace-visibility">{status}</span><time dateTime={job.created_at}>Submitted {shortDate(job.created_at)}</time></div>
     <Link className="workspace-item-title" href={runHref(job.id)}>{title}</Link>
     {preview && preview !== title && <p className="workspace-account-conclusion">{preview}</p>}
     <div className="workspace-item-meta"><Link href={runHref(job.id)}>View run →</Link>
       {job.result?.kind === "analysis" && job.result.account_ids.map(id => <Link key={id} href={`/accounts/${encodeURIComponent(id)}`}>Scientific account</Link>)}
       {job.result?.kind === "analysis_outcome" && <Link href={outcomeHref(job.result.outcome_id)}>View exploration</Link>}
+    </div>
+  </article>;
+}
+function LocalResearchRun({ work }: { work: LocalWork }) {
+  const title = localWorkTitle(work);
+  const preview = work.request?.composer?.research_direction || work.request?.composer?.context;
+  const accounts = [...new Set(work.submissions.flatMap(submissionAccounts))];
+  return <article className="workspace-run-row workspace-account-row" data-local-work-id={work.id}>
+    <div className="workspace-item-meta"><span className="workspace-run-mode">Local</span><span className="workspace-visibility">{localStateLabel[work.state]}</span><time dateTime={work.created_at}>Started {shortDate(work.created_at)}</time></div>
+    <Link className="workspace-item-title" href={localWorkHref(work.id)}>{title}</Link>
+    {preview && preview !== title && <p className="workspace-account-conclusion">{preview}</p>}
+    <div className="workspace-item-meta"><Link href={localWorkHref(work.id)}>View run →</Link>
+      {accounts.map(id => <Link key={id} href={`/accounts/${encodeURIComponent(id)}`}>Scientific account</Link>)}
     </div>
   </article>;
 }
@@ -54,7 +68,7 @@ function Workspace() {
   const query = searchableWorkspaceTab(tab) ? searches[tab] : "";
   const cached = useWorkspaceData(tab, query, listedReference);
   const reloaded = useReferenceReloaded();
-  const { gaps = [], accounts = [], outcomes = [], drafts = [], jobs = [], requests = [], cursor = null } = cached.data || {};
+  const { gaps = [], accounts = [], outcomes = [], drafts = [], jobs = [], requests = [], localWorks = [], cursor = null } = cached.data || {};
   const { loading, loadingMore, counts } = cached;
   const error = cached.error ? messageOf(cached.error) : "";
   const dialog = useRef<HTMLDialogElement>(null);
@@ -62,7 +76,10 @@ function Workspace() {
   useEffect(() => { setSearchText({ accounts: "", explorations: "" }); setSearches({ accounts: "", explorations: "" }); }, [me?.user_id]);
   const activity = workspaceRuns(jobs, requests, drafts);
   const frozenRequests = new Map(requests.map(request => [request.id, request]));
-  const runs = jobs.filter(job => job.kind === "analysis").sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id));
+  const runs = [
+    ...jobs.filter(job => job.kind === "analysis").map(job => ({ mode: "online" as const, record: job })),
+    ...localWorks.map(work => ({ mode: "local" as const, record: work })),
+  ].sort((a, b) => b.record.created_at.localeCompare(a.record.created_at) || b.record.id.localeCompare(a.record.id));
   const load = (append = false) => append ? cached.loadMore() : cached.refresh();
   const navigate = (value: WorkspaceTab, state: ReferenceState) => { window.history.replaceState(null, "", `?tab=${value}${state === "all" ? "" : `&reference=${state}`}`); };
   const chooseTab = (value: WorkspaceTab) => navigate(value, reference);
@@ -93,7 +110,7 @@ function Workspace() {
     <div id="workspace-results" role="tabpanel" aria-labelledby={`workspace-tab-${tab}`} aria-busy={initialLoading || loading}>
       {initialLoading ? <LoadingSurface key={`${me?.user_id || "session"}:${tab}`} title={!ready ? "Opening your workspace" : `Loading your ${tabLabels[tab].toLowerCase()}`} description={!ready ? "Checking this browser’s access to your saved work." : "Your saved explorations will appear here when the request completes."} /> : <>
         {tab === "drafts" ? (hasCurrentData ? drafts : []).map(draft => <WorkspaceDraftRow key={draft.id} draft={draft} refresh={cached.refresh} />)
-          : tab === "runs" ? (hasCurrentData ? runs : []).map(job => <ResearchRun key={job.id} job={job} request={frozenRequests.get(job.research_request_id || "")} />)
+          : tab === "runs" ? (hasCurrentData ? runs : []).map(run => run.mode === "local" ? <LocalResearchRun key={`local:${run.record.id}`} work={run.record} /> : <ResearchRun key={`online:${run.record.id}`} job={run.record} request={frozenRequests.get(run.record.research_request_id || "")} />)
           : tab === "gaps" ? me ? (hasCurrentData ? gaps : []).map(item => <WorkspaceGapRow key={`${me.user_id}:${item.source_gap.source_id}`} item={item} drafts={drafts.filter(draft => draft.composer.source_gap?.id === item.source_gap.id)} activity={activity} refresh={cached.refresh} />) : localGaps.map(gap => <article className="workspace-gap-row" key={gap.object.id}><Link className="workspace-item-title" href={`/knowledge-gaps/${encodeURIComponent(gap.object.id)}`}>{gap.object.text}</Link><div className="workspace-item-meta">{gap.source.disease_label && <span>{gap.source.disease_label}</span>}<span>Kept in this browser</span></div></article>) : tab === "explorations" ? (hasCurrentData ? outcomes : []).map(item => <article className="workspace-account-row" key={item.id}>
           <div className="workspace-item-meta"><PublicationStatus publication={item.publication} /><time dateTime={item.created_at}>Explored {shortDate(item.created_at)}</time><ReferenceBadge archive={item.archive} /></div>
           <Link className="workspace-item-title" href={outcomeHref(item.id)}>{item.knowledge_gap.text}</Link>

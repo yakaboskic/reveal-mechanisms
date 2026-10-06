@@ -22,7 +22,7 @@ async function proxy(request: Request, context: { params: Promise<{ path: string
         return gatewayProblem(502, "INVALID_ARTIFACT_REDIRECT", "The artifact download is unavailable.");
       return new Response(null, { status: 307, headers: { Location: location, "Cache-Control": "private, no-store", "Referrer-Policy": "no-referrer" } });
     }
-    const output = new Headers({ "Cache-Control": "no-store", "X-Accel-Buffering": "no" });
+    const output = new Headers({ "Cache-Control": "private, no-store", "X-Accel-Buffering": "no" });
     for (const name of ["content-type", "content-disposition", "x-content-type-options", "retry-after"]) { const value = upstream.headers.get(name); if (value) output.set(name, value); }
     return new Response(upstream.body, { status: upstream.status, headers: output });
   } catch { return gatewayProblem(502, "API_UNAVAILABLE", "The research API is unavailable. Your local edits are preserved; retry shortly."); }

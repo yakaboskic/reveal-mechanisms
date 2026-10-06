@@ -17,7 +17,9 @@ from linkml.generators.jsonschemagen import JsonSchemaGenerator
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / 'api'
-PIN_DIR = ROOT / 'data/dapper/2026-09-24-v8'
+sys.path.insert(0, str(ROOT / 'services/backend/src'))
+from reveal_backend.runtime_config import CURRENT_DAPPER_SNAPSHOT
+PIN_DIR = CURRENT_DAPPER_SNAPSHOT
 DAPPER = PIN_DIR / 'snapshot/schema'
 sys.path[:0] = [str(DAPPER / 'identity'), str(DAPPER / 'lint'), str(DAPPER)]
 from dapper_identity import DOC_GROUPS, assign_ids, compute_id, load_schema, verify
@@ -308,7 +310,7 @@ def application_schemas():
         'target': nullable(ref('SourceRef')), 'label': nullable(string())},
         description='Only uniquely resolved mechanism occurrences can become selected context. Phenotypes and whole sections retain their actual kinds.'))
     add('GapRecord', obj({'object': ref('DapperKnowledgeGap'), 'source': ref('GapSource'), 'attachments': array(ref('Attachment'))}))
-    add('Rank', obj({'value': {'type': 'number'}, 'metric': enum('cosine_similarity', 'lexical_rank', 'fuzzy_similarity', 'reciprocal_rank_fusion'),
+    add('Rank', obj({'value': {'type': 'number'}, 'metric': enum('cosine_similarity', 'lexical_rank', 'fuzzy_similarity', 'reciprocal_rank_fusion', 'eligible_disease_identity'),
         'rank': {'type': 'integer', 'minimum': 1}}, description='Retrieval relevance, not biological support or probability. Compare values only within the same metric/configuration.'))
     add('SearchProvenance', obj({'query': string(), 'mode': enum('lexical', 'fuzzy', 'semantic', 'hybrid'), 'corpus_snapshot': string(),
         'embedding_model': nullable(string()), 'embedding_revision': nullable(string()), 'template_version': string(),
@@ -321,9 +323,10 @@ def application_schemas():
         'manual_eaggl_anchors': array(ref('SourceRef'), maxItems=10), 'dismissed_source_ids': array(string(), uniqueItems=True, maxItems=1000),
         'subquery': string(maxLength=2000), 'mode': enum('semantic', 'hybrid'), 'model': {'const': MODEL, 'type': 'string'}}))
     add('Suggestion', obj({'factor': ref('EagglFactor'), 'ranking': ref('Rank'), 'matched_context_ids': array(string(), uniqueItems=True)}))
+    SCHEMAS['Suggestion']['properties']['reason'] = string()
     add('Suggestions', obj({'suggestion_id': uuid, 'automatic_anchors': array(ref('Suggestion'), maxItems=5),
         'automatic_target_count': {'const': 5, 'type': 'integer'}, 'search': ref('SearchProvenance'), 'limitations': array(string())},
-        description='At most five unique automatic EAGGL factors TOTAL across context, ranked by maximum per-mechanism cosine for semantic mode. Excludes manual selections and dismissals. Removal does not trigger silent refill; reset suggestions is explicit.'))
+        description='At most five unique automatic EAGGL factors TOTAL across context. Eligible versioned exact disease mappings are proposed first, followed by semantic/hybrid context retrieval. Reasons establish relevance to inspect, not biological support. Excludes manual selections and dismissals. Removal does not trigger silent refill; reset suggestions is explicit.'))
     add('JobBudgets', obj({'max_accounts': {'type': 'integer', 'minimum': 1, 'maximum': 3, 'default': 3},
         'candidates_per_type': {'type': 'integer', 'minimum': 1, 'maximum': 100, 'default': 100},
         'max_nodes': {'type': 'integer', 'minimum': 10, 'maximum': 250, 'default': 250},
@@ -729,6 +732,8 @@ def main():
     examples = openapi_current.examples(module, fixture, sample_responses(fixture))
     endpoints(fixture, examples)
     openapi_current.endpoints(module, fixture, examples)
+    import openapi_research
+    openapi_research.extend(module, fixture, examples)
     # Pair representation-specific inputs with the correct output, and include
     # paragraph polling under its own job ID in the portable exchange library.
     def extra_exchange(operation_id, case, *, query=None, path=None, media=None, response_name=None, value=None):
@@ -768,15 +773,15 @@ def main():
             'summary': 'DAPPER scientific content, knowledge-gap search, and shared analysis/paragraph jobs.',
             'description': 'Local API implementation contract; production deployment is deferred. Scientific schemas are generated from the pinned DAPPER schema. Application envelopes handle ownership, drafts, search, jobs and pagination. All DAPPER IDs in scientific examples are computed, not placeholders. Research/job/user timestamps and semantic rankings are illustrative; no Claude Code or embedding run was performed. The account fixture is the approved 12-claim HTML example: captured CFDE observations plus explicitly invented KG/membership assertions, never a production grounding-pass example. The evidence package is a separately verified live capture, not a claim that this example account was generated from it. Examples using example.org are not live resources. Do not treat example output as published research.'},
         'servers': [{'url': 'http://127.0.0.1:18000', 'description': 'Local Docker deployment backend (private routes require a gateway assertion)'},
-                    {'url': 'http://localhost:3000/api/backend', 'description': 'Local Next.js gateway (browser session required for private routes)'},
+                    {'url': 'http://localhost:3000/api/backend', 'description': 'Local Next.js v1 gateway (browser session for private routes; OAuth protocol/metadata use the backend server)'},
                     {'url': BASE, 'description': 'Reserved example domain; replace for deployment'}],
-        'tags': [{'name': n} for n in ['Identity', 'Knowledge gaps', 'Mechanisms', 'Drafts', 'Research history', 'Jobs', 'Scientific content', 'Citations']],
+        'tags': [{'name': n} for n in ['Identity', 'Knowledge gaps', 'Mechanisms', 'Drafts', 'Research history', 'Jobs', 'Local research', 'Scientific content', 'Citations']],
         'security': [{'ApplicationBearer': []}], 'paths': PATHS,
         'components': {'securitySchemes': {'ApplicationBearer': {'type': 'http', 'scheme': 'bearer', 'bearerFormat': 'API key or JWT',
             'description': 'Paste your rvl_ workspace API key or a short-lived trusted-gateway JWT. Swagger adds the Bearer prefix automatically. API keys resolve to one configured existing workspace and retain its ownership, expiry and job limits; they grant no internal or administrator access. Gateway JWTs are issued after registered login or anonymous session bootstrap. Never share gateway signing/service credentials or send provider access tokens or Auth.js cookies. Without a bearer, only public operations are available.'}}, 'schemas': SCHEMAS},
         'x-dapper-dependency': {'base_commit': PIN['base_commit'], 'schema_sha256': PIN['root_schema_sha256'],
             'snapshot_sha256': PIN['snapshot_sha256'], 'identity_profile': 'DAPPER-ID-1',
-            'source': '../data/dapper/2026-09-24-v8/snapshot/schema/dapper.yaml'},
+            'source': '../' + str((DAPPER / 'dapper.yaml').relative_to(ROOT))},
         'x-contract-rules': {'idempotency_retention_days': 7, 'schema_validation': 'Closed DAPPER schemas plus runtime digest, graph-reference, evidence-lineage and citation-span checks.',
             'naming': 'jobs is the only job resource. kind=analysis and kind=paragraph share creation, listing, status, events and cancellation.',
             'design_revision': 'v12.1',

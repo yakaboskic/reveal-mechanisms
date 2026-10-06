@@ -1,0 +1,527 @@
+id: https://broadinstitute.github.io/dapper/model/schema/claims.yaml
+name: dapper_claims
+version: 0.2.0
+title: DAPPER scientific claims
+description: >-
+  Propositions, attributed assessments, and paragraph-oriented scientific accounts.
+  Imported by dapper.yaml, which supplies HashableNode, ProvenancedResource,
+  DismechLinked, and the literal/relationship and identity slot mixins.
+license: https://creativecommons.org/licenses/by/4.0/
+default_prefix: dapper
+default_range: string
+prefixes:
+  dapper: https://broadinstitute.github.io/dapper/ns#
+  dapper_class: https://broadinstitute.github.io/dapper/model/reference/classes/
+  dapper_slot: https://broadinstitute.github.io/dapper/model/reference/slots/
+  dapper_enum: https://broadinstitute.github.io/dapper/model/reference/enums/
+  dapper_type: https://broadinstitute.github.io/dapper/model/reference/types/
+  linkml: https://w3id.org/linkml/
+imports:
+  - linkml:types
+
+# SEPIO's draft source still declares an example.org default namespace.
+# Use documentation links and explicit conceptual alignment rather than assert
+# OWL equivalence to a provisional or invented SEPIO class URI.
+enums:
+  GapKindEnum:
+    description: Kind of missing knowledge; independent of resolution or review status.
+    permissible_values:
+      KNOWLEDGE_GAP:
+        description: Missing knowledge about the biological system or its evidence.
+      HUMAN_MODEL_MISMATCH:
+        description: An unresolved difference between human biology and an experimental or computational model.
+  EvidenceDirectionEnum:
+    description: Direction of an assessment relative to its target proposition.
+    permissible_values:
+      SUPPORTS:
+        description: The assessment favors the proposition.
+      DISPUTES:
+        description: The assessment argues against the proposition.
+      NEUTRAL:
+        description: The assessment does not favor either direction; not missing evidence.
+      MIXED:
+        description: The evidence contributes in both directions.
+      UNKNOWN:
+        description: The direction was explicitly recorded as unknown.
+  ClaimScoreKindEnum:
+    description: Mathematical meaning of a reported value, independent of its magnitude.
+    permissible_values:
+      PROBABILITY:
+        description: Probability of the event specified in interpretation, in [0,1].
+      POSTERIOR_PROBABILITY:
+        description: Probability conditional on the specified data and model, in [0,1].
+      EFFECT_ESTIMATE:
+        description: Estimated effect on the scale named by metric; may be negative.
+      LOADING:
+        description: Factor loading or membership weight; not necessarily a probability.
+      SCORE:
+        description: Method-specific score whose scale is defined by interpretation.
+  PropositionKindEnum:
+    description: Scope of the content, independent of paragraph role or confidence.
+    permissible_values:
+      RESULT:
+        description: An observation, measurement, or output of a specified analysis.
+      BIOLOGICAL_INTERPRETATION:
+        description: Content about the biological system that results are used to understand.
+      UNSPECIFIED:
+        description: The scope has not been classified.
+  ClaimStatusEnum:
+    description: An assessor's review status; not a change to the proposition or a hypothesis type.
+    permissible_values:
+      proposed:
+        description: Put forward but not yet reviewed.
+      canonical:
+        description: Regarded by the assessor as the accepted explanation in the stated scope.
+      alternative:
+        description: Regarded by the assessor as a competing explanation.
+      contested:
+        description: Under active dispute.
+      refuted:
+        description: Judged by the assessor to be refuted.
+      retracted:
+        description: Withdrawn by its creator.
+
+classes:
+  Proposition:
+    is_a: HashableNode
+    description: >-
+      The content being asserted or evaluated, independent of a particular
+      assessment, score, or execution. A text statement is required; a structured
+      subject-predicate-object form is optional. DAPPER identifiers address the
+      representation, not a guarantee of semantic equivalence between paraphrases.
+    see_also:
+      - https://sepio-framework.github.io/sepio-linkml/Proposition/
+    annotations:
+      dapper:source_standard: SEPIO LinkML Proposition (conceptual alignment)
+    attributes:
+      statement:
+        is_a: literal
+        mixins: [hashable]
+        required: true
+        pattern: '\S'
+        description: >-
+          Self-contained proposition text, including its scientific scope but
+          excluding a particular assessor's confidence and execution metadata.
+      subject_entity:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        description: Subject of the optional structured proposition.
+      relation:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        description: Predicate of the optional structured proposition; does not itself assert truth.
+      object_entity:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        description: Object of the optional structured proposition.
+      scope:
+        is_a: literal
+        mixins: [hashable]
+        description: >-
+          Conditions that constrain the proposition's meaning (trait, population,
+          tissue, or fitted-factor context). Input provenance alone does not imply
+          that the conclusion is restricted to the input's biological context.
+      negated:
+        is_a: literal
+        mixins: [hashable]
+        range: boolean
+        description: >-
+          Whether the structured proposition is negated. Distinct from an
+          assessment that disputes the unnegated proposition.
+      proposition_kind:
+        is_a: literal
+        mixins: [hashable]
+        range: PropositionKindEnum
+        description: Result or biological interpretation; independent of its role as a hypothesis.
+      mechanistic_model:
+        is_a: relationship
+        mixins: [hashable]
+        range: MechanisticModel
+        inlined: false
+        description: Optional mechanistic structure elaborating this proposition's content.
+    rules:
+      - preconditions:
+          slot_conditions:
+            subject_entity:
+              required: true
+        postconditions:
+          slot_conditions:
+            relation:
+              required: true
+            object_entity:
+              required: true
+      - preconditions:
+          slot_conditions:
+            relation:
+              required: true
+        postconditions:
+          slot_conditions:
+            subject_entity:
+              required: true
+            object_entity:
+              required: true
+      - preconditions:
+          slot_conditions:
+            object_entity:
+              required: true
+        postconditions:
+          slot_conditions:
+            subject_entity:
+              required: true
+            relation:
+              required: true
+
+  ClaimScore:
+    is_a: HashableNode
+    description: >-
+      One explicitly typed quantitative assessment. A Claim links the score to
+      its proposition and provenance. Values are not interchangeable across
+      metrics, and a factor loading must not be relabeled as a probability.
+    attributes:
+      score_kind:
+        is_a: literal
+        mixins: [hashable]
+        range: ClaimScoreKindEnum
+        required: true
+        description: Mathematical kind of the value.
+      value:
+        is_a: literal
+        mixins: [hashable]
+        range: float
+        required: true
+        description: Reported numeric value on the metric's scale.
+      metric:
+        is_a: literal
+        mixins: [hashable]
+        required: true
+        pattern: '\S'
+        description: Exact source metric or output-column name; never inferred from the value.
+      interpretation:
+        is_a: literal
+        mixins: [hashable]
+        required: true
+        pattern: '\S'
+        description: >-
+          What is estimated, its scale, and (for probabilities) the event and
+          conditioning data/model. A posterior for a latent variable is not
+          automatically a probability that a biological mechanism is true.
+    rules:
+      - preconditions:
+          slot_conditions:
+            score_kind:
+              equals_string: PROBABILITY
+        postconditions:
+          slot_conditions:
+            value:
+              minimum_value: 0
+              maximum_value: 1
+      - preconditions:
+          slot_conditions:
+            score_kind:
+              equals_string: POSTERIOR_PROBABILITY
+        postconditions:
+          slot_conditions:
+            value:
+              minimum_value: 0
+              maximum_value: 1
+
+  Claim:
+    is_a: HashableNode
+    mixins:
+      - ProvenancedResource
+      - DismechLinked
+    description: >-
+      An attributed assertion or assessment of a Proposition, produced by a
+      particular activity. This is DAPPER's counterpart to SEPIO Statement.
+      It may be computational, curated, or reported by an author; being a Claim
+      does not imply established truth, causality, or a mechanistic hypothesis.
+    see_also:
+      - https://sepio-framework.github.io/sepio-linkml/Statement/
+    annotations:
+      dapper:source_standard: SEPIO LinkML Statement (conceptual alignment)
+    slot_usage:
+      was_generated_by:
+        required: true
+      was_attributed_to:
+        required: true
+        minimum_cardinality: 1
+    attributes:
+      proposition:
+        is_a: relationship
+        mixins: [hashable]
+        range: Proposition
+        inlined: false
+        required: true
+        description: Identifier of the proposition being asserted or assessed.
+      statement:
+        is_a: literal
+        mixins: [hashable]
+        description: >-
+          Human-readable rendering of this assessment, optionally including its
+          scores. The proposition text separately captures the evaluated content.
+      direction:
+        is_a: literal
+        mixins: [hashable]
+        range: EvidenceDirectionEnum
+        description: >-
+          Assessment direction, when reported. Omit for a simple assertion or
+          when the method supplies no directional judgment; do not infer it
+          by thresholding a score without a specified interpretation rule.
+      status:
+        is_a: literal
+        mixins: [hashable]
+        range: ClaimStatusEnum
+        description: Review status of this assessment, independent of proposition content.
+      has_score:
+        is_a: relationship
+        mixins: [hashable]
+        range: ClaimScore
+        inlined: false
+        multivalued: true
+        description: Scores assessing this claim's proposition, each retaining its metric and meaning.
+      source_locator:
+        is_a: literal
+        mixins: [hashable]
+        description: >-
+          Record key, row selector, or passage locating this assessment in the
+          output artifacts referenced by was_derived_from. Name the artifact
+          when more than one is referenced.
+      has_evidence:
+        is_a: relationship
+        mixins: [hashable]
+        range: EvidenceItem
+        inlined: false
+        multivalued: true
+        description: >-
+          Evidence uses bearing on this claim's proposition. Each evidence item's
+          target_proposition must match this proposition when supplied. Source
+          claims, rationale and assumptions describe an explicit interpretation;
+          computational input lineage remains in PROV links.
+      asserted_in:
+        is_a: relationship
+        mixins: [unhashable]
+        range: uriorcurie
+        multivalued: true
+        description: Publication back-references; excluded from claim identity to avoid cycles.
+
+  Question:
+    is_a: HashableNode
+    mixins:
+      - ProvenancedResource
+    description: >-
+      An inquiry to be addressed, independent of a proposed answer or assessment.
+      It has no truth assessment or confidence score. Accounts can share the same
+      question and propose different hypotheses in response.
+    attributes:
+      text:
+        is_a: literal
+        mixins: [hashable]
+        required: true
+        pattern: '\S'
+        description: The inquiry expressed in natural language.
+      scope:
+        is_a: literal
+        mixins: [hashable]
+        description: Biological or analytical setting that bounds this inquiry.
+      about_entities:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        multivalued: true
+        description: >-
+          Identifiers of diseases, genes, mechanisms, phenotypes, or other entities
+          that this inquiry concerns. These supply entity context, not proposed
+          answers or evidence. Omit when unavailable; do not invent identifiers.
+
+  KnowledgeGap:
+    is_a: Question
+    description: >-
+      A Question identifying knowledge that is missing. Inherited text expresses
+      the inquiry; gap_description states what is not yet known. Recording a gap
+      does not assess a proposed answer or imply that work has resolved it.
+    attributes:
+      gap_kind:
+        is_a: literal
+        mixins: [hashable]
+        range: GapKindEnum
+        description: Optional classification of the gap; omission means not classified.
+      gap_description:
+        is_a: literal
+        mixins: [hashable]
+        required: true
+        pattern: '\S'
+        description: The specific missing knowledge motivating the inherited question.
+
+  ScientificAccount:
+    is_a: HashableNode
+    mixins:
+      - ProvenancedResource
+    description: >-
+      An attributed scientific account organized as framing, context, claims,
+      and optional closing. It is not a Claim and has no aggregate proposition
+      or score. A hypothesis is a Proposition's role in this account. Membership
+      and order do not imply causation or evidential support.
+    slot_usage:
+      was_generated_by:
+        required: true
+      was_attributed_to:
+        required: true
+        minimum_cardinality: 1
+    attributes:
+      question:
+        is_a: relationship
+        mixins: [hashable]
+        range: Question
+        inlined: false
+        pattern: '\S'
+        description: The Question or KnowledgeGap motivating this account.
+      hypothesis:
+        is_a: relationship
+        mixins: [hashable]
+        range: Proposition
+        inlined: false
+        pattern: '\S'
+        description: >-
+          A proposition proposed for investigation in this account. This role
+          neither asserts it nor changes its identity; other accounts may use
+          the same proposition differently.
+      context:
+        is_a: literal
+        mixins: [hashable]
+        required: true
+        pattern: '\S'
+        description: >-
+          Authored description of approach, scope and analytical model. Material
+          proposition scope must also remain on the proposition when reused.
+      assumptions:
+        is_a: literal
+        mixins: [hashable]
+        multivalued: true
+        description: Assumptions taken as given here, not claims assessed by this work.
+      mechanistic_model:
+        is_a: relationship
+        mixins: [hashable]
+        range: MechanisticModel
+        inlined: false
+        description: Optional biological model being considered; distinct from the analytical method.
+      component_claims:
+        is_a: relationship
+        mixins: [hashable]
+        range: Claim
+        inlined: false
+        multivalued: true
+        required: true
+        minimum_cardinality: 1
+        description: >-
+          Ordered, distinct claim references. At least one claim appears before
+          the optional closing. Accounts do not nest in the initial profile.
+      conclusion_claims:
+        is_a: relationship
+        mixins: [hashable]
+        range: Claim
+        inlined: false
+        multivalued: true
+        description: >-
+          Ordered subset of component_claims expressed in the closing. New
+          scientific conclusions must be explicit Claims, not just closing prose.
+      closing_remarks:
+        is_a: literal
+        mixins: [hashable]
+        description: Optional editorial synthesis or limitations; does not create an additional claim.
+    rules:
+      - preconditions:
+          slot_conditions:
+            context:
+              required: true
+        postconditions:
+          any_of:
+            - slot_conditions:
+                question:
+                  required: true
+            - slot_conditions:
+                hypothesis:
+                  required: true
+
+  CitationOccurrence:
+    description: >-
+      An inline citation anchored in the exact saved Paragraph text. It pins an
+      already-minted scientific object and a separate registry metadata revision.
+      This value object has no independent identifier. Citation does not imply
+      evidential support or public access. Offsets count Unicode code points,
+      not UTF-16 code units or bytes.
+    attributes:
+      target_id:
+        is_a: relationship
+        range: uriorcurie
+        required: true
+        pattern: '\S'
+        description: Exact Claim, Question, or most-specific KnowledgeGap identifier.
+      citation_metadata_revision:
+        range: integer
+        required: true
+        minimum_value: 1
+        description: Immutable revision of the target's external citation metadata.
+      start:
+        range: integer
+        required: true
+        minimum_value: 0
+        description: Zero-based inclusive start offset in the saved Paragraph text.
+      end:
+        range: integer
+        required: true
+        minimum_value: 1
+        description: Exclusive end offset; greater than start and at most the text length.
+      exact_text:
+        description: Optional anchoring check; must exactly equal the text selected by start and end.
+
+  Paragraph:
+    is_a: HashableNode
+    mixins:
+      - ProvenancedResource
+    description: >-
+      A saved textual expression of one ScientificAccount. Multiple renderings
+      can express the same account. Editing text changes this record's identity,
+      not the scientific account's identity.
+    see_also:
+      - http://purl.org/spar/doco/Paragraph
+    attributes:
+      scientific_account:
+        is_a: relationship
+        mixins: [hashable]
+        range: ScientificAccount
+        inlined: false
+        required: true
+        description: The version of the structured account expressed by this paragraph.
+      text:
+        is_a: literal
+        mixins: [hashable]
+        required: true
+        pattern: '\S'
+        description: The paragraph's authored or rendered natural-language text.
+      citations:
+        is_a: literal
+        mixins: [hashable]
+        range: CitationOccurrence
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+        description: >-
+          Ordered citation occurrences in the saved text. Each pins an object and
+          metadata revision; style, numbering, and author-date labels are rendered
+          separately. Changes affect Paragraph identity, not the cited objects.
+      publication:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        description: Publication identifier or local Publication record containing this expression.
+      location:
+        is_a: literal
+        mixins: [hashable]
+        description: Section, paragraph number, or other locator within the publication.
+      language:
+        is_a: literal
+        mixins: [hashable]
+        description: Language tag for this expression.

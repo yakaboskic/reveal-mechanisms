@@ -4,9 +4,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError, backend, errorMessage, request } from "../lib/api";
 import { followJob, followWorkspace } from "../lib/events";
 import { createMutationKeys } from "../lib/mutations";
+import { analysisAccountResults, localWorkApi, localWorkHref } from "../lib/local-work";
+import { ResearchModeMenu } from "../components/ResearchModeMenu";
 import { emptyComposer, terminal, withFactors, type AnalysisInput, type Composer, type Draft, type Factor, type Gap, type Job, type JobEvent, type Me, type Schema } from "../lib/types";
 
-type PendingSubmission = { body: AnalysisInput; key: string };
+type PendingSubmission = { body: AnalysisInput; key: string; mode?: "online" | "local" };
 const readable = (value: string) => value.replaceAll("_", " ");
 const date = (value: string) => new Date(value).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 const gapTitle = (gap: Gap) => gap.object.name || gap.object.text || "Knowledge gap";
@@ -19,7 +21,7 @@ function setLocation(kind: "draft" | "job", id: string | null) {
 function storedIntent(user: string): PendingSubmission | null {
   try {
     const value = JSON.parse(sessionStorage.getItem("reveal-submit:" + user) || "null");
-    return value?.body?.kind === "analysis" && typeof value.body.draft_id === "string" && Number.isInteger(value.body.draft_version) && typeof value.key === "string" ? value : null;
+    return value?.body?.kind === "analysis" && (value.mode === undefined || ["online", "local"].includes(value.mode)) && typeof value.body.draft_id === "string" && Number.isInteger(value.body.draft_version) && typeof value.key === "string" ? value : null;
   } catch { return null; }
 }
 
@@ -213,12 +215,18 @@ export default function Home() {
     } catch (error) { setError(error instanceof ApiError && error.status === 409 && error.code !== "REFERENCE_GENERATION_SUPERSEDED" ? "This draft changed on the server. Reload the saved draft below to review it before saving again. Your local selections remain visible." : errorMessage(error)); }
     finally { setBusy(""); }
   }
-  async function submit() {
+  async function submit(mode: "online" | "local" = "online") {
     if (!principal || (!pending && (!draft || dirty))) return;
-    const intent = pending || { body: { kind: "analysis" as const, draft_id: draft!.id, draft_version: draft!.version, budgets: { max_accounts: 1 } }, key: crypto.randomUUID() };
+    const intent = pending || { mode, body: { kind: "analysis" as const, draft_id: draft!.id, draft_version: draft!.version, budgets: { max_accounts: 1 } }, key: crypto.randomUUID() };
     setPending(intent); sessionStorage.setItem("reveal-submit:" + principal.user_id, JSON.stringify(intent));
     setBusy("submit"); setError("");
     try {
+      if (intent.mode === "local") {
+        const value = await localWorkApi.create({ draft_id: intent.body.draft_id, draft_version: intent.body.draft_version }, intent.key);
+        sessionStorage.removeItem("reveal-submit:" + principal.user_id); setPending(null);
+        window.location.assign(localWorkHref(value.id));
+        return;
+      }
       const value = await api.submit(intent.body, intent.key);
       sessionStorage.removeItem("reveal-submit:" + principal.user_id); setPending(null);
       currentJob.current = value; setJob(value); setActivity([]); setLocation("job", value.id); setNotice("Analysis submitted. Live activity will appear alongside your draft."); await refresh();
@@ -252,7 +260,7 @@ export default function Home() {
       {error && <div className="notice error" role="alert"><span>{error}</span><button className="quiet" onClick={() => setError("")} aria-label="Dismiss error">Dismiss</button></div>}
       {notice && <p className="notice" role="status">{notice}</p>}
       {!principal ? <section className="welcome"><h2>A question is the starting point.</h2><p>Connect to the QA research workspace, choose a knowledge gap, and explore it with a genetic mechanism anchor.</p><p>Drafts and results are saved by the REVEAL API. Research continues if you close this page.</p><button onClick={connect} disabled={!!busy || checking}>{checking ? "Checking workspace…" : busy === "connect" ? "Connecting…" : "Connect workspace"}</button><details className="setup-note"><summary>Running this client locally</summary><p>Complete the server setup described in this client’s README, then connect here. Your server handles the workspace session automatically.</p></details></section> : <>
-        <div className="workspace-toolbar"><span>{principal.display_name || "Research workspace"}</span><div><span className="muted small">{workspaceState || "Connecting workspace updates…"}</span><button className="quiet small" onClick={() => { setWorkspaceAttempt(value => value + 1); void refresh().catch(error => setError(errorMessage(error))); }}>Reconnect updates</button></div></div>
+        <p className="small"><a href="/local-runs">Your local research →</a></p><div className="workspace-toolbar"><span>{principal.display_name || "Research workspace"}</span><div><span className="muted small">{workspaceState || "Connecting workspace updates…"}</span><button className="quiet small" onClick={() => { setWorkspaceAttempt(value => value + 1); void refresh().catch(error => setError(errorMessage(error))); }}>Reconnect updates</button></div></div>
         <div className="workspace-grid">
           <section className="draft-pane" aria-labelledby="draft-heading">
             <div className="section-heading"><div><p className="step-label">Prepare your research</p><h2 id="draft-heading">{draft ? "Research draft" : "New research draft"}</h2></div><button className="secondary" onClick={newDraft} disabled={!mutable}>New draft</button></div>
@@ -275,9 +283,9 @@ export default function Home() {
               </>}
             </section>
             <section className="editor-section"><h3><span className="step-number">3</span> Save and investigate</h3><fieldset disabled={!mutable}><legend>Knowledge graph evidence</legend>{(["biomarkerkg", "prokn"] as const).map(value => <label className="check" key={value}><input type="checkbox" checked={composer.selected_kgs.includes(value)} onChange={event => setComposer(current => ({ ...current, selected_kgs: event.target.checked ? [...current.selected_kgs, value] : current.selected_kgs.filter(kg => kg !== value) }))} />{value === "biomarkerkg" ? "BiomarkerKG" : "ProKN"}</label>)}</fieldset>
-              <p className="muted small">This client requests one scientific account. Accepted accounts automatically receive a research paragraph. Starting research uses the configured model budget.</p>
+              <p className="muted small">Online research uses the configured model budget and automatically prepares a research statement. With a local agent, you connect Codex or Claude Code and submit findings yourself; hosted statement generation is optional.</p>
               {pending && <div className="notice"><span>A submission needs confirmation. Recover it with the original request key before starting another.</span><button className="quiet small" onClick={discardSubmission} disabled={!!busy}>Discard recovery</button></div>}
-              <div className="actions"><button className="secondary" onClick={save} disabled={!mutable || suggesting || !dirty}>{busy === "save" ? "Saving…" : "Save draft"}</button><button onClick={submit} disabled={!mutable || suggesting || (!pending && (!draft || dirty || !composer.source_gap || !composer.eaggl_anchors.length))}>{busy === "submit" ? "Submitting…" : pending ? "Recover submission" : "Start analysis"}</button></div>{dirty && <p className="small muted">Save your draft before starting an analysis.</p>}
+              <div className="actions"><button className="secondary" onClick={save} disabled={!mutable || suggesting || !dirty}>{busy === "save" ? "Saving…" : "Save draft"}</button>{pending ? <button type="button" onClick={() => void submit()} disabled={!mutable || suggesting}>{busy === "submit" ? "Submitting…" : "Recover submission"}</button> : <ResearchModeMenu disabled={!mutable || suggesting || !draft || dirty || !composer.source_gap || !composer.eaggl_anchors.length} onSelect={mode => void submit(mode)} />}</div>{dirty && <p className="small muted">Save your draft before starting an analysis.</p>}
             </section>
           </section>
           <section className="activity-pane" aria-labelledby="activity-heading">
@@ -309,7 +317,7 @@ function ResultView({ job, openJob }: { job: Job; openJob: (id: string) => Promi
   useEffect(() => {
     if (!result) return;
     let active = true;
-    const paths = result.kind === "analysis" ? result.account_ids.map(id => ({ path: "accounts/" + encodeURIComponent(id), title: "Scientific account" }))
+    const paths = result.kind === "analysis" ? analysisAccountResults(result).map(({ id, reused }) => ({ path: "accounts/" + encodeURIComponent(id), title: reused ? "Reused accepted scientific account · original authorship retained" : "Newly accepted scientific account" }))
       : result.kind === "paragraph" ? [{ path: "paragraphs/" + encodeURIComponent(result.paragraph_id), title: "Research paragraph" }]
       : [{ path: "analysis-outcomes/" + encodeURIComponent(result.outcome_id), title: "Insufficient evidence" }];
     setRecords(paths);
@@ -331,7 +339,7 @@ function ResultView({ job, openJob }: { job: Job; openJob: (id: string) => Promi
           {([['missing_evidence', 'Missing evidence'], ['limitations', 'Limitations'], ['next_steps', 'Possible next steps']] as const).map(([field, title]) => Array.isArray(record.data![field]) && (record.data![field] as unknown[]).length > 0 ? <div className="outcome-section" key={field}><strong>{title}</strong><ul>{(record.data![field] as unknown[]).map((value, index) => <li key={index}>{textValue(value)}</li>)}</ul></div> : null)}
           {textValue(record.data.scope_note) && <p className="scope-note">{textValue(record.data.scope_note)}</p>}
         </>}
-        {object?.closing_remarks && <p>{textValue(object.closing_remarks)}</p>}
+        {result.kind === "analysis" && <p className="small muted">{record.title}</p>}{object?.closing_remarks && <p>{textValue(object.closing_remarks)}</p>}
         {paragraphs.map((paragraph, index) => <p className="research-text" key={textValue(paragraph.id) || index}>{textValue(paragraph.text)}</p>)}
         <div className="result-links"><a href={backend(record.path)} target="_blank" rel="noreferrer">Open saved JSON</a>{result.kind === "paragraph" && <a href={backend("paragraphs/" + encodeURIComponent(result.paragraph_id) + "/export?format=markdown")} target="_blank" rel="noreferrer">Export paragraph Markdown</a>}{artifacts.filter(artifact => artifact.availability === "available" && /^[a-f0-9]{64}$/.test(artifact.file.sha256 || "")).map(artifact => <a key={artifact.file.id} href={backend("artifacts/" + artifact.file.sha256)} target="_blank" rel="noreferrer">{artifact.file.filename || artifact.file.name || "Evidence artifact"}</a>)}</div>
         <details><summary>Inspect result</summary><pre>{JSON.stringify(record.data, null, 2)}</pre></details>

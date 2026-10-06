@@ -28,6 +28,8 @@ async function harness(name, { mobile = false, anonymous = false } = {}) {
       research_direction: 'Saved direction ' + id, context: 'Saved researcher context', hypotheses: 'A saved working hypothesis', upload_ids: ['document-reference'],
       eaggl_anchors: [], dismissed_source_ids: [], mechanism_subquery: '', model: 'cfde-inc-v2', selected_kgs: ['biomarkerkg', 'prokn'] } }));
   const state = { drafts, conflictDraft: false, status: 'running', owner, outcomeSummary: outcome.summary, failOutcomes: false, calls: [], errors: [], unexpected: [], cursor: 0, collections: [] };
+  state.localWorks = [{ id: 'local-ready', state: 'preparing', created_at: '2026-09-29T12:00:00Z', grants: [], submissions: [],
+    request: { question_id: gap.object.id, document: { knowledge_gaps: [gap.object] }, composer: { research_direction: 'Investigate with my local agent' } } }];
   page.on('pageerror', error => state.errors.push(error.message));
   await context.route('**/*', async route => {
     const req = route.request(), url = new URL(req.url()), path = decodeURIComponent(url.pathname);
@@ -39,6 +41,7 @@ async function harness(name, { mobile = false, anonymous = false } = {}) {
     if (path === '/api/backend/v1/me') return respond({ user_id: state.owner, principal_kind: anonymous ? 'anonymous' : 'registered', display_name: anonymous ? null : 'Workspace researcher', workspace_expires_at: null });
     if (path === '/api/backend/v1/me/workspace/events') return route.fulfill({ contentType: 'text/event-stream', body: 'event: ready\ndata: {}\n\n' + (state.cursor ? `event: workspace_change\ndata: ${JSON.stringify({ schema_version: 1, scope: 'workspace', cursor: String(state.cursor), collections: state.collections })}\n\n` : '') });
     if (path === '/api/backend/v1/accounts') return respond(paging([]));
+    if (path === '/api/backend/v1/local-work') return respond({ items: state.localWorks });
     if (path === '/api/backend/v1/analysis-outcomes') {
       if (state.failOutcomes) return route.fulfill({ status: 503, json: { code: 'UNAVAILABLE', detail: 'Workspace temporarily offline.' } });
       const later = { ...outcome, id: '77777777-7777-4777-8777-777777777777', summary: 'A second saved investigation.', publication: { ...outcome.publication, visibility: 'public' } };
@@ -93,7 +96,23 @@ try {
     assert.equal(await original.getByRole('button', { name: 'Delete', exact: true }).isEnabled(), true);
     await page.getByRole('tab', { name: 'Research runs', exact: true }).click();
     await page.locator('[data-job-id="job-active"]').waitFor();
-    assert.equal(await page.locator('.workspace-run-row').count(), 2);
+    assert.equal(await page.locator('.workspace-run-row').count(), 3);
+    const local = page.locator('[data-local-work-id="local-ready"]');
+    assert.equal(await page.locator('.workspace-run-row').first().getAttribute('data-local-work-id'), 'local-ready');
+    await page.getByRole('tab', { name: 'Research runs 3', exact: true }).waitFor();
+    await local.getByText('Local', { exact: true }).waitFor();
+    await local.getByText('Preparing research seed', { exact: true }).waitFor();
+    assert.equal(await local.getByRole('link', { name: 'View run', exact: false }).getAttribute('href'), '/local-runs/local-ready');
+    assert.equal(await page.locator('.workspace-topbar a[href="/local-runs"]').count(), 0);
+    state.localWorks[0].state = 'ready';
+    state.localWorks[0].submissions = [{ id: 'validation', state: 'succeeded', validation_only: true, account_ids: ['candidate-account'], reused_account_ids: ['candidate-reuse'] }, { id: 'submission', state: 'accepted', account_ids: ['new-local-account'], reused_account_ids: ['existing-account'] }, { id: 'another', state: 'accepted', reused_account_ids: ['existing-account'] }];
+    await h.change(['jobs'], '/api/backend/v1/local-work');
+    await local.getByText('Ready for your local agent', { exact: true }).waitFor();
+    assert.equal(await local.getByRole('link', { name: 'Scientific account', exact: true }).count(), 2);
+    assert.equal(await local.locator('a[href="/accounts/existing-account"]').count(), 1);
+    assert.equal(await local.locator('a[href*="candidate"]').count(), 0, 'Validation candidates are not accepted findings');
+    await page.locator('[data-job-id="job-active"]').getByText('Online', { exact: true }).waitFor();
+    await page.screenshot({ path: resolve(output, `unified-runs-${mobile ? 'mobile' : 'desktop'}.png`), fullPage: true });
     assert.equal(await page.locator('[data-job-id="job-active"]').getByRole('link', { name: 'View run', exact: false }).getAttribute('href'), '/runs/job-active');
     await page.getByText('Frozen direction active', { exact: true }).waitFor();
     assert.equal(await page.getByText('Saved direction active', { exact: true }).count(), 0);
@@ -144,6 +163,9 @@ try {
     await gapRow.getByRole('link', { name: 'Fresh start', exact: true }).waitFor();
     const fresh = state.drafts.find(draft => draft.name === 'Fresh start'); assert.equal(fresh.composer.source_gap.id, gap.object.id); assert.deepEqual(fresh.composer.upload_ids, []);
     assert.ok(state.calls.filter(call => ['POST', 'PATCH', 'DELETE'].includes(call.method)).every(call => call.key));
+    await page.goto(origin + '/local-runs');
+    await page.waitForURL('**/workspace?tab=runs');
+    await page.locator('[data-local-work-id="local-ready"]').waitFor();
     await h.close();
   }
   for (const mobile of [false, true]) {

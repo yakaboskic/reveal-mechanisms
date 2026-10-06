@@ -1,0 +1,174 @@
+# Illustrative full DAPPER node graph — the nodes that the CURIEs in
+# example_dataset.yaml resolve to. This is a reference document (a mixed set of
+# node types), not a single-class instance; validate individual nodes with
+# `linkml-validate -C <ClassName>` if desired. It also demonstrates the
+# mirroring invariant: a mirror appends `MirrorProvenance` and a
+# `mirror_provenance` block WITHOUT altering any authoritative node.
+
+# ---- Agents (creators / contributors) ----
+persons:
+  - id: dapper:Person.igPWGT9jf1iax5DaJiTyA_jswWOMwlt0
+    name: Jane A. Smith
+    given_name: Jane
+    family_name: Smith
+    orcid: orcid:0000-0002-1825-0097
+    affiliation:
+      - ror:012345678
+    creator_role: principal_investigator
+  - id: dapper:Person.L8FjAsnWeuHMfkbZKsO4aOgfXXUE0Y7r
+    name: Alex R. Lee
+    given_name: Alex
+    family_name: Lee
+    orcid: orcid:0000-0003-1234-5678
+    contributor_role: data_curator
+
+organizations:
+  - id: dapper:Organization.v0EMoT5DDWpNBPvsCkpGIr3hd4rhQPty
+    name: National Institutes of Health
+    ror: ror:0155zta11
+  - id: dapper:Organization.eY3e16e60hWr6Qstcm1Oq-SOZIoIdTpx
+    name: Example NIH Consortium
+    ror: ror:04abcde12
+    creator_role: consortium
+
+# ---- Award (authoritative — mirror_mutable: false) ----
+awards:
+  - id: dapper:Award.6CEJwkm7mP_DLGswK-LdSlBZVA30HjNT
+    name: Example NIH Consortium Data Coordination Center
+    funder_name: National Institutes of Health
+    funder_identifier: doi:10.13039/100000002
+    funder_identifier_type: crossref_funder_id
+    award_number: U54-EXAMPLE-123456
+    award_uri: https://reporter.nih.gov/project-details/123456
+    award_title: Example NIH Consortium Data Coordination Center
+    grant_administering_institute: NHLBI
+
+# ---- Publication (authoritative) ----
+publications:
+  - id: dapper:Publication.STjruSl-ZWVs9DPBEEnF5Xb6LfhOekwd
+    name: A multi-omics atlas from the Example NIH Consortium
+    title: A multi-omics atlas from the Example NIH Consortium
+    doi: doi:10.1000/example.publication
+    pmid: "12345678"
+    citation: >-
+      Smith JA, Lee AR, et al. A multi-omics atlas from the Example NIH
+      Consortium. CFDE RAG Journal 2026.
+    relationship_type: is_described_by
+
+# ---- License ----
+licenses:
+  - id: dapper:License.x3eovLQ0VYpz5G0K7AhgYdTjkdvCpMfv
+    name: CC BY 4.0
+    url: https://creativecommons.org/licenses/by/4.0/
+    usage_terms: >-
+      Users must cite the dataset, primary publication, and NIH award number.
+
+# ---- Provenance activity + lineage ----
+activities:
+  - id: dapper:Activity.I1ssZi1jZCZNj80yIalfRM5cf0D1x_aa
+    name: NIH MCP Gateway dataset packaging
+    activity_type: MCPResourceSerialization
+    software_name: nih-mcp-gateway
+    software_version: 1.0.0
+    generated_at_time: "2026-07-22T00:00:00Z"
+    has_lineage_step:
+      - dapper:LineageStep.HWWXdyNbHt2NvupVwapzRB5gy42RPpci
+      - dapper:LineageStep.NKqJUtQVP3yph7XkxONXzJjQx5c36Z39
+      - dapper:LineageStep.5KEfylsgJhyQAyy9WoX02llCXSlwEUeI
+
+lineage_steps:
+  - id: dapper:LineageStep.HWWXdyNbHt2NvupVwapzRB5gy42RPpci
+    name: Raw data acquisition
+    step: 1
+    activity: Raw data acquisition
+    responsible_party: Example NIH Consortium
+  - id: dapper:LineageStep.NKqJUtQVP3yph7XkxONXzJjQx5c36Z39
+    name: Quality control and normalization
+    step: 2
+    activity: Quality control and normalization
+    responsible_party: Example Data Coordination Center
+  - id: dapper:LineageStep.5KEfylsgJhyQAyy9WoX02llCXSlwEUeI
+    name: Public release packaging
+    step: 3
+    activity: Public release packaging
+    responsible_party: NIH MCP Gateway
+
+# ---- Recommended citation (authoritative) ----
+recommended_citations:
+  - id: dapper:RecommendedCitation.c1GMFzWcd887Rqwh55TLFETlo1iSg-RY
+    name: Recommended citation for Example NIH Multi-Omics Dataset
+    citation_text: >-
+      Smith JA, Lee AR, Example NIH Consortium. Example NIH Multi-Omics Dataset.
+      Version 2.1.0. National Institutes of Health; 2026.
+      doi:10.12345/example.dataset.v2. Supported by NIH grant U54-EXAMPLE-123456.
+    required_elements:
+      - dataset_title
+      - dataset_doi
+      - version
+      - creators
+      - publication_year
+      - primary_publication
+      - grant_number
+
+# ---- DRS, DUO, RO-Crate, BioCompute ----
+drs_objects:
+  - id: dapper:DrsObject.X8x2qXKC_q1guH6BnWOY8RNKXN4OY2rt
+    name: raw sequencing bundle
+    drs_id: example-object-1
+    self_uri: drs://drs.example.nih.gov/example-object-1
+    size: 10737418240
+    checksum_sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    mime_type: application/x-bam
+    access_methods:
+      - s3
+      - https
+
+data_use_terms:
+  # A permission (child of DUO:0000001)
+  - id: dapper:DataUseTerm.nNYfQNjuwA8boZ-dTYEmL6SkQ31ifBtx
+    name: general research use
+    duo_id: DUO:0000042
+    duo_label: general research use
+    permission: general_research_use
+  # A modifier (child of DUO:0000017)
+  - id: dapper:DataUseTerm.ao3Tkvv89JgF7wlJqQDE3RK-J_ZDATqy
+    name: publication required
+    duo_id: DUO:0000019
+    duo_label: publication required
+    modifier: publication_required
+
+ro_crate_packages:
+  - id: dapper:RoCratePackage.9zxxksJUBcpd6A-_FVKVWBRs8B3Clu4U
+    name: Example dataset RO-Crate
+    conforms_to: https://w3id.org/ro/crate/1.1
+    ro_crate_metadata_ref: ro-crate-metadata.json
+    root_dataset_ref: doi:10.12345/example.dataset.v2
+
+bio_compute_objects:
+  - id: dapper:BioComputeObject.lbcUb1_AttPzD87LUusfXyXq3pB_bts0
+    name: Example multi-omics pipeline BCO
+    bco_id: dapper:bco/example-pipeline-v2
+    bco_spec_version: https://w3id.org/ieee/ieee-2791-schema/2791object.json
+    etag: 11ee0f7b8c...
+    usability_domain:
+      - Multi-omics normalization and release packaging pipeline.
+
+# ===========================================================================
+# MIRRORING INVARIANT DEMONSTRATION
+#
+# An OpenAI mirror caches this dataset. It is ALLOWED to append the
+# MirrorProvenance node below (and a `mirror_provenance` block on its cached
+# copy). It is FORBIDDEN from editing any node above annotated
+# `dapper:mirror_mutable: false` (awards, publications, recommended_citations, and
+# the has_creator / funded_by / is_described_by / has_recommended_citation
+# links on the Dataset). Compliant append only:
+# ===========================================================================
+mirror_provenances:
+  - id: dapper:MirrorProvenance.cYMKpnDdrs5zInUyC--6Qh4P7t1auMiE
+    name: OpenAI us-west-1 mirror of example.dataset.v2
+    mirror_provider: OpenAI
+    mirror_region: us-west-1
+    synced_from: nih-mcp-gateway
+    sync_time: "2026-07-22T03:00:00Z"
+    source_manifest_hash: "sha256:9f2c...authoritative-source..."
+    mirror_object_hash: "sha256:4a7d...mirror-copy..."

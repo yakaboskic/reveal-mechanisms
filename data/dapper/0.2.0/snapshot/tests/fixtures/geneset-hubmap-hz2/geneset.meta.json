@@ -1,0 +1,310 @@
+{
+  "converter": {
+    "code": {
+      "git_commit": "2fb57130136a8fa25211ef1e77fe13d220e4b115",
+      "module": "geneset_extractors.extractors.converters.unsigned_term_gene",
+      "notebook_url": null,
+      "repo_url": "https://github.com/flannick/dig-gene-set-extractors",
+      "script_url": null
+    },
+    "execution": {
+      "command": [
+        "/opt/conda/envs/harmonizome/bin/python3.10",
+        "-m",
+        "geneset_extractors.cli",
+        "convert",
+        "unsigned_term_gene",
+        "--emit_small_gene_sets",
+        "false",
+        "--gene_id_column",
+        "gene_id",
+        "--gene_symbol_column",
+        "gene_symbol",
+        "--gmt_min_genes",
+        "5",
+        "--score_column",
+        "score",
+        "--term_column",
+        "term",
+        "--term_prefix",
+        "HuBMAP"
+      ],
+      "container_image": null,
+      "entrypoint": "geneset_extractors.cli convert unsigned_term_gene",
+      "mode": "cli",
+      "notes": "Collapsed extraction operation for one emitted gene set.",
+      "observed_command": [
+        "geneset_extractors.cli",
+        "convert",
+        "unsigned_term_gene",
+        "--table_tsv",
+        "s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ2/workflow/hubmap_unsigned_term_gene.tsv",
+        "--out_dir",
+        "s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ2/extractor",
+        "--organism",
+        "human",
+        "--genome_build",
+        "hg38",
+        "--term_column",
+        "term",
+        "--term_prefix",
+        "HuBMAP",
+        "--gene_id_column",
+        "gene_id",
+        "--gene_symbol_column",
+        "gene_symbol",
+        "--score_column",
+        "score",
+        "--gmt_min_genes",
+        "5",
+        "--gmt_require_symbol",
+        "true",
+        "--emit_small_gene_sets",
+        "false"
+      ],
+      "workspace_template_url": null
+    },
+    "name": "unsigned_term_gene",
+    "parameters": {
+      "emit_small_gene_sets": false,
+      "gene_id_column": "gene_id",
+      "gene_symbol_column": "gene_symbol",
+      "gmt_min_genes": 5,
+      "score_column": "score",
+      "term_column": "term",
+      "term_prefix": "HuBMAP"
+    },
+    "version": "0.1.0"
+  },
+  "created_at": "2026-06-29T15:52:17.191225+00:00",
+  "file_type": "metadata",
+  "gene_annotation": {
+    "gene_id_field": "gene_id",
+    "mode": "provided",
+    "source": "input_table"
+  },
+  "gene_set": {
+    "assay": "bulk",
+    "data_type": "transcriptomics",
+    "description": "HuBMAP ASCT+B augmented marker gene-set library using model HZ2: library built from released ASCT+B marker tables and expanded with GeneShot-based augmentation under the configured enrichment threshold and cap.",
+    "genome_build": "hg38",
+    "id": "geneset:402cf4a1f3682a2e5bf1b002",
+    "n_genes": 1747,
+    "name": "unsigned_term_gene:402cf4a1f3682a2e5bf1b002",
+    "organism": "human",
+    "primary_artifact": {
+      "path": "geneset.tsv",
+      "role": "selected_program"
+    }
+  },
+  "geneset_id": "402cf4a1f3682a2e5bf1b002",
+  "input": {
+    "assay": "bulk",
+    "data_type": "transcriptomics",
+    "files": [
+      {
+        "access_level": "local_only",
+        "local_path": "s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ2/workflow/hubmap_unsigned_term_gene.tsv",
+        "path": "s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ2/workflow/hubmap_unsigned_term_gene.tsv",
+        "role": "table_tsv",
+        "sha256": "e945fe0ee2fcb5166e45d80597edbbec1bcd55c21e9ead7a85a2cbcb1e6d1ef3",
+        "size_bytes": 385544
+      }
+    ],
+    "genome_build": "hg38",
+    "organism": "human"
+  },
+  "lineage": {
+    "edges": [
+      {
+        "edge_type": "process_step",
+        "id": "edge:00418c3c3541",
+        "process_id": "process:converter_invocation",
+        "source": "file:input:table_tsv:1",
+        "target": "file:output:gmt_library:1"
+      },
+      {
+        "edge_type": "process_step",
+        "id": "edge:592f1e82755f",
+        "process_id": "process:converter_invocation",
+        "source": "file:input:table_tsv:1",
+        "target": "file:output:selected_program:2"
+      },
+      {
+        "edge_type": "process_step",
+        "id": "edge:c64d9f2c4aee",
+        "process_id": "process:converter_invocation",
+        "source": "file:input:table_tsv:1",
+        "target": "file:output:full_scores:3"
+      },
+      {
+        "edge_type": "process_step",
+        "id": "edge:244d576b8960",
+        "process_id": "process:converter_invocation",
+        "source": "file:input:table_tsv:1",
+        "target": "file:output:signature_summary:4"
+      },
+      {
+        "edge_type": "process_step",
+        "id": "edge:fbe760b9bc00",
+        "process_id": "process:converter_invocation",
+        "source": "file:input:table_tsv:1",
+        "target": "file:output:metadata_json:5"
+      }
+    ],
+    "graph_version": "1.0.0",
+    "nodes": [
+      {
+        "direction": "input",
+        "id": "file:input:table_tsv:1",
+        "media_type": "text/tab-separated-values",
+        "node_type": "file",
+        "path": "s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ2/workflow/hubmap_unsigned_term_gene.tsv",
+        "role": "table_tsv",
+        "sha256": "e945fe0ee2fcb5166e45d80597edbbec1bcd55c21e9ead7a85a2cbcb1e6d1ef3"
+      },
+      {
+        "direction": "output",
+        "id": "file:output:gmt_library:1",
+        "node_type": "file",
+        "path": "genesets.gmt",
+        "role": "gmt_library"
+      },
+      {
+        "direction": "output",
+        "id": "file:output:selected_program:2",
+        "media_type": "text/tab-separated-values",
+        "node_type": "file",
+        "path": "geneset.tsv",
+        "role": "selected_program"
+      },
+      {
+        "direction": "output",
+        "id": "file:output:full_scores:3",
+        "media_type": "text/tab-separated-values",
+        "node_type": "file",
+        "path": "geneset.full.tsv",
+        "role": "full_scores"
+      },
+      {
+        "direction": "output",
+        "id": "file:output:signature_summary:4",
+        "media_type": "text/tab-separated-values",
+        "node_type": "file",
+        "path": "signature_summary.tsv",
+        "role": "signature_summary"
+      },
+      {
+        "direction": "output",
+        "id": "file:output:metadata_json:5",
+        "media_type": "application/json",
+        "node_type": "file",
+        "path": "geneset.meta.json",
+        "role": "metadata_json"
+      }
+    ],
+    "processes": [
+      {
+        "code": {
+          "git_commit": "2fb57130136a8fa25211ef1e77fe13d220e4b115"
+        },
+        "command": "/opt/conda/envs/harmonizome/bin/python3.10 -m geneset_extractors.cli convert unsigned_term_gene --table_tsv s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ2/workflow/hubmap_unsigned_term_gene.tsv --out_dir s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ2/extractor --organism human --genome_build hg38 --term_column term --term_prefix HuBMAP --gene_id_column gene_id --gene_symbol_column gene_symbol --score_column score --gmt_min_genes 5 --gmt_require_symbol true --emit_small_gene_sets false",
+        "command_argv": [
+          "/opt/conda/envs/harmonizome/bin/python3.10",
+          "-m",
+          "geneset_extractors.cli",
+          "convert",
+          "unsigned_term_gene",
+          "--table_tsv",
+          "s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ2/workflow/hubmap_unsigned_term_gene.tsv",
+          "--out_dir",
+          "s3://dig-gene-set-data/HuBMAP/genesets/all_signatures/models/HZ2/extractor",
+          "--organism",
+          "human",
+          "--genome_build",
+          "hg38",
+          "--term_column",
+          "term",
+          "--term_prefix",
+          "HuBMAP",
+          "--gene_id_column",
+          "gene_id",
+          "--gene_symbol_column",
+          "gene_symbol",
+          "--score_column",
+          "score",
+          "--gmt_min_genes",
+          "5",
+          "--gmt_require_symbol",
+          "true",
+          "--emit_small_gene_sets",
+          "false"
+        ],
+        "command_kind": "captured_cli_argv",
+        "entrypoint": {
+          "kind": "python_module",
+          "module": "geneset_extractors.cli"
+        },
+        "id": "process:converter_invocation",
+        "name": "convert unsigned_term_gene",
+        "parameters": {
+          "emit_small_gene_sets": false,
+          "gene_id_column": "gene_id",
+          "gene_symbol_column": "gene_symbol",
+          "gmt_min_genes": 5,
+          "score_column": "score",
+          "term_column": "term",
+          "term_prefix": "HuBMAP"
+        },
+        "process_type": "converter_invocation",
+        "working_directory": "dig-gene-set-extractors"
+      }
+    ]
+  },
+  "output": {
+    "files": [
+      {
+        "path": "genesets.gmt",
+        "role": "gmt_library"
+      },
+      {
+        "path": "geneset.tsv",
+        "role": "selected_program"
+      },
+      {
+        "path": "geneset.full.tsv",
+        "role": "full_scores"
+      },
+      {
+        "path": "signature_summary.tsv",
+        "role": "signature_summary"
+      },
+      {
+        "path": "geneset.meta.json",
+        "role": "metadata_json"
+      }
+    ]
+  },
+  "provenance": {
+    "focus_node_id": "geneset:402cf4a1f3682a2e5bf1b002",
+    "path": "geneset.provenance.json"
+  },
+  "schema_version": "1.0.0",
+  "standard_name": "dig.geneset",
+  "standard_version": "0.1.0",
+  "summary": {
+    "fraction_features_assigned": 1.0,
+    "n_features_assigned": 7544,
+    "n_genes": 1747,
+    "n_input_features": 7544,
+    "n_sets_emitted": 487
+  },
+  "weights": {
+    "aggregation": "group_by_term",
+    "normalization": {
+      "method": "none",
+      "target_sum": null
+    },
+    "weight_type": "nonnegative"
+  }
+}

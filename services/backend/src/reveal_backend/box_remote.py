@@ -22,9 +22,11 @@ import time
 
 from .box_mcp import DraftValidationError, Ledger, PolicyError, ScopedTools, canonical, serve, stamp
 from .box_stream import ClaudeStream, SecretFilter, StreamProtocolError
+from .box_research import HostedResearchClient, ResearchAccessError, validate_context
 from .dispatch_view import (FILE_INPUT_FILENAME, FILE_INPUT_FORMAT, research_authoring_requirements,
                             research_prompt, validate_file_input)
-from .evidence_files import INDEX_PATH, build_evidence_files
+from .evidence_files import INDEX_PATH, build_evidence_index
+from .evidence_reader import WorkspaceReader, read_artifact, READER_VERSION
 from .box_literature import LiteratureClient
 from .research_outcome import validate_insufficient_outcome
 from .box_upload import MAX_TOTAL, capture_file_limit, source_file
@@ -33,6 +35,7 @@ BASE = Path('/reveal')
 STATE = BASE / 'state'
 OUTPUT = BASE / 'output'
 SECRETS = ()
+RESEARCH = None
 
 
 def write_json(path, data):
@@ -90,8 +93,21 @@ finally: os.close(fd); path.unlink()
 
 
 def write_outcome_tool(value):
-    try: outcome = validate_insufficient_outcome(value)
-    except ValueError as error: raise DraftValidationError(str(error)) from None
+    if isinstance(value, dict) and value.get('format') == 'reveal.research-outcome/1' and value.get('status') == 'succeeded':
+        if RESEARCH is None: raise DraftValidationError('Reuse outcomes require a progressive research context')
+        allowed = {'format', 'status', 'existing_account_ids', 'receipt_ids', 'reuse_receipt_ids'}
+        accounts = value.get('existing_account_ids', [])
+        if set(value) - allowed or not isinstance(accounts, list) or not 1 <= len(accounts) <= 3 or not all(isinstance(item, str) for item in accounts) or len(set(accounts)) != len(accounts) or not set(accounts) <= RESEARCH.existing_account_ids:
+            raise DraftValidationError('Select one to three exact-question accounts using authorized reuse receipts first')
+        for key, known in (('receipt_ids', RESEARCH.receipt_ids), ('reuse_receipt_ids', RESEARCH.reuse_receipt_ids)):
+            choices = value.get(key, [])
+            if not isinstance(choices, list) or not all(isinstance(item, str) for item in choices) or not set(choices) <= known:
+                raise DraftValidationError('Outcome receipts must belong to this captured research')
+        outcome = {**value, 'receipt_ids': sorted(RESEARCH.receipt_ids), 'reuse_receipt_ids': sorted(RESEARCH.reuse_receipt_ids)}
+        RESEARCH.materialize()
+    else:
+        try: outcome = validate_insufficient_outcome(value)
+        except ValueError as error: raise DraftValidationError(str(error)) from None
     # Keep the legacy format distinguishable for trusted acceptance, including
     # its optional selected-gap binding. Never relabel old output as new schema.
     if 'format' not in value: outcome.pop('format')
@@ -102,7 +118,7 @@ def write_outcome_tool(value):
     with os.fdopen(descriptor, 'wb') as handle:
         handle.write(canonical(outcome))
         os.fchown(handle.fileno(), user.pw_uid, user.pw_gid)
-    return {'content': [{'type': 'text', 'text': 'Insufficient-evidence outcome saved to ' + str(path) + '; no scientific account has been accepted.'}]}
+    return {'content': [{'type': 'text', 'text': 'Research outcome saved to ' + str(path) + '; no scientific account has been accepted.'}]}
 
 
 def setup(request):
@@ -117,21 +133,29 @@ def setup(request):
         frozen = json.loads(package.read_text())
         if set(request['selected_graphs']) != set(frozen['external_evidence']['selected_graphs']):
             raise ValueError('Selected graph bindings differ from the immutable package')
-        prompt = research_prompt(request['selected_graphs'], request.get('validation_feedback', ()))
+        progressive = frozen.get('retrieval_mode') == 'progressive'
+        if progressive:
+            context = validate_context(frozen.get('research_context'))
+            if request.get('research_context') != context:
+                raise ValueError('Research context differs from the frozen seed')
+            runtime['research_context'] = context
+        from .dispatch_view import pinned_contract_sha256
+        contract_sha256 = pinned_contract_sha256(frozen)
+        prompt = research_prompt(request['selected_graphs'], request.get('validation_feedback', ()), progressive=progressive,
+                                 contract_sha256=contract_sha256)
         frozen_input = BASE / 'input' / FILE_INPUT_FILENAME
         if frozen_input.exists():
             manifest = json.loads(frozen_input.read_bytes())
             validate_file_input(package.read_bytes(), manifest, prompt)
             runtime['file_input'] = manifest
-        # Bounded lossless record files let Read/Grep inspect exact observations
-        # and minified source rows without loading whole packages/catalogues.
+        # A small index binds the shared bounded reader to original source bytes.
         source_bytes = {}
         for identity, item in frozen['source_artifacts'].items():
             source = (package.parent / item['path']).resolve()
             if not source.is_relative_to(package.parent.resolve()):
                 raise ValueError('Evidence reader source path escapes input directory')
             source_bytes[identity] = source.read_bytes()
-        reading_files = build_evidence_files(package.read_bytes(), source_bytes=source_bytes)
+        reading_files = {INDEX_PATH: build_evidence_index(package.read_bytes(), source_bytes=source_bytes)}
         views = {}
         for relative, data in reading_files.items():
             target = work / relative
@@ -139,7 +163,7 @@ def setup(request):
             target.write_bytes(data)
             views[relative] = hashlib.sha256(data).hexdigest()
         runtime['derived_input_views'] = views
-        runtime['evidence_reader'] = {'format': FILE_INPUT_FORMAT, 'index_path': INDEX_PATH,
+        runtime['evidence_reader'] = {'format': READER_VERSION, 'index_path': INDEX_PATH,
                                      'index_sha256': views[INDEX_PATH],
                                      'package_sha256': hashlib.sha256(package.read_bytes()).hexdigest(),
                                      'source_artifact_count': len(source_bytes),
@@ -148,21 +172,20 @@ def setup(request):
         runtime['research_prompt_sha256'] = hashlib.sha256(prompt.encode()).hexdigest()
         # This small authoring aid is separate from evidence navigation.
         sections = work / 'input/package-sections'
-        sections.mkdir()
-        import yaml
-        schema_root = Path(runtime['dapper_root']) / 'schema'
-        schema_parts = [yaml.safe_load((schema_root / filename).read_text()) for filename in ('dapper.yaml', 'claims.yaml')]
-        wanted = {'Claim', 'Proposition', 'EvidenceItem', 'ClaimScore', 'ScientificAccount', 'ProvenancedResource', 'File', 'Activity', 'Paragraph'}
-        excerpt = {'note': 'Exact excerpts for authoring convenience. The full pinned schema remains authoritative.', 'classes': {}, 'slots': {}, 'enums': {}}
-        for part in schema_parts:
-            excerpt['classes'].update({key: value for key, value in part.get('classes', {}).items() if key in wanted})
-            excerpt['enums'].update(part.get('enums', {}))
-        used_slots = {slot for value in excerpt['classes'].values() for slot in value.get('slots', [])}
-        for part in schema_parts:
-            excerpt['slots'].update({key: value for key, value in part.get('slots', {}).items() if key in used_slots})
+        sections.mkdir(exist_ok=True)
+        from .authoring_contract import pinned_schema
         excerpt_path = sections / 'authoring-schema-excerpt.yaml'
-        excerpt_path.write_text(yaml.safe_dump(excerpt, sort_keys=False))
-        views[str(excerpt_path.relative_to(work))] = hashlib.sha256(excerpt_path.read_bytes()).hexdigest()
+        example_path = sections / 'authoring-examples.json'
+        if contract_sha256 is None:
+            excerpt_path.write_bytes(pinned_schema(project))
+            shutil.copyfile(project / 'services/backend/agent-runtime/authoring-examples.json', example_path)
+        for target in (excerpt_path, example_path):
+            views[str(target.relative_to(work))] = hashlib.sha256(target.read_bytes()).hexdigest()
+        runtime['authoring_contract'] = {'format': 'reveal.authoring-contract/2',
+            'sha256': contract_sha256 or hashlib.sha256((work/'docs/authoring-contract.md').read_bytes()).hexdigest(),
+            'reader_version': READER_VERSION,
+            'schema_sha256': views[str(excerpt_path.relative_to(work))],
+            'examples_sha256': views[str(example_path.relative_to(work))]}
     else:
         root = BASE / 'workspace'
         root.mkdir()
@@ -210,6 +233,29 @@ def setup(request):
     return work, runtime, prompt
 
 
+def read_frozen_evidence(**arguments):
+    """Read existing seed bytes; later retained captures use the authorized proxy."""
+    runtime = json.loads((STATE / 'runtime.json').read_bytes())
+    path = Path(runtime['evidence_package'])
+    raw = path.read_bytes(); checksum = hashlib.sha256(raw).hexdigest()
+    frozen = json.loads(raw)
+    identity = arguments.get('artifact_id')
+    if identity == 'package:' + checksum:
+        descriptor = {'artifact_id': identity, 'sha256': checksum, 'size_bytes': len(raw)}
+    elif identity in frozen['source_artifacts']:
+        descriptor = {**frozen['source_artifacts'][identity], 'artifact_id': identity}
+        from .evidence_reader import safe_read
+        raw = safe_read(path.parent, descriptor['path'])
+    elif RESEARCH:
+        result = RESEARCH.call('read_evidence', arguments)
+        if result.get('isError'):
+            raise ValueError('Retained artifact is unavailable for this research scope')
+        return result.get('structuredContent', result)
+    else:
+        raise ValueError('Artifact absent from the frozen source inventory')
+    return read_artifact(raw, descriptor, **arguments)
+
+
 def terminate(process):
     if process.poll() is None:
         def send_signal(name):
@@ -227,6 +273,7 @@ def terminate(process):
 
 
 def lint_tool(filename, ledger):
+    deadline = time.monotonic() + 55
     from .scientific_account_lint import lint_scientific_account
     path = OUTPUT / filename
     if path.is_symlink() or not path.is_file() or path.stat().st_size > 4_000_000:
@@ -240,12 +287,16 @@ def lint_tool(filename, ledger):
     ledger_path = ledger.root / 'lint-sources.json'
     with ledger.lock:
         write_json(ledger_path, json.loads(ledger.sanitized_bytes({'calls': ledger.entries})[0]))
+    evidence_path = RESEARCH.materialize() if RESEARCH else runtime['evidence_package']
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise DraftValidationError('Draft lint deadline reached during evidence materialization; retry this call to resume verified progress')
     report = lint_scientific_account(frozen, dapper_root=runtime['dapper_root'],
                                      release_lock=BASE / 'bundle/services/backend/agent-runtime/dapper-release.json',
-                                     evidence_package=runtime['evidence_package'], ledger_path=ledger_path, mode='draft')
+                                     evidence_package=evidence_path, ledger_path=ledger_path, mode='draft', timeout=remaining)
     checks = {finding.get('check') for finding in report.get('findings', []) if finding.get('severity') == 'error'}
-    if checks & {'cfde-ancestry', 'claim-evidence'}:
-        report['repair_guidance'] = 'Each component Claim needs an explicit EvidenceItem and genuine lineage to a captured CFDE File. DisMech-only source-result Claims may be auxiliary sources but cannot substitute for CFDE-backed account components. Do not attach an unrelated CFDE row to satisfy lint. If the captured observations cannot support a useful CFDE-backed interpretation of the selected gap, write outcome.json with status insufficient_evidence and the specific missing link instead of repeatedly rewriting the same unsupported account.'
+    if checks & {'source-ancestry', 'claim-evidence'}:
+        report['repair_guidance'] = 'Each component Claim needs explicit, target-matched EvidenceItems and unchanged eligible scientific source Files with exact locators. Use captured reference data, authorized prior science or eligible independent evidence. Seek a relevant CFDE connection when supported and explain its absence when not; never attach an unrelated row to satisfy guidance. If no useful supported interpretation exists, save an insufficient-evidence outcome identifying the missing observation.'
     return {'content': [{'type': 'text', 'text': json.dumps(report)}], 'isError': not report.get('valid')}
 
 
@@ -290,12 +341,14 @@ def runtime_completion(request, started, status, reason, process=None, parser=No
 
 def write_draft_tool(filename, document):
     """Representation assistance only: source hydration never implies acceptance."""
+    deadline = time.monotonic() + 55
     if not isinstance(document, dict) or len(canonical(document)) > 4_000_000:
         raise DraftValidationError('Invalid or oversized draft document')
     if not isinstance(document.get('scientific_accounts'), list) or len(document['scientific_accounts']) != 1:
         raise DraftValidationError('Expected document={"scientific_accounts":[one account],"claims":[...],"propositions":[...],"evidence_items":[...]}; group values must be arrays, not a class instance or graph/nodes envelope')
     runtime = json.loads((STATE / 'runtime.json').read_text())
-    package = json.loads(Path(runtime['evidence_package']).read_text())
+    evidence_path = RESEARCH.materialize() if RESEARCH else Path(runtime['evidence_package'])
+    package = json.loads(Path(evidence_path).read_text())
     trusted = {n['id']: (group, n) for group, rows in package['dapper_context'].items() if isinstance(rows, list) for n in rows if isinstance(n, dict) and 'id' in n}
     for rows in document.values():
         if isinstance(rows, list):
@@ -312,6 +365,8 @@ def write_draft_tool(filename, document):
         elif isinstance(value, str):
             yield value
     for _ in range(len(trusted) + 1):
+        if time.monotonic() >= deadline:
+            raise DraftValidationError('Draft preparation deadline reached; retry this call to resume verified evidence materialization')
         present = {n['id'] for rows in document.values() if isinstance(rows, list) for n in rows if isinstance(n, dict) and 'id' in n}
         references = set(exact_references(document))
         missing = [identity for identity in trusted if identity not in present and identity in references]
@@ -331,6 +386,8 @@ def write_draft_tool(filename, document):
                     node['was_generated_by'] = context['activities'][0]['id']
                     node['was_attributed_to'] = [context['organizations'][0]['id']]
     path = OUTPUT / filename
+    if time.monotonic() >= deadline:
+        raise DraftValidationError('Draft preparation deadline reached; retry this call to resume verified evidence materialization')
     if path.is_symlink():
         raise PolicyError('Draft output symlink forbidden')
     path.write_bytes(canonical(document))
@@ -340,7 +397,7 @@ def write_draft_tool(filename, document):
 
 
 def main():
-    global SECRETS
+    global SECRETS, RESEARCH
     if os.getuid() != 0:
         raise RuntimeError('The trusted Box runner must be root')
     STATE.mkdir(exist_ok=True)
@@ -366,7 +423,16 @@ def main():
     try:
         emit('stage', {'stage': 'starting_agent', 'state': 'started', 'source': 'harness',
                        'message': 'Verifying the research runtime and preparing evidence files.'})
+        credentials = json.loads((BASE / 'credentials.json').read_text())
+        (BASE / 'credentials.json').unlink()
+        SECRETS = tuple(value for value in credentials.values() if isinstance(value, str) and value)
+        ledger.secrets = SECRETS
         work, runtime, prompt = setup(request)
+        if runtime.get('research_context'):
+            RESEARCH = HostedResearchClient(runtime['research_context'], credentials.get('REVEAL_RESEARCH_TOKEN'),
+                STATE / 'ledger/research-context', seed_path=runtime['evidence_package'],
+                execution_id=request['job_id'] + ':' + str(request['attempt']))
+            runtime['research_receipts_path'] = 'ledger/research-receipts.json'
         actual_version = subprocess.run(['/reveal/claude/node_modules/.bin/claude', '--version'], capture_output=True, text=True, check=True, timeout=15).stdout.strip()
         if actual_version.split()[0] != request['claude_version']:
             raise ValueError('Installed Claude Code version differs from the pinned harness')
@@ -378,17 +444,14 @@ def main():
         tools = ScopedTools(request['selected_graphs'], ledger, lint=(lambda filename: lint_tool(filename, ledger)) if request['kind'] == 'research' else None,
                             write_draft=write_draft_tool if request['kind'] == 'research' else None,
                             literature=LiteratureClient() if request['kind'] == 'research' else None,
-                            write_outcome=write_outcome_tool if request['kind'] == 'research' else None)
+                            write_outcome=write_outcome_tool if request['kind'] == 'research' else None, research=RESEARCH,
+                            read_evidence=read_frozen_evidence if request['kind'] == 'research' else None)
         server = serve(tools)
         config = {'mcpServers': {'reveal': {'type': 'http', 'url': 'http://127.0.0.1:8765/mcp'}}}
         config_path = BASE / 'mcp.json'
         config_path.write_bytes(canonical(config)); os.chmod(config_path, 0o444)
-        api_key = (BASE / 'credentials.json').read_text()
-        (BASE / 'credentials.json').unlink()
-        SECRETS = (json.loads(api_key)['ANTHROPIC_API_KEY'],)
-        ledger.secrets = SECRETS
         env = {'PATH': '/reveal/venv/bin:/usr/local/bin:/usr/bin:/bin', 'HOME': user.pw_dir,
-               'ANTHROPIC_API_KEY': json.loads(api_key)['ANTHROPIC_API_KEY'],
+               'ANTHROPIC_API_KEY': credentials['ANTHROPIC_API_KEY'],
                'PYTHONDONTWRITEBYTECODE': '1', 'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC': '1',
                'DISABLE_AUTOUPDATER': '1', 'REVEAL_DAPPER_ROOT': runtime['dapper_root']}
         command = ['setpriv', '--reuid', str(user.pw_uid), '--regid', str(user.pw_gid), '--clear-groups', '--no-new-privs',
@@ -466,7 +529,9 @@ def main():
                     if outcome.get('status') in ('insufficient_evidence', 'failed'):
                         status, reason = outcome['status'], str(outcome.get('reason', ''))[:2000]
                 expected = list(OUTPUT.glob('account-*.*')) if request['kind'] == 'research' else list(OUTPUT.glob('paragraph.json'))
-                if status == 'succeeded' and not expected:
+                reused = outcome.get('existing_account_ids', []) if (OUTPUT / 'outcome.json').exists() else []
+                reuse_output = RESEARCH is not None and bool(reused) and isinstance(reused, list) and all(isinstance(item, str) for item in reused) and set(reused) <= RESEARCH.existing_account_ids
+                if status == 'succeeded' and not expected and not reuse_output:
                     status, reason = 'failed', 'Claude completed without the required output documents'
     except Exception as exc:
         # Values from provider exceptions can contain credentials. Keep diagnostics typed.
@@ -479,6 +544,8 @@ def main():
             terminate(process)
         if server:
             server.shutdown()
+        if RESEARCH is not None:
+            RESEARCH.freeze()
         ledger.freeze()
         if runtime is not None:
             completion = runtime_completion(request, started, status, reason, process, parser, last_activity)

@@ -4,6 +4,8 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import time
 import unittest
@@ -15,6 +17,7 @@ import jwt
 
 from reveal_backend import app as api
 from reveal_backend.account_discovery import visible_accounts
+from reveal_backend.acceptance import release_root
 from reveal_backend.catalog import Catalog
 from reveal_backend.fixture_seed import apply_seed, dry_run, load_fixture, verify_seed, LOCAL_PREFIX
 from reveal_backend.repository import Repository, digest, uid
@@ -44,7 +47,22 @@ class MemoryS3:
 class FixtureSeedTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.fixture = load_fixture(ROOT / 'data/fixtures/bubble-account-v1')
+        # Historical fixture bytes retain their original release pin. Verify
+        # that archive separately, then explicitly rebuild into a temporary
+        # directory to exercise new seeding against the configured release.
+        historical = ROOT / 'data/fixtures/bubble-account-v1'
+        manifest = json.loads((historical / 'manifest.json').read_text())
+        if digest(manifest['contents']) != manifest['content_sha256']:
+            raise AssertionError('Historical fixture content manifest changed')
+        for name, checksum in manifest['contents'].items():
+            if hashlib.sha256((historical / name).read_bytes()).hexdigest() != checksum:
+                raise AssertionError('Historical fixture bytes changed: ' + name)
+        temporary = tempfile.TemporaryDirectory(); cls.addClassCleanup(temporary.cleanup)
+        runtime = Path(os.environ.get('REVEAL_TEST_DAPPER_RELEASE', str(release_root())))
+        with patch.dict(os.environ, {'REVEAL_DAPPER_ROOT': str(runtime)}):
+            subprocess.run([sys.executable, str(ROOT / 'scripts/build_bubble_account.py'),
+                            '--output', temporary.name], check=True, capture_output=True, text=True)
+            cls.fixture = load_fixture(Path(temporary.name))
         contract = json.loads((ROOT / 'services/frontend/src/lib/fixtures/contract.json').read_text())
         cls.gap = deepcopy(next(gap for gap in contract['gaps']['items'] if gap['object']['id'] == cls.fixture['manifest']['selected_gap']['id']))
         cls.gap['source'].update({key: cls.fixture['manifest']['selected_gap'][key] for key in ('source_id', 'source_revision')})

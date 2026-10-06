@@ -1,5 +1,7 @@
 # How the agent constructs a ScientificAccount
 
+Current local/hosted authoring rules: [shared contract v2](authoring-contract.md). Its mode-specific tool and evidence rules govern new workspaces; historical examples below retain their original scope.
+
 **Working design, September 25, 2026.** This document defines the agent's scientific task and the account it should produce. Its companion, [PIGEAN/EAGGL claim templates](pigean-claim-model.md), defines four biological involvement propositions and how computational results become evidence for assessing them. Both use the current DAPPER classes. No graph-path object or provider-specific EvidenceItem extension is part of this design.
 
 ## 1. The organizing unit is the account

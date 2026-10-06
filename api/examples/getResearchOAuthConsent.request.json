@@ -1,0 +1,42 @@
+{
+  "operation_id": "getResearchOAuthConsent",
+  "case": "request",
+  "method": "GET",
+  "path_template": "/v1/research-oauth/consent",
+  "request": {
+    "url": "https://api.reveal.example.org/v1/research-oauth/consent?request_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    "path": {},
+    "query": {
+      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+    },
+    "headers": {
+      "Authorization": "Bearer <api-key-or-gateway-assertion>",
+      "Accept": "application/json"
+    },
+    "body": null
+  },
+  "responses": {
+    "200": {
+      "content_type": "application/json",
+      "examples": {
+        "device": {
+          "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          "kind": "device",
+          "client_id": "reveal-local-launcher",
+          "client_name": "Reveal local launcher",
+          "scopes": [
+            "research:read",
+            "research:write"
+          ],
+          "resource": "https://api.reveal.example.org/mcp",
+          "requested_local_work_id": "77777777-7777-4777-8777-777777777777",
+          "redirect_uri": null,
+          "expires_at": "2026-10-06T12:10:00Z",
+          "status": "pending",
+          "requires_registered": true
+        }
+      }
+    }
+  },
+  "curl": "curl -X GET 'https://api.reveal.example.org/v1/research-oauth/consent?request_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
+}

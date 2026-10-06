@@ -18,6 +18,7 @@ import time
 from .agent_execution import (ExecutionRequest, ExecutionResult, MAX_EMIT_BATCH_BYTES,
                               MAX_EMIT_BATCH_EVENTS, emit_batch_size)
 from .box_mcp import GRAPHS
+from .box_research import network_policy, validate_context, validate_access, validate_hosted_context
 from .box_upload import MAX_TOTAL, capture_file_limit
 
 CLAUDE_VERSION = '2.1.282'
@@ -32,6 +33,8 @@ def dispatchable_capture(package):
     """Complete evidence capture, or a KPN (eaggl-capped-v1) package whose only capture blockers are the
     trait-level PIGEAN phenotype queries its MySQL reference generation cannot answer."""
     readiness = package.get('readiness') or {}
+    if package.get('retrieval_mode') == 'progressive':
+        return package.get('seed_version') == 'reveal.research-seed/1' and readiness.get('seed_ready') is True
     if readiness.get('input_capture_complete') is True: return True
     from .reference_evidence import TRAIT_CAPTURE_BLOCKER
     blockers = readiness.get('capture_blockers') or []
@@ -105,7 +108,8 @@ def captured_result(request, handle, marker):
     return ExecutionResult(marker['state']['status'], request.output_dir, account_paths=accounts,
                            paragraph_path=found('output/paragraph.json'), runtime_manifest_path=found('runtime.json'),
                            ledger_manifest_path=found('ledger/manifest.json'), reason=marker['state'].get('reason'),
-                           remote_handle=handle, outcome_path=found('output/outcome.json'))
+                           remote_handle=handle, outcome_path=found('output/outcome.json'),
+                           research_receipts_path=found('ledger/research-receipts.json'))
 
 
 def verified_box_not_found(exc):
@@ -146,10 +150,14 @@ def make_bundle(project_root: Path, request: ExecutionRequest):
     source = project_root / 'services/backend/src/reveal_backend'
     files = {}
     for name in ('__init__.py', 'evidence_package.py', 'dapper_release.py', 'scientific_account_lint.py', 'source_validation.py',
-                 'box_remote.py', 'box_upload.py', 'box_stream.py', 'box_mcp.py', 'box_literature.py', 'research_outcome.py',
-                 'dispatch_view.py', 'evidence_files.py', 'public_tool_activity.py'):
+                 'box_remote.py', 'box_upload.py', 'box_stream.py', 'box_mcp.py', 'box_research.py', 'box_literature.py', 'research_outcome.py',
+                 'dispatch_view.py', 'evidence_files.py', 'evidence_reader.py', 'authoring_contract.py', 'relationship_provenance.py', 'public_tool_activity.py'):
         files['bundle/services/backend/src/reveal_backend/' + name] = (source / name).read_bytes()
     relative = ['scripts/lint_scientific_account.py', 'services/backend/agent-runtime/dapper-release.json',
+                'services/backend/agent-runtime/authoring-schema-dependencies.json',
+                'services/backend/agent-runtime/linkml-types-1.11.1.yaml',
+                'services/backend/agent-runtime/authoring-schema-excerpt.yaml',
+                'services/backend/agent-runtime/authoring-examples.json', 'docs/authoring-contract.md', 'docs/local-agent-mcp.md', 'docs/local-workspaces-and-authentication.md',
                 'services/backend/agent-skills/construct-scientific-account/SKILL.md',
                 'services/backend/agent-skills/read-evidence-package/SKILL.md',
                 'services/backend/agent-skills/write-cited-paragraph/SKILL.md',
@@ -165,13 +173,18 @@ def make_bundle(project_root: Path, request: ExecutionRequest):
         from jsonschema import FormatChecker
         from jsonschema.validators import validator_for
         schema = json.loads((project_root / 'schema/evidence-package.schema.json').read_text())
-        validator_for(schema)(schema, format_checker=FormatChecker()).validate(value)
+        if value.get('retrieval_mode') == 'progressive':
+            validate_hosted_context(value.get('research_context'))
+            if value.get('package_version') != 'reveal.evidence-package/0.2-draft' or value.get('research_request_id') != value['research_context']['research_request_id']:
+                raise BoxConfigurationError('Research seed identity is inconsistent')
+        else:
+            validator_for(schema)(schema, format_checker=FormatChecker()).validate(value)
         if not dispatchable_capture(value):
             raise BoxConfigurationError('Evidence capture is incomplete; paid execution is disabled')
         if set(value['external_evidence']['selected_graphs']) != set(request.selected_graphs):
             raise BoxConfigurationError('Selected graphs do not match the frozen evidence package')
         files['input/evidence-package.json'] = data
-        from .dispatch_view import (BUDGET_FILENAME, VIEW_FILENAME, legacy_research_prompt, research_prompt,
+        from .dispatch_view import (BUDGET_FILENAME, VIEW_FILENAME, legacy_research_prompt, research_prompt, pinned_contract_sha256,
                                     validate_dispatch_budget, validate_file_input)
         budget_path = request.input_path.parent / BUDGET_FILENAME
         view_path = request.input_path.parent / VIEW_FILENAME
@@ -199,7 +212,8 @@ def make_bundle(project_root: Path, request: ExecutionRequest):
                     if hashlib.sha256(manifest_data).hexdigest() != binding['sha256']:
                         raise BoxConfigurationError('Frozen file input manifest changed')
                     validate_file_input(data, json.loads(manifest_data),
-                                        research_prompt(request.selected_graphs, request.validation_feedback))
+                                        research_prompt(request.selected_graphs, request.validation_feedback, progressive=value.get('retrieval_mode') == 'progressive',
+                                                        contract_sha256=pinned_contract_sha256(value)))
                     files['input/evidence-input.json'] = manifest_data
                 frozen_view = frozen_input.get('dispatch_view')
                 if frozen_view:
@@ -287,6 +301,12 @@ class BoxExecutionAdapter:
                   'model': self.environ.get('REVEAL_CLAUDE_MODEL', MODEL), 'claude_version': CLAUDE_VERSION,
                   'input_sha256': hashlib.sha256(request.input_path.read_bytes()).hexdigest()}
         config['validation_feedback'] = list(request.validation_feedback)
+        if request.kind == 'research':
+            package = json.loads(request.input_path.read_bytes())
+            if package.get('retrieval_mode') == 'progressive':
+                config['research_context'] = validate_context(package.get('research_context'))
+                if request.research_access is not None:
+                    validate_access(request.research_access, config['research_context'])
         return config
 
     async def prepare(self, box, request, bundle):
@@ -297,11 +317,14 @@ class BoxExecutionAdapter:
         # harness bundle, input, model, limits and selected evidence services.
         fingerprint = hashlib.sha256(bundle + json.dumps(config, sort_keys=True).encode()).hexdigest()
         marker = await self.command(box, "sudo -n sh -c 'if [ -f /reveal/state/bootstrap-ready ]; then cat /reveal/state/bootstrap-ready; fi'")
-        policy = {'mode': 'custom', 'allowed_domains': ['api.anthropic.com', 'apps.okn.us', 'github.com']}
+        policy = network_policy(config.get('research_context'))
         if marker.strip():
             if marker.strip() != fingerprint:
                 raise BoxConfigurationError('Existing Box bootstrap belongs to different frozen input or harness')
-            await box.update_network_policy(policy)
+            if config.get('research_context'):
+                await self.finish_prepare(box, fingerprint, research_context=config['research_context'], research_access=request.research_access)
+            else:
+                await box.update_network_policy(policy)
             return
         await box.files.write(path='/tmp/reveal-bundle.tgz', content=base64.b64encode(bundle).decode(), encoding='base64')
         await box.files.write(path='/tmp/reveal-request.json', content=json.dumps(config))
@@ -309,7 +332,7 @@ class BoxExecutionAdapter:
         bootstrap = self.bootstrap_script(config['claude_version'])
         await box.files.write(path='/tmp/reveal-bootstrap.sh', content=bootstrap)
         await self.command(box, 'sh /tmp/reveal-bootstrap.sh')
-        await self.finish_prepare(box, fingerprint)
+        await self.finish_prepare(box, fingerprint, research_context=config.get('research_context'), research_access=request.research_access)
 
     @staticmethod
     def bootstrap_script(claude_version, *, unpack=True):
@@ -331,13 +354,18 @@ sudo chmod 755 /reveal/state
 sudo /reveal/claude/node_modules/.bin/claude --version
 '''
 
-    async def finish_prepare(self, box, fingerprint):
+    async def finish_prepare(self, box, fingerprint, *, research_context=None, research_access=None):
         # Secret only uses structured SDK file input, then root-only protection before launch.
-        await box.files.write(path='/tmp/reveal-credential.json', content=json.dumps({'ANTHROPIC_API_KEY': self.environ['ANTHROPIC_API_KEY']}))
+        credentials = {'ANTHROPIC_API_KEY': self.environ['ANTHROPIC_API_KEY']}
+        if research_context:
+            credentials['REVEAL_RESEARCH_TOKEN'] = validate_access(research_access, research_context)
+        elif research_access is not None:
+            raise BoxConfigurationError('Research credential has no frozen context')
+        await box.files.write(path='/tmp/reveal-credential.json', content=json.dumps(credentials))
         await self.command(box, 'sudo mv /tmp/reveal-credential.json /reveal/credentials.json && sudo chown root:root /reveal/credentials.json && sudo chmod 600 /reveal/credentials.json')
         await self.command(box, "sudo -n sh -c " + shlex.quote("printf '%s' " + fingerprint + " > /reveal/state/bootstrap-ready && chmod 600 /reveal/state/bootstrap-ready"))
         # After installation only Anthropic and the fixed evidence service are reachable.
-        await box.update_network_policy({'mode': 'custom', 'allowed_domains': ['api.anthropic.com', 'apps.okn.us', 'github.com']})
+        await box.update_network_policy(network_policy(research_context))
         # DAPPER clone is intentionally fresh and requires github.com after policy tightening.
 
     async def execute(self, request, emit, cancelled, checkpoint):

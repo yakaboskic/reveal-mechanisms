@@ -6,6 +6,7 @@ the verified original and extraction objects, independently of draft lifetime.
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 import base64
+import csv
 import io
 import json
 import os
@@ -50,7 +51,9 @@ def has_inputs(value):
 
 def prevent_private_publication(tx, job_id):
     job=tx.get('job',job_id) if job_id else None
-    request=tx.get('request',job['data'].get('research_request_id')) if job else None
+    local=tx.get('local_work',job_id) if job_id and not job else None
+    origin=job or local
+    request=tx.get('request',origin['data'].get('research_request_id')) if origin else None
     if request and has_inputs(request['data'].get('user_inputs')):
         raise Problem(409,'PRIVATE_RESEARCH_INPUTS','This result used private researcher inputs. Public disclosure is not enabled for these results.')
 
@@ -132,7 +135,7 @@ def verify_bytes(value,data):
 
 
 def parse_document(data, filename):
-    suffix=Path(filename).suffix.lower(); parts=[]
+    suffix=Path(filename).suffix.lower(); parts=[]; structured=None
     if suffix=='.pdf':
         if not data.startswith(b'%PDF-'): raise ValueError('The file is not a PDF')
         from pypdf import PdfReader
@@ -156,16 +159,37 @@ def parse_document(data, filename):
     else:
         text=data.decode('utf-8-sig')
         if '\x00' in text or any(ord(c)<32 and c not in '\n\r\t' for c in text): raise ValueError('File is not UTF-8 text')
-        if suffix=='.json': json.loads(text)
+        if suffix=='.json': structured=json.loads(text)
         if suffix in ('.yaml','.yml'):
             import yaml
-            yaml.safe_load(text)
+            structured=yaml.safe_load(text)
+        if suffix in ('.csv','.tsv'):
+            rows=list(csv.reader(io.StringIO(text),delimiter=',' if suffix=='.csv' else '\t'))
+            if not rows or not rows[0] or len(set(rows[0]))!=len(rows[0]) or any(not key for key in rows[0]):
+                raise ValueError('Tables require unique nonempty column names')
+            if len(rows)>10001 or any(len(row)!=len(rows[0]) for row in rows[1:]):
+                raise ValueError('Table rows must match their header and fit the row limit')
+            def cell(value):
+                # Preserve nonnumeric text exactly; normalize finite JSON numbers
+                # only, with original bytes always retained for inspection.
+                try:
+                    parsed=json.loads(value)
+                    if type(parsed) in (int,float) and __import__('math').isfinite(parsed): return parsed
+                except (ValueError,TypeError): pass
+                return value
+            structured=[{key:cell(value) for key,value in zip(rows[0],row)} for row in rows[1:]]
         parts=[{'locator':'line:'+str(i),'text':line} for i,line in enumerate(text.splitlines(),1)]
     if len(parts)>10000: raise ValueError('Document exceeds 10,000 text segments')
     if not any(p['text'].strip() for p in parts): raise ValueError('No readable text was found; scanned documents require OCR before upload')
     if sum(len(p['text'].encode()) for p in parts)>MAX_TEXT_BYTES: raise ValueError('Extracted text exceeds 500 KB')
-    return {'format':'reveal.upload-text/1','original_sha256':checksum(data),
+    result={'format':'reveal.upload-text/1','original_sha256':checksum(data),
         'extractor':{'name':'REVEAL document extraction','version':'1','parser':'pypdf 6.19.0' if suffix=='.pdf' else 'docx-xml' if suffix=='.docx' else 'utf-8'},'segments':parts}
+    if structured is not None:
+        # JSON serialization rejects nonfinite numeric values and cyclic YAML.
+        encoded=json.dumps(structured,allow_nan=False,ensure_ascii=False)
+        if len(encoded.encode())>MAX_EXTRACTED_BYTES: raise ValueError('Structured extraction exceeds 1 MB')
+        result.update(data=structured,structured_extractor='reveal.structured-import/1')
+    return result
 
 
 def extract(data, filename):

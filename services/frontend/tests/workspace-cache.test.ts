@@ -2,8 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { RevalidationCache, workspaceFreshMs } from "../src/lib/revalidation-cache";
 import { affectedWorkspaceTabs, changesWorkspace } from "../src/lib/workspace-events";
-import { loadWorkspaceData, workspaceKey, workspaceKeyParts, type WorkspaceKey, type WorkspaceData } from "../src/lib/workspace-data";
+import { loadWorkspaceData, workspaceKey, workspaceKeyParts, workspaceSize, type WorkspaceKey, type WorkspaceData } from "../src/lib/workspace-data";
 import { api, ApiError, type Schema } from "../src/lib/client";
+import { localWorkApi, LocalWorkError, type LocalWork } from "../src/lib/local-work";
 
 const deferred = <T>() => {
   let resolve!: (value: T) => void, reject!: (error: unknown) => void;
@@ -68,10 +69,10 @@ test("revoked access clears all cached private tabs", async () => {
 });
 
 test("workspace changes invalidate while searches, rendering and private reads do not", () => {
-  for (const [method, path] of [["POST", "/v1/jobs"], ["PATCH", "/v1/drafts/id"], ["POST", "/v1/drafts/id/save"], ["POST", "/v1/jobs/id/retry-review"], ["POST", "/v1/me/explorations"], ["POST", "/v1/accounts/id/publication"], ["POST", "/v1/analysis-outcomes/id/publication"]]) {
+  for (const [method, path] of [["POST", "/v1/jobs"], ["PATCH", "/v1/drafts/id"], ["POST", "/v1/drafts/id/save"], ["POST", "/v1/jobs/id/retry-review"], ["POST", "/v1/me/explorations"], ["POST", "/v1/accounts/id/publication"], ["POST", "/v1/analysis-outcomes/id/publication"], ["POST", "/v1/local-work"], ["POST", "/v1/local-work/id/close"], ["POST", "/v1/local-work/id/grants"], ["DELETE", "/v1/local-work/id/grants/grant"]]) {
     assert.equal(changesWorkspace(method, "/api/backend" + path), true, path);
   }
-  for (const [method, path] of [["GET", "/v1/accounts"], ["POST", "/v1/citations/render"], ["POST", "/v1/mechanisms/suggest"]]) assert.equal(changesWorkspace(method, path), false);
+  for (const [method, path] of [["GET", "/v1/accounts"], ["POST", "/v1/citations/render"], ["POST", "/v1/mechanisms/suggest"], ["GET", "/v1/local-work"], ["GET", "/v1/local-work/id/package"]]) assert.equal(changesWorkspace(method, path), false);
 });
 
 test("saved draft loading excludes temporary work without fetching jobs or frozen requests", async t => {
@@ -81,6 +82,7 @@ test("saved draft loading excludes temporary work without fetching jobs or froze
   }));
   t.mock.method(api, "jobs", () => assert.fail("Draft display must not depend on runs"));
   t.mock.method(api, "requests", () => assert.fail("Draft display must not depend on frozen requests"));
+  t.mock.method(localWorkApi, "list", () => assert.fail("Draft display must not depend on local research"));
   const signal = new AbortController().signal;
   let data = await loadWorkspaceData("drafts", undefined, "refresh", signal);
   assert.deepEqual(data.drafts.map(draft => draft.id), ["saved"]);
@@ -95,12 +97,60 @@ test("research runs load frozen inputs independently of deleted drafts and exclu
   t.mock.method(api, "drafts", () => assert.fail("Run history must not read mutable drafts"));
   t.mock.method(api, "jobs", async () => ({ items: [{ id: "research", kind: "analysis", research_request_id: "frozen" }, { id: "paragraph", kind: "paragraph" }], page }));
   t.mock.method(api, "requests", async () => ({ items: [{ id: "frozen", source_draft_id: "deleted-draft" }], page }));
+  let localState = "preparing";
+  t.mock.method(localWorkApi, "list", async () => ({ items: [{ id: "local", state: localState, request: { id: "local-frozen" } }] }));
   const signal = new AbortController().signal;
   let data = await loadWorkspaceData("runs", undefined, "refresh", signal);
   assert.deepEqual(data.jobs.map(job => job.id), ["research"]);
   assert.equal(data.requests[0].source_draft_id, "deleted-draft");
+  assert.deepEqual(data.localWorks.map(work => work.id), ["local"]);
+  assert.equal(workspaceSize("runs", data), 2);
+  localState = "ready";
   data = await loadWorkspaceData("runs", data, "activity", signal);
   assert.deepEqual(data.jobs.map(job => job.id), ["research"]);
+  assert.equal(data.localWorks[0].state, "ready");
+});
+
+test("local run pagination preserves the caller signal and deduplicates frozen work", async t => {
+  const page = { next_cursor: null, has_more: false, snapshot_id: "test" };
+  t.mock.method(api, "jobs", async () => ({ items: [], page }));
+  t.mock.method(api, "requests", async () => ({ items: [], page }));
+  const cursors: (string | undefined)[] = [], signal = new AbortController().signal;
+  t.mock.method(localWorkApi, "list", async (cursor?: string, caller?: AbortSignal) => {
+    assert.equal(caller, signal); cursors.push(cursor);
+    return { items: (cursor ? ["first", "second"] : ["first"]).map(id => ({ id })), page: { next_cursor: cursor ? null : "next" } };
+  });
+  const data = await loadWorkspaceData("runs", undefined, "refresh", signal);
+  assert.deepEqual(cursors, [undefined, "next"]);
+  assert.deepEqual(data.localWorks.map(work => work.id), ["first", "second"]);
+  assert.equal(workspaceSize("runs", data), 2);
+  assert.equal(data.cursor, null);
+});
+
+test("local run cursor loops fail instead of silently presenting incomplete history", async t => {
+  const page = { next_cursor: null, has_more: false, snapshot_id: "test" };
+  t.mock.method(api, "jobs", async () => ({ items: [], page }));
+  t.mock.method(api, "requests", async () => ({ items: [], page }));
+  t.mock.method(localWorkApi, "list", async () => ({ items: [], page: { next_cursor: "repeated" } }));
+  await assert.rejects(loadWorkspaceData("runs", undefined, "refresh", new AbortController().signal), /Local research history changed/);
+});
+
+test("local research read failures retain mixed history while denied access clears private caches", async t => {
+  const page = { next_cursor: null, has_more: false, snapshot_id: "test" };
+  let failure: Error | null = null;
+  t.mock.method(api, "jobs", async () => ({ items: [{ id: "online", kind: "analysis" }], page }));
+  t.mock.method(api, "requests", async () => ({ items: [], page }));
+  t.mock.method(api, "accounts", async () => ({ items: [], page }));
+  t.mock.method(localWorkApi, "list", async () => { if (failure) throw failure; return { items: [{ id: "local" } as LocalWork] }; });
+  const cache = new RevalidationCache<WorkspaceKey, WorkspaceData>(loadWorkspaceData);
+  cache.bind("owner"); await cache.revalidate("owner", "runs"); await cache.revalidate("owner", "accounts");
+  failure = new Error("Local history unavailable"); await cache.revalidate("owner", "runs", true);
+  assert.equal(cache.read("owner", "runs").data?.jobs[0].id, "online");
+  assert.equal(cache.read("owner", "runs").data?.localWorks[0].id, "local");
+  assert.equal((cache.read("owner", "runs").error as Error).message, failure.message);
+  failure = new LocalWorkError(403, "FORBIDDEN", "Access revoked"); await cache.revalidate("owner", "runs", true);
+  assert.equal(cache.read("owner", "runs").data, undefined);
+  assert.equal(cache.read("owner", "accounts").data, undefined);
 });
 
 test("draft and run events invalidate their independent tabs and gap history", () => {
@@ -132,7 +182,7 @@ test("running-job refresh reuses frozen requests until it discovers an unknown r
   let requestId = "known", frozenReads = 0;
   t.mock.method(api, "jobs", async () => ({ items: [{ id: "job", research_request_id: requestId }], page: { next_cursor: null, has_more: false, snapshot_id: "test" } }));
   t.mock.method(api, "requests", async () => { frozenReads++; return { items: [{ id: "new" }], page: { next_cursor: null, has_more: false, snapshot_id: "test" } }; });
-  const initial = { gaps: [], accounts: [], outcomes: [], drafts: [], jobs: [], requests: [{ id: "known" }] as Schema<"ResearchRequest">[], cursor: null, pages: 1 };
+  const initial = { gaps: [], accounts: [], outcomes: [], drafts: [], jobs: [], localWorks: [], requests: [{ id: "known" }] as Schema<"ResearchRequest">[], cursor: null, pages: 1 };
   const signal = new AbortController().signal;
   await loadWorkspaceData("gaps", initial, "activity", signal); assert.equal(frozenReads, 0);
   requestId = "new"; await loadWorkspaceData("gaps", initial, "activity", signal); assert.equal(frozenReads, 1);

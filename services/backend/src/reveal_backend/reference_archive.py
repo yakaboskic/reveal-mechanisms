@@ -55,6 +55,15 @@ KIND_ACTIONS: dict[str, str] = {
         # Private upload metadata and immutable fixture receipts are independent
         # of the reference generation; frozen requests retain their input refs.
         'upload', 'fixture_seed',
+        # Progressive research retains immutable captures independently of the
+        # currently active catalog. Active research_pin rows block table purge.
+        'local_work', 'research_pin', 'research_package', 'research_access', 'research_grant_issue',
+        'research_idempotency', 'research_operation', 'research_artifact', 'research_upload', 'research_setup_ticket',
+        'research_oauth_client', 'research_oauth_request', 'research_oauth_code', 'research_oauth_device',
+        'research_oauth_user_code', 'research_oauth_family', 'research_oauth_refresh', 'research_oauth_rate',
+        'public_capture', 'public_capture_cache', 'public_read_budget',
+        'evidence_receipt', 'evidence_import', 'reuse_receipt', 'reuse_idempotency',
+        'reuse_authorization', 'scientific_dependencies', 'scientific_share', 'scientific_owner_transition',
         # Identities.
         'principal', 'identity', 'transfer', 'citation_actor',
         # Community ballots and their public tallies (votes.py), keyed by gap or published account id and never
@@ -795,7 +804,9 @@ def _kpn_factors(connection, generation, wanted) -> dict:
             factor = parse_factor_key(key)['factor']
             factors[public] = {'model': generation.get('model') or KPN_MODEL, 'factor_id': eaggl_factor_id,
                 'trait': legacy_phenotype or eaggl_factor_id.split('::')[0], 'kpn_trait_id': kpn_trait_id, 'label': label,
-                'node': mechanism_node(public, phenotype, kpn_trait_id, factor, label), 'metadata': _json(metadata),
+                'node': mechanism_node(public, phenotype, kpn_trait_id, factor, label,
+                    identity_version=(_json(generation.get('manifest')) or {}).get('mechanism_identity_version', 1),
+                    eaggl_import_id=import_id), 'metadata': _json(metadata),
                 'top_genes': genes, 'top_gene_sets': gene_sets}
     return factors
 

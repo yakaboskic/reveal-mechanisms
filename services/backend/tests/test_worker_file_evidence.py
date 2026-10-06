@@ -97,7 +97,7 @@ class WorkerFileEvidenceTests(unittest.TestCase):
         with tarfile.open(fileobj=io.BytesIO(bundle_bytes), mode='r:gz') as bundle:
             self.assertEqual(bundle.extractfile('input/evidence-package.json').read(), original)
             manifest = json.load(bundle.extractfile('input/evidence-input.json'))
-            self.assertEqual(manifest['format'], 'reveal.file-backed-evidence/1')
+            self.assertEqual(manifest['format'], 'reveal.file-backed-evidence/2')
             self.assertEqual(manifest['package']['sha256'], sha256(original))
             self.assertIn('bundle/services/backend/src/reveal_backend/evidence_files.py', bundle.getnames())
             self.assertIn('bundle/services/backend/agent-skills/read-evidence-package/SKILL.md', bundle.getnames())
