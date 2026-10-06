@@ -54,7 +54,7 @@ app.openapi = lambda: CONTRACT
 async def publication_cache_policy(request: Request, call_next):
     response = await call_next(request)
     path = request.url.path.removeprefix(request.scope.get('root_path', ''))
-    if path.startswith(('/v1/accounts', '/v1/claims', '/v1/objects', '/v1/gene-sets',
+    if path.startswith(('/v1/admin/', '/v1/accounts', '/v1/claims', '/v1/objects', '/v1/gene-sets',
             '/v1/paragraphs', '/v1/citations', '/v1/artifacts', '/v1/knowledge-gaps', '/v1/analysis-outcomes', '/v1/leaderboard')):
         # Visibility is revocable and workspace responses vary by principal.
         response.headers['Cache-Control'] = 'private, no-store'
@@ -253,7 +253,9 @@ def admin_cell(table: str, key: str = Query(..., max_length=4096), column: str =
 @app.get('/health/ready')
 def ready():
     from .api_keys import configuration as api_key_configuration
+    from .admin_read_keys import configuration as admin_key_configuration
     api_key_configuration()
+    admin_key_configuration()
     database = repo.readiness(); sources = catalog.readiness()
     from .artifact_store import s3_enabled, store
     if s3_enabled(): store().check()
@@ -264,6 +266,47 @@ def ready():
     return {'status': 'ready', **database, 'sources': sources,
         'execution_mode': os.getenv('REVEAL_EXECUTION_MODE','box'), 'job_transport':jobs.transport(),
         'notifications':{'transport':configuration()[0], 'delivery':'pubsub', 'polling':False}}
+
+def admin_scientific_list(request, kind, visibility, limit, cursor):
+    from . import admin_read_keys, admin_science
+    key_id = admin_read_keys.authenticate(request.headers.get('authorization'))
+    cursor_owner = digest([key_id, os.getenv('REVEAL_ADMIN_READ_API_KEY_SHA256', '')])
+    with repo.read_transaction() as tx:
+        items, revisions = admin_science.collection(tx, kind, visibility)
+        result = page(items, cursor_owner, limit, cursor, 'admin-science:'+kind+':'+visibility, snapshot_items=[items, revisions])
+        if kind == 'account': admin_science.attribution(tx, result['items'])
+    admin_science.audit(key_id, 'list_'+kind, len(result['items']))
+    return result
+
+
+def admin_scientific_detail(request, kind, identity):
+    from . import admin_read_keys, admin_science
+    key_id = admin_read_keys.authenticate(request.headers.get('authorization'))
+    with repo.read_transaction() as tx:
+        result = admin_science.detail(tx, kind, identity)
+    admin_science.audit(key_id, 'get_'+kind, 1)
+    return result
+
+
+@app.get('/v1/admin/accounts')
+def admin_accounts(request: Request, visibility: str = 'private', limit: int = Query(50, ge=1, le=100), cursor: str | None = None):
+    return admin_scientific_list(request, 'account', visibility, limit, cursor)
+
+
+@app.get('/v1/admin/accounts/{record_id}')
+def admin_account(record_id: str, request: Request):
+    return admin_scientific_detail(request, 'account', record_id)
+
+
+@app.get('/v1/admin/explorations')
+def admin_explorations(request: Request, visibility: str = 'private', limit: int = Query(50, ge=1, le=100), cursor: str | None = None):
+    return admin_scientific_list(request, 'analysis_outcome', visibility, limit, cursor)
+
+
+@app.get('/v1/admin/explorations/{record_id}')
+def admin_exploration(record_id: str, request: Request):
+    return admin_scientific_detail(request, 'analysis_outcome', record_id)
+
 
 @app.post('/internal/v1/principals/anonymous', status_code=201)
 async def provision(request: Request):

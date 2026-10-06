@@ -2,7 +2,9 @@
 """Prepare private DIG/Vercel configuration; never deploy or print credentials."""
 import argparse
 import json
+import os
 import secrets
+import stat
 
 from dotenv import dotenv_values
 import yaml
@@ -10,6 +12,7 @@ import yaml
 from local_deployment import ROOT, env_file, read_env
 
 API_KEY_SETTINGS = ('REVEAL_API_KEY_SHA256', 'REVEAL_API_KEY_USER_ID')
+ADMIN_READ_API_KEY_SETTINGS = ('REVEAL_ADMIN_READ_API_KEY_SHA256', 'REVEAL_ADMIN_READ_API_KEY_ID')
 
 
 def api_key_configuration(runtime, environment):
@@ -38,6 +41,36 @@ def api_key_configuration(runtime, environment):
     return values
 
 
+def admin_read_key_configuration(runtime, environment):
+    """Only an explicit private environment record enables cross-owner reads."""
+    from reveal_backend.admin_read_keys import configuration
+    from reveal_backend.auth import Problem
+    path = runtime / f'{environment}-admin-read-api-key-config.json'
+    values = dict.fromkeys(ADMIN_READ_API_KEY_SETTINGS, '')
+    try:
+        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except FileNotFoundError:
+        return values
+    except OSError:
+        raise ValueError('Admin read API key configuration must be a regular private file') from None
+    try:
+        with os.fdopen(descriptor, 'rb') as stream:
+            info = os.fstat(stream.fileno())
+            if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid()
+                    or stat.S_IMODE(info.st_mode) & 0o077):
+                raise ValueError()
+            raw = stream.read(4097)
+        if len(raw) > 4096: raise ValueError()
+        values = json.loads(raw)
+        if (not isinstance(values, dict) or set(values) != set(ADMIN_READ_API_KEY_SETTINGS)
+                or not all(isinstance(value, str) for value in values.values())):
+            raise ValueError()
+        configuration(values)
+    except (OSError, ValueError, TypeError, Problem):
+        raise ValueError('Invalid private admin read API key configuration record') from None
+    return values
+
+
 def prepare(environment):
     if environment not in ('qa', 'prod'):
         raise ValueError('Choose qa or prod')
@@ -49,6 +82,16 @@ def prepare(environment):
     source = read_env(ROOT / '.runtime/deployment/backend.env')
     source.update({k: v for k, v in dotenv_values(ROOT / '.env', interpolate=False).items() if v is not None})
     source.update(api_key_configuration(runtime, environment))
+    admin_keys = admin_read_key_configuration(runtime, environment)
+    source.update(admin_keys)
+    names = manifest[environment]['secrets']
+    admin_names = set(ADMIN_READ_API_KEY_SETTINGS)
+    configured_names = admin_names.intersection(names)
+    if (configured_names and configured_names != admin_names) or (
+            any(value.strip() for value in admin_keys.values()) and configured_names != admin_names):
+        raise ValueError('Admin read API key access requires both environment secret references')
+    if admin_names.intersection(settings):
+        raise ValueError('Admin read API key configuration belongs only in environment secrets')
     keyfile = runtime / f'{environment}-session-keys.json'
     if not keyfile.exists():
         keyfile.write_text(json.dumps({k: secrets.token_hex(32) for k in ('session', 'gateway', 'service')}))
@@ -56,8 +99,8 @@ def prepare(environment):
     keys = json.loads(keyfile.read_text())
     source.update(REVEAL_GATEWAY_SECRET=keys['gateway'], REVEAL_GATEWAY_SERVICE_TOKEN=keys['service'])
     source['UPSTASH_VECTOR_WRITE_TOKEN'] = source.get('UPSTASH_VECTOR_WRITE_TOKEN') or source.get('UPSTASH_VECTOR_REST_TOKEN')
-    names = manifest[environment]['secrets']
-    missing = [name for name in names if name not in API_KEY_SETTINGS and not source.get(name)]
+    missing = [name for name in names
+               if name not in (*API_KEY_SETTINGS, *ADMIN_READ_API_KEY_SETTINGS) and not source.get(name)]
     if missing:
         raise ValueError('Missing credentials: ' + ', '.join(missing))
     backend_secret = {name: source[name] for name in names}

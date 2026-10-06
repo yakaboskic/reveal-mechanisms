@@ -1,0 +1,109 @@
+{
+  "operation_id": "listAdminAccounts",
+  "case": "request",
+  "method": "GET",
+  "path_template": "/v1/admin/accounts",
+  "request": {
+    "url": "https://api.reveal.example.org/v1/admin/accounts?visibility=private&limit=50",
+    "path": {},
+    "query": {
+      "visibility": "private",
+      "limit": 50
+    },
+    "headers": {
+      "Authorization": "Bearer rvl_admin_<private-admin-read-key>",
+      "Accept": "application/json"
+    },
+    "body": null
+  },
+  "responses": {
+    "200": {
+      "content_type": "application/json",
+      "examples": {
+        "private_records": {
+          "items": [
+            {
+              "record_id": "4e47d886a1e763f834bbcee32b4899930bc9d5bab74b0b81246a82a19b1ee358",
+              "owner_user_id": "11111111-1111-4111-8111-111111111111",
+              "summary": {
+                "account": {
+                  "id": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
+                  "name": "Genes and gene programs in a shared CAD-in-T2D mechanism",
+                  "question": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+                  "context": "A CAD-in-T2D evidence slice used to investigate the selected broader CAD gap. This authored design packet combines captured CFDE observations with explicitly illustrative KG membership assertions. No live agent ran.",
+                  "component_claims": [
+                    "dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km",
+                    "dapper:Claim.Uv7_cT46DdsqZMvk5nh8G48qOIKvhRgc",
+                    "dapper:Claim.I2mf6PJ0DPF5_nnbiBjAhgjlUCOiUZZ9",
+                    "dapper:Claim.Kd3psmdr4G9AlD0UU1E1Vu6AjpKaQYWE",
+                    "dapper:Claim.NBafdtdEE2Uabs-8pZqurv7SoWpg7Yhi",
+                    "dapper:Claim.Oe2UZeV7oMY4NsMHyB8h4HJO1FH4nSGF",
+                    "dapper:Claim.2idJniYU4zCtCN6puy8XZ2mzo9Mq6c5p",
+                    "dapper:Claim.H5icBYm5JLM3_T-b1mMfH65Nc0zMhZzH",
+                    "dapper:Claim.xzV_35EYnLl-zy03YbmhfBk_ynNbl7H9",
+                    "dapper:Claim.SYqCJXxCVXDpwflRSdZnkVLzGLO_vi_r",
+                    "dapper:Claim.x7aCVQ1uTkYKLJo32ZyAGMGZaAGCSvWV",
+                    "dapper:Claim.uzqyfwuhf59hSTdravdcr4cTxuitWGx-"
+                  ],
+                  "conclusion_claims": [
+                    "dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km",
+                    "dapper:Claim.Uv7_cT46DdsqZMvk5nh8G48qOIKvhRgc",
+                    "dapper:Claim.I2mf6PJ0DPF5_nnbiBjAhgjlUCOiUZZ9",
+                    "dapper:Claim.Kd3psmdr4G9AlD0UU1E1Vu6AjpKaQYWE",
+                    "dapper:Claim.NBafdtdEE2Uabs-8pZqurv7SoWpg7Yhi"
+                  ],
+                  "closing_remarks": "SHH, GLI3 and TCF7L2, together with the AMP AD / GTEx and PsychENCODE geneM16 programs, are implicated in the same CAD-in-T2D mechanism by their captured EAGGL loadings. Their PIGEAN trait-level results connect these assessments to CAD in people with type 2 diabetes. The illustrative membership assertions show how genes could be connected to the programs, but those links remain unverified. Together, the assessed relationships prioritize a mechanism for investigating the selected gap. They do not distinguish exposure-driven amplification of genetic risk from downstream readouts or reverse causation; that requires temporal or intervention evidence not present here.",
+                  "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+                  "was_attributed_to": [
+                    "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+                  ]
+                },
+                "knowledge_gap": {
+                  "text": "Are the CAD PGS×context interactions driven by adverse exposures causally amplifying genetic risk, or are some \"contexts\" actually downstream readouts of incipient disease (reverse causation)?",
+                  "gap_description": "Population PGS×context analyses (Nagpal & Gibson 2026, PMID:42443528) are largely unable to establish the causality of specific contexts. dismech separates true environmental exposures (smoking, high-fat diet, sedentary lifestyle) from biochemical readouts (LDL, HDL, C-reactive protein); the biochemical \"contexts\" are prime reverse-causation suspects, since they may be partly downstream of the atherosclerotic process rather than upstream drivers, and behavioural contexts such as reduced physical activity may be rapid responses to incipient angina rather than causes. Distinguishing genuine amplification of genetic effects from reverse causation determines whether the modelled interventions (e.g. lowering cholesterol in high-PGS smokers) would actually reduce risk.",
+                  "gap_kind": "KNOWLEDGE_GAP",
+                  "scope": "Coronary Artery Disease",
+                  "about_entities": [
+                    "http://purl.obolibrary.org/obo/MONDO_0021661"
+                  ],
+                  "id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk"
+                },
+                "claim_count": 12,
+                "created_at": "2026-09-24T16:00:00Z",
+                "job_id": "44444444-4444-4444-8444-444444444444",
+                "research_statement": {
+                  "status": "succeeded",
+                  "job_id": "55555555-5555-4555-8555-555555555555",
+                  "paragraph_id": "dapper:Paragraph.uSYa1LdXNPuwlSgsCz3oZ7IfrVoztroD"
+                },
+                "publication": {
+                  "visibility": "private",
+                  "version": 0,
+                  "published_at": null,
+                  "updated_at": null,
+                  "can_manage": false,
+                  "has_unpublished_changes": false
+                },
+                "votes": null
+              }
+            }
+          ],
+          "page": {
+            "next_cursor": null,
+            "has_more": false,
+            "snapshot_id": "illustrative-contract-snapshot"
+          }
+        },
+        "empty": {
+          "items": [],
+          "page": {
+            "next_cursor": null,
+            "has_more": false,
+            "snapshot_id": "illustrative-contract-snapshot"
+          }
+        }
+      }
+    }
+  },
+  "curl": "curl -X GET 'https://api.reveal.example.org/v1/admin/accounts?visibility=private&limit=50' -H 'Authorization: Bearer rvl_admin_<private-admin-read-key>' -H 'Accept: application/json'"
+}

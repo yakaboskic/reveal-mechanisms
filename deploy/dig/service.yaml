@@ -110,6 +110,9 @@ qa:
     # Optional paired fields: an absent key is represented by two empty strings.
     REVEAL_API_KEY_SHA256: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-qa-uiJnVi:REVEAL_API_KEY_SHA256::'
     REVEAL_API_KEY_USER_ID: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-qa-uiJnVi:REVEAL_API_KEY_USER_ID::'
+    # Separate science:read credential; provision both fields before QA rollout.
+    REVEAL_ADMIN_READ_API_KEY_SHA256: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-qa-uiJnVi:REVEAL_ADMIN_READ_API_KEY_SHA256::'
+    REVEAL_ADMIN_READ_API_KEY_ID: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-qa-uiJnVi:REVEAL_ADMIN_READ_API_KEY_ID::'
     UPSTASH_REDIS_REST_URL: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-qa-uiJnVi:UPSTASH_REDIS_REST_URL::'
     UPSTASH_REDIS_REST_TOKEN: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-qa-uiJnVi:UPSTASH_REDIS_REST_TOKEN::'
     UPSTASH_VECTOR_REST_URL: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-qa-uiJnVi:UPSTASH_VECTOR_REST_URL::'

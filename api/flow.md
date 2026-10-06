@@ -459,8 +459,27 @@ Retain deprecated compatibility only where existing issuance records prove regis
 - Deprecated for new setup: v2 archives issue neither setup tickets nor manual bearer credentials.
 - New clients use anonymous public access and explicit browser OAuth consent.
 
+### Inspect retained scientific records as an administrator
+
+Use a separately provisioned administrator read key to inspect saved scientific results across owners.
+
+**Request:** QA administrator science:read bearer; visibility (private by default), bounded pagination, or exact owner-specific record identity.
+
+**Response:** Owner identity, current account or scoped exploration summary, and exact stored scientific/provenance envelopes on detail reads.
+
+- `GET /v1/admin/accounts` — [request request/response](examples/listAdminAccounts.request.json)
+- `GET /v1/admin/accounts/{record_id}` — [request request/response](examples/getAdminAccount.request.json)
+- `GET /v1/admin/explorations` — [request request/response](examples/listAdminExplorations.request.json)
+- `GET /v1/admin/explorations/{record_id}` — [request request/response](examples/getAdminExploration.request.json)
+
+- This separate credential authorizes only these four GET operations. Workspace, gateway and service credentials are rejected; administrator read keys cannot mutate, publish, run research, access MCP, internal administration or download raw artifacts.
+- Private selects currently unpublished records. Use all plus has_unpublished_changes to find a published account with newer unpublished statement work. Results retain owners and historical authorship separately.
+- An account record ID distinguishes owner-specific copies of the same DAPPER scientific account; exploration IDs refer to saved insufficient-evidence outcomes, not visits or bookmarks.
+- Stored coverage, hashes and source locators remain exact. Artifact download URLs are null; these reads never re-query scientific sources. All responses are private and no-store.
+- Cursors bind credential, resource, visibility and collection revision. Restart pagination if any of those change.
+
 ## Evidence and validation
 
 Requests/responses are taken from the existing validated OpenAPI exchange library. The CADinT2D analysis/paragraph sequence is internally linked. The CAD source-selected gap now frames the request and account. The evidence package is a separate captured input; the authored account is not its validated agent output. Semantic scores and agent outputs remain illustrative fixtures.
 
-The mapping covers 81 operations and all 103 exchanges. OpenAPI SHA-256: `f22b3fbc2475b0b3791bc757b0218b03a3227eb237bb706b0a86d32803a227e2`. No endpoints or payloads were changed to build this diagram.
+The mapping covers 85 operations and all 107 exchanges. OpenAPI SHA-256: `e8ee80dd0c090f5bf4ca656117f5331476d5ed7ad3ab9db71913ddef27c297cb`. No endpoints or payloads were changed to build this diagram.

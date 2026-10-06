@@ -47,6 +47,7 @@ def configuration(local_backend, local_frontend, keys, app_url, api_url, image):
         'REVEAL_GATEWAY_ISSUER': 'reveal-nextjs', 'REVEAL_GATEWAY_AUDIENCE': 'reveal-api',
         # A local owner's key must not silently acquire production access.
         'REVEAL_API_KEY_SHA256': '', 'REVEAL_API_KEY_USER_ID': '',
+        'REVEAL_ADMIN_READ_API_KEY_SHA256': '', 'REVEAL_ADMIN_READ_API_KEY_ID': '',
         'NEXTAUTH_URL': app_url, 'REVEAL_CANONICAL_URL': app_url, 'REVEAL_PUBLIC_WEB_URL': app_url,
     })
     frontend = {k: v for k, v in local_frontend.items()

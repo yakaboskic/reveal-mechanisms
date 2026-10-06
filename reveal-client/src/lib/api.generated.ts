@@ -1419,6 +1419,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/accounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List retained accounts across owners
+         * @description Requires the separately issued administrator read key with fixed science:read scope. Normal workspace API keys, gateway assertions, service tokens and anonymous requests are rejected. Reads retained scientific results across owners, including archived records and records of expired owners. No scientific mutation, publication, job execution, source query or artifact transfer occurs. Responses and authorization errors use Cache-Control: private, no-store and Vary: Authorization. visibility=private (default) selects currently unpublished records; public selects currently published records; all includes both. Public records with unpublished statement changes are found using all and publication.has_unpublished_changes, not the private filter. Returns current owner records, never substitutes frozen public snapshots. Results are ordered newest first with stable record identity tie-breaking. Cursors bind the administrator credential, resource, filter and collection revision; rotation, filter changes or changed records require restarting pagination.
+         */
+        get: operations["listAdminAccounts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/accounts/{record_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read a retained account across owners
+         * @description Requires the separately issued administrator read key with fixed science:read scope. Normal workspace API keys, gateway assertions, service tokens and anonymous requests are rejected. Reads retained scientific results across owners, including archived records and records of expired owners. No scientific mutation, publication, job execution, source query or artifact transfer occurs. Responses and authorization errors use Cache-Control: private, no-store and Vary: Authorization. Use the owner-specific record_id from its administrator list. Private and public records are readable. Returns 404 if this resource has no matching retained record.
+         */
+        get: operations["getAdminAccount"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/explorations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List retained explorations across owners
+         * @description Requires the separately issued administrator read key with fixed science:read scope. Normal workspace API keys, gateway assertions, service tokens and anonymous requests are rejected. Reads retained scientific results across owners, including archived records and records of expired owners. No scientific mutation, publication, job execution, source query or artifact transfer occurs. Responses and authorization errors use Cache-Control: private, no-store and Vary: Authorization. visibility=private (default) selects currently unpublished records; public selects currently published records; all includes both. Public records with unpublished statement changes are found using all and publication.has_unpublished_changes, not the private filter. Returns current owner records, never substitutes frozen public snapshots. Results are ordered newest first with stable record identity tie-breaking. Cursors bind the administrator credential, resource, filter and collection revision; rotation, filter changes or changed records require restarting pagination.
+         */
+        get: operations["listAdminExplorations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/explorations/{record_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read a retained exploration across owners
+         * @description Requires the separately issued administrator read key with fixed science:read scope. Normal workspace API keys, gateway assertions, service tokens and anonymous requests are rejected. Reads retained scientific results across owners, including archived records and records of expired owners. No scientific mutation, publication, job execution, source query or artifact transfer occurs. Responses and authorization errors use Cache-Control: private, no-store and Vary: Authorization. Use the owner-specific record_id from its administrator list. Private and public records are readable. Returns 404 if this resource has no matching retained record.
+         */
+        get: operations["getAdminExploration"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -8655,6 +8735,47 @@ export interface components {
             artifacts: components["schemas"]["PublicResearchArtifact"][];
             attachment_policy: string;
         } & unknown;
+        /** @description One retained owner-specific account. record_id is the SHA-256 storage identity of [owner_user_id, account.id], not a DAPPER ID. Copies of one scientific account in different workspaces remain separate records. Publication can_manage is always false. */
+        AdminAccountSummary: {
+            record_id: string;
+            /** Format: uuid */
+            owner_user_id: string;
+            summary: components["schemas"]["AccountSummary"];
+        };
+        /** @description Current saved account envelope and its saved research statement, if available. Scientific IDs, schema pins, payload checksums, citations and coverage retain their stored values. An incomplete saved envelope stays explicitly incomplete; this endpoint does not expand or re-query its sources. Artifact download URLs, expiry times and owner-scoped coverage.next_cursor are null. Publication can_manage is false; this is not an owner session or a frozen public snapshot. */
+        AdminAccountDetail: {
+            record_id: string;
+            /** Format: uuid */
+            owner_user_id: string;
+            summary: components["schemas"]["AccountSummary"];
+            result: components["schemas"]["AccountResult"];
+            paragraph: components["schemas"]["ParagraphObjectResult"] | null;
+        };
+        /** @description One retained insufficient-evidence analysis outcome, with its owner and UUID record identity. Explorations here are saved analysis outcomes, not knowledge-gap visit/bookmark records. Publication can_manage is always false. */
+        AdminExplorationSummary: {
+            /** Format: uuid */
+            record_id: string;
+            /** Format: uuid */
+            owner_user_id: string;
+            summary: components["schemas"]["AnalysisOutcomeSummary"];
+        };
+        /** @description Current saved scoped exploration outcome with original attribution, scope and provenance. Scientific evidence hashes and source locators are preserved. Artifact and evidence-reference download URLs are null; internal storage records and credentials are not returned. Publication can_manage is false. */
+        AdminExplorationDetail: {
+            /** Format: uuid */
+            record_id: string;
+            /** Format: uuid */
+            owner_user_id: string;
+            summary: components["schemas"]["AnalysisOutcomeSummary"];
+            result: components["schemas"]["AnalysisOutcome"];
+        };
+        AdminAccountList: {
+            items: components["schemas"]["AdminAccountSummary"][];
+            page: components["schemas"]["Page"];
+        };
+        AdminExplorationList: {
+            items: components["schemas"]["AdminExplorationSummary"][];
+            page: components["schemas"]["Page"];
+        };
     };
     responses: never;
     parameters: never;
@@ -14497,6 +14618,344 @@ export interface operations {
             /** @description Dependency Unavailable */
             503: {
                 headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listAdminAccounts: {
+        parameters: {
+            query?: {
+                /** @example private */
+                visibility?: "private" | "public" | "all";
+                /** @example 50 */
+                limit?: number;
+                /**
+                 * @description Omit for the first page; reuse the returned next_cursor with the same credential and visibility filter.
+                 * @example opaque-next-page
+                 */
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminAccountList"];
+                };
+            };
+            /** @description Invalid Admin Read Api Key */
+            401: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Cursor Expired */
+            409: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid Input */
+            422: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Admin Read Api Key Configuration Invalid */
+            503: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getAdminAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @example 4e47d886a1e763f834bbcee32b4899930bc9d5bab74b0b81246a82a19b1ee358 */
+                record_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminAccountDetail"];
+                };
+            };
+            /** @description Invalid Admin Read Api Key */
+            401: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid Input */
+            422: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Admin Read Api Key Configuration Invalid */
+            503: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listAdminExplorations: {
+        parameters: {
+            query?: {
+                /** @example private */
+                visibility?: "private" | "public" | "all";
+                /** @example 50 */
+                limit?: number;
+                /**
+                 * @description Omit for the first page; reuse the returned next_cursor with the same credential and visibility filter.
+                 * @example opaque-next-page
+                 */
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminExplorationList"];
+                };
+            };
+            /** @description Invalid Admin Read Api Key */
+            401: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Cursor Expired */
+            409: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid Input */
+            422: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Admin Read Api Key Configuration Invalid */
+            503: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getAdminExploration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @example 66666666-6666-4666-8666-666666666666 */
+                record_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminExplorationDetail"];
+                };
+            };
+            /** @description Invalid Admin Read Api Key */
+            401: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid Input */
+            422: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Admin Read Api Key Configuration Invalid */
+            503: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
                     [name: string]: unknown;
                 };
                 content: {

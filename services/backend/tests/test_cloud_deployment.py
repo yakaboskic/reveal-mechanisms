@@ -21,6 +21,8 @@ def prepared():
         'AWS_EC2_METADATA_DISABLED': 'true', 'REVEAL_S3_PREFIX': 'local/',
         'REVEAL_APPLICATION_TABLE_PREFIX': 'wrong', 'UPSTASH_BOX_API_KEY': 'backend-only'}
     local.update(REVEAL_API_KEY_SHA256='a'*64, REVEAL_API_KEY_USER_ID='11111111-1111-4111-8111-111111111111')
+    local.update(REVEAL_ADMIN_READ_API_KEY_SHA256='b'*64,
+                 REVEAL_ADMIN_READ_API_KEY_ID='22222222-2222-4222-8222-222222222222')
     frontend = {'AUTH_GOOGLE_ID': 'same-identity-provider', 'AUTH_GOOGLE_SECRET': 'oauth-secret',
         'REVEAL_MYSQL_PASSWORD': 'never-copy', 'DISABLE_ADMIN_LOGIN': 'true'}
     keys = {key: letter * 64 for key, letter in zip(('gateway', 'service', 'session', 'redis'), 'abcd')}
@@ -40,6 +42,8 @@ def test_cloud_handoff_preserves_database_and_identity_without_copying_aws_crede
     assert backend['UPSTASH_BOX_API_KEY'] == 'backend-only'
     assert backend['REVEAL_API_KEY_SHA256'] == backend['REVEAL_API_KEY_USER_ID'] == ''
     assert 'REVEAL_API_KEY_SHA256' not in frontend and 'REVEAL_API_KEY_USER_ID' not in frontend
+    assert backend['REVEAL_ADMIN_READ_API_KEY_SHA256'] == backend['REVEAL_ADMIN_READ_API_KEY_ID'] == ''
+    assert not {'REVEAL_ADMIN_READ_API_KEY_SHA256', 'REVEAL_ADMIN_READ_API_KEY_ID'} & frontend.keys()
     assert 'UPSTASH_BOX_API_KEY' not in frontend and 'REVEAL_MYSQL_PASSWORD' not in frontend
     assert frontend['REVEAL_GATEWAY_SECRET'] == backend['REVEAL_GATEWAY_SECRET']
     assert backend['REVEAL_PUBLIC_WEB_URL'] == backend['REVEAL_CANONICAL_URL'] == frontend['NEXTAUTH_URL'] == 'https://reveal-mechanisms.vercel.app'
