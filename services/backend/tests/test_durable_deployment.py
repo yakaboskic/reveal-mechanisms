@@ -95,6 +95,7 @@ def test_platform_qa_isolates_authoritative_state_and_callbacks():
     assert config['env']['REVEAL_MAX_ACTIVE_BOXES']=='2'
     assert config['qa']['env']['REVEAL_S3_PREFIX']=='qa/'
     assert 'api-qa.' in config['qa']['env']['REVEAL_WORKFLOW_URL']
+    assert config['qa']['env']['REVEAL_PUBLIC_API_URL'] == 'https://api-qa.hugeampkpnbi.org/api/reveal'
     required = {'REVEAL_MYSQL_PASSWORD', 'REVEAL_GATEWAY_SECRET', 'REVEAL_GATEWAY_SERVICE_TOKEN',
         'REVEAL_API_KEY_SHA256', 'REVEAL_API_KEY_USER_ID',
         'UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN',
@@ -104,6 +105,8 @@ def test_platform_qa_isolates_authoritative_state_and_callbacks():
         public_settings = {**config['env'], **config[environment].get('env', {})}
         assert public_settings['REVEAL_PUBLIC_WEB_URL'] == public_settings['REVEAL_CANONICAL_URL'] == public_settings['NEXTAUTH_URL']
         assert public_settings['REVEAL_PUBLIC_WEB_URL'].startswith('https://')
+        expected_web = 'https://reveal-mechanisms-qa.vercel.app' if environment == 'qa' else 'https://reveal-mechanisms.vercel.app'
+        assert public_settings['REVEAL_PUBLIC_WEB_URL'] == expected_web
         secrets = config[environment]['secrets']
         assert 'REVEAL_REDIS_URL' not in secrets
         assert required <= secrets.keys()

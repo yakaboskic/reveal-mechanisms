@@ -8,6 +8,8 @@ node_modules/
 schema/prisma/generated/
 data/cfde/raw/
 data/cfde-genesets/*/raw/
+# Downloaded raw import source; preserve locally rather than commit the 95 MB dataset.
+/gnomad.v4.1.constraint_metrics.tsv
 .DS_Store
 .env
 .env.*

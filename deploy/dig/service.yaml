@@ -87,6 +87,10 @@ qa:
   on_demand_base: 1
   env:
     REVEAL_APPLICATION_TABLE_PREFIX: reveal_workflow_qa
+    REVEAL_PUBLIC_API_URL: https://api-qa.hugeampkpnbi.org/api/reveal
+    REVEAL_PUBLIC_WEB_URL: https://reveal-mechanisms-qa.vercel.app
+    REVEAL_CANONICAL_URL: https://reveal-mechanisms-qa.vercel.app
+    NEXTAUTH_URL: https://reveal-mechanisms-qa.vercel.app
     EMBEDDING_SERVICE_URL: https://embedding-service-848707719401.us-east1.run.app
     REVEAL_QUERY_EMBEDDING_SERVICE_URL: https://embedding-service-848707719401.us-east1.run.app
     REVEAL_MAX_ACTIVE_JOBS: '10'
