@@ -50,7 +50,7 @@ def prepare(*, scheduler='local', api_port=18001, frontend_port=3000, callback_u
     keys = json.loads(saved.read_text())
     backend = read_env(baseline)
     backend.update({k:v for k,v in source.items() if k.startswith(('REVEAL_', 'EMBEDDING_', 'UPSTASH_', 'QSTASH_'))
-                    or k == 'ANTHROPIC_API_KEY'})
+                    or k in ('ANTHROPIC_API_KEY', 'TYPESAFE_API_KEY')})
     # The supplied project token is used explicitly for the initial migration;
     # deployments can supply a separate ingestion token without changing code.
     backend['UPSTASH_VECTOR_WRITE_TOKEN'] = source.get('UPSTASH_VECTOR_WRITE_TOKEN') or source['UPSTASH_VECTOR_REST_TOKEN']

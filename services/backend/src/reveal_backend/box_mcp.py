@@ -311,9 +311,29 @@ class ScopedTools:
             tools.append({'name': 'query_graph', 'description': 'Fetch bounded triples in one selected named graph. Prefer exact subject/object IRIs. For exact source label or gene-symbol discovery use a schema-derived predicate IRI plus literal (case-sensitive). contains requires a bound predicate or subject; whole-graph text scans are unavailable. A hit needs entity/scope verification; empty or failed reads do not prove biological absence.',
                           'inputSchema': {'type': 'object', 'properties': {'graph': graph, 'subject': {'type': 'string'}, 'predicate': {'type': 'string'}, 'object': {'type': 'string'}, 'literal': {'type': 'string', 'minLength': 1, 'maxLength': 200}, 'contains': {'type': 'string'}, 'limit': {'type': 'integer', 'minimum': 1, 'maximum': 100}}, 'required': ['graph'], 'additionalProperties': False}})
         if self.lint:
-            tools.append({'name': 'lint_account', 'description': 'Run the worker\'s shared account linter: pinned DAPPER structure, exact source pointers, verbatim snippets, metric agreement, and trusted captured Files. Returns repairable findings; draft IDs are allowed.', 'inputSchema': {'type': 'object', 'properties': {'filename': {'type': 'string', 'pattern': '^account-[1-3]\\.(json|yaml|yml)$'}}, 'required': ['filename'], 'additionalProperties': False}})
+            tools.append({'name': 'lint_account', 'description': 'Run the worker\'s shared account linter: pinned DAPPER structure, exact source pointers, verbatim snippets, metric agreement, and trusted captured Files. Returns compact field/rule findings, exact counts and a readable report path/hash containing every normalized finding. Draft IDs are allowed; passing structure alone is not validation or acceptance.', 'inputSchema': {'type': 'object', 'properties': {'filename': {'type': 'string', 'pattern': '^account-[1-3]\\.(json|yaml|yml)$'}}, 'required': ['filename'], 'additionalProperties': False}})
         if self.write_draft:
-            tools.append({'name': 'write_account_draft', 'description': 'Write a DAPPER document with plural group arrays: {"scientific_accounts":[one account],"propositions":[...],"claims":[...],"evidence_items":[...]}. Automatically copies exact referenced trusted source nodes and dependencies. Do not supply a class instance as document root or a graph/nodes envelope. No acceptance or minting occurs.', 'inputSchema': {'type': 'object', 'properties': {'filename': {'type': 'string', 'enum': ['account-1.json', 'account-2.json', 'account-3.json']}, 'document': {'type': 'object', 'properties': {'scientific_accounts': {'type': 'array', 'minItems': 1, 'maxItems': 1, 'items': {'type': 'object'}}, 'propositions': {'type': 'array', 'items': {'type': 'object'}}, 'claims': {'type': 'array', 'items': {'type': 'object'}}, 'evidence_items': {'type': 'array', 'items': {'type': 'object'}}}, 'required': ['scientific_accounts']}}, 'required': ['filename', 'document'], 'additionalProperties': False}})
+            # Property hints are intentionally open. The pinned preflight owns
+            # validation; optional scores, narrative Propositions, source-Claim
+            # reuse and additional trusted groups remain legitimate documents.
+            text = {'type': 'string'}
+            refs = {'type': 'array', 'items': text}
+            fields = {
+                'scientific_accounts': {'id': text, 'question': text, 'hypothesis': text, 'context': text,
+                    'component_claims': refs, 'closing_remarks': text},
+                'propositions': {'id': text, 'statement': text, 'scope': text, 'proposition_kind': text,
+                    'subject_entity': text, 'relation': {'type': 'string', 'description': 'An absolute predicate URI or declared CURIE; omit the entire triple for a narrative Proposition.'}, 'object_entity': text},
+                'claims': {'id': text, 'proposition': text, 'statement': text, 'status': text,
+                    'direction': text, 'has_evidence': refs, 'has_score': refs},
+                'evidence_items': {'id': text, 'target_proposition': text, 'direction': text,
+                    'context': {'type': 'string', 'description': 'Exact captured artifact/pointer and biological or analytical scope.'},
+                    'explanation': text, 'snippet': text, 'was_derived_from': refs, 'source_claims': refs},
+            }
+            document_schema = {'type': 'object', 'properties': {
+                group: {'type': 'array', 'items': {'type': 'object', 'properties': properties}}
+                for group, properties in fields.items()}, 'required': ['scientific_accounts']}
+            document_schema['properties']['scientific_accounts'].update(minItems=1, maxItems=1)
+            tools.append({'name': 'write_account_draft', 'description': 'Use the pinned authoring skeleton and schema before drafting. Write plural arrays scientific_accounts (one account), propositions, claims and evidence_items. Claim.proposition identifies its Proposition; Claim.statement carries its assessment. ScientificAccount.question identifies the exact gap. EvidenceItem.context/explanation retain source locators; source_ref is not an EvidenceItem field. Structure is checked before evidence export or changing the account. Exact referenced trusted dependencies and real runtime attribution are then supplied automatically. Repair reported fields and run lint_account. No acceptance or minting occurs.', 'inputSchema': {'type': 'object', 'properties': {'filename': {'type': 'string', 'enum': ['account-1.json', 'account-2.json', 'account-3.json']}, 'document': document_schema}, 'required': ['filename', 'document'], 'additionalProperties': False}})
         if self.write_outcome:
             tools.append({'name': 'write_outcome', 'description': 'Save a structured insufficient-evidence outcome to the canonical writable output directory. Follow the skill format; this does not accept scientific claims.',
                           'inputSchema': {'type': 'object', 'properties': {'outcome': {'type': 'object'}}, 'required': ['outcome'], 'additionalProperties': False}})

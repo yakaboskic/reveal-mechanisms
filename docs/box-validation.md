@@ -429,3 +429,35 @@ validation. Together with existing transport and public-activity tests, all 75
 pass, and both changed skills pass their validators. The filesystem probe test
 runs its actual script as the unprivileged host UID against a read-only
 workspace; it does not claim a new live Box execution.
+
+## October 7 QA timeout: late drafting and malformed account fields
+
+Read-only investigation of QA job `764f9472-0be0-402a-a9e0-caf21bebea80`
+verified its frozen DAPPER 0.2.0 inputs and retained output/ledger hashes. The
+agent reached its 900-second execution limit; no scientific output was accepted.
+The first draft write began at 742.536 seconds. Lint completed at 752.170 seconds
+and reported 35 errors. The agent read the examples afterward, but no repaired
+draft was retained before the deadline.
+
+The errors included invented `Claim.subject_proposition`, `Claim.assessment`,
+`EvidenceItem.source_ref` and `ScientificAccount.required_question` fields,
+missing EvidenceItem directions, unqualified relation names, missing source
+lineage and a missing referenced Mechanism. These are representation errors;
+they do not establish that scientific evidence is absent. Separately, the draft
+contained cross-trait assertions broader than their inspected loading sources.
+Renaming fields alone would not make that historical science acceptable.
+
+The four recorded durable reference operations completed in 0.235–0.602 seconds;
+their four status polls totaled 0.275 seconds. All 24 completed tool calls
+totaled 42.951 seconds, including a 35.016-second ProKN query timeout. Tool
+durations can overlap and are not an exclusive wall-time breakdown. A long
+interval before the first draft had no active recorded tool. The retained
+runtime lacked the provider lifecycle and retry timing needed to distinguish
+generation, throttling, retries or network silence during that interval. The
+terminal provider result, cost and final usage were unavailable, not zero.
+
+The corrective work is an exact pinned draft skeleton, structure checks before
+evidence materialization, an earlier draft/lint/repair cycle and bounded provider
+timing diagnostics. The execution timeout stays unchanged. Regression fixtures
+are synthetic; the colleague's retained account and original investigation
+workspace are not modified, revalidated, submitted or rerun.

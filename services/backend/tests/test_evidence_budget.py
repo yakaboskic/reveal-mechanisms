@@ -85,6 +85,9 @@ class BudgetTests(unittest.TestCase):
                              (self.root / FILE_INPUT_FILENAME).read_bytes())
             self.assertIn('bundle/services/backend/agent-skills/read-evidence-package/SKILL.md', archive.getnames())
             self.assertIn('bundle/services/backend/src/reveal_backend/evidence_files.py', archive.getnames())
+            for module in ('authoring_structure.py','box_timing.py'):
+                self.assertEqual(archive.extractfile('bundle/services/backend/src/reveal_backend/'+module).read(),
+                                 (ROOT/'services/backend/src/reveal_backend'/module).read_bytes())
             for item in package['source_artifacts'].values():
                 self.assertEqual(archive.extractfile('input/' + item['path']).read(),
                                  (chosen.parent / item['path']).read_bytes())

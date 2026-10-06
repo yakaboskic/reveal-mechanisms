@@ -101,6 +101,8 @@ class ResearchSetupTests(unittest.TestCase):
                 for entry in stored['package']['authoring_kit']['files']:
                     source = stored['package']['source_artifacts'][entry['artifact_id']]
                     self.assertEqual(files[entry['path']], files['input/'+source['path']])
+                skeleton=next(entry for entry in stored['package']['authoring']['references'] if entry['path']=='input/package-sections/authoring-skeleton.json')
+                self.assertEqual(hashlib.sha256(files[skeleton['path']]).hexdigest(),skeleton['sha256'])
                 listed = {item['path']: item for item in manifest['files']}
                 self.assertEqual(set(listed), set(files)-{'setup-manifest.json'})
                 for path, entry in listed.items():

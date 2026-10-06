@@ -221,6 +221,7 @@ def test_materialization_deadline_retains_id_package_and_completed_files_for_res
 
 
 def test_hosted_lint_passes_only_shared_remaining_budget(hosted,monkeypatch):
+    monkeypatch.setattr('reveal_backend.authoring_structure.preflight_document', lambda *a, **k: {'valid': True})
     from reveal_backend import box_remote, scientific_account_lint
     research,_,root=hosted
     state=root/'state'; state.mkdir(); output=root/'output'; output.mkdir()

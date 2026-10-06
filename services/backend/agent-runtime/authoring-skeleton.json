@@ -1,0 +1,50 @@
+{
+  "scientific_accounts": [
+    {
+      "closing_remarks": "The synthetic source records membership of Gene X in the synthetic set.",
+      "component_claims": [
+        "urn:reveal:local:synthetic-work:relationships:claim-1"
+      ],
+      "context": "Synthetic authoring example; every observation is fictional and ineligible for research citation. Known GeneSet provenance reaches the synthetic catalog File; original experimental construction is unspecified.",
+      "id": "urn:reveal:local:synthetic-work:relationships:account-1",
+      "name": "Synthetic minimal membership account",
+      "question": "dapper:KnowledgeGap._391dOOJOcvb-82gpRPLrv0nJ54whN7J"
+    }
+  ],
+  "propositions": [
+    {
+      "id": "urn:reveal:local:synthetic-work:relationships:proposition-1",
+      "object_entity": "dapper:GeneSet.6HkS18HSC9is650Ck9eKoyDl4K4-KNF7",
+      "proposition_kind": "RESULT",
+      "relation": "urn:reveal:relation:member-of",
+      "scope": "Synthetic instructions only; model example-fit, no biological inference.",
+      "statement": "Synthetic Gene X is a recorded member of the synthetic set.",
+      "subject_entity": "urn:example:gene:X"
+    }
+  ],
+  "claims": [
+    {
+      "direction": "SUPPORTS",
+      "has_evidence": [
+        "urn:reveal:local:synthetic-work:relationships:evidence-1"
+      ],
+      "id": "urn:reveal:local:synthetic-work:relationships:claim-1",
+      "proposition": "urn:reveal:local:synthetic-work:relationships:proposition-1",
+      "statement": "Synthetic Gene X is a recorded member of the synthetic set.",
+      "status": "proposed"
+    }
+  ],
+  "evidence_items": [
+    {
+      "context": "Synthetic source /result/membership",
+      "direction": "SUPPORTS",
+      "explanation": "Synthetic example illustrates an exact, scoped source relationship, never an eligible research observation.",
+      "id": "urn:reveal:local:synthetic-work:relationships:evidence-1",
+      "target_proposition": "urn:reveal:local:synthetic-work:relationships:proposition-1",
+      "was_derived_from": [
+        "dapper:File.5ovaRgL0aqXZmm4ns1iDG0fDNHKt4Ukl",
+        "dapper:GeneSet.6HkS18HSC9is650Ck9eKoyDl4K4-KNF7"
+      ]
+    }
+  ]
+}

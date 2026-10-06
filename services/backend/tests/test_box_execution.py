@@ -181,8 +181,9 @@ class DraftHydrationTests(unittest.TestCase):
             trusted={'knowledge_gaps':[{'id':'gap','text':'Exact imported gap','was_generated_by':'source-act'}],
                      'activities':[{'id':'source-act','name':'Original import'}]}
             package=root/'input.json'; package.write_text(json.dumps({'dapper_context':trusted}))
-            (state/'runtime.json').write_text(json.dumps({'evidence_package':str(package)}))
-            with patch.multiple(box_remote,STATE=state,OUTPUT=output), patch.object(box_remote.pwd,'getpwnam',return_value=SimpleNamespace(pw_uid=os.getuid(),pw_gid=os.getgid())):
+            (state/'runtime.json').write_text(json.dumps({'evidence_package':str(package),'dapper_root':'fixture'}))
+            with patch.multiple(box_remote,STATE=state,OUTPUT=output), patch.object(box_remote.pwd,'getpwnam',return_value=SimpleNamespace(pw_uid=os.getuid(),pw_gid=os.getgid())), \
+                 patch('reveal_backend.authoring_structure.preflight_document',return_value={'valid':True}):
                 box_remote.write_draft_tool('account-1.json',{'scientific_accounts':[{'id':'temporary-account','question':'gap'}]})
                 doc=json.loads((output/'account-1.json').read_text())
                 self.assertEqual(doc['knowledge_gaps'],trusted['knowledge_gaps'])

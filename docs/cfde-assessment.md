@@ -23,7 +23,7 @@ Jev receives no application record IDs, hashes, provenance graphs or compression
 
 `POST /v1/drafts/{draft_id}/cfde-assessments` requires an ordinary owner bearer credential, an 8–128-character `Idempotency-Key`, and `{draft_version, composer}`. It returns `202`, a private assessment receipt, `Location`, and `Retry-After: 2`. An anonymous owner may use it. An admin science-read key cannot.
 
-`GET /v1/drafts/{draft_id}/cfde-assessments/{assessment_id}` polls that receipt. The response progresses through `preparing`, `assessing`, and `succeeded` or `failed`. Neither endpoint exposes another user's assessment ID or inputs. Responses are `private, no-store` and vary by authorization.
+`GET /v1/drafts/{draft_id}/cfde-assessments/{assessment_id}` polls that receipt. The response progresses through `preparing`, `assessing`, and `succeeded`, `failed` or `interrupted`. Neither endpoint exposes another user's assessment ID or inputs. Responses are `private, no-store` and vary by authorization.
 
 The durable application database stores request receipts, exact prepared model inputs, filtered typed responses and hashes. No research jobs or scientific records are created. Source reads and provider calls execute outside application write transactions. POST returns before a cold catalog is prepared.
 
@@ -34,6 +34,32 @@ Each cache miss makes at most one provider attempt. The browser submits a check 
 The receipt has a 120-second acceptance deadline. Queued/active receipts left by a process restart become `interrupted`; polling never silently retries a potentially billed request. A deliberate retry uses a new key. Failed/interrupted checks never become a “No” forecast. Source statements check the remaining deadline, direct connections use bounded socket timeouts, and the provider attempt has a 25-second budget plus a 64 KB response cap. Existing cold catalog loading has its own database timeouts; the acceptance deadline is not a hard cancellation of that shared loader. Completed receipts remain readable after their operation deadline.
 
 Edits invalidate the UI's result immediately; server reads also mark changed saved versions or reference generations stale. A stale or incomplete result cannot block research. Private assessments follow normal workspace ownership and draft access rules; a deleted/expired draft makes its assessment unavailable.
+
+## Colleague API handoff: assess and rank drafts
+
+QA base URL: `https://api-qa.hugeampkpnbi.org/api/reveal`. The live [Swagger API](https://api-qa.hugeampkpnbi.org/api/reveal/docs) and the generated `api/examples/createCfdeAssessment.current_composer.json` describe the complete request. Use an ordinary workspace `rvl_` key or a registered gateway assertion for the owner of these drafts; the administrative science-read key cannot create assessments.
+
+For each owned draft, fetch its current version and composer, then create one assessment:
+
+```sh
+REVEAL_API_URL=https://api-qa.hugeampkpnbi.org/api/reveal
+# Supply REVEAL_API_KEY privately and DRAFT_ID for an existing owned draft.
+curl --fail-with-body "$REVEAL_API_URL/v1/drafts/$DRAFT_ID" \
+  -H "Authorization: Bearer $REVEAL_API_KEY" > draft.json
+jq '{draft_version:.version, composer:.composer}' draft.json > assessment-input.json
+ASSESSMENT_REQUEST_ID="$(uuidgen)"
+curl --fail-with-body "$REVEAL_API_URL/v1/drafts/$DRAFT_ID/cfde-assessments" \
+  -H "Authorization: Bearer $REVEAL_API_KEY" \
+  -H "Idempotency-Key: $ASSESSMENT_REQUEST_ID" \
+  -H 'Content-Type: application/json' \
+  --data-binary @assessment-input.json > assessment.json
+```
+
+Read the returned `id`, then poll `GET /v1/drafts/{draft_id}/cfde-assessments/{id}` with the same authorization, using the POST response's `Retry-After` interval (two seconds). A shared cache hit can already be `succeeded` in the initial response. To create drafts first, use `POST /v1/drafts` with `{composer: ...}` and its own idempotency key; obtain current gap and mechanism references through the discovery API rather than copying historical example IDs.
+
+Rank only responses with `status: "succeeded"` and `stale: false`, sorting `result.probability_yes` descending. Keep `result.confidence` separate: it is not the Yes probability. Failed, interrupted and stale checks are unranked, not zero-support predictions. Reuse the same idempotency key for an ambiguous POST retry; use a new key for a deliberately new check. This API assesses one draft per request; there is no batch-ranking endpoint. The server assembles the source data and shares eligible cached predictions automatically.
+
+The recipe above assesses saved drafts. Clients sending unsaved composer edits must also compare the receipt's `composer_sha256` with their current composer before displaying a result; the server cannot mark an estimate stale for edits it has not received.
 
 ## Configuration and verification
 

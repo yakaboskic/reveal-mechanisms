@@ -5,12 +5,13 @@ import json
 import time
 
 from .public_tool_activity import bounded, redact_text, tool_call_payload, tool_result_payload
+from .box_timing import RuntimeTiming, provider_metrics
 
 MAX_UNKNOWN_EVENT_TYPES = 8
 # Claude CLI/Agent SDK bookkeeping, not assistant messages or new tool calls.
 # Tool progress is a repeated heartbeat; summaries duplicate captured results.
 # Authentication output can contain sensitive diagnostics and stays private.
-PRIVATE_NOTIFICATION_TYPES = frozenset(('rate_limit_event', 'tool_progress', 'tool_use_summary', 'auth_status'))
+PRIVATE_NOTIFICATION_TYPES = frozenset(('rate_limit_event', 'tool_progress', 'tool_use_summary', 'auth_status', 'api_retry'))
 
 
 class StreamProtocolError(ValueError):
@@ -34,7 +35,7 @@ class SecretFilter:
 
 
 class ClaudeStream:
-    def __init__(self, max_line_bytes=2_000_000, secrets=(), clock=None):
+    def __init__(self, max_line_bytes=2_000_000, secrets=(), clock=None, timing=None):
         self.decoder = codecs.getincrementaldecoder('utf-8')('strict')
         self.buffer = ''
         self.max_line_bytes = max_line_bytes
@@ -45,6 +46,7 @@ class ClaudeStream:
         self.runtime = {}
         self.secrets = tuple(secret for secret in secrets if secret)
         self.clock = clock or time.monotonic
+        self.timing = timing if timing is not None else RuntimeTiming()
         self.public_filter = SecretFilter(self.secrets)
         self.public_decoder = codecs.getincrementaldecoder('utf-8')('strict')
         self.unknown_event_types = set()
@@ -58,6 +60,7 @@ class ClaudeStream:
         return [('agent_message', {'text': bounded(redact_text(value, self.secrets), 16000), 'delta': True})] if value else []
 
     def feed(self, chunk: bytes, final=False):
+        self.timing.bytes_received('stdout', len(chunk))
         try:
             self.buffer += self.decoder.decode(chunk, final=final)
         except UnicodeDecodeError as exc:
@@ -88,6 +91,7 @@ class ClaudeStream:
         return events
 
     def parse(self, event):
+        self.timing.observe(event)
         kind = event['type']
         if kind == 'stream_event':
             delta = event.get('event', {}).get('delta', {})
@@ -128,7 +132,7 @@ class ClaudeStream:
             self.result = event
             return self.public_text(final=True) + [('agent_completed', {'status': 'failed' if event.get('is_error') else 'succeeded',
                                          'message': 'Claude finished its work.' if not event.get('is_error') else 'Claude stopped with an error.',
-                                         'cost_usd': event.get('total_cost_usd')})]
+                                         'cost_usd': provider_metrics(event)['cost_usd']})]
         if kind == 'system':
             if event.get('subtype') == 'init':
                 self.runtime = {key: event[key] for key in ('model', 'claude_code_version', 'session_id', 'permissionMode') if key in event}

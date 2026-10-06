@@ -111,6 +111,8 @@ def validate_seed_shape(package, source_root=None):
     require(isinstance(entries,list) and bool(entries) and kit.get('kit_sha256')==sha256(canonical_json(entries)), 'Research authoring kit manifest changed')
     require(all(isinstance(item,dict) and item.get('artifact_id') in sources
                 and item.get('sha256')==sources[item['artifact_id']]['sha256'] for item in entries), 'Research authoring kit source binding changed')
+    from .dispatch_view import pinned_skeleton_sha256
+    pinned_skeleton_sha256(package)
 
 
 def prepare_research_seed(frozen, binding, *, dapper, project_root, output=None,
@@ -221,13 +223,14 @@ def prepare_research_seed(frozen, binding, *, dapper, project_root, output=None,
         capture(key,raw,Path(relative).name,'text',origin=relative)
         implementation.append({'artifact_id':key,'path':relative,'sha256':sha256(raw)})
 
-    from .authoring_contract import pinned_schema, SCHEMA_PATH, EXAMPLE_PATH
+    from .authoring_contract import pinned_schema, SCHEMA_PATH, EXAMPLE_PATH, SKELETON_PATH
     schema_raw = pinned_schema(root)
     for key, target, raw in (
         ('authoring-schema', SCHEMA_PATH, schema_raw),
         ('authoring-examples', EXAMPLE_PATH, (root/'services/backend/agent-runtime/authoring-examples.json').read_bytes()),
+        ('authoring-skeleton', SKELETON_PATH, (root/'services/backend/agent-runtime/authoring-skeleton.json').read_bytes()),
     ):
-        capture(key, raw, Path(target).name, 'text', origin='reveal:synthetic-authoring-contract' if key.endswith('examples') else 'reveal:pinned-authoring-schema')
+        capture(key, raw, Path(target).name, 'text', origin='reveal:pinned-authoring-schema' if key == 'authoring-schema' else 'reveal:synthetic-authoring-contract')
         implementation.append({'artifact_id': key, 'path': target, 'sha256': sha256(raw)})
         files[target.removeprefix('input/')] = raw
 
@@ -308,7 +311,8 @@ def prepare_research_seed(frozen, binding, *, dapper, project_root, output=None,
             'contract':kit_by_path['docs/authoring-contract.md'],
             'references':[item for item in kit if item['path'] not in {
                 'services/backend/agent-skills/construct-scientific-account/SKILL.md',
-                'docs/authoring-contract.md', 'services/backend/agent-runtime/dapper-release.json'}],
+                'docs/authoring-contract.md', 'services/backend/agent-runtime/dapper-release.json'}] +
+                [next(item for item in implementation if item['path'] == SKELETON_PATH)],
             'required_question':frozen['question_id'],'max_accounts':max_accounts,
             'assembly_builder':{'version':SEED_VERSION,'source_sha256':sha256(Path(__file__).read_bytes())}},
         'authoring_kit':{'version':'reveal.research-authoring-kit/2','files':kit+implementation,

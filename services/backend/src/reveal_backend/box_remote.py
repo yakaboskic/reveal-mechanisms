@@ -22,7 +22,8 @@ import time
 
 from .box_mcp import DraftValidationError, Ledger, PolicyError, ScopedTools, canonical, serve, stamp
 from .box_stream import ClaudeStream, SecretFilter, StreamProtocolError
-from .public_tool_activity import DURABLE_TOOLS, durable_operation, tool_kind
+from .box_timing import RuntimeTiming, provider_metrics
+from .public_tool_activity import DURABLE_TOOLS, durable_operation, tool_failed, tool_kind
 from .box_research import HostedResearchClient, ResearchAccessError, validate_context
 from .dispatch_view import (FILE_INPUT_FILENAME, FILE_INPUT_FORMAT, research_authoring_requirements,
                             research_prompt, validate_file_input)
@@ -140,10 +141,10 @@ def setup(request):
             if request.get('research_context') != context:
                 raise ValueError('Research context differs from the frozen seed')
             runtime['research_context'] = context
-        from .dispatch_view import pinned_contract_sha256
+        from .dispatch_view import pinned_contract_sha256, pinned_skeleton_sha256
         contract_sha256 = pinned_contract_sha256(frozen)
         prompt = research_prompt(request['selected_graphs'], request.get('validation_feedback', ()), progressive=progressive,
-                                 contract_sha256=contract_sha256)
+                                 contract_sha256=contract_sha256, skeleton_sha256=pinned_skeleton_sha256(frozen))
         frozen_input = BASE / 'input' / FILE_INPUT_FILENAME
         if frozen_input.exists():
             manifest = json.loads(frozen_input.read_bytes())
@@ -276,12 +277,24 @@ def terminate(process):
 def lint_tool(filename, ledger):
     deadline = time.monotonic() + 55
     from .scientific_account_lint import lint_scientific_account
+    from .authoring_structure import preflight_document, diagnostic_response
+    from .evidence_package import decode
     path = OUTPUT / filename
     if path.is_symlink() or not path.is_file() or path.stat().st_size > 4_000_000:
         return {'isError': True, 'content': [{'type': 'text', 'text': 'Account output missing, symlinked or oversized'}]}
     frozen = STATE / ('lint-' + filename)
     frozen.write_bytes(path.read_bytes())
     runtime = json.loads((STATE / 'runtime.json').read_text())
+    try:
+        document = decode(frozen.read_bytes(), 'yaml' if path.suffix in ('.yaml', '.yml') else 'json')
+    except ValueError:
+        raise DraftValidationError('Account is not valid JSON/YAML; repair its document syntax') from None
+    structure = preflight_document(document, dapper_root=runtime['dapper_root'],
+        release_lock=BASE / 'bundle/services/backend/agent-runtime/dapper-release.json',
+        timeout=min(12, max(0.1, deadline - time.monotonic())))
+    if not structure['valid']:
+        return diagnostic_response(structure, output=OUTPUT, filename=filename,
+            capture_roots=(OUTPUT, STATE / 'ledger', STATE / 'runtime.json'))
     # The final manifest is written only when execution ends. Snapshot completed
     # captures under the ledger lock so draft lint sees the same trusted bytes
     # without freezing or interrupting the agent's remaining tool calls.
@@ -298,7 +311,8 @@ def lint_tool(filename, ledger):
     checks = {finding.get('check') for finding in report.get('findings', []) if finding.get('severity') == 'error'}
     if checks & {'source-ancestry', 'claim-evidence'}:
         report['repair_guidance'] = 'Each component Claim needs explicit, target-matched EvidenceItems and unchanged eligible scientific source Files with exact locators. Use captured reference data, authorized prior science or eligible independent evidence. Seek a relevant CFDE connection when supported and explain its absence when not; never attach an unrelated row to satisfy guidance. If no useful supported interpretation exists, save an insufficient-evidence outcome identifying the missing observation.'
-    return {'content': [{'type': 'text', 'text': json.dumps(report)}], 'isError': not report.get('valid')}
+    return diagnostic_response(report, output=OUTPUT, filename=filename,
+        capture_roots=(OUTPUT, STATE / 'ledger', STATE / 'runtime.json'))
 
 
 def deadline_reason(request, last_activity=None):
@@ -311,13 +325,26 @@ def deadline_reason(request, last_activity=None):
         stage = 'while waiting for a durable evidence operation'
     elif last_activity.get('kind') == 'tool_call' and last_tool and tool_kind(last_tool) == 'lint_account':
         stage = 'while checking the draft account and sources'
+    elif last_activity.get('authoring_phase') == 'draft_repair':
+        stage = 'while repairing the draft after an unsuccessful authoring check'
     suffix = '; last observed tool: ' + last_tool if last_tool else ''
     return f"Agent reached its {request['timeout_seconds']}-second execution limit {stage}{suffix}. No output was accepted."
 
 
-def observable_activity(kind, payload, call):
+def observable_activity(kind, payload, call, previous=None):
     """Record actual public tool progress for timeout diagnostics, never reasoning."""
     value = {'kind': kind, 'tool_name': payload.get('tool_name')}
+    phase = (previous or {}).get('authoring_phase')
+    if phase in ('draft_repair', 'draft_checked'):
+        value['authoring_phase'] = phase
+    name = tool_kind(value['tool_name'] or '')
+    result = call.get('result')
+    if kind == 'tool_result' and name in ('lint_account', 'write_account_draft'):
+        failed = payload.get('status') == 'error' or tool_failed(name, result)
+        if failed:
+            value['authoring_phase'] = 'draft_repair'
+        elif name == 'lint_account':
+            value['authoring_phase'] = 'draft_checked'
     if kind == 'tool_result' and tool_kind(value['tool_name'] or '') in DURABLE_TOOLS:
         operation = durable_operation(call.get('result'), SECRETS)
         if operation:
@@ -334,19 +361,24 @@ def provider_failure_reason(request, result):
     return 'Claude execution failed: ' + str(result.get('subtype', 'nonzero exit'))
 
 
-def runtime_completion(request, started, status, reason, process=None, parser=None, last_activity=None):
+def runtime_completion(request, started, status, reason, process=None, parser=None, last_activity=None, timing=None):
     """Safe terminal metrics, including deadline exits without provider usage."""
     result = parser.result if parser else None
+    reported = provider_metrics(result)
     summary = {'completed_at': stamp(), 'elapsed_seconds': round(time.monotonic() - started, 3),
                'time_limit_seconds': request['timeout_seconds'],
                'max_budget_usd': request.get('max_budget_usd'),
-               'turn_limit': request['max_turns'], 'turns_used': result.get('num_turns') if result else None,
-               'provider_result_subtype': result.get('subtype') if result else None,
+               'turn_limit': request['max_turns'], 'turns_used': reported['num_turns'],
+               'provider_result_subtype': reported['subtype'],
                'status': status, 'reason': reason, 'process_returncode': process.returncode if process else None,
                'provider_terminal_received': result is not None,
-               'usage_status': 'reported' if result and result.get('total_cost_usd') is not None else 'unavailable',
-               'cost_usd': result.get('total_cost_usd') if result else None,
+               'usage_status': 'reported' if reported['cost_usd'] is not None else 'unavailable',
+               'cost_usd': reported['cost_usd'],
+               'provider_reported': reported,
                'last_observable_activity': last_activity}
+    timing = timing if timing is not None else getattr(parser, 'timing', None)
+    if timing is not None:
+        summary['timing'] = timing.snapshot()
     try:
         import resource
         usage = resource.getrusage(resource.RUSAGE_CHILDREN)
@@ -365,6 +397,13 @@ def write_draft_tool(filename, document):
     if not isinstance(document.get('scientific_accounts'), list) or len(document['scientific_accounts']) != 1:
         raise DraftValidationError('Expected document={"scientific_accounts":[one account],"claims":[...],"propositions":[...],"evidence_items":[...]}; group values must be arrays, not a class instance or graph/nodes envelope')
     runtime = json.loads((STATE / 'runtime.json').read_text())
+    from .authoring_structure import preflight_document, diagnostic_response
+    structure = preflight_document(document, dapper_root=runtime['dapper_root'],
+        release_lock=BASE / 'bundle/services/backend/agent-runtime/dapper-release.json',
+        timeout=min(12, max(0.1, deadline - time.monotonic())))
+    if not structure['valid']:
+        return diagnostic_response(structure, output=OUTPUT, filename=filename,
+            capture_roots=(OUTPUT, STATE / 'ledger', STATE / 'runtime.json'))
     evidence_path = RESEARCH.materialize() if RESEARCH else Path(runtime['evidence_package'])
     package = json.loads(Path(evidence_path).read_text())
     trusted = {n['id']: (group, n) for group, rows in package['dapper_context'].items() if isinstance(rows, list) for n in rows if isinstance(n, dict) and 'id' in n}
@@ -437,6 +476,17 @@ def main():
     builtin_calls = {}
     status, reason = 'failed', None
     started = time.monotonic()
+    timing = RuntimeTiming(started=started, clock=time.monotonic)
+    last_checkpoint = started
+    def checkpoint(force=False):
+        nonlocal last_checkpoint
+        observed = time.monotonic()
+        if runtime is not None and (force or observed - last_checkpoint >= 5):
+            runtime['timing_checkpoint'] = {'recorded_at': stamp(), 'timing': timing.snapshot(),
+                                          'last_observable_activity': last_activity}
+            write_json(STATE / 'runtime.json', runtime)
+            os.chmod(STATE / 'runtime.json', 0o600)
+            last_checkpoint = observed
     write_json(STATE / 'status.json', {'status': 'preparing', 'started_at': stamp(), 'pid': os.getpid()})
     try:
         emit('stage', {'stage': 'starting_agent', 'state': 'started', 'source': 'harness',
@@ -486,7 +536,8 @@ def main():
         write_json(STATE / 'status.json', {'status': 'running', 'started_at': stamp(), 'pid': os.getpid(), 'agent_pid': process.pid})
         emit('agent_started', {'message': 'Claude is reading the frozen evidence and authoring a result.', 'model': request['model'],
                                'stage': 'authoring_account' if request['kind'] == 'research' else 'authoring_paragraph'})
-        parser = ClaudeStream(secrets=SECRETS)
+        parser = ClaudeStream(secrets=SECRETS, timing=timing)
+        checkpoint(force=True)
         trace_filter, error_filter = SecretFilter(SECRETS), SecretFilter(SECRETS)
         selector = selectors.DefaultSelector()
         selector.register(process.stdout, selectors.EVENT_READ, 'stdout')
@@ -496,6 +547,7 @@ def main():
             os.chmod(trace.name, 0o600); os.chmod(errors.name, 0o600)
             total = 0
             while selector.get_map():
+                checkpoint()
                 if (STATE / 'cancel').exists():
                     status, reason = 'cancelled', 'Cancelled by the owning job'
                     terminate(process); break
@@ -512,7 +564,7 @@ def main():
                         trace.write(trace_filter.feed(chunk)); trace.flush()
                         for kind, payload in parser.feed(chunk):
                             if kind in ('tool_call', 'tool_result'):
-                                last_activity = observable_activity(kind, payload, parser.tools[payload['call_id']])
+                                last_activity = observable_activity(kind, payload, parser.tools[payload['call_id']], last_activity)
                             if kind == 'tool_call':
                                 call = parser.tools[payload['call_id']]
                                 entry = ledger.start(call['name'], call['input'], None)
@@ -521,10 +573,11 @@ def main():
                             elif kind == 'tool_result':
                                 call_id = payload['call_id']
                                 result = parser.tools[call_id]['result']
-                                ledger.finish(builtin_calls[call_id], result, 'failed' if result.get('is_error') else 'completed')
+                                ledger.finish(builtin_calls[call_id], result, 'failed' if tool_failed(parser.tools[call_id]['name'], result) else 'completed')
                                 payload['artifact_sha256'] = builtin_calls[call_id]['response']['sha256']
                             emit(kind, payload)
                     else:
+                        timing.bytes_received('stderr', len(chunk))
                         errors.write(error_filter.feed(chunk)); errors.flush()
             trace.write(trace_filter.feed(b'', final=True)); trace.flush()
             errors.write(error_filter.feed(b'', final=True)); errors.flush()
@@ -566,11 +619,14 @@ def main():
             RESEARCH.freeze()
         ledger.freeze()
         if runtime is not None:
-            completion = runtime_completion(request, started, status, reason, process, parser, last_activity)
+            completion = runtime_completion(request, started, status, reason, process, parser, last_activity, timing)
             runtime['completed_at'], runtime['cost_usd'] = completion['completed_at'], completion['cost_usd']
             runtime['completion'] = completion
+            runtime['timing_checkpoint'] = {'recorded_at': completion['completed_at'], 'timing': completion['timing'],
+                                          'last_observable_activity': last_activity}
             runtime['observed_claude_runtime'] = parser.runtime if parser else {}
             write_json(STATE / 'runtime.json', runtime)
+            os.chmod(STATE / 'runtime.json', 0o600)
         write_json(STATE / 'status.json', {'status': status, 'reason': reason, 'completed_at': stamp()})
         lockfile.close()
     return 0

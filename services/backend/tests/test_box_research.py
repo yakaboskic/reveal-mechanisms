@@ -164,6 +164,7 @@ def test_shared_reference_budget_does_not_consume_selected_graph_or_authoring_al
 
 
 def test_writer_linter_and_reuse_only_outcome_use_trusted_materialized_context(hosted, monkeypatch):
+    monkeypatch.setattr('reveal_backend.authoring_structure.preflight_document', lambda *a, **k: {'valid': True})
     research, state, root = hosted
     research.call('reuse_scientific_objects', {'selections': [{'object_id': 'dapper:ScientificAccount.prior', 'purpose': 'existing_account'}]})
     output = root/'output'; output.mkdir()

@@ -34,13 +34,14 @@ def test_prepare_separates_application_state_and_backend_secrets(tmp_path, monke
     runtime = root/'.runtime/workflow'
     runtime.mkdir(parents=True)
     baseline = root/'.runtime/deployment'; baseline.mkdir()
-    (baseline/'backend.env').write_text('REVEAL_MYSQL_PASSWORD=db-secret\nREVEAL_REDIS_URL=redis://old-queue\n'
+    (baseline/'backend.env').write_text('REVEAL_MYSQL_PASSWORD=db-secret\nREVEAL_REDIS_URL=redis://old-queue\nTYPESAFE_API_KEY=old-fixture-key\n'
         'REVEAL_API_KEY_SHA256='+('c'*64)+'\nREVEAL_API_KEY_USER_ID=33333333-3333-4333-8333-333333333333\n')
     assets=root/'.deployment-assets'; assets.mkdir()
     for name in ('dapper','dismech','rds-ca.pem'): (assets/name).touch()
     (root/'.env').write_text('UPSTASH_REDIS_REST_URL=https://redis.example\nUPSTASH_REDIS_REST_TOKEN=redis-secret\n'
         'UPSTASH_VECTOR_REST_URL=https://vector.example\nUPSTASH_VECTOR_REST_TOKEN=vector-secret\n'
-        'QSTASH_TOKEN=live-token\nQSTASH_CURRENT_SIGNING_KEY=live-current\nQSTASH_NEXT_SIGNING_KEY=live-next\n')
+        'QSTASH_TOKEN=live-token\nQSTASH_CURRENT_SIGNING_KEY=live-current\nQSTASH_NEXT_SIGNING_KEY=live-next\n'
+        'TYPESAFE_API_KEY=current-fixture-key\n')
     if local_api_key:
         with (root/'.env').open('a') as output:
             output.write('REVEAL_API_KEY_SHA256='+('a'*64)+'\nREVEAL_API_KEY_USER_ID=11111111-1111-4111-8111-111111111111\n')
@@ -59,6 +60,9 @@ def test_prepare_separates_application_state_and_backend_secrets(tmp_path, monke
     assert backend['REVEAL_WORKSPACE_MAX_BYTES'] == '268435456'
     assert backend['QSTASH_TOKEN']=='local-token'
     assert backend['QSTASH_URL']=='http://host.docker.internal:18080'
+    assert backend['TYPESAFE_API_KEY'] == 'current-fixture-key'
+    assert 'TYPESAFE_API_KEY' not in frontend
+    assert 'current-fixture-key' not in json.dumps(result)
     assert 'REVEAL_REDIS_URL' not in backend
     assert backend['REVEAL_API_KEY_SHA256'] == ('a'*64 if local_api_key else '')
     assert backend['REVEAL_API_KEY_USER_ID'] == ('11111111-1111-4111-8111-111111111111' if local_api_key else '')

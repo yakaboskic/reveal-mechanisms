@@ -6,6 +6,8 @@ import tempfile
 import subprocess
 import shutil
 import unittest
+from copy import deepcopy
+from unittest.mock import patch
 import yaml
 from reveal_backend.authoring_contract import schema_excerpt, pinned_schema, WANTED
 from reveal_backend.evidence_package import canonical_json, sha256
@@ -46,6 +48,45 @@ class AuthoringContractTests(unittest.TestCase):
         self.assertIn('partial top-60',contract)
         self.assertIn('perturbation target',contract)
         self.assertNotIn('evidence-records/',contract)
+
+    def test_minimal_authorable_skeleton_passes_locked_lint_after_trusted_hydration(self):
+        if self.release is None: self.skipTest('Set REVEAL_TEST_DAPPER_RELEASE to a checkout containing the locked release')
+        from reveal_backend.acceptance import hydrate_inputs
+        bundle=json.loads((ROOT/'services/backend/agent-runtime/authoring-examples.json').read_bytes())
+        original=bundle['documents'][0]
+        doc=json.loads((ROOT/'services/backend/agent-runtime/authoring-skeleton.json').read_bytes())
+        self.assertEqual(set(doc), {'scientific_accounts','propositions','claims','evidence_items'})
+        self.assertTrue(all(len(rows)==1 for rows in doc.values()))
+        for rows in doc.values():
+            for node in rows:
+                self.assertFalse({'was_generated_by','was_attributed_to','source_ref','source_locator','subject_proposition','required_question'} & set(node))
+        claim=doc['claims'][0]; evidence=doc['evidence_items'][0]
+        self.assertEqual(claim['proposition'],evidence['target_proposition'])
+        self.assertEqual(claim['direction'],'SUPPORTS'); self.assertEqual(evidence['direction'],'SUPPORTS')
+        # Only the isolated harness supplies actual fixture provenance and
+        # exact source dependency bodies; agents never author these fields.
+        for group in ('scientific_accounts','claims'):
+            for field in ('was_generated_by','was_attributed_to'):
+                doc[group][0][field]=deepcopy(original[group][0][field])
+        trusted={node['id']:(group,node) for group in ('knowledge_gaps','gene_sets','files','activities','organizations') for node in original[group]}
+        with patch('reveal_backend.acceptance.release_root',return_value=self.release):
+            hydrated=hydrate_inputs(doc,trusted,[('used_edges',edge) for edge in original['used_edges']])
+        self.assertEqual(hydrated['gene_sets'],original['gene_sets'])
+        self.assertEqual(hydrated['files'],original['files'])
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp); path=root/'account.json'; path.write_bytes(canonical_json(hydrated))
+            sources={}
+            for file in hydrated['files']:
+                raw=canonical_json(bundle['synthetic_sources'][file['filename']]); (root/file['filename']).write_bytes(raw)
+                sources[file['filename']]={'path':file['filename'],'sha256':sha256(raw),'size_bytes':len(raw),'format':'json','dapper_file_id':file['id']}
+            package={'package_version':'reveal.evidence-package/0.2-draft','dapper_pin':{'snapshot_sha256':json.loads(LOCK.read_bytes())['compatible_input_snapshots'][0]},
+                'selection':{'knowledge_gap_id':hydrated['knowledge_gaps'][0]['id']},
+                'dapper_context':{key:hydrated[key] for key in ('files','knowledge_gaps','gene_sets')},
+                'source_artifacts':sources,'pigean':{'model':'synthetic','mechanisms':{}},
+                'validation_context':{'format':'reveal.validation-context/1','eligible_source_ids':[f['id'] for f in hydrated['files']]}}
+            package_path=root/'evidence-package.json';package_path.write_bytes(canonical_json(package))
+            result=lint_scientific_account(path,dapper_root=self.release,release_lock=LOCK,evidence_package=package_path,mode='draft')
+            self.assertTrue(result['valid'],result)
 
     def test_schema_matches_actual_locked_release_and_has_transitive_definitions(self):
         if self.release is None: self.skipTest('Set REVEAL_TEST_DAPPER_RELEASE to a checkout containing the locked release')

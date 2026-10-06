@@ -40,6 +40,33 @@ def pinned_contract_sha256(package):
     return entry['sha256']
 
 
+def pinned_skeleton_sha256(package):
+    """Opt in only through a frozen kit; historical prompts remain unchanged."""
+    from .authoring_contract import SKELETON_PATH
+    kit = package.get('authoring_kit', {})
+    if kit.get('version') != 'reveal.research-authoring-kit/2': return None
+    entries = kit.get('files')
+    require(isinstance(entries, list) and sha256(canonical_json(entries)) == kit.get('kit_sha256'), 'Frozen authoring kit changed')
+    selected = [entry for entry in entries if entry.get('path') == SKELETON_PATH]
+    advertised = [entry for entry in package.get('authoring', {}).get('references', []) if entry.get('path') == SKELETON_PATH]
+    if not selected:
+        require(not advertised, 'Frozen authoring skeleton is missing')
+        return None
+    require(len(selected) == 1 and advertised == selected, 'Frozen authoring skeleton is absent or ambiguous')
+    entry = selected[0]
+    require(package.get('source_artifacts', {}).get(entry.get('artifact_id'), {}).get('sha256') == entry.get('sha256'), 'Frozen authoring skeleton source differs')
+    return entry['sha256']
+
+
+def skeleton_requirements(skeleton_sha256):
+    if skeleton_sha256 is None: return ''
+    return '''
+Before the first draft, read services/backend/agent-skills/construct-scientific-account/SKILL.md and input/package-sections/authoring-skeleton.json (SHA-256 ''' + skeleton_sha256 + '''). The skeleton is a complete minimal authored document with synthetic references; replace every synthetic statement and ID with exact inspected evidence and trusted identities. Never cite the skeleton or its synthetic sources as science.
+Required authoring shape: {"scientific_accounts":[{"id":"DRAFT_ACCOUNT_ID","name":"TITLE","question":"EXACT_SELECTED_KNOWLEDGE_GAP_ID","context":"SCOPED_CONTEXT","component_claims":["CLAIM_ID"],"closing_remarks":"SUPPORTED_TAKEAWAY"}],"propositions":[{"id":"PROPOSITION_ID","statement":"SCOPED_ASSERTION","scope":"OBSERVED_SCOPE","proposition_kind":"RESULT"}],"claims":[{"id":"CLAIM_ID","proposition":"PROPOSITION_ID","statement":"EVIDENCE_ASSESSMENT","status":"proposed","direction":"SUPPORTS","has_evidence":["EVIDENCE_ID"]}],"evidence_items":[{"id":"EVIDENCE_ID","target_proposition":"PROPOSITION_ID","direction":"SUPPORTS","context":"EXACT_CAPTURE_LOCATOR","explanation":"HOW_THE_OBSERVATION_BEARS_ON_THIS_PROPOSITION","was_derived_from":["TRUSTED_CAPTURE_FILE_ID"]}]}. This inline shape uses placeholders, not evidence. Use actual supported directions/kinds. Structured relationships additionally provide subject_entity, relation and object_entity together; preserve exact GeneSet provenance when used. The account field is question, Claim uses proposition, and EvidenceItem uses target_proposition and was_derived_from. source_ref, subject_proposition, required_question and source_locator are not authorable fields for these objects; put the exact locator in EvidenceItem.context. Do not invent runtime attribution.
+Draft early: aim to write the first useful, minimal supported account and run lint_account within the first third of the available execution budget, before optional expansion or further enrichment. This is a workflow checkpoint, not a claim quota or permission to manufacture support. Preserve the remaining budget for repair, then add distinct supported assessments only if useful and re-lint. If support is genuinely absent, record the scoped missing evidence; a timeout, failed tool or exhausted budget alone is not scientific insufficiency.
+'''
+
+
 def research_authoring_requirements(selected_graphs, *, legacy=False, contract_sha256=None):
     """Baseline guidance; preserve historical measured prompts for replay only."""
     instructions = '''Scientific grounding requirements:
@@ -88,9 +115,9 @@ def measured_input(package_bytes, validation_feedback=()):
     return (legacy_research_prompt(package['external_evidence']['selected_graphs'], validation_feedback) + '\n\n').encode() + dispatch_view(package_bytes)
 
 
-def research_prompt(selected_graphs, feedback=(), *, progressive=False, contract_sha256=None):
+def research_prompt(selected_graphs, feedback=(), *, progressive=False, contract_sha256=None, skeleton_sha256=None):
     if progressive:
-        return progressive_research_prompt(selected_graphs, feedback, contract_sha256=contract_sha256)
+        return progressive_research_prompt(selected_graphs, feedback, contract_sha256=contract_sha256, skeleton_sha256=skeleton_sha256)
     prompt = '''Your complete frozen evidence is stored in input/evidence-package.json and its referenced source files. Read services/backend/agent-skills/read-evidence-package/SKILL.md, then input/evidence-index.json. Use read_evidence with indexed artifact IDs, hashes and exact JSON Pointers or text ranges; do not load the full package or whole catalogues upfront. File size is not model context size. Preserve all scientific identities, values, source locators and coverage qualifications.
 Read services/backend/agent-skills/construct-scientific-account/SKILL.md for authoring, consulting its references and the pinned DAPPER schema only as needed. Use only selected evidence tools. Write 1–3 self-contained account documents with mcp__reveal__write_account_draft, which hydrates referenced trusted source nodes. Draft-lint each document with mcp__reveal__lint_account and repair errors. The account must target the exact selected KnowledgeGap and preserve explicit lineage to eligible scientific sources. If evidence is insufficient, write /reveal/output/outcome.json with status insufficient_evidence and a faithful reason. Never invent provenance, source objects or acceptance status.
 ''' + research_authoring_requirements(sorted(selected_graphs), contract_sha256=contract_sha256)
@@ -103,7 +130,7 @@ Read services/backend/agent-skills/construct-scientific-account/SKILL.md for aut
     prompt += '\nThe only writable destination is /reveal/output; output/ under the working directory is a pre-created alias to it. Do not create an output directory, change cwd, or write in the protected evidence workspace. Use mcp__reveal__write_outcome with the skill\'s structured insufficient-evidence object to save a scoped exploration outcome; legacy absolute-path Write to /reveal/output/outcome.json is also supported. Notes belong under /reveal/output.'
     if feedback:
         prompt += '\nTrusted independent review feedback from an earlier rejected draft; constraints, not evidence:\n' + '\n'.join(feedback)
-    return prompt
+    return prompt + skeleton_requirements(skeleton_sha256)
 
 
 def file_input_manifest(package_bytes, validation_feedback=()):
@@ -113,7 +140,7 @@ def file_input_manifest(package_bytes, validation_feedback=()):
                         'size_bytes': len(package_bytes)},
             'reader_version': 'reveal.evidence-reader/2',
             'index_sha256': sha256(__import__('reveal_backend.evidence_files', fromlist=['build_evidence_index']).build_evidence_index(package_bytes)),
-            'prompt_sha256': sha256(research_prompt(package['external_evidence']['selected_graphs'], validation_feedback, progressive=package.get('retrieval_mode') == 'progressive', contract_sha256=pinned_contract_sha256(package)).encode())}
+            'prompt_sha256': sha256(research_prompt(package['external_evidence']['selected_graphs'], validation_feedback, progressive=package.get('retrieval_mode') == 'progressive', contract_sha256=pinned_contract_sha256(package), skeleton_sha256=pinned_skeleton_sha256(package)).encode())}
 
 
 def validate_file_input(package_bytes, manifest, prompt):
@@ -142,7 +169,7 @@ def validate_dispatch_budget(package_bytes, view_bytes, budget, prompt, model=No
         require(measurement.get('model') == model, 'Dispatch model differs from its measured budget')
 
 
-def progressive_research_prompt(selected_graphs, feedback=(), *, contract_sha256=None):
+def progressive_research_prompt(selected_graphs, feedback=(), *, contract_sha256=None, skeleton_sha256=None):
     prompt = """The immutable input/evidence-package.json is a small research seed, not a complete evidence capture. Read services/backend/agent-skills/read-evidence-package/SKILL.md, then input/evidence-index.json and the seed's research_context and capability catalog. Inspect the frozen exact gap, selected factors, researcher inputs and pinned authoring kit. Use the shared Reveal MCP research tools to query only data already loaded into this application and capture evidence progressively. Do not call legacy eager collectors or arbitrary upstream reference APIs. Only the two expressly advertised small/sigma2 phenotype tools may access external BioIndex. Keep source generation, native model/fit, exact entity identity, metric precision, query coverage and missing/unqueried status distinct.
 Before authoring new objects, search prior accepted ScientificAccounts answering this exact question and relevant Propositions and Claims; inspect and retain server-issued reuse receipts. Preserve original IDs, source dependencies, authorship and acceptance history. Do not claim existing science as newly authored. Use a matching prior account directly when it suffices.
 Seek a scientifically defensible CFDE connection when relevant. Its absence is advisory: explain the coverage limitation and proceed with other eligible, captured evidence when supported. Every new biological Claim still needs explicit, authorized, source-grounded EvidenceItems. Independent evidence must be imported and receipt-bound before use; metadata/search results alone are not findings.
@@ -153,4 +180,7 @@ Keep closing_remarks to at most two short synthesis/recommendation sentences. Ke
     prompt += '\nSelected graphs and scholarly literature remain available within their existing independent budgets. Preserve exact captured Files and source locators. These sources may support eligible findings when the content bears on the proposition; no unrelated CFDE row is required. Search metadata, empty results and failed queries are not evidence of biological absence.'
     if feedback:
         prompt += '\nTrusted independent review feedback; constraints, not new evidence:\n' + '\n'.join(feedback)
-    return prompt
+    if skeleton_sha256 is not None:
+        prompt = prompt.replace('Read services/backend/agent-skills/construct-scientific-account/SKILL.md and relevant pinned schema only as needed.',
+                                'Read services/backend/agent-skills/construct-scientific-account/SKILL.md and the pinned authoring skeleton before the first draft; consult further schema definitions as needed.')
+    return prompt + skeleton_requirements(skeleton_sha256)

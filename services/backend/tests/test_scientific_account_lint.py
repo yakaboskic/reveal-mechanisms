@@ -277,6 +277,7 @@ p.write_text(json.dumps(doc))
 
     def test_agent_tool_and_worker_assembly_use_same_source_gate(self):
         from reveal_backend import acceptance, box_remote
+        from reveal_backend.authoring_structure import _normalized_finding
         from reveal_backend.box_mcp import Ledger
         with tempfile.TemporaryDirectory() as directory:
             base = Path(directory); state = base / 'state'; output = base / 'output'
@@ -294,20 +295,55 @@ p.write_text(json.dumps(doc))
             document['used_edges'].append({'subject': 'urn:test:activity', 'predicate': 'prov:used', 'object': 'urn:test:external'})
             document['evidence_items'][0]['snippet'] = 'result_key: "derived-field", normalized_score: 0.5795'
             raw = output / 'account-1.json'; raw.write_bytes(canonical_json(document))
-            with patch.object(box_remote, 'BASE', base), patch.object(box_remote, 'STATE', state), patch.object(box_remote, 'OUTPUT', output):
+            authoritative = []
+            def capture_report(*args, **kwargs):
+                report = lint_scientific_account(*args, **kwargs)
+                authoritative.append(report)
+                return report
+            with patch.object(box_remote, 'BASE', base), patch.object(box_remote, 'STATE', state), patch.object(box_remote, 'OUTPUT', output), \
+                    patch('reveal_backend.scientific_account_lint.lint_scientific_account', side_effect=capture_report):
                 feedback = box_remote.lint_tool(raw.name, ledger)
             self.assertTrue(feedback['isError'])
             self.assertFalse(ledger.frozen)
             draft_report = json.loads(feedback['content'][0]['text'])
+            self.assertEqual(len(authoritative), 1)
+            descriptor = draft_report['report']
+            self.assertTrue(descriptor['retained'])
+            retained_bytes = Path(descriptor['path']).read_bytes()
+            self.assertEqual(sha256(retained_bytes), descriptor['sha256'])
+            self.assertEqual(len(retained_bytes), descriptor['size_bytes'])
+            retained = decode(retained_bytes)
+            self.assertTrue(retained['findings_complete'])
+            self.assertEqual(retained['counts'], authoritative[0]['counts'])
+            self.assertEqual(retained['finding_count'], len(authoritative[0]['findings']))
+            self.assertEqual(retained['findings'], [_normalized_finding(item) for item in authoritative[0]['findings']])
+            self.assertEqual(retained['advisories'], [_normalized_finding(item) for item in authoritative[0]['advisories']])
+            self.assertEqual(draft_report['findings'], retained['findings'])
+            self.assertEqual(draft_report['findings_omitted'], 0)
             ledger.freeze()
             with patch.object(acceptance, 'release_root', return_value=self.release), patch.object(acceptance, 'LOCK', self.lock):
                 with self.assertRaises(AccountValidationError) as failure:
                     acceptance.assemble_account(raw, self.package_path, base / 'assembled.json',
                         {'user_id': 'parity-owner', 'principal_kind': 'anonymous'}, {'id': 'parity-job'}, 1, 'deterministic', state / 'ledger/manifest.json')
-            source_errors = lambda report: [(item['check'], item['message']) for item in report['findings'] if item['check'].startswith(('source-', 'evidence-snippet'))]
-            self.assertEqual(source_errors(draft_report), source_errors(failure.exception.report))
-            self.assertEqual(source_errors(draft_report)[0][0], 'evidence-snippet')
-            self.assertNotIn('source-file', {item['check'] for item in draft_report['findings']})
+            source_errors = lambda report: [item for item in report['findings'] if item['check'].startswith(('source-', 'evidence-snippet'))]
+            draft_errors = source_errors(retained)
+            final_errors = [_normalized_finding(item) for item in source_errors(failure.exception.report)]
+            self.assertEqual(len(draft_errors), 1)
+            self.assertEqual(len(final_errors), 1)
+            # Trusted assembly mints a new EvidenceItem identity. Both reports
+            # must locate that same offending item, preserving all other
+            # finding fields after the deliberate text normalization.
+            assembled = decode((base / 'assembled.json').read_bytes())
+            self.assertEqual(draft_errors[0]['where'], document['evidence_items'][0]['id'])
+            self.assertEqual(final_errors[0]['where'], assembled['evidence_items'][0]['id'])
+            self.assertEqual(assembled['evidence_items'][0]['snippet'], document['evidence_items'][0]['snippet'])
+            self.assertEqual(draft_errors, [dict(final_errors[0], where=document['evidence_items'][0]['id'])])
+            self.assertEqual(draft_errors[0]['check'], 'evidence-snippet')
+            self.assertEqual(draft_errors[0]['severity'], 'error')
+            self.assertEqual(draft_errors[0]['rule'], 'evidence-snippet')
+            self.assertEqual(draft_errors[0]['message'],
+                'Copy a verbatim excerpt from the exact captured source row; put summaries in explanation.')
+            self.assertNotIn('source-file', {item['check'] for item in retained['findings']})
             # A real source quotation must pass both paths with the same live
             # external capture, rather than merely making both paths reject.
             source_id = document['evidence_items'][0]['was_derived_from'][0]

@@ -7,6 +7,7 @@ from .evidence_package import decode, canonical_json, require, sha256
 CONTRACT_VERSION = 'reveal.authoring-contract/2'
 SCHEMA_PATH = 'input/package-sections/authoring-schema-excerpt.yaml'
 EXAMPLE_PATH = 'input/package-sections/authoring-examples.json'
+SKELETON_PATH = 'input/package-sections/authoring-skeleton.json'
 WANTED = {'ScientificAccount','Proposition','Claim','EvidenceItem','ClaimScore','Mechanism','GeneSet','File','KnowledgeGap'}
 DEPENDENCY_PIN = 'services/backend/agent-runtime/authoring-schema-dependencies.json'
 

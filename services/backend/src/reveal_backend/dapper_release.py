@@ -110,6 +110,10 @@ def prepare_agent_workspace(workspace, project_root, package_path, lock_path):
         allowed.update(('input/package-sections/authoring-schema-excerpt.yaml',
                         'input/package-sections/authoring-examples.json',
                         'services/backend/agent-runtime/authoring-schema-dependencies.json'))
+        from .authoring_contract import SKELETON_PATH
+        from .dispatch_view import pinned_skeleton_sha256
+        skeleton_pin = pinned_skeleton_sha256(package)
+        if skeleton_pin is not None: allowed.add(SKELETON_PATH)
         installed = {}
         for entry in entries:
             relative = entry.get('path')
@@ -127,7 +131,8 @@ def prepare_agent_workspace(workspace, project_root, package_path, lock_path):
             target.parent.mkdir(parents=True, exist_ok=True); target.write_bytes(data)
             installed[relative] = copied[relative] = sha256(data)
         for relative in ({name for name in relative_files if name.endswith('.md')} |
-                         {'input/package-sections/authoring-schema-excerpt.yaml', 'input/package-sections/authoring-examples.json'}):
+                         {'input/package-sections/authoring-schema-excerpt.yaml', 'input/package-sections/authoring-examples.json'} |
+                         ({SKELETON_PATH} if skeleton_pin is not None else set())):
             require(relative in installed, 'Frozen authoring kit is missing required file: '+relative)
     for name in ('construct-scientific-account', 'read-evidence-package'):
         skill = project / f'.claude/skills/{name}/SKILL.md'

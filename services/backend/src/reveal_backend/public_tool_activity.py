@@ -186,9 +186,60 @@ def tool_call_payload(call_id, name, arguments, secrets=()):
             'message': 'Calling ' + safe_name}
 
 
+def tool_failed(name, result):
+    """Inspect bounded MCP envelopes, never arbitrary scientific result fields.
+
+Claude may mark the outer tool_result successful while wrapping an MCP isError
+response as JSON text. Only lint/write tools interpret a report's valid=false.
+No parsed content is returned or retained by this status projection.
+"""
+    authoring = isinstance(name, str) and tool_kind(name) in ('lint_account', 'write_account_draft')
+    budget = 100_000
+    def failed(value, depth=0):
+        nonlocal budget
+        if not isinstance(value, dict) or depth > 3:
+            return False
+        if value.get('is_error') is True or value.get('isError') is True:
+            return True
+        if authoring and value.get('valid') is False:
+            return True
+        structured = value.get('structuredContent')
+        if authoring and isinstance(structured, dict) and structured.get('valid') is False:
+            return True
+        content = value.get('content')
+        if isinstance(content, str):
+            content = [{'type': 'text', 'text': content}]
+        if not isinstance(content, list):
+            return False
+        for block in content[:8]:
+            if not isinstance(block, dict) or block.get('type') != 'text':
+                continue
+            text = block.get('text')
+            if not isinstance(text, str) or len(text) > budget:
+                continue
+            size = len(text.encode())
+            if size > budget:
+                continue
+            budget -= size
+            try:
+                parsed = json.loads(text)
+            except (ValueError, RecursionError):
+                continue
+            if not isinstance(parsed, dict):
+                continue
+            envelope = (set(parsed) <= {'content', 'structuredContent', 'isError', '_meta'}
+                        and isinstance(parsed.get('isError'), bool)
+                        and (isinstance(parsed.get('content'), list) or isinstance(parsed.get('structuredContent'), dict)))
+            report = authoring and isinstance(parsed.get('valid'), bool)
+            if (envelope or report) and failed(parsed, depth + 1):
+                return True
+        return False
+    return failed(result)
+
+
 def tool_result_payload(call_id, name, arguments, result, secrets=()):
     payload = tool_call_payload(call_id, name, arguments, secrets)
-    failed = bool(result.get('is_error') or result.get('isError')) if isinstance(result, dict) else False
+    failed = tool_failed(name, result)
     payload.update(status='error' if failed else 'completed',
                    message=payload['tool_name'] + (' failed' if failed else ' completed'),
                    output_excerpt=result_preview(result, arguments, secrets))

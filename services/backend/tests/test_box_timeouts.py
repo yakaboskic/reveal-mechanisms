@@ -227,9 +227,10 @@ class DraftAndRuntimeTests(unittest.TestCase):
             trusted = {'knowledge_gaps': [{'id': 'urn:gap', 'was_generated_by': 'urn:import'}],
                        'activities': [{'id': 'urn:import'}], 'mechanisms': [{'id': 'urn:mechanism', 'name': 'Source mechanism'}]}
             package = root / 'package.json'; package.write_text(json.dumps({'dapper_context': trusted}))
-            (state / 'runtime.json').write_text(json.dumps({'evidence_package': str(package)}))
+            (state / 'runtime.json').write_text(json.dumps({'evidence_package': str(package), 'dapper_root': 'fixture'}))
             draft = {'scientific_accounts': [{'id': 'urn:new', 'question': 'urn:gap', 'context': 'A prose mention of urn:mechanism.'}]}
-            with patch.multiple(box_remote, STATE=state, OUTPUT=output), patch.object(box_remote.pwd, 'getpwnam', return_value=SimpleNamespace(pw_uid=os.getuid(), pw_gid=os.getgid())):
+            with patch.multiple(box_remote, STATE=state, OUTPUT=output), patch.object(box_remote.pwd, 'getpwnam', return_value=SimpleNamespace(pw_uid=os.getuid(), pw_gid=os.getgid())), \
+                 patch('reveal_backend.authoring_structure.preflight_document', return_value={'valid': True}):
                 box_remote.write_draft_tool('account-1.json', deepcopy(draft))
                 first = json.loads((output / 'account-1.json').read_text())
                 self.assertNotIn('mechanisms', first)
