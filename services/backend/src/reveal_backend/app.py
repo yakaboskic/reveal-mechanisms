@@ -54,7 +54,7 @@ app.openapi = lambda: CONTRACT
 async def publication_cache_policy(request: Request, call_next):
     response = await call_next(request)
     path = request.url.path.removeprefix(request.scope.get('root_path', ''))
-    if path.startswith(('/v1/admin/', '/v1/accounts', '/v1/claims', '/v1/objects', '/v1/gene-sets',
+    if path.startswith(('/v1/drafts', '/v1/admin/', '/v1/accounts', '/v1/claims', '/v1/objects', '/v1/gene-sets',
             '/v1/paragraphs', '/v1/citations', '/v1/artifacts', '/v1/knowledge-gaps', '/v1/analysis-outcomes', '/v1/leaderboard')):
         # Visibility is revocable and workspace responses vary by principal.
         response.headers['Cache-Control'] = 'private, no-store'
@@ -637,6 +637,21 @@ def get_draft(draft_id:str,request:Request):
     with repo.transaction() as tx:
         user=principal(tx,request.headers.get('authorization'))['user_id']; row=owned(tx,'draft',draft_id,user)
         return dict(user_inputs.available(row['data']),owner_user_id=user)
+
+@app.post('/v1/drafts/{draft_id}/cfde-assessments', status_code=202)
+async def create_cfde_assessment(draft_id: str, request: Request):
+    from . import cfde_assessment
+    from starlette.concurrency import run_in_threadpool
+    body = await request.json(); validate(body, 'CfdeAssessmentInput')
+    result = await run_in_threadpool(cfde_assessment.start, repo, catalog,
+        request.headers.get('authorization'), draft_id, body, request.headers.get('idempotency-key'))
+    return JSONResponse(result, status_code=202, headers={
+        'Location': request.url.path.rstrip('/')+'/'+result['id'], 'Retry-After': '2'})
+
+@app.get('/v1/drafts/{draft_id}/cfde-assessments/{assessment_id}')
+def get_cfde_assessment(draft_id: str, assessment_id: str, request: Request):
+    from . import cfde_assessment
+    return cfde_assessment.get(repo, catalog, request.headers.get('authorization'), draft_id, assessment_id)
 
 @app.patch('/v1/drafts/{draft_id}')
 async def patch_draft(draft_id:str,request:Request):

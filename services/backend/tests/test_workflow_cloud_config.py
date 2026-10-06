@@ -1,4 +1,4 @@
-"""Owner-key configuration is isolated by environment and never enters frontend config."""
+"""Backend credentials are isolated by environment and never enter frontend config."""
 import importlib.util
 import json
 from pathlib import Path
@@ -219,3 +219,58 @@ def test_deployment_manifest_enables_only_qa_admin_read_secret_plumbing():
     assert set(ADMIN_KEY_NAMES)<=manifest['qa']['secrets'].keys()
     assert not set(ADMIN_KEY_NAMES)&manifest['prod']['secrets'].keys()
     assert all(':cyaka/reveal/workflow-qa-' in manifest['qa']['secrets'][name] for name in ADMIN_KEY_NAMES)
+
+
+def configure_typesafe_fixture(cloud):
+    path=cloud.parents[1]/'deploy/dig/service.yaml'
+    manifest=yaml.safe_load(path.read_text())
+    manifest['qa']['secrets']['TYPESAFE_API_KEY']='configured-qa-secret'
+    path.write_text(yaml.safe_dump(manifest))
+    source=cloud.parents[1]/'.env'
+    with source.open('a') as output: output.write('TYPESAFE_API_KEY=synthetic-typesafe\n')
+    return path,manifest
+
+
+def test_typesafe_enabled_only_on_qa_backend_and_other_credentials_preserved(cloud):
+    # Initial saved secret represents the currently deployed QA configuration.
+    module.prepare('qa')
+    original=json.loads((cloud/'qa-backend-secret.json').read_text())
+    configure_typesafe_fixture(cloud)
+    with pytest.raises(ValueError,match='reconcile'): module.prepare('qa')
+    assert json.loads((cloud/'qa-backend-secret.json').read_text())==original
+    (cloud/'qa-backend-secret.json').write_text(json.dumps({**original,'TYPESAFE_API_KEY':'synthetic-typesafe'}))
+    summary=module.prepare('qa');module.prepare('prod')
+    qa=module.read_env(cloud/'qa-backend.env')
+    qa_secret=json.loads((cloud/'qa-backend-secret.json').read_text())
+    assert qa['TYPESAFE_API_KEY']==qa_secret['TYPESAFE_API_KEY']=='synthetic-typesafe'
+    assert {key:qa_secret[key] for key in original}==original
+    assert 'synthetic-typesafe' not in json.dumps(summary)
+    for environment in ('qa','prod'):
+        assert 'TYPESAFE_API_KEY' not in module.read_env(cloud/f'{environment}-frontend.env')
+    assert 'TYPESAFE_API_KEY' not in module.read_env(cloud/'prod-backend.env')
+    assert 'TYPESAFE_API_KEY' not in json.loads((cloud/'prod-backend-secret.json').read_text())
+    before=(cloud/'qa-backend-secret.json').read_bytes();module.prepare('qa')
+    assert (cloud/'qa-backend-secret.json').read_bytes()==before
+
+
+def test_qa_typesafe_reference_requires_key_and_cannot_be_plaintext(cloud):
+    path,manifest=configure_typesafe_fixture(cloud)
+    source=cloud.parents[1]/'.env'
+    source.write_text(source.read_text().replace('TYPESAFE_API_KEY=synthetic-typesafe\n',''))
+    with pytest.raises(ValueError,match='Missing credentials: TYPESAFE_API_KEY'): module.prepare('qa')
+    assert not (cloud/'qa-backend-secret.json').exists()
+    assert not (cloud/'qa-backend.env').exists()
+    assert not (cloud/'qa-frontend.env').exists()
+    manifest['qa']['env']['TYPESAFE_API_KEY']='synthetic-insecure'
+    path.write_text(yaml.safe_dump(manifest))
+    with pytest.raises(ValueError,match='only in environment secrets'): module.prepare('qa')
+
+
+def test_deployment_manifest_keeps_typesafe_backend_secret_qa_only():
+    manifest=yaml.safe_load((ROOT/'deploy/dig/service.yaml').read_text())
+    assert manifest['qa']['secrets']['TYPESAFE_API_KEY']==(
+        'arn:aws:secretsmanager:us-east-1:005901288866:secret:'
+        'cyaka/reveal/workflow-qa-uiJnVi:TYPESAFE_API_KEY::')
+    assert 'TYPESAFE_API_KEY' not in manifest['prod']['secrets']
+    assert 'TYPESAFE_API_KEY' not in manifest['env']
+    assert all('TYPESAFE_API_KEY' not in manifest[environment].get('env',{}) for environment in ('qa','prod'))

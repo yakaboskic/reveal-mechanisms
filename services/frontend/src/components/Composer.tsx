@@ -30,9 +30,11 @@ import { DraftNavigation } from "./DraftNavigation";
 import { rememberDraftSave, restoreDraftSave, type DraftSaveAttempt } from "@/lib/draft-save";
 import { analysisAccountResults, localWorkApi, localWorkHref, LocalWorkError } from "@/lib/local-work";
 import { ResearchModeMenu } from "./ResearchModeMenu";
+import { CfdeAssessment } from "./CfdeAssessment";
 import { QueryHighlight } from "./QueryHighlight";
 import "./draft-editor.css";
 import "./local-work.css";
+import "./cfde-assessment.css";
 
 const browserSelection = () => composerSelection(new URLSearchParams(window.location.search), window.location.pathname);
 export function Composer({ initialJobId, initialDraftId }: { initialJobId?: string; initialDraftId?: string } = {}) {
@@ -706,7 +708,7 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
           </fieldset>
           {!job && <>
             <p className="draft-notice">{draft?.lifecycle !== "temporary" && draft ? "Changes are kept only when you save." : "Save a named draft to keep it. Unsaved work is discarded when you leave."}</p>
-            <div className="submit-row"><div className="draft-save-group"><button type="button" className="draft-save-button" aria-label="Save draft" title="Save a named draft" disabled={!draft || saving || attachmentsBlocked || uncertainSubmission || conflict || !!outdatedAnchors.length} onClick={requestSave}><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M5 3h12l4 4v14H3V3h2Z"/><path d="M7 3v7h10V3M7 21v-7h10v7M14 5v3"/></svg><span className="sr-only">Save draft</span></button><span className="draft-save-state" role="status">{saveState}</span></div>{uncertainSubmission ? <button type="button" className="gap-submit" disabled={submitDisabled} onClick={() => void retrySubmission()}><span>Check submission</span><span className="send" aria-hidden="true"><span>↑</span></span></button> : <ResearchModeMenu disabled={submitDisabled} onSelect={mode => { requestedMode.current = mode; if (me) void launch(mode); else dialog.current?.showModal(); }} />}</div><p className="local-research-link"><Link href="/workspace?tab=runs">Your research runs</Link></p>
+            <div className="submit-row"><div className="draft-save-group"><button type="button" className="draft-save-button" aria-label="Save draft" title="Save a named draft" disabled={!draft || saving || attachmentsBlocked || uncertainSubmission || conflict || !!outdatedAnchors.length} onClick={requestSave}><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M5 3h12l4 4v14H3V3h2Z"/><path d="M7 3v7h10V3M7 21v-7h10v7M14 5v3"/></svg><span className="sr-only">Save draft</span></button><span className="draft-save-state" role="status">{saveState}</span></div>{uncertainSubmission ? <button type="button" className="gap-submit" disabled={submitDisabled} onClick={() => void retrySubmission()}><span>Check submission</span><span className="send" aria-hidden="true"><span>↑</span></span></button> : <CfdeAssessment key={me?.user_id || "visitor"} draft={draft} composer={composer} disabled={!me || editorLocked || saving || attachmentsBlocked || conflict || !!outdatedAnchors.length || suggesting}>{(assessment, assessing) => <ResearchModeMenu assessment={assessment} assessing={assessing} disabled={submitDisabled} onSelect={mode => { requestedMode.current = mode; if (me) void launch(mode); else dialog.current?.showModal(); }} />}</CfdeAssessment>}</div><p className="local-research-link"><Link href="/workspace?tab=runs">Your research runs</Link></p>
           </>}
         </div>
       </>}

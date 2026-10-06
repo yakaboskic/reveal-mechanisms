@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import { CfdeEstimateRing } from "./CfdeAssessmentView";
+import { assessmentSupportLabel, type CfdeAssessment } from "../lib/cfde-assessment";
 import "./research-mode-menu.css";
 
-export function ResearchModeMenu({ disabled, onSelect }: { disabled: boolean; onSelect: (mode: "online" | "local") => void }) {
+export function ResearchModeMenu({ disabled, onSelect, assessment, assessing = false }: { disabled: boolean; onSelect: (mode: "online" | "local") => void; assessment?: CfdeAssessment | null; assessing?: boolean }) {
   const [open, setOpen] = useState(false);
   const id = useId(), root = useRef<HTMLDivElement>(null), trigger = useRef<HTMLButtonElement>(null);
   const initialFocus = useRef(0);
@@ -28,11 +30,13 @@ export function ResearchModeMenu({ disabled, onSelect }: { disabled: boolean; on
     choices[next]?.focus();
   }
   return <div className="research-mode-menu" ref={root}>
-    <button type="button" ref={trigger} id={`${id}-trigger`} disabled={disabled} aria-haspopup="menu" aria-expanded={open && !disabled} aria-controls={open && !disabled ? `${id}-menu` : undefined}
+    <button type="button" className="research-mode-trigger" ref={trigger} id={`${id}-trigger`} disabled={disabled} aria-haspopup="menu" aria-expanded={open && !disabled} aria-controls={open && !disabled ? `${id}-menu` : undefined}
+      aria-describedby={assessment?.result || assessing ? `${id}-estimate` : undefined}
       onClick={() => { initialFocus.current = 0; setOpen(value => !value); }}
       onKeyDown={event => { if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); initialFocus.current = event.key === "ArrowUp" ? 1 : 0; setOpen(true); } }}>
-      Let’s close this gap <span aria-hidden="true">⌄</span>
+      Let’s close this gap <span className="cfde-estimate-arrow" aria-hidden="true">↑{(assessing || assessment?.result) && <CfdeEstimateRing loading={assessing} probability={assessment?.result?.probability_yes} />}</span>
     </button>
+    {(assessing || assessment?.result) && <span className="sr-only" id={`${id}-estimate`}>{assessing ? "Assessing likely CFDE support" : assessmentSupportLabel(assessment!.result!.probability_yes)}</span>}
     {open && !disabled && <div className="research-mode-popup" id={`${id}-menu`} role="menu" aria-labelledby={`${id}-trigger`} onKeyDown={navigate}>
       <button type="button" className="research-mode-item" role="menuitem" tabIndex={-1} aria-label="Run online" aria-describedby={`${id}-online-description`} onClick={() => { close(true); onSelect("online"); }}><strong>Run online</strong><span id={`${id}-online-description`}>Run research in Reveal.</span></button>
       <button type="button" className="research-mode-item" role="menuitem" tabIndex={-1} aria-label="Use my local agent" aria-describedby={`${id}-local-description`} onClick={() => { close(true); onSelect("local"); }}><strong>Use my local agent</strong><span id={`${id}-local-description`}>Connect Codex or Claude Code.</span></button>

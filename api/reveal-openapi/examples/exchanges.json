@@ -21163,6 +21163,391 @@
     "curl": "curl -X GET https://api.reveal.example.org/v1/admin/explorations/66666666-6666-4666-8666-666666666666 -H 'Authorization: Bearer rvl_admin_<private-admin-read-key>' -H 'Accept: application/json'"
   },
   {
+    "operation_id": "createCfdeAssessment",
+    "case": "current_composer",
+    "method": "POST",
+    "path_template": "/v1/drafts/{draft_id}/cfde-assessments",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/drafts/22222222-2222-4222-8222-222222222222/cfde-assessments",
+      "path": {
+        "draft_id": "22222222-2222-4222-8222-222222222222"
+      },
+      "query": {},
+      "headers": {
+        "Idempotency-Key": "66666666-6666-4666-8666-666666666666",
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      },
+      "body": {
+        "draft_version": 2,
+        "composer": {
+          "source_gap": {
+            "id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+            "source_id": "dismech:disorders/Coronary_Artery_Disease#discussion:cad_pgsxc_reverse_causation",
+            "source_revision": "8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd"
+          },
+          "eaggl_anchors": [
+            {
+              "reference": {
+                "source": "eaggl",
+                "source_id": "factor:kpn:0000398:eaggl-capped-v1:Factor1",
+                "source_revision": "191055aeb63ba725d7254b602556a76546a1857662c79f9e40da3eefbb8c2550",
+                "dapper_id": "dapper:Mechanism.DDGbWvsSn5KPwztUH_htX778WdrO5Zan"
+              },
+              "origin": "manual",
+              "suggestion_id": null
+            }
+          ],
+          "dismissed_source_ids": [],
+          "mechanism_subquery": "CADinT2D",
+          "model": "eaggl-capped-v1",
+          "selected_kgs": [
+            "biomarkerkg",
+            "prokn"
+          ]
+        }
+      }
+    },
+    "responses": {
+      "202": {
+        "content_type": "application/json",
+        "examples": {
+          "preparing": {
+            "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "draft_id": "22222222-2222-4222-8222-222222222222",
+            "draft_version": 2,
+            "composer_sha256": "55d28ec08ebf555b727f12cc46022ab363fd09f35a48b7219d4b2136ec41d81e",
+            "status": "preparing",
+            "created_at": "2026-09-24T16:00:00Z",
+            "updated_at": "2026-09-24T16:00:00Z",
+            "expires_at": "2026-09-24T16:02:00Z",
+            "model": "jev-1.13.0",
+            "rubric_version": "cfde-support-v1",
+            "reference_generation_id": null,
+            "result": null,
+            "coverage": null,
+            "error": null,
+            "stale": false
+          },
+          "reused_prediction": {
+            "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "draft_id": "22222222-2222-4222-8222-222222222222",
+            "draft_version": 2,
+            "composer_sha256": "55d28ec08ebf555b727f12cc46022ab363fd09f35a48b7219d4b2136ec41d81e",
+            "status": "succeeded",
+            "created_at": "2026-09-24T16:00:00Z",
+            "updated_at": "2026-09-24T16:01:00Z",
+            "expires_at": "2026-09-24T16:02:00Z",
+            "model": "jev-1.13.0",
+            "rubric_version": "cfde-support-v1",
+            "reference_generation_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c",
+            "result": {
+              "verdict": "yes",
+              "probability_yes": 0.56,
+              "probability_no": 0.43,
+              "confidence": 0.48,
+              "main_blocker": "weak_relevance",
+              "relationship_support": {
+                "gene_gene_set": 0.65,
+                "gene_mechanism": 0.54,
+                "gene_set_mechanism": 0.58
+              },
+              "calibration": "not_calibrated"
+            },
+            "coverage": {
+              "factor_count": 1,
+              "gene_loading_count": 50,
+              "gene_set_loading_count": 50,
+              "unique_gene_set_count": 50,
+              "missing": [],
+              "truncations": [],
+              "complete": true
+            },
+            "error": null,
+            "stale": false
+          },
+          "shared_cached_receipt": {
+            "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "draft_id": "22222222-2222-4222-8222-222222222222",
+            "draft_version": 2,
+            "composer_sha256": "55d28ec08ebf555b727f12cc46022ab363fd09f35a48b7219d4b2136ec41d81e",
+            "status": "succeeded",
+            "created_at": "2026-09-25T16:00:00Z",
+            "updated_at": "2026-09-24T16:01:00Z",
+            "expires_at": "2026-09-24T16:02:00Z",
+            "model": "jev-1.13.0",
+            "rubric_version": "cfde-support-v1",
+            "reference_generation_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c",
+            "result": {
+              "verdict": "yes",
+              "probability_yes": 0.56,
+              "probability_no": 0.43,
+              "confidence": 0.48,
+              "main_blocker": "weak_relevance",
+              "relationship_support": {
+                "gene_gene_set": 0.65,
+                "gene_mechanism": 0.54,
+                "gene_set_mechanism": 0.58
+              },
+              "calibration": "not_calibrated"
+            },
+            "coverage": {
+              "factor_count": 1,
+              "gene_loading_count": 50,
+              "gene_set_loading_count": 50,
+              "unique_gene_set_count": 50,
+              "missing": [],
+              "truncations": [],
+              "complete": true
+            },
+            "error": null,
+            "stale": false
+          }
+        }
+      }
+    },
+    "curl": "curl -X POST https://api.reveal.example.org/v1/drafts/22222222-2222-4222-8222-222222222222/cfde-assessments -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"composer\":{\"dismissed_source_ids\":[],\"eaggl_anchors\":[{\"origin\":\"manual\",\"reference\":{\"dapper_id\":\"dapper:Mechanism.DDGbWvsSn5KPwztUH_htX778WdrO5Zan\",\"source\":\"eaggl\",\"source_id\":\"factor:kpn:0000398:eaggl-capped-v1:Factor1\",\"source_revision\":\"191055aeb63ba725d7254b602556a76546a1857662c79f9e40da3eefbb8c2550\"},\"suggestion_id\":null}],\"mechanism_subquery\":\"CADinT2D\",\"model\":\"eaggl-capped-v1\",\"selected_kgs\":[\"biomarkerkg\",\"prokn\"],\"source_gap\":{\"id\":\"dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk\",\"source_id\":\"dismech:disorders/Coronary_Artery_Disease#discussion:cad_pgsxc_reverse_causation\",\"source_revision\":\"8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd\"}},\"draft_version\":2}'"
+  },
+  {
+    "operation_id": "getCfdeAssessment",
+    "case": "request",
+    "method": "GET",
+    "path_template": "/v1/drafts/{draft_id}/cfde-assessments/{assessment_id}",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/drafts/22222222-2222-4222-8222-222222222222/cfde-assessments/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      "path": {
+        "draft_id": "22222222-2222-4222-8222-222222222222",
+        "assessment_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+      },
+      "query": {},
+      "headers": {
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
+        "Accept": "application/json"
+      },
+      "body": null
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/json",
+        "examples": {
+          "preparing": {
+            "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "draft_id": "22222222-2222-4222-8222-222222222222",
+            "draft_version": 2,
+            "composer_sha256": "55d28ec08ebf555b727f12cc46022ab363fd09f35a48b7219d4b2136ec41d81e",
+            "status": "preparing",
+            "created_at": "2026-09-24T16:00:00Z",
+            "updated_at": "2026-09-24T16:00:00Z",
+            "expires_at": "2026-09-24T16:02:00Z",
+            "model": "jev-1.13.0",
+            "rubric_version": "cfde-support-v1",
+            "reference_generation_id": null,
+            "result": null,
+            "coverage": null,
+            "error": null,
+            "stale": false
+          },
+          "assessing": {
+            "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "draft_id": "22222222-2222-4222-8222-222222222222",
+            "draft_version": 2,
+            "composer_sha256": "55d28ec08ebf555b727f12cc46022ab363fd09f35a48b7219d4b2136ec41d81e",
+            "status": "assessing",
+            "created_at": "2026-09-24T16:00:00Z",
+            "updated_at": "2026-09-24T16:00:00Z",
+            "expires_at": "2026-09-24T16:02:00Z",
+            "model": "jev-1.13.0",
+            "rubric_version": "cfde-support-v1",
+            "reference_generation_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c",
+            "result": null,
+            "coverage": {
+              "factor_count": 1,
+              "gene_loading_count": 50,
+              "gene_set_loading_count": 50,
+              "unique_gene_set_count": 50,
+              "missing": [],
+              "truncations": [],
+              "complete": true
+            },
+            "error": null,
+            "stale": false
+          },
+          "synthetic_low_confidence_yes": {
+            "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "draft_id": "22222222-2222-4222-8222-222222222222",
+            "draft_version": 2,
+            "composer_sha256": "55d28ec08ebf555b727f12cc46022ab363fd09f35a48b7219d4b2136ec41d81e",
+            "status": "succeeded",
+            "created_at": "2026-09-24T16:00:00Z",
+            "updated_at": "2026-09-24T16:01:00Z",
+            "expires_at": "2026-09-24T16:02:00Z",
+            "model": "jev-1.13.0",
+            "rubric_version": "cfde-support-v1",
+            "reference_generation_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c",
+            "result": {
+              "verdict": "yes",
+              "probability_yes": 0.56,
+              "probability_no": 0.43,
+              "confidence": 0.48,
+              "main_blocker": "weak_relevance",
+              "relationship_support": {
+                "gene_gene_set": 0.65,
+                "gene_mechanism": 0.54,
+                "gene_set_mechanism": 0.58
+              },
+              "calibration": "not_calibrated"
+            },
+            "coverage": {
+              "factor_count": 1,
+              "gene_loading_count": 50,
+              "gene_set_loading_count": 50,
+              "unique_gene_set_count": 50,
+              "missing": [],
+              "truncations": [],
+              "complete": true
+            },
+            "error": null,
+            "stale": false
+          },
+          "synthetic_shared_cached_receipt": {
+            "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "draft_id": "22222222-2222-4222-8222-222222222222",
+            "draft_version": 2,
+            "composer_sha256": "55d28ec08ebf555b727f12cc46022ab363fd09f35a48b7219d4b2136ec41d81e",
+            "status": "succeeded",
+            "created_at": "2026-09-25T16:00:00Z",
+            "updated_at": "2026-09-24T16:01:00Z",
+            "expires_at": "2026-09-24T16:02:00Z",
+            "model": "jev-1.13.0",
+            "rubric_version": "cfde-support-v1",
+            "reference_generation_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c",
+            "result": {
+              "verdict": "yes",
+              "probability_yes": 0.56,
+              "probability_no": 0.43,
+              "confidence": 0.48,
+              "main_blocker": "weak_relevance",
+              "relationship_support": {
+                "gene_gene_set": 0.65,
+                "gene_mechanism": 0.54,
+                "gene_set_mechanism": 0.58
+              },
+              "calibration": "not_calibrated"
+            },
+            "coverage": {
+              "factor_count": 1,
+              "gene_loading_count": 50,
+              "gene_set_loading_count": 50,
+              "unique_gene_set_count": 50,
+              "missing": [],
+              "truncations": [],
+              "complete": true
+            },
+            "error": null,
+            "stale": false
+          },
+          "failed_oversized_input": {
+            "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "draft_id": "22222222-2222-4222-8222-222222222222",
+            "draft_version": 2,
+            "composer_sha256": "55d28ec08ebf555b727f12cc46022ab363fd09f35a48b7219d4b2136ec41d81e",
+            "status": "failed",
+            "created_at": "2026-09-24T16:00:00Z",
+            "updated_at": "2026-09-24T16:01:00Z",
+            "expires_at": "2026-09-24T16:02:00Z",
+            "model": "jev-1.13.0",
+            "rubric_version": "cfde-support-v1",
+            "reference_generation_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c",
+            "result": null,
+            "coverage": {
+              "factor_count": 1,
+              "gene_loading_count": 50,
+              "gene_set_loading_count": 50,
+              "unique_gene_set_count": 50,
+              "missing": [
+                "Synthetic example: a pinned GeneSet definition is unavailable."
+              ],
+              "truncations": [
+                {
+                  "source": "user_inputs/context",
+                  "included_chars": 2000,
+                  "total_chars": 2400
+                }
+              ],
+              "complete": false
+            },
+            "error": {
+              "code": "CFDE_ASSESSMENT_TOO_LARGE",
+              "detail": "These inputs exceed the assessment size limit. Use fewer mechanisms or shorter context; the research run remains available.",
+              "retryable": false
+            },
+            "stale": false
+          },
+          "interrupted": {
+            "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "draft_id": "22222222-2222-4222-8222-222222222222",
+            "draft_version": 2,
+            "composer_sha256": "55d28ec08ebf555b727f12cc46022ab363fd09f35a48b7219d4b2136ec41d81e",
+            "status": "interrupted",
+            "created_at": "2026-09-24T16:00:00Z",
+            "updated_at": "2026-09-24T16:00:00Z",
+            "expires_at": "2026-09-24T16:02:00Z",
+            "model": "jev-1.13.0",
+            "rubric_version": "cfde-support-v1",
+            "reference_generation_id": null,
+            "result": null,
+            "coverage": null,
+            "error": {
+              "code": "CFDE_ASSESSMENT_INTERRUPTED",
+              "detail": "This check did not finish. Request another assessment to try again.",
+              "retryable": true
+            },
+            "stale": false
+          },
+          "stale_prediction": {
+            "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "draft_id": "22222222-2222-4222-8222-222222222222",
+            "draft_version": 2,
+            "composer_sha256": "55d28ec08ebf555b727f12cc46022ab363fd09f35a48b7219d4b2136ec41d81e",
+            "status": "succeeded",
+            "created_at": "2026-09-24T16:00:00Z",
+            "updated_at": "2026-09-24T16:01:00Z",
+            "expires_at": "2026-09-24T16:02:00Z",
+            "model": "jev-1.13.0",
+            "rubric_version": "cfde-support-v1",
+            "reference_generation_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c",
+            "result": {
+              "verdict": "yes",
+              "probability_yes": 0.56,
+              "probability_no": 0.43,
+              "confidence": 0.48,
+              "main_blocker": "weak_relevance",
+              "relationship_support": {
+                "gene_gene_set": 0.65,
+                "gene_mechanism": 0.54,
+                "gene_set_mechanism": 0.58
+              },
+              "calibration": "not_calibrated"
+            },
+            "coverage": {
+              "factor_count": 1,
+              "gene_loading_count": 50,
+              "gene_set_loading_count": 50,
+              "unique_gene_set_count": 50,
+              "missing": [],
+              "truncations": [],
+              "complete": true
+            },
+            "error": null,
+            "stale": true
+          }
+        }
+      }
+    },
+    "curl": "curl -X GET https://api.reveal.example.org/v1/drafts/22222222-2222-4222-8222-222222222222/cfde-assessments/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
+  },
+  {
     "operation_id": "getJob",
     "case": "paragraph",
     "method": "GET",

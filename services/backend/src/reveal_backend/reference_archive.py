@@ -55,6 +55,11 @@ KIND_ACTIONS: dict[str, str] = {
         # Private upload metadata and immutable fixture receipts are independent
         # of the reference generation; frozen requests retain their input refs.
         'upload', 'fixture_seed',
+        # Advisory assessments retain their exact accepted composer, source
+        # generation and response independently of later draft deletion. Shared
+        # versions are service-owned; reuse keys include the source generation.
+        'cfde_assessment', 'cfde_assessment_cache', 'cfde_assessment_idempotency',
+        'cfde_assessment_shared', 'cfde_assessment_shared_cache',
         # Progressive research retains immutable captures independently of the
         # currently active catalog. Active research_pin rows block table purge.
         'local_work', 'research_pin', 'research_package', 'research_access', 'research_grant_issue',

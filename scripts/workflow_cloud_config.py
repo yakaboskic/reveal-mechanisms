@@ -78,6 +78,8 @@ def prepare(environment):
     runtime.mkdir(mode=0o700, parents=True, exist_ok=True)
     manifest = yaml.safe_load((ROOT / 'deploy/dig/service.yaml').read_text())
     settings = {**manifest['env'], **manifest[environment].get('env', {})}
+    if 'TYPESAFE_API_KEY' in settings:
+        raise ValueError('Typesafe API key configuration belongs only in environment secrets')
     settings['SERVICE_PATH_PREFIX'] = '/api/reveal'
     source = read_env(ROOT / '.runtime/deployment/backend.env')
     source.update({k: v for k, v in dotenv_values(ROOT / '.env', interpolate=False).items() if v is not None})

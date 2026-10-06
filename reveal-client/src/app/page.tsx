@@ -6,6 +6,8 @@ import { followJob, followWorkspace } from "../lib/events";
 import { createMutationKeys } from "../lib/mutations";
 import { analysisAccountResults, localWorkApi, localWorkHref } from "../lib/local-work";
 import { ResearchModeMenu } from "../components/ResearchModeMenu";
+import { CfdeAssessment } from "../components/CfdeAssessment";
+import "../components/cfde-assessment.css";
 import { QueryHighlight } from "../components/QueryHighlight";
 import { emptyComposer, terminal, withFactors, type AnalysisInput, type Composer, type Draft, type Factor, type Gap, type Job, type JobEvent, type Me, type Schema } from "../lib/types";
 
@@ -287,7 +289,7 @@ export default function Home() {
             <section className="editor-section"><h3><span className="step-number">3</span> Save and investigate</h3><fieldset disabled={!mutable}><legend>Knowledge graph evidence</legend>{(["biomarkerkg", "prokn"] as const).map(value => <label className="check" key={value}><input type="checkbox" checked={composer.selected_kgs.includes(value)} onChange={event => setComposer(current => ({ ...current, selected_kgs: event.target.checked ? [...current.selected_kgs, value] : current.selected_kgs.filter(kg => kg !== value) }))} />{value === "biomarkerkg" ? "BiomarkerKG" : "ProKN"}</label>)}</fieldset>
               <p className="muted small">Online research uses the configured model budget and automatically prepares a research statement. With a local agent, you connect Codex or Claude Code and submit findings yourself; hosted statement generation is optional.</p>
               {pending && <div className="notice"><span>A submission needs confirmation. Recover it with the original request key before starting another.</span><button className="quiet small" onClick={discardSubmission} disabled={!!busy}>Discard recovery</button></div>}
-              <div className="actions"><button className="secondary" onClick={save} disabled={!mutable || suggesting || !dirty}>{busy === "save" ? "Saving…" : "Save draft"}</button>{pending ? <button type="button" onClick={() => void submit()} disabled={!mutable || suggesting}>{busy === "submit" ? "Submitting…" : "Recover submission"}</button> : <ResearchModeMenu disabled={!mutable || suggesting || !draft || dirty || !composer.source_gap || !composer.eaggl_anchors.length} onSelect={mode => void submit(mode)} />}</div>{dirty && <p className="small muted">Save your draft before starting an analysis.</p>}
+              <div className="actions"><button className="secondary" onClick={save} disabled={!mutable || suggesting || !dirty}>{busy === "save" ? "Saving…" : "Save draft"}</button>{pending ? <button type="button" onClick={() => void submit()} disabled={!mutable || suggesting}>{busy === "submit" ? "Submitting…" : "Recover submission"}</button> : <CfdeAssessment key={principal.user_id} draft={draft} composer={composer} disabled={!mutable || suggesting || !!pending}>{(assessment, assessing) => <ResearchModeMenu assessment={assessment} assessing={assessing} disabled={!mutable || suggesting || !draft || dirty || !composer.source_gap || !composer.eaggl_anchors.length} onSelect={mode => void submit(mode)} />}</CfdeAssessment>}</div>{dirty && <p className="small muted">Save your draft before starting an analysis.</p>}
             </section>
           </section>
           <section className="activity-pane" aria-labelledby="activity-heading">

@@ -244,12 +244,14 @@ def resolve(tx, owner, composer):
 
 def referenced_ids(tx, owner=None):
     identities=set()
-    for kind in ('draft','request'):
+    for kind in ('draft','request','cfde_assessment'):
         for row in tx.list(kind,owner):
             value=row['data']
             if kind=='draft' and not saved(value) and value.get('expires_at','')<=now(): continue
             identities.update(value.get('composer',{}).get('upload_ids',[]))
             identities.update(u['id'] for u in value.get('user_inputs',{}).get('uploads',[]))
+            if kind == 'cfde_assessment':
+                identities.update(u['id'] for u in value.get('inputs',{}).get('uploads',[]))
     return identities
 
 

@@ -12,6 +12,25 @@ def transfer_workspace(tx, source, target):
     """
     from .research_work import TERMINAL
     timestamp = now()
+    # Assessment indexes include the old owner in their digest. Retain the
+    # immutable assessment itself, but never carry an unusable private cache or
+    # idempotency namespace into the newly claimed workspace.
+    for kind in ('cfde_assessment_cache', 'cfde_assessment_idempotency'):
+        for row in tx.list(kind, source): tx.remove(kind, row['id'])
+    from .user_inputs import INPUT_FIELDS
+    for row in tx.list('cfde_assessment', source):
+        value = deepcopy(row['data']); public = value.get('public') or {}
+        inputs, composer = value.get('inputs') or {}, value.get('composer') or {}
+        private = bool(inputs.get('uploads') or composer.get('upload_ids') or any(
+            not isinstance(context.get(field, ''), str) or context.get(field, '').strip()
+            for context in (inputs, composer) for field in INPUT_FIELDS))
+        if public.get('status') in ('preparing', 'assessing') and private:
+            public.update(status='interrupted', updated_at=timestamp, error={
+                'code': 'WORKSPACE_TRANSFERRED', 'retryable': True,
+                'detail': 'This workspace moved to your registered account. Request another assessment to try again.'})
+            tx.put('cfde_assessment', row['id'], source, value)
+        # Public-only leaders/followers may finish their accepted immutable
+        # snapshot across a claim. Their shared service records are untouched.
     for row in tx.list('research_access', source):
         value = deepcopy(row['data'])
         value.update(revoked_at=value.get('revoked_at') or timestamp, revocation_reason='workspace_transferred')

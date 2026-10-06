@@ -127,7 +127,7 @@ def prepare():
     if not ca.is_absolute(): ca = ROOT / ca
     shutil.copy2(ca, ASSETS / 'rds-ca.pem')
     backend = {key: value for key, value in env.items()
-               if key.startswith(('REVEAL_', 'EMBEDDING_')) or key in ('ANTHROPIC_API_KEY', 'UPSTASH_BOX_API_KEY')}
+               if key.startswith(('REVEAL_', 'EMBEDDING_')) or key in ('ANTHROPIC_API_KEY', 'UPSTASH_BOX_API_KEY', 'TYPESAFE_API_KEY')}
     backend.update({
         'REVEAL_MYSQL_CA_FILE': '/app/runtime-ca.pem', 'REVEAL_DAPPER_ROOT': '/app/.runtime/dapper',
         'REVEAL_DISMECH_SOURCE': '/app/dismech', 'REVEAL_LOCAL_DEPLOYMENT': '1', 'REVEAL_ENVIRONMENT': 'development',

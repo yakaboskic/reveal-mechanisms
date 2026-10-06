@@ -51,6 +51,9 @@
     },
     {
       "name": "Administrator science read"
+    },
+    {
+      "name": "CFDE assessment"
     }
   ],
   "security": [
@@ -35811,6 +35814,1163 @@
         ],
         "x-required-scope": "science:read"
       }
+    },
+    "/v1/drafts/{draft_id}/cfde-assessments": {
+      "post": {
+        "operationId": "createCfdeAssessment",
+        "tags": [
+          "CFDE assessment"
+        ],
+        "summary": "Assess CFDE support before research",
+        "description": "Requires a valid existing registered or anonymous workspace principal that owns the draft. An administrator science-read key cannot authorize this operation. This advisory prediction never launches research or creates scientific records and is not a prerequisite for local or hosted research. CFDE grounding remains encouraged, not mandatory. Predictions must not be cited as evidence or used as scientific validation. All response and error bodies are private and no-store, with Vary: Authorization. Examples are synthetic contract fixtures; no model or scientific source was queried. Create an assessment receipt for the supplied composer without saving its unsaved edits. The editor sends this POST automatically after the selected gap and mechanism suggestions are ready and edits have settled for 1.5 seconds, with at most one automatic attempt per input binding. Failed or interrupted assessments require an explicit retry; the editor does not automatically resubmit the same inputs after failure. Only this POST can dispatch assessment work; reading a draft or polling an assessment cannot start a provider call. The trusted service selects the model and rubric, retains exact pinned factor and GeneSet source state for audit, and makes the assessment asynchronously from a simple scientific projection of the question, selected factors, names, loadings, source labels and researcher context. The model does not receive DAPPER identifiers, hashes, provenance records or audit encoding rules. The operation is bounded by a 120-second deadline and an owner daily quota. Source preparation and any cold catalog load happen asynchronously after acceptance. Public default inputs share forecasts when the source gap, selected factor references, reference model and selected graphs match and no researcher direction, context, hypotheses or uploads are present. Identical concurrent defaults share pending work; successful default forecasts can be reused for up to seven days, unless the active reference generation, assessment model or rubric changes. Each owner still receives a separate owned assessment UUID and independent draft revision binding. Composers containing notes or uploads use private caching only. No other owner identity, assessment ID or private context is exposed. A changed body with the same Idempotency-Key returns 409. Failed or interrupted work needs an explicit retry with a new key; retrying the original key recovers the original result. Process restart never automatically repeats provider calls. ",
+        "parameters": [
+          {
+            "name": "draft_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "22222222-2222-4222-8222-222222222222",
+            "description": ""
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 8,
+              "maxLength": 128
+            },
+            "example": "66666666-6666-4666-8666-666666666666",
+            "description": "Unique per caller and operation for at least 7 days. Same key and same canonical body replay the original accepted response; changed body returns 409 IDEMPOTENCY_CONFLICT. Compare idempotency before draft-version checks on retries."
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Assessment accepted or existing assessment reused; poll Location.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CfdeAssessment"
+                },
+                "examples": {
+                  "preparing": {
+                    "summary": "Preparing",
+                    "value": {
+                      "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+                      "draft_id": "22222222-2222-4222-8222-222222222222",
+                      "draft_version": 2,
+                      "composer_sha256": "55d28ec08ebf555b727f12cc46022ab363fd09f35a48b7219d4b2136ec41d81e",
+                      "status": "preparing",
+                      "created_at": "2026-09-24T16:00:00Z",
+                      "updated_at": "2026-09-24T16:00:00Z",
+                      "expires_at": "2026-09-24T16:02:00Z",
+                      "model": "jev-1.13.0",
+                      "rubric_version": "cfde-support-v1",
+                      "reference_generation_id": null,
+                      "result": null,
+                      "coverage": null,
+                      "error": null,
+                      "stale": false
+                    }
+                  },
+                  "reused_prediction": {
+                    "summary": "Reused prediction",
+                    "value": {
+                      "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+                      "draft_id": "22222222-2222-4222-8222-222222222222",
+                      "draft_version": 2,
+                      "composer_sha256": "55d28ec08ebf555b727f12cc46022ab363fd09f35a48b7219d4b2136ec41d81e",
+                      "status": "succeeded",
+                      "created_at": "2026-09-24T16:00:00Z",
+                      "updated_at": "2026-09-24T16:01:00Z",
+                      "expires_at": "2026-09-24T16:02:00Z",
+                      "model": "jev-1.13.0",
+                      "rubric_version": "cfde-support-v1",
+                      "reference_generation_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c",
+                      "result": {
+                        "verdict": "yes",
+                        "probability_yes": 0.56,
+                        "probability_no": 0.43,
+                        "confidence": 0.48,
+                        "main_blocker": "weak_relevance",
+                        "relationship_support": {
+                          "gene_gene_set": 0.65,
+                          "gene_mechanism": 0.54,
+                          "gene_set_mechanism": 0.58
+                        },
+                        "calibration": "not_calibrated"
+                      },
+                      "coverage": {
+                        "factor_count": 1,
+                        "gene_loading_count": 50,
+                        "gene_set_loading_count": 50,
+                        "unique_gene_set_count": 50,
+                        "missing": [],
+                        "truncations": [],
+                        "complete": true
+                      },
+                      "error": null,
+                      "stale": false
+                    }
+                  },
+                  "shared_cached_receipt": {
+                    "summary": "Shared cached receipt",
+                    "value": {
+                      "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+                      "draft_id": "22222222-2222-4222-8222-222222222222",
+                      "draft_version": 2,
+                      "composer_sha256": "55d28ec08ebf555b727f12cc46022ab363fd09f35a48b7219d4b2136ec41d81e",
+                      "status": "succeeded",
+                      "created_at": "2026-09-25T16:00:00Z",
+                      "updated_at": "2026-09-24T16:01:00Z",
+                      "expires_at": "2026-09-24T16:02:00Z",
+                      "model": "jev-1.13.0",
+                      "rubric_version": "cfde-support-v1",
+                      "reference_generation_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c",
+                      "result": {
+                        "verdict": "yes",
+                        "probability_yes": 0.56,
+                        "probability_no": 0.43,
+                        "confidence": 0.48,
+                        "main_blocker": "weak_relevance",
+                        "relationship_support": {
+                          "gene_gene_set": 0.65,
+                          "gene_mechanism": 0.54,
+                          "gene_set_mechanism": 0.58
+                        },
+                        "calibration": "not_calibrated"
+                      },
+                      "coverage": {
+                        "factor_count": 1,
+                        "gene_loading_count": 50,
+                        "gene_set_loading_count": 50,
+                        "unique_gene_set_count": 50,
+                        "missing": [],
+                        "truncations": [],
+                        "complete": true
+                      },
+                      "error": null,
+                      "stale": false
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "description": "Correlation ID for this HTTP request.",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              },
+              "Location": {
+                "description": "Relative URL of the created resource.",
+                "schema": {
+                  "type": "string",
+                  "format": "uri-reference"
+                },
+                "example": "/v1/drafts/22222222-2222-4222-8222-222222222222/cfde-assessments/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+              },
+              "Retry-After": {
+                "description": "Suggested polling delay in seconds.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "example": 2
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              },
+              "Vary": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "Authorization"
+              }
+            }
+          },
+          "400": {
+            "description": "Assessment idempotency key required.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "idempotency_key_required": {
+                    "summary": "Idempotency key required",
+                    "value": {
+                      "type": "urn:reveal:problem:idempotency-key-required",
+                      "title": "Idempotency Key Required",
+                      "status": 400,
+                      "code": "IDEMPOTENCY_KEY_REQUIRED",
+                      "detail": "Supply an Idempotency-Key of 8–128 characters.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              },
+              "Vary": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "Authorization"
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication Required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "authentication_required": {
+                    "summary": "Authentication required",
+                    "value": {
+                      "type": "urn:reveal:problem:authentication-required",
+                      "title": "Authentication Required",
+                      "status": 401,
+                      "code": "AUTHENTICATION_REQUIRED",
+                      "detail": "A valid trusted-gateway API assertion is required.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              },
+              "Vary": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "Authorization"
+              }
+            }
+          },
+          "403": {
+            "description": "Access denied.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "access_denied": {
+                    "summary": "Access denied",
+                    "value": {
+                      "type": "urn:reveal:problem:access-denied",
+                      "title": "Access Denied",
+                      "status": 403,
+                      "code": "ACCESS_DENIED",
+                      "detail": "This principal cannot access the requested assessment.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              },
+              "Vary": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "Authorization"
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "not_found": {
+                    "summary": "Not found",
+                    "value": {
+                      "type": "urn:reveal:problem:not-found",
+                      "title": "Not Found",
+                      "status": 404,
+                      "code": "NOT_FOUND",
+                      "detail": "No accessible record exists for the supplied identifier or exact revision.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              },
+              "Vary": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "Authorization"
+              }
+            }
+          },
+          "409": {
+            "description": "Draft revision or idempotency conflict.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "draft_changed": {
+                    "summary": "Draft changed",
+                    "value": {
+                      "type": "urn:reveal:problem:version-conflict",
+                      "title": "Version Conflict",
+                      "status": 409,
+                      "code": "VERSION_CONFLICT",
+                      "detail": "The draft revision changed. Reload its current version.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false,
+                      "current_version": 3
+                    }
+                  },
+                  "idempotency_conflict": {
+                    "summary": "Idempotency conflict",
+                    "value": {
+                      "type": "urn:reveal:problem:idempotency-conflict",
+                      "title": "Idempotency Conflict",
+                      "status": 409,
+                      "code": "IDEMPOTENCY_CONFLICT",
+                      "detail": "This key was already used with a different request body.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              },
+              "Vary": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "Authorization"
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid Input",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "invalid_input": {
+                    "summary": "Invalid input",
+                    "value": {
+                      "type": "urn:reveal:problem:invalid-input",
+                      "title": "Invalid Input",
+                      "status": 422,
+                      "code": "INVALID_INPUT",
+                      "detail": "The request does not satisfy the operation contract.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false,
+                      "field_errors": [
+                        {
+                          "pointer": "/inquiry",
+                          "message": "A valid DAPPER inquiry is required."
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              },
+              "Vary": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "Authorization"
+              }
+            }
+          },
+          "429": {
+            "description": "Rate Limited",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "rate_limited": {
+                    "summary": "Rate limited",
+                    "value": {
+                      "type": "urn:reveal:problem:rate-limited",
+                      "title": "Rate Limited",
+                      "status": 429,
+                      "code": "RATE_LIMITED",
+                      "detail": "Retry after the interval in Retry-After.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": true
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "example": 30
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              },
+              "Vary": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "Authorization"
+              }
+            }
+          },
+          "503": {
+            "description": "Dependency Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "dependency_unavailable": {
+                    "summary": "Dependency unavailable",
+                    "value": {
+                      "type": "urn:reveal:problem:dependency-unavailable",
+                      "title": "Dependency Unavailable",
+                      "status": 503,
+                      "code": "DEPENDENCY_UNAVAILABLE",
+                      "detail": "A required dependency is temporarily unavailable; no replacement ranking or scientific result was fabricated.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": true
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              },
+              "Vary": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "Authorization"
+              }
+            }
+          },
+          "410": {
+            "description": "Temporary editor expired.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "editor_expired": {
+                    "summary": "Editor expired",
+                    "value": {
+                      "type": "urn:reveal:problem:editor-expired",
+                      "title": "Editor Expired",
+                      "status": 410,
+                      "code": "EDITOR_EXPIRED",
+                      "detail": "This temporary editor expired. Open the knowledge gap to start again.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              },
+              "Vary": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "Authorization"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApplicationBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CfdeAssessmentInput"
+              },
+              "examples": {
+                "current_composer": {
+                  "summary": "Current composer",
+                  "value": {
+                    "draft_version": 2,
+                    "composer": {
+                      "source_gap": {
+                        "id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+                        "source_id": "dismech:disorders/Coronary_Artery_Disease#discussion:cad_pgsxc_reverse_causation",
+                        "source_revision": "8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd"
+                      },
+                      "eaggl_anchors": [
+                        {
+                          "reference": {
+                            "source": "eaggl",
+                            "source_id": "factor:kpn:0000398:eaggl-capped-v1:Factor1",
+                            "source_revision": "191055aeb63ba725d7254b602556a76546a1857662c79f9e40da3eefbb8c2550",
+                            "dapper_id": "dapper:Mechanism.DDGbWvsSn5KPwztUH_htX778WdrO5Zan"
+                          },
+                          "origin": "manual",
+                          "suggestion_id": null
+                        }
+                      ],
+                      "dismissed_source_ids": [],
+                      "mechanism_subquery": "CADinT2D",
+                      "model": "eaggl-capped-v1",
+                      "selected_kgs": [
+                        "biomarkerkg",
+                        "prokn"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "label": "current_composer",
+            "source": "curl -X POST https://api.reveal.example.org/v1/drafts/22222222-2222-4222-8222-222222222222/cfde-assessments -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"composer\":{\"dismissed_source_ids\":[],\"eaggl_anchors\":[{\"origin\":\"manual\",\"reference\":{\"dapper_id\":\"dapper:Mechanism.DDGbWvsSn5KPwztUH_htX778WdrO5Zan\",\"source\":\"eaggl\",\"source_id\":\"factor:kpn:0000398:eaggl-capped-v1:Factor1\",\"source_revision\":\"191055aeb63ba725d7254b602556a76546a1857662c79f9e40da3eefbb8c2550\"},\"suggestion_id\":null}],\"mechanism_subquery\":\"CADinT2D\",\"model\":\"eaggl-capped-v1\",\"selected_kgs\":[\"biomarkerkg\",\"prokn\"],\"source_gap\":{\"id\":\"dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk\",\"source_id\":\"dismech:disorders/Coronary_Artery_Disease#discussion:cad_pgsxc_reverse_causation\",\"source_revision\":\"8927a1eab2265dfa3385f176b255b05e307346137d7d914bae131f9c83ddc9dd\"}},\"draft_version\":2}'"
+          }
+        ]
+      }
+    },
+    "/v1/drafts/{draft_id}/cfde-assessments/{assessment_id}": {
+      "get": {
+        "operationId": "getCfdeAssessment",
+        "tags": [
+          "CFDE assessment"
+        ],
+        "summary": "Read a CFDE support assessment",
+        "description": "Requires a valid existing registered or anonymous workspace principal that owns the draft. An administrator science-read key cannot authorize this operation. This advisory prediction never launches research or creates scientific records and is not a prerequisite for local or hosted research. CFDE grounding remains encouraged, not mandatory. Predictions must not be cited as evidence or used as scientific validation. All response and error bodies are private and no-store, with Vary: Authorization. Examples are synthetic contract fixtures; no model or scientific source was queried. Read only this owner/draft-bound assessment. Polling makes no remote calls and never starts or retries preparation, model work or research. No result after failure is replaced by a no verdict. Pending work past its deadline is reported as interrupted; completed results remain readable. Shared work is projected through this owner receipt: created_at is this receipt creation, updated_at remains the original forecast update, and expires_at remains its operation deadline. An unavailable assessment returns 404; inspect stale input pins before displaying a saved prediction for the current editor. ",
+        "parameters": [
+          {
+            "name": "draft_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "22222222-2222-4222-8222-222222222222",
+            "description": ""
+          },
+          {
+            "name": "assessment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "description": ""
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CfdeAssessment"
+                },
+                "examples": {
+                  "preparing": {
+                    "summary": "Preparing",
+                    "value": {
+                      "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+                      "draft_id": "22222222-2222-4222-8222-222222222222",
+                      "draft_version": 2,
+                      "composer_sha256": "55d28ec08ebf555b727f12cc46022ab363fd09f35a48b7219d4b2136ec41d81e",
+                      "status": "preparing",
+                      "created_at": "2026-09-24T16:00:00Z",
+                      "updated_at": "2026-09-24T16:00:00Z",
+                      "expires_at": "2026-09-24T16:02:00Z",
+                      "model": "jev-1.13.0",
+                      "rubric_version": "cfde-support-v1",
+                      "reference_generation_id": null,
+                      "result": null,
+                      "coverage": null,
+                      "error": null,
+                      "stale": false
+                    }
+                  },
+                  "assessing": {
+                    "summary": "Assessing",
+                    "value": {
+                      "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+                      "draft_id": "22222222-2222-4222-8222-222222222222",
+                      "draft_version": 2,
+                      "composer_sha256": "55d28ec08ebf555b727f12cc46022ab363fd09f35a48b7219d4b2136ec41d81e",
+                      "status": "assessing",
+                      "created_at": "2026-09-24T16:00:00Z",
+                      "updated_at": "2026-09-24T16:00:00Z",
+                      "expires_at": "2026-09-24T16:02:00Z",
+                      "model": "jev-1.13.0",
+                      "rubric_version": "cfde-support-v1",
+                      "reference_generation_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c",
+                      "result": null,
+                      "coverage": {
+                        "factor_count": 1,
+                        "gene_loading_count": 50,
+                        "gene_set_loading_count": 50,
+                        "unique_gene_set_count": 50,
+                        "missing": [],
+                        "truncations": [],
+                        "complete": true
+                      },
+                      "error": null,
+                      "stale": false
+                    }
+                  },
+                  "synthetic_low_confidence_yes": {
+                    "summary": "Synthetic low confidence yes",
+                    "value": {
+                      "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+                      "draft_id": "22222222-2222-4222-8222-222222222222",
+                      "draft_version": 2,
+                      "composer_sha256": "55d28ec08ebf555b727f12cc46022ab363fd09f35a48b7219d4b2136ec41d81e",
+                      "status": "succeeded",
+                      "created_at": "2026-09-24T16:00:00Z",
+                      "updated_at": "2026-09-24T16:01:00Z",
+                      "expires_at": "2026-09-24T16:02:00Z",
+                      "model": "jev-1.13.0",
+                      "rubric_version": "cfde-support-v1",
+                      "reference_generation_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c",
+                      "result": {
+                        "verdict": "yes",
+                        "probability_yes": 0.56,
+                        "probability_no": 0.43,
+                        "confidence": 0.48,
+                        "main_blocker": "weak_relevance",
+                        "relationship_support": {
+                          "gene_gene_set": 0.65,
+                          "gene_mechanism": 0.54,
+                          "gene_set_mechanism": 0.58
+                        },
+                        "calibration": "not_calibrated"
+                      },
+                      "coverage": {
+                        "factor_count": 1,
+                        "gene_loading_count": 50,
+                        "gene_set_loading_count": 50,
+                        "unique_gene_set_count": 50,
+                        "missing": [],
+                        "truncations": [],
+                        "complete": true
+                      },
+                      "error": null,
+                      "stale": false
+                    }
+                  },
+                  "synthetic_shared_cached_receipt": {
+                    "summary": "Synthetic shared cached receipt",
+                    "value": {
+                      "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+                      "draft_id": "22222222-2222-4222-8222-222222222222",
+                      "draft_version": 2,
+                      "composer_sha256": "55d28ec08ebf555b727f12cc46022ab363fd09f35a48b7219d4b2136ec41d81e",
+                      "status": "succeeded",
+                      "created_at": "2026-09-25T16:00:00Z",
+                      "updated_at": "2026-09-24T16:01:00Z",
+                      "expires_at": "2026-09-24T16:02:00Z",
+                      "model": "jev-1.13.0",
+                      "rubric_version": "cfde-support-v1",
+                      "reference_generation_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c",
+                      "result": {
+                        "verdict": "yes",
+                        "probability_yes": 0.56,
+                        "probability_no": 0.43,
+                        "confidence": 0.48,
+                        "main_blocker": "weak_relevance",
+                        "relationship_support": {
+                          "gene_gene_set": 0.65,
+                          "gene_mechanism": 0.54,
+                          "gene_set_mechanism": 0.58
+                        },
+                        "calibration": "not_calibrated"
+                      },
+                      "coverage": {
+                        "factor_count": 1,
+                        "gene_loading_count": 50,
+                        "gene_set_loading_count": 50,
+                        "unique_gene_set_count": 50,
+                        "missing": [],
+                        "truncations": [],
+                        "complete": true
+                      },
+                      "error": null,
+                      "stale": false
+                    }
+                  },
+                  "failed_oversized_input": {
+                    "summary": "Failed oversized input",
+                    "value": {
+                      "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+                      "draft_id": "22222222-2222-4222-8222-222222222222",
+                      "draft_version": 2,
+                      "composer_sha256": "55d28ec08ebf555b727f12cc46022ab363fd09f35a48b7219d4b2136ec41d81e",
+                      "status": "failed",
+                      "created_at": "2026-09-24T16:00:00Z",
+                      "updated_at": "2026-09-24T16:01:00Z",
+                      "expires_at": "2026-09-24T16:02:00Z",
+                      "model": "jev-1.13.0",
+                      "rubric_version": "cfde-support-v1",
+                      "reference_generation_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c",
+                      "result": null,
+                      "coverage": {
+                        "factor_count": 1,
+                        "gene_loading_count": 50,
+                        "gene_set_loading_count": 50,
+                        "unique_gene_set_count": 50,
+                        "missing": [
+                          "Synthetic example: a pinned GeneSet definition is unavailable."
+                        ],
+                        "truncations": [
+                          {
+                            "source": "user_inputs/context",
+                            "included_chars": 2000,
+                            "total_chars": 2400
+                          }
+                        ],
+                        "complete": false
+                      },
+                      "error": {
+                        "code": "CFDE_ASSESSMENT_TOO_LARGE",
+                        "detail": "These inputs exceed the assessment size limit. Use fewer mechanisms or shorter context; the research run remains available.",
+                        "retryable": false
+                      },
+                      "stale": false
+                    }
+                  },
+                  "interrupted": {
+                    "summary": "Interrupted",
+                    "value": {
+                      "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+                      "draft_id": "22222222-2222-4222-8222-222222222222",
+                      "draft_version": 2,
+                      "composer_sha256": "55d28ec08ebf555b727f12cc46022ab363fd09f35a48b7219d4b2136ec41d81e",
+                      "status": "interrupted",
+                      "created_at": "2026-09-24T16:00:00Z",
+                      "updated_at": "2026-09-24T16:00:00Z",
+                      "expires_at": "2026-09-24T16:02:00Z",
+                      "model": "jev-1.13.0",
+                      "rubric_version": "cfde-support-v1",
+                      "reference_generation_id": null,
+                      "result": null,
+                      "coverage": null,
+                      "error": {
+                        "code": "CFDE_ASSESSMENT_INTERRUPTED",
+                        "detail": "This check did not finish. Request another assessment to try again.",
+                        "retryable": true
+                      },
+                      "stale": false
+                    }
+                  },
+                  "stale_prediction": {
+                    "summary": "Stale prediction",
+                    "value": {
+                      "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+                      "draft_id": "22222222-2222-4222-8222-222222222222",
+                      "draft_version": 2,
+                      "composer_sha256": "55d28ec08ebf555b727f12cc46022ab363fd09f35a48b7219d4b2136ec41d81e",
+                      "status": "succeeded",
+                      "created_at": "2026-09-24T16:00:00Z",
+                      "updated_at": "2026-09-24T16:01:00Z",
+                      "expires_at": "2026-09-24T16:02:00Z",
+                      "model": "jev-1.13.0",
+                      "rubric_version": "cfde-support-v1",
+                      "reference_generation_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c",
+                      "result": {
+                        "verdict": "yes",
+                        "probability_yes": 0.56,
+                        "probability_no": 0.43,
+                        "confidence": 0.48,
+                        "main_blocker": "weak_relevance",
+                        "relationship_support": {
+                          "gene_gene_set": 0.65,
+                          "gene_mechanism": 0.54,
+                          "gene_set_mechanism": 0.58
+                        },
+                        "calibration": "not_calibrated"
+                      },
+                      "coverage": {
+                        "factor_count": 1,
+                        "gene_loading_count": 50,
+                        "gene_set_loading_count": 50,
+                        "unique_gene_set_count": 50,
+                        "missing": [],
+                        "truncations": [],
+                        "complete": true
+                      },
+                      "error": null,
+                      "stale": true
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "description": "Correlation ID for this HTTP request.",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              },
+              "Vary": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "Authorization"
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication Required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "authentication_required": {
+                    "summary": "Authentication required",
+                    "value": {
+                      "type": "urn:reveal:problem:authentication-required",
+                      "title": "Authentication Required",
+                      "status": 401,
+                      "code": "AUTHENTICATION_REQUIRED",
+                      "detail": "A valid trusted-gateway API assertion is required.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              },
+              "Vary": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "Authorization"
+              }
+            }
+          },
+          "403": {
+            "description": "Access denied.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "access_denied": {
+                    "summary": "Access denied",
+                    "value": {
+                      "type": "urn:reveal:problem:access-denied",
+                      "title": "Access Denied",
+                      "status": 403,
+                      "code": "ACCESS_DENIED",
+                      "detail": "This principal cannot access the requested assessment.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              },
+              "Vary": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "Authorization"
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "not_found": {
+                    "summary": "Not found",
+                    "value": {
+                      "type": "urn:reveal:problem:not-found",
+                      "title": "Not Found",
+                      "status": 404,
+                      "code": "NOT_FOUND",
+                      "detail": "No accessible record exists for the supplied identifier or exact revision.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              },
+              "Vary": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "Authorization"
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid Input",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "invalid_input": {
+                    "summary": "Invalid input",
+                    "value": {
+                      "type": "urn:reveal:problem:invalid-input",
+                      "title": "Invalid Input",
+                      "status": 422,
+                      "code": "INVALID_INPUT",
+                      "detail": "The request does not satisfy the operation contract.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false,
+                      "field_errors": [
+                        {
+                          "pointer": "/inquiry",
+                          "message": "A valid DAPPER inquiry is required."
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              },
+              "Vary": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "Authorization"
+              }
+            }
+          },
+          "503": {
+            "description": "Dependency Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "dependency_unavailable": {
+                    "summary": "Dependency unavailable",
+                    "value": {
+                      "type": "urn:reveal:problem:dependency-unavailable",
+                      "title": "Dependency Unavailable",
+                      "status": 503,
+                      "code": "DEPENDENCY_UNAVAILABLE",
+                      "detail": "A required dependency is temporarily unavailable; no replacement ranking or scientific result was fabricated.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": true
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              },
+              "Vary": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "Authorization"
+              }
+            }
+          },
+          "410": {
+            "description": "Temporary editor expired.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "editor_expired": {
+                    "summary": "Editor expired",
+                    "value": {
+                      "type": "urn:reveal:problem:editor-expired",
+                      "title": "Editor Expired",
+                      "status": 410,
+                      "code": "EDITOR_EXPIRED",
+                      "detail": "This temporary editor expired. Open the knowledge gap to start again.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              },
+              "Vary": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "Authorization"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApplicationBearer": []
+          }
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "label": "request",
+            "source": "curl -X GET https://api.reveal.example.org/v1/drafts/22222222-2222-4222-8222-222222222222/cfde-assessments/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
+          }
+        ]
+      }
     }
   },
   "components": {
@@ -63017,6 +64177,360 @@
           "page"
         ],
         "additionalProperties": false
+      },
+      "CfdeAssessmentInput": {
+        "type": "object",
+        "properties": {
+          "draft_version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "composer": {
+            "$ref": "#/components/schemas/Composer"
+          }
+        },
+        "required": [
+          "draft_version",
+          "composer"
+        ],
+        "additionalProperties": false,
+        "description": "Assess the current composer, including unsaved edits, against an owned draft revision. This request neither saves the draft nor submits research. Caller-supplied owners, models, probabilities, evidence or administrative authority are not accepted."
+      },
+      "CfdeAssessmentResult": {
+        "type": "object",
+        "properties": {
+          "verdict": {
+            "type": "string",
+            "enum": [
+              "yes",
+              "no"
+            ]
+          },
+          "probability_yes": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "probability_no": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Separate reported rubric confidence, not the yes probability."
+          },
+          "main_blocker": {
+            "type": "string",
+            "enum": [
+              "none",
+              "weak_relevance",
+              "missing_cfde_evidence",
+              "wrong_data_type",
+              "species_or_context_mismatch",
+              "incomplete_inputs",
+              "unsupported_inference"
+            ]
+          },
+          "relationship_support": {
+            "type": "object",
+            "properties": {
+              "gene_gene_set": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "gene_mechanism": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "gene_set_mechanism": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              }
+            },
+            "required": [
+              "gene_gene_set",
+              "gene_mechanism",
+              "gene_set_mechanism"
+            ],
+            "additionalProperties": false
+          },
+          "calibration": {
+            "type": "string",
+            "const": "not_calibrated"
+          }
+        },
+        "required": [
+          "verdict",
+          "probability_yes",
+          "probability_no",
+          "confidence",
+          "main_blocker",
+          "relationship_support",
+          "calibration"
+        ],
+        "additionalProperties": false,
+        "description": "Advisory model prediction of whether the scoped CFDE evidence could support at least one responsible, scientifically supported relationship relevant to the selected question. Neither all three relationship categories nor complete resolution of the knowledge gap is required. Choice yes/no likelihoods retain provider values without renormalizing rounded mass (for example, 0.56 plus 0.43). These values are not calibrated success rates. The three relationship-support scores and reported confidence are separate rubric judgments. A prediction is not scientific evidence, a supported claim, validation or permission to publish. Errors and unavailable evidence must never be converted into a no verdict."
+      },
+      "CfdeAssessmentCoverage": {
+        "type": "object",
+        "properties": {
+          "factor_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "gene_loading_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "gene_set_loading_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "unique_gene_set_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "missing": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "truncations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "source": {
+                  "type": "string"
+                },
+                "included_chars": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "total_chars": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "source",
+                "included_chars",
+                "total_chars"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "complete": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "factor_count",
+          "gene_loading_count",
+          "gene_set_loading_count",
+          "unique_gene_set_count",
+          "missing",
+          "truncations",
+          "complete"
+        ],
+        "additionalProperties": false,
+        "description": "Counts and explicit omissions for this bounded assessment input. Each selected factor uses its exact pinned top 50 gene and top 50 GeneSet loadings, where available, with bounded context excerpts. The provider receives a simple scientific projection of names, loadings, source labels and context. Exact source identities, hashes, definitions and provenance remain in the server-retained pinned audit state rather than the model payload. Complete means the requested bounded input was available; it does not claim complete biological or CFDE coverage. Oversized input fails explicitly instead of silently dropping evidence or returning a no verdict."
+      },
+      "CfdeAssessmentError": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "retryable": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "retryable"
+        ],
+        "additionalProperties": false,
+        "description": "Operational failure only. Retrying requires another explicit assessment request; polling never retries a model call."
+      },
+      "CfdeAssessment": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "draft_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "draft_version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "composer_sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "preparing",
+              "assessing",
+              "succeeded",
+              "failed",
+              "interrupted"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Creation time of this owner-scoped assessment receipt."
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Original forecast update time, preserved when a cached forecast is reused; it can precede this receipt creation."
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Underlying operation deadline, preserved on shared or completed forecasts; not the cache retention deadline."
+          },
+          "model": {
+            "type": "string"
+          },
+          "rubric_version": {
+            "type": "string"
+          },
+          "reference_generation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CfdeAssessmentResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "coverage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CfdeAssessmentCoverage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CfdeAssessmentError"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "stale": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "draft_id",
+          "draft_version",
+          "composer_sha256",
+          "status",
+          "created_at",
+          "updated_at",
+          "expires_at",
+          "model",
+          "rubric_version",
+          "reference_generation_id",
+          "result",
+          "coverage",
+          "error",
+          "stale"
+        ],
+        "additionalProperties": false,
+        "description": "Owner-scoped, expiring advisory assessment of one exact composer. reference_generation_id can be null during preparation; the exact source generation is pinned when asynchronous source preparation completes. No Job, ResearchRequest, ScientificAccount or exploration outcome is created. Every owner receives a separate assessment UUID bound to their own draft revision and composer hash. Default inputs with no researcher notes or uploads may share the underlying forecast; no other owner, draft or assessment identity is exposed. expires_at is the operation deadline, not deletion of a completed prediction. A stale result remains inspectable but should not be shown as the current editor assessment. stale reports a changed saved draft revision or active reference generation; clients must also compare composer_sha256 with current unsaved edits before displaying a current prediction. Preparing and assessing have no prediction; failed and interrupted preserve an explicit error. The operation deadline is at most 120 seconds; interrupted or restarted work needs explicit user retry and is never automatically billed again.",
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "const": "succeeded"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "result": {
+                  "$ref": "#/components/schemas/CfdeAssessmentResult"
+                },
+                "error": {
+                  "type": "null"
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "result": {
+                  "type": "null"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "enum": [
+                    "failed",
+                    "interrupted"
+                  ]
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "error": {
+                  "$ref": "#/components/schemas/CfdeAssessmentError"
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "error": {
+                  "type": "null"
+                }
+              }
+            }
+          }
+        ]
       }
     }
   },

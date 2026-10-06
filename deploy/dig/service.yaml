@@ -105,6 +105,8 @@ qa:
     EMBEDDING_SERVICE_API_KEY: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-qa-uiJnVi:EMBEDDING_SERVICE_API_KEY::'
     UPSTASH_BOX_API_KEY: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-qa-uiJnVi:UPSTASH_BOX_API_KEY::'
     ANTHROPIC_API_KEY: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-qa-uiJnVi:ANTHROPIC_API_KEY::'
+    # The pre-run CFDE estimate is enabled only on QA; keep this backend-only.
+    TYPESAFE_API_KEY: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-qa-uiJnVi:TYPESAFE_API_KEY::'
     REVEAL_GATEWAY_SECRET: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-qa-uiJnVi:REVEAL_GATEWAY_SECRET::'
     REVEAL_GATEWAY_SERVICE_TOKEN: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-qa-uiJnVi:REVEAL_GATEWAY_SERVICE_TOKEN::'
     # Optional paired fields: an absent key is represented by two empty strings.

@@ -1,11 +1,14 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
+import { CfdeEstimateRing } from "./CfdeAssessmentView";
+import { assessmentSupportLabel, type CfdeAssessment } from "../lib/cfde-assessment";
 import "./research-mode-menu.css";
 
-export function ResearchModeMenu({ disabled, onSelect }: {
+export function ResearchModeMenu({ disabled, onSelect, assessment, assessing = false }: {
   disabled: boolean;
   onSelect: (mode: "online" | "local") => void;
+  assessment?: CfdeAssessment | null; assessing?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const id = useId();
@@ -39,14 +42,16 @@ export function ResearchModeMenu({ disabled, onSelect }: {
   }}>
     <button type="button" className="gap-submit" ref={trigger} id={`${id}-trigger`}
       disabled={disabled} aria-haspopup="menu" aria-expanded={visible} aria-controls={visible ? id : undefined}
+      aria-describedby={assessment?.result || assessing ? `${id}-estimate` : undefined}
       onClick={() => { initialFocus.current = 0; setOpen(!visible); }}
       onKeyDown={event => {
         if (event.key === "ArrowDown" || event.key === "ArrowUp") {
           event.preventDefault(); initialFocus.current = event.key === "ArrowUp" ? 1 : 0; setOpen(true);
         }
       }}>
-      <span>Let’s close this gap</span><span className="send" aria-hidden="true"><span>↑</span></span>
+      <span>Let’s close this gap</span><span className="send cfde-estimate-arrow" aria-hidden="true"><span>↑</span>{(assessing || assessment?.result) && <CfdeEstimateRing loading={assessing} probability={assessment?.result?.probability_yes} />}</span>
     </button>
+    {(assessing || assessment?.result) && <span className="sr-only" id={`${id}-estimate`}>{assessing ? "Assessing likely CFDE support" : assessmentSupportLabel(assessment!.result!.probability_yes)}</span>}
     {visible && <div className="research-mode-options" id={id} ref={menu} role="menu" aria-labelledby={`${id}-trigger`}
       onKeyDown={event => {
         if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(true); return; }

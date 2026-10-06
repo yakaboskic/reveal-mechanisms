@@ -1499,6 +1499,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/drafts/{draft_id}/cfde-assessments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Assess CFDE support before research
+         * @description Requires a valid existing registered or anonymous workspace principal that owns the draft. An administrator science-read key cannot authorize this operation. This advisory prediction never launches research or creates scientific records and is not a prerequisite for local or hosted research. CFDE grounding remains encouraged, not mandatory. Predictions must not be cited as evidence or used as scientific validation. All response and error bodies are private and no-store, with Vary: Authorization. Examples are synthetic contract fixtures; no model or scientific source was queried. Create an assessment receipt for the supplied composer without saving its unsaved edits. The editor sends this POST automatically after the selected gap and mechanism suggestions are ready and edits have settled for 1.5 seconds, with at most one automatic attempt per input binding. Failed or interrupted assessments require an explicit retry; the editor does not automatically resubmit the same inputs after failure. Only this POST can dispatch assessment work; reading a draft or polling an assessment cannot start a provider call. The trusted service selects the model and rubric, retains exact pinned factor and GeneSet source state for audit, and makes the assessment asynchronously from a simple scientific projection of the question, selected factors, names, loadings, source labels and researcher context. The model does not receive DAPPER identifiers, hashes, provenance records or audit encoding rules. The operation is bounded by a 120-second deadline and an owner daily quota. Source preparation and any cold catalog load happen asynchronously after acceptance. Public default inputs share forecasts when the source gap, selected factor references, reference model and selected graphs match and no researcher direction, context, hypotheses or uploads are present. Identical concurrent defaults share pending work; successful default forecasts can be reused for up to seven days, unless the active reference generation, assessment model or rubric changes. Each owner still receives a separate owned assessment UUID and independent draft revision binding. Composers containing notes or uploads use private caching only. No other owner identity, assessment ID or private context is exposed. A changed body with the same Idempotency-Key returns 409. Failed or interrupted work needs an explicit retry with a new key; retrying the original key recovers the original result. Process restart never automatically repeats provider calls.
+         */
+        post: operations["createCfdeAssessment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/drafts/{draft_id}/cfde-assessments/{assessment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read a CFDE support assessment
+         * @description Requires a valid existing registered or anonymous workspace principal that owns the draft. An administrator science-read key cannot authorize this operation. This advisory prediction never launches research or creates scientific records and is not a prerequisite for local or hosted research. CFDE grounding remains encouraged, not mandatory. Predictions must not be cited as evidence or used as scientific validation. All response and error bodies are private and no-store, with Vary: Authorization. Examples are synthetic contract fixtures; no model or scientific source was queried. Read only this owner/draft-bound assessment. Polling makes no remote calls and never starts or retries preparation, model work or research. No result after failure is replaced by a no verdict. Pending work past its deadline is reported as interrupted; completed results remain readable. Shared work is projected through this owner receipt: created_at is this receipt creation, updated_at remains the original forecast update, and expires_at remains its operation deadline. An unavailable assessment returns 404; inspect stale input pins before displaying a saved prediction for the current editor.
+         */
+        get: operations["getCfdeAssessment"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -8776,6 +8816,82 @@ export interface components {
             items: components["schemas"]["AdminExplorationSummary"][];
             page: components["schemas"]["Page"];
         };
+        /** @description Assess the current composer, including unsaved edits, against an owned draft revision. This request neither saves the draft nor submits research. Caller-supplied owners, models, probabilities, evidence or administrative authority are not accepted. */
+        CfdeAssessmentInput: {
+            draft_version: number;
+            composer: components["schemas"]["Composer"];
+        };
+        /** @description Advisory model prediction of whether the scoped CFDE evidence could support at least one responsible, scientifically supported relationship relevant to the selected question. Neither all three relationship categories nor complete resolution of the knowledge gap is required. Choice yes/no likelihoods retain provider values without renormalizing rounded mass (for example, 0.56 plus 0.43). These values are not calibrated success rates. The three relationship-support scores and reported confidence are separate rubric judgments. A prediction is not scientific evidence, a supported claim, validation or permission to publish. Errors and unavailable evidence must never be converted into a no verdict. */
+        CfdeAssessmentResult: {
+            /** @enum {string} */
+            verdict: "yes" | "no";
+            probability_yes: number;
+            probability_no: number;
+            /** @description Separate reported rubric confidence, not the yes probability. */
+            confidence: number;
+            /** @enum {string} */
+            main_blocker: "none" | "weak_relevance" | "missing_cfde_evidence" | "wrong_data_type" | "species_or_context_mismatch" | "incomplete_inputs" | "unsupported_inference";
+            relationship_support: {
+                gene_gene_set: number;
+                gene_mechanism: number;
+                gene_set_mechanism: number;
+            };
+            /** @constant */
+            calibration: "not_calibrated";
+        };
+        /** @description Counts and explicit omissions for this bounded assessment input. Each selected factor uses its exact pinned top 50 gene and top 50 GeneSet loadings, where available, with bounded context excerpts. The provider receives a simple scientific projection of names, loadings, source labels and context. Exact source identities, hashes, definitions and provenance remain in the server-retained pinned audit state rather than the model payload. Complete means the requested bounded input was available; it does not claim complete biological or CFDE coverage. Oversized input fails explicitly instead of silently dropping evidence or returning a no verdict. */
+        CfdeAssessmentCoverage: {
+            factor_count: number;
+            gene_loading_count: number;
+            gene_set_loading_count: number;
+            unique_gene_set_count: number;
+            missing: string[];
+            truncations: {
+                source: string;
+                included_chars: number;
+                total_chars: number;
+            }[];
+            complete: boolean;
+        };
+        /** @description Operational failure only. Retrying requires another explicit assessment request; polling never retries a model call. */
+        CfdeAssessmentError: {
+            code: string;
+            detail: string;
+            retryable: boolean;
+        };
+        /** @description Owner-scoped, expiring advisory assessment of one exact composer. reference_generation_id can be null during preparation; the exact source generation is pinned when asynchronous source preparation completes. No Job, ResearchRequest, ScientificAccount or exploration outcome is created. Every owner receives a separate assessment UUID bound to their own draft revision and composer hash. Default inputs with no researcher notes or uploads may share the underlying forecast; no other owner, draft or assessment identity is exposed. expires_at is the operation deadline, not deletion of a completed prediction. A stale result remains inspectable but should not be shown as the current editor assessment. stale reports a changed saved draft revision or active reference generation; clients must also compare composer_sha256 with current unsaved edits before displaying a current prediction. Preparing and assessing have no prediction; failed and interrupted preserve an explicit error. The operation deadline is at most 120 seconds; interrupted or restarted work needs explicit user retry and is never automatically billed again. */
+        CfdeAssessment: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            draft_id: string;
+            draft_version: number;
+            composer_sha256: string;
+            /** @enum {string} */
+            status: "preparing" | "assessing" | "succeeded" | "failed" | "interrupted";
+            /**
+             * Format: date-time
+             * @description Creation time of this owner-scoped assessment receipt.
+             */
+            created_at: string;
+            /**
+             * Format: date-time
+             * @description Original forecast update time, preserved when a cached forecast is reused; it can precede this receipt creation.
+             */
+            updated_at: string;
+            /**
+             * Format: date-time
+             * @description Underlying operation deadline, preserved on shared or completed forecasts; not the cache retention deadline.
+             */
+            expires_at: string;
+            model: string;
+            rubric_version: string;
+            reference_generation_id: string | null;
+            result: components["schemas"]["CfdeAssessmentResult"] | null;
+            coverage: components["schemas"]["CfdeAssessmentCoverage"] | null;
+            error: components["schemas"]["CfdeAssessmentError"] | null;
+            stale: boolean;
+        } & (unknown & unknown);
     };
     responses: never;
     parameters: never;
@@ -14950,6 +15066,283 @@ export interface operations {
                 };
             };
             /** @description Admin Read Api Key Configuration Invalid */
+            503: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    createCfdeAssessment: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description Unique per caller and operation for at least 7 days. Same key and same canonical body replay the original accepted response; changed body returns 409 IDEMPOTENCY_CONFLICT. Compare idempotency before draft-version checks on retries.
+                 * @example 66666666-6666-4666-8666-666666666666
+                 */
+                "Idempotency-Key": string;
+            };
+            path: {
+                /** @example 22222222-2222-4222-8222-222222222222 */
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CfdeAssessmentInput"];
+            };
+        };
+        responses: {
+            /** @description Assessment accepted or existing assessment reused; poll Location. */
+            202: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    /**
+                     * @description Relative URL of the created resource.
+                     * @example /v1/drafts/22222222-2222-4222-8222-222222222222/cfde-assessments/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb
+                     */
+                    Location?: string;
+                    /**
+                     * @description Suggested polling delay in seconds.
+                     * @example 2
+                     */
+                    "Retry-After"?: number;
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CfdeAssessment"];
+                };
+            };
+            /** @description Assessment idempotency key required. */
+            400: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Draft revision or idempotency conflict. */
+            409: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Temporary editor expired. */
+            410: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid Input */
+            422: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate Limited */
+            429: {
+                headers: {
+                    /** @example 30 */
+                    "Retry-After"?: number;
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dependency Unavailable */
+            503: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getCfdeAssessment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @example 22222222-2222-4222-8222-222222222222 */
+                draft_id: string;
+                /** @example bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb */
+                assessment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CfdeAssessment"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Temporary editor expired. */
+            410: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid Input */
+            422: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dependency Unavailable */
             503: {
                 headers: {
                     /** @example private, no-store */

@@ -478,8 +478,28 @@ Use a separately provisioned administrator read key to inspect saved scientific 
 - Stored coverage, hashes and source locators remain exact. Artifact download URLs are null; these reads never re-query scientific sources. All responses are private and no-store.
 - Cursors bind credential, resource, visibility and collection revision. Restart pagination if any of those change.
 
+### Assess CFDE support before research
+
+Automatically request an advisory prediction once the selected gap and mechanism suggestions are ready and current composer edits have settled for 1.5 seconds.
+
+**Request:** Owned registered or anonymous workspace session, exact draft revision, complete Composer and Idempotency-Key.
+
+**Response:** Asynchronous assessment state; distinct yes/no likelihood, reported confidence, three relationship-support scores, coverage and blockers.
+
+- `POST /v1/drafts/{draft_id}/cfde-assessments` — [current composer request/response](examples/createCfdeAssessment.current_composer.json)
+- `GET /v1/drafts/{draft_id}/cfde-assessments/{assessment_id}` — [request request/response](examples/getCfdeAssessment.request.json)
+
+- No draft save, scientific record or research job is created. The automatic advisory check does not block local or hosted research; CFDE grounding is encouraged, not mandatory.
+- The editor sends at most one automatic POST per input binding. Failure or interruption requires an explicit retry; reading a draft, polling an assessment and restarting the service never dispatch provider work.
+- The service retains exact pinned top-50 gene and GeneSet loadings, bounded source context and provenance for audit. Jev receives a simple projection of names, loadings, source labels and researcher context; source IDs, hashes and provenance graphs stay server-side. Missing input remains unknown. Oversized input is an operational failure, never a no prediction.
+- Choice likelihoods preserve provider values and rounded probability mass; reported confidence and relationship-support scores remain separate and uncalibrated. Predictions are not scientific evidence or validation.
+- Default inputs with the same source gap, selected factor references, reference model and selected graphs share forecasts only when researcher direction, context, hypotheses and uploads are absent. Concurrent requests share pending work; successful forecasts are reused for up to seven days unless the reference generation, assessment model or rubric changes. Each owner receives a separate assessment UUID and draft revision binding. Notes and uploads use private caching only.
+- Shared forecasts expose no other owner, draft or assessment IDs. created_at identifies the current owner receipt; updated_at and expires_at retain the original forecast update and operation deadline. Responses remain authorized and private/no-store.
+- Idempotency keys recover the original assessment and reject changed bodies. Failed or interrupted work is never a no prediction; explicit retries use a new key. Polling and process restart never repeat provider calls automatically. An operation has a 120-second deadline, and owner daily quotas bound new model work.
+- Changed inputs invalidate the displayed assessment; preserve stale results only as labeled historical predictions. Owner authorization and private no-store responses apply to both operations.
+
 ## Evidence and validation
 
 Requests/responses are taken from the existing validated OpenAPI exchange library. The CADinT2D analysis/paragraph sequence is internally linked. The CAD source-selected gap now frames the request and account. The evidence package is a separate captured input; the authored account is not its validated agent output. Semantic scores and agent outputs remain illustrative fixtures.
 
-The mapping covers 85 operations and all 107 exchanges. OpenAPI SHA-256: `e8ee80dd0c090f5bf4ca656117f5331476d5ed7ad3ab9db71913ddef27c297cb`. No endpoints or payloads were changed to build this diagram.
+The mapping covers 87 operations and all 109 exchanges. OpenAPI SHA-256: `1cb922ecfb7cdd18a9137447daeb6361c542bd5670204f76b4614b1d6d092495`. No endpoints or payloads were changed to build this diagram.

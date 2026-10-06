@@ -19,7 +19,8 @@ def prepared():
         'REVEAL_MYSQL_PASSWORD': 'db-secret', 'AWS_ACCESS_KEY_ID': 'never-copy',
         'AWS_SECRET_ACCESS_KEY': 'never-copy', 'AWS_PROFILE': 'never-copy',
         'AWS_EC2_METADATA_DISABLED': 'true', 'REVEAL_S3_PREFIX': 'local/',
-        'REVEAL_APPLICATION_TABLE_PREFIX': 'wrong', 'UPSTASH_BOX_API_KEY': 'backend-only'}
+        'REVEAL_APPLICATION_TABLE_PREFIX': 'wrong', 'UPSTASH_BOX_API_KEY': 'backend-only',
+        'TYPESAFE_API_KEY': 'local-provider-key-not-enabled-in-production'}
     local.update(REVEAL_API_KEY_SHA256='a'*64, REVEAL_API_KEY_USER_ID='11111111-1111-4111-8111-111111111111')
     local.update(REVEAL_ADMIN_READ_API_KEY_SHA256='b'*64,
                  REVEAL_ADMIN_READ_API_KEY_ID='22222222-2222-4222-8222-222222222222')
@@ -40,6 +41,7 @@ def test_cloud_handoff_preserves_database_and_identity_without_copying_aws_crede
     assert backend['REVEAL_S3_READ_PREFIXES'] == 'local/'
     assert not {'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_PROFILE', 'AWS_EC2_METADATA_DISABLED'} & backend.keys()
     assert backend['UPSTASH_BOX_API_KEY'] == 'backend-only'
+    assert 'TYPESAFE_API_KEY' not in backend and 'TYPESAFE_API_KEY' not in frontend
     assert backend['REVEAL_API_KEY_SHA256'] == backend['REVEAL_API_KEY_USER_ID'] == ''
     assert 'REVEAL_API_KEY_SHA256' not in frontend and 'REVEAL_API_KEY_USER_ID' not in frontend
     assert backend['REVEAL_ADMIN_READ_API_KEY_SHA256'] == backend['REVEAL_ADMIN_READ_API_KEY_ID'] == ''

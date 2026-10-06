@@ -129,7 +129,12 @@ class Transaction:
                     destination=digest([target,identity,sha256(canonical_json(data['payload']))])
                 if not self.get(kind,destination): self.put(kind,destination,target,data)
                 self.remove(kind,row['id'])
-        self.execute('UPDATE reveal_records SET owner_id=%s WHERE owner_id=%s AND kind NOT IN (%s,%s,%s,%s)', (target, source, 'principal', 'identity', 'workspace_event', 'workspace_cursor'))
+        # Shared forecast versions/indexes are service authority, never personal
+        # workspace state, even if a malformed row has a user owner.
+        excluded = ('principal', 'identity', 'workspace_event', 'workspace_cursor',
+                    'cfde_assessment_shared', 'cfde_assessment_shared_cache')
+        self.execute('UPDATE reveal_records SET owner_id=%s WHERE owner_id=%s AND kind NOT IN (' +
+                     ','.join(['%s'] * len(excluded)) + ')', (target, source, *excluded))
 
 class Repository:
     def __init__(self, sqlite_path=None, table_prefix=None):

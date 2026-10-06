@@ -31,13 +31,14 @@ def dapper_snapshot_for_pin(pin, *, root=ROOT):
 def setting(name, default=None):
     return os.environ.get(name, default)
 
-def mysql_connection():
+def mysql_connection(*, timeout_seconds=None):
     from .mysql_database import connect
     if not setting('REVEAL_MYSQL_PASSWORD'):
         raise RuntimeError('REVEAL_MYSQL_PASSWORD is required')
     return connect(host=setting('REVEAL_MYSQL_HOST', 'aurora-giant-bioindex.cluster-cxrzznxifeib.us-east-1.rds.amazonaws.com'),
         port=int(setting('REVEAL_MYSQL_PORT', '3306')), user=setting('REVEAL_MYSQL_USER', 'cyaka'),
-        database=setting('REVEAL_MYSQL_DATABASE', 'cyaka_reveal_mechanisms'), ca_file=setting('REVEAL_MYSQL_CA_FILE') or None)
+        database=setting('REVEAL_MYSQL_DATABASE', 'cyaka_reveal_mechanisms'), ca_file=setting('REVEAL_MYSQL_CA_FILE') or None,
+        **({'timeout_seconds': timeout_seconds} if timeout_seconds is not None else {}))
 
 
 _application_pool = None

@@ -25,6 +25,7 @@ Updated October 1, 2026. Start with the [Workflow runtime](durable-workflow-runt
 - [Account publication and gap discovery](account-publication.md)
 - [Saved explorations and literature search](exploration-outcomes.md)
 - [Explicit draft saving, private uploads, and agent inputs](research-inputs.md)
+- [Automatic CFDE support assessment and shared default-input cache](cfde-assessment.md)
 - [Canonical scientific account fixture and local seeding](../data/fixtures/bubble-account-v1/README.md)
 - [Admin telemetry](admin-telemetry.md)
 - [Research-agent output and worker acceptance boundary](agent-output-contract.md)

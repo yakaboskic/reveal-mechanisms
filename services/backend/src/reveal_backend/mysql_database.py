@@ -14,13 +14,16 @@ def validate_database(name):
         raise ValueError('Database must be a simple identifier with literal cyaka_ prefix')
 
 
-def connect(*, host=DEFAULT_HOST, port=3306, user='cyaka', database='cyaka_reveal_mechanisms', ca_file=None):
+def connect(*, host=DEFAULT_HOST, port=3306, user='cyaka', database='cyaka_reveal_mechanisms', ca_file=None,
+            timeout_seconds=None):
     import pymysql
     validate_database(database)
+    if timeout_seconds is not None and timeout_seconds <= 0: raise ValueError('Connection deadline elapsed')
+    timeout = min(120, timeout_seconds) if timeout_seconds is not None else 120
     password = os.getenv('REVEAL_MYSQL_PASSWORD') or getpass.getpass('MySQL password (not saved): ')
     connection = pymysql.connect(host=host, port=port, user=user, password=password, database=database,
         ssl=ssl.create_default_context(cafile=ca_file), charset='utf8mb4', autocommit=False,
-        binary_prefix=True, connect_timeout=15, read_timeout=120, write_timeout=120)
+        binary_prefix=True, connect_timeout=min(15, timeout), read_timeout=timeout, write_timeout=timeout)
     try:
         with connection.cursor() as cursor:
             cursor.execute("SHOW SESSION STATUS LIKE 'Ssl_cipher'")
@@ -67,4 +70,3 @@ def insert_batch(cursor, table, columns, batch):
     cursor.execute('SHOW WARNINGS')
     if cursor.fetchall():
         raise ValueError(f'MySQL conversion warning inserting {table}; transaction rolled back')
-
