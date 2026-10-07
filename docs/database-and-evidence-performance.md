@@ -168,6 +168,10 @@ Cursors for the gap list, gap search and mechanism search bind compact rows
 deep-copying and hashing every matching item, which cut about 105 ms of CPU from
 each gap-list page and about 1.3 seconds from a hybrid mechanism search over
 1,000 semantic candidates. A cursor issued before this change expires once.
+Fuzzy gap search scores each distinct catalog word at most once per query and
+skips words whose difflib upper bounds cannot reach the 0.7 threshold, using a
+word index built with each catalog load (about 35 ms and 14 MB). Results and
+scores are identical; a search takes about 15 ms of CPU instead of 0.3-0.9 s.
 
 Read-only measurements included transaction completion and pool reset:
 

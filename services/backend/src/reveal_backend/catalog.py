@@ -23,6 +23,7 @@ from .repository import Repository, canonical, digest, now
 from .runtime_config import ROOT, CURRENT_DAPPER_SNAPSHOT, setting, mysql_connection
 from .evidence_package import DapperRuntime, canonical_json, sha256
 from .eaggl_embeddings import database_search_index
+from .fuzzy import FuzzyWords
 from .embedding_client import get_embeddings
 from .dismech_embeddings import context_input, load_context_vectors
 from .mapping_identity import POLICY_VERSION, interpreted_mappings, normalize_disease_id
@@ -79,6 +80,10 @@ def factor_key_index(index, rows):
     return index
 
 
+def gap_search_text(gap):
+    return (gap['object']['text']+' '+gap['source']['disease_label']).casefold()
+
+
 def factor_search_text(record):
     """Lexical/fuzzy text: label and source id; KPN factors add the trait name and ids."""
     text = record['cfde_anchor']['label']+' '+record['source_id']
@@ -114,6 +119,7 @@ class Catalog:
         self.refresh_lock, self.lookup_lock = threading.Lock(), threading.Lock()
         self.generation_checked_at = None
         self.active_generation = self.reference_generation_id = self.model = self.generation_record = None
+        self.gap_fuzzy = None  # FuzzyWords over the served gaps' search texts, built with them by _load
         # archive_cache: {archive_id: (checked_at, snapshot|None)}; archive_unavailable_at: when the table was last found missing or empty.
         self.generation_cache, self.archive_cache, self.archive_unavailable_at = {}, {}, None
         # None: no poller (tests, tools); the API polls reference_active every GENERATION_TTL_SECONDS.
@@ -429,6 +435,7 @@ class Catalog:
                 'attachments': linked, 'source_detail': {'source_file': row['source_file'], 'source_pointer': row['source_pointer'], 'payload_sha256': sha256(canonical_json(raw)), 'raw': raw},
                 'scientific_accounts': {'count': 0, 'scope': 'public_exact_gap', 'as_of': now(), 'ranking': 'curated', 'window_days': None}}
             self.gaps[node['id']] = gap; self.by_source[row['id']] = gap
+        self.gap_fuzzy = FuzzyWords([gap_search_text(gap) for gap in self.gaps.values()])
         self.factors, self.factor_legacy = {}, {}
         if kpn: self.kpn_factors(runtime, factor_rows)
         else:
@@ -622,15 +629,22 @@ class Catalog:
         return {'query': query, 'mode': mode, 'corpus_snapshot': corpus,
             'embedding_model': index.run['config']['model'] if semantic else None, 'embedding_revision': self.embedding_run if semantic else None,
             'template_version': 'eaggl-label-v1' if semantic else 'dismech-question-v1', 'score_aggregation': 'maximum_per_context' if semantic else None}
+    def fuzzy_gaps(self, texts):
+        """The fuzzy accelerator for exactly these gap search texts (rebuilt only if the served gaps changed)."""
+        index = self.__dict__.get('gap_fuzzy')
+        if index is None or index.texts != texts: index = self.gap_fuzzy = FuzzyWords(texts)
+        return index
     def search_gaps(self, query, limit=20,mode='fuzzy'):
-        self.load(); words = query.casefold().split()
-        scored = []
-        for gap in self.gaps.values():
-            text = (gap['object']['text']+' '+gap['source']['disease_label']).casefold()
-            score = sum(w in text for w in words)/max(1,len(words)) if words else 1
-            if words and not score and mode=='fuzzy':
-                score = max((SequenceMatcher(None, query.casefold(), word).ratio() for word in text.split()), default=0)
-                if score < 0.7: score = 0
+        self.load(); words = query.casefold().split(); gaps = list(self.gaps.values())
+        texts = [gap_search_text(gap) for gap in gaps] if words else None
+        scored = []; fuzzy = None
+        for index, gap in enumerate(gaps):
+            if not words: scored.append((1, gap)); continue
+            text = texts[index]
+            score = sum(w in text for w in words)/max(1,len(words))
+            if not score and mode=='fuzzy':
+                if fuzzy is None: fuzzy = self.fuzzy_gaps(texts).scorer(query)
+                score = fuzzy(index)
             if score: scored.append((score, gap))
         scored.sort(key=lambda r: (-r[0], r[1]['source']['source_id']))
         return [{'gap': g, 'ranking': {'value': s, 'metric': 'fuzzy_similarity' if mode=='fuzzy' else 'lexical_rank', 'rank': i+1}} for i,(s,g) in enumerate(scored[:limit])]
