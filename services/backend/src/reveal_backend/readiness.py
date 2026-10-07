@@ -50,8 +50,8 @@ class ReadinessMonitor:
             database = facts['database'] or repo.readiness()  # sessions not opened by mysql_database.connect
             binding = readiness_binding(generation, snapshot)
         except Exception as error:
-            with self.lock: self.current = (self.clock(), None, None, None, error)
-            LOGGER.warning('Readiness check failed (%s)', type(error).__name__)
+            with self.lock: previous, self.current = self.current, (self.clock(), None, None, None, error)
+            if previous is None or previous[4] is None: LOGGER.warning('Readiness check failed (%s)', type(error).__name__)
             return
         observe = getattr(catalog, 'observe_pointers', None)
         if observe: observe(generation, snapshot)
