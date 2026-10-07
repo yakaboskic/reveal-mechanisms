@@ -91,10 +91,31 @@ def counted_gap(gap, counts, owner, observed_at):
     }}
 
 
-def count_snapshot(items):
-    """Fresh observation timestamps do not invalidate an otherwise stable page."""
-    result = deepcopy(items)
-    for item in result:
-        gap = item.get('gap', item)
-        gap.get('scientific_accounts', {}).pop('as_of', None)
-    return result
+def resolved_mechanism_count(gap):
+    """Count canonical DisMech Mechanisms, not attachment rows or unresolved labels."""
+    identities=set()
+    for attachment in gap.get('attachments',[]):
+        target=attachment.get('target') or {}
+        identity=target.get('dapper_id','')
+        if (attachment.get('resolution')=='resolved' and target.get('source')=='dismech'
+                and target.get('source_id','').startswith('dismech:') and identity.startswith('dapper:Mechanism.')):
+            identities.add(identity)
+    return len(identities)
+
+
+def gap_snapshot(items, corpus):
+    """Cursor binding for a gap page without copying or hashing catalog payloads.
+
+    Binds the catalog corpus, order and membership, each gap's content ids and every field that ranks or varies
+    per request (account counts, votes, mechanism count, search ranking). Observation time (as_of) is excluded,
+    so a fresh timestamp keeps a page. Catalog gaps are immutable within one load, so the corpus, object id,
+    source revision and payload hash identify their static body.
+    """
+    rows = []
+    for item in items:
+        gap = item.get('gap', item); source = gap.get('source') or {}
+        accounts = {key: value for key, value in (gap.get('scientific_accounts') or {}).items() if key != 'as_of'}
+        rows.append([gap['object']['id'], source.get('source_id'), source.get('source_revision'),
+                     (gap.get('source_detail') or {}).get('payload_sha256'), resolved_mechanism_count(gap),
+                     accounts, gap.get('votes'), item.get('ranking')])
+    return ['gap-snapshot-v2', corpus, rows]

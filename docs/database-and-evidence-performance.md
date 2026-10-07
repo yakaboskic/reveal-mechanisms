@@ -163,6 +163,11 @@ counts only at its canonical key, so ballots re-owned by a workspace transfer
 stay excluded as before. Small target sets, including a vote under the write
 fence, still read their exact keys. A registered browse of the 3,367-gap
 catalog dropped from 2 leases and about 34 round trips to 1 lease and 5.
+Cursors for the gap list, gap search and mechanism search bind compact rows
+(identities, revisions, counts, votes, mechanism counts and ranking) instead of
+deep-copying and hashing every matching item, which cut about 105 ms of CPU from
+each gap-list page and about 1.3 seconds from a hybrid mechanism search over
+1,000 semantic candidates. A cursor issued before this change expires once.
 
 Read-only measurements included transaction completion and pool reset:
 

@@ -20,7 +20,7 @@ from .repository import DatabaseBusy, Repository, now, uid, digest
 from .runtime_config import ROOT, artifacts_root
 from .service_routing import mount_service
 from . import jobs
-from .account_discovery import visible_accounts, counts_by_gap, counted_gap, count_snapshot, by_reference_state
+from .account_discovery import visible_accounts, counts_by_gap, counted_gap, gap_snapshot, by_reference_state, resolved_mechanism_count
 from . import publication
 from . import analysis_outcomes
 from . import reference_generation
@@ -403,17 +403,6 @@ def filter_gaps(items,kind,status,disease_id):
         (not status or (x['source']['status'] or 'UNSPECIFIED')==status) and
         (not disease_id or disease_id in x['object'].get('about_entities',[]))]
 
-def resolved_mechanism_count(gap):
-    """Count canonical DisMech Mechanisms, not attachment rows or unresolved labels."""
-    identities=set()
-    for attachment in gap.get('attachments',[]):
-        target=attachment.get('target') or {}
-        identity=target.get('dapper_id','')
-        if (attachment.get('resolution')=='resolved' and target.get('source')=='dismech'
-                and target.get('source_id','').startswith('dismech:') and identity.startswith('dapper:Mechanism.')):
-            identities.add(identity)
-    return len(identities)
-
 @app.get('/v1/knowledge-gaps/search')
 def search_gaps(request:Request,q: str='', limit: int=20, mode: str='fuzzy',kind:str|None=None,status:str|None=None,cursor:str|None=None,source:str='dismech',disease_id:str|None=None,scope:str='public'):
     if mode not in ('lexical','fuzzy'): raise Problem(503,'SEARCH_MODE_UNAVAILABLE','Knowledge-gap discovery currently supports lexical and fuzzy modes; no semantic gap index is configured.')
@@ -423,7 +412,7 @@ def search_gaps(request:Request,q: str='', limit: int=20, mode: str='fuzzy',kind
     owner,viewer,accounts,values=gap_discovery(request,scope,[item['gap'] for item in items])
     counts=counts_by_gap(accounts); observed=now()
     items=[{**item,'gap':{**counted_gap(item['gap'],counts,owner,observed),'votes':values[('gap',item['gap']['object']['id'])]}} for item in items]
-    return {**page(items,viewer or owner,limit,cursor,digest([q,mode,kind,status,disease_id,scope]),snapshot_items=count_snapshot(items)),'search':catalog.provenance(q,mode)}
+    return {**page(items,viewer or owner,limit,cursor,digest([q,mode,kind,status,disease_id,scope]),snapshot_items=gap_snapshot(items,getattr(catalog,'dismech_import',None))),'search':catalog.provenance(q,mode)}
 
 def optional_identity(tx,request):
     authorization=request.headers.get('authorization')
@@ -462,7 +451,7 @@ def list_gaps(request:Request,limit: int=20,cursor:str|None=None,kind:str|None=N
     items.sort(key=lambda gap:((-gap['votes']['score'],-resolved_mechanism_count(gap),-gap['scientific_accounts']['count'])
         if sort=='votes' else (-gap['scientific_accounts']['count'],-resolved_mechanism_count(gap)))+
         (digest([seed,gap['object']['id']]),gap['source']['source_id'],gap['object']['id']))
-    return page(items,viewer or owner,limit,cursor,digest(['gaps',kind,status,disease_id,scope,sort]),snapshot_items=count_snapshot(items),seed=seed)
+    return page(items,viewer or owner,limit,cursor,digest(['gaps',kind,status,disease_id,scope,sort]),snapshot_items=gap_snapshot(items,getattr(catalog,'dismech_import',None)),seed=seed)
 
 def listing_scope(parts,reference_state):
     """Cursor scope; the default `all` keeps the pre-archive scope digest."""
@@ -550,7 +539,10 @@ def search_mechanisms(q: str='', mode: str='hybrid', limit: int=20,source:str='a
         for rank,item in enumerate(items,1): item['ranking']['rank']=rank
     provenance=catalog.provenance(q,mode,source!='dismech' and mode in ('semantic','hybrid'))
     if source=='all': provenance['corpus_snapshot']=digest([catalog.dismech_import,catalog.mapping_run])
-    return {**page(items,limit=limit,cursor=cursor,scope=digest(['mechanisms',q,mode,source,model])),'search':provenance}
+    # Order, ranking and exact record identities, never the per-item retrieval provenance (up to 1,000 candidate hits each).
+    snapshot=['mechanism-snapshot-v2',provenance,getattr(catalog,'reference_generation_id',None),[[item['record'].get('source'),item['record']['source_id'],
+        item['record'].get('source_revision'),(item['record'].get('object') or {}).get('id'),item['ranking']] for item in items]]
+    return {**page(items,limit=limit,cursor=cursor,scope=digest(['mechanisms',q,mode,source,model]),snapshot_items=snapshot),'search':provenance}
 
 @app.post('/v1/mechanisms/suggest')
 async def suggest(request: Request):
