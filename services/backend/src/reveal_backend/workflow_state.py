@@ -19,8 +19,15 @@ def after(seconds):
 
 
 def create(tx, job, queue):
+    """(Re)dispatch a job's execution, over whatever execution it already has (review retries)."""
     old = tx.get('execution', job['id'])
-    previous = old['data'] if old else {}
+    rows = build(job, queue, old['data'] if old else {})
+    for row in rows: tx.put(*row)
+    return rows[0][3]
+
+
+def build(job, queue, previous):
+    """The execution and workflow_dispatch rows for a job whose prior execution is `previous`; no I/O."""
     reviewing = bool(queue.get('review_source'))
     source = queue.get('review_source') or {}
     authoring_attempt = source.get('attempt', previous.get('authoring_attempt', 1)) if reviewing else 1
@@ -49,13 +56,12 @@ def create(tx, job, queue):
     if reviewing and source.get('cleanup_id'):
         execution.update(cleanup_id=source['cleanup_id'], capture_sha256=source['capture_sha256'])
     queue['attempt'] = execution['authoring_attempt']
-    tx.put('execution', job['id'], job['owner_user_id'], execution)
-    tx.put('workflow_dispatch', job['id'], job['owner_user_id'], {
+    return [('execution', job['id'], job['owner_user_id'], execution),
+            ('workflow_dispatch', job['id'], job['owner_user_id'], {
         'job_id': job['id'], 'namespace': execution['namespace'], 'generation': execution['generation'],
         'dispatch_id': queue['dispatch_id'], 'run_id': 'reveal-' + digest([job['id'], execution['generation']])[:40],
         'published_at': None, 'attempts': 0, 'created_at': now(), 'next_attempt_at': now(),
-    })
-    return execution
+    })]
 
 
 def check(execution, payload):

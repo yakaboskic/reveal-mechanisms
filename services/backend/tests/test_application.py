@@ -361,4 +361,78 @@ class ApplicationTests(unittest.TestCase):
         self.assertEqual({n:frozen['selections'][n]['retrieval'] for n in natives},
                          {n:{'mode':'semantic','hit':{'ranking':{'rank':i+1}}} for i,n in enumerate(natives)})
 
+    def submission(self):
+        """A provisioned user with a saved one-anchor draft, under a stand-in catalog."""
+        root=Path(__file__).resolve().parents[3]
+        composer=json.loads((root/'api/examples/createDraft.question_and_anchor.json').read_text())['request']['body']['composer']
+        gap=next(iter(json.loads((root/'api/examples/getKnowledgeGap.request.json').read_text())['responses']['200']['examples'].values()))
+        factor=next(iter(json.loads((root/'api/examples/getMechanism.request.json').read_text())['responses']['200']['examples'].values()))
+        class Source:
+            dismech_import='dismech'; factors={factor['source_id']:factor}
+            bindings={factor['source_id']:{'reference_generation_id':digest('fixture'),'cfde_node_id':factor['source_id']}}
+            def selected(self,reference): return gap
+            def validate_composer(self,composer,submit=False): return gap
+        patcher=patch.object(api,'catalog',Source()); patcher.start(); self.addCleanup(patcher.stop)
+        user=self.provision()
+        response=self.client.post('/v1/drafts',json={'composer':composer},headers=self.headers(user)); self.assertEqual(response.status_code,201,response.text)
+        return user,response.json()
+
+    def test_job_submission_writes_the_rows_of_sequential_puts_with_the_request_written_once(self):
+        """The staged submission against a copy of the pre-batching sequence (freeze + put, enqueue's dispatch and
+        first event, hosted create re-writing the request), with deterministic ids and clocks."""
+        import shutil, sqlite3
+        from reveal_backend import research_hosted, workflow_state, workspace_events
+        from reveal_backend import repository as repository_module
+        user,draft=self.submission(); headers=self.headers(user,**{'Idempotency-Key':'submission'})
+        body={'kind':'analysis','draft_id':draft['id'],'draft_version':draft['version']}
+        copy=Repository(str(Path(self.temp.name)/'sequential.sqlite')); shutil.copy(self.repo.sqlite_path,copy.sqlite_path)
+        def deterministic():
+            counter=iter(range(10**6)); fixed='2026-10-07T00:00:00Z'; values=[]
+            for module in (api,jobs,workflow_state,research_hosted,workspace_events,repository_module):
+                if hasattr(module,'uid'): values.append(patch.object(module,'uid',lambda:'uid-%d'%next(counter)))
+                if hasattr(module,'now'): values.append(patch.object(module,'now',lambda:fixed))
+            return values+[patch.object(workflow_state,'after',lambda seconds:fixed),patch.object(research_hosted,'deadline',lambda seconds:fixed)]
+        def sequential(body,authorization,key):
+            with copy.transaction() as tx:
+                identity=principal(tx,authorization); owner=identity['user_id']
+                identity_key=digest([owner,'job',key])
+                api.reload_gate(tx)
+                frozen,binding=api.freeze_research_request(tx,identity,body)
+                job={'id':api.uid(),'kind':'analysis','owner_user_id':owner,'status':'queued','stage':'queued','research_request_id':frozen['id'],
+                    'input_account_id':None,'created_at':api.now(),'updated_at':api.now(),'completed_at':None,'result':None,'failure':None,'warnings':[],'last_event_id':'0'}
+                job['links']={'self':'/v1/jobs/'+job['id'],'events':'/v1/jobs/'+job['id']+'/events','cancel':'/v1/jobs/'+job['id']+'/cancel'}
+                jobs.dispatch(tx,job,{'attempt':0,'lease_until':None,'token':None,'remote_handle':None,'inputs':body})
+                jobs.event(tx,job,'status','Queued for evidence preparation.')
+                frozen.pop('retrieval_mode',None); research_hosted.create(tx,job,frozen,binding)
+                tx.put('idempotency',identity_key,owner,{'checksum':digest(body),'response':job})
+                return job
+        from reveal_backend.auth import principal
+        with patch.dict(os.environ,{'REVEAL_JOB_TRANSPORT':'workflow','REVEAL_JOB_NAMESPACE':'test'}):
+            contexts=deterministic()
+            for context in contexts: context.start()
+            try: staged=api.create_job_transaction(body,headers['Authorization'],'submission')
+            finally:
+                for context in reversed(contexts): context.stop()
+            contexts=deterministic()
+            for context in contexts: context.start()
+            try: reference=sequential(body,headers['Authorization'],'submission')
+            finally:
+                for context in reversed(contexts): context.stop()
+        self.assertEqual(staged,reference)
+        def rows(repo):
+            with sqlite3.connect(repo.sqlite_path) as connection:
+                return {(kind,identity):(owner,version,json.loads(payload),updated) for kind,identity,owner,version,payload,updated in
+                        connection.execute('SELECT kind,id,owner_id,version,payload,updated_at FROM reveal_records')}
+        after,before=rows(self.repo),rows(copy)
+        self.assertEqual(len(after),len(before)); self.assertGreater(len(after),15)
+        request=('request',staged['research_request_id'])
+        self.assertEqual((after[request][1],before[request][1]),(1,2))   # written once instead of twice
+        self.assertEqual(after[request][2],before[request][2])           # the same frozen, progressive request bytes
+        self.assertEqual(after[request][2]['retrieval_mode'],'progressive')
+        for key in set(after)|set(before):
+            if key==request: continue
+            if key[0]=='workspace_event' and after[key][2]['entity_id']==staged['research_request_id']:
+                self.assertEqual((after[key][2].pop('entity_revision'),before[key][2].pop('entity_revision')),(1,2))
+            self.assertEqual(after.get(key),before.get(key),key)
+
 if __name__=='__main__': unittest.main()

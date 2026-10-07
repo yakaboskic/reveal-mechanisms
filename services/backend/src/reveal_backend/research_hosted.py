@@ -10,16 +10,24 @@ from . import user_inputs
 
 
 def create(tx, job, frozen, binding):
+    """Hosted progressive state for a request already written; a request not yet frozen as progressive is
+    written again with that mode."""
+    if frozen.get('retrieval_mode') != 'progressive':
+        frozen['retrieval_mode'] = 'progressive'; tx.put('request', frozen['id'], job['owner_user_id'], frozen)
+    for row in rows(job, frozen, binding): tx.put(*row)
+
+
+def rows(job, frozen, binding):
+    """The local_work and research_pin rows of a new hosted analysis; no I/O."""
     from .reference_generation import generation_of_anchors
     generation = generation_of_anchors(binding['anchors']); owner = job['owner_user_id']
-    frozen['retrieval_mode'] = 'progressive'; tx.put('request', frozen['id'], owner, frozen)
     work = {'id': job['id'], 'job_id': job['id'], 'owner_user_id': owner, 'research_request_id': frozen['id'],
         'state': 'preparing', 'created_at': now(), 'last_activity': now(), 'last_action': 'created',
         'expires_at': deadline(30*86400), 'reference_generation_id': generation,
         'package_id': None, 'package_sha256': None, 'last_error': None}
-    tx.put('local_work', work['id'], owner, work)
-    tx.put('research_pin', frozen['id'], owner, {'id': frozen['id'], 'research_request_id': frozen['id'],
-        'generation_id': generation, 'state': 'active', 'expires_at': work['expires_at']})
+    return [('local_work', work['id'], owner, work),
+            ('research_pin', frozen['id'], owner, {'id': frozen['id'], 'research_request_id': frozen['id'],
+                'generation_id': generation, 'state': 'active', 'expires_at': work['expires_at']})]
 
 
 def collect(repository, job, directory):

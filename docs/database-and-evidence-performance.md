@@ -332,6 +332,20 @@ resolution and validated assembly durations. It is outside the scientific
 package and cannot change evidence hashes. A telemetry write failure does not
 replace a source error or invalidate an otherwise successful package.
 
+Analysis submission (`POST /v1/jobs`) keeps one fenced transaction. It reads the
+principal, idempotency key, reference-reload gate, draft and draft binding in one
+statement and lists the owner's jobs once for both quotas. The request is frozen
+as progressive before its only write, and every new row (request, binding,
+execution, Workflow dispatch, queue, first event, job, hosted local work, pin and
+idempotency key) goes in one `INSERT`. An anonymous submission sent 31 statements
+under the fence and now sends 6 (33 round trips to 8 with the fence and `COMMIT`); the
+stored rows are the same except that the request's version, and its workspace
+event revision, is 1 instead of 2. Draft creation inserts the draft, its binding
+and the retry key together, a draft save prefetches its rows with the principal,
+and a draft's anchors read a shared suggestion once: a rename is 8 round trips
+instead of 10, an anchor save 9 instead of 12 and a new draft 7 instead of 13.
+Selected uploads are read in one statement.
+
 ## Worker boundaries and remaining latency
 
 Frozen preparation inputs are read together without taking the write lock.

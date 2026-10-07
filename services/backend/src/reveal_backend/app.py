@@ -15,7 +15,7 @@ from fastapi import BackgroundTasks, FastAPI, Request, Depends, Query
 from fastapi.responses import JSONResponse, StreamingResponse, Response, RedirectResponse
 from starlette.concurrency import run_in_threadpool
 from jsonschema import Draft202012Validator
-from .auth import Problem, decode_assertion, owned, require_owned, principal, publication_principal, service_authority
+from .auth import Problem, decode_assertion, owned, require_owned, principal, principal_with, publication_principal, service_authority
 from .catalog import GENERATION_TTL_SECONDS, Catalog
 from .repository import DatabaseBusy, Repository, now, uid, digest
 from .runtime_config import ROOT, artifacts_root
@@ -139,16 +139,24 @@ def browse_seed(cursor):
         return seed
     except (ValueError,KeyError,TypeError): raise Problem(409,'CURSOR_EXPIRED','Reload the first page to start a new browse session.')
 
-def idempotent(tx, owner, route, key, body, action):
+def idempotent(tx, owner, route, key, body, action, *, staged=False):
+    """staged: action returns (response, new rows), inserted with the idempotency row in one statement."""
     if not key or len(key)>200: raise Problem(400, 'IDEMPOTENCY_KEY_REQUIRED', 'Supply an Idempotency-Key of at most 200 characters.')
     identity = digest([owner, route, key]); checksum = digest(body)
     existing = tx.get('idempotency', identity)
     if existing:
         if existing['data']['checksum'] != checksum: raise Problem(409, 'IDEMPOTENCY_CONFLICT', 'This retry key was already used for different input.')
         return existing['data']['response']
-    result = action()
-    tx.put('idempotency', identity, owner, {'checksum': checksum, 'response': result})
+    result, rows = action() if staged else (action(), [])
+    # Read as absent under this fence, so it is inserted unread; a duplicate fails the whole transaction.
+    tx.insert_many([*rows, ('idempotency', identity, owner, {'checksum': checksum, 'response': result})])
     return result
+
+def principal_for(tx, authorization, route, key, keys=()):
+    """principal() plus, in the same statement, this route's idempotency row and the rows it reads next. The
+    identity map serves those later reads; each row is still authorized where it is used (owned())."""
+    exact=[item for item in keys if isinstance(item[1],str)]
+    return principal_with(tx, authorization, lambda owner: [('idempotency', digest([owner, route, key])), *exact])[0]
 
 def fresh_principal(kind, profile=None):
     identity = uid(); profile = profile or {}
@@ -192,12 +200,14 @@ def preload_catalog(composer=None):
     try: load()
     except Exception: pass
 
-def freeze_draft_bindings(tx,draft_id,owner,composer):
+def freeze_draft_bindings(tx,draft_id,owner,composer,*,new=False):
     """An unchanged selection retains the exact run bindings first saved with it,
-    while its reference generation is still served; otherwise it is re-validated."""
+    while its reference generation is still served; otherwise it is re-validated.
+    new: the draft is created in this transaction, so there is no prior binding to read and the caller inserts
+    the returned binding with it."""
     gap=catalog.selected(composer['source_gap']) if composer['source_gap'] else None
     if composer['eaggl_anchors'] and hasattr(catalog,'load'): catalog.load()
-    previous=tx.get('draft_binding',draft_id)
+    previous=None if new else tx.get('draft_binding',draft_id)
     previous=previous['data'].get('selections',{}) if previous else {}
     selections={}; gate_checked=False; suggestions={}   # automatic anchors share one suggestion: read and parse it once
     for selection in composer['eaggl_anchors']:
@@ -222,7 +232,7 @@ def freeze_draft_bindings(tx,draft_id,owner,composer):
             selections[native]['retrieval']={k:v for k,v in suggestion['data'].items() if k!='hits'}|{'hit':suggestion['data']['hits'][native]}
     if len(selections)!=len(composer['eaggl_anchors']): raise Problem(422,'DUPLICATE_ANCHOR','Select each native mechanism once.')
     frozen={'dismech_import_id':catalog.dismech_import if gap else None,'source_gap':gap,'selections':selections}
-    tx.put('draft_binding',draft_id,owner,frozen)
+    if not new: tx.put('draft_binding',draft_id,owner,frozen)
     return frozen
 
 @app.get('/health')
@@ -658,8 +668,10 @@ async def create_draft(request:Request):
     body=await request.json()
     def run():
         validate(body,'DraftCreate'); preload_catalog(body['composer'])
+        key=request.headers.get('idempotency-key')
         with repo.transaction() as tx:
-            user=principal(tx,request.headers.get('authorization'))['user_id']
+            reads=[('draft',body.get('source_draft_id'))]+([(reference_generation.CONTROL_KIND,reference_generation.CONTROL_ID)] if body['composer'].get('eaggl_anchors') else [])
+            user=principal_for(tx,request.headers.get('authorization'),'draft',key,reads)['user_id']
             def create():
                 draft={'id':uid(),'owner_user_id':user,'version':1,'composer':body['composer'],'created_at':now(),'updated_at':now()}
                 lifecycle=body.get('lifecycle','saved')
@@ -673,9 +685,9 @@ async def create_draft(request:Request):
                     draft.update(source_draft_id=source['id'],source_draft_version=source_version)
                 user_inputs.resolve(tx,user,body['composer'])
                 if 'name' in body: draft['name']=body['name'].strip()
-                freeze_draft_bindings(tx,draft['id'],user,body['composer'])
-                tx.put('draft',draft['id'],user,draft); return draft
-            return idempotent(tx,user,'draft',request.headers.get('idempotency-key'),body,create)
+                binding=freeze_draft_bindings(tx,draft['id'],user,body['composer'],new=True)
+                return draft,[('draft_binding',draft['id'],user,binding),('draft',draft['id'],user,draft)]   # a fresh uuid
+            return idempotent(tx,user,'draft',key,body,create,staged=True)
     return await run_in_threadpool(run)
 
 @app.get('/v1/drafts/{draft_id}')
@@ -708,8 +720,10 @@ async def patch_draft(draft_id:str,request:Request):
     def run():
         validate(body,'DraftPatch')
         if 'composer' in body: preload_catalog(body['composer'])
+        key=request.headers.get('idempotency-key')
         with repo.transaction() as tx:
-            user=principal(tx,request.headers.get('authorization'))['user_id']
+            reads=[('draft',draft_id)]+([('draft_binding',draft_id),(reference_generation.CONTROL_KIND,reference_generation.CONTROL_ID)] if 'composer' in body else [])
+            user=principal_for(tx,request.headers.get('authorization'),'draft:'+draft_id,key,reads)['user_id']
             def update():
                 row=owned(tx,'draft',draft_id,user); draft=user_inputs.available(row['data'])
                 if draft['version']!=body['expected_version']: raise Problem(409,'VERSION_CONFLICT','This draft changed in another tab.',current_version=draft['version'])
@@ -724,7 +738,7 @@ async def patch_draft(draft_id:str,request:Request):
                 elif not user_inputs.saved(draft): draft['expires_at']=user_inputs.expiration()
                 draft.update(version=draft['version']+1,updated_at=now(),owner_user_id=user)
                 tx.put('draft',draft_id,user,draft,expected=row['version']); return draft
-            return idempotent(tx,user,'draft:'+draft_id,request.headers.get('idempotency-key'),body,update)
+            return idempotent(tx,user,'draft:'+draft_id,key,body,update)
     return await run_in_threadpool(run)
 
 @app.delete('/v1/drafts/{draft_id}')
@@ -861,8 +875,10 @@ async def deliver_workflow_intents(job_id,*,control=True):
         import logging
         logging.getLogger('reveal.workflow').warning('Dispatch deferred to reconciliation (%s)', type(error).__name__)
 
-def freeze_research_request(tx, identity, body):
-    """Freeze one scientific request for either hosted or local execution."""
+def freeze_research_request(tx, identity, body, *, retrieval_mode=None, write=True):
+    """Freeze one scientific request for either hosted or local execution. write=False returns its two new rows
+    as well instead of writing them, so the caller inserts them with the rest of its batch; retrieval_mode is
+    frozen into the request before its only write."""
     user = identity['user_id']
     draft=user_inputs.available(owned(tx,'draft',body['draft_id'],user)['data'])
     if draft['version']!=body['draft_version']: raise Problem(409,'VERSION_CONFLICT','Save the current draft before submitting.',current_version=draft['version'])
@@ -885,39 +901,46 @@ def freeze_research_request(tx, identity, body):
         'submitted_at':now(),'linked_dismech_context':contexts,'user_inputs':user_inputs.resolve(tx,user,composer)}
     if draft.get('source_draft_id'):
         frozen.update(originating_saved_draft_id=draft['source_draft_id'],originating_saved_draft_version=draft['source_draft_version'])
-    tx.put('request',frozen['id'],user,frozen)
+    if retrieval_mode: frozen['retrieval_mode']=retrieval_mode
     request_binding={'dismech_import_id':saved['dismech_import_id'],'source_gap':gap,
         'pinned_dismech_context':pinned_context,
         'anchors':[saved['selections'][s['reference']['source_id']]['binding'] for s in composer['eaggl_anchors']],
         'retrieval':{s['reference']['source_id']:saved['selections'][s['reference']['source_id']].get('retrieval') for s in composer['eaggl_anchors']}}
     request_binding['anchor_display']=analysis_outcomes.anchor_display(composer,request_binding,saved)
-    tx.put('request_binding',frozen['id'],user,request_binding)
+    rows=[('request',frozen['id'],user,frozen),('request_binding',frozen['id'],user,request_binding)]   # a fresh uuid
+    if not write: return frozen, request_binding, rows
+    for row in rows: tx.put(*row)
     return frozen, request_binding
 
 
 def create_job_transaction(body,authorization,idempotency_key):
-    if body.get('kind')=='analysis': preload_catalog()
+    analysis=body.get('kind')=='analysis'
+    if analysis: preload_catalog()
     with repo.transaction() as tx:
-        identity=principal(tx,authorization); user=identity['user_id']
+        reads=[(reference_generation.CONTROL_KIND,reference_generation.CONTROL_ID),('draft',body.get('draft_id')),('draft_binding',body.get('draft_id'))] if analysis else []
+        identity=principal_for(tx,authorization,'job',idempotency_key,reads); user=identity['user_id']
         def create():
-            active=[r for r in tx.list('job',user) if r['data']['status'] not in jobs.TERMINAL]
+            mine=tx.list('job',user)
+            active=[r for r in mine if r['data']['status'] not in jobs.TERMINAL]
             maximum=int(os.getenv('REVEAL_MAX_ACTIVE_JOBS','2'))
             if len(active)>=maximum: raise Problem(429,'ANONYMOUS_QUOTA_EXCEEDED' if identity['principal_kind']=='anonymous' else 'JOB_QUOTA_EXCEEDED','Wait for an active job to finish or stop it.')
             if identity['principal_kind']=='anonymous' and body['kind']=='analysis':
                 cutoff=(datetime.now(timezone.utc)-timedelta(days=1)).isoformat().replace('+00:00','Z')
-                today=[r for r in tx.list('job',user) if r['data']['kind']=='analysis' and r['data']['created_at']>=cutoff]
+                today=[r for r in mine if r['data']['kind']=='analysis' and r['data']['created_at']>=cutoff]
                 if len(today)>=int(os.getenv('REVEAL_ANONYMOUS_ANALYSES_PER_DAY','5')): raise Problem(429,'ANONYMOUS_QUOTA_EXCEEDED','This anonymous workspace has reached its daily analysis allowance.')
             if body['kind']=='paragraph':
                 # Research statements need no reference data: allowed on archived accounts and during reloads.
                 account=owned(tx,'account',body['account_id'],user)
-                return jobs.enqueue(tx,user,'paragraph',account_id=body['account_id'],inputs=body)
+                job,rows=jobs.new(user,'paragraph',account_id=body['account_id'],inputs=body)
+                jobs.update_paragraph_state(tx,job)
+                return job,rows
             reload_gate(tx)
-            frozen, binding = freeze_research_request(tx, identity, body)
-            job = jobs.enqueue(tx,user,'analysis',request_id=frozen['id'],inputs=body)
-            from .research_hosted import create as create_hosted_research
-            create_hosted_research(tx, job, frozen, binding)
-            return job
-        return idempotent(tx,user,'job',idempotency_key,body,create)
+            # The request is frozen as progressive and written once, with every other new row, in one statement.
+            frozen,binding,rows=freeze_research_request(tx,identity,body,retrieval_mode='progressive',write=False)
+            job,queued=jobs.new(user,'analysis',request_id=frozen['id'],inputs=body)
+            from . import research_hosted
+            return job,rows+queued+research_hosted.rows(job,frozen,binding)
+        return idempotent(tx,user,'job',idempotency_key,body,create,staged=True)
 
 @app.get('/v1/jobs')
 def list_jobs(request:Request,limit:int=20,cursor:str|None=None,kind:str|None=None,status:str|None=None,research_request_id:str|None=None):

@@ -23,16 +23,19 @@ def lease_duration():
     return value
 
 def dispatch(tx, job, queue):
-    """The durable outbox shares the job's transaction; Redis is never called here."""
+    """The durable outbox shares the job's transaction; Redis is never called here. Puts over existing rows, so
+    an existing job can be dispatched again (review retries)."""
     queue.update(transport=transport(), namespace=namespace(), dispatch_id=uid())
     if queue['transport'] == 'workflow':
         from .workflow_state import create
         create(tx, job, queue)
-    if queue['transport'] == 'redis':
-        tx.put('dispatch', job['id'], job['owner_user_id'], {
-            'job_id': job['id'], 'namespace': queue['namespace'], 'dispatch_id': queue['dispatch_id'],
-            'schema': 1, 'message_id': None, 'published_at': None})
+    if queue['transport'] == 'redis': tx.put(*redis_dispatch(job, queue))
     tx.put('queue', job['id'], job['owner_user_id'], queue)
+
+def redis_dispatch(job, queue):
+    return ('dispatch', job['id'], job['owner_user_id'], {
+        'job_id': job['id'], 'namespace': queue['namespace'], 'dispatch_id': queue['dispatch_id'],
+        'schema': 1, 'message_id': None, 'published_at': None})
 
 def update_paragraph_state(tx,job):
     if job['kind']!='paragraph': return
@@ -63,15 +66,30 @@ def event(tx, job, event_type, message, detail=None):
         release(tx, job)
     return item
 
-def enqueue(tx, owner, kind, request_id=None, account_id=None, inputs=None):
+def new(owner, kind, request_id=None, account_id=None, inputs=None):
+    """A queued job and every row enqueue writes for it (dispatch, queue, first event, job), with no I/O: the
+    job's fresh uuid makes every key new, so the caller inserts them in one statement."""
     identity = uid(); timestamp = now()
     job = {'id': identity, 'kind': kind, 'owner_user_id': owner, 'status': 'queued', 'stage': 'queued',
         'research_request_id': request_id, 'input_account_id': account_id, 'created_at': timestamp, 'updated_at': timestamp,
         'completed_at': None, 'result': None, 'failure': None, 'warnings': [], 'last_event_id': '0',
         'links': {'self': '/v1/jobs/'+identity, 'events': '/v1/jobs/'+identity+'/events', 'cancel': '/v1/jobs/'+identity+'/cancel'}}
-    dispatch(tx, job, {'attempt': 0, 'lease_until': None, 'token': None, 'remote_handle': None, 'inputs': inputs or {}})
+    queue = {'attempt': 0, 'lease_until': None, 'token': None, 'remote_handle': None, 'inputs': inputs or {}}
+    queue.update(transport=transport(), namespace=namespace(), dispatch_id=uid())
+    rows = []
+    if queue['transport'] == 'workflow':
+        from .workflow_state import build
+        rows += build(job, queue, {})
+    if queue['transport'] == 'redis': rows.append(redis_dispatch(job, queue))
+    rows.append(('queue', identity, owner, queue))
+    item = event_record(job, 'status', 'Queued for evidence preparation.' if kind == 'analysis' else 'Research statement queued.')
+    rows += [('event', identity+':'+item['id'].zfill(12), owner, item), ('job', identity, owner, job)]
+    return job, rows
+
+def enqueue(tx, owner, kind, request_id=None, account_id=None, inputs=None):
+    job, rows = new(owner, kind, request_id, account_id, inputs)
+    tx.insert_many(rows)
     update_paragraph_state(tx,job)
-    event(tx, job, 'status', 'Queued for evidence preparation.' if kind == 'analysis' else 'Research statement queued.')
     return job
 
 def cancel(tx, job):

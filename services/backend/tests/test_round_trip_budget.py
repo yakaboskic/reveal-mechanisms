@@ -29,7 +29,7 @@ import test_research_http as research_http
 import test_readiness_monitor as readiness_monitor
 import test_research_polling as research_polling
 
-BUDGET = {'local_work_poll': 5, 'me': 2, 'readyz': 2, 'draft_patch': 10, 'mcp_get_operation': 5,
+BUDGET = {'local_work_poll': 5, 'me': 2, 'readyz': 2, 'draft_patch': 8, 'mcp_get_operation': 5, 'job_create': 8, 'draft_create': 7,
           'mcp_query_enqueue': 13, 'query_operation': 17, 'workspace_list': 4, 'workspace_detail': 4,
           'reconcile_idle': 4, 'job_dispatch': 11, 'gap_list': 5, 'gap_search': 5, 'gap_detail': 5,
           'citation_render': 5, 'readyz_monitored': 0, 'readiness_tick': 2, 'suggest': 2,
@@ -275,6 +275,34 @@ class TrackedWriteBudget(unittest.TestCase):
         self.assertLessEqual(budget.trips(), BUDGET['draft_patch'], budget)
         self.assertEqual(len(published), 1)
         with self.repo.read_transaction() as tx: self.assertEqual(tx.list('notification_outbox'), [])
+
+
+class SubmissionBudget(unittest.TestCase):
+    setUp = application.ApplicationTests.setUp
+    provision = application.ApplicationTests.provision
+    token = application.ApplicationTests.token
+    headers = application.ApplicationTests.headers
+    submission = application.ApplicationTests.submission
+
+    def test_job_submission_is_one_fence_with_one_read_and_one_insert(self):
+        # The principal, idempotency, reload gate, draft and binding in one read; every new row in one INSERT.
+        user, draft = self.submission()
+        with patch.dict(os.environ, {'REVEAL_JOB_TRANSPORT': 'workflow', 'REVEAL_JOB_NAMESPACE': 'test'}), \
+                patch('reveal_backend.app.deliver_after_response'), patch.object(workspace_events, 'publish_committed'), \
+                count_round_trips() as budget:   # delivery runs after the response (TrackedWriteBudget)
+            response = self.client.post('/v1/jobs', json={'kind': 'analysis', 'draft_id': draft['id'], 'draft_version': draft['version']},
+                                        headers=self.headers(user))
+        self.assertEqual(response.status_code, 202, response.text); print('\njob create', budget)
+        self.assertEqual((budget.kinds(), budget.unleased, budget.connects), (['write'], 0, 0), budget)
+        self.assertLessEqual(budget.trips(), BUDGET['job_create'], budget)
+
+    def test_draft_creation_inserts_the_draft_binding_and_retry_key_together(self):
+        user, draft = self.submission()
+        with patch.object(workspace_events, 'publish_committed'), count_round_trips() as budget:
+            response = self.client.post('/v1/drafts', json={'composer': draft['composer']}, headers=self.headers(user))
+        self.assertEqual(response.status_code, 201, response.text); print('\ndraft create', budget)
+        self.assertEqual((budget.kinds(), budget.unleased, budget.connects), (['write'], 0, 0), budget)
+        self.assertLessEqual(budget.trips(), BUDGET['draft_create'], budget)
 
 
 class WorkflowBudget(unittest.IsolatedAsyncioTestCase):

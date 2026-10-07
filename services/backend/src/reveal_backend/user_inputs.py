@@ -232,6 +232,8 @@ def resolve(tx, owner, composer):
     identities=composer.get('upload_ids',[])
     if len(identities)>5 or len(set(identities))!=len(identities):
         raise Problem(422,'UPLOAD_LIMIT','Select at most five distinct attachments.')
+    if len(identities)>1 and hasattr(tx,'get_records'):
+        tx.get_records([('upload',identity) for identity in identities])   # one read; owned() still authorizes each
     for identity in identities:
         value=owned(tx,'upload',identity,owner)['data']
         if value['status']!='ready': raise Problem(409,'UPLOAD_NOT_READY','Wait for every selected attachment to finish processing.')
