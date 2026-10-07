@@ -2,13 +2,16 @@
 
 Served EAGGL factors come from one reference generation (docs/reference-reload.md §8). The
 prefix's `reference_active` record, or REVEAL_REFERENCE_GENERATION_ID, names it. load() reads it
-once, on the cold load; a loaded catalog does no I/O in load(), as before reference reloads. A
-background poller (Catalog(poll_seconds=...), which the API enables) re-checks it every
-GENERATION_TTL_SECONDS off the request path, and a change reloads the catalog. Without an active
+once, on the cold load, together with the active Vector snapshot (`vector_active`) in one
+statement; a loaded catalog does no I/O in load(), as before reference reloads, and serves that
+pinned snapshot's semantic index. A background poller (Catalog(poll_seconds=...), which the API
+enables) re-checks both pointers every GENERATION_TTL_SECONDS off the request path (reusing the
+readiness monitor's reads when it runs), and a change reloads the catalog. Without an active
 record the catalog runs in legacy mode, exactly as before reference reloads: the CFDE-linked
 factors of the one selected mapping run (cfde-inc-v2).
 """
 from collections import defaultdict
+from concurrent.futures import Future, TimeoutError as FutureTimeout
 from copy import copy, deepcopy
 from datetime import timezone
 from difflib import SequenceMatcher
@@ -29,7 +32,7 @@ from .dismech_embeddings import context_input, load_context_vectors
 from .mapping_identity import POLICY_VERSION, interpreted_mappings, normalize_disease_id
 from .vector_retrieval import UpstashFactorIndex, VectorUnavailable, check_snapshot_readiness, retrieve_native, query_vector_provenance
 from .vector_ingestion import VectorRegistry
-from .reference_generation import (GENERATION_RE, KPN_KIND, KPN_MODEL, LEGACY_KIND, LEGACY_MODEL, ReferenceError as ReferenceInvariant,
+from .reference_generation import (ACTIVE_ID, ACTIVE_KIND, GENERATION_RE, KPN_KIND, KPN_MODEL, LEGACY_KIND, LEGACY_MODEL, ReferenceError as ReferenceInvariant,
     archive_id as reference_archive_id, generation_of_binding, get_generation, legacy_generation_id, mechanism_node, model_of_source_id, parse_factor_key,
     public_id, read_active)
 import numpy as np
@@ -37,6 +40,7 @@ import numpy as np
 LOGGER = logging.getLogger(__name__)
 GENERATION_TTL_SECONDS = 5.0
 READINESS_VERIFICATION_TTL_SECONDS = 60.0
+VECTOR_BUILD_WAIT_SECONDS = 60.0  # a request waiting on another request's cold semantic index build
 # Prefixes cut over one at a time while reference_generations.status is shared by every prefix
 # of the scientific database, so a generation another prefix superseded stays servable.
 SERVED_STATUSES = ('complete', 'superseded')
@@ -54,14 +58,36 @@ def check_vector_readiness(index):
         raise Problem(503, 'SEMANTIC_SEARCH_UNAVAILABLE', str(error)) from error
 
 
-def active_generation_id(repo=None):
-    """The prefix's active reference generation (REVEAL_REFERENCE_GENERATION_ID first), or None for legacy mode."""
+def vector_backend():
+    backend = setting('REVEAL_RETRIEVAL_BACKEND', 'upstash')
+    if backend not in ('upstash', 'legacy'): raise ValueError('Invalid retrieval backend')
+    return backend == 'upstash'
+
+
+def active_pointers(repo=None, vector=False):
+    """(active reference generation or None for legacy mode, active Vector snapshot id or None).
+
+    REVEAL_REFERENCE_GENERATION_ID pins the generation. Otherwise both pointers come from one statement:
+    reference_reload flips them in one transaction, so a reader never sees a cutover half done."""
     pinned = setting('REVEAL_REFERENCE_GENERATION_ID')
-    if pinned:
-        if not GENERATION_RE.fullmatch(pinned): raise Problem(503, 'SOURCE_NOT_READY', 'REVEAL_REFERENCE_GENERATION_ID is not a reference generation id.')
-        return pinned
-    with (repo or Repository()).read_transaction() as tx: active = read_active(tx)
-    return active['generation_id'] if active else None
+    if pinned and not GENERATION_RE.fullmatch(pinned):
+        raise Problem(503, 'SOURCE_NOT_READY', 'REVEAL_REFERENCE_GENERATION_ID is not a reference generation id.')
+    repo = repo or Repository()
+    registry = VectorRegistry(repo) if vector else None
+    if pinned: return pinned, registry.active_identity(required=False) if registry else None
+    with repo.single_read() as tx:
+        if registry: tx.get_records([(ACTIVE_KIND, ACTIVE_ID), ('vector_active', registry.scope)])  # the reads below reuse it
+        active = read_active(tx)
+        return (active['generation_id'] if active else None), registry.active_identity_in(tx) if registry else None
+
+
+def readiness_binding(generation_id, snapshot_id):
+    """What readiness verifies: the active pointers plus the deployment's source pins."""
+    backend = setting('REVEAL_RETRIEVAL_BACKEND', 'upstash')
+    if backend == 'upstash' and not snapshot_id:
+        raise Problem(503, 'SEMANTIC_SEARCH_UNAVAILABLE', 'No verified active Vector snapshot in this environment')
+    return (generation_id, backend, snapshot_id, *(setting(key) for key in
+        ('REVEAL_DISMECH_IMPORT_ID', 'REVEAL_MAPPING_RUN_ID', 'REVEAL_EMBEDDING_RUN_ID')))
 
 
 def missing_table(error):
@@ -104,7 +130,8 @@ def archived_factor(row):
 class Catalog:
     # Process-wide state that a reload (load() or refresh_if_changed()) keeps when it swaps in a freshly loaded catalog.
     PROCESS_STATE = frozenset({'lock', 'dismech_catalog_lock', 'vector_lock', 'refresh_lock', 'lookup_lock', 'repo', 'generation_cache', 'archive_cache',
-                               'archive_unavailable_at', 'poll_seconds', 'poller', 'poller_lock', 'poller_stop', 'readiness_lock', 'readiness_cache'})
+                               'archive_unavailable_at', 'poll_seconds', 'poller', 'poller_lock', 'poller_stop', 'poller_wake', 'readiness_lock',
+                               'readiness_cache', 'observed_pointers'})
     def __init__(self, repo=None, *, poll_seconds=None):
         self.loaded = False
         self.lock = threading.Lock()
@@ -113,7 +140,9 @@ class Catalog:
         self.dismech_catalog_lock=threading.Lock()
         self.complete_dismech_catalog=None
         self.vector_lock = threading.Lock()
-        self.vector_indexes = {}
+        # Loaded state (not PROCESS_STATE): adopt() swaps them with the generation, so a request after a reload
+        # never joins or publishes an index built for the previous one.
+        self.vector_indexes, self.vector_builds, self.vector_snapshot_id = {}, {}, None
         # Reference generation: resolved by load(); None = legacy mode.
         self.repo = repo
         self.refresh_lock, self.lookup_lock = threading.Lock(), threading.Lock()
@@ -124,8 +153,11 @@ class Catalog:
         self.generation_cache, self.archive_cache, self.archive_unavailable_at = {}, {}, None
         # None: no poller (tests, tools); the API polls reference_active every GENERATION_TTL_SECONDS.
         self.poll_seconds, self.poller, self.poller_lock, self.poller_stop = poll_seconds, None, threading.Lock(), threading.Event()
+        # (read at, retrieval backend, generation, snapshot): the readiness monitor's latest pointer read.
+        self.poller_wake, self.observed_pointers = threading.Event(), None
     def readiness(self):
-        """Verify serving pins and coverage without materializing research corpora.
+        """Verify serving pins and coverage without materializing research corpora (the synchronous path, when no
+        readiness monitor runs).
 
         This is separate from the catalog lock: health checks must not wait for
         an unrelated browse/suggestion request to construct all DAPPER objects.
@@ -133,23 +165,22 @@ class Catalog:
         with self.readiness_lock:
             if self.readiness_cache and monotonic() - self.readiness_cache[0] < GENERATION_TTL_SECONDS:
                 return dict(self.readiness_cache[1])
-            generation_id = active_generation_id(self.repo)
-            backend = setting('REVEAL_RETRIEVAL_BACKEND', 'upstash')
-            registry, snapshot_id = None, None
-            if backend == 'upstash':
-                registry = VectorRegistry(self.repo)
-                try: snapshot_id = registry.active_identity()
-                except VectorUnavailable as error:
-                    raise Problem(503, 'SEMANTIC_SEARCH_UNAVAILABLE', str(error)) from error
-            binding = (generation_id, backend, snapshot_id, *(setting(key) for key in
-                ('REVEAL_DISMECH_IMPORT_ID', 'REVEAL_MAPPING_RUN_ID', 'REVEAL_EMBEDDING_RUN_ID')))
+            binding = readiness_binding(*active_pointers(self.repo, vector_backend()))
             # Recheck small active pointers frequently; independently verify
             # provider health/coverage at least once a minute, even with no cutover.
             if (self.readiness_cache and self.readiness_cache[2] == binding
                     and monotonic() - self.readiness_cache[3] < READINESS_VERIFICATION_TTL_SECONDS):
                 self.readiness_cache = (monotonic(), self.readiness_cache[1], binding, self.readiness_cache[3])
                 return dict(self.readiness_cache[1])
-            connection = mysql_connection()
+            result = self.verify_binding(binding)
+            self.readiness_cache = (monotonic(), result, binding, monotonic())
+            return dict(result)
+    def verify_binding(self, binding):
+        """Check one readiness_binding against the reference tables, the verified snapshot and the Vector provider.
+        The pooled reference read ends before the snapshot read, so no lease nests in another."""
+        generation_id, backend, snapshot_id = binding[:3]
+        try:
+            connection = reference_mysql_connection()
             try:
                 generation = self.select_generation(connection, generation_id) if generation_id else None
                 kpn = bool(generation) and generation['kind'] == KPN_KIND
@@ -182,25 +213,22 @@ class Catalog:
                     embedding = embeddings[0]
                     cursor.execute('SELECT COUNT(*) FROM dismech_discussions WHERE import_id=%s AND is_gap=1', (dismech,))
                     gaps = cursor.fetchone()[0]
-                if backend == 'upstash':
-                    snapshot = registry.serving(snapshot_id, summary=True)
-                    pinned = (snapshot.get('reference_generation_id') == generation_id if kpn else snapshot['mapping_run'] == mapping)
-                    if (not pinned or snapshot['run']['run_id'] != embedding or snapshot['run']['config']['import_id'] != eaggl
-                            or snapshot['dismech_import'] != dismech or snapshot['_serving_counts'].get('factors') != factors):
-                        raise VectorUnavailable('Active Vector snapshot differs from selected source runs')
-                    check_snapshot_readiness(snapshot)
-                elif backend == 'legacy':
-                    # The optional local-vector backend has no verified serving
-                    # manifest, so preserve its full compatibility checks.
-                    self.load()
-                else: raise ValueError('Invalid retrieval backend')
-            except VectorUnavailable as error:
-                raise Problem(503, 'SEMANTIC_SEARCH_UNAVAILABLE', str(error)) from error
             finally: connection.close()
-            result = {'dismech_import': dismech, 'gaps': gaps, 'mapping_run': mapping,
-                'mapped_factors': factors, 'embedding_run': embedding}
-            self.readiness_cache = (monotonic(), result, binding, monotonic())
-            return dict(result)
+            if backend == 'upstash':
+                snapshot = VectorRegistry(self.repo).serving(snapshot_id, summary=True)
+                pinned = (snapshot.get('reference_generation_id') == generation_id if kpn else snapshot['mapping_run'] == mapping)
+                if (not pinned or snapshot['run']['run_id'] != embedding or snapshot['run']['config']['import_id'] != eaggl
+                        or snapshot['dismech_import'] != dismech or snapshot['_serving_counts'].get('factors') != factors):
+                    raise VectorUnavailable('Active Vector snapshot differs from selected source runs')
+                check_snapshot_readiness(snapshot)
+            else:
+                # The optional local-vector backend has no verified serving
+                # manifest, so preserve its full compatibility checks.
+                self.load()
+        except VectorUnavailable as error:
+            raise Problem(503, 'SEMANTIC_SEARCH_UNAVAILABLE', str(error)) from error
+        return {'dismech_import': dismech, 'gaps': gaps, 'mapping_run': mapping,
+            'mapped_factors': factors, 'embedding_run': embedding}
     def load(self):
         """Serve the loaded generation without I/O; a cold load (or one after a failed reload) reads the active generation.
 
@@ -209,15 +237,16 @@ class Catalog:
         """
         with self.lock:
             if self.loaded: return
-            try: generation = active_generation_id(self.repo)
+            try: generation, snapshot = active_pointers(self.repo, vector_backend())
             except Problem: raise
+            except VectorUnavailable as error: raise Problem(503, 'SEMANTIC_SEARCH_UNAVAILABLE', str(error)) from error
             except Exception as error:
                 raise Problem(503, 'SOURCE_NOT_READY', 'The active reference generation is unavailable.') from error
             checked = monotonic()
             # Always load beside the current state: a failed reload leaves the previous generation's
             # state (e.g. its DisMech context run) behind, and a failed load must leave nothing half-set.
             fresh = self.fresh()
-            fresh._load(generation)
+            fresh._load(generation, snapshot)
             fresh.generation_checked_at = checked
             self.adopt(fresh)
         self.start_poller()
@@ -229,38 +258,52 @@ class Catalog:
         """Replace the serving state with a loaded catalog's (caller holds self.lock)."""
         with self.vector_lock:
             self.__dict__.update({key: value for key, value in fresh.__dict__.items() if key not in self.PROCESS_STATE})
+    def observe_pointers(self, generation, snapshot, at=None):
+        """Share a pointer read (the readiness monitor's) with the poller, which then needs no read of its own."""
+        self.observed_pointers = (monotonic() if at is None else at, setting('REVEAL_RETRIEVAL_BACKEND', 'upstash'), generation, snapshot)
+        self.poller_wake.set()
     def refresh_if_changed(self):
-        """Reload when the active reference generation changed; checked at most every TTL.
+        """Reload when the active reference generation or Vector snapshot changed; checked at most every TTL.
 
-        Runs on the poller thread, never on the request path. The new generation loads beside the
+        Runs on the poller thread, never on the request path. A newer readiness-monitor observation replaces
+        the read; without one for two TTLs the poller reads itself. The new generation loads beside the
         serving state, which keeps serving meanwhile, and replaces it at once. A failed check keeps
         serving; a failed reload fails closed (loaded=False, so the next load() retries and raises
         until the generation loads).
         """
         checked = self.generation_checked_at
-        if not self.loaded or checked is None or monotonic() - checked < GENERATION_TTL_SECONDS: return False
+        if not self.loaded or checked is None: return False
         if not self.refresh_lock.acquire(blocking=False): return False
         try:
-            if not self.loaded or monotonic() - self.generation_checked_at < GENERATION_TTL_SECONDS: return False
-            self.generation_checked_at = monotonic()
-            try: generation = active_generation_id(self.repo)
-            except Exception:
-                LOGGER.warning('Reference generation check failed; serving the loaded generation', exc_info=True)
-                return False
-            finally: self.generation_checked_at = monotonic()  # A slow check never re-triggers at once.
-            if generation == self.active_generation: return False
+            checked = self.generation_checked_at
+            observed = self.observed_pointers; now_ = monotonic()
+            if observed and observed[1] != setting('REVEAL_RETRIEVAL_BACKEND', 'upstash'): observed = None
+            if not self.loaded: return False
+            if observed and observed[0] > checked and now_ - observed[0] <= GENERATION_TTL_SECONDS:
+                self.generation_checked_at = observed[0]; generation, snapshot = observed[2:]
+            else:
+                if now_ - checked < GENERATION_TTL_SECONDS * (2 if observed and now_ - observed[0] < 2 * GENERATION_TTL_SECONDS else 1):
+                    return False
+                self.generation_checked_at = now_
+                try: generation, snapshot = active_pointers(self.repo, vector_backend())
+                except Exception:
+                    LOGGER.warning('Reference generation check failed; serving the loaded generation', exc_info=True)
+                    return False
+                finally: self.generation_checked_at = monotonic()  # A slow check never re-triggers at once.
+            if generation == self.active_generation and snapshot == self.vector_snapshot_id: return False
             fresh = self.fresh()
-            try: fresh._load(generation)
+            try: fresh._load(generation, snapshot)
             except BaseException:
                 with self.lock: self.loaded = False
                 raise
-            fresh.generation_checked_at = monotonic()
+            fresh.generation_checked_at = self.generation_checked_at
             with self.lock: self.adopt(fresh)
-            LOGGER.info('Reference generation changed to %s; catalog reloaded', generation or 'legacy')
+            LOGGER.info('Reference generation %s or Vector snapshot changed; catalog reloaded', generation or 'legacy')
             return True
         finally: self.refresh_lock.release()
     def start_poller(self):
-        """Start (once per process) the thread that re-checks the active generation every poll_seconds.
+        """Start (once per process) the thread that re-checks the active pointers every poll_seconds, or as
+        soon as the readiness monitor shares a read.
 
         It holds no request's lease or lock, so its pooled read may wait without stalling writers
         or the event loop. A failed reload is logged; the next load() then reloads inline, fail-closed.
@@ -269,13 +312,15 @@ class Catalog:
         with self.poller_lock:
             if self.poller and self.poller[0] == os.getpid() and self.poller[1].is_alive(): return
             def run():
-                while not self.poller_stop.wait(self.poll_seconds):
+                while not self.poller_stop.is_set():
+                    self.poller_wake.wait(self.poll_seconds); self.poller_wake.clear()
+                    if self.poller_stop.is_set(): return
                     try: self.refresh_if_changed()
                     except Exception: LOGGER.warning('Reference generation refresh failed; the next request reloads', exc_info=True)
             thread = threading.Thread(target=run, name='reference-generation-poll', daemon=True)
             self.poller = (os.getpid(), thread); thread.start()
     def stop_poller(self, timeout=None):
-        self.poller_stop.set()
+        self.poller_stop.set(); self.poller_wake.set()
         if self.poller and self.poller[1].is_alive(): self.poller[1].join(timeout)
     def select_generation(self, connection, generation_id):
         """The active generation's reference_generations row; only a loaded, servable generation qualifies."""
@@ -309,7 +354,8 @@ class Catalog:
                 raise Problem(503, 'SOURCE_NOT_READY', 'Reference generation factor identities are inconsistent.')
             if isinstance(row['metadata'], (str, bytes)): row['metadata'] = json.loads(row['metadata'])
         return rows
-    def _load(self, generation_id):
+    def _load(self, generation_id, vector_snapshot_id=None):
+        """Load generation_id; with the Upstash backend, serve vector_snapshot_id (read with it by active_pointers)."""
         runtime = getattr(self, 'runtime', None) or DapperRuntime(CURRENT_DAPPER_SNAPSHOT)
         self.runtime = runtime
         connection = mysql_connection()
@@ -357,8 +403,7 @@ class Catalog:
             self.active_generation, self.generation_record = generation_id, generation
             self.model = KPN_MODEL if kpn else LEGACY_MODEL
             self.reference_generation_id = generation_id or (legacy_generation_id(self.mapping_run) if GENERATION_RE.fullmatch(str(self.mapping_run)) else None)
-            backend = setting('REVEAL_RETRIEVAL_BACKEND', 'upstash')
-            if backend not in ('upstash', 'legacy'): raise ValueError('Invalid retrieval backend')
+            self.vector_backend = vector_backend()
             context_ids = {row['id'] for row in mechanism_rows}
             inputs = [context_input(row['id'], 'mechanism', self.file_hashes[row['source_file']],
                 row.get('description') or row['name']) for row in mechanism_rows]
@@ -366,7 +411,7 @@ class Catalog:
                 for row in gap_rows if not any(item.get('target_id') in context_ids for item in attachments[row['id']]))
             self.context_source_ids = tuple(row['source_id'] for row in inputs)
             self.expected_context_inputs = tuple(inputs)
-            self.vector_backend = backend == 'upstash'
+            self.vector_snapshot_id = vector_snapshot_id if self.vector_backend else None
             if self.vector_backend:
                 # Browsing and freezing selected records need their native source
                 # bindings, not a semantic index. Verify aliases/contexts on the
@@ -375,8 +420,8 @@ class Catalog:
                 self.expected_factor_aliases = ({(row['factor_key'], row['label'], row['public_id']) for row in factor_rows} if kpn
                     else {(row[0], row[1], row[2]) for row in factor_rows})
                 try:
-                    registry = VectorRegistry(self.repo)
-                    summary = registry.serving(registry.active_identity(), summary=True)
+                    if not vector_snapshot_id: raise VectorUnavailable('No verified active Vector snapshot in this environment')
+                    summary = VectorRegistry(self.repo).serving(vector_snapshot_id, summary=True)
                 except VectorUnavailable as error:
                     raise Problem(503, 'SEMANTIC_SEARCH_UNAVAILABLE', str(error)) from error
                 pinned = (summary.get('reference_generation_id') == self.reference_generation_id if kpn
@@ -478,45 +523,70 @@ class Catalog:
         return (self.reference_generation_id, self.mapping_run, self.eaggl_import, self.embedding_run,
             self.dismech_import, (getattr(self, 'dismech_embeddings', None) or {}).get('run_id'), self.model)
     def retrieval_index(self):
+        """The loaded snapshot's semantic index; no database read once it is built.
+
+        The snapshot id is pinned with the loaded generation (the poller reloads on a change). One caller
+        per catalog state builds a cold index while the others wait for it; a build that straddles a reload
+        is never published, and a failed build is never replayed by its waiters.
+        """
         if not getattr(self, 'vector_backend', False): return self.index
         try:
-            registry = VectorRegistry(self.repo)
-            identity = registry.active_identity()
             with self.vector_lock:
-                binding = self._retrieval_binding()
+                identity, binding = self.vector_snapshot_id, self._retrieval_binding()
                 cached = self.vector_indexes.get(identity)
                 if cached is not None:
                     self.index = cached; self.dismech_embeddings = cached.contexts
                     return cached
-            snapshot = registry.serving(identity, context_ids=getattr(self, 'context_source_ids', None))
-            generation, mapping, eaggl, embedding, dismech, context_run, model = binding
-            # KPN snapshots are pinned by their generation, legacy ones by the mapping run.
-            pinned = (snapshot.get('reference_generation_id') == generation if model == KPN_MODEL
-                      else snapshot['mapping_run'] == mapping)
-            if (not pinned or snapshot['run']['run_id'] != embedding
-                    or snapshot['run']['config']['import_id'] != eaggl or snapshot['dismech_import'] != dismech
-                    or (context_run and snapshot['context_run_id'] != context_run)):
-                raise VectorUnavailable('Active Vector snapshot differs from selected source runs')
+                builds = self.vector_builds; future = builds.get(identity); owner = future is None
+                if owner:
+                    future = builds[identity] = Future()
+                    expected = (self.expected_factor_aliases, self.factor_legacy, self.expected_context_inputs,
+                                getattr(self, 'context_source_ids', None))
+            if owner:
+                try:
+                    index = self._build_index(identity, binding, *expected)
+                    future.set_result(index)
+                except BaseException as error:
+                    future.set_exception(error); raise
+                finally:
+                    with self.vector_lock:
+                        if builds.get(identity) is future: del builds[identity]
+            else:
+                try: index = future.result(timeout=VECTOR_BUILD_WAIT_SECONDS)
+                except FutureTimeout: raise VectorUnavailable('The semantic index is still loading; retry the query') from None
+                except Problem as error: raise Problem(error.status, error.code, error.detail) from error
+                except Exception as error: raise VectorUnavailable('The semantic index could not be prepared; retry the query') from error
             with self.vector_lock:
-                if self._retrieval_binding() != binding:
+                if self._retrieval_binding() != binding or self.vector_snapshot_id != identity:
                     raise VectorUnavailable('The reference generation changed during retrieval; retry the query')
-                if identity not in self.vector_indexes:
-                    index = UpstashFactorIndex(snapshot)
-                    check_vector_readiness(index)
-                    actual = {(row['factor_id'], row['label'], row['native_id']) for row in index.factors}
-                    if actual != self.expected_factor_aliases:
-                        raise VectorUnavailable('Vector aliases differ from selected mapping')
-                    if any(row['source_revision'] != self.factor_legacy[row['factor_id']]['source_revision'] for row in index.factors):
-                        raise VectorUnavailable('Vector source revisions differ from current canonical factor payloads')
-                    if any(index.contexts['bindings'].get(row['source_id']) != row for row in self.expected_context_inputs):
-                        raise VectorUnavailable('Vector context bindings differ from current source revisions/text')
-                    self.vector_indexes[identity] = index
-                    while len(self.vector_indexes) > 4: self.vector_indexes.pop(next(iter(self.vector_indexes)))
+                self.vector_indexes.setdefault(identity, index)
+                while len(self.vector_indexes) > 4: self.vector_indexes.pop(next(iter(self.vector_indexes)))
                 self.index = self.vector_indexes[identity]
                 self.dismech_embeddings = self.index.contexts
                 return self.index
         except VectorUnavailable as error:
             raise Problem(503, 'SEMANTIC_SEARCH_UNAVAILABLE', str(error)) from error
+    def _build_index(self, identity, binding, aliases, factor_legacy, context_inputs, context_ids):
+        """Read and verify one snapshot's serving subset outside vector_lock (a pooled read plus a provider call)."""
+        snapshot = VectorRegistry(self.repo).serving(identity, context_ids=context_ids)
+        generation, mapping, eaggl, embedding, dismech, context_run, model = binding
+        # KPN snapshots are pinned by their generation, legacy ones by the mapping run.
+        pinned = (snapshot.get('reference_generation_id') == generation if model == KPN_MODEL
+                  else snapshot['mapping_run'] == mapping)
+        if (not pinned or snapshot['run']['run_id'] != embedding
+                or snapshot['run']['config']['import_id'] != eaggl or snapshot['dismech_import'] != dismech
+                or (context_run and snapshot['context_run_id'] != context_run)):
+            raise VectorUnavailable('Active Vector snapshot differs from selected source runs')
+        index = UpstashFactorIndex(snapshot)
+        check_vector_readiness(index)
+        actual = {(row['factor_id'], row['label'], row['native_id']) for row in index.factors}
+        if actual != aliases:
+            raise VectorUnavailable('Vector aliases differ from selected mapping')
+        if any(row['source_revision'] != factor_legacy[row['factor_id']]['source_revision'] for row in index.factors):
+            raise VectorUnavailable('Vector source revisions differ from current canonical factor payloads')
+        if any(index.contexts['bindings'].get(row['source_id']) != row for row in context_inputs):
+            raise VectorUnavailable('Vector context bindings differ from current source revisions/text')
+        return index
 
     def dismech_catalog(self):
         """Load the independent full corpus only when mechanism search needs it."""
@@ -623,8 +693,9 @@ class Catalog:
         finally: connection.close()
         with self.lookup_lock: self.archive_unavailable_at = monotonic() if empty else None
         return [archived_factor(row) for row in rows]
-    def provenance(self, query, mode, semantic=False):
-        index = self.retrieval_index() if semantic else None
+    def provenance(self, query, mode, semantic=False, *, index=None):
+        """index: the one a request already resolved, so its hits and provenance share a snapshot."""
+        index = (index if index is not None else self.retrieval_index()) if semantic else None
         corpus = (self.reference_generation_id if self.model == KPN_MODEL else self.mapping_run) if semantic else self.dismech_import
         return {'query': query, 'mode': mode, 'corpus_snapshot': corpus,
             'embedding_model': index.run['config']['model'] if semantic else None, 'embedding_revision': self.embedding_run if semantic else None,
@@ -651,7 +722,7 @@ class Catalog:
     def search_factors(self, query, mode='semantic', limit=20, exclude=(), *, query_vector=None, _index=None):
         self.load()
         if mode in ('semantic', 'hybrid') and query.strip():
-            index = _index or self.retrieval_index()
+            index = _index if _index is not None else self.retrieval_index()
             try:
                 vector = query_vector if query_vector is not None else self.runtime_query_vectors([query.strip()], index=index)[0]
                 # Hybrid retains RRF over semantic and lexical ranks. The ANN
@@ -709,15 +780,16 @@ class Catalog:
             inputs.append(row)
         return inputs
 
-    def context_embedding_provenance(self, contexts):
-        inputs = self.stored_context_inputs(contexts)
-        stored = self.dismech_embeddings
+    def context_embedding_provenance(self, contexts, *, index=None):
+        stored = index.contexts if isinstance(index, UpstashFactorIndex) else None
+        inputs = self.stored_context_inputs(contexts, stored=stored)
+        stored = stored if stored is not None else self.dismech_embeddings
         return {'dismech_embedding_run_id': stored['run_id'], 'dismech_import_id': self.dismech_import,
                 'context_embedding_templates': stored['config']['templates'],
                 'context_embedding_inputs': [{key: value for key, value in row.items() if key != 'input_text'} for row in inputs]}
 
     def runtime_query_vectors(self, texts, *, index=None):
-        index = index or self.retrieval_index()
+        index = index if index is not None else self.retrieval_index()
         if isinstance(index, UpstashFactorIndex): return index.query_vectors(texts, embedder=get_embeddings)
         imported = getattr(self, 'context_text_vectors', {})
         known = [imported.get(sha256(text.encode('utf-8'))) for text in texts]
@@ -749,10 +821,10 @@ class Catalog:
                     'mapping_index': matched['mapping_index'], 'normalized_target_id': matched['normalized_target_id']}})
         return candidates[:remaining]
 
-    def suggest_factors(self,contexts,mode,remaining,exclude,*,precomputed=False):
+    def suggest_factors(self,contexts,mode,remaining,exclude,*,precomputed=False,index=None):
         self.load()
         if not remaining: return []
-        index = self.retrieval_index() if mode in ('semantic', 'hybrid') else None
+        index = (index if index is not None else self.retrieval_index()) if mode in ('semantic', 'hybrid') else None
         vectors = None
         query_inputs = [{'context_id': identity, 'input_sha256': sha256(text.encode('utf-8'))} for identity, text in contexts]
         try:

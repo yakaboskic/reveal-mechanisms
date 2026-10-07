@@ -159,7 +159,11 @@ class Vectors:
     def registry(self, repo=None):
         vectors = self
         class Registry:
-            def active_identity(self): return vectors.active
+            scope = 'local'
+            def active_identity_in(self, tx): return vectors.active
+            def active_identity(self, *, required=True):
+                if required and not vectors.active: raise catalog_module.VectorUnavailable('No verified active Vector snapshot')
+                return vectors.active
             def get(self, identity): return deepcopy(vectors.snapshots[identity])
             def serving(self, identity, *, summary=False, context_ids=None):
                 state = self.get(identity)
@@ -214,6 +218,10 @@ class CountingRepository:
         self.reads += 1
         if self.fail: raise self.fail
         return self.repo.read_transaction(**kwargs)
+    def single_read(self):
+        self.reads += 1
+        if self.fail: raise self.fail
+        return self.repo.single_read()
 
 
 class Clock:
@@ -433,6 +441,112 @@ class CatalogGenerationTests(unittest.TestCase):
         self.assertIsNone(catalog.index)
         self.assertEqual(catalog.vector_indexes, {})
         self.assertEqual(catalog.retrieval_index().snapshot['reference_generation_id'], KPN2)
+
+    def serving_calls(self, gate=None):
+        """Count full (non-summary) serving reads; gate holds them until released."""
+        original, calls = self.vectors.registry, []
+        def registry(*args):
+            result = original(*args); serving = result.serving
+            def project(identity, **kwargs):
+                if not kwargs.get('summary'):
+                    calls.append(identity)
+                    if gate: gate[0].set(); gate[1].wait(5)
+                    if len(gate or ()) > 2: raise gate[2]
+                return serving(identity, **kwargs)
+            result.serving = project
+            return result
+        return calls, patch.object(catalog_module, 'VectorRegistry', registry)
+
+    def test_a_loaded_catalog_serves_semantic_requests_without_pointer_reads(self):
+        self.activate(KPN1, KPN_MODEL, self.kpn1_snapshot)
+        catalog = self.load(); reads = self.repo.reads
+        calls, registry = self.serving_calls()
+        gap = catalog.by_source[OPEN_GAP['id']]['object']; contexts = [(gap['id'], gap['text'])]
+        with registry:
+            index = catalog.retrieval_index()
+            for _ in range(3):
+                catalog.suggest_factors(contexts, 'semantic', 1, (), precomputed=True, index=index)
+                catalog.context_embedding_provenance(contexts, index=index)
+                catalog.provenance('insulin', 'semantic', True, index=index)
+                catalog.search_factors('insulin', 'hybrid', 2, query_vector=np.array([1., 0.]))
+        self.assertIs(catalog.retrieval_index(), index)
+        self.assertEqual((self.repo.reads - reads, calls), (0, [self.kpn1_snapshot]))  # one cold build, no pointer reads
+
+    def test_vector_only_activation_is_adopted_by_the_poller_not_by_requests(self):
+        self.activate(KPN1, KPN_MODEL, self.kpn1_snapshot)
+        catalog = self.load(); first = catalog.retrieval_index()
+        other = self.kpn_snapshot(KPN1, KPN_FACTORS, name='kpn1-reindexed')
+        self.vectors.active = other
+        self.assertIs(catalog.retrieval_index(), first)  # requests keep the pinned snapshot until the poller sees the change
+        self.clock.now += GENERATION_TTL_SECONDS - 1
+        self.assertFalse(catalog.refresh_if_changed())
+        self.clock.now += 1
+        self.assertTrue(catalog.refresh_if_changed())
+        self.assertEqual((catalog.active_generation, catalog.vector_snapshot_id), (KPN1, other))
+        self.assertEqual(catalog.retrieval_index().snapshot['snapshot_id'], other)
+
+    def test_readiness_monitor_reads_replace_the_pollers_own(self):
+        self.activate(KPN1, KPN_MODEL, self.kpn1_snapshot)
+        catalog = self.load(); reads = self.repo.reads
+        self.clock.now += 1; catalog.observe_pointers(KPN1, self.kpn1_snapshot)
+        self.assertFalse(catalog.refresh_if_changed())
+        self.insert_generation(KPN2, KPN_KIND, KPN_MODEL, factors=KPN_FACTORS)
+        second = self.kpn_snapshot(KPN2, KPN_FACTORS); self.activate(KPN2, KPN_MODEL, second, previous=KPN1)
+        self.clock.now += GENERATION_TTL_SECONDS; catalog.observe_pointers(KPN2, second)
+        self.assertTrue(catalog.refresh_if_changed())
+        self.assertEqual((catalog.active_generation, catalog.vector_snapshot_id, self.repo.reads - reads), (KPN2, second, 0))
+        self.clock.now += GENERATION_TTL_SECONDS + 1  # observations stopped: after two TTLs the poller reads itself
+        self.assertFalse(catalog.refresh_if_changed()); self.assertEqual(self.repo.reads - reads, 0)
+        self.clock.now += GENERATION_TTL_SECONDS
+        self.assertFalse(catalog.refresh_if_changed()); self.assertEqual(self.repo.reads - reads, 1)
+
+    def test_cold_semantic_index_is_built_once_for_concurrent_requests(self):
+        self.activate(KPN1, KPN_MODEL, self.kpn1_snapshot)
+        catalog = self.load(); entered, release = threading.Event(), threading.Event()
+        calls, registry = self.serving_calls((entered, release)); results = []
+        with registry:
+            workers = [threading.Thread(target=lambda: results.append(catalog.retrieval_index())) for _ in range(4)]
+            for worker in workers: worker.start()
+            self.assertTrue(entered.wait(5)); time.sleep(.05); release.set()
+            for worker in workers: worker.join(5)
+        self.assertEqual((len(results), len({id(index) for index in results}), calls), (4, 1, [self.kpn1_snapshot]))
+
+    def test_a_failed_cold_build_fails_every_waiter_without_replaying_it(self):
+        self.activate(KPN1, KPN_MODEL, self.kpn1_snapshot)
+        catalog = self.load(); entered, release = threading.Event(), threading.Event(); failures = []
+        calls, registry = self.serving_calls((entered, release, RuntimeError('serving read lost')))
+        def request():
+            try: catalog.retrieval_index()
+            except Exception as error: failures.append(error)
+        with registry:
+            workers = [threading.Thread(target=request) for _ in range(3)]
+            for worker in workers: worker.start()
+            self.assertTrue(entered.wait(5)); time.sleep(.05); release.set()
+            for worker in workers: worker.join(5)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(sorted(type(error).__name__ for error in failures), ['Problem', 'Problem', 'RuntimeError'])
+        self.assertTrue(all(error.code == 'SEMANTIC_SEARCH_UNAVAILABLE' for error in failures if isinstance(error, Problem)))
+        self.assertEqual((catalog.vector_indexes, catalog.vector_builds), ({}, {}))
+        self.assertEqual(catalog.retrieval_index().snapshot['snapshot_id'], self.kpn1_snapshot)  # the next request builds again
+
+    def test_a_suggestion_resolves_one_index_for_hits_context_inputs_and_provenance(self):
+        from reveal_backend import app as api
+        self.activate(KPN1, KPN_MODEL, self.kpn1_snapshot)
+        catalog = self.load(); gap = catalog.by_source[OPEN_GAP['id']]
+        seen, resolved = [], []
+        class Recording:
+            def __getattr__(self, name): return getattr(catalog, name)
+            def retrieval_index(self): resolved.append(catalog.retrieval_index()); return resolved[-1]
+            def suggest_factors(self, *args, index=None, **kwargs): seen.append(index); return catalog.suggest_factors(*args, index=index, **kwargs)
+            def context_embedding_provenance(self, contexts, *, index=None): seen.append(index); return catalog.context_embedding_provenance(contexts, index=index)
+            def provenance(self, *args, index=None): seen.append(index); return catalog.provenance(*args, index=index)
+        body = {'manual_eaggl_anchors': [], 'dismissed_source_ids': [], 'subquery': '', 'mode': 'semantic', 'model': KPN_MODEL,
+                'source_gap': {'id': gap['object']['id'], **{key: gap['source'][key] for key in ('source_id', 'source_revision')}}}
+        with patch.object(api, 'catalog', Recording()), patch.object(api, 'repo', self.repo.repo):
+            result = api.build_suggestions(body)
+        self.assertEqual(len(resolved), 1)
+        self.assertEqual(len(seen), 3); self.assertTrue(all(index is resolved[0] for index in seen))
+        self.assertEqual(result['search']['corpus_snapshot'], KPN1)
 
     def test_readiness_fails_closed_on_generation_snapshot_or_provider_mismatch(self):
         self.activate(KPN1, KPN_MODEL)

@@ -68,11 +68,14 @@ class VectorRegistry:
         self.repo = repo or Repository()
         self.scope = environment(environment_name)
         self._snapshots = {}
-    def active_identity(self):
-        with self.repo.read_transaction() as tx:
-            row = tx.get('vector_active', self.scope)
-        if not row: raise VectorUnavailable('No verified active Vector snapshot in this environment')
-        return row['data']['snapshot_id']
+    def active_identity_in(self, tx):
+        """The active snapshot id read in the caller's transaction (e.g. with reference_active), or None."""
+        row = tx.get('vector_active', self.scope)
+        return row['data']['snapshot_id'] if row else None
+    def active_identity(self, *, required=True):
+        with self.repo.single_read() as tx: identity = self.active_identity_in(tx)
+        if not identity and required: raise VectorUnavailable('No verified active Vector snapshot in this environment')
+        return identity
     def active(self):
         with self.repo.read_transaction() as tx:
             active = tx.get('vector_active', self.scope)

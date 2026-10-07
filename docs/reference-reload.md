@@ -251,7 +251,7 @@ Never touched: the DisMech source tables (`003_dismech.sql`) and `archived_refer
 ## 8. App behaviour
 
 **Catalog**
-- Resolves the active generation on its cold load. Once loaded, `load()` does no I/O (as before reloads), because draft saves and job submits call it inside pooled write transactions. The API's background poller re-checks the active generation every 5 s, off the request path; a change reloads the catalog beside the serving one and swaps it in, so no restart is needed. A failed reload fails closed: the next request reloads inline into a fresh catalog, never on top of the previous generation's state.
+- Resolves the active generation and the active Vector snapshot on its cold load, in one statement, so a cutover is never seen half done. Once loaded, `load()` does no I/O (as before reloads), because draft saves and job submits call it inside pooled write transactions, and semantic requests serve the pinned snapshot's index without reading `vector_active`. The API's background poller re-checks both pointers every 5 s, off the request path (reusing the readiness monitor's read when it has one); a change of either reloads the catalog beside the serving one and swaps it in, so no restart is needed. A failed reload fails closed: the next request reloads inline into a fresh catalog, never on top of the previous generation's state.
 - `GET /v1/reference-factors/{archive_id}` caches hits for the process and misses for 5 s; while `archived_reference_factors` is missing or empty (legacy mode) it connects at most once per 5 s.
 - **KPN mode:**
   - it serves all factors of the generation from `reference_factors`, joined to `kpn_traits`;

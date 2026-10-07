@@ -202,6 +202,20 @@ instead of ranking the factor a second time. Measured from the laptop on
 seconds on a warm pool with nothing cached, and no database work once cached;
 a searched loadings page took 1.99, 0.85 and 0.34 seconds.
 
+The catalog reads the active reference generation and the active Vector
+snapshot together, in one statement, and pins that snapshot with the loaded
+generation. Semantic search and suggestions therefore read no pointer at all
+once the snapshot's index is built; a suggestion previously re-read the Vector
+pointer three times (three read transactions, about 2.4 seconds from the
+laptop), and a semantic mechanism search twice. A Vector-only activation is
+picked up by the catalog's poller within the same 5 second check as a
+generation change, and reloads the catalog. Each suggestion or search resolves
+the index once, so its hits, context inputs and provenance always come from one
+snapshot. The first semantic request after a load builds the index once:
+concurrent requests wait for that build (at most 60 seconds) instead of each
+reading the 7-10 MB serving subset on its own pooled connection, and a failed
+build is reported to them, not repeated.
+
 The research `get_gene_factors` query joins from the gene by symbol, through
 the loadings' `(import_id, gene_index)` index, to its factors. A `JOIN_ORDER`
 hint fixes that order: unhinted, the optimizer's 10% guess for the TEXT symbol

@@ -520,7 +520,9 @@ def get_gap(gap_id: str,request:Request,source_revision:str|None=None,scope:str=
 def search_mechanisms(q: str='', mode: str='hybrid', limit: int=20,source:str='all',model:str='cfde-inc-v2',cursor:str|None=None):
     catalog.load()
     if mode=='semantic' and source!='eaggl': raise Problem(503,'SEARCH_MODE_UNAVAILABLE','Pure semantic search requires the EAGGL embedding corpus; use lexical, fuzzy or hybrid for DisMech.')
-    items=catalog.search_factors(q,mode,len(catalog.factors)) if source in ('eaggl','all') else []
+    semantic=source!='dismech' and mode in ('semantic','hybrid')
+    index=pinned_index() if semantic else {}
+    items=catalog.search_factors(q,mode,len(catalog.factors),**({'_index':index['index']} if index else {})) if source in ('eaggl','all') else []
     if source in ('dismech','all'):
         from difflib import SequenceMatcher
         contexts=[]
@@ -537,12 +539,19 @@ def search_mechanisms(q: str='', mode: str='hybrid', limit: int=20,source:str='a
             for item in items+contexts: item['ranking'].update(value=1/(60+item['ranking']['rank']),metric='reciprocal_rank_fusion')
         items+=contexts; items.sort(key=lambda item:(-item['ranking']['value'],item['record']['source_id']))
         for rank,item in enumerate(items,1): item['ranking']['rank']=rank
-    provenance=catalog.provenance(q,mode,source!='dismech' and mode in ('semantic','hybrid'))
+    provenance=catalog.provenance(q,mode,semantic,**index)
     if source=='all': provenance['corpus_snapshot']=digest([catalog.dismech_import,catalog.mapping_run])
     # Order, ranking and exact record identities, never the per-item retrieval provenance (up to 1,000 candidate hits each).
     snapshot=['mechanism-snapshot-v2',provenance,getattr(catalog,'reference_generation_id',None),[[item['record'].get('source'),item['record']['source_id'],
         item['record'].get('source_revision'),(item['record'].get('object') or {}).get('id'),item['ranking']] for item in items]]
     return {**page(items,limit=limit,cursor=cursor,scope=digest(['mechanisms',q,mode,source,model]),snapshot_items=snapshot),'search':provenance}
+
+def pinned_index():
+    """{'index': the served semantic index}, resolved once per request so its hits, context inputs and provenance
+    share one snapshot; {} for catalogs without one (test stand-ins)."""
+    resolve=getattr(catalog,'retrieval_index',None)
+    index=resolve() if resolve else None
+    return {'index':index} if index is not None else {}
 
 @app.post('/v1/mechanisms/suggest')
 async def suggest(request: Request):
@@ -565,11 +574,12 @@ def build_suggestions(body):
     precomputed=not bool(body.get('subquery'))
     disease_candidates=getattr(catalog,'disease_factors',lambda *_: [])(gap,remaining,exclude)
     excluded=exclude | {item['record']['source_id'] for item in disease_candidates}
-    items=disease_candidates+catalog.suggest_factors(contexts,body.get('mode','semantic'),remaining-len(disease_candidates),excluded,precomputed=precomputed)
+    index=pinned_index()  # the response's search provenance always needs it, so no request resolves it more than once
+    items=disease_candidates+catalog.suggest_factors(contexts,body.get('mode','semantic'),remaining-len(disease_candidates),excluded,precomputed=precomputed,**index)
     for rank,item in enumerate(items,1):
         item['ranking']['rank']=rank
         item.setdefault('reason','Similarity to selected source context; inspect for relevance, not biological support.')
-    context_provenance=catalog.context_embedding_provenance(contexts) if precomputed else {'context_embedding_origin':'user_subquery'}
+    context_provenance=catalog.context_embedding_provenance(contexts,**index) if precomputed else {'context_embedding_origin':'user_subquery'}
     suggestion_id=uid()
     with repo.transaction() as tx:
         tx.insert_many([('suggestion',suggestion_id,'catalog',{'mode':body.get('mode','semantic'),'embedding_run_id':catalog.embedding_run,'mapping_run_id':catalog.mapping_run,
@@ -577,7 +587,7 @@ def build_suggestions(body):
                 **({'retrieval':x['retrieval']} if 'retrieval' in x else {}),
                 **({'context_similarities':x['context_similarities']} if 'context_similarities' in x else {})} for x in items}})])
     return {'suggestion_id':suggestion_id,'automatic_anchors':[{'factor':x['record'],'ranking':x['ranking'],'matched_context_ids':x['contexts'],'reason':x['reason']} for x in items],
-        'automatic_target_count':5,'search':catalog.provenance(query,body.get('mode','semantic'),True),'limitations':['Retrieval similarity is not evidence of biological support.']}
+        'automatic_target_count':5,'search':catalog.provenance(query,body.get('mode','semantic'),True,**index),'limitations':['Retrieval similarity is not evidence of biological support.']}
 
 def archived_factor(source_id):
     """(superseded, frozen snapshot|None) for a factor id the served generation does not serve.
