@@ -68,7 +68,9 @@ class MechanismSnapshotTests(unittest.TestCase):
             factors = {'a': 1, 'b': 2, 'c': 3}
             def load(self): pass
             def provenance(self, query, mode, semantic=False): return {'query': query, 'mode': mode, 'corpus_snapshot': 'generation'}
-            def search_factors(self, query, mode, limit): return deepcopy(self.items)
+            def search_factors(self, query, mode, limit, provenance=True):
+                assert provenance is False, 'search responses never build per-hit retrieval provenance'
+                return deepcopy(self.items)
         self.catalog = Catalog()
         self.catalog.items = [{'record': {'source': 'eaggl', 'source_id': 'factor:' + letter, 'source_revision': letter * 64,
                                           'object': {'id': 'dapper:Mechanism.' + letter * 32}},
@@ -86,7 +88,7 @@ class MechanismSnapshotTests(unittest.TestCase):
     def test_cursor_binds_ranking_not_retrieval_provenance(self):
         first = self.search(); self.assertEqual(first.status_code, 200, first.text)
         cursor = first.json()['page']['next_cursor']
-        self.assertEqual(first.json()['items'][0]['retrieval'], self.catalog.items[0]['retrieval'], 'responses keep their provenance')
+        self.assertEqual(set(first.json()['items'][0]), {'record', 'ranking'}, 'MechanismHit: provenance stays server-side')
         for item in self.catalog.items: item['retrieval']['candidate_hits'] = [[{'id': 'other', 'score': 0.1}]]
         second = self.search(cursor)
         self.assertEqual(second.status_code, 200, second.text)

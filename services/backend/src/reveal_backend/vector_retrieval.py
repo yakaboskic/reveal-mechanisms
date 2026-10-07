@@ -78,9 +78,12 @@ def vector_checksum(vector):
 
 
 def query_vector_provenance(vectors):
-    return {'query_vector_checksums': [vector_checksum(vector) for vector in vectors],
-            'query_vectors': np.asarray(vectors).tolist(), 'query_vector_encoding': 'float64-le/base64',
-            'query_vectors_base64': [base64.b64encode(np.asarray(vector, dtype='<f8').tobytes()).decode('ascii') for vector in vectors]}
+    """The exact '<f8' bytes once, as base64, with their checksums. Records before this change also carry the same
+    vectors as a JSON float list; they stay readable and are never rewritten."""
+    raw = [np.asarray(vector, dtype='<f8').tobytes() for vector in vectors]
+    return {'query_vector_checksums': [hashlib.sha256(value).hexdigest() for value in raw],
+            'query_vector_encoding': 'float64-le/base64',
+            'query_vectors_base64': [base64.b64encode(value).decode('ascii') for value in raw]}
 
 
 def cosine_score(score):
@@ -312,8 +315,9 @@ class UpstashFactorIndex:
             'dismech_import_id': self.snapshot.get('dismech_import'), 'roundtrip_tolerance': {'atol': ROUNDTRIP_ATOL, 'rtol': ROUNDTRIP_RTOL}}
 
 
-def retrieve_native(index, factor_legacy, vectors, limit, exclude=()):
-    """Shared exact/reference and ANN retrieval contract, with bounded expansion."""
+def retrieve_native(index, factor_legacy, vectors, limit, exclude=(), *, provenance=True):
+    """Shared exact/reference and ANN retrieval contract, with bounded expansion. provenance=False (search
+    responses, which never return it) skips building each hit's retrieval record."""
     if not limit or not len(vectors): return []
     vectors = np.asarray(vectors, dtype=np.float64)
     validate_vectors(vectors, len(vectors), index.run['dimensions'])
@@ -347,14 +351,16 @@ def retrieve_native(index, factor_legacy, vectors, limit, exclude=()):
     for identity, row in zip(factor_ids, scores):
         native = factor_legacy[identity]['source_id']
         grouped[native] = np.maximum(grouped[native], row) if native in grouped else row.copy()
+    # One retrieval record shared by every hit: same JSON per hit, built once instead of once per hit.
+    shared = ({**index.provenance(), 'candidate_depth': depth, 'candidate_count': len(selected),
+               **query_vector_provenance(vectors), 'candidate_hits': [[dict(row) for row in batch] for batch in batches]}
+              if provenance and hasattr(index, 'provenance') else None)
     result = []
     for native, scores in grouped.items():
         cosine = np.clip(scores, -1, 1)
         item = {'record': factor_legacy[aliases[native][0]], 'scores': cosine, 'value': float(cosine.max())}
-        if hasattr(index, 'provenance'):
-            item['retrieval'] = {**index.provenance(), 'candidate_depth': depth, 'candidate_count': len(selected),
-                **query_vector_provenance(vectors),
-                'candidate_hits': [[dict(row) for row in batch] for batch in batches],
+        if shared is not None:
+            item['retrieval'] = {**shared,
                 'aliases': [{'id': index.by_id[identity]['id'], 'original_vector_sha256': index.by_id[identity]['original_vector_sha256']}
                             for identity in aliases[native]]}
         result.append(item)

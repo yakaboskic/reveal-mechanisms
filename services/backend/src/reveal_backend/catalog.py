@@ -743,7 +743,8 @@ class Catalog:
             if score: scored.append((score, gap))
         scored.sort(key=lambda r: (-r[0], r[1]['source']['source_id']))
         return [{'gap': g, 'ranking': {'value': s, 'metric': 'fuzzy_similarity' if mode=='fuzzy' else 'lexical_rank', 'rank': i+1}} for i,(s,g) in enumerate(scored[:limit])]
-    def search_factors(self, query, mode='semantic', limit=20, exclude=(), *, query_vector=None, _index=None):
+    def search_factors(self, query, mode='semantic', limit=20, exclude=(), *, query_vector=None, _index=None, provenance=True):
+        """provenance=False omits each semantic hit's retrieval record (search responses never return it)."""
         self.load()
         if mode in ('semantic', 'hybrid') and query.strip():
             index = _index if _index is not None else self.retrieval_index()
@@ -752,7 +753,7 @@ class Catalog:
                 # Hybrid retains RRF over semantic and lexical ranks. The ANN
                 # semantic leg is explicitly bounded and recorded in provenance.
                 semantic_limit = min(len(self.factors), index.candidate_limit) if mode == 'hybrid' else limit
-                semantic = retrieve_native(index, self.factor_legacy, np.asarray([vector]), semantic_limit, exclude)
+                semantic = retrieve_native(index, self.factor_legacy, np.asarray([vector]), semantic_limit, exclude, provenance=provenance)
                 items = [{'record': row['record'], 'ranking': {'value': row['value'], 'metric': 'cosine_similarity', 'rank': rank},
                           **({'retrieval': {**row['retrieval'], 'query_inputs': [{'context_id': 'search_query',
                               'input_sha256': sha256((query if query_vector is not None else query.strip()).encode('utf-8'))}]}}

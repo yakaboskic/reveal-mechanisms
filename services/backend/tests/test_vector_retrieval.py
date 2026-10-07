@@ -13,7 +13,7 @@ from reveal_backend.auth import Problem
 from reveal_backend.repository import Repository, digest
 from reveal_backend.vector_ingestion import VectorRegistry, import_batch, save_export, verify_snapshot
 from reveal_backend.vector_retrieval import (POLICY_VERSION, UpstashFactorIndex, VectorUnavailable, check_snapshot_readiness,
-    cosine_score, embedding_space, metadata, retrieve_native, vector_checksum)
+    cosine_score, embedding_space, metadata, query_vector_provenance, retrieve_native, vector_checksum)
 
 
 class Provider:
@@ -168,6 +168,31 @@ class RetrievalTests(unittest.TestCase):
         self.assertTrue(all(ns == snapshot['factor_namespace'] for ns, _ in client.queries))
         self.assertFalse(hasattr(index, 'matrix'))
 
+    def test_query_vectors_are_stored_once_as_exact_base64_bytes(self):
+        import base64
+        vectors = np.array([[.6, .8], [1 / 3, (8 / 9) ** .5]])
+        value = query_vector_provenance(vectors)
+        self.assertEqual(set(value), {'query_vector_checksums', 'query_vector_encoding', 'query_vectors_base64'})
+        self.assertEqual(value['query_vector_checksums'], [vector_checksum(vector) for vector in vectors])
+        decoded = [np.frombuffer(base64.b64decode(text), dtype='<f8') for text in value['query_vectors_base64']]
+        np.testing.assert_array_equal(decoded, vectors)   # lossless: the float list was a second copy
+
+    def test_hits_share_one_retrieval_record_built_once_and_search_can_skip_it(self):
+        snapshot, client, records = fixture()
+        index = UpstashFactorIndex(snapshot, client=client)
+        vectors = np.array([[1., 0.], [0., 1.], [-1., 0.]])
+        with patch('reveal_backend.vector_retrieval.query_vector_provenance', wraps=query_vector_provenance) as built:
+            rows = retrieve_native(index, records, vectors, 3)
+        self.assertEqual(built.call_count, 1)
+        self.assertGreater(len(rows), 1)
+        shared = [{key: value for key, value in row['retrieval'].items() if key != 'aliases'} for row in rows]
+        self.assertTrue(all(digest(value) == digest(shared[0]) for value in shared))
+        self.assertNotIn('query_vectors', shared[0])
+        self.assertEqual(shared[0]['query_vectors_base64'], query_vector_provenance(vectors)['query_vectors_base64'])
+        bare = retrieve_native(index, records, vectors, 3, provenance=False)
+        self.assertEqual([(row['record'], row['value']) for row in bare], [(row['record'], row['value']) for row in rows])
+        self.assertTrue(all('retrieval' not in row for row in bare))
+
     def test_duplicate_alias_underfill_expands_before_cutoff(self):
         snapshot, client, records = fixture(many=True)
         rows = retrieve_native(UpstashFactorIndex(snapshot, client=client), records, [[1., 0.]], 2)
@@ -210,8 +235,12 @@ class RetrievalTests(unittest.TestCase):
         self.assertTrue(all('context_similarities' in row for row in rows))
         self.assertTrue(client.queries)
         before = len(client.queries)
-        catalog.search_factors('query', 'hybrid', 3, query_vector=np.array([1., 0.]))
+        hybrid = catalog.search_factors('query', 'hybrid', 3, query_vector=np.array([1., 0.]))
         self.assertGreater(len(client.queries), before)
+        self.assertTrue(any('retrieval' in row for row in hybrid))
+        bare = catalog.search_factors('query', 'hybrid', 3, query_vector=np.array([1., 0.]), provenance=False)
+        self.assertEqual([(row['record'], row['ranking']) for row in bare], [(row['record'], row['ranking']) for row in hybrid])
+        self.assertTrue(all(set(row) == {'record', 'ranking'} for row in bare))
 
     def test_snapshot_requires_explicit_namespace_and_compatible_space(self):
         snapshot, client, _ = fixture()

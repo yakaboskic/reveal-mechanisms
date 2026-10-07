@@ -199,7 +199,7 @@ def freeze_draft_bindings(tx,draft_id,owner,composer):
     if composer['eaggl_anchors'] and hasattr(catalog,'load'): catalog.load()
     previous=tx.get('draft_binding',draft_id)
     previous=previous['data'].get('selections',{}) if previous else {}
-    selections={}; gate_checked=False
+    selections={}; gate_checked=False; suggestions={}   # automatic anchors share one suggestion: read and parse it once
     for selection in composer['eaggl_anchors']:
         reference=selection['reference']; native=reference['source_id']; old=previous.get(native)
         stale=bool(old) and not current_binding(old['binding'])
@@ -215,7 +215,9 @@ def freeze_draft_bindings(tx,draft_id,owner,composer):
                     raise superseded('This anchor belongs to a superseded reference generation; select current factors.') from None
                 raise
             selections[native]={'reference':reference,'record':catalog.factors[native],'binding':catalog.bindings[native]}
-        suggestion=tx.get('suggestion',selection.get('suggestion_id')) if selection.get('suggestion_id') else None
+        identity=selection.get('suggestion_id')
+        if identity and identity not in suggestions: suggestions[identity]=tx.get('suggestion',identity)
+        suggestion=suggestions.get(identity) if identity else None
         if suggestion and native in suggestion['data']['hits']:
             selections[native]['retrieval']={k:v for k,v in suggestion['data'].items() if k!='hits'}|{'hit':suggestion['data']['hits'][native]}
     if len(selections)!=len(composer['eaggl_anchors']): raise Problem(422,'DUPLICATE_ANCHOR','Select each native mechanism once.')
@@ -527,7 +529,10 @@ def search_mechanisms(q: str='', mode: str='hybrid', limit: int=20,source:str='a
     if mode=='semantic' and source!='eaggl': raise Problem(503,'SEARCH_MODE_UNAVAILABLE','Pure semantic search requires the EAGGL embedding corpus; use lexical, fuzzy or hybrid for DisMech.')
     semantic=source!='dismech' and mode in ('semantic','hybrid')
     index=pinned_index() if semantic else {}
-    items=catalog.search_factors(q,mode,len(catalog.factors),**({'_index':index['index']} if index else {})) if source in ('eaggl','all') else []
+    # Items are MechanismHit {record, ranking}: per-hit retrieval provenance (query vectors, up to 1,000 candidate
+    # hits each) stays server-side, so it is neither built nor returned.
+    items=[{'record':item['record'],'ranking':item['ranking']} for item in catalog.search_factors(q,mode,len(catalog.factors),
+        provenance=False,**({'_index':index['index']} if index else {}))] if source in ('eaggl','all') else []
     if source in ('dismech','all'):
         from difflib import SequenceMatcher
         contexts=[]

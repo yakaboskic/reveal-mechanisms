@@ -343,4 +343,22 @@ class ApplicationTests(unittest.TestCase):
             binding=tx.get('request_binding',response.json()['research_request_id'])['data']
         self.assertEqual(binding['retrieval'][factor['source_id']]['hit']['context_similarities'],pair_scores)
 
+    def test_anchors_sharing_one_suggestion_read_it_once_and_freeze_their_own_hits(self):
+        natives=['factor:%d'%i for i in range(3)]; suggestion=uid()
+        class Source:
+            dismech_import='dismech'; factors={n:{'source_id':n} for n in natives}
+            bindings={n:{'cfde_node_id':n} for n in natives}
+            def selected(self,reference): return None
+            def validate_composer(self,composer,submit=False): return None
+        with self.repo.transaction() as tx:
+            tx.put('suggestion',suggestion,'catalog',{'mode':'semantic','hits':{n:{'ranking':{'rank':i+1}} for i,n in enumerate(natives)}})
+        composer=dict(COMPOSER,eaggl_anchors=[{'reference':{'source_id':n},'origin':'automatic','suggestion_id':suggestion} for n in natives])
+        reads=[]; get=Transaction.get
+        def counted(tx,kind,identity): reads.append(kind); return get(tx,kind,identity)
+        with patch.object(api,'catalog',Source()), patch.object(Transaction,'get',counted), self.repo.transaction() as tx:
+            frozen=api.freeze_draft_bindings(tx,uid(),'owner',composer)
+        self.assertEqual(reads.count('suggestion'),1)
+        self.assertEqual({n:frozen['selections'][n]['retrieval'] for n in natives},
+                         {n:{'mode':'semantic','hit':{'ranking':{'rank':i+1}}} for i,n in enumerate(natives)})
+
 if __name__=='__main__': unittest.main()
