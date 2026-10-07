@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api, ApiError, messageOf, type Schema } from "@/lib/client";
 import { factorApi } from "@/lib/factor-api";
+import { firstGenePage } from "@/lib/factor-explorer";
 import { factorHref, traitHref, referenceReturnPath, returnLabel } from "@/lib/factor-links";
 import { mechanismName, mechanismTrait } from "@/lib/mechanism-display";
 import { constraintDefinitions, constraintSourceHref } from "@/lib/gnomad-display";
@@ -20,7 +21,7 @@ export function ReferenceNavigation({ from }: { from?: string | null }) {
 
 export function FactorView({ sourceId, revision, archiveId, from }: { sourceId: string; revision?: string; archiveId?: string; from?: string }) {
   const binding = JSON.stringify([sourceId, revision, archiveId]);
-  const [loaded, setLoaded] = useState<{ binding: string; detail?: Schema<"FactorDetail">; archived?: Schema<"ArchivedReferenceFactor"> } | null>(null);
+  const [loaded, setLoaded] = useState<{ binding: string; detail?: Schema<"FactorDetail">; archived?: Schema<"ArchivedReferenceFactor">; genes?: Promise<Schema<"FactorLoadings"> | null> } | null>(null);
   const [failure, setFailure] = useState<{ binding: string; message: string } | null>(null);
   const [attempt, retry] = useState(0);
   useEffect(() => {
@@ -31,7 +32,9 @@ export function FactorView({ sourceId, revision, archiveId, from }: { sourceId: 
         if (archived.source_id !== sourceId) throw new Error("This archived record belongs to a different factor.");
         return { binding, archived };
       }
-      try { return { binding, detail: await factorApi.detail(sourceId, revision, controller.signal) }; }
+      // The first gene page waits for nothing the detail returns: read both at once. The panel checks its pins.
+      const genes = factorApi.loadings({ source_id: sourceId, source_revision: revision, ...firstGenePage }, controller.signal).catch(() => null);
+      try { return { binding, detail: await factorApi.detail(sourceId, revision, controller.signal), genes }; }
       catch (error) {
         const archived = error instanceof ApiError ? error.problem?.archived_reference_factor : null;
         if (archived?.source_id === sourceId) return { binding, archived };
@@ -50,7 +53,7 @@ export function FactorView({ sourceId, revision, archiveId, from }: { sourceId: 
     {!result ? <LoadingSurface title={error ? "Couldn’t open this factor" : "Opening factor"} description="Retrieving its gene loadings, gene-set projections and source record." error={error} onRetry={() => retry(n => n + 1)} skeleton="record" /> : result.archived ? <ArchivedFactorView snapshot={result.archived} /> : detail && <>
       <header className="reference-heading"><p className="reference-kind">EAGGL factor</p><h1>{mechanismName(detail.factor)}</h1><p className="factor-trait">{traitUrl ? <a href={traitUrl} target="_blank" rel="noopener noreferrer">{mechanismTrait(detail.factor)}</a> : mechanismTrait(detail.factor)}</p>
       </header>
-      <FactorExplorer key={binding} detail={detail} self={self} />
+      <FactorExplorer key={binding} detail={detail} self={self} genes={result.genes} />
       <section id="factor-additional-info" className="factor-additional-info" aria-labelledby="factor-additional-info-title">
       <h2 id="factor-additional-info-title">Additional info</h2>
       <details id="factor-source" className="factor-metadata"><summary>Factor details</summary>

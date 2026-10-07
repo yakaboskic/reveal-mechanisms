@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import { messageOf, type Schema } from "@/lib/client";
 import { factorApi } from "@/lib/factor-api";
 import { geneSetHref } from "@/lib/factor-links";
-import { appendLoadings, overlayMembers } from "@/lib/factor-explorer";
+import { appendLoadings, overlayMembers, prefetchedLoadings } from "@/lib/factor-explorer";
 import { constraintCell, constraintDefinitions, constraintLinks, constraintSelection, constraintValue, loadingSortLabels, type LoadingSort } from "@/lib/gnomad-display";
 import { LoadingSurface } from "./LoadingSurface";
 import { LoadingHeatmap } from "./LoadingHeatmap";
@@ -16,7 +16,7 @@ type Overlay = { label: string; symbols: Set<string>; unsupported: number };
 const count = (value: number) => value.toLocaleString();
 const valueLabel = (value: number | null | undefined) => value == null ? "Not reported" : String(value);
 
-export function FactorExplorer({ detail, self }: { detail: Schema<"FactorDetail">; self: string }) {
+export function FactorExplorer({ detail, self, genes }: { detail: Schema<"FactorDetail">; self: string; genes?: Promise<Schema<"FactorLoadings"> | null> }) {
   const id = useId(), [tab, setTab] = useState<Kind>("gene"), [visitedSets, setVisitedSets] = useState(false);
   const [chooser, setChooser] = useState(false), [choice, setChoice] = useState<OverlayChoice | null>(null);
   const [options, setOptions] = useState<Schema<"FactorLoading">[] | null>(null), [optionsError, setOptionsError] = useState("");
@@ -67,7 +67,7 @@ export function FactorExplorer({ detail, self }: { detail: Schema<"FactorDetail"
       changeTab(tabs[next].kind); document.getElementById(`${id}-${tabs[next].kind}-tab`)?.focus();
     }}>{item.label}<span>{count(item.total)}</span></button>)}</div>
     <div id={`${id}-gene-panel`} role="tabpanel" aria-labelledby={`${id}-gene-tab`} hidden={tab !== "gene"}>
-      <LoadingPanel detail={detail} kind="gene" self={self} overlay={overlay}>
+      <LoadingPanel detail={detail} kind="gene" self={self} overlay={overlay} initial={genes}>
         {!chooser ? <button type="button" className="overlay-add" onClick={() => setChooser(true)}>＋ Overlay a gene set</button> : <div className="factor-overlay">
           <div className="overlay-tools"><label htmlFor={`${id}-overlay`}>Overlay gene set</label><select id={`${id}-overlay`} value={choice?.id || ""} disabled={!options && !choice} onChange={event => {
             const item = options?.find(row => row.gene_set_id === event.target.value);
@@ -85,7 +85,7 @@ export function FactorExplorer({ detail, self }: { detail: Schema<"FactorDetail"
   </div>;
 }
 
-function LoadingPanel({ detail, kind, self, overlay, onOverlay, children }: { detail: Schema<"FactorDetail">; kind: Kind; self: string; overlay?: Overlay | null; onOverlay?: (choice: OverlayChoice) => void; children?: React.ReactNode }) {
+function LoadingPanel({ detail, kind, self, overlay, onOverlay, initial, children }: { detail: Schema<"FactorDetail">; kind: Kind; self: string; overlay?: Overlay | null; onOverlay?: (choice: OverlayChoice) => void; initial?: Promise<Schema<"FactorLoadings"> | null>; children?: React.ReactNode }) {
   const id = useId(), isGene = kind === "gene", title = isGene ? "Gene loadings" : "Gene-set loadings";
   const [search, setSearch] = useState(""), [q, setQuery] = useState("");
   const [metric, setMetric] = useState<"joint" | "marginal">("joint"), [sort, setSort] = useState<LoadingSort>("alphabetical");
@@ -95,11 +95,15 @@ function LoadingPanel({ detail, kind, self, overlay, onOverlay, children }: { de
   const requestKey = `${binding}:${offset}:${attempt}`;
   const [loaded, setLoaded] = useState<{ binding: string; result: Schema<"FactorLoadings"> } | null>(null);
   const [failure, setFailure] = useState<{ key: string; message: string } | null>(null), [settled, setSettled] = useState("");
-  const busy = settled !== requestKey;
+  const busy = settled !== requestKey, first = useRef(requestKey);
   useEffect(() => { const timer = setTimeout(() => { setQuery(search.trim()); setOffset(0); }, 250); return () => clearTimeout(timer); }, [search]);
   useEffect(() => {
     const controller = new AbortController(); setFailure(null);
-    void factorApi.loadings({ source_id: detail.factor.source_id, source_revision: detail.factor.source_revision, generation_id: detail.generation_id || undefined, gnomad_import_id: gnomadImportId, kind, metric, sort, q, offset, limit: isGene ? 200 : 50 }, controller.signal)
+    const limit = isGene ? 200 : 50;
+    const pinned = () => factorApi.loadings({ source_id: detail.factor.source_id, source_revision: detail.factor.source_revision, generation_id: detail.generation_id || undefined, gnomad_import_id: gnomadImportId, kind, metric, sort, q, offset, limit }, controller.signal);
+    void (initial && requestKey === first.current
+      ? initial.then(value => prefetchedLoadings(value, { source_id: detail.factor.source_id, generation_id: detail.generation_id, gnomad_import_id: gnomadImportId, kind, metric, sort, q, offset, limit }) || pinned())
+      : pinned())
       .then(result => {
         if (controller.signal.aborted) return;
         if (result.source_id !== detail.factor.source_id || result.generation_id !== detail.generation_id || result.kind !== kind || result.metric !== metric || result.sort !== sort) throw new Error("These loadings belong to a different reference or order. Reload the factor page.");
@@ -108,7 +112,7 @@ function LoadingPanel({ detail, kind, self, overlay, onOverlay, children }: { de
       }).catch(error => { if (!controller.signal.aborted) setFailure({ key: requestKey, message: messageOf(error) }); })
       .finally(() => { if (!controller.signal.aborted) setSettled(requestKey); });
     return () => controller.abort();
-  }, [binding, requestKey, detail, kind, isGene, gnomadImportId, metric, sort, q, offset]);
+  }, [binding, requestKey, detail, kind, isGene, gnomadImportId, metric, sort, q, offset, initial]);
   const result = loaded?.binding === binding ? loaded.result : null;
   const error = failure?.key === requestKey ? failure.message : "";
   const summary = result?.summary || (isGene ? detail.genes : detail.gene_sets);
