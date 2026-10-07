@@ -420,42 +420,45 @@ def search_gaps(request:Request,q: str='', limit: int=20, mode: str='fuzzy',kind
     catalog.load(); items=catalog.search_gaps(q,len(catalog.gaps),mode)
     allowed={g['object']['id'] for g in filter_gaps([x['gap'] for x in items],kind,status,disease_id)}
     items=[x for x in items if x['gap']['object']['id'] in allowed]
-    owner,accounts=discovery(request,scope); counts=counts_by_gap(accounts); observed=now()
-    items=[{**item,'gap':counted_gap(item['gap'],counts,owner,observed)} for item in items]
-    viewer,observations=gap_votes(request,[item['gap'] for item in items])
-    items=[{**item,'gap':gap} for item,gap in zip(items,observations)]
+    owner,viewer,accounts,values=gap_discovery(request,scope,[item['gap'] for item in items])
+    counts=counts_by_gap(accounts); observed=now()
+    items=[{**item,'gap':{**counted_gap(item['gap'],counts,owner,observed),'votes':values[('gap',item['gap']['object']['id'])]}} for item in items]
     return {**page(items,viewer or owner,limit,cursor,digest([q,mode,kind,status,disease_id,scope]),snapshot_items=count_snapshot(items)),'search':catalog.provenance(q,mode)}
 
 def optional_identity(tx,request):
     authorization=request.headers.get('authorization')
     return principal(tx,authorization)['user_id'] if authorization is not None else None
 
-def discovery(request,scope='public', *, attribution=False):
+def discovery_scope(scope):
     if scope not in ('public','workspace'): raise Problem(422,'INVALID_QUERY','Choose public or workspace discovery.')
-    with repo.read_transaction() as tx:
-        owner=optional_identity(tx,request)
-        if scope=='public': return '',publication.public_accounts(tx)
-        if owner is None: raise Problem(401,'SESSION_EXPIRED','Continue with a registered or anonymous session to browse your workspace.')
-        return owner,visible_accounts(tx,owner,attribution=attribution)
 
-def gap_votes(request, items):
-    with repo.read_transaction() as tx:
-        viewer=votes.viewer(tx,request.headers.get('authorization'))
-        values=votes.states(tx,[('gap',item['object']['id']) for item in items],viewer)
-    return viewer,[{**item,'votes':values[('gap',item['object']['id'])]} for item in items]
+def discovery(tx,request,scope='public', *, attribution=False):
+    """One principal read: owner, registered vote viewer, the accounts the scope may count and, for public
+    scope, the publication rows they came from (for account_summaries)."""
+    authorization=request.headers.get('authorization')
+    me=principal(tx,authorization) if authorization is not None else None
+    owner=me['user_id'] if me else None
+    viewer=owner if me and me['principal_kind']=='registered' else None
+    if scope=='public':
+        published=publication.published(tx)
+        return '',viewer,publication.public_accounts(tx,published),published
+    if owner is None: raise Problem(401,'SESSION_EXPIRED','Continue with a registered or anonymous session to browse your workspace.')
+    return owner,viewer,visible_accounts(tx,owner,attribution=attribution),None
 
-def account_votes(request, items):
+def gap_discovery(request,scope,gaps):
+    """Counts and every gap's vote state from one read snapshot, after scope validation."""
+    discovery_scope(scope)
     with repo.read_transaction() as tx:
-        viewer=votes.viewer(tx,request.headers.get('authorization'))
-        return viewer,votes.account_summaries(tx,items,viewer)
+        owner,viewer,accounts,_=discovery(tx,request,scope)
+        return owner,viewer,accounts,votes.states(tx,[('gap',gap['object']['id']) for gap in gaps],viewer)
 
 @app.get('/v1/knowledge-gaps')
 def list_gaps(request:Request,limit: int=20,cursor:str|None=None,kind:str|None=None,status:str|None=None,source:str='dismech',disease_id:str|None=None,scope:str='public',sort:str='accounts'):
     if sort not in ('accounts','votes'): raise Problem(422,'INVALID_QUERY','Choose accounts or votes sorting.')
     catalog.load(); items=filter_gaps([x['gap'] for x in catalog.search_gaps('',len(catalog.gaps))],kind,status,disease_id)
-    owner,accounts=discovery(request,scope); counts=counts_by_gap(accounts); observed=now(); seed=browse_seed(cursor)
-    items=[counted_gap(gap,counts,owner,observed) for gap in items]
-    viewer,items=gap_votes(request,items)
+    owner,viewer,accounts,values=gap_discovery(request,scope,items)
+    counts=counts_by_gap(accounts); observed=now(); seed=browse_seed(cursor)
+    items=[{**counted_gap(gap,counts,owner,observed),'votes':values[('gap',gap['object']['id'])]} for gap in items]
     items.sort(key=lambda gap:((-gap['votes']['score'],-resolved_mechanism_count(gap),-gap['scientific_accounts']['count'])
         if sort=='votes' else (-gap['scientific_accounts']['count'],-resolved_mechanism_count(gap)))+
         (digest([seed,gap['object']['id']]),gap['source']['source_id'],gap['object']['id']))
@@ -469,9 +472,11 @@ def listing_scope(parts,reference_state):
 def gap_accounts(gap_id:str,request:Request,limit:int=20,cursor:str|None=None,source_revision:str|None=None,scope:str='public',reference_state:str='all'):
     gap=catalog.gap(gap_id)
     if source_revision and source_revision!=gap['source']['source_revision']: raise Problem(409,'SOURCE_REVISION_CHANGED','The exact requested source revision is unavailable.')
-    owner,accounts=discovery(request,scope,attribution=True)
-    items=by_reference_state([item for item in accounts if item['account']['question']==gap['object']['id']],reference_state)
-    viewer,items=account_votes(request,items)
+    discovery_scope(scope)
+    with repo.read_transaction() as tx:
+        owner,viewer,accounts,published=discovery(tx,request,scope,attribution=True)
+        items=by_reference_state([item for item in accounts if item['account']['question']==gap['object']['id']],reference_state)
+        items=votes.account_summaries(tx,items,viewer,published=published)
     return page(items,viewer or owner,limit,cursor,listing_scope(['gap-accounts',gap['object']['id'],source_revision,scope],reference_state))
 
 @app.get('/v1/knowledge-gaps/{gap_id}/outcomes')
@@ -519,8 +524,8 @@ async def set_account_vote(account_id:str,request:Request): return await write_v
 def get_gap(gap_id: str,request:Request,source_revision:str|None=None,scope:str='public'):
     gap=catalog.gap(gap_id)
     if source_revision and source_revision!=gap['source']['source_revision']: raise Problem(409,'SOURCE_REVISION_CHANGED','The exact requested source revision is unavailable.')
-    owner,accounts=discovery(request,scope)
-    return gap_votes(request,[counted_gap(gap,counts_by_gap(accounts),owner,now())])[1][0]
+    owner,_,accounts,values=gap_discovery(request,scope,[gap])
+    return {**counted_gap(gap,counts_by_gap(accounts),owner,now()),'votes':values[('gap',gap['object']['id'])]}
 
 @app.get('/v1/mechanisms/search')
 def search_mechanisms(q: str='', mode: str='hybrid', limit: int=20,source:str='all',model:str='cfde-inc-v2',cursor:str|None=None):
@@ -995,12 +1000,9 @@ def accounts(request:Request,limit:int=20,cursor:str|None=None,gap_id:str|None=N
     if sort not in ('recent','votes'): raise Problem(422,'INVALID_QUERY','Choose recent or votes sorting.')
     query=normalize(q)
     with repo.read_transaction() as tx:
-        user=optional_identity(tx,request)
-        if scope=='workspace' and user is None: raise Problem(401,'SESSION_EXPIRED','Continue with a registered or anonymous session to browse your workspace.')
-        items=publication.public_accounts(tx) if scope=='public' else visible_accounts(tx,user,attribution=True)
+        user,viewer,items,published=discovery(tx,request,scope,attribution=True)
         items=filter_summaries([item for item in items if not gap_id or item['account']['question']==gap_id],query,'account')
-        viewer=votes.viewer(tx,request.headers.get('authorization'))
-        items=votes.account_summaries(tx,items,viewer)
+        items=votes.account_summaries(tx,items,viewer,published=published)
         # Keep workspace ordering unchanged; public recency is the actual
         # publication date, with deterministic identity ties across pages.
         items.sort(key=lambda item:item['account']['id'])

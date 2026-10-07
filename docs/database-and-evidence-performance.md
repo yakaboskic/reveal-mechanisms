@@ -155,6 +155,15 @@ then load the complete stored scientific document. This reduces data queries
 from seven to three while retaining provenance pagination and exact payload
 checks. Readiness uses a bounded table read rather than counting every record.
 
+Knowledge-gap discovery (the gap list, gap search, a gap and its accounts, and
+`/v1/accounts`) reads one snapshot with one principal lookup. A browse over the
+whole catalog reads vote state in one statement: the stored vote totals plus
+the registered viewer's own ballots, since only voted targets have rows. A row
+counts only at its canonical key, so ballots re-owned by a workspace transfer
+stay excluded as before. Small target sets, including a vote under the write
+fence, still read their exact keys. A registered browse of the 3,367-gap
+catalog dropped from 2 leases and about 34 round trips to 1 lease and 5.
+
 Read-only measurements included transaction completion and pool reset:
 
 | Operation | Before | After |

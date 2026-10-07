@@ -1,4 +1,6 @@
 """Canonical, public vote totals with one transactional ballot per registered user."""
+import json
+
 from .auth import Problem, principal
 from .repository import digest, now
 from . import publication
@@ -34,21 +36,63 @@ def target(tx, catalog, kind, identity):
     return identity, gap
 
 
+KEYED = 250  # keys one get_records statement reads exactly
+
+
 def states(tx, targets, user=None):
+    """Public totals and the registered viewer's own ballot per (kind, id) target.
+
+    Few targets are read at their exact keys. A larger set (a catalog-wide browse) reads the stored totals and
+    this viewer's ballots instead, one statement whatever the catalog size: only voted targets have rows.
+    """
     targets = set(targets)
-    # A browse may cover the full imported catalog; get_records bounds SQL
-    # parameter batches independently of catalog size.
-    records = tx.get_records([('vote_total', digest(target)) for target in targets]+
-        ([('vote', digest([user, *target])) for target in targets] if user else []))
+    if len(targets) * (2 if user else 1) <= KEYED:
+        keys = {target: (digest(list(target)), digest([user, *target]) if user else None) for target in targets}
+        records = tx.get_records([('vote_total', total) for total, _ in keys.values()] +
+                                 [('vote', ballot) for _, ballot in keys.values() if ballot])
+        totals = {target: records.get(('vote_total', total)) for target, (total, _) in keys.items()}
+        ballots = {target: records.get(('vote', ballot)) for target, (_, ballot) in keys.items() if ballot}
+    else:
+        totals, ballots = stored(tx, targets, user)
     result = {}
-    for kind, identity in targets:
-        total = records.get(('vote_total', digest([kind, identity])), {}).get('data', {})
-        ballot = records.get(('vote', digest([user, kind, identity]))) if user else None
+    for target in targets:
+        total = (totals.get(target) or {}).get('data', {}); ballot = ballots.get(target)
         mine = ballot['data']['vote'] if ballot and ballot['owner'] == user else 0
         up, down = total.get('upvotes', 0), total.get('downvotes', 0)
-        result[(kind, identity)] = {'upvotes': up, 'downvotes': down, 'score': up-down,
-                                   'user_vote': mine if user else None}
+        result[target] = {'upvotes': up, 'downvotes': down, 'score': up-down, 'user_vote': mine if user else None}
     return result
+
+
+def stored(tx, targets, user=None):
+    """Every stored total and the viewer's ballots (owner index) in one statement, by target."""
+    sql, args = 'SELECT kind,id,owner_id,payload FROM reveal_records WHERE kind=%s', ['vote_total']
+    if user:
+        sql += ' UNION ALL SELECT kind,id,owner_id,payload FROM reveal_records WHERE kind=%s AND owner_id=%s'
+        args += ['vote', user]
+    rows = {'vote_total': [], 'vote': []}
+    for kind, identity, owner, payload in tx.execute(sql, args).fetchall():
+        rows[kind].append({'id': identity, 'owner': owner, 'data': json.loads(payload)})
+    return (keyed(tx, rows['vote_total'], targets, lambda target: digest(list(target))),
+            keyed(tx, rows['vote'], targets, lambda target: digest([user, *target])) if user else {})
+
+
+def keyed(tx, rows, targets, key):
+    """Rows by target exactly as reads of key(target) find them: a row counts only at its own key, so a
+    re-owned (transferred) ballot or a row under another target's key never answers for its payload's target."""
+    found, other = {}, []
+    for row in rows:
+        data = row['data'] if isinstance(row['data'], dict) else {}
+        target = (data.get('target_kind'), data.get('target_id'))
+        if isinstance(target[0], str) and isinstance(target[1], str) and row['id'] == key(target):
+            if target in targets: found[target] = row
+        else: other.append(row)
+    if other:
+        # Never written by change(); resolve them like the keyed read (ascii_bin ids are PAD SPACE in MySQL).
+        keys = {key(target): target for target in targets}
+        for row in other:
+            target = keys.get(row['id'] if tx.sqlite else row['id'].rstrip(' '))
+            if target is not None: found[target] = row
+    return found
 
 
 def change(tx, kind, identity, gap_id, user, value):
@@ -73,7 +117,8 @@ def change(tx, kind, identity, gap_id, user, value):
     return states(tx, [(kind, identity)], user)[(kind, identity)]
 
 
-def account_summaries(tx, items, user=None):
-    public = {row['data']['account_id'] for row in publication.published(tx)}
+def account_summaries(tx, items, user=None, *, published=None):
+    """published: this transaction's publication.published() rows, when the caller already read them."""
+    public = {row['data']['account_id'] for row in (publication.published(tx) if published is None else published)}
     totals = states(tx, [('account', item['account']['id']) for item in items if item['account']['id'] in public], user)
     return [{**item, 'votes': totals.get(('account', item['account']['id']))} for item in items]

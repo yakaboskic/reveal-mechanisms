@@ -130,9 +130,10 @@ def find(tx, identity, kind='object', revision=None):
     raise Problem(404, 'NOT_FOUND', 'The requested scientific resource is unavailable.')
 
 
-def public_accounts(tx):
+def public_accounts(tx, rows=None):
+    """rows: this transaction's published() rows, when the caller already read them."""
     unique = {}
-    for row in published(tx):
+    for row in published(tx) if rows is None else rows:
         summary = deepcopy(row['data']['summary'])
         if summary and summary['account']['id'] not in unique:
             summary['publication'] = state(tx, row['owner'], summary['account']['id'], record=row)

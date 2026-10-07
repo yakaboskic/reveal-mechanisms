@@ -4,12 +4,27 @@ from copy import deepcopy
 import time
 import unittest
 from urllib.parse import urlencode
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import jwt
 from reveal_backend import app as api, votes
-from reveal_backend.repository import digest, uid
+from reveal_backend.repository import Transaction, digest, uid
 import test_publication as published
+
+
+def keyed_states(tx, targets, user=None):
+    """The exact-key reference: states() before the catalog-wide read (one get_records batch per 250 keys)."""
+    targets = set(targets)
+    records = tx.get_records([('vote_total', digest(target)) for target in targets]+
+        ([('vote', digest([user, *target])) for target in targets] if user else []))
+    result = {}
+    for kind, identity in targets:
+        total = records.get(('vote_total', digest([kind, identity])), {}).get('data', {})
+        ballot = records.get(('vote', digest([user, kind, identity]))) if user else None
+        mine = ballot['data']['vote'] if ballot and ballot['owner'] == user else 0
+        up, down = total.get('upvotes', 0), total.get('downvotes', 0)
+        result[(kind, identity)] = {'upvotes': up, 'downvotes': down, 'score': up-down, 'user_vote': mine if user else None}
+    return result
 
 
 class VotingTests(unittest.TestCase):
@@ -173,3 +188,75 @@ class VotingTests(unittest.TestCase):
         self.assertIsNone(public.json()['votes']['user_vote'])
         self.assertEqual(public.headers['cache-control'],'private, no-store')
         self.assertIn('Authorization',public.headers['vary'])
+
+    def statements(self, call):
+        executed = []; original = Transaction.execute
+        def counted(tx, sql, params=()): executed.append(sql); return original(tx, sql, params)
+        with patch.object(Transaction, 'execute', counted): result = call()
+        return result, executed
+
+    def test_catalog_wide_states_read_stored_rows_once_and_match_exact_keys(self):
+        targets = [('gap', 'dapper:KnowledgeGap.%032x' % index) for index in range(300)] + [('account', 'dapper:ScientificAccount.' + 'a' * 32)]
+        third = self.principal(); fourth = self.principal()
+        with self.repo.transaction() as tx:
+            for index, target in enumerate(targets[:40]):
+                votes.change(tx, *target, target[1], self.owner, (1, -1, 0)[index % 3])
+                if index % 2: votes.change(tx, *target, target[1], self.other, 1)
+                if index % 5 == 0: votes.change(tx, *target, target[1], third, -1)
+            votes.change(tx, *targets[-1], self.gap['object']['id'], self.owner, 1)
+            # A total stored under another target's key and a ballot whose payload names a different target
+            # count only at their keys; rows under no target's key never count.
+            tx.put('vote_total', digest(list(targets[50])), 'system', {'target_kind': 'gap', 'target_id': targets[51][1], 'upvotes': 7, 'downvotes': 2})
+            tx.put('vote_total', 'not-a-target-key', 'system', {'target_kind': 'gap', 'target_id': targets[52][1], 'upvotes': 9, 'downvotes': 0})
+            tx.put('vote', digest([self.owner, *targets[60]]), self.owner, {'target_kind': 'gap', 'target_id': targets[61][1], 'vote': -1})
+            tx.put('vote', 'stray-ballot', self.owner, {'target_kind': 'gap', 'target_id': targets[62][1], 'vote': 1})
+            # A transfer re-owns ballots without re-keying them: neither owner's view may count them.
+            tx.transfer(third, fourth)
+        for user in (None, self.owner, self.other, third, fourth):
+            with self.subTest(user=user), self.repo.read_transaction() as tx:
+                expected = keyed_states(tx, targets, user)
+                actual, executed = self.statements(lambda: votes.states(tx, targets, user))
+                self.assertEqual(actual, expected)
+                self.assertEqual(len(executed), 1, executed)   # stored totals plus this viewer's ballots, whatever the target count
+                self.assertNotEqual(expected[targets[50]]['upvotes'], 0)
+                with patch.object(votes, 'KEYED', 0):   # a small set gives the same states on either path
+                    self.assertEqual(votes.states(tx, targets[45:75], user), keyed_states(tx, targets[45:75], user))
+                small, executed = self.statements(lambda: votes.states(tx, targets[45:75], user))
+                self.assertEqual((small, len(executed)), (keyed_states(tx, targets[45:75], user), 1))
+        with self.repo.read_transaction() as tx:
+            mine = votes.states(tx, targets, self.owner)
+            self.assertEqual({state['user_vote'] for state in votes.states(tx, targets, fourth).values()}, {0})
+        self.assertEqual(mine[targets[60]]['user_vote'], -1); self.assertEqual(mine[targets[61]]['user_vote'], 0)
+        self.assertEqual(mine[targets[62]]['user_vote'], 0); self.assertEqual(mine[targets[-1]]['user_vote'], 1)
+
+    def test_gap_routes_read_one_snapshot_with_one_principal_lookup(self):
+        for index in range(300):
+            gap = deepcopy(self.gap); gap['object']['id'] = 'dapper:KnowledgeGap.%032x' % index
+            gap['source']['source_id'] = 'dismech:%03d' % index; self.catalog.gaps[gap['object']['id']] = gap
+        self.publish(); self.vote(1)
+        principals = []; original = api.principal
+        def counted(tx, authorization): principals.append(authorization); return original(tx, authorization)
+        routes = ['/v1/knowledge-gaps?limit=5', '/v1/knowledge-gaps?limit=5&sort=votes', '/v1/knowledge-gaps?limit=5&scope=workspace',
+                  '/v1/knowledge-gaps/search?' + urlencode({'q': self.gap['object']['text'].split()[0]}),
+                  '/v1/knowledge-gaps/' + self.gap['object']['id'], '/v1/knowledge-gaps/' + self.gap['object']['id'] + '/accounts',
+                  '/v1/accounts?scope=public']
+        for route in routes:
+            for owner in (self.owner, None):
+                if owner is None and 'scope=workspace' in route: continue
+                with self.subTest(route=route, owner=owner):
+                    principals.clear(); reads = []; leases = Mock(side_effect=AssertionError('discovery took the write fence'))
+                    original_read = self.repo.read_transaction
+                    def read(*args, **kwargs): reads.append(1); return original_read(*args, **kwargs)
+                    headers = self.headers(owner) if owner else {}
+                    with patch.object(api, 'principal', counted), patch.object(self.repo, 'read_transaction', read), \
+                            patch.object(self.repo, 'transaction', leases):
+                        response = self.client.get(route, headers=headers)
+                    self.assertEqual(response.status_code, 200, response.text)
+                    self.assertEqual((len(reads), len(principals)), (1, 1 if owner else 0))
+        listed = self.request('get', '/v1/knowledge-gaps?sort=votes&limit=1', self.owner).json()
+        self.assertEqual(listed['items'][0]['votes'], {'upvotes': 1, 'downvotes': 0, 'score': 1, 'user_vote': 1})
+        self.assertIsNone(self.request('get', '/v1/knowledge-gaps?sort=votes&limit=1').json()['items'][0]['votes']['user_vote'])
+        self.assertEqual(self.client.get('/v1/knowledge-gaps', headers={'Authorization': 'Bearer invalid'}).status_code, 401)
+        self.assertEqual(self.client.get('/v1/knowledge-gaps?scope=other').status_code, 422)
+        self.assertEqual(self.client.get('/v1/knowledge-gaps?scope=workspace').status_code, 401)
+

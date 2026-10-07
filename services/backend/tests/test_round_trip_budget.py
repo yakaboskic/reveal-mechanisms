@@ -17,6 +17,7 @@ from reveal_backend.mysql_pool import Pool
 from reveal_backend.repository import Repository
 from reveal_backend.research_work import ResearchWorkService, deadline
 from reveal_backend.workflow_routes import dispatch_job, sweep
+import test_account_discovery as account_discovery
 import test_application as application
 import test_durable_workflow as durable
 import test_mysql_pool as wire
@@ -25,7 +26,7 @@ import test_research_polling as research_polling
 
 BUDGET = {'local_work_poll': 5, 'me': 2, 'readyz': 2, 'draft_patch': 10, 'mcp_get_operation': 5,
           'mcp_query_enqueue': 13, 'query_operation': 17, 'workspace_list': 4, 'workspace_detail': 4,
-          'reconcile_idle': 4, 'job_dispatch': 11}
+          'reconcile_idle': 4, 'job_dispatch': 11, 'gap_list': 5, 'gap_search': 5, 'gap_detail': 5}
 
 
 class LocalWorkPollBudget(unittest.TestCase):
@@ -148,6 +149,29 @@ class AccountBudget(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.text); print('\n/readyz', budget)
         self.assertEqual((budget.kinds(), budget.unleased, budget.connects), (['single'], 0, 0), budget)
         self.assertLessEqual(budget.trips(), BUDGET['readyz'], budget)
+
+
+class GapDiscoveryBudget(unittest.TestCase):
+    setUp = account_discovery.AccountDiscoveryTests.setUp
+    principal = account_discovery.AccountDiscoveryTests.principal
+    headers = account_discovery.AccountDiscoveryTests.headers
+
+    def test_gap_discovery_is_one_snapshot_whatever_the_catalog_size(self):
+        from copy import deepcopy
+        template = self.gaps[0]
+        for index in range(600):   # 1,200 vote keys for a registered viewer: five exact-key batches before
+            gap = deepcopy(template); gap['object']['id'] = 'dapper:KnowledgeGap.%032x' % index
+            gap['source']['source_id'] = 'dismech:%03d' % index; self.catalog.gaps[gap['object']['id']] = gap
+        query = template['object']['text'].split()[0]
+        routes = (('/v1/knowledge-gaps?limit=20', 'gap_list'), ('/v1/knowledge-gaps?limit=20&sort=votes', 'gap_list'),
+                  ('/v1/knowledge-gaps/search?q=' + query, 'gap_search'), ('/v1/knowledge-gaps/' + template['object']['id'], 'gap_detail'))
+        for route, name in routes:
+            for headers in (self.headers(self.owner), {}):
+                with self.subTest(route=route, signed=bool(headers)), count_round_trips() as budget:
+                    response = self.client.get(route, headers=headers)
+                    self.assertEqual(response.status_code, 200, response.text); print('\n' + route, budget)
+                    self.assertEqual((budget.kinds(), budget.unleased, budget.connects), (['read'], 0, 0), budget)
+                    self.assertLessEqual(budget.trips(), BUDGET[name] - (0 if headers else 1), budget)   # no principal read
 
 
 class TrackedWriteBudget(unittest.TestCase):
