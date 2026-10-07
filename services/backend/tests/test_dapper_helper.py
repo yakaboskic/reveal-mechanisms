@@ -14,10 +14,12 @@ from unittest.mock import patch
 
 import yaml
 
-from reveal_backend import acceptance, box_paragraph, dapper_helper, dapper_release
+import test_scientific_account_lint as account_fixtures
+from reveal_backend import acceptance, box_paragraph, dapper_helper, dapper_release, scientific_account_lint as account_lint
 from reveal_backend.dapper_release import clone_release, verify_release
-from reveal_backend.evidence_package import EvidenceBuildError, canonical_json, sha256
+from reveal_backend.evidence_package import EvidenceBuildError, canonical_json, decode, sha256
 from reveal_backend.runtime_config import CURRENT_DAPPER_SNAPSHOT
+from reveal_backend.scientific_account_lint import AccountValidationError, validate_scientific_account
 
 EXAMPLES = CURRENT_DAPPER_SNAPSHOT/'snapshot/schema/examples'
 
@@ -200,6 +202,156 @@ class CallSiteTests(unittest.TestCase):
         source = Path(acceptance.__file__).read_text()
         line = next(text for text in source.splitlines() if text.startswith("profiles['profiles']['reveal-paragraph']="))
         self.assertEqual(ast.literal_eval(line.split('=', 1)[1]), dapper_helper.PARAGRAPH_PROFILE)
+
+
+class AccountLintTests(unittest.TestCase):
+    """Backend account validation runs the per-call script's _lint in the warm helper, with the same report."""
+    @classmethod
+    def setUpClass(cls):
+        cls.science = account_fixtures.ScientificAccountLintTests
+        cls.science.setUpClass(); cls.addClassCleanup(cls.science.doClassCleanups)
+        cls.addClassCleanup(lambda: dapper_helper.HELPER.close())
+
+    def setUp(self):
+        work = tempfile.TemporaryDirectory(); self.addCleanup(work.cleanup); self.work = Path(work.name)
+        for target in (patch.object(acceptance, 'release_root', return_value=self.science.release),
+                       patch.object(acceptance, 'LOCK', self.science.lock)):
+            target.start(); self.addCleanup(target.stop)
+
+    def write(self, name, document):
+        path = self.work/name
+        path.write_bytes(yaml.safe_dump(document).encode() if path.suffix == '.yaml' else canonical_json(document))
+        return path
+
+    def lint(self, helper, path, mode='final', strict=False, package=True, lock=None, ledger=False):
+        linter = account_lint.lint_in_helper if helper else account_lint.lint_scientific_account
+        return linter(path, dapper_root=self.science.release, release_lock=lock or self.science.lock, mode=mode, strict=strict,
+                      evidence_package=self.science.package_path if package else None,
+                      ledger_path=self.work/'ledger/manifest.json' if ledger else None)
+
+    def validate(self, path):
+        return validate_scientific_account(path, dapper_root=self.science.release, release_lock=self.science.lock,
+                                           evidence_package=self.science.package_path)
+
+    def cases(self):
+        valid = self.science.valid
+        gap, trusted, synthesis = deepcopy(valid), deepcopy(valid), deepcopy(valid)
+        gap['scientific_accounts'][0]['question'] = gap['mechanisms'][0]['id']
+        trusted['knowledge_gaps'][0]['text'] = 'Changed source gap'
+        synthesis['scientific_accounts'][0]['closing_remarks'] = ' '
+        example = yaml.safe_load((EXAMPLES/'example_scientific_account.yaml').read_text()); example.pop('_illustrative', None)
+        # An external capture counts as a source only through the trusted tool ledger.
+        from reveal_backend.box_mcp import Ledger
+        ledger = Ledger(self.work/'ledger', 'helper-job', 1)
+        call = ledger.start('query_graph', {'graph': 'prokn'}, 'prokn')
+        ledger.finish(call, {'content': [{'type': 'text', 'text': 'Captured auxiliary observation'}]}, 'completed'); ledger.freeze()
+        external = deepcopy(self.science.draft)
+        external['files'].append({'id': 'urn:test:external', 'filename': 'capture.json', 'mime_type': 'application/json',
+                                  'sha256': call['response']['sha256'], 'size_in_bytes': call['response']['size_bytes']})
+        external['used_edges'].append({'subject': 'urn:test:activity', 'predicate': 'prov:used', 'object': 'urn:test:external'})
+        external['evidence_items'][0]['was_derived_from'] = ['urn:test:external']
+        documents = {'valid.json': valid, 'gap.json': gap, 'trusted.json': trusted, 'synthesis.json': synthesis,
+                     'unminted.json': self.science.draft, 'example.yaml': example}
+        cases = [(name, mode, {}) for name in documents for mode in ('draft', 'final', 'profile-only')]
+        cases += [('valid.json', 'final', {'strict': True}), ('external.json', 'draft', {}), ('external.json', 'draft', {'ledger': True}),
+                  ('valid.json', 'final', {'package': False}), ('mapping.json', 'final', {}),
+                  ('valid.json', 'final', {'lock': 'wrong-commit.json'})]
+        documents['external.json'] = external
+        for name, document in {**documents, 'mapping.json': [valid]}.items(): self.write(name, document)
+        wrong = decode(self.science.lock.read_bytes()); wrong['commit'] = '0' * 40; self.write('wrong-commit.json', wrong)
+        return [(name, mode, {**options, 'lock': self.work/options['lock']} if 'lock' in options else options)
+                for name, mode, options in cases]
+
+    def test_account_lint_matches_the_per_call_program_in_every_mode(self):
+        cases = self.cases()
+        expected = [self.lint(False, self.work/name, mode, **options) for name, mode, options in cases]
+        checks = [{finding['check'] for finding in report['findings']} for report in expected]
+        self.assertTrue(expected[1]['valid'] and expected[0]['valid'] and expected[2]['valid'])
+        for index, check in ((4, 'selected-gap'), (7, 'trusted-input'), (10, 'account-synthesis'), (13, 'final-identity')):
+            self.assertIn(check, checks[index]); self.assertFalse(expected[index]['valid'])
+        self.assertTrue(expected[17]['valid'])   # the DAPPER example account, read as YAML
+        self.assertIn('source-ancestry', checks[19]); self.assertNotIn('source-ancestry', checks[20])
+        self.assertTrue(all(report.get('operational_error') for report in expected[-3:]))
+        paragraph = self.work/'paragraph.json'; acceptance.mint(documents()[1], paragraph)
+        # One warm interpreter serves every case in both orders, between paragraph lints: nothing carries over.
+        for index in [*range(len(cases)), *reversed(range(len(cases)))]:
+            name, mode, options = cases[index]
+            self.assertEqual(self.lint(True, self.work/name, mode, **options), expected[index], cases[index])
+            try: acceptance.validate_paragraph_document(paragraph)
+            except EvidenceBuildError: pass
+        # An input error is a normal reply: the helper keeps serving.
+        process = dapper_helper.HELPER.process
+        self.assertEqual(self.lint(True, self.work/'mapping.json')['findings'][0]['message'], 'Account document must be a mapping')
+        self.assertIs(dapper_helper.HELPER.process, process)
+
+    def test_a_changed_account_profile_is_caught(self):
+        stock = "STOCK.append(Vocabulary.build(SV,copy.deepcopy(PROFILES)))"
+        changed = ("STOCK.append(Vocabulary.build(SV,(lambda p:(p['profiles']['scientific-account']['terminal'].update(max=0),p)[1])"
+                   "(copy.deepcopy(PROFILES))))")
+        self.assertEqual(dapper_helper.SERVER.count(stock), 1)
+        path = self.write('valid.json', self.science.valid); expected = self.lint(False, path)
+        self.assertEqual(self.lint(True, path), expected)
+        with patch.object(dapper_helper, 'SERVER', dapper_helper.SERVER.replace(stock, changed)), \
+                patch.object(dapper_helper, 'HELPER', dapper_helper.Helper()) as helper:
+            self.addCleanup(helper.close)
+            mutated = self.lint(True, path)
+        self.assertTrue(expected['valid']); self.assertFalse(mutated['valid'])
+
+    def test_a_warm_account_validation_starts_no_interpreter(self):
+        path = self.write('valid.json', self.science.valid)
+        dapper_helper.HELPER.close(); dapper_release._VERIFIED.clear()
+        with patch.dict(os.environ, {'REVEAL_DAPPER_HELPER': '0'}), Spawns() as before:
+            expected = self.validate(path)
+        self.assertEqual(before.interpreters, 1)   # one cold interpreter per account, before
+        dapper_release._VERIFIED.clear()
+        with Spawns() as cold: self.assertEqual(self.validate(path), expected)
+        with Spawns() as warm: self.assertEqual(self.validate(path), expected)
+        self.assertEqual((cold.interpreters, cold.git), (1, 5))
+        self.assertEqual((warm.interpreters, warm.git), (0, 0))
+
+    def test_kill_switch_runs_the_per_call_program(self):
+        path = self.write('valid.json', self.science.valid)
+        with patch.dict(os.environ, {'REVEAL_DAPPER_HELPER': '0'}), \
+                patch.object(dapper_helper, 'request', side_effect=AssertionError('helper disabled')), \
+                patch.object(subprocess, 'run', wraps=subprocess.run) as run:
+            self.assertTrue(self.validate(path)['valid'])
+        self.assertEqual(run.call_args.args[0][1:5], ['-I', '-B', str(Path(account_lint.__file__).resolve()), '--internal'])
+
+    def failure(self, path):
+        with self.assertRaises(AccountValidationError) as raised: self.validate(path)
+        report = raised.exception.report
+        self.assertEqual({key: value for key, value in report.items() if key != 'findings'},
+                         {'report_version': 'reveal.account-lint/1', 'mode': 'final', 'valid': False, 'operational_error': True})
+        [finding] = report['findings']
+        self.assertEqual({key: value for key, value in finding.items() if key != 'message'},
+                         {'severity': 'error', 'check': 'linter-runtime', 'where': 'runtime', 'why': ''})
+        return finding['message']
+
+    def test_helper_failures_give_the_linter_runtime_report(self):
+        path = self.write('valid.json', self.science.valid)
+        for outcome, message in (
+                ({'side_effect': subprocess.TimeoutExpired(['dapper-helper', 'lint_account'], 120)}, "Command '['dapper-helper', 'lint_account']' timed out after 120 seconds"),
+                ({'side_effect': OSError('cannot start helper')}, 'cannot start helper'),
+                ({'return_value': (False, 'Traceback: boom\n')}, 'Account linter process failed: Traceback: boom'),
+                ({'return_value': (True, '{"report_version": "other"}')}, 'Unexpected account linter report'),
+                ({'return_value': (True, None)}, 'Unexpected account linter report')):
+            with self.subTest(outcome=outcome), patch.object(dapper_helper, 'request', **outcome) as request:
+                self.assertEqual(self.failure(path), message)
+                self.assertEqual((request.call_args.args[2], request.call_args.args[4]), ('lint_account', 120))
+
+    def test_a_crashed_or_hung_helper_gives_the_linter_runtime_report(self):
+        fake = FAKE.replace("if op=='sleep'", "if op=='sleep' or request.get('mode')=='draft'") \
+                   .replace("if op=='crash'", "if op=='crash' or request.get('mode')=='final'")
+        path = self.write('valid.json', self.science.valid)
+        with patch.object(dapper_helper, 'SERVER', fake), patch.object(dapper_helper, 'HELPER', dapper_helper.Helper()) as helper:
+            self.addCleanup(helper.close)
+            message = self.failure(path)
+            self.assertTrue(message.startswith('Account linter process failed: ')); self.assertIn('helper exploded', message)
+            self.assertIsNone(helper.process)
+            report = account_lint.lint_in_helper(path, dapper_root=self.science.release, release_lock=self.science.lock,
+                                                 evidence_package=self.science.package_path, timeout=0.5)
+            self.assertTrue(report['operational_error']); self.assertEqual(report['mode'], 'draft')
+            self.assertIn('timed out after 0.5 seconds', report['findings'][0]['message']); self.assertIsNone(helper.process)
 
 
 FAKE = r'''import json,os,sys,time

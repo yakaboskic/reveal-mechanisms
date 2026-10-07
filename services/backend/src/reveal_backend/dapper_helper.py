@@ -1,11 +1,12 @@
-"""One warm, isolated DAPPER interpreter per process for trusted assembly, minting and paragraph linting.
+"""One warm, isolated DAPPER interpreter per process for trusted assembly, minting and paragraph and account linting.
 
 It runs the same pinned release code as the per-call `python -I -B` programs it
 replaces, in its own fresh interpreter (never this process, which imports another
 DAPPER snapshot), and loads the schema, vocabulary and validator once. Callers
 verify the release before every request; a different release, a crash, a
 timeout or an error restarts it. REVEAL_DAPPER_HELPER=0 restores the per-call
-programs.
+programs. Account lint imports this backend's own scientific_account_lint, from
+SOURCE, after the pinned schema directories, as its per-call script does.
 """
 import atexit
 import json
@@ -24,6 +25,7 @@ STARTUP_SECONDS = 120
 IDLE_SECONDS = 1800       # the helper exits after this long without a request
 IDLE_MARGIN = 60          # and is replaced, not reused, once it is this close to exiting
 MAX_REQUESTS = 256
+SOURCE = Path(__file__).resolve().parents[1]   # services/backend/src: -I ignores PYTHONPATH
 # The application-owned terminal Paragraph profile, exactly as validate_paragraph_document's program adds it.
 PARAGRAPH_PROFILE = {'title': 'Cited research statement', 'terminal': {'class': 'Paragraph', 'min': 1, 'max': 1},
     'required_edges': [{'group': 'was_generated_by_edges', 'object_class': 'Activity', 'min': 1, 'severity': 'error',
@@ -39,20 +41,31 @@ from dataclasses import asdict
 from pathlib import Path
 out=os.fdopen(os.dup(1),'w',encoding='ascii',buffering=1); os.dup2(2,1)
 root=Path(sys.argv[1]); schema=root/'schema'; idle=float(sys.argv[2])
-sys.path[:0]=[str(schema/'lint'),str(schema/'identity'),str(schema)]
+sys.path[:0]=[str(schema/'lint'),str(schema/'identity'),str(schema),sys.argv[4]]
 import yaml
-from dapper_identity import assign_ids,load_schema
+from dapper_identity import DOC_GROUPS,assign_ids,load_schema
 from lint_provenance import Vocabulary,build_validator,lint
 from scientific_claims import assemble_cited_text
 SV=load_schema(schema/'dapper.yaml'); PROFILES=yaml.safe_load((schema/'lint/profiles.yaml').read_text())
 profiles=copy.deepcopy(PROFILES); profiles['profiles']['reveal-paragraph']=json.loads(sys.argv[3])
 PARAGRAPH=Vocabulary.build(SV,profiles); VALIDATOR=build_validator(schema/'dapper.yaml'); STOCK=[]
-def fields():
+def stock():
     if not STOCK: STOCK.append(Vocabulary.build(SV,copy.deepcopy(PROFILES)))
-    vocab=STOCK[0]
+    return STOCK[0]
+def fields():
+    vocab=stock()
     result={group:sorted(vocab.relationship_slots.get(cls,{})) for group,cls in vocab.node_groups.items()}
     result.update({group:['subject','object'] for group in vocab.edge_groups})
     return result
+def lint_account(request):
+    from reveal_backend.scientific_account_lint import _lint
+    try:
+        result=_lint(request['document'],str(root),request['lock'],request['package'],request['mode'],request['strict'],
+                     request['ledger'],preloaded=(SV,stock(),VALIDATOR,lint,DOC_GROUPS))
+    except Exception as exc:
+        result={'report_version':'reveal.account-lint/1','valid':False,'operational_error':True,
+                'findings':[{'severity':'error','check':'linter-runtime','where':'runtime','message':str(exc),'why':''}]}
+    return json.dumps(result,ensure_ascii=False,allow_nan=False)
 def handle(request):
     op=request['op']
     if op=='assemble': return assemble_cited_text(request['segments'])
@@ -64,7 +77,9 @@ def handle(request):
     if op=='lint_paragraph':
         return [asdict(x) for x in lint(Path(request['path']),PARAGRAPH,SV,VALIDATOR,profile_name='reveal-paragraph').findings]
     if op=='reference_fields': return fields()
+    if op=='lint_account': return lint_account(request)
     if op=='warm':
+        import reveal_backend.scientific_account_lint; stock()
         for group in request['groups']:
             cls=PARAGRAPH.node_groups.get(group) or PARAGRAPH.edge_groups.get(group)
             if cls in SV.all_classes(): VALIDATOR.validate({},cls)
@@ -143,7 +158,7 @@ class Helper:
         self.close()
         self.errors = tempfile.TemporaryFile()
         self.process = subprocess.Popen([sys.executable, '-I', '-B', '-c', SERVER, str(root), str(IDLE_SECONDS),
-                                         json.dumps(PARAGRAPH_PROFILE)],
+                                         json.dumps(PARAGRAPH_PROFILE), str(SOURCE)],
                                         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=self.errors)
         os.set_blocking(self.process.stdin.fileno(), False)
         self.key, self.served, self.used = key, 0, time.monotonic()

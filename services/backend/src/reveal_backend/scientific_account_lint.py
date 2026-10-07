@@ -123,8 +123,39 @@ def lint_scientific_account(document, *, dapper_root, release_lock, evidence_pac
         require(report.get('report_version') == 'reveal.account-lint/1', 'Unexpected account linter report')
         return report
     except (OSError, subprocess.TimeoutExpired, EvidenceBuildError) as exc:
-        return {'report_version': 'reveal.account-lint/1', 'mode': mode, 'valid': False, 'operational_error': True,
-                'findings': [{'severity': 'error', 'check': 'linter-runtime', 'where': 'runtime', 'message': str(exc), 'why': ''}]}
+        return runtime_failure(exc, mode)
+
+
+def runtime_failure(exc, mode=None):
+    """The linter-runtime report: with its mode when the linter could not run, without it when it raised."""
+    return {'report_version': 'reveal.account-lint/1', **({} if mode is None else {'mode': mode}), 'valid': False, 'operational_error': True,
+            'findings': [{'severity': 'error', 'check': 'linter-runtime', 'where': 'runtime', 'message': str(exc), 'why': ''}]}
+
+
+def lint_in_helper(document, *, dapper_root, release_lock, evidence_package=None, ledger_path=None, mode='draft', strict=False, timeout=120):
+    """lint_scientific_account's report from this process's warm DAPPER helper, which runs the same _lint.
+
+    The release is verified here first, as for every helper request; the helper verifies it again inside _lint.
+    """
+    from reveal_backend import dapper_helper   # backend only: never part of the agent bundle
+    try:
+        require(mode in ('draft', 'final', 'profile-only'), 'Unknown account lint mode')
+        require(mode == 'profile-only' or evidence_package, 'REVEAL linting requires the frozen evidence package')
+        release = verify_release(dapper_root, release_lock)
+    except Exception as exc:
+        return runtime_failure(exc)
+    arguments = {'document': str(Path(document).resolve()), 'lock': str(Path(release_lock).resolve()),
+                 'package': str(Path(evidence_package).resolve()) if evidence_package else '', 'mode': mode, 'strict': strict,
+                 'ledger': str(Path(ledger_path).resolve()) if ledger_path else ''}
+    try:
+        ok, report = dapper_helper.request(dapper_root, release, 'lint_account', arguments, timeout)
+        require(ok, f'Account linter process failed: {str(report).strip()}')
+        require(isinstance(report, str), 'Unexpected account linter report')
+        report = decode(report.encode())
+        require(report.get('report_version') == 'reveal.account-lint/1', 'Unexpected account linter report')
+        return report
+    except (OSError, subprocess.TimeoutExpired, EvidenceBuildError) as exc:
+        return runtime_failure(exc, mode)
 
 
 def validate_scientific_account(document, *, dapper_root, release_lock, evidence_package, ledger_path=None, strict=False):
@@ -132,29 +163,36 @@ def validate_scientific_account(document, *, dapper_root, release_lock, evidence
 
     Passing this gate verifies structure and source fidelity, not scientific acceptance.
     Never accept an agent-written report as a replacement for this invocation.
+    The warm DAPPER helper serves it unless REVEAL_DAPPER_HELPER=0.
     """
-    report = lint_scientific_account(document, dapper_root=dapper_root, release_lock=release_lock,
-                                     evidence_package=evidence_package, ledger_path=ledger_path, mode='final', strict=strict)
+    from reveal_backend import dapper_helper
+    linter = lint_in_helper if dapper_helper.enabled() else lint_scientific_account
+    report = linter(document, dapper_root=dapper_root, release_lock=release_lock,
+                    evidence_package=evidence_package, ledger_path=ledger_path, mode='final', strict=strict)
     if not report['valid']:
         raise AccountValidationError(report)
     return report
 
 
-def _lint(document_path, dapper_root, lock_path, package_path, mode, strict, ledger_path=None):
+def _lint(document_path, dapper_root, lock_path, package_path, mode, strict, ledger_path=None, *, preloaded=None):
+    """preloaded=(sv, vocabulary, validator, lint, DOC_GROUPS) of this release, from a warm DAPPER helper."""
     require(mode in ('draft', 'final', 'profile-only'), 'Unknown account lint mode')
     require(mode == 'profile-only' or package_path, 'REVEAL linting requires the frozen evidence package')
     release = verify_release(dapper_root, lock_path)
     raw = Path(document_path).read_bytes()
     document = decode(raw, 'yaml' if Path(document_path).suffix in ('.yaml', '.yml') else 'json')
     require(isinstance(document, dict), 'Account document must be a mapping')
-    schema_root = Path(dapper_root).resolve() / 'schema'
-    sys.path[:0] = [str(schema_root / 'lint'), str(schema_root / 'identity'), str(schema_root)]
-    import yaml
-    from lint_provenance import Vocabulary, build_validator, lint
-    from dapper_identity import DOC_GROUPS, load_schema
-    sv = load_schema(schema_root / 'dapper.yaml')
-    vocabulary = Vocabulary.build(sv, yaml.safe_load((schema_root / 'lint/profiles.yaml').read_text()))
-    validator = build_validator(schema_root / 'dapper.yaml')
+    if preloaded is None:
+        schema_root = Path(dapper_root).resolve() / 'schema'
+        sys.path[:0] = [str(schema_root / 'lint'), str(schema_root / 'identity'), str(schema_root)]
+        import yaml
+        from lint_provenance import Vocabulary, build_validator, lint
+        from dapper_identity import DOC_GROUPS, load_schema
+        sv = load_schema(schema_root / 'dapper.yaml')
+        vocabulary = Vocabulary.build(sv, yaml.safe_load((schema_root / 'lint/profiles.yaml').read_text()))
+        validator = build_validator(schema_root / 'dapper.yaml')
+    else:
+        sv, vocabulary, validator, lint, DOC_GROUPS = preloaded
     # Validate the exact parsed bytes; do not reread a file the agent may edit mid-check.
     with tempfile.TemporaryDirectory(prefix='reveal-account-lint-') as directory:
         frozen = Path(directory) / 'account.json'; frozen.write_bytes(canonical_json(document))

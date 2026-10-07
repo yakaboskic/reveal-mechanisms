@@ -11,7 +11,7 @@ Implemented components:
 - [Release lock](../services/backend/agent-runtime/dapper-release.json): repository, tag object, immutable commit, schema/code checksums and approved evidence-input snapshots.
 - [Startup helper](../scripts/start_research_agent.py): clones and verifies the release, bundles the skill/scripts and frozen evidence, then launches the requested agent command.
 - [Agent linter](../scripts/lint_scientific_account.py): JSON findings and a meaningful exit status for one ScientificAccount document.
-- [Shared validator](../services/backend/src/reveal_backend/scientific_account_lint.py): invokes the same checks in a fresh Python interpreter; `validate_scientific_account` enforces final mode for backend callers.
+- [Shared validator](../services/backend/src/reveal_backend/scientific_account_lint.py): invokes the same checks in a fresh Python interpreter; `validate_scientific_account` enforces final mode for backend callers and runs those checks in the backend's warm, isolated DAPPER helper interpreter.
 
 The repository helper exercises the trusted bootstrap without provisioning a hosted instance, configuring MCP access, or supplying provider credentials. Use the downloaded kit's `start.py` for a local-agent workspace.
 
@@ -118,7 +118,7 @@ report = validate_scientific_account(
 )
 ```
 
-This reruns the same linter in **final** mode and raises `AccountValidationError` with `.report` on failure. The fresh interpreter avoids accidentally importing the collector's older DAPPER snapshot. Trusted identity minting, cited-text assembly and the Paragraph lint keep that isolation in one warm helper interpreter per backend process, bound to the verified release (`REVEAL_DAPPER_HELPER=0` starts a fresh interpreter per call instead). The backend must run this against returned document bytes, never trust a report supplied by the agent, and persist/compare the report's hashes with the artifacts it accepts.
+This reruns the same linter in **final** mode and raises `AccountValidationError` with `.report` on failure. The fresh interpreter avoids accidentally importing the collector's older DAPPER snapshot. This backend validation, trusted identity minting, cited-text assembly and the Paragraph lint keep that isolation in one warm helper interpreter per backend process, bound to the verified release (`REVEAL_DAPPER_HELPER=0` starts a fresh interpreter per call instead). The helper returns the per-call program's exact report, including its `linter-runtime` operational errors. The backend must run this against returned document bytes, never trust a report supplied by the agent, and persist/compare the report's hashes with the artifacts it accepts.
 
 Passing this validator establishes structure and source fidelity. Draft and final modes use the same checks; final mode additionally requires minted scientific identities after trusted assembly. Trusted attribution/job ownership and execution-ledger/tool-policy enforcement remain worker responsibilities. Once those deterministic checks pass, the worker saves the account. No second AI review or scientific verdict is required. A correct source quotation does not by itself prove that an interpretation is scientifically correct. Failed worker lint reports are retained alongside the output so their findings remain inspectable.
 

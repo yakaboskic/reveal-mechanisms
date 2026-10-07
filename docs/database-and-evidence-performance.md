@@ -405,7 +405,24 @@ a process). The Workflow's launch and capture steps, and the legacy worker
 before a Box run, warm the helper in a background thread while the Box works, so
 the first commit takes about 70 ms. `REVEAL_DAPPER_HELPER=0` restores the
 per-call interpreters; `REVEAL_DAPPER_PREWARM=0` leaves the first request to
-start the helper. Account linting still runs its own interpreter per account.
+start the helper.
+
+Backend account validation (`validate_scientific_account`: each account the
+analysis validate phase assembles, up to three per job, plus MCP submission and
+hosted reuse checks) used to start one more cold interpreter per account. It now
+runs in the same helper. The helper imports this backend's
+`scientific_account_lint` after the pinned schema directories, as the per-call
+script does, and calls the same `_lint` with its preloaded schema, an unmodified
+stock vocabulary and the shared validator; release verification, the frozen
+copy, every REVEAL check and the report are unchanged. Over ten real accepted
+accounts, linted in final mode against the release, evidence package and tool
+ledger that accepted them, the reports equal the per-call ones, and an account
+went from 3.0 seconds (median, one interpreter each) to 82 ms warm on the laptop
+(2.8 seconds for the first in a process, 0.2 seconds after the background
+warmup). A lint input error is an ordinary report; a helper timeout, crash or
+failed reply gives the same `linter-runtime` operational-error report as the
+per-call program. The agent's lint tool in the Box, fixture seeding and the
+scripts still start a fresh interpreter per call.
 
 The inspected jobs also spent approximately 38–40 seconds setting up their Box
 runtime. That delay and model/external-KG latency are separate from evidence

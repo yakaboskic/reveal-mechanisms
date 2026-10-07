@@ -161,7 +161,10 @@ until deletion or a confirmed provider 404 is acknowledged. No Redis reads or
 in-process background task are needed to keep cleanup alive.
 
 Account and paragraph acceptance use deterministic validation, with no second AI
-review. Passing captured output proceeds directly to saving. Historical review
+review. Their pinned DAPPER work (account and Paragraph lint, identity minting and
+cited-text assembly) runs in one warm, isolated helper interpreter per process,
+warmed while the Box runs (`REVEAL_DAPPER_HELPER=0` starts a fresh interpreter
+per call; see database-and-evidence-performance.md). Passing captured output proceeds directly to saving. Historical review
 checkpoints remain available for diagnostics; saved output from an incomplete
 legacy review can be revalidated through the compatible retry route. Initial
 preparation, validation and final acceptance use bounded file-based scratch where
