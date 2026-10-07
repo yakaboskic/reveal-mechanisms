@@ -160,12 +160,19 @@ def _work(tx, owner, work_id):
     return work
 
 
-def check_grant_scope(tx, owner, grant, *, write=False):
-    """Recheck OAuth family, principal and resource on every authenticated use."""
+_UNREAD = object()
+
+
+def check_grant_scope(tx, owner, grant, *, write=False, me=None, family=_UNREAD):
+    """Recheck OAuth family, principal and resource on every authenticated use.
+
+    me (a valid principal) and family (the grant's family row, None if absent) may come from a batched read of
+    this same transaction.
+    """
     family_id = grant.get('oauth_family_id')
     if not family_id: return
-    me = valid_principal(tx, owner)
-    row = tx.get('research_oauth_family', family_id)
+    me = me or valid_principal(tx, owner)
+    row = tx.get('research_oauth_family', family_id) if family is _UNREAD else family
     if (me['principal_kind'] != 'registered' or not row or row['owner'] != owner
             or row['data'].get('issued_owner_user_id') != owner or row['data'].get('revoked_at')
             or row['data']['expires_at'] <= now()):

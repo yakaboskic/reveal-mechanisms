@@ -165,6 +165,23 @@ class ResearchOAuthTests(unittest.TestCase):
             for secret in (tokens['access_token'], tokens['refresh_token'], params['code']): self.assertNotIn(secret, retained)
         self.assertTrue(tokens['access_token'].startswith('rvlm_'))
 
+    def test_oauth_authentication_reads_principal_and_family_once(self):
+        from round_trips import count_round_trips
+        _, _, tokens = self.code_flow()
+        with count_round_trips() as budget:
+            with self.repo.read_transaction() as tx:
+                authority = authenticate(tx, 'Bearer '+tokens['access_token'])
+                # The transport's write-scope check reuses the same rows instead of re-reading them.
+                oauth.check_grant_scope(tx, authority['owner'], authority['grant'], write=True,
+                                        me=authority['me'], family=authority['oauth_family'])
+        self.assertEqual(budget.leases, [['read', 2]], budget)   # research_access, then principal+work+request+family
+        with self.repo.transaction() as tx:
+            identity = authority['grant']['oauth_family_id']; family = tx.get('research_oauth_family', identity)
+            family['data']['revoked_at'] = deadline(0); tx.put('research_oauth_family', identity, family['owner'], family['data'])
+        with self.repo.read_transaction() as tx, self.assertRaises(Problem) as revoked:
+            authenticate(tx, 'Bearer '+tokens['access_token'])
+        self.assertEqual(revoked.exception.code, 'MCP_GRANT_EXPIRED')
+
     def test_pkce_wrong_client_and_invalid_verifier_do_not_mint_or_consume_code(self):
         client, verifier, request = self.request_code()
         response = self.approve(request); code = parse_qs(urlsplit(response.json()['redirect_url']).query)['code'][0]

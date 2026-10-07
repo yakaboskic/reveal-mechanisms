@@ -14,11 +14,12 @@ from mcp import types
 
 from .auth import Problem, owned, principal, principal_with, require_owned
 from .repository import now
-from .research_work import ResearchWorkService, authenticate, idempotent, issue_grant, public_base, TERMINAL
+from .research_work import ResearchWorkService, authenticate, bearer_shaped, idempotent, issue_grant, public_base, TERMINAL
 from .research_tools import definitions, dispatch, check_child, public_call
 from . import user_inputs
 from . import research_setup
 
+MCP_CHALLENGE = 'reveal.mcp_challenge'   # ASGI scope key: a read tool's authentication failure, answered as HTTP
 
 def register(app, repository, *, freeze, preload, reload_gate, service_factory=ResearchWorkService):
     from . import research_oauth
@@ -214,6 +215,8 @@ def register(app, repository, *, freeze, preload, reload_gate, service_factory=R
                 on_operation=runner.resume_operation)
             return types.CallToolResult(content=[types.TextContent(type='text', text=json.dumps(result))], structuredContent=result)
         except Problem as error:
+            if getattr(error, 'mcp_challenge', False) and getattr(context, 'request', None) is not None:
+                context.request.scope[MCP_CHALLENGE] = error
             result = {'code': error.code, 'detail': error.detail, **error.extra}
             metadata = ({'mcp/www_authenticate': [research_oauth.challenge(write=True,
                 error='insufficient_scope' if error.status == 403 else 'invalid_token')]}
@@ -256,17 +259,24 @@ def register(app, repository, *, freeze, preload, reload_gate, service_factory=R
                     downstream_receive = replay
                 protected = False
                 write = False
-                if isinstance(message, dict) and message.get('method') == 'tools/call':
+                call = isinstance(message, dict) and message.get('method') == 'tools/call'
+                if call:
                     params = message.get('params')
                     if isinstance(params, dict) and isinstance(params.get('name'), str):
                         tool = next((t for t in tool_definitions if t['name'] == params['name']), None)
                         protected = tool is not None and not public_call(params['name'], params.get('arguments') or {})
                         write = protected and not tool['annotations']['readOnlyHint']
-                if authorization or protected:
+                if protected and not bearer_shaped(authorization):
+                    raise Problem(401, 'MCP_AUTH_REQUIRED', 'Connect using a Reveal research credential.')
+                # Handshakes keep their HTTP 401 for a bad bearer. Writes are pre-checked outside the global
+                # fence, so an invalid credential never takes it. A read tool's dispatch authenticates once,
+                # inside its own snapshot, and its failure comes back here as the same HTTP challenge.
+                if authorization and (write or not call):
                     def check():
                         with repository().read_transaction() as tx:
                             authority = authenticate(tx, authorization)
-                            if write: research_oauth.check_grant_scope(tx, authority['owner'], authority['grant'], write=True)
+                            if write: research_oauth.check_grant_scope(tx, authority['owner'], authority['grant'],
+                                write=True, me=authority['me'], family=authority['oauth_family'])
                             if protected: research_oauth.require_registered_local(authority)
                     await asyncio.to_thread(check)
             except Problem as error:
@@ -274,9 +284,25 @@ def register(app, repository, *, freeze, preload, reload_gate, service_factory=R
                     headers={'WWW-Authenticate': research_oauth.challenge(write=locals().get('write', False),
                         error='insufficient_scope' if error.status == 403 else 'invalid_token'), 'Cache-Control': 'no-store'})
                 return await response(scope, receive, send)
+            challenge = None
             async def private_send(message):
+                nonlocal challenge
                 if message['type'] == 'http.response.start':
-                    message['headers'].append((b'cache-control', b'private, no-store'))
+                    # JSON-response mode starts the reply only after the tool returned, so call_tool has
+                    # already recorded any authentication failure in the scope.
+                    failure = scope.get(MCP_CHALLENGE)
+                    if failure is None:
+                        message['headers'].append((b'cache-control', b'private, no-store'))
+                    else:
+                        challenge = json.dumps({'code': failure.code, 'detail': failure.detail}, ensure_ascii=False, separators=(',', ':')).encode()
+                        message = {'type': 'http.response.start', 'status': failure.status, 'headers': [
+                            (b'content-type', b'application/json'), (b'content-length', str(len(challenge)).encode()),
+                            (b'www-authenticate', research_oauth.challenge(
+                                error='insufficient_scope' if failure.status == 403 else 'invalid_token').encode()),
+                            (b'cache-control', b'no-store')]}
+                elif message['type'] == 'http.response.body' and challenge is not None:
+                    if message.get('more_body'): return
+                    message = {'type': 'http.response.body', 'body': challenge, 'more_body': False}
                 await send(message)
             await self.downstream(scope, downstream_receive, private_send)
     registered = list(transport.routes)

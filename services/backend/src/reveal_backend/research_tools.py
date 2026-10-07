@@ -141,6 +141,20 @@ def definitions():
     return list(result.values())
 
 
+def first_authentication(tx, authorization, *, registered=False):
+    """A read's only authentication: the transport no longer pre-checks reads, so a failure here is tagged
+    for it to answer with the HTTP challenge (status, JSON body, WWW-Authenticate) it used to send."""
+    try:
+        authority = authenticate(tx, authorization)
+        if registered:
+            from .research_oauth import require_registered_local
+            require_registered_local(authority)
+        return authority
+    except Problem as error:
+        error.mcp_challenge = True
+        raise
+
+
 def check_child(tx, kind, identity, authority):
     value = owned(tx, kind, identity, authority['owner'])['data']
     if value.get('local_work_id') != authority['work']['id']:
@@ -190,9 +204,7 @@ def resolve_reader_artifact(tx, authority, identity, checksum):
 def data_capabilities(service, authorization, name, arguments):
     """Resolve the actual pinned source without holding an app transaction."""
     with service.repo.read_transaction() as tx:
-        authority=authenticate(tx,authorization)
-        from .research_oauth import require_registered_local
-        require_registered_local(authority)
+        authority=first_authentication(tx,authorization,registered=True)
         work=authority['work']
         if arguments['research_request_id'] != work['research_request_id']:
             raise Problem(404,'NOT_FOUND','The requested research context is unavailable.')
@@ -229,7 +241,7 @@ def dispatch(service, authorization, name, arguments, *, rate_key=None, on_opera
         # No owner lookup or durable private work is needed for public research.
         # Supplied invalid credentials must never silently downgrade access.
         if authorization:
-            with service.repo.read_transaction() as tx: authenticate(tx, authorization)
+            with service.repo.read_transaction() as tx: first_authentication(tx, authorization)
         from .research_public import public_dispatch
         return public_dispatch(service, name, arguments, rate_key=rate_key)
     from .research_oauth import require_registered_local
@@ -239,8 +251,7 @@ def dispatch(service, authorization, name, arguments, *, rate_key=None, on_opera
         from .research_execution import authorize_artifact, read_artifact_bytes
         from .evidence_reader import read_artifact
         with service.repo.read_transaction() as tx:
-            authority = authenticate(tx, authorization)
-            require_registered_local(authority)
+            authority = first_authentication(tx, authorization, registered=True)
             if arguments['local_work_id'] != authority['work']['id']:
                 raise Problem(404, 'NOT_FOUND', 'The requested research context is unavailable.')
             artifact = resolve_reader_artifact(tx, authority, arguments['artifact_id'], arguments['sha256'])
@@ -267,8 +278,10 @@ def dispatch(service, authorization, name, arguments, *, rate_key=None, on_opera
         prepared_captures = prepare_capture_attachments(service, arguments['capture_ids'], authority=authority)
     transaction = service.repo.transaction if mutation else service.repo.read_transaction
     with transaction() as tx:
-        authority = authenticate(tx, authorization, write=mutation)
-        require_registered_local(authority)
+        if mutation:   # the transport pre-checked this write outside the fence; recheck under it
+            authority = authenticate(tx, authorization, write=True)
+            require_registered_local(authority)
+        else: authority = first_authentication(tx, authorization, registered=True)
         owner, work = authority['owner'], authority['work']
         if arguments.get('local_work_id', work['id']) != work['id'] or arguments.get('research_request_id', work['research_request_id']) != work['research_request_id']:
             raise Problem(404, 'NOT_FOUND', 'The requested research context is unavailable.')

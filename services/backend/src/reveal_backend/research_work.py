@@ -202,19 +202,26 @@ def issue_grant(tx, owner, work_id, key, *, kind='local', execution_id=None):
             'expires_at': expiry, 'local_work_id': work_id}
 
 
+def bearer_shaped(authorization):
+    """A research credential's shape, checked without the database."""
+    return isinstance(authorization, str) and authorization.startswith('Bearer rvlm_')
+
+
 def authenticate(tx, authorization, *, write=False, delegated=False):
-    if not isinstance(authorization, str) or not authorization.startswith('Bearer rvlm_'):
+    if not bearer_shaped(authorization):
         raise Problem(401, 'MCP_AUTH_REQUIRED', 'Connect using a Reveal research credential.')
     row = tx.get('research_access', hashlib.sha256(authorization[7:].encode()).hexdigest())
     if not row: raise Problem(401, 'MCP_AUTH_REQUIRED', 'The research credential is invalid.')
-    grant = row['data']; owner = row['owner']
-    records = tx.get_records((('principal', owner), ('local_work', grant['local_work_id']),
-        ('request', grant['research_request_id'])))
+    grant = row['data']; owner = row['owner']; family_id = grant.get('oauth_family_id')
+    keys = [('principal', owner), ('local_work', grant['local_work_id']), ('request', grant['research_request_id'])]
+    if family_id: keys.append(('research_oauth_family', family_id))
+    records = tx.get_records(keys)
     me = principal_record(records.get(('principal', owner)))
     if grant.get('revoked_at') or (not delegated and grant['expires_at'] <= now()):
         raise Problem(401, 'MCP_GRANT_EXPIRED', 'The research credential expired or was revoked; reconnect in Reveal.')
     from .research_oauth import check_grant_scope, require_registered_local
-    check_grant_scope(tx, owner, grant, write=write)
+    family = records.get(('research_oauth_family', family_id)) if family_id else None
+    check_grant_scope(tx, owner, grant, write=write, me=me, family=family)
     if write: require_registered_local({'grant': grant, 'principal_kind': me.get('principal_kind')})
     work = require_owned(tx, 'local_work', grant['local_work_id'], owner,
         records.get(('local_work', grant['local_work_id'])))['data']
@@ -231,7 +238,8 @@ def authenticate(tx, authorization, *, write=False, delegated=False):
         queue = require_owned(tx, 'queue', work['job_id'], owner, execution.get(('queue', work['job_id'])))['data']
         if job['status'] in ('succeeded', 'failed', 'cancelled', 'insufficient_evidence', 'cancel_requested') or str(queue.get('attempt')) != str(grant['execution_id']):
             raise Problem(403, 'EXECUTION_EXPIRED', 'This hosted execution no longer has research authority.')
-    return {'owner': owner, 'principal_kind': me.get('principal_kind'), 'grant': grant, 'work': work, 'request': request}
+    return {'owner': owner, 'principal_kind': me.get('principal_kind'), 'grant': grant, 'work': work, 'request': request,
+            'me': me, 'oauth_family': family}
 
 
 def authorize_commit(tx, operation):

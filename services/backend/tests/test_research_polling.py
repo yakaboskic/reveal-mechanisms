@@ -70,13 +70,49 @@ class ResearchPollingTests(TestCase):
     def test_transport_does_not_reauthenticate_or_scan_work_after_poll(self):
         with patch.object(fixture.InlinePreparation, 'kick', side_effect=AssertionError('Poll scanned work')), \
                 patch.object(fixture.InlinePreparation, 'resume_operation') as scheduled, \
+                patch.object(self.repo, 'read_transaction', wraps=self.repo.read_transaction) as reads, \
                 patch('reveal_backend.research_http.authenticate', wraps=research_work.authenticate) as transport_auth, \
                 patch.object(research_tools, 'authenticate', wraps=research_work.authenticate) as dispatch_auth:
             result = self.tool(self.grant_value, 'get_operation', self.arguments)
         self.assertFalse(result.get('isError'))
-        self.assertEqual(transport_auth.call_count, 1)
-        self.assertEqual(dispatch_auth.call_count, 1)
+        # A read tool authenticates once, inside the snapshot that serves it.
+        self.assertEqual((transport_auth.call_count, dispatch_auth.call_count, reads.call_count), (0, 1, 1))
         scheduled.assert_called_once_with(self.operation['id'])
+
+    def test_read_tool_authentication_failure_is_the_transport_challenge(self):
+        with self.repo.transaction() as tx:
+            row = next(r for r in tx.list('research_access', self.owner) if r['data']['grant_id'] == self.grant_value['grant_id'])
+            row['data']['expires_at'] = '2000-01-01T00:00:00Z'
+            tx.put('research_access', row['id'], self.owner, row['data'])
+        modern = {'io.modelcontextprotocol/protocolVersion': '2026-07-28', 'io.modelcontextprotocol/clientCapabilities': {}}
+        def legacy(token): return self.rpc(token, 'tools/call', {'name': 'get_operation', 'arguments': self.arguments})
+        def stateless(token):   # the SDK's modern per-request path builds its Request from the same scope
+            return self.client.post('/mcp', headers={'Authorization': 'Bearer '+token, 'Accept': 'application/json, text/event-stream',
+                'MCP-Protocol-Version': '2026-07-28', 'Mcp-Method': 'tools/call', 'Mcp-Name': 'get_operation'},
+                json={'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call',
+                      'params': {'name': 'get_operation', 'arguments': self.arguments, '_meta': modern}})
+        for send, (token, code) in [(send, case) for send in (legacy, stateless) for case in
+                ((self.grant_value['token'], 'MCP_GRANT_EXPIRED'), ('rvlm_unknown', 'MCP_AUTH_REQUIRED'))]:
+            with self.subTest(path=send.__name__, code=code):
+                response = send(token)
+                self.assertEqual(response.status_code, 401, response.text)
+                self.assertEqual(response.json(), {'code': code, 'detail': response.json()['detail']})
+                self.assertIn('resource_metadata="', response.headers['www-authenticate'])
+                self.assertIn('error="invalid_token"', response.headers['www-authenticate'])
+                self.assertEqual(response.headers['cache-control'], 'no-store')
+                self.assertEqual(int(response.headers['content-length']), len(response.content))
+
+    def test_write_tool_is_prechecked_outside_the_write_fence(self):
+        args = {'research_request_id': self.work['research_request_id'], 'arguments': {'factor_id': 'fixture'},
+                'idempotency_key': 'denied'}
+        with patch.object(self.repo, 'transaction', side_effect=AssertionError('Invalid credential took the fence')):
+            response = self.rpc('rvlm_unknown', 'tools/call', {'name': 'get_factor', 'arguments': args})
+        self.assertEqual(response.status_code, 401, response.text)
+        self.assertIn('research:write', response.headers['www-authenticate'])
+        with patch('reveal_backend.research_http.authenticate', wraps=research_work.authenticate) as transport_auth:
+            result = self.tool(self.grant_value, 'get_factor', {**args, 'idempotency_key': 'accepted'})
+        self.assertFalse(result.get('isError'), result)
+        self.assertEqual(transport_auth.call_count, 1)
 
     def test_recovery_queue_deduplicates_repeated_polls_across_service_instances(self):
         future = Future()

@@ -19,8 +19,9 @@ from reveal_backend.research_work import ResearchWorkService, deadline
 import test_application as application
 import test_mysql_pool as wire
 import test_research_http as research_http
+import test_research_polling as research_polling
 
-BUDGET = {'local_work_poll': 5, 'me': 3, 'readyz': 2, 'draft_patch': 10}
+BUDGET = {'local_work_poll': 5, 'me': 3, 'readyz': 2, 'draft_patch': 10, 'mcp_get_operation': 5}
 
 
 class LocalWorkPollBudget(unittest.TestCase):
@@ -70,6 +71,24 @@ class LocalWorkPollBudget(unittest.TestCase):
             budget = self.poll(work, lambda runner, identity, lease_token=None: scheduled.append((identity, lease_token)))
         self.assertEqual(budget.kinds(), ['read'], budget)
         self.assertEqual(sorted(scheduled), sorted([(received['id'], None), (expired['id'], expired['id'] + '-lease')]))
+
+
+class McpBudget(unittest.TestCase):
+    setUp = research_polling.ResearchPollingTests.setUp
+    make_app = research_http.ResearchHTTPTests.make_app
+    headers = research_http.ResearchHTTPTests.headers
+    create = research_http.ResearchHTTPTests.create
+    grant = research_http.ResearchHTTPTests.grant
+    rpc = research_http.ResearchHTTPTests.rpc
+    tool = research_http.ResearchHTTPTests.tool
+
+    def test_read_tool_call_is_one_read_lease(self):
+        with patch.object(research_http.InlinePreparation, 'resume_operation', lambda *a, **k: None), \
+                count_round_trips() as budget:
+            result = self.tool(self.grant_value, 'get_operation', self.arguments)
+        self.assertFalse(result.get('isError'), result); print('\nmcp get_operation', budget)
+        self.assertEqual((budget.kinds(), budget.unleased, budget.connects), (['read'], 0, 0), budget)
+        self.assertLessEqual(budget.trips(), BUDGET['mcp_get_operation'], budget)
 
 
 class AccountBudget(unittest.TestCase):
