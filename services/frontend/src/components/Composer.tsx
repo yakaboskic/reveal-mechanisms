@@ -31,6 +31,7 @@ import { rememberDraftSave, restoreDraftSave, type DraftSaveAttempt } from "@/li
 import { analysisAccountResults, localWorkApi, localWorkHref, LocalWorkError } from "@/lib/local-work";
 import { ResearchModeMenu } from "./ResearchModeMenu";
 import { CfdeAssessment } from "./CfdeAssessment";
+import { LazyDraft } from "@/lib/lazy-draft";
 import { QueryHighlight } from "./QueryHighlight";
 import "./draft-editor.css";
 import "./local-work.css";
@@ -103,6 +104,11 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
   const saveAsCopy = useRef(false);
   const openingAttempt = useRef<{ key: string; composer: Schema<"Composer"> } | null>(null);
   const openingGap = useRef(false);
+  const [openFailed, setOpenFailed] = useState(false);
+  const meRef = useRef(me); meRef.current = me;
+  const identityRequest = useRef<Promise<Schema<"Me">> | null>(null);
+  // The editor a gap opening started, and the temporary draft it created once something needed its id.
+  const openedEpoch = useRef(-1), createdDraft = useRef<string | null>(null);
   const freshSelection = useRef<string | null>(null);
   const [error, setError] = useState(""); const [booted, setBooted] = useState(false);
   const [job, setJob] = useState<Schema<"Job"> | null>(null);
@@ -142,6 +148,39 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
   const discardTemporary = (value = draftRef.current) => {
     if (value?.lifecycle === "temporary") void api.deleteDraft(value, getKey(`discard:${value.id}:${value.version}`)).catch(() => { /* Server expiration handles an interrupted discard. */ });
   };
+  /** The visitor's session, provisioning an anonymous one once if there is none. */
+  const openIdentity = (): Promise<Schema<"Me">> => {
+    if (meRef.current) return Promise.resolve(meRef.current);
+    identityRequest.current ||= (async () => {
+      const created = await withRequestDeadline(async signal => {
+        const response = await fetch("/api/session/anonymous", { method: "POST", headers: { "content-type": "application/json", "Idempotency-Key": getKey("editor-session") }, body: "{}", signal });
+        if (!response.ok) throw new Error("Could not open your workspace. Please retry.");
+        return await response.json() as Schema<"Me">;
+      });
+      const identity = await refresh({ adopt: created });
+      if (!identity) throw new Error("Your session could not be established. Please retry.");
+      meRef.current = identity; return identity;
+    })().finally(() => { identityRequest.current = null; });
+    return identityRequest.current;
+  };
+  const actions = useRef({ openIdentity, discardTemporary }); actions.current = { openIdentity, discardTemporary };
+  const lazyDraft = useRef<LazyDraft<Schema<"Draft">> | null>(null);
+  lazyDraft.current ||= new LazyDraft<Schema<"Draft">>({
+    epoch: () => saveEpoch.current, current: () => draftRef.current,
+    create: async () => {
+      // Only the editor a gap opening started has no draft by design; another (a saved draft deleted elsewhere) saves anew.
+      const attempt = openedEpoch.current === saveEpoch.current ? openingAttempt.current : null;
+      if (!attempt) throw new Error("Save this draft again before adding documents.");
+      await actions.current.openIdentity();
+      return api.createWorkingDraft(attempt.composer, attempt.key);
+    },
+    adopt: created => {
+      if (!mounted.current || pendingSubmission.current) return false;
+      createdDraft.current = created.id; draftRef.current = created; setDraft(created); return true;
+    },
+    discard: created => actions.current.discardTemporary(created),
+  });
+  const ensureDraftId = () => lazyDraft.current!.ensure().then(value => value?.id ?? null);
   useEffect(() => { mounted.current = true; return () => {
     mounted.current = false; saveEpoch.current++; restoreEpoch.current++; suggestionRequest.current?.abort();
     // Defer past Strict Mode’s effect replay; real departures discard unsaved work.
@@ -160,7 +199,7 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
     setComposer(currentRef.current); setGap(null); setFactors({}); setOutdated({}); setRequestArchive(null); setDraft(null); setJob(null); setRunRequest(null);
     setDraftView(!!selection.draft); setSubmission(null); setRestoring("");
     setRetrievingJob(!!selection.job); setJobRestoreError("");
-    setSuggesting(false); setLimitations([]); setError(""); setConflict(false); setAdding(false); setQuery("");
+    setSuggesting(false); setLimitations([]); setError(""); setOpenFailed(false); setConflict(false); setAdding(false); setQuery("");
     setSaveState("Not saved"); setSaveRecovery(null);
   }, [navigationKey]);
   useEffect(() => {
@@ -189,7 +228,7 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
       saveEpoch.current++; restoreEpoch.current++; suggestionRequest.current?.abort();
       draftRef.current = null; currentRef.current = emptyComposer();
       setDraft(null); setJob(null); setRunRequest(null); setGap(null); setComposer(currentRef.current); setFactors({}); setOutdated({}); setRequestArchive(null);
-      setError(""); setInspection(null); inspectionDialog.current?.close(); namingDialog.current?.close();
+      setError(""); setOpenFailed(false); setInspection(null); inspectionDialog.current?.close(); namingDialog.current?.close();
       openingAttempt.current = null; requestKeys.current.clear(); rememberDraftSave(null); setSaveRecovery(null); droppedDrafts.current.clear();
     }
     if (!pendingSubmission.current) loadedOwner.current = me?.user_id || null;
@@ -342,6 +381,8 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
     const queued = saveQueue.current.catch(() => null).then(async () => {
       if (!current()) return null;
       if (!name.trim()) throw new Error("Give this draft a name before saving.");
+      // A temporary draft still being created becomes the saved draft rather than a stray copy.
+      if (!resumed) { await lazyDraft.current!.settled(); if (!current()) return null; }
       const previous = resumed ? resumed.draft : saveAsCopy.current ? null : draftRef.current;
       savingRef.current = true; setSaving(true); setSaveState("Saving…"); setError("");
       try {
@@ -375,9 +416,10 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
   };
   const outdatedAnchors = composer.eaggl_anchors.filter(anchor => outdated[anchorKey(anchor.reference)]);
   const requestSave = () => {
-    if (saving || attachmentsBlocked || outdatedAnchors.length || !draftRef.current) return;
-    if (draftRef.current.lifecycle === "temporary" || !draftRef.current.name) {
-      setSaveName(draftRef.current.name || ""); namingDialog.current?.showModal();
+    if (saving || attachmentsBlocked || outdatedAnchors.length || (!draftRef.current && !currentRef.current.source_gap)) return;
+    // An opened gap without a draft yet saves with one POST of a named draft.
+    if (!draftRef.current || draftRef.current.lifecycle === "temporary" || !draftRef.current.name) {
+      setSaveName(draftRef.current?.name || ""); namingDialog.current?.showModal();
     } else void save().catch(failure => setError(messageOf(failure)));
   };
   useEffect(() => {
@@ -447,35 +489,28 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
     if (!restoringSelection) restoreEpoch.current++;
     if (!retryOpening) discardTemporary();
     saveEpoch.current++;
-    const epoch = saveEpoch.current;
-    setRestoring("Opening your draft"); setRetrievingJob(false); setJobRestoreError("");
+    const epoch = saveEpoch.current; openedEpoch.current = epoch;
+    setRestoring("Opening knowledge gap"); setRetrievingJob(false); setJobRestoreError(""); setOpenFailed(false);
     setGap(value); setQuery(""); setJob(null); setRunRequest(null); setError(""); setConflict(false); submitKey.current = null; setRequestArchive(null); setOutdated({});
     if (!retryOpening || !openingAttempt.current) openingAttempt.current = { key: crypto.randomUUID(), composer: seed || { ...emptyComposer(), source_gap: selectedGap(value) } };
     const attempt = openingAttempt.current;
     const next = retryOpening ? currentRef.current : attempt.composer;
-    currentRef.current = next; setComposer(next); setDraft(null); draftRef.current = null;
+    currentRef.current = next; setComposer(next);
+    if (!retryOpening) { setDraft(null); draftRef.current = null; }
+    // Suggestions need no session, and the draft waits until an attachment, the CFDE check, Save or Submit needs it.
+    const suggested = suggest(currentRef.current);
     try {
-      let identity = me;
-      if (!identity) {
-        const created = await withRequestDeadline(async signal => {
-          const response = await fetch("/api/session/anonymous", { method: "POST", headers: { "content-type": "application/json", "Idempotency-Key": getKey("editor-session") }, body: "{}", signal });
-          if (!response.ok) throw new Error("Could not open your workspace. Please retry.");
-          return await response.json() as Schema<"Me">;
-        });
-        identity = await refresh({ adopt: created });
-      }
-      if (!identity) throw new Error("Your session could not be established. Please retry.");
+      const identity = await openIdentity();
       if (!mounted.current || epoch !== saveEpoch.current) return;
       loadedOwner.current = identity.user_id;
-      const created = await api.createWorkingDraft(attempt.composer, attempt.key);
-      if (!mounted.current || epoch !== saveEpoch.current) { discardTemporary(created); return; }
-      draftRef.current = created; setDraft(created); setSaveState("Not saved");
-      const target = questionSelection(created.id);
-      freshSelection.current = selectionKey(target); navigateSelection(target);
+      if (!draftRef.current) setSaveState("Not saved");
+      const target = questionSelection(null, value.object.id);
+      if (selectionKey(target) !== lastNavigation.current) freshSelection.current = selectionKey(target);
+      navigateSelection(target); setDraftView(true);
       setRestoring("");
       void api.explore({ source_gap: selectedGap(value) }).catch(() => {});
-      await suggest(currentRef.current);
-    } catch (failure) { if (mounted.current && epoch === saveEpoch.current) setError(messageOf(failure)); }
+      await suggested;
+    } catch (failure) { if (mounted.current && epoch === saveEpoch.current) { setError(messageOf(failure)); setOpenFailed(true); } }
     finally { openingGap.current = false; if (mounted.current && epoch === saveEpoch.current) setRestoring(""); }
   }
   const submissionFailed = (failure: unknown) => {
@@ -634,7 +669,7 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
     setDraftView(false);
     restoreEpoch.current++; setRestoring(""); setRetrievingJob(false); setJobRestoreError("");
     suggestionRequest.current?.abort(); suggestionRequest.current = null; setSuggesting(false); setLimitations([]);
-    saveEpoch.current++; setGap(null); setComposer(emptyComposer()); setDraft(null); draftRef.current = null; setError(""); setAdding(false); setQuery(""); setRequestArchive(null); setOutdated({});
+    saveEpoch.current++; setGap(null); setComposer(emptyComposer()); setDraft(null); draftRef.current = null; setError(""); setOpenFailed(false); setAdding(false); setQuery(""); setRequestArchive(null); setOutdated({});
     navigateSelection(questionSelection());
     requestAnimationFrame(() => document.getElementById("gap-search")?.focus());
   };
@@ -657,14 +692,20 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
   const anchorName = (anchor: Schema<"Selection">) => outdatedAnchor(anchor)?.name || mechanismName(selectedFactor(anchor.reference.source_id));
   const anchorHref = (anchor: Schema<"Selection">) => factorHref(anchor.reference.source_id, anchor.reference.source_revision, {
     archiveId: outdatedAnchor(anchor)?.archive_id,
-    from: job ? `/runs/${encodeURIComponent(job.id)}` : draft ? `/drafts/${encodeURIComponent(draft.id)}` : "/",
+    from: job ? `/runs/${encodeURIComponent(job.id)}` : draft ? `/drafts/${encodeURIComponent(draft.id)}` : gap ? `/?gap=${encodeURIComponent(gap.object.id)}` : "/",
   });
   const frozenGap = runRequest?.document?.knowledge_gaps?.find(value => value.id === runRequest.question_id);
   const displayGap = job && frozenGap ? frozenGap : gap?.object;
   const uncertainSubmission = !!pendingSubmission.current?.submitKey;
   const editorLocked = saving || uncertainSubmission;
   const submitDisabled = submissionActionDisabled({ ready, busy: saving || submissionRunning.current, uncertain: uncertainSubmission,
-    newInputsValid: !!composer.eaggl_anchors.length && !suggesting && !attachmentsBlocked && !!draft && !outdatedAnchors.length });
+    newInputsValid: !!composer.eaggl_anchors.length && !suggesting && !attachmentsBlocked && !outdatedAnchors.length });
+  // The CFDE check posts against a draft: create the temporary one once the check could run, not when the gap opens.
+  const assessable = !!me && !!gap && !job && !draft && !submission && !restoring && !!composer.source_gap && !!composer.eaggl_anchors.length
+    && !editorLocked && !attachmentsBlocked && !conflict && !outdatedAnchors.length && !suggesting;
+  useEffect(() => {
+    if (assessable) void lazyDraft.current!.ensure().catch(failure => { if (mounted.current) setError(messageOf(failure)); });
+  }, [assessable]);
   const discoveryVisible = !draftView && !job;
   if (submission) return <SubmissionProgress stage={submission.stage} provider={pendingSubmission.current?.method} question={pendingSubmission.current?.question} error={submission.error} onRetry={retrySubmission} onBack={backToQuestion} retryLabel={pendingSubmission.current?.method === "google" || pendingSubmission.current?.method === "orcid" ? "Try again" : "Retry"} />;
   const jobStatusSurface = <LoadingSurface compact={!!job} skeleton={job ? "none" : "rows"} title={jobRestoreError ? "Unable to retrieve job status" : "Retrieving job status"} description="Checking the current stage and reconnecting to recorded activity." error={jobRestoreError} onRetry={() => { setJobRestoreError(""); setRetrievingJob(true); setRestoreAttempt(value => value + 1); }} />;
@@ -682,7 +723,7 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
     <Link className="text-button" href="/">Return to knowledge gaps</Link>
   </main>;
   return <main id="main" className={`composer-page prototype-composer ${!gap && discoveryVisible ? "is-gap-browsing" : ""} ${gap ? "has-gap" : ""} ${job ? "has-job" : ""} ${job && terminal(job.status) ? "job-complete" : ""}`}>
-    {draft && !job && <nav className="composer-draft-nav" aria-label="Draft navigation"><DraftNavigation /><strong>{draft.name || "New research draft"}</strong><span role="status">{saveState}</span></nav>}
+    {(draft || (gap && draftView)) && !job && <nav className="composer-draft-nav" aria-label="Draft navigation"><DraftNavigation /><strong>{draft?.name || "New research draft"}</strong><span role="status">{saveState}</span></nav>}
     {job && <nav className="run-navigation" aria-label="Research run navigation"><Link href="/workspace?tab=runs">← Research runs</Link><span>Submitted inputs · read-only</span></nav>}
     {(retrievingJob || jobRestoreError) && jobStatusSurface}
     {restoring && !retrievingJob && <LoadingSurface compact={!!gap || !!job} skeleton={gap || job ? "none" : "rows"} title={restoring} description="Retrieving your saved question and mechanism anchors." />}
@@ -707,11 +748,11 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
           </>}
           {job && <p className="muted">Additional knowledge graphs: {composer.selected_kgs.length ? composer.selected_kgs.join(", ") : "None"}</p>}
           </section>
-          <ResearchInputs key={job?.id || draft?.id || "opening"} composer={composer} onChange={setComposer} draftId={draft?.id} readOnly={!!job} onBlockingChange={setAttachmentsBlocked} />
+          <ResearchInputs key={job?.id || (draft && draft.id !== createdDraft.current ? draft.id : openingAttempt.current?.key) || "opening"} composer={composer} onChange={setComposer} draft={ensureDraftId} readOnly={!!job} onBlockingChange={setAttachmentsBlocked} />
           </fieldset>
           {!job && <>
             <p className="draft-notice">{draft?.lifecycle !== "temporary" && draft ? "Changes are kept only when you save." : "Save a named draft to keep it. Unsaved work is discarded when you leave."}</p>
-            <div className="submit-row"><div className="draft-save-group"><button type="button" className="draft-save-button" aria-label="Save draft" title="Save a named draft" disabled={!draft || saving || attachmentsBlocked || uncertainSubmission || conflict || !!outdatedAnchors.length} onClick={requestSave}><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M5 3h12l4 4v14H3V3h2Z"/><path d="M7 3v7h10V3M7 21v-7h10v7M14 5v3"/></svg><span className="sr-only">Save draft</span></button><span className="draft-save-state" role="status">{saveState}</span></div>{uncertainSubmission ? <button type="button" className="gap-submit" disabled={submitDisabled} onClick={() => void retrySubmission()}><span>Check submission</span><span className="send" aria-hidden="true"><span>↑</span></span></button> : <CfdeAssessment key={me?.user_id || "visitor"} draft={draft} composer={composer} disabled={!me || editorLocked || saving || attachmentsBlocked || conflict || !!outdatedAnchors.length || suggesting}>{(assessment, assessing) => <ResearchModeMenu assessment={assessment} assessing={assessing} disabled={submitDisabled} onSelect={mode => { requestedMode.current = mode; if (me) void launch(mode); else dialog.current?.showModal(); }} />}</CfdeAssessment>}</div><p className="local-research-link"><Link href="/workspace?tab=runs">Your research runs</Link></p>
+            <div className="submit-row"><div className="draft-save-group"><button type="button" className="draft-save-button" aria-label="Save draft" title="Save a named draft" disabled={(!draft && !me) || saving || attachmentsBlocked || uncertainSubmission || conflict || !!outdatedAnchors.length} onClick={requestSave}><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M5 3h12l4 4v14H3V3h2Z"/><path d="M7 3v7h10V3M7 21v-7h10v7M14 5v3"/></svg><span className="sr-only">Save draft</span></button><span className="draft-save-state" role="status">{saveState}</span></div>{uncertainSubmission ? <button type="button" className="gap-submit" disabled={submitDisabled} onClick={() => void retrySubmission()}><span>Check submission</span><span className="send" aria-hidden="true"><span>↑</span></span></button> : <CfdeAssessment key={me?.user_id || "visitor"} draft={draft} composer={composer} disabled={!me || editorLocked || saving || attachmentsBlocked || conflict || !!outdatedAnchors.length || suggesting}>{(assessment, assessing) => <ResearchModeMenu assessment={assessment} assessing={assessing} disabled={submitDisabled} onSelect={mode => { requestedMode.current = mode; if (me) void launch(mode); else dialog.current?.showModal(); }} />}</CfdeAssessment>}</div><p className="local-research-link"><Link href="/workspace?tab=runs">Your research runs</Link></p>
           </>}
         </div>
       </>}
@@ -721,7 +762,7 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
     {!gap && discoveryVisible && discoveryView === "gaps" && !!query.trim() && showResults && <section className="search-results" aria-label="Knowledge gap search results">{searching ? <LoadingSurface key={query.trim()} compact rows={2} title="Searching knowledge gaps" description="Looking for matching questions in DisMech." /> : <p className="result-heading" role="status">{error ? "Search unavailable" : `${visibleResults.length} related knowledge gaps`}</p>}<div id="gap-results-list" role="listbox" aria-label="Matching knowledge gaps">{visibleResults.map((value, index) => <button className="gap-result" role="option" aria-selected="false" key={value.source.source_id} onClick={() => void selectGap(value)} onKeyDown={e => { if (e.key === "Escape") { setShowResults(false); document.getElementById("gap-search")?.focus(); } if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); if (e.key === "ArrowUp" && index === 0) document.getElementById("gap-search")?.focus(); else { const buttons = e.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>("button"); buttons?.[(index + (e.key === "ArrowDown" ? 1 : -1)) % visibleResults.length]?.focus(); } } }}><span><QueryHighlight text={value.object.text} query={query} /></span><small><QueryHighlight text={value.source.disease_label ?? ""} query={query} /> · {value.source.status || "Status not specified"}</small></button>)}</div>{!searching && !error && !visibleResults.length && <p className="empty">No matching knowledge gaps. Try a disease, gene or mechanism.</p>}</section>}
     {!gap && discoveryVisible && discoveryView === "gaps" && !query.trim() && <GapBrowser scope="public" sort={gapSort} onSelect={value => void selectGap(value)} onRanked={setTrending} />}
     {!gap && discoveryVisible && discoveryView === "accounts" && (!query.trim() || showResults) && <TrendingAccounts query={query} sort={accountSort} onLoaded={focusAccountResult} />}
-    {error && <div className="error" role="alert">{error}{saveRecovery && !saving && <button type="button" onClick={() => void save(saveRecovery.composer, saveRecovery.name, saveRecovery).catch(failure => setError(messageOf(failure)))}>Retry save</button>}{gap && !draft && !job && openingAttempt.current && <button type="button" onClick={() => void selectGap(gap, false, true)}>Retry opening editor</button>}</div>}
+    {error && <div className="error" role="alert">{error}{saveRecovery && !saving && <button type="button" onClick={() => void save(saveRecovery.composer, saveRecovery.name, saveRecovery).catch(failure => setError(messageOf(failure)))}>Retry save</button>}{gap && !job && openFailed && <button type="button" onClick={() => void selectGap(gap, false, true)}>Retry opening editor</button>}</div>}
     {conflict && <div className="conflict"><p>This draft changed in another session. Your edits are retained here.</p><button onClick={async () => { if (!draftRef.current) return; const latest = await api.draft(draftRef.current.id); rememberDraftSave(null); draftRef.current = latest; setDraft(latest); setComposer(latest.composer); setConflict(false); setError(""); }}>Load saved version</button><button onClick={() => { saveAsCopy.current = true; setError(""); setSaveName(""); namingDialog.current?.showModal(); }}>Save my edits as a new draft</button></div>}
     {job && requestArchive && <ReferenceArchiveBanner compact archive={requestArchive} subject="analysis" gapId={requestArchive.gap?.id || composer.source_gap?.id} anchorsOpen={false} settings={async () => composer} />}
     {job && <><Activity key={job.id} initial={job} onJob={setJob} archived={!!requestArchive} />{accountResults.map(({ id, reused }) => reused ? <section key={id} aria-label="Reused scientific account"><p className="local-research-link">Reused accepted account · original authorship retained</p><AccountPreview id={id} /></section> : <AccountPreview key={id} id={id} />)}{terminal(job.status) && gap && !requestArchive && <button className="text-button return-to-question" onClick={() => void reset()}>Edit these inputs</button>}</>}

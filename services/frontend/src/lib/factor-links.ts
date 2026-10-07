@@ -36,5 +36,6 @@ export function returnLabel(path?: string | null) {
   if (path?.startsWith("/factors/")) return "Back to factor";
   if (path?.startsWith("/runs/") || path?.includes("?job=")) return "Back to research run";
   if (path?.startsWith("/drafts/")) return "Back to draft";
+  if (path?.startsWith("/?gap=")) return "Back to knowledge gap";
   return "Explore knowledge gaps";
 }

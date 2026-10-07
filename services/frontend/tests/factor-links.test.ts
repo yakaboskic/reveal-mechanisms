@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { factorHref, geneSetHref, referenceReturnPath, traitHref } from "../src/lib/factor-links";
+import { factorHref, geneSetHref, referenceReturnPath, returnLabel, traitHref } from "../src/lib/factor-links";
 
 test("trait links use the KPN catalog and preserve leading zeroes", () => {
   assert.equal(traitHref("KPN.TRAIT:0001360"), "https://broadinstitute.github.io/kpn-data-models/kpn.trait/0001360/");
@@ -26,4 +26,12 @@ test("gene-set links pin their reference generation and preserve factor context"
 test("return links cannot leave the app or lead to API routes", () => {
   for (const value of ["//example.com", "https://example.com", "/\\example.com", "/api/session/logout", "/factors/../api", "/\n/evil"]) assert.equal(referenceReturnPath(value), null);
   assert.equal(referenceReturnPath("/?job=123"), "/?job=123");
+});
+
+test("an opened gap without a draft yet returns to its question", () => {
+  const url = new URL(factorHref("factor:fixture", "abc", { from: "/?gap=dismech%3Agap" }), "http://localhost");
+  const back = referenceReturnPath(url.searchParams.get("from"));
+  assert.equal(back, "/?gap=dismech%3Agap");
+  assert.equal(returnLabel(back), "Back to knowledge gap");
+  assert.equal(returnLabel("/drafts/draft-1"), "Back to draft"); assert.equal(returnLabel("/"), "Explore knowledge gaps");
 });

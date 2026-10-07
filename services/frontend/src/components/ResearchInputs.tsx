@@ -4,10 +4,11 @@ import { messageOf, type Schema } from "@/lib/client";
 import { fileDigest, transferFile, uploadRequest, type Upload, type UploadTicket } from "@/lib/uploads";
 
 type Pending = { key: string; file: File; progress: number; error?: string; upload?: Upload; controller?: AbortController; ticket?: UploadTicket };
-type Props = { composer: Schema<"Composer">; onChange: (change: (value: Schema<"Composer">) => Schema<"Composer">) => void; draftId?: string; readOnly?: boolean; onBlockingChange: (blocked: boolean) => void };
+/** `draft` resolves the editor's draft id, creating its temporary draft on the first attachment; null once the editor is gone. */
+type Props = { composer: Schema<"Composer">; onChange: (change: (value: Schema<"Composer">) => Schema<"Composer">) => void; draft?: () => Promise<string | null>; readOnly?: boolean; onBlockingChange: (blocked: boolean) => void };
 const sizeLabel = (bytes: number) => bytes < 1_000_000 ? `${Math.ceil(bytes / 1000)} KB` : `${(bytes / 1_000_000).toFixed(1)} MB`;
 
-export function ResearchInputs({ composer, onChange, draftId, readOnly = false, onBlockingChange }: Props) {
+export function ResearchInputs({ composer, onChange, draft, readOnly = false, onBlockingChange }: Props) {
   const ids = composer.upload_ids || [];
   const legacyFields = useRef({ direction: !!composer.research_direction, hypotheses: !!composer.hypotheses });
   legacyFields.current.direction ||= !!composer.research_direction;
@@ -35,13 +36,16 @@ export function ResearchInputs({ composer, onChange, draftId, readOnly = false, 
   const updatePending = (key: string, patch: Partial<Pending>) => { if (active.current) setPending(previous => previous.map(item => item.key === key ? { ...item, ...patch } : item)); };
   const release = (id: string) => { void uploadRequest(`/v1/uploads/${encodeURIComponent(id)}`, "DELETE", undefined, `detach-${id}`).catch(() => { /* Saved drafts and frozen runs retain referenced files; expiry reclaims abandoned uploads. */ }); };
   async function attach(item: Pending) {
-    if (!draftId || readOnly) return;
+    if (!draft || readOnly) return;
     const controller = new AbortController(); transfers.current.set(item.key, controller);
     updatePending(item.key, { progress: 0, error: undefined });
     let upload = item.upload;
     try {
       if (upload) upload = await uploadRequest<Upload>(`/v1/uploads/${upload.id}`, "GET", undefined, undefined, controller.signal);
       if (upload?.status !== "ready") {
+        const draftId = await draft();
+        if (!active.current || controller.signal.aborted) return;
+        if (!draftId) throw new Error("This editor closed before the document could be attached.");
         const ticket = await uploadRequest<UploadTicket>("/v1/uploads", "POST", { draft_id: draftId, filename: item.file.name, media_type: item.file.type || "application/octet-stream", size_bytes: item.file.size, sha256: await fileDigest(item.file) }, item.key);
         upload = ticket.upload;
         if (!active.current || controller.signal.aborted) { release(upload.id); return; }
@@ -95,7 +99,7 @@ export function ResearchInputs({ composer, onChange, draftId, readOnly = false, 
         {legacyFields.current.hypotheses && <><label htmlFor="research-hypotheses">Hypotheses</label><textarea id="research-hypotheses" rows={2} maxLength={12000} value={composer.hypotheses || ""} onChange={event => { const text = event.target.value; onChange(value => ({ ...value, hypotheses: text })); }} /></>}
       </details>}
     </>}
-    {(!readOnly || ids.length > 0) && <div className="draft-attachments"><div className="attachment-heading">{readOnly && <h3>Submitted documents</h3>}{!readOnly && <label className={`attach-document${!draftId ? " is-disabled" : ""}`}><svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="m7 10 5-5a3 3 0 0 1 4 4l-7 7a4 4 0 0 1-6-6l7-7M6 12l6-6" /></svg>Attach documents<input type="file" multiple disabled={!draftId} accept=".txt,.md,.csv,.tsv,.json,.yaml,.yml,.pdf,.docx" onChange={event => { choose(event.target.files); event.target.value = ""; }} /></label>}</div>
+    {(!readOnly || ids.length > 0) && <div className="draft-attachments"><div className="attachment-heading">{readOnly && <h3>Submitted documents</h3>}{!readOnly && <label className={`attach-document${!draft ? " is-disabled" : ""}`}><svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="m7 10 5-5a3 3 0 0 1 4 4l-7 7a4 4 0 0 1-6-6l7-7M6 12l6-6" /></svg>Attach documents<input type="file" multiple disabled={!draft} accept=".txt,.md,.csv,.tsv,.json,.yaml,.yml,.pdf,.docx" onChange={event => { choose(event.target.files); event.target.value = ""; }} /></label>}</div>
       {!readOnly && <p className="attachment-hint">Up to 5 documents · 8 MB each · PDF, Word, text, or tables</p>}
       <ul className="attachment-list">{ids.map(id => { const upload = records[id]; return <li key={id}><div className="attachment-row"><div><strong>{upload?.filename || "Loading document…"}</strong><small>{upload ? `${sizeLabel(upload.size_bytes)} · ${upload.status === "ready" ? "Ready for the agent" : upload.status}` : "Retrieving document details"}</small></div>{!readOnly && <button type="button" onClick={() => remove(id)} aria-label={`Remove ${upload?.filename || "document"}`}>×</button>}</div>{upload?.storage && <details><summary>Source and storage</summary><dl><dt>Location</dt><dd>{upload.storage.store === "s3" ? `s3://${upload.storage.bucket}/${upload.storage.key}` : upload.storage.key}</dd>{upload.storage.version_id && <><dt>Version</dt><dd>{upload.storage.version_id}</dd></>}<dt>SHA-256</dt><dd>{upload.sha256}</dd>{upload.extraction?.storage && <><dt>Extracted text</dt><dd>{upload.extraction.storage.store === "s3" ? `s3://${upload.extraction.storage.bucket}/${upload.extraction.storage.key}` : upload.extraction.storage.key}</dd></>}</dl><a href={`/api/backend/v1/uploads/${id}/download`} target="_blank" rel="noreferrer">Download original</a></details>}</li>; })}
       {pending.map(item => <li key={item.key}><div className="attachment-row"><div><strong>{item.file.name}</strong><small>{item.error ? "Needs attention" : item.progress === 100 ? "Verifying and preparing document…" : `Uploading ${item.progress}%`}</small></div><button type="button" aria-label={`Remove ${item.file.name}`} onClick={() => { transfers.current.get(item.key)?.abort(); if (item.upload) release(item.upload.id); setPending(previous => previous.filter(value => value.key !== item.key)); }}>×</button></div>{item.error ? <p className="error" role="alert">{item.error} <button type="button" onClick={() => retry(item)}>Retry</button></p> : <progress max={100} value={item.progress} aria-label={`Uploading ${item.file.name}`} />}</li>)}</ul>
