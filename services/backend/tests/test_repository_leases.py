@@ -222,10 +222,12 @@ class BusyResponseTests(unittest.TestCase):
     token = application.ApplicationTests.token
 
     def test_database_busy_is_the_existing_retryable_503(self):
-        user = self.provision()
-        for message in ('Application database writers are busy', 'Application database connection pool is busy'):
-            with self.subTest(message=message), patch.object(self.repo, 'transaction', side_effect=DatabaseBusy(message)):
-                response = self.client.get('/v1/me', headers={'Authorization': 'Bearer ' + self.token(user)})
+        user = self.provision(); headers = {'Authorization': 'Bearer ' + self.token(user), 'Idempotency-Key': 'busy'}
+        cases = (('Application database writers are busy', 'transaction', 'POST', '/v1/drafts'),   # a writer
+                 ('Application database connection pool is busy', 'single_read', 'GET', '/v1/me'))   # a snapshot read
+        for message, lease, method, route in cases:
+            with self.subTest(message=message), patch.object(self.repo, lease, side_effect=DatabaseBusy(message)):
+                response = self.client.request(method, route, headers=headers, json={'composer': application.COMPOSER} if method == 'POST' else None)
                 self.assertEqual(response.status_code, 503)
                 self.assertEqual((response.json()['code'], response.json()['retryable']), ('SERVICE_UNAVAILABLE', True))
                 self.assertNotIn('busy', response.text)
