@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api, ApiError, messageOf, type Schema } from "@/lib/client";
 import { LoadingSurface } from "../LoadingSurface";
+import { onPageReturn } from "@/lib/page-return";
 import { formatLeaderboardNumber as number, leaderboardHref, LeaderboardPageChangedError, leaderboardSorts, leaderboardViews, mergeLeaderboardPages, publicLeaderboardHref, readLeaderboardQuery, verifiedOrcidHref, type LeaderboardEntry, type LeaderboardMetric, type LeaderboardQuery, type LeaderboardSort, type LeaderboardView } from "@/lib/leaderboard";
 
 type Column = { key: keyof LeaderboardEntry["metrics"]; label: string; metric: LeaderboardMetric; sort?: LeaderboardSort; score?: boolean };
@@ -34,15 +35,7 @@ type OpenRecords = (entry: LeaderboardEntry, metric: LeaderboardMetric, trigger:
 
 function usePublicRevalidation(reload: () => void) {
   const latest = useRef(reload); latest.current = reload;
-  useEffect(() => {
-    let lastCheck = -Infinity;
-    const check = () => {
-      if (document.visibilityState === "hidden" || performance.now() - lastCheck < 250) return;
-      lastCheck = performance.now(); latest.current();
-    };
-    window.addEventListener("focus", check); window.addEventListener("online", check); document.addEventListener("visibilitychange", check);
-    return () => { window.removeEventListener("focus", check); window.removeEventListener("online", check); document.removeEventListener("visibilitychange", check); };
-  }, []);
+  useEffect(() => onPageReturn(() => latest.current()), []);
 }
 
 function Contributor({ entry }: { entry: LeaderboardEntry }) {

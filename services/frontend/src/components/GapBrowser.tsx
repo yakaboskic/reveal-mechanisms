@@ -10,7 +10,10 @@ import { useIdentity } from "./Session";
 import { LoadingSurface } from "./LoadingSurface";
 import { VoteControls } from "./VoteControls";
 import { onWorkspaceChange } from "@/lib/workspace-events";
+import { onPageReturn } from "@/lib/page-return";
 import "./gap-browser.css";
+
+const publicFreshMs = 60_000;
 
 export type { GapScope, GapSort } from "@/lib/gap-discovery";
 export const gapScopeLabel = (scope: GapScope) => scope === "public" ? "Trending knowledge gaps" : "Top questions in your workspace";
@@ -79,7 +82,7 @@ export function TrendingAccounts({ query, sort, onLoaded }: { query: string; sor
   const current = useRef(binding); current.current = binding;
   const [collection, setCollection] = useState<{ binding: string; items: Schema<"AccountSummary">[]; page: Schema<"Page"> } | null>(null);
   const [busy, setBusy] = useState(true), [error, setError] = useState("");
-  const serial = useRef(0), inflight = useRef(false), controller = useRef<AbortController | null>(null);
+  const serial = useRef(0), inflight = useRef(false), controller = useRef<AbortController | null>(null), loadedAt = useRef(0);
   const scroll = useRef<HTMLDivElement>(null), sentinel = useRef<HTMLDivElement>(null);
   const loaded = useRef(onLoaded); loaded.current = onLoaded;
   const visible = collection?.binding === binding ? collection : null;
@@ -95,7 +98,7 @@ export function TrendingAccounts({ query, sort, onLoaded }: { query: string; sor
       const result = await api.publicAccounts(append ? previous?.page.next_cursor || undefined : undefined, abort.signal, term, sort);
       if (abort.signal.aborted || sequence !== serial.current || binding !== current.current) return;
       const items = mergePublicAccounts(append ? previous?.items || [] : [], result.items);
-      setCollection({ binding, items, page: result.page });
+      setCollection({ binding, items, page: result.page }); if (!append) loadedAt.current = Date.now();
       requestAnimationFrame(() => { if (!abort.signal.aborted && binding === current.current) loaded.current(); });
     } catch (failure) {
       if (!abort.signal.aborted && sequence === serial.current && binding === current.current) {
@@ -122,10 +125,9 @@ export function TrendingAccounts({ query, sort, onLoaded }: { query: string; sor
     const unsubscribe = onWorkspaceChange((reset, event) => {
       if (reset || !event || event.collections.some(value => ["catalog", "accounts", "identity"].includes(value))) refresh();
     });
-    const visibleAgain = () => { if (!document.hidden) refresh(); };
-    window.addEventListener("focus", refresh); window.addEventListener("online", refresh);
-    document.addEventListener("visibilitychange", visibleAgain);
-    return () => { unsubscribe(); window.removeEventListener("focus", refresh); window.removeEventListener("online", refresh); document.removeEventListener("visibilitychange", visibleAgain); };
+    // A tab switch fires visibilitychange and focus together: one check, and rows under a minute old are kept.
+    const stop = onPageReturn(() => { if (!inflight.current && (!snapshot.current || Date.now() - loadedAt.current >= publicFreshMs)) refresh(); });
+    return () => { unsubscribe(); stop(); };
   }, [load]);
   useEffect(() => {
     if (!visible?.page.has_more || busy || error || !scroll.current || !sentinel.current || typeof IntersectionObserver === "undefined") return;
