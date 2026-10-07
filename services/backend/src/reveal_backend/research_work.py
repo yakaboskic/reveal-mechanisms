@@ -33,6 +33,26 @@ TERMINAL = {'succeeded', 'accepted', 'rejected', 'failed', 'cancelled'}
 MAX_ARTIFACT_BYTES = 8_000_000
 
 
+def json_text(tx, path):
+    """SQL text of one top-level payload field; path is a code constant, never input."""
+    field = "JSON_EXTRACT(payload, '$." + path + "')"
+    return field if tx.sqlite else 'JSON_UNQUOTE(' + field + ')'
+
+
+def _ordered(rows, identity, updated):
+    """list() order: updated_at descending, then id ascending."""
+    rows = sorted(rows, key=lambda row: row[identity])
+    rows.sort(key=lambda row: row[updated], reverse=True)
+    return rows
+
+
+def records_where(tx, kind, owner, field, value):
+    """This owner's rows of one kind whose payload field equals value, in list() order."""
+    rows = tx.execute('SELECT id,owner_id,version,payload,updated_at FROM reveal_records '
+        'WHERE kind=%s AND owner_id=%s AND '+json_text(tx, field)+'=%s', (kind, owner, value)).fetchall()
+    return [{'id': row[0], 'owner': row[1], 'version': row[2], 'data': json.loads(row[3])} for row in _ordered(rows, 0, 4)]
+
+
 def work_records(tx, kind, owner, work_id):
     """Read this work's children without transferring an owner's other captures.
 
@@ -40,13 +60,42 @@ def work_records(tx, kind, owner, work_id):
     Python made every status poll download those unrelated payloads from MySQL.
     Ownership and the frozen local-work boundary both remain in the SQL filter.
     """
-    field = "JSON_EXTRACT(payload, '$.local_work_id')"
-    if not tx.sqlite: field = 'JSON_UNQUOTE('+field+')'
-    rows = tx.execute('SELECT id,owner_id,version,payload,updated_at FROM reveal_records '
-        'WHERE kind=%s AND owner_id=%s AND '+field+'=%s', (kind, owner, work_id)).fetchall()
-    rows = sorted(rows, key=lambda row: row[0])
-    rows.sort(key=lambda row: row[4], reverse=True)
-    return [{'id': row[0], 'owner': row[1], 'version': row[2], 'data': json.loads(row[3])} for row in rows]
+    return records_where(tx, kind, owner, 'local_work_id', work_id)
+
+
+def work_children(tx, owner, work_ids, *, operations=('validate', 'submit')):
+    """research_operation and research_access rows of several works in one owner-scoped read.
+
+    Returns {kind: {work_id: rows}}, each list in work_records() order. operations limits
+    research_operation rows to those kinds in SQL; None keeps every kind (pending detection).
+    """
+    work, kind = json_text(tx, 'local_work_id'), json_text(tx, 'kind')
+    grouped = {'research_operation': {}, 'research_access': {}}; rows = []; ids = list(dict.fromkeys(work_ids))
+    for offset in range(0, len(ids), 250):
+        batch = ids[offset:offset + 250]
+        sql = ('SELECT kind,id,owner_id,version,payload,updated_at FROM reveal_records WHERE kind IN (%s,%s) '
+               'AND owner_id=%s AND '+work+' IN ('+','.join(['%s'] * len(batch))+')')
+        args = ['research_operation', 'research_access', owner, *batch]
+        if operations:
+            sql += ' AND (kind=%s OR '+kind+' IN ('+','.join(['%s'] * len(operations))+'))'
+            args += ['research_access', *operations]
+        rows += tx.execute(sql, args).fetchall()
+    for row in _ordered(rows, 1, 5):
+        data = json.loads(row[4])
+        grouped[row[0]].setdefault(data.get('local_work_id'), []).append(
+            {'id': row[1], 'owner': row[2], 'version': row[3], 'data': data})
+    return grouped
+
+
+def pending_operations(rows):
+    """(id, lease_token) of received operations and running ones whose lease expired, to resume."""
+    stamp = now(); pending = []
+    for row in rows:
+        state = row['data']['state']
+        if state == 'received': pending.append((row['id'], None))
+        elif state == 'running' and (row['data'].get('lease_until') or '') <= stamp:
+            pending.append((row['id'], row['data'].get('lease_token')))
+    return pending
 
 
 def deadline(seconds):
@@ -237,35 +286,60 @@ class ResearchWorkService:
             return self.view(tx, owner, work_id)
         return idempotent(tx, owner, 'create-local', key, body, action)
 
-    def view(self, tx, owner, work_id):
-        work = deepcopy(owned(tx, 'local_work', work_id, owner)['data'])
-        work.pop('owner_user_id', None)
-        work['request'] = deepcopy(owned(tx, 'request', work['research_request_id'], owner)['data'])
-        for upload in (work['request'].get('user_inputs') or {}).get('uploads', []):
-            upload.pop('storage', None)
-            if isinstance(upload.get('extraction'), dict):
-                upload['extraction'].pop('storage', None); upload['extraction'].pop('content', None)
-        work['submissions'] = [self.operation_view(r['data'], tx=tx, owner=owner)
-            for r in work_records(tx, 'research_operation', owner, work_id)
-            if r['data']['kind'] in ('validate', 'submit')]
-        connections = {}
-        grants = work_records(tx, 'research_access', owner, work_id)
-        families = tx.get_many('research_oauth_family', sorted({row['data']['oauth_family_id'] for row in grants
-            if row['data'].get('oauth_family_id') and row['data']['local_work_id'] == work_id}))
-        for row in grants:
-            grant = row['data']
-            if grant['local_work_id'] != work_id or grant['kind'] != 'local': continue
-            family = families.get(grant.get('oauth_family_id'))
-            if family and family['owner'] == owner:
-                # Show the renewable connection lifetime, so dormant OAuth
-                # authorization remains visible and revocable after access expires.
-                grant = {**grant, **{key: family['data'].get(key) for key in ('expires_at', 'created_at', 'revoked_at')}}
-            prior = connections.get(grant['grant_id'])
-            if not prior or grant['expires_at'] > prior['expires_at']:
-                connections[grant['grant_id']] = {k: grant.get(k) for k in ('grant_id', 'expires_at', 'revoked_at', 'created_at')}
-        work['grants'] = list(connections.values())
-        work.update(connection_instructions(work_id))
-        return work
+    def view(self, tx, owner, work_id, *, work_row=None, loaded=None):
+        """work_row, when given, must already be authorized for owner in this transaction. loaded, when
+        given, receives every research_operation row of the work, so a poll resumes from the same snapshot."""
+        return self.views(tx, owner, [{**(work_row or owned(tx, 'local_work', work_id, owner)), 'id': work_id}], loaded=loaded)[0]
+
+    def views(self, tx, owner, rows, *, loaded=None):
+        """Views of this owner's authorized local_work rows with a fixed number of reads, whatever their count."""
+        if not rows: return []
+        ids = [row['id'] for row in rows]
+        requested = sorted({row['data']['research_request_id'] for row in rows})
+        requests = tx.get_many('request', requested) if len(requested) > 1 else None
+        children = work_children(tx, owner, ids, operations=None if loaded is not None else ('validate', 'submit'))
+        operations, grants = children['research_operation'], children['research_access']
+        submissions = {work_id: [r['data'] for r in operations.get(work_id, [])
+            if r['data']['kind'] in ('validate', 'submit')] for work_id in ids}
+        # Warm this snapshot's evidence rows in one read; each submission is still authorized row by row.
+        evidence = sorted({(kind, identity) for values in submissions.values() for value in values
+            for field, kind in (('import_ids', 'evidence_import'), ('receipt_ids', 'evidence_receipt'))
+            for identity in (value.get('arguments') or {}).get(field, []) if isinstance(identity, str)})
+        if evidence: tx.get_records(evidence)
+        families = tx.get_many('research_oauth_family', sorted({row['data']['oauth_family_id']
+            for work_id in ids for row in grants.get(work_id, []) if row['data'].get('oauth_family_id')}))
+        resolved = {}; result = []
+        for row in rows:
+            work_id = row['id']
+            work = deepcopy(row['data'])
+            work.pop('owner_user_id', None)
+            request_id = work['research_request_id']
+            request = (owned(tx, 'request', request_id, owner) if requests is None
+                else require_owned(tx, 'request', request_id, owner, requests.get(request_id)))
+            work['request'] = deepcopy(request['data'])
+            for upload in (work['request'].get('user_inputs') or {}).get('uploads', []):
+                upload.pop('storage', None)
+                if isinstance(upload.get('extraction'), dict):
+                    upload['extraction'].pop('storage', None); upload['extraction'].pop('content', None)
+            work['submissions'] = [self.operation_view(value, tx=tx, owner=owner, resolved=resolved)
+                for value in submissions[work_id]]
+            connections = {}
+            for grant_row in grants.get(work_id, []):
+                grant = grant_row['data']
+                if grant['local_work_id'] != work_id or grant['kind'] != 'local': continue
+                family = families.get(grant.get('oauth_family_id'))
+                if family and family['owner'] == owner:
+                    # Show the renewable connection lifetime, so dormant OAuth
+                    # authorization remains visible and revocable after access expires.
+                    grant = {**grant, **{key: family['data'].get(key) for key in ('expires_at', 'created_at', 'revoked_at')}}
+                prior = connections.get(grant['grant_id'])
+                if not prior or grant['expires_at'] > prior['expires_at']:
+                    connections[grant['grant_id']] = {k: grant.get(k) for k in ('grant_id', 'expires_at', 'revoked_at', 'created_at')}
+            work['grants'] = list(connections.values())
+            work.update(connection_instructions(work_id))
+            result.append(work)
+        if loaded is not None: loaded['operations'] = [r for work_id in ids for r in operations.get(work_id, [])]
+        return result
 
     @staticmethod
     def release_pin_if_idle(tx, work):
@@ -278,13 +352,13 @@ class ResearchWorkService:
             tx.put('research_pin', work['research_request_id'], pin['owner'], pin['data'])
 
     @staticmethod
-    def operation_view(operation, *, tx, owner, strict=False):
+    def operation_view(operation, *, tx, owner, strict=False, resolved=None):
         result = {k: deepcopy(v) for k, v in operation.items() if k in (
             'id', 'kind', 'state', 'created_at', 'completed_at', 'result', 'error', 'report',
             'account_ids', 'reused_account_ids', 'validation_only', 'local_work_id')}
         from .research_execution import authorize_operation_result
         try:
-            authorize_operation_result(tx, owner, operation)
+            authorize_operation_result(tx, owner, operation, resolved=resolved)
         except Problem as error:
             if strict: raise
             for field in ('result', 'report', 'error', 'reused_account_ids'): result.pop(field, None)
@@ -304,12 +378,12 @@ class ResearchWorkService:
         with self.repo.read_transaction() as tx:
             work = tx.get('local_work', work_id)
             if not work: return
-            pending = [r for r in work_records(tx, 'research_operation', work['owner'], work_id)
-                if r['data']['state'] == 'received'
-                or (r['data']['state'] == 'running' and r['data'].get('lease_until', '') <= now())]
-        for row in pending:
-            self.resume_operation(row['id'], lease_token=row['data'].get('lease_token')
-                if row['data']['state'] == 'running' else None)
+            pending = pending_operations(work_records(tx, 'research_operation', work['owner'], work_id))
+        for identity, token in pending: self.resume_operation(identity, lease_token=token)
+
+    def resume_pending(self, rows):
+        """Schedule pending operations among rows already read, e.g. by view(loaded=...)."""
+        for identity, token in pending_operations(rows): self.resume_operation(identity, lease_token=token)
 
     def resume_operation(self, operation_id, *, lease_token=None):
         """Schedule an already-authorized operation without delaying its reply.

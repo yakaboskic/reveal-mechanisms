@@ -135,6 +135,96 @@ class ResearchHTTPTests(unittest.TestCase):
         self.assertEqual(closed.json()['state'],'closed')
         with self.repo.read_transaction() as tx: self.assertEqual(tx.get('research_pin',work['research_request_id'])['data']['state'],'released')
 
+    def legacy_view(self,tx,owner,work_id):
+        """The per-work view() before batching: the reference for listing equivalence."""
+        from reveal_backend.auth import owned
+        from reveal_backend.research_work import connection_instructions,work_records
+        work=deepcopy(owned(tx,'local_work',work_id,owner)['data']); work.pop('owner_user_id',None)
+        work['request']=deepcopy(owned(tx,'request',work['research_request_id'],owner)['data'])
+        for upload in (work['request'].get('user_inputs') or {}).get('uploads',[]):
+            upload.pop('storage',None)
+            if isinstance(upload.get('extraction'),dict): upload['extraction'].pop('storage',None); upload['extraction'].pop('content',None)
+        work['submissions']=[ResearchWorkService.operation_view(r['data'],tx=tx,owner=owner)
+            for r in work_records(tx,'research_operation',owner,work_id) if r['data']['kind'] in ('validate','submit')]
+        connections={}; grants=work_records(tx,'research_access',owner,work_id)
+        families=tx.get_many('research_oauth_family',sorted({r['data']['oauth_family_id'] for r in grants if r['data'].get('oauth_family_id')}))
+        for row in grants:
+            grant=row['data']
+            if grant['kind']!='local': continue
+            family=families.get(grant.get('oauth_family_id'))
+            if family and family['owner']==owner:
+                grant={**grant,**{key:family['data'].get(key) for key in ('expires_at','created_at','revoked_at')}}
+            prior=connections.get(grant['grant_id'])
+            if not prior or grant['expires_at']>prior['expires_at']:
+                connections[grant['grant_id']]={k:grant.get(k) for k in ('grant_id','expires_at','revoked_at','created_at')}
+        work['grants']=list(connections.values()); work.update(connection_instructions(work_id))
+        return work
+
+    def seed_children(self,work,grant_id,evidence):
+        service=ResearchWorkService(self.repo)
+        with self.repo.transaction() as tx:
+            stored=tx.get('local_work',work['id'])['data']
+            for kind,arguments in (('query',{}),('export',{'receipt_ids':[evidence['receipt']]}),
+                    ('validate',{'receipt_ids':[evidence['receipt']]}),
+                    ('submit',{'receipt_ids':[evidence['receipt']],'import_ids':[evidence['import']]})):
+                operation=service.enqueue(tx,self.owner,stored,kind,arguments,grant_id)
+                operation.update(state='succeeded',result={'borrowed':'excerpt'},report={'valid':True},reused_account_ids=['dapper:Account.borrowed'])
+                tx.put('research_operation',operation['id'],self.owner,operation)
+
+    def test_listing_batches_children_and_matches_each_work_view(self):
+        from round_trips import count_round_trips
+        works=[self.create() for _ in range(3)]; first=works[0]
+        local=[self.grant(work) for work in works]
+        evidence={'receipt':'receipt-a','import':'import-a'}
+        with self.repo.transaction() as tx:
+            scope={'local_work_id':first['id'],'research_request_id':first['research_request_id']}
+            tx.put('evidence_receipt','receipt-a',self.owner,{'id':'receipt-a',**scope,'context':{}})
+            # A withdrawn reuse receipt behind the import must strip borrowed results, never fail the listing.
+            tx.put('evidence_import','import-a',self.owner,{'id':'import-a',**scope,'context':{},'reuse_receipt_ids':['withdrawn']})
+            key=hashlib.sha256(b'oauth-token').hexdigest()
+            tx.put('research_access',key,self.owner,{'grant_id':'oauth-grant','local_work_id':first['id'],
+                'research_request_id':first['research_request_id'],'expires_at':'2000-01-01T00:00:00Z','created_at':now(),
+                'revoked_at':None,'kind':'local','oauth_family_id':'family-a'})
+            tx.put('research_oauth_family','family-a',self.owner,{'local_work_id':first['id'],'expires_at':'2999-01-01T00:00:00Z','created_at':now(),'revoked_at':None})
+            hosted=dict(tx.get('local_work',works[2]['id'])['data'],id='hosted-work',job_id='hosted-work')
+            tx.put('local_work','hosted-work',self.owner,hosted)
+        for work,grant in zip(works,local): self.seed_children(work,grant['grant_id'],evidence)
+        other=self.create(self.other)
+        def listing():
+            with count_round_trips() as budget:
+                response=self.client.get('/v1/local-work',headers=self.headers())
+            self.assertEqual(response.status_code,200,response.text)
+            return response.json()['items'],budget
+        items,budget=listing()
+        with self.repo.read_transaction() as tx:
+            rows=[r for r in tx.list('local_work',self.owner) if not r['data'].get('job_id')]
+            expected=[self.legacy_view(tx,self.owner,row['id']) for row in rows]
+        self.assertEqual(json.dumps(items,sort_keys=True),json.dumps(expected,sort_keys=True))
+        self.assertEqual([item['id'] for item in items],[row['id'] for row in rows])
+        self.assertNotIn('hosted-work',[item['id'] for item in items])
+        view={item['id']:item for item in items}[first['id']]
+        cited=[item for item in view['submissions'] if item['kind']=='submit'][0]
+        self.assertEqual(cited['error']['code'],'REUSE_AUTHORITY_UNAVAILABLE')
+        for field in ('result','report','reused_account_ids'): self.assertNotIn(field,cited)
+        self.assertEqual([item['kind'] for item in view['submissions']].count('validate'),1)
+        self.assertEqual({grant['grant_id'] for grant in view['grants']},{local[0]['grant_id'],'oauth-grant'})
+        self.assertEqual([g for g in view['grants'] if g['grant_id']=='oauth-grant'][0]['expires_at'],'2999-01-01T00:00:00Z')
+        self.assertEqual([item['id'] for item in self.client.get('/v1/local-work',headers=self.headers(self.other)).json()['items']],[other['id']])
+        more=[self.create() for _ in range(2)]
+        for work in more: self.seed_children(work,self.grant(work)['grant_id'],evidence)
+        grown,larger=listing()
+        self.assertEqual(len(grown),len(items)+2)
+        self.assertEqual(larger.leases,budget.leases,larger)   # statements do not grow with the number of works
+
+    def test_poll_rejects_an_expired_session_before_revealing_whether_work_exists(self):
+        work=self.create()
+        with self.repo.transaction() as tx:
+            row=tx.get('principal',self.other); row['data']['retired']=True; tx.put('principal',self.other,self.other,row['data'])
+        for path in ('/v1/local-work/'+work['id'],'/v1/local-work/absent-work'):
+            self.assertEqual(self.client.get(path,headers=self.headers(self.other)).status_code,401)
+        self.assertEqual(self.client.get('/v1/local-work/absent-work',headers=self.headers()).status_code,404)
+        self.assertEqual(self.client.get('/v1/local-work/'+work['id'],headers={'Authorization':'Bearer '}).status_code,401)
+
     def test_grant_once_and_revocation_blocks_transport(self):
         work=self.create(); path='/v1/local-work/'+work['id']+'/grants'; headers=self.headers()
         first=self.client.post(path,headers=headers,json={})

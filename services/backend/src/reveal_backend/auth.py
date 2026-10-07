@@ -29,22 +29,35 @@ def service_authority(authorization):
     if len(expected) < 32 or not hmac.compare_digest(authorization or '', 'Bearer '+expected):
         raise Problem(403, 'SERVICE_IDENTITY_REQUIRED', 'A trusted gateway service credential is required.')
 
-def principal(tx, authorization):
+def _credential(authorization):
+    """The principal id a credential names, and its claims; no database access."""
     if not authorization or not authorization.startswith('Bearer ') or not authorization[7:]:
         raise Problem(401, 'SESSION_EXPIRED', 'Continue with a registered or anonymous session.')
     token = authorization[7:]
     if token.startswith('rvl_'):
         from .api_keys import authenticate
-        identity = authenticate(token); claims = None
-    else:
-        claims = decode_assertion(token); identity = claims.get('sub', '')
-    row = tx.get('principal', identity)
+        return authenticate(token), None
+    claims = decode_assertion(token)
+    return claims.get('sub', ''), claims
+
+def _accept(row, claims):
     if not row or row['data'].get('retired') or (row['data']['me']['workspace_expires_at'] and row['data']['me']['workspace_expires_at'] <= now()):
         raise Problem(401, 'SESSION_EXPIRED', 'This workspace session is expired or retired.')
     me = row['data']['me']
     if claims is not None and claims.get('principal_kind') != me['principal_kind']:
         raise Problem(401, 'SESSION_EXPIRED', 'Refresh the workspace session.')
     return me
+
+def principal(tx, authorization):
+    identity, claims = _credential(authorization)
+    return _accept(tx.get('principal', identity), claims)
+
+def principal_with(tx, authorization, keys):
+    """principal() and exact extra keys in one read. The principal is accepted first, so an invalid session
+    still fails 401 before any 404; the extra rows are NOT authorized: pass each through require_owned."""
+    identity, claims = _credential(authorization)
+    rows = tx.get_records((('principal', identity), *keys))
+    return _accept(rows.get(('principal', identity)), claims), rows
 
 
 def credential_expiry(authorization):

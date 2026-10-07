@@ -12,7 +12,7 @@ from mcp.server.lowlevel import Server
 from mcp.server.transport_security import TransportSecuritySettings
 from mcp import types
 
-from .auth import Problem, owned, principal
+from .auth import Problem, owned, principal, principal_with, require_owned
 from .repository import now
 from .research_work import ResearchWorkService, authenticate, idempotent, issue_grant, public_base, TERMINAL
 from .research_tools import definitions, dispatch, check_child, public_call
@@ -24,10 +24,12 @@ def register(app, repository, *, freeze, preload, reload_gate, service_factory=R
     from . import research_oauth
     research_oauth.register(app, repository)
     def service(): return service_factory(repository())
-    def local_work(tx, owner, work_id):
-        work = owned(tx, 'local_work', work_id, owner)['data']
-        if work.get('job_id'): raise Problem(404, 'NOT_FOUND', 'Local research unavailable.')
-        return work
+    def local_row(tx, owner, work_id, *row):
+        """Authorize the local_work row (prefetched in this transaction when given); hosted work is 404."""
+        row = require_owned(tx, 'local_work', work_id, owner, row[0]) if row else owned(tx, 'local_work', work_id, owner)
+        if row['data'].get('job_id'): raise Problem(404, 'NOT_FOUND', 'Local research unavailable.')
+        return row
+    def local_work(tx, owner, work_id): return local_row(tx, owner, work_id)['data']
 
     @app.post('/v1/local-work', status_code=201)
     async def create(request: Request):
@@ -49,16 +51,18 @@ def register(app, repository, *, freeze, preload, reload_gate, service_factory=R
     def listing(request: Request):
         with repository().read_transaction() as tx:
             owner = principal(tx, request.headers.get('authorization'))['user_id']
-            return {'items': [service().view(tx, owner, r['id']) for r in tx.list('local_work', owner) if not r['data'].get('job_id')]}
+            # Owner-filtered rows; views() reads every work's children in a fixed number of statements.
+            return {'items': service().views(tx, owner, [r for r in tx.list('local_work', owner) if not r['data'].get('job_id')])}
 
     @app.get('/v1/local-work/{work_id}')
     def get(work_id: str, request: Request):
-        runner = service()
+        runner = service(); loaded = {}
         with runner.repo.read_transaction() as tx:
-            owner = principal(tx, request.headers.get('authorization'))['user_id']
-            local_work(tx, owner, work_id)
-            result = runner.view(tx, owner, work_id)
-        runner.kick(work_id); return result
+            me, rows = principal_with(tx, request.headers.get('authorization'), (('local_work', work_id),))
+            row = local_row(tx, me['user_id'], work_id, rows.get(('local_work', work_id)))
+            result = runner.view(tx, me['user_id'], work_id, work_row=row, loaded=loaded)
+        # Recovery is scheduled from this snapshot's operations, never a second read.
+        runner.resume_pending(loaded['operations']); return result
 
     @app.get('/v1/local-work/{work_id}/package')
     def package(work_id: str, request: Request):
@@ -129,7 +133,7 @@ def register(app, repository, *, freeze, preload, reload_gate, service_factory=R
         runner = service()
         with runner.repo.transaction() as tx:
             owner = principal(tx, request.headers.get('authorization'))['user_id']
-            work = local_work(tx, owner, work_id)
+            row = local_row(tx, owner, work_id); work = row['data']
             def action():
                 work.update(state='closed', closed_at=now(), last_action='closed'); tx.put('local_work', work_id, owner, work)
                 # Closing blocks new work, but already-authorized bounded operations
@@ -138,7 +142,7 @@ def register(app, repository, *, freeze, preload, reload_gate, service_factory=R
                 return {'id': work_id, 'state': 'closed'}
             idempotent(tx, owner, 'close:'+work_id, request.headers.get('idempotency-key'), {}, action)
             # Replays repeat the mutation result, never stale borrowed evidence.
-            return runner.view(tx, owner, work_id)
+            return runner.view(tx, owner, work_id, work_row=row)
 
     @app.put('/v1/research-uploads/{upload_id}/content')
     async def upload(upload_id: str, request: Request):

@@ -30,8 +30,12 @@ def authorize_import(tx, owner, imported):
         resolve_receipts(tx, owner, imported['research_request_id'], imported['reuse_receipt_ids'])
 
 
-def authorize_context_selection(tx, owner, work_id, request_id, arguments):
-    """Recheck the complete inherited authorization behind a retained response."""
+def authorize_context_selection(tx, owner, work_id, request_id, arguments, *, resolved=None):
+    """Recheck the complete inherited authorization behind a retained response.
+
+    resolved memoizes resolve_receipts (read-only and deterministic for one snapshot), including its
+    failure, per receipt set; share it only within one transaction.
+    """
     from .scientific_reuse import resolve_receipts
     identities = set(arguments.get('reuse_receipt_ids', []))
     for field, kind in (('import_ids', 'evidence_import'), ('receipt_ids', 'evidence_receipt')):
@@ -40,11 +44,19 @@ def authorize_context_selection(tx, owner, work_id, request_id, arguments):
             if imported['local_work_id'] != work_id or imported['research_request_id'] != request_id:
                 raise Problem(404, 'NOT_FOUND', 'The evidence belongs to different research work.')
             identities.update(imported.get('reuse_receipt_ids', []))
-    if identities: resolve_receipts(tx, owner, request_id, sorted(identities))
+    if not identities: return
+    if resolved is None:
+        resolve_receipts(tx, owner, request_id, sorted(identities)); return
+    key = (request_id, tuple(sorted(identities)))
+    if key not in resolved:
+        try: resolve_receipts(tx, owner, request_id, list(key[1])); resolved[key] = None
+        except Problem as error: resolved[key] = error
+    if resolved[key] is not None: raise resolved[key]
 
 
-def authorize_operation_result(tx, owner, operation):
-    authorize_context_selection(tx, owner, operation['local_work_id'], operation['research_request_id'], operation.get('arguments', {}))
+def authorize_operation_result(tx, owner, operation, *, resolved=None):
+    authorize_context_selection(tx, owner, operation['local_work_id'], operation['research_request_id'],
+        operation.get('arguments', {}), resolved=resolved)
     if operation['kind'] == 'import':
         row = tx.get('evidence_import', operation['id'])
         if row:

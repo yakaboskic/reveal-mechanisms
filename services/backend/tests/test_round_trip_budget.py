@@ -15,12 +15,12 @@ from reveal_backend import redis_notifications, workspace_events
 from reveal_backend.mysql_database import application_session_unchanged, reset_application_session
 from reveal_backend.mysql_pool import Pool
 from reveal_backend.repository import Repository
-from reveal_backend.research_work import ResearchWorkService
+from reveal_backend.research_work import ResearchWorkService, deadline
 import test_application as application
 import test_mysql_pool as wire
 import test_research_http as research_http
 
-BUDGET = {'local_work_poll': 11, 'me': 3, 'readyz': 2, 'draft_patch': 10}
+BUDGET = {'local_work_poll': 5, 'me': 3, 'readyz': 2, 'draft_patch': 10}
 
 
 class LocalWorkPollBudget(unittest.TestCase):
@@ -30,18 +30,18 @@ class LocalWorkPollBudget(unittest.TestCase):
     create = research_http.ResearchHTTPTests.create
     grant = research_http.ResearchHTTPTests.grant
 
-    def poll(self, work):
-        with patch.object(research_http.InlinePreparation, 'kick', ResearchWorkService.kick), \
-             patch.object(research_http.InlinePreparation, 'resume_operation', lambda *a, **k: None), \
+    def poll(self, work, scheduled=None):
+        with patch.object(research_http.InlinePreparation, 'kick', side_effect=AssertionError('poll re-read its work')), \
+             patch.object(research_http.InlinePreparation, 'resume_operation', scheduled or (lambda *a, **k: None)), \
              count_round_trips() as budget:
             response = self.client.get('/v1/local-work/' + work['id'], headers=self.headers())
         self.assertEqual(response.status_code, 200, response.text)
         return budget
 
-    def test_poll_is_two_read_leases_within_budget_and_constant_in_children(self):
+    def test_poll_is_one_read_lease_within_budget_and_constant_in_children(self):
         work = self.create()
         empty = self.poll(work); print('\npoll', empty)
-        self.assertEqual(empty.kinds(), ['read', 'read'], empty)   # never the global write fence
+        self.assertEqual(empty.kinds(), ['read'], empty)   # never the global write fence, never a second lease
         self.assertEqual((empty.unleased, empty.connects), (0, 0), empty)
         self.assertLessEqual(empty.trips(), BUDGET['local_work_poll'], empty)
         service = ResearchWorkService(self.repo)
@@ -51,6 +51,25 @@ class LocalWorkPollBudget(unittest.TestCase):
                 service.enqueue(tx, self.owner, work, 'validate', {'operation_id': 'v%d' % index}, grants[0]['grant_id'])
         busy = self.poll(work)
         self.assertEqual(busy.leases, empty.leases, busy)  # no per-submission or per-grant queries
+        with self.repo.transaction() as tx:
+            for index in range(3):
+                service.enqueue(tx, self.owner, work, 'submit', {'receipt_ids': ['r%d' % index, 'shared'],
+                    'import_ids': ['i%d' % index]}, grants[0]['grant_id'])
+        cited = self.poll(work)   # every cited evidence row arrives in one read, however many submissions cite it
+        self.assertEqual(cited.leases, [['read', empty.leases[0][1] + 1]], cited)
+
+    def test_poll_resumes_pending_operations_from_its_own_snapshot(self):
+        work = self.create(); service = ResearchWorkService(self.repo); scheduled = []
+        with self.repo.transaction() as tx:
+            received = service.enqueue(tx, self.owner, work, 'query', {}, None)
+            expired, live, done = (service.enqueue(tx, self.owner, work, kind, {}, None) for kind in ('export', 'import', 'validate'))
+            for operation, state, lease in ((expired, 'running', deadline(-60)), (live, 'running', deadline(600)), (done, 'succeeded', None)):
+                operation.update(state=state, lease_until=lease, lease_token=operation['id'] + '-lease')
+                tx.put('research_operation', operation['id'], self.owner, operation)
+        with patch.object(self.repo, 'transaction', side_effect=AssertionError('poll took the write fence')):
+            budget = self.poll(work, lambda runner, identity, lease_token=None: scheduled.append((identity, lease_token)))
+        self.assertEqual(budget.kinds(), ['read'], budget)
+        self.assertEqual(sorted(scheduled), sorted([(received['id'], None), (expired['id'], expired['id'] + '-lease')]))
 
 
 class AccountBudget(unittest.TestCase):
