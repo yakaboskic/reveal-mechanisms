@@ -377,9 +377,11 @@ async def claim_workspace(request: Request):
         safe={'source':source.get('sub'),'target':digest([profile['issuer'],profile['subject']]),'consent':body['consent']}
         return idempotent(tx,'gateway','claim',request.headers.get('idempotency-key'),safe,perform)
 
+# Workspace reads never take the global write fence: one consistent snapshot authorizes and reads, so they
+# neither queue behind writers nor serialize against each other. /v1/me is exactly one principal row.
 @app.get('/v1/me')
 def me(request: Request):
-    with repo.transaction() as tx: return principal(tx,request.headers.get('authorization'))
+    with repo.single_read() as tx: return principal(tx,request.headers.get('authorization'))
 
 def filter_gaps(items,kind,status,disease_id):
     if disease_id and ':' in disease_id and not disease_id.startswith(('http:','https:','urn:')):
@@ -616,10 +618,11 @@ def get_mechanism(source_id:str,source_revision:str|None=None):
 
 @app.get('/v1/drafts')
 def list_drafts(request:Request,limit:int=50,cursor:str|None=None):
-    with repo.transaction() as tx:
-        user=principal(tx,request.headers.get('authorization'))['user_id']
-        user_inputs.cleanup(tx,user)
-        return page([dict(r['data'],owner_user_id=user) for r in tx.list('draft',user) if user_inputs.saved(r['data'])],user,limit,cursor,'drafts')
+    # A pure read: saved() already hides every temporary editor, expired or not. Expiry deletes and exploration
+    # repointing run under the write fence in managed reconciliation (workflow_routes.sweep).
+    with repo.read_transaction() as tx:
+        user=principal(tx,request.headers.get('authorization'))['user_id']; rows=tx.list('draft',user)
+    return page([dict(r['data'],owner_user_id=user) for r in rows if user_inputs.saved(r['data'])],user,limit,cursor,'drafts')
 
 @app.post('/v1/drafts',status_code=201)
 async def create_draft(request:Request):
@@ -645,9 +648,9 @@ async def create_draft(request:Request):
 
 @app.get('/v1/drafts/{draft_id}')
 def get_draft(draft_id:str,request:Request):
-    with repo.transaction() as tx:
+    with repo.read_transaction() as tx:
         user=principal(tx,request.headers.get('authorization'))['user_id']; row=owned(tx,'draft',draft_id,user)
-        return dict(user_inputs.available(row['data']),owner_user_id=user)
+    return dict(user_inputs.available(row['data']),owner_user_id=user)
 
 @app.post('/v1/drafts/{draft_id}/cfde-assessments', status_code=202)
 async def create_cfde_assessment(draft_id: str, request: Request):
@@ -778,13 +781,13 @@ async def download_upload(upload_id:str,request:Request):
 
 @app.get('/v1/research-requests')
 def list_requests(request:Request,limit:int=50,cursor:str|None=None):
-    with repo.transaction() as tx:
-        user=principal(tx,request.headers.get('authorization'))['user_id']
-        return page([dict(r['data'],owner_user_id=user) for r in tx.list('request',user)],user,limit,cursor,'requests')
+    with repo.read_transaction() as tx:
+        user=principal(tx,request.headers.get('authorization'))['user_id']; rows=tx.list('request',user)
+    return page([dict(r['data'],owner_user_id=user) for r in rows],user,limit,cursor,'requests')
 
 @app.get('/v1/research-requests/{request_id}')
 def get_request(request_id:str,request:Request):
-    with repo.transaction() as tx:
+    with repo.read_transaction() as tx:
         user=principal(tx,request.headers.get('authorization'))['user_id']
         return dict(owned(tx,'request',request_id,user)['data'],owner_user_id=user)
 
@@ -867,11 +870,11 @@ def create_job_transaction(body,authorization,idempotency_key):
 
 @app.get('/v1/jobs')
 def list_jobs(request:Request,limit:int=20,cursor:str|None=None,kind:str|None=None,status:str|None=None,research_request_id:str|None=None):
-    with repo.transaction() as tx:
-        user=principal(tx,request.headers.get('authorization'))['user_id']
-        items=[dict(r['data'],owner_user_id=user) for r in tx.list('job',user) if (not kind or r['data']['kind']==kind) and (not status or r['data']['status']==status) and (not research_request_id or r['data']['research_request_id']==research_request_id)]
-        items.sort(key=lambda x:x['id']); items.sort(key=lambda x:x['created_at'],reverse=True)
-        return page(items,user,limit,cursor,digest(['jobs',kind,status,research_request_id]))
+    with repo.read_transaction() as tx:
+        user=principal(tx,request.headers.get('authorization'))['user_id']; rows=tx.list('job',user)
+    items=[dict(r['data'],owner_user_id=user) for r in rows if (not kind or r['data']['kind']==kind) and (not status or r['data']['status']==status) and (not research_request_id or r['data']['research_request_id']==research_request_id)]
+    items.sort(key=lambda x:x['id']); items.sort(key=lambda x:x['created_at'],reverse=True)
+    return page(items,user,limit,cursor,digest(['jobs',kind,status,research_request_id]))
 
 @app.get('/v1/jobs/{job_id}')
 def get_job(job_id:str,request:Request):
@@ -936,8 +939,9 @@ async def get_events(job_id:str,request:Request,after:str='0',limit:int=100):
 
 @app.get('/v1/me/explorations')
 def explorations(request:Request,limit:int=50,cursor:str|None=None):
-    with repo.transaction() as tx:
-        user=principal(tx,request.headers.get('authorization'))['user_id']; return page([r['data'] for r in tx.list('exploration',user)],user,limit,cursor,'explorations')
+    with repo.read_transaction() as tx:
+        user=principal(tx,request.headers.get('authorization'))['user_id']; rows=tx.list('exploration',user)
+    return page([r['data'] for r in rows],user,limit,cursor,'explorations')
 
 @app.post('/v1/me/explorations')
 async def record_exploration(request:Request):

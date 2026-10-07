@@ -108,9 +108,9 @@ class RequestLogTests(unittest.TestCase):
 
     def test_failures_are_logged_with_their_status_and_the_log_can_be_disabled(self):
         user = self.provision(); stream = self.capture(); client = TestClient(api.app, raise_server_exceptions=False)
-        with patch.object(self.repo, 'transaction', side_effect=DatabaseBusy('Application database writers are busy')):
+        with patch.object(self.repo, 'single_read', side_effect=DatabaseBusy('Application database writers are busy')):
             self.assertEqual(client.get('/v1/me', headers={'Authorization': 'Bearer ' + self.token(user)}).status_code, 503)
-        with patch.object(self.repo, 'transaction', side_effect=RuntimeError('unexpected')):
+        with patch.object(self.repo, 'single_read', side_effect=RuntimeError('unexpected')):
             self.assertEqual(client.get('/v1/me', headers={'Authorization': 'Bearer ' + self.token(user)}).status_code, 503)
         self.assertEqual([(line['route'], line['status']) for line in self.lines(stream)], [('GET /v1/me', 503), ('GET /v1/me', 500)])
         with patch.dict(os.environ, {'REVEAL_ACCESS_LOG': '0'}): self.client.get('/v1/me')

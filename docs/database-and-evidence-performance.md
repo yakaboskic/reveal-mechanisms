@@ -120,6 +120,13 @@ changes to the next cycle instead of queueing. A closed work and a released pin
 are no longer rewritten every cycle. In steady state a cycle is one read of
 five round trips, instead of a fenced transaction plus one read per work.
 
+Workspace reads never take the global write fence. `GET /v1/me` is one
+principal read (two round trips); the draft, job, research-request and
+exploration lists and the draft and request details are one read snapshot of
+four, so a workspace tab's parallel requests no longer queue behind each other
+or behind writers. Listing drafts no longer runs expiry cleanup: it was three
+extra owner-wide lists under the fence on every call.
+
 Each API request logs one JSON line to stdout with the route template (never
 the raw path, query string, ids or parameters), status, duration, and its
 database cost: statements (including `COMMIT`, `ROLLBACK` and the fence),

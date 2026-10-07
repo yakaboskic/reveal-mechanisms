@@ -21,8 +21,8 @@ import test_mysql_pool as wire
 import test_research_http as research_http
 import test_research_polling as research_polling
 
-BUDGET = {'local_work_poll': 5, 'me': 3, 'readyz': 2, 'draft_patch': 10, 'mcp_get_operation': 5,
-          'mcp_query_enqueue': 13, 'query_operation': 17}
+BUDGET = {'local_work_poll': 5, 'me': 2, 'readyz': 2, 'draft_patch': 10, 'mcp_get_operation': 5,
+          'mcp_query_enqueue': 13, 'query_operation': 17, 'workspace_list': 4, 'workspace_detail': 4}
 
 
 class LocalWorkPollBudget(unittest.TestCase):
@@ -120,9 +120,22 @@ class AccountBudget(unittest.TestCase):
         with count_round_trips() as budget:
             response = self.client.get('/v1/me', headers={'Authorization': 'Bearer ' + self.token(user)})
         self.assertEqual(response.status_code, 200, response.text); print('\n/v1/me', budget)
-        self.assertEqual(budget.kinds(), ['write'], budget)  # known debt (F07/F28): flip to ['read'] or ['single']
-        self.assertEqual((budget.unleased, budget.connects, budget.locked_trips()), (0, 0, 2), budget)
+        self.assertEqual(budget.kinds(), ['single'], budget)  # one principal row, never the global write fence
+        self.assertEqual((budget.unleased, budget.connects, budget.locked_trips()), (0, 0, 0), budget)
         self.assertLessEqual(budget.trips(), BUDGET['me'], budget)
+
+    def test_workspace_reads_are_one_snapshot_off_the_fence(self):
+        user = self.provision(); headers = {'Authorization': 'Bearer ' + self.token(user)}
+        draft = self.client.post('/v1/drafts', json={'composer': application.COMPOSER},
+                                 headers={**headers, 'Idempotency-Key': 'budget'}).json()
+        routes = (('/v1/drafts', 'workspace_list'), ('/v1/jobs', 'workspace_list'), ('/v1/research-requests', 'workspace_list'),
+                  ('/v1/me/explorations', 'workspace_list'), ('/v1/drafts/' + draft['id'], 'workspace_detail'))
+        for route, name in routes:
+            with self.subTest(route=route), count_round_trips() as budget:
+                response = self.client.get(route, headers=headers)
+                self.assertEqual(response.status_code, 200, response.text); print('\n' + route, budget)
+                self.assertEqual((budget.kinds(), budget.unleased, budget.connects), (['read'], 0, 0), budget)
+                self.assertLessEqual(budget.trips(), BUDGET[name], budget)
 
     def test_readyz_database_check_is_one_single_read(self):
         class Sources:

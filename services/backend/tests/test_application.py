@@ -49,6 +49,17 @@ class ApplicationTests(unittest.TestCase):
         forged=jwt.encode({'sub':user,'exp':int(time.time())+10},'x'*40,algorithm='HS256')
         self.assertEqual(self.client.get('/v1/me',headers={'Authorization':'Bearer '+forged}).status_code,401)
         self.assertEqual(self.client.post('/internal/v1/principals/anonymous',json={},headers=self.headers(user)).status_code,403)
+    def test_workspace_reads_never_acquire_write_fence(self):
+        user,other=self.provision(),self.provision(); draft=self.draft(user); request_id=uid()
+        with self.repo.transaction() as tx: tx.put('request',request_id,user,{'id':request_id,'composer':COMPOSER})
+        with patch.object(self.repo,'transaction',side_effect=AssertionError('read acquired the write fence')):
+            for route in ('/v1/me','/v1/me/explorations','/v1/jobs','/v1/research-requests','/v1/drafts',
+                          '/v1/drafts/'+draft['id'],'/v1/research-requests/'+request_id):
+                self.assertEqual(self.client.get(route,headers=self.headers(user)).status_code,200,route)
+            for route in ('/v1/drafts/'+draft['id'],'/v1/research-requests/'+request_id):
+                self.assertEqual(self.client.get(route,headers=self.headers(other)).status_code,404,route)
+            self.assertEqual(self.client.get('/v1/drafts').status_code,401)
+        self.assertEqual(self.client.get('/v1/drafts',headers=self.headers(user)).json()['items'][0]['id'],draft['id'])
     def test_idempotent_autosave_and_two_tab_conflict(self):
         user=self.provision(); draft=self.draft(user); headers=self.headers(user)
         body={'expected_version':1,'composer':dict(COMPOSER,mechanism_subquery='new')}
