@@ -1,10 +1,14 @@
-"""Managed reconciliation probes outside the write fence and never waits on it."""
-from unittest.mock import patch
+"""Managed reconciliation probes outside the write fence and never waits on it; job replies never wait for
+Workflow delivery, which a committed intent and reconciliation already guarantee."""
+import asyncio
+import os
+from unittest.mock import AsyncMock, Mock, patch
 import unittest
 
-from reveal_backend import workflow_routes
+from reveal_backend import app as api, jobs, workflow_routes
 from reveal_backend.repository import DatabaseBusy, FenceBusy
-from reveal_backend.workflow_routes import mount_workflow, reconcile_stale, sweep
+from reveal_backend.workflow_routes import dispatch_job, mount_workflow, reconcile_stale, sweep
+from round_trips import count_round_trips
 import test_durable_workflow as durable
 
 PAST = '2000-01-01T00:00:00Z'
@@ -108,6 +112,81 @@ class ReconcileRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((response.status_code, response.json()['status'], response.json()['recovered']), (200, 'deferred', 0))
     new = durable.WorkflowTests.new
     change = SweepTests.change
+
+
+class FakeQStash:
+    def __init__(self):
+        self.http = Mock(); self.http.request = AsyncMock(return_value=[{'messageId': 'run'}])
+        self.message = Mock(); self.message.publish_json = AsyncMock(return_value={'messageId': 'control'})
+
+
+class JobDispatchTests(unittest.IsolatedAsyncioTestCase):
+    setUp = durable.WorkflowTests.setUp
+    new = durable.WorkflowTests.new
+
+    async def test_a_jobs_intents_are_one_read_and_one_client(self):
+        job, _ = self.new()
+        with self.repo.transaction() as tx: jobs.cancel(tx, tx.get('job', job['id'])['data'])
+        clients = []
+        def client(): clients.append(FakeQStash()); return clients[-1]
+        with patch.object(workflow_routes, 'client', client), count_round_trips() as budget:
+            self.assertEqual(await dispatch_job(self.repo, job['id']), {'delivered': 1, 'failed': 0})
+        self.assertEqual(len(clients), 1)
+        clients[0].http.request.assert_awaited_once(); clients[0].message.publish_json.assert_awaited_once()
+        self.assertEqual(budget.leases[0], ['read', 1], budget)   # dispatch and control in one statement
+        with self.repo.read_transaction() as tx:
+            self.assertIsNone(tx.get('workflow_dispatch', job['id'])); self.assertIsNone(tx.get('workflow_control', job['id']))
+
+    async def test_without_control_the_cancellation_intent_is_left_to_reconciliation(self):
+        job, _ = self.new()
+        with self.repo.transaction() as tx: jobs.cancel(tx, tx.get('job', job['id'])['data'])
+        fake = FakeQStash()
+        with patch.object(workflow_routes, 'client', return_value=fake):
+            await dispatch_job(self.repo, job['id'], control=False)
+        fake.message.publish_json.assert_not_awaited()
+        with self.repo.read_transaction() as tx:
+            self.assertIsNone(tx.get('workflow_dispatch', job['id'])); self.assertIsNotNone(tx.get('workflow_control', job['id']))
+        await workflow_routes.dispatch_pending(self.repo, qstash=fake)
+        with self.repo.read_transaction() as tx: self.assertIsNone(tx.get('workflow_control', job['id']))
+
+
+class JobReplyTests(unittest.IsolatedAsyncioTestCase):
+    """The reply is sent before delivery starts; delivery still runs in the request, after the body."""
+
+    async def exchange(self, path, body, transaction, transport='workflow'):
+        order, released = [], asyncio.Event()
+        async def dispatch(repository, job_id, *, control=True):
+            await asyncio.wait_for(released.wait(), 2)
+            order.append(('dispatched', job_id, control))
+        scope = {'type': 'http', 'asgi': {'version': '3.0'}, 'http_version': '1.1', 'method': 'POST', 'scheme': 'http',
+                 'path': path, 'raw_path': path.encode(), 'root_path': '', 'query_string': b'', 'server': ('test', 80),
+                 'client': ('test', 1), 'headers': [(b'content-type', b'application/json'), (b'authorization', b'Bearer x'),
+                                                    (b'idempotency-key', b'key')]}
+        delivered = []
+        async def receive():
+            if not delivered: delivered.append(1); return {'type': 'http.request', 'body': body, 'more_body': False}
+            await asyncio.Event().wait()
+        async def send(message):
+            if message['type'] == 'http.response.start': order.append(('status', message['status']))
+            if message['type'] == 'http.response.body' and not message.get('more_body'): order.append(('responded',)); released.set()
+        with patch.object(api, transaction, return_value={'id': 'job-1', 'status': 'queued'}), \
+                patch.object(jobs, 'transport', return_value=transport), patch.object(workflow_routes, 'dispatch_job', dispatch):
+            await asyncio.wait_for(api.app(scope, receive, send), 5)
+        return order
+
+    async def test_job_replies_never_wait_for_workflow_delivery(self):
+        cases = (('/v1/jobs', b'{"kind":"analysis","draft_id":"draft","draft_version":1}', 'create_job_transaction', False),
+                 ('/v1/jobs/job-1/cancel', b'', 'cancel_job_transaction', True),
+                 ('/v1/jobs/job-1/retry-review', b'{"expected_last_event_id":"3"}', 'retry_review_transaction', False))
+        for path, body, transaction, control in cases:
+            with self.subTest(path=path):
+                order = await self.exchange(path, body, transaction)
+                self.assertEqual(order[1:], [('responded',), ('dispatched', 'job-1', control)])
+                self.assertIn(order[0][1], (200, 202))
+
+    async def test_other_transports_schedule_no_delivery(self):
+        order = await self.exchange('/v1/jobs/job-1/cancel', b'', 'cancel_job_transaction', transport='database')
+        self.assertEqual(order, [('status', 200), ('responded',)])
 
 
 if __name__ == '__main__': unittest.main()

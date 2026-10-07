@@ -76,25 +76,51 @@ def pending(repository, kind, limit, job_id=None):
     return [(row[0], json.loads(row[1])) for row in rows]
 
 
-async def dispatch_pending(repository, limit=25, *, qstash=None, job_id=None):
+def pending_for_job(repository, job_id, kinds):
+    """One job's intents of these kinds in one statement: primary-key point lookups."""
+    with repository.read_transaction() as tx:
+        namespace_expr = "json_extract(payload,'$.namespace')" if tx.sqlite else "JSON_UNQUOTE(JSON_EXTRACT(payload,'$.namespace'))"
+        rows = tx.execute('SELECT kind,id,payload FROM reveal_records WHERE kind IN (' + ','.join(['%s'] * len(kinds)) +
+                          ') AND id=%s AND ' + namespace_expr + '=%s', (*kinds, job_id, jobs.namespace())).fetchall()
+    found = {kind: [] for kind in kinds}
+    for kind, identity, payload in rows: found[kind].append((identity, json.loads(payload)))
+    return found
+
+
+async def dispatch_pending(repository, limit=25, *, qstash=None, job_id=None, control=True):
+    """control=False skips the cancellation read where none can exist (a new job, a review retry). One job's
+    intents are read in one statement; the bulk path keeps reading controls after its dispatches. At most one
+    QStash client is built per call, never shared across event loops."""
     delivered = failed = 0
     if jobs.transport() != 'workflow': return {'delivered': 0, 'failed': 0}
     config()
-    for identity, intent in await asyncio.to_thread(pending, repository, 'workflow_dispatch', min(limit, 100), job_id):
+    shared = qstash
+    def provider():
+        nonlocal shared
+        if shared is None: shared = client()
+        return shared
+    controls = None
+    if job_id:
+        found = await asyncio.to_thread(pending_for_job, repository, job_id,
+                                        ('workflow_dispatch', 'workflow_control') if control else ('workflow_dispatch',))
+        dispatches, controls = found['workflow_dispatch'], found.get('workflow_control', [])
+    else: dispatches = await asyncio.to_thread(pending, repository, 'workflow_dispatch', min(limit, 100))
+    for identity, intent in dispatches:
         if intent.get('published_at') or intent.get('next_attempt_at', '') > now(): continue
         try:
-            await trigger(intent, qstash=qstash)
+            await trigger(intent, qstash=provider())
             await asyncio.to_thread(acknowledge_dispatch, repository, identity, intent)
             delivered += 1
         except Exception as exc:
             failed += 1
             await asyncio.to_thread(retry_dispatch, repository, identity, intent, type(exc).__name__)
             log.warning('Workflow dispatch remains pending: %s', type(exc).__name__)
-    for identity, intent in await asyncio.to_thread(pending, repository, 'workflow_control', min(limit, 100), job_id):
+    if controls is None: controls = await asyncio.to_thread(pending, repository, 'workflow_control', min(limit, 100))
+    for identity, intent in controls:
         if intent.get('published_at'): continue
         try:
             async with asyncio.timeout(15):
-                await (qstash or client()).message.publish_json(url=config().removesuffix(PATH) + CONTROL_PATH,
+                await provider().message.publish_json(url=config().removesuffix(PATH) + CONTROL_PATH,
                     body=payload_for(intent), deduplication_id=digest(['control', identity, intent['generation']]), retries=5)
             await asyncio.to_thread(acknowledge_control, repository, identity, intent)
         except Exception as exc:
@@ -170,8 +196,8 @@ def acknowledge_control(repository, identity, intent):
         if row and row['data']['generation'] == intent['generation']: tx.remove('workflow_control', identity)
 
 
-async def dispatch_job(repository, job_id):
-    return await dispatch_pending(repository, limit=1, job_id=job_id)
+async def dispatch_job(repository, job_id, *, control=True):
+    return await dispatch_pending(repository, limit=1, job_id=job_id, control=control)
 
 
 def sweep(repository, limit=25):

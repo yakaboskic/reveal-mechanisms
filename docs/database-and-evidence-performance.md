@@ -133,7 +133,9 @@ of four round trips instead of a fenced cleanup plus one fenced transaction per
 unfinished execution; a held fence defers the work to the next tick. Async
 handlers read the request body on the event loop and run validation, catalog
 loads and their transactions in the threadpool, so a writer waiting on the
-fence no longer stalls every other request in the process.
+fence no longer stalls every other request in the process. Job submission,
+cancellation and review retry reply before Workflow delivery, which then reads
+the job's intents in one statement with one QStash client.
 
 Each API request logs one JSON line to stdout with the route template (never
 the raw path, query string, ids or parameters), status, duration, and its

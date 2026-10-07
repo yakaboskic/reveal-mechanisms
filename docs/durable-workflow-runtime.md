@@ -40,6 +40,9 @@ candidate retrieval. Upstash Redis provides Pub/Sub wakeups only.
   never waited for, and a busy database answers 200 `{"status": "deferred"}`
   so the next tick resumes it. `durable_deployment.py down` removes a managed
   schedule after the stack stops.
+- Job submission, cancellation and review retry reply as soon as their
+  transaction commits. Workflow delivery starts after the reply; the committed
+  dispatch or control intent and reconciliation guarantee it.
 - Redis consumers use the supplied HTTPS REST streaming subscription. A backend
   shares subscriptions across interested browser clients. Idle SSE heartbeats
   write HTTP comments only. There are no recurring Redis commands. Pub/Sub has

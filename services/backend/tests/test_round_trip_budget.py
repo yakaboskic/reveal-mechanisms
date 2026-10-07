@@ -8,7 +8,7 @@ that becomes a write costs the same trips but holds the global write fence.
 import os
 import threading
 import unittest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, Mock, patch
 
 from round_trips import END, OPEN, RELEASE, count_round_trips
 from reveal_backend import redis_notifications, workspace_events
@@ -16,7 +16,7 @@ from reveal_backend.mysql_database import application_session_unchanged, reset_a
 from reveal_backend.mysql_pool import Pool
 from reveal_backend.repository import Repository
 from reveal_backend.research_work import ResearchWorkService, deadline
-from reveal_backend.workflow_routes import sweep
+from reveal_backend.workflow_routes import dispatch_job, sweep
 import test_application as application
 import test_durable_workflow as durable
 import test_mysql_pool as wire
@@ -25,7 +25,7 @@ import test_research_polling as research_polling
 
 BUDGET = {'local_work_poll': 5, 'me': 2, 'readyz': 2, 'draft_patch': 10, 'mcp_get_operation': 5,
           'mcp_query_enqueue': 13, 'query_operation': 17, 'workspace_list': 4, 'workspace_detail': 4,
-          'reconcile_idle': 4}
+          'reconcile_idle': 4, 'job_dispatch': 11}
 
 
 class LocalWorkPollBudget(unittest.TestCase):
@@ -185,6 +185,14 @@ class WorkflowBudget(unittest.IsolatedAsyncioTestCase):
         print('\nreconcile sweep', budget)
         self.assertEqual((budget.leases, budget.unleased, budget.connects, budget.locked_trips()), ([['read', 2]], 0, 0, 0), budget)
         self.assertLessEqual(budget.trips(), BUDGET['reconcile_idle'], budget)
+
+    async def test_job_dispatch_reads_once_and_fences_once(self):
+        job, _ = self.new(); fake = Mock(); fake.http.request = AsyncMock(return_value=[{'messageId': 'run'}])
+        with patch('reveal_backend.workflow_routes.client', return_value=fake), count_round_trips() as budget:
+            self.assertEqual(await dispatch_job(self.repo, job['id'], control=False), {'delivered': 1, 'failed': 0})
+        print('\njob dispatch', budget)
+        self.assertEqual((budget.kinds(), budget.leases[0], budget.unleased, budget.connects), (['read', 'write'], ['read', 1], 0, 0), budget)
+        self.assertLessEqual(budget.trips(), BUDGET['job_dispatch'], budget)
 
 
 class WireConstantsTests(unittest.TestCase):

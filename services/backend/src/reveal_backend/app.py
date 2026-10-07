@@ -10,7 +10,7 @@ import os
 import base64
 import hmac
 import re
-from fastapi import FastAPI, Request, Depends, Query
+from fastapi import BackgroundTasks, FastAPI, Request, Depends, Query
 from fastapi.responses import JSONResponse, StreamingResponse, Response, RedirectResponse
 from starlette.concurrency import run_in_threadpool
 from jsonschema import Draft202012Validator
@@ -819,18 +819,22 @@ def get_request(request_id:str,request:Request):
         return dict(owned(tx,'request',request_id,user)['data'],owner_user_id=user)
 
 @app.post('/v1/jobs',status_code=202)
-async def create_job(request:Request):
+async def create_job(request:Request,background:BackgroundTasks):
     body=await request.json(); validate(body,'JobCreate')
     result = await asyncio.to_thread(create_job_transaction,body,request.headers.get('authorization'),request.headers.get('idempotency-key'))
-    await deliver_workflow_intents(result['id'])
+    deliver_after_response(background,result['id'],control=False)   # a new job has no cancellation intent
     return result
 
-async def deliver_workflow_intents(job_id):
-    if jobs.transport() != 'workflow': return
+def deliver_after_response(background,job_id,*,control):
+    """The committed intent is the delivery guarantee (managed reconciliation repairs it), so the reply never waits
+    for Workflow. Background tasks start only after the response body is sent, and graceful shutdown awaits them."""
+    if jobs.transport()=='workflow': background.add_task(deliver_workflow_intents,job_id,control=control)
+
+async def deliver_workflow_intents(job_id,*,control=True):
     from .workflow_routes import dispatch_job
     try:
-        async with asyncio.timeout(8):
-            await dispatch_job(repo, job_id)
+        async with asyncio.timeout(30):
+            await dispatch_job(repo, job_id, control=control)
     except Exception as error:
         # The job and dispatch intent already committed. Managed reconciliation
         # repairs delivery; never misrepresent a committed submission as failed.
@@ -909,9 +913,9 @@ def get_job(job_id:str,request:Request):
         user=principal(tx,request.headers.get('authorization'))['user_id']; return dict(owned(tx,'job',job_id,user)['data'],owner_user_id=user)
 
 @app.post('/v1/jobs/{job_id}/cancel')
-async def cancel_job(job_id:str,request:Request):
+async def cancel_job(job_id:str,request:Request,background:BackgroundTasks):
     result = await asyncio.to_thread(cancel_job_transaction, job_id, request.headers.get('authorization'))
-    await deliver_workflow_intents(job_id)
+    deliver_after_response(background,job_id,control=True)
     return result
 
 def cancel_job_transaction(job_id, authorization):
@@ -920,10 +924,10 @@ def cancel_job_transaction(job_id, authorization):
         return jobs.cancel(tx,job)
 
 @app.post('/v1/jobs/{job_id}/retry-review',status_code=202)
-async def retry_job_review(job_id:str,request:Request):
+async def retry_job_review(job_id:str,request:Request,background:BackgroundTasks):
     body=await request.json(); validate(body,'ReviewRetryInput')
     result = await asyncio.to_thread(retry_review_transaction,job_id,body,request.headers.get('authorization'),request.headers.get('idempotency-key'))
-    await deliver_workflow_intents(job_id)
+    deliver_after_response(background,job_id,control=False)   # only cancellation writes workflow_control
     return result
 
 def retry_review_transaction(job_id,body,authorization,idempotency_key):
