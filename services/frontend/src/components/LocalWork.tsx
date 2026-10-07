@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { downloadLocalBlob, localClientPreference, localClientPreferenceKey, localErrorMessage, localLaunchCommand, localResearchPrompt, localWorkApi, localWorkTitle, LocalWorkError, submissionAccounts, type LocalAgentClient, type LocalSetupProgress, type LocalWork, type LocalSubmission } from "@/lib/local-work";
+import { createLocalWorkRefresher } from "@/lib/local-work-refresh";
+import { onCollectionInvalidation } from "@/lib/collection-events";
 import { LocalWorkspaceDownload } from "./LocalWorkspaceDownload";
 import "./local-work.css";
 
@@ -53,22 +55,31 @@ export function LocalWorkView({ id, standalone = false }: { id: string; standalo
     setClient(value); try { localStorage.setItem(localClientPreferenceKey, value); } catch { /* Private browsing may disable storage. */ }
   }
   useEffect(() => {
-    alive.current = true; const controller = new AbortController(); let timer: ReturnType<typeof setTimeout>;
+    alive.current = true; const controller = new AbortController();
     setWork(null); setError(""); setSetupError(""); setDownloadedClient(null); setSetupProgress(null); setBusy(""); flight.current = false; closeKey.current = null;
-    async function refresh() {
-      let nextRefresh = 8_000;
-      try {
-        const value = await localWorkApi.get(id, controller.signal);
-        if (!controller.signal.aborted) { setWork(value); setError(""); }
-        if (value.state === "preparing") nextRefresh = 2_000;
-      }
-      catch (failure) { if (!controller.signal.aborted) { setError(message(failure)); if (accessLost(failure)) { downloadRequest.current?.abort(); setWork(null); } } }
-      if (!controller.signal.aborted) timer = setTimeout(() => void refresh(), nextRefresh);
-    }
-    void refresh();
+    const refresher = createLocalWorkRefresher({
+      hidden: () => document.visibilityState === "hidden", terminal: accessLost,
+      load: async () => {
+        try {
+          const value = await localWorkApi.get(id, controller.signal);
+          if (!controller.signal.aborted) { setWork(value); setError(""); }
+          return value;
+        } catch (failure) {
+          if (!controller.signal.aborted) { setError(message(failure)); if (accessLost(failure)) { downloadRequest.current?.abort(); setWork(null); } }
+          throw failure;
+        }
+      },
+    });
+    refresher.refresh();
+    // The workspace stream pushes local work and submission changes as 'jobs'.
+    const unsubscribe = onCollectionInvalidation(["jobs"], () => refresher.refresh());
     const clearCredential = () => { downloadRequest.current?.abort(); };
     window.addEventListener("pagehide", clearCredential);
-    return () => { alive.current = false; controller.abort(); downloadRequest.current?.abort(); clearTimeout(timer); window.removeEventListener("pagehide", clearCredential); };
+    document.addEventListener("visibilitychange", refresher.visible); window.addEventListener("online", refresher.visible);
+    return () => {
+      alive.current = false; refresher.stop(); unsubscribe(); controller.abort(); downloadRequest.current?.abort();
+      window.removeEventListener("pagehide", clearCredential); document.removeEventListener("visibilitychange", refresher.visible); window.removeEventListener("online", refresher.visible);
+    };
   }, [id, attempt]);
   useEffect(() => { if (work?.state === "closed") downloadRequest.current?.abort(); }, [work?.state]);
   const waiting = (!work && !error) || work?.state === "preparing" || busy === "setup-kit";
