@@ -5,13 +5,15 @@ import { loadWorkspaceData, workspaceTabs, workspaceKey, workspaceKeyParts, work
 import type { ReferenceState } from "@/lib/reference";
 import { onWorkspaceChange, invalidateWorkspace, resetWorkspaceCache, affectedWorkspaceTabs, connectWorkspaceEvents, type WorkspaceConnection } from "@/lib/workspace-events";
 import { terminal, type Schema } from "@/lib/client";
+import { onPageReturn } from "@/lib/page-return";
+import type { RefreshOptions } from "@/lib/session-identity";
 
 type Store = RevalidationCache<WorkspaceKey, WorkspaceData>;
-type IdentityCheck = () => Promise<Schema<"Me"> | null>;
+type IdentityCheck = (options?: RefreshOptions) => Promise<Schema<"Me"> | null>;
 const Context = createContext<{ cache: Store; scope: string | null; checkIdentity: IdentityCheck; connection: WorkspaceConnection } | null>(null);
 const serverVersion = () => 0;
 
-export function WorkspaceCacheProvider({ scope, children, checkIdentity }: { scope: string | null; children: ReactNode; checkIdentity: IdentityCheck }) {
+export function WorkspaceCacheProvider({ scope, live = true, children, checkIdentity }: { scope: string | null; live?: boolean; children: ReactNode; checkIdentity: IdentityCheck }) {
   const [cache] = useState(() => new RevalidationCache(loadWorkspaceData));
   const [connection, setConnection] = useState<WorkspaceConnection>("connecting");
   const identityCheck = useRef(checkIdentity); identityCheck.current = checkIdentity;
@@ -29,18 +31,19 @@ export function WorkspaceCacheProvider({ scope, children, checkIdentity }: { sco
     return () => { active = false; remove(); };
   }, [cache]);
   useEffect(() => {
-    if (!scope) return;
+    if (!scope || !live) return;
     const controller = new AbortController();
     void connectWorkspaceEvents(controller.signal, {
       status: setConnection,
       change: event => {
         invalidateWorkspace(event);
-        if (event?.collections.includes("identity")) void identityCheck.current();
+        // Replay re-sends the principal's creation on every connect; only a resync forces a fresh /v1/me.
+        if (event?.collections.includes("identity")) void identityCheck.current({ force: event.operation === "resync" });
       },
-      revoked: () => { resetWorkspaceCache(); void identityCheck.current(); },
+      revoked: () => { resetWorkspaceCache(); void identityCheck.current({ force: true }); },
     });
     return () => controller.abort();
-  }, [cache, scope]);
+  }, [cache, scope, live]);
   return <Context.Provider value={{ cache, scope, checkIdentity, connection }}>{children}</Context.Provider>;
 }
 
@@ -54,15 +57,9 @@ export function useWorkspaceData(tab: WorkspaceTab, query = "", reference: Refer
   useEffect(() => {
     if (!snapshot.error) void cache.revalidate(scope, key);
   }, [cache, scope, key, snapshot.stale, snapshot.loading, snapshot.error]);
-  useEffect(() => {
-    const refresh = () => {
-      if (document.visibilityState === "hidden") return;
-      void checkIdentity().then(identity => { if (identity && scope?.startsWith(identity.user_id + ":")) void cache.revalidate(scope, key); });
-    };
-    window.addEventListener("focus", refresh); window.addEventListener("online", refresh);
-    document.addEventListener("visibilitychange", refresh);
-    return () => { window.removeEventListener("focus", refresh); window.removeEventListener("online", refresh); document.removeEventListener("visibilitychange", refresh); };
-  }, [cache, scope, key, checkIdentity]);
+  useEffect(() => onPageReturn(() => {
+    void checkIdentity().then(identity => { if (identity && scope?.startsWith(identity.user_id + ":")) void cache.revalidate(scope, key); });
+  }), [cache, scope, key, checkIdentity]);
   const observed = useRef(new Map<string, string>());
   useEffect(() => { observed.current.clear(); }, [scope]);
   useEffect(() => {

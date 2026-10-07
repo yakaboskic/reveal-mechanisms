@@ -1,5 +1,5 @@
 "use client";
-import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { signIn, signOut } from "next-auth/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -7,14 +7,15 @@ import { selectedGap } from "@/lib/composer";
 import { api, ApiError, messageOf, type Schema } from "@/lib/client";
 import { withRequestDeadline } from "@/lib/request-deadline";
 import { continuityPromptDismissed, dismissContinuityPrompt } from "@/lib/continuity-prompt";
+import { createSessionIdentity, emptyIdentity, sessionMe, sessionScope, type RefreshOptions, type SessionStatus } from "@/lib/session-identity";
 import { WorkspaceCacheProvider } from "./WorkspaceCache";
 import { GapDiscoveryProvider } from "./GapDiscoveryCache";
 import { invalidateWorkspace, resetWorkspaceCache } from "@/lib/workspace-events";
 import "./session-menu.css";
 
-type SessionStatus = { canClaim: boolean; canAdmin?: boolean; providers: { google: boolean; orcid: boolean } };
-type SessionContextType = { me: Schema<"Me"> | null; ready: boolean; status: SessionStatus; refresh: () => Promise<Schema<"Me"> | null> };
-const SessionContext = createContext<SessionContextType>({ me: null, ready: false, status: { canClaim: false, providers: { google: false, orcid: false } }, refresh: async () => null });
+/** `ready`: the gateway principal is known, so data may load. `verified`: GET /v1/me confirmed it (display details, SSE). */
+type SessionContextType = { me: Schema<"Me"> | null; ready: boolean; verified: boolean; status: SessionStatus; refresh: (options?: RefreshOptions) => Promise<Schema<"Me"> | null> };
+const SessionContext = createContext<SessionContextType>({ me: null, ready: false, verified: false, status: { canClaim: false, providers: { google: false, orcid: false } }, refresh: async () => null });
 export const useIdentity = () => useContext(SessionContext);
 
 export function Session({ children }: { children: ReactNode }) {
@@ -30,48 +31,23 @@ export function Session({ children }: { children: ReactNode }) {
     document.addEventListener("keydown", keyboard, true);
     return () => { document.removeEventListener("pointerdown", pointer, true); document.removeEventListener("keydown", keyboard, true); };
   }, []);
-  const [me, setMe] = useState<Schema<"Me"> | null>(null);
-  const [ready, setReady] = useState(false);
+  const [identity, setIdentity] = useState(emptyIdentity);
   const [status, setStatus] = useState<SessionStatus>({ canClaim: false, providers: { google: false, orcid: false } });
   const [menu, setMenu] = useState(false);
   const menuArea = useRef<HTMLDivElement>(null);
   const [claimMessage, setClaimMessage] = useState("");
   const [claimPrompt, setClaimPrompt] = useState<{ owner: string; dismissed: boolean } | null>(null);
+  const [session] = useState(() => createSessionIdentity({
+    status: () => withRequestDeadline(signal => fetch("/api/session/status", { cache: "no-store", signal }).then(r => {
+      if (!r.ok) throw new ApiError(r.status, "SESSION_CHECK_FAILED", "Your session could not be checked. Please retry.");
+      return r.json() as Promise<SessionStatus>;
+    })),
+    me: () => api.me(), onStatus: setStatus, onChange: setIdentity, reset: resetWorkspaceCache,
+    denied: error => error instanceof ApiError && [401, 403].includes(error.status),
+  }));
+  const me = useMemo(() => sessionMe(identity), [identity]), ready = identity.ready, verified = !!me && me === identity.verified;
   const claimOwner = ready && me?.principal_kind === "registered" ? me.user_id : null;
-  const identityRef = useRef<Schema<"Me"> | null>(null);
-  const refreshSequence = useRef(0);
-  const pendingRefresh = useRef<Promise<Schema<"Me"> | null> | null>(null);
-  const refresh = useCallback((): Promise<Schema<"Me"> | null> => {
-    if (pendingRefresh.current) return pendingRefresh.current;
-    const sequence = ++refreshSequence.current;
-    const request = (async () => {
-    try {
-      const state = await withRequestDeadline(signal => fetch("/api/session/status", { cache: "no-store", signal }).then(r => {
-        if (!r.ok) throw new ApiError(r.status, "SESSION_CHECK_FAILED", "Your session could not be checked. Please retry.");
-        return r.json();
-      }));
-      if (sequence !== refreshSequence.current) return null;
-      setStatus(state);
-      if (state.principal?.user_id !== identityRef.current?.user_id) {
-        resetWorkspaceCache(); identityRef.current = null; setMe(null); setReady(false);
-      }
-      const identity = state.principal ? await api.me() : null;
-      if (sequence !== refreshSequence.current) return null;
-      identityRef.current = identity; setMe(identity); return identity;
-    } catch (error) {
-      if (sequence !== refreshSequence.current) return null;
-      if (error instanceof ApiError && [401, 403].includes(error.status)) {
-        resetWorkspaceCache(); identityRef.current = null; setMe(null);
-      }
-      // A transport outage does not change an already verified identity.
-      // Retain its cached rows; explicit logout/denial still purges them.
-      return identityRef.current;
-    } finally { if (sequence === refreshSequence.current) setReady(true); }
-    })();
-    pendingRefresh.current = request;
-    void request.finally(() => { if (pendingRefresh.current === request) pendingRefresh.current = null; });
-    return request;
-  }, []);
+  const refresh = useCallback((options?: RefreshOptions) => session.refresh(options), [session]);
   useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => {
     setClaimPrompt(claimOwner ? { owner: claimOwner, dismissed: continuityPromptDismissed(claimOwner) } : null);
@@ -97,8 +73,7 @@ export function Session({ children }: { children: ReactNode }) {
     } catch { /* retain local selections when storage is unavailable */ }
   }, [me?.user_id]);
   const logout = async () => {
-    refreshSequence.current++; pendingRefresh.current = null; identityRef.current = null;
-    resetWorkspaceCache(); setMe(null); setStatus(current => ({ ...current, canClaim: false, canAdmin: false }));
+    session.clear(); resetWorkspaceCache(); setStatus(current => ({ ...current, canClaim: false, canAdmin: false }));
     await fetch("/api/session/logout", { method: "POST" });
     for (const key of Object.keys(sessionStorage)) if (key.startsWith("reveal:")) sessionStorage.removeItem(key);
     await signOut({ callbackUrl: "/" });
@@ -107,7 +82,7 @@ export function Session({ children }: { children: ReactNode }) {
     try {
       const response = await fetch("/api/session/claim", { method: "POST", headers: { "content-type": "application/json", "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ consent: true }) });
       const result = await response.json(); if (!response.ok) throw new Error(result.detail);
-      invalidateWorkspace(); setClaimMessage("Your anonymous work is now in this workspace. Scientific attribution is unchanged."); await refresh();
+      invalidateWorkspace(); setClaimMessage("Your anonymous work is now in this workspace. Scientific attribution is unchanged."); await refresh({ force: true });
     } catch (error) { setClaimMessage(messageOf(error)); }
   };
   const dismissClaim = () => {
@@ -118,8 +93,9 @@ export function Session({ children }: { children: ReactNode }) {
   const canClaim = !!claimOwner && status.canClaim;
   const claimPromptKnown = claimPrompt?.owner === claimOwner;
   const claimDismissed = claimPromptKnown && claimPrompt?.dismissed;
-  const workspaceScope = ready && me ? `${me.user_id}:${me.principal_kind}:${me.workspace_expires_at || ""}:${status.canClaim}` : null;
-  return <SessionContext.Provider value={{ me, ready, status, refresh }}><WorkspaceCacheProvider scope={workspaceScope} checkIdentity={refresh}><GapDiscoveryProvider viewer={ready ? workspaceScope || "visitor" : null}>
+  const workspaceScope = sessionScope(identity, status.canClaim);
+  // Data starts once the principal is known; the event stream still waits for verification so page load leases do not grow.
+  return <SessionContext.Provider value={{ me, ready, verified, status, refresh }}><WorkspaceCacheProvider scope={workspaceScope} live={verified} checkIdentity={refresh}><GapDiscoveryProvider viewer={ready ? workspaceScope || "visitor" : null}>
     <a className="skip" href="#main">Skip to content</a>
     <header className="site-nav workspace-chrome">
       <nav className="site-information" aria-label="Community"><Link href="/about" aria-current={pathname === "/about" ? "page" : undefined}>About</Link><span className="site-information-divider" aria-hidden="true">|</span><Link href="/leaderboard" aria-current={pathname === "/leaderboard" ? "page" : undefined}>Leaderboard</Link></nav>

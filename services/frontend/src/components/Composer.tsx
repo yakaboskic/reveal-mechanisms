@@ -456,11 +456,12 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
     try {
       let identity = me;
       if (!identity) {
-        await withRequestDeadline(async signal => {
+        const created = await withRequestDeadline(async signal => {
           const response = await fetch("/api/session/anonymous", { method: "POST", headers: { "content-type": "application/json", "Idempotency-Key": getKey("editor-session") }, body: "{}", signal });
           if (!response.ok) throw new Error("Could not open your workspace. Please retry.");
+          return await response.json() as Schema<"Me">;
         });
-        identity = await refresh();
+        identity = await refresh({ adopt: created });
       }
       if (!identity) throw new Error("Your session could not be established. Please retry.");
       if (!mounted.current || epoch !== saveEpoch.current) return;
@@ -507,12 +508,13 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
     try {
       let identity = confirmedIdentity;
       if (attempt.method === "anonymous" && !identity) {
-        await withRequestDeadline(async signal => {
+        const created = await withRequestDeadline(async signal => {
           const response = await fetch("/api/session/anonymous", { method: "POST", headers: { "content-type": "application/json", "Idempotency-Key": attempt.anonymousKey }, body: "{}", signal });
           const value = await response.json(); if (!response.ok) throw new Error(value.detail || "Anonymous continuation is unavailable. Please try again.");
+          return value as Schema<"Me">;
         });
         if (!current()) return;
-        identity = await refresh();
+        identity = await refresh({ adopt: created });
       } else if (!identity) identity = await refresh();
       if (!current()) return;
       if (attempt.method === "google" || attempt.method === "orcid") {
