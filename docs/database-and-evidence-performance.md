@@ -358,6 +358,15 @@ and a draft's anchors read a shared suggestion once: a rename is 8 round trips
 instead of 10, an anchor save 9 instead of 12 and a new draft 7 instead of 13.
 Selected uploads are read in one statement.
 
+Anonymous provisioning (`POST /internal/v1/principals/anonymous`, a visitor's
+first gap open) no longer reads every principal under the fence to apply
+`REVEAL_ANONYMOUS_PROVISIONS_PER_HOUR`. One statement reads only principals whose
+`updated_at` falls in the last hour (less five minutes and rounded down to the
+second, so the superset survives writer clock skew and whole-second stamps), and
+the same `created_at`/`principal_kind` check counts them, so the quota is
+unchanged. The new principal, a fresh UUID, goes in with its retry key in one
+`INSERT` with no pre-read: 9 round trips to 7, 8 of them to 6 under the fence.
+
 ## Worker boundaries and remaining latency
 
 Frozen preparation inputs are read together without taking the write lock.

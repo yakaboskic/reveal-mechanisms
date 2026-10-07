@@ -14,7 +14,7 @@ from round_trips import END, OPEN, RELEASE, count_round_trips
 from reveal_backend import redis_notifications, workspace_events
 from reveal_backend.mysql_database import application_session_unchanged, reset_application_session
 from reveal_backend.mysql_pool import Pool
-from reveal_backend.repository import Repository
+from reveal_backend.repository import Repository, Transaction
 from reveal_backend.research_work import ResearchWorkService, deadline
 from reveal_backend.workflow_routes import dispatch_job, sweep
 import test_cfde_assessment as cfde
@@ -30,7 +30,7 @@ import test_research_http as research_http
 import test_readiness_monitor as readiness_monitor
 import test_research_polling as research_polling
 
-BUDGET = {'local_work_poll': 5, 'me': 2, 'readyz': 2, 'draft_patch': 8, 'mcp_get_operation': 5, 'job_create': 8, 'draft_create': 7, 'account_acceptance': 12,
+BUDGET = {'local_work_poll': 5, 'me': 2, 'provision': 7, 'readyz': 2, 'draft_patch': 8, 'mcp_get_operation': 5, 'job_create': 8, 'draft_create': 7, 'account_acceptance': 12,
           'mcp_query_enqueue': 13, 'query_operation': 17, 'workspace_list': 4, 'workspace_detail': 4,
           'reconcile_idle': 4, 'job_dispatch': 11, 'observe_tick': 11, 'observe_tick_events': 13, 'gap_list': 5, 'gap_search': 5, 'gap_detail': 5,
           'citation_render': 5, 'readyz_monitored': 0, 'readiness_tick': 2, 'suggest': 2,
@@ -135,6 +135,17 @@ class AccountBudget(unittest.TestCase):
         self.assertEqual(budget.kinds(), ['single'], budget)  # one principal row, never the global write fence
         self.assertEqual((budget.unleased, budget.connects, budget.locked_trips()), (0, 0, 0), budget)
         self.assertLessEqual(budget.trips(), BUDGET['me'], budget)
+
+    def test_anonymous_provisioning_reads_recent_principals_and_inserts_once(self):
+        # A visitor's first gap open: the quota reads only principals touched in the last hour, never every one;
+        # the new principal goes in with its retry key in one INSERT, with no pre-read of its fresh id.
+        for _ in range(3): self.provision()
+        with patch.object(Transaction, 'list', side_effect=AssertionError('provisioning listed every principal')), \
+                patch.object(workspace_events, 'publish_committed'), count_round_trips() as budget:
+            self.provision()
+        print('\nprovision', budget)
+        self.assertEqual((budget.kinds(), budget.unleased, budget.connects), (['write'], 0, 0), budget)
+        self.assertLessEqual(budget.trips(), BUDGET['provision'], budget)
 
     def test_workspace_reads_are_one_snapshot_off_the_fence(self):
         user = self.provision(); headers = {'Authorization': 'Bearer ' + self.token(user)}

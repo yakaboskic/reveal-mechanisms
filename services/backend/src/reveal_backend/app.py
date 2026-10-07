@@ -346,13 +346,19 @@ async def provision(request: Request):
         validate(body,'AnonymousProvisionInput',True)
         with repo.transaction() as tx:
             def create():
-                cutoff=(datetime.now(timezone.utc)-timedelta(hours=1)).isoformat().replace('+00:00','Z')
-                count=sum(1 for r in tx.list('principal') if r['data'].get('created_at','')>=cutoff and r['data']['me']['principal_kind']=='anonymous')
+                moment=datetime.now(timezone.utc); cutoff=(moment-timedelta(hours=1)).isoformat().replace('+00:00','Z')
+                # A principal's updated_at is stamped after its created_at and only moves forward, so only rows touched
+                # since the cutoff can count. Whole seconds (a '...SSZ' stamp sorts after '...SS.ffffffZ') less 5 min of
+                # writer clock skew keep this a superset; the exact check below runs under the fence as before.
+                floor=(moment-timedelta(hours=1,minutes=5)).strftime('%Y-%m-%dT%H:%M:%S')
+                rows=tx.execute('SELECT payload FROM reveal_records WHERE kind=%s AND updated_at>=%s',('principal',floor)).fetchall()
+                count=sum(1 for (payload,) in rows if (data:=json.loads(payload)).get('created_at','')>=cutoff and data['me']['principal_kind']=='anonymous')
                 if count>=int(os.getenv('REVEAL_ANONYMOUS_PROVISIONS_PER_HOUR','100')):
                     raise Problem(429,'ANONYMOUS_QUOTA_EXCEEDED','Anonymous workspace creation is temporarily rate limited.')
-                me = fresh_principal('anonymous'); tx.put('principal', me['user_id'], me['user_id'], {'me':me,'retired':False,'created_at':now()})
-                return {k:me[k] for k in ('user_id','principal_kind','workspace_expires_at')}
-            return idempotent(tx,'gateway','anonymous',request.headers.get('idempotency-key'),body,create)
+                me = fresh_principal('anonymous')   # a fresh uuid: inserted unread, with the retry key
+                return ({k:me[k] for k in ('user_id','principal_kind','workspace_expires_at')},
+                        [('principal', me['user_id'], me['user_id'], {'me':me,'retired':False,'created_at':now()})])
+            return idempotent(tx,'gateway','anonymous',request.headers.get('idempotency-key'),body,create,staged=True)
     return await run_in_threadpool(run)
 
 def resolve_identity(tx, body, preferred=None):

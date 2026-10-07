@@ -49,6 +49,43 @@ class ApplicationTests(unittest.TestCase):
         forged=jwt.encode({'sub':user,'exp':int(time.time())+10},'x'*40,algorithm='HS256')
         self.assertEqual(self.client.get('/v1/me',headers={'Authorization':'Bearer '+forged}).status_code,401)
         self.assertEqual(self.client.post('/internal/v1/principals/anonymous',json={},headers=self.headers(user)).status_code,403)
+    def test_anonymous_provisioning_quota_reads_only_recently_touched_principals(self):
+        moment=datetime.now(timezone.utc).replace(microsecond=500000); hour=moment-timedelta(hours=1)
+        stamp=lambda value: value.isoformat().replace('+00:00','Z'); minutes=lambda n: moment-timedelta(minutes=n)
+        seeds=(('anonymous',minutes(10),minutes(10)),
+               ('anonymous',minutes(59),minutes(62)),                                 # another writer's clock ran behind
+               ('anonymous',hour.replace(microsecond=0),hour.replace(microsecond=40)), # '...SSZ' sorts after '...SS.5Z'
+               ('anonymous',minutes(120),minutes(120)),                               # older than the hour
+               ('anonymous',minutes(120),minutes(1)),                                 # old workspace retired just now
+               ('registered',minutes(1),minutes(1)),('registered',None,minutes(1)))
+        with self.repo.transaction() as tx:
+            for kind,created,updated in seeds:
+                identity=uid(); data={'me':dict(api.fresh_principal(kind),user_id=identity),'retired':False}
+                if created: data['created_at']=stamp(created)
+                tx.execute('INSERT INTO reveal_records(kind,id,owner_id,version,payload,updated_at) VALUES (%s,%s,%s,1,%s,%s)',
+                           ('principal',identity,identity,json.dumps(data),stamp(updated)))
+        with self.repo.read_transaction() as tx:   # what the full scan counted
+            self.assertEqual(sum(1 for r in tx.list('principal') if r['data'].get('created_at','')>=stamp(hour) and r['data']['me']['principal_kind']=='anonymous'),3)
+        class Clock(datetime):
+            @classmethod
+            def now(cls,tz=None): return moment
+        service={'Authorization':'Bearer '+'t'*40}; key=uid()
+        with patch.object(api,'datetime',Clock), patch.dict(os.environ,{'REVEAL_ANONYMOUS_PROVISIONS_PER_HOUR':'4'}), \
+                patch.object(Transaction,'list',side_effect=AssertionError('provisioning listed every principal')):
+            first=self.client.post('/internal/v1/principals/anonymous',json={},headers={**service,'Idempotency-Key':key})
+            self.assertEqual(first.status_code,201,first.text)
+            limited=self.client.post('/internal/v1/principals/anonymous',json={},headers={**service,'Idempotency-Key':uid()})
+            self.assertEqual((limited.status_code,limited.json().get('code')),(429,'ANONYMOUS_QUOTA_EXCEEDED'))
+            replay=self.client.post('/internal/v1/principals/anonymous',json={},headers={**service,'Idempotency-Key':key})
+            self.assertEqual((replay.status_code,replay.json()),(201,first.json()))   # a replay is answered past the quota
+        user=first.json()['user_id']; self.assertEqual(sorted(first.json()),['principal_kind','user_id','workspace_expires_at'])
+        with self.repo.read_transaction() as tx:
+            row=tx.get('principal',user); self.assertEqual((row['owner'],row['version'],row['data']['retired']),(user,1,False))
+            self.assertEqual(row['data']['me'],{**api.fresh_principal('anonymous'),'user_id':user,'workspace_expires_at':first.json()['workspace_expires_at']})
+            self.assertGreaterEqual(row['data']['created_at'],stamp(hour))
+            self.assertEqual([event['data']['event_type'] for event in tx.list('workspace_event',user)],['identity.changed'])
+            self.assertEqual(len(tx.list('principal')),len(seeds)+1)
+        self.assertEqual(self.client.get('/v1/me',headers={'Authorization':'Bearer '+self.token(user)}).json()['user_id'],user)
     def test_workspace_reads_never_acquire_write_fence(self):
         user,other=self.provision(),self.provision(); draft=self.draft(user); request_id=uid()
         with self.repo.transaction() as tx: tx.put('request',request_id,user,{'id':request_id,'composer':COMPOSER})
