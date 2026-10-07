@@ -216,6 +216,7 @@ def test_snapshot_limits_and_changed_file_fail_before_manifest(tmp_path, monkeyp
 
 @pytest.mark.parametrize(('window', 'expected_pending'), [(100, 4), (6, 1), (2, 1)])
 def test_restore_bounds_downloads_and_bytes_and_preserves_exact_files(tmp_path, monkeypatch, window, expected_pending):
+    monkeypatch.setattr(artifact_store, 'RESTORE_CONCURRENCY', 4)
     monkeypatch.setattr(artifact_store, 'RESTORE_PENDING_BYTES', window)
     source, target = tmp_path / 'source', tmp_path / 'target'
     source.mkdir()
@@ -259,6 +260,7 @@ def test_restore_bounds_downloads_and_bytes_and_preserves_exact_files(tmp_path, 
 
 @pytest.mark.parametrize('failure', ['cancel', 'checksum'])
 def test_restore_failure_drains_downloads_and_never_writes_unverified_bytes(tmp_path, monkeypatch, failure):
+    monkeypatch.setattr(artifact_store, 'RESTORE_CONCURRENCY', 4)
     source, target = tmp_path / 'source', tmp_path / 'target'
     source.mkdir()
     for index in range(8):
@@ -308,6 +310,71 @@ def test_restore_failure_drains_downloads_and_never_writes_unverified_bytes(tmp_
             restored.result(timeout=5)
     assert observed == {'active': 0, 'started': 4}
     assert not target.exists()
+
+
+def test_transfer_concurrency_defaults_to_sixteen_and_rejects_unbounded_values(monkeypatch):
+    monkeypatch.delenv('REVEAL_S3_TRANSFER_CONCURRENCY', raising=False)
+    assert artifact_store.transfer_concurrency() == 16
+    monkeypatch.setenv('REVEAL_S3_TRANSFER_CONCURRENCY', '4')
+    assert artifact_store.transfer_concurrency() == 4
+    for value in ('0', '65'):
+        monkeypatch.setenv('REVEAL_S3_TRANSFER_CONCURRENCY', value)
+        with pytest.raises(ValueError):
+            artifact_store.transfer_concurrency()
+
+
+class GetCountingS3(CountingS3):
+    def get_object(self, **kwargs):
+        with self.lock:
+            self.calls.append(('get', kwargs['Key']))
+        return super().get_object(**kwargs)
+
+
+def test_restore_downloads_each_object_version_once_and_writes_every_path(tmp_path):
+    source, target = tmp_path / 'source', tmp_path / 'target'
+    (source / 'ledger').mkdir(parents=True)
+    for name in ('a.json', 'ledger/b.json', 'ledger/c.json'):
+        (source / name).write_bytes(b'{}')   # identical bytes: one immutable object
+    (source / 'other.txt').write_bytes(b'distinct')
+    client = GetCountingS3()
+    reference = S3Store('reveal-test-artifacts', client=client).snapshot(source)
+    client.calls.clear()
+    S3Store('reveal-test-artifacts', client=client).restore(reference, target)
+    gets = [key for kind, key in client.calls if kind == 'get']
+    assert len(gets) == 3 and len(set(gets)) == 3   # manifest, the shared '{}' object, the distinct object
+    assert {path.relative_to(target).as_posix(): path.read_bytes() for path in target.rglob('*') if path.is_file()} == {
+        'a.json': b'{}', 'ledger/b.json': b'{}', 'ledger/c.json': b'{}', 'other.txt': b'distinct'}
+
+
+def test_restored_versions_seed_the_put_cache_so_an_unchanged_checkpoint_sends_nothing(tmp_path):
+    source, target = tmp_path / 'source', tmp_path / 'target'
+    source.mkdir()
+    for index in range(5):
+        (source / f'{index}.json').write_bytes(str(index).encode())
+    client = CountingS3()
+    reference = S3Store('reveal-test-artifacts', client=client).snapshot(source)
+    fresh = S3Store('reveal-test-artifacts', client=client)   # another task: a cold cache
+    fresh.restore(reference, target)
+    client.calls.clear()
+    assert fresh.snapshot(target) == reference
+    assert client.calls == []   # no HEAD per restored file, none for the unchanged manifest
+    (target / 'validated.json').write_bytes(b'new')
+    fresh.snapshot(target)
+    assert sorted(kind for kind, _ in client.calls) == ['head', 'head', 'put', 'put']   # only new bytes and the manifest
+
+
+def test_legacy_prefix_reads_never_enter_the_put_cache(tmp_path):
+    client = CountingS3()
+    old = S3Store('reveal-test-artifacts', 'local/', client=client).put(b'legacy bytes')
+    manifest = S3Store('reveal-test-artifacts', 'local/', client=client).put(json.dumps(
+        {'format': 'reveal.workspace/1', 'files': [{'path': 'a.txt', 'storage': old}]}).encode())
+    prod = S3Store('reveal-test-artifacts', 'prod/', client=client, read_prefixes=('local/',))
+    prod.restore(manifest, tmp_path / 'restore')
+    assert (tmp_path / 'restore/a.txt').read_bytes() == b'legacy bytes'
+    assert not prod._verified_puts
+    calls = len(client.calls)
+    assert prod.put(b'legacy bytes')['key'].startswith('prod/')
+    assert [kind for kind, _ in client.calls[calls:]] == ['head', 'put']
 
 
 def test_restore_preflights_all_paths_before_parallel_downloads(tmp_path, monkeypatch):

@@ -228,3 +228,13 @@ async def test_legacy_or_live_handles_cannot_enter_direct_path():
     for handle in [dict(HANDLE,capture_protocol=None),dict(HANDLE,state={'status':'running'})]:
         with pytest.raises(BoxTransportError): await capture.capture_to_store(adapter,BINDING,handle,None,None)
     adapter.connect.assert_not_awaited()
+
+
+def test_verified_direct_uploads_seed_the_put_cache_for_the_closing_checkpoint():
+    storage, files, receipts, refs = staged()
+    fresh = S3Store('reveal-test-artifacts', 'qa/', client=storage.client, signer=signer())   # a cold task
+    assert capture.verify_uploads(fresh, files, receipts, BINDING, ()) == refs
+    fresh.client = SimpleNamespace(head_object=lambda **kwargs: pytest.fail('verified capture was re-checked'),
+                                   put_object=lambda **kwargs: pytest.fail('verified capture was re-uploaded'))
+    for name, raw in fixture_bytes().items():
+        assert fresh.put(raw) == refs[name]

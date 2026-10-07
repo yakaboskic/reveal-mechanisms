@@ -123,9 +123,14 @@ legacy review can be revalidated through the compatible retry route. Initial
 preparation, validation and final acceptance use bounded file-based scratch where
 their validators require files; legacy bootstrap keeps its existing scratch path. The legacy
 `REVEAL_MAX_REVIEW_STEPS` setting caps concurrent deterministic validation steps.
-Their S3 restores use four parallel downloads
-with bounded buffered bytes and cancellation draining. This adds no workspace
-cache and no Redis reads.
+Their S3 restores and checkpoint snapshots keep 16 objects in flight
+(`REVEAL_S3_TRANSFER_CONCURRENCY`, 1-64; botocore's connection pool is sized to
+match) with bounded buffered bytes and cancellation draining. A restore downloads
+each distinct object version once, however many workspace paths share its bytes.
+Every version a restore or direct capture has verified (size and SHA-256 on that
+exact VersionId) seeds the process's verified-put cache, so the validate step's
+closing checkpoint, and a commit on another task, upload only new files instead of
+sending a HEAD per captured file. This adds no workspace cache and no Redis reads.
 
 A read-only comparison of one cold restore per setting used an actual checkpoint
 containing 244 files and 9,347,440 bytes: serial download took 74.173 seconds;

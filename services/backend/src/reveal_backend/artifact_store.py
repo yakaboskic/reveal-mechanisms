@@ -21,9 +21,18 @@ from uuid import uuid4
 from .runtime_config import setting
 
 VERIFIED_PUT_CACHE_SIZE = 4096
-SNAPSHOT_CONCURRENCY = 4
+
+
+def transfer_concurrency():
+    """Objects one snapshot or restore keeps in flight (REVEAL_S3_TRANSFER_CONCURRENCY, 1-64)."""
+    value = int(setting('REVEAL_S3_TRANSFER_CONCURRENCY', '16'))
+    if not 1 <= value <= 64:
+        raise ValueError('REVEAL_S3_TRANSFER_CONCURRENCY must be between 1 and 64')
+    return value
+
+
+SNAPSHOT_CONCURRENCY = RESTORE_CONCURRENCY = transfer_concurrency()
 SNAPSHOT_PENDING_BYTES = 16 * 1024 * 1024
-RESTORE_CONCURRENCY = 4
 RESTORE_PENDING_BYTES = 16 * 1024 * 1024
 
 
@@ -57,8 +66,11 @@ class S3Store:
         if client is None:
             import boto3
             from botocore.config import Config
+            # Two scratch steps' transfers plus retention and capture verification share one pool per process;
+            # botocore's default of 10 would discard and re-handshake connections under that fan-out.
             config = Config(signature_version='s3v4', connect_timeout=5, read_timeout=30,
                             retries={'max_attempts': 3, 'mode': 'standard'},
+                            max_pool_connections=max(64, 2 * max(SNAPSHOT_CONCURRENCY, RESTORE_CONCURRENCY) + 16),
                             s3={'addressing_style': setting('REVEAL_S3_ADDRESSING_STYLE', 'auto')})
             options = {'region_name': setting('AWS_REGION', 'us-east-1'), 'config': config}
             endpoint = setting('REVEAL_S3_ENDPOINT_URL') or None
@@ -109,12 +121,22 @@ class S3Store:
                     self._verified_puts.move_to_end(cache_key)
                     return dict(ref, version_id=verified[0])
             ref = self._put_verified(data, ref)
-            with self._cache_lock:
-                self._verified_puts[cache_key] = (ref['version_id'], ref['size_bytes'])
-                self._verified_puts.move_to_end(cache_key)
-                while len(self._verified_puts) > VERIFIED_PUT_CACHE_SIZE:
-                    self._verified_puts.popitem(last=False)
+            self.remember_verified(ref)
             return ref
+
+    def remember_verified(self, ref):
+        """Record a version whose size and SHA-256 were verified on that exact VersionId (a put's HEAD, a restore
+        GET or a direct-capture GET), so a later put of the same bytes skips its HEAD. Keys under legacy read
+        prefixes are never looked up by put() and are not kept."""
+        sha = ref['sha256']
+        if ref['key'] != self.prefix + 'artifacts/sha256/' + sha[:2] + '/' + sha:
+            return
+        key = (self.bucket, ref['key'])
+        with self._cache_lock:
+            self._verified_puts[key] = (ref['version_id'], ref['size_bytes'])
+            self._verified_puts.move_to_end(key)
+            while len(self._verified_puts) > VERIFIED_PUT_CACHE_SIZE:
+                self._verified_puts.popitem(last=False)
 
     def _put_verified(self, data, ref):
         key, sha = ref['key'], ref['sha256']
@@ -289,34 +311,42 @@ class S3Store:
         check_cancelled()
         root = Path(root).resolve()
         manifest = self.workspace_manifest(ref)
+        self.remember_verified(ref)
         check_cancelled()
-        targets = []
+        # Files with identical bytes share one immutable object version: download it once, in manifest order.
+        objects = {}
         for item in manifest['files']:
             name = item['path']
             target = root / name
             if not target.resolve().is_relative_to(root) or target.is_symlink():
                 raise StorageUnavailable('Unsafe workspace manifest path')
-            targets.append((target, item['storage']))
+            storage = item['storage']
+            identity = (storage['key'], storage['version_id'], storage['sha256'], storage['size_bytes'])
+            objects.setdefault(identity, (storage, []))[1].append(target)
+        targets = list(objects.values())
         pending = deque()
         pending_bytes = 0
 
         def download(storage):
             check_cancelled()
-            return self.get(storage)
+            data = self.get(storage)  # size and SHA-256 verified on the exact VersionId
+            self.remember_verified(storage)
+            return data
 
         def finish_one():
             nonlocal pending_bytes
-            target, future, size = pending.popleft()
+            paths, future, size = pending.popleft()
             data = future.result()
-            check_cancelled()
-            target.parent.mkdir(parents=True, exist_ok=True)
-            temporary = target.with_name('.restore-' + uuid4().hex)
-            try:
-                temporary.write_bytes(data)
+            for target in paths:
                 check_cancelled()
-                temporary.replace(target)
-            finally:
-                temporary.unlink(missing_ok=True)
+                target.parent.mkdir(parents=True, exist_ok=True)
+                temporary = target.with_name('.restore-' + uuid4().hex)
+                try:
+                    temporary.write_bytes(data)
+                    check_cancelled()
+                    temporary.replace(target)
+                finally:
+                    temporary.unlink(missing_ok=True)
             pending_bytes -= size
 
         # Download immutable, checksum-verified bytes in a bounded window. Only
@@ -325,13 +355,13 @@ class S3Store:
         # An object larger than the byte window is downloaded alone.
         with ThreadPoolExecutor(max_workers=RESTORE_CONCURRENCY) as pool:
             try:
-                for target, storage in targets:
+                for storage, paths in targets:
                     check_cancelled()
                     size = storage['size_bytes']
                     while pending and (len(pending) >= RESTORE_CONCURRENCY or pending_bytes + size > RESTORE_PENDING_BYTES):
                         finish_one()
                     check_cancelled()
-                    pending.append((target, pool.submit(download, storage), size))
+                    pending.append((paths, pool.submit(download, storage), size))
                     pending_bytes += size
                 while pending:
                     finish_one()

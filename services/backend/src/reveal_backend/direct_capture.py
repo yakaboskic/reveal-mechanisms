@@ -118,6 +118,9 @@ def verify_uploaded(storage, item, receipt, secrets):
                 overlap = joined[-(maximum_secret - 1):] if maximum_secret > 1 else b''
                 if item['path'] == 'ledger/manifest.json': saved.append(chunk)
         require(count == item['size_bytes'] and digest.hexdigest() == sha, 'Direct object bytes differ from inventory')
+        # The same proof a put's HEAD gives, so the closing checkpoint does not HEAD every captured file again.
+        remember = getattr(storage, 'remember_verified', None)
+        if remember: remember(ref)
         return item['path'], ref, b''.join(saved)
     except (BoxTransportError, StorageUnavailable): raise
     except Exception as exc: raise StorageUnavailable('Direct capture object verification failed') from exc
