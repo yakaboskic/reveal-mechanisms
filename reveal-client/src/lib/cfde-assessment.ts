@@ -30,7 +30,16 @@ function canonical(value: unknown): unknown {
   if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => [key, canonical(item)]));
   return value;
 }
-export const assessmentBinding = (draft: AssessmentDraft | null, composer: AssessmentComposer) => JSON.stringify(canonical({ draft: draft && { id: draft.id, version: draft.version }, composer }));
+/** What a check assesses, as the API defines it: the mechanism search text, dismissed suggestions and an
+ * anchor's origin or suggestion id are editor-only, so editing them neither starts nor invalidates a check. */
+export function assessmentSubject(composer: AssessmentComposer) {
+  const text = (field: string) => composer[field] ?? "";
+  return { source_gap: composer.source_gap, model: composer.model,
+    anchors: composer.eaggl_anchors.map(anchor => anchor && typeof anchor === "object" && "reference" in anchor ? anchor.reference : anchor),
+    selected_kgs: composer.selected_kgs ?? [], upload_ids: composer.upload_ids ?? [],
+    research_direction: text("research_direction"), context: text("context"), hypotheses: text("hypotheses") };
+}
+export const assessmentBinding = (draft: AssessmentDraft | null, composer: AssessmentComposer) => JSON.stringify(canonical({ draft: draft && { id: draft.id, version: draft.version }, subject: assessmentSubject(composer) }));
 export const assessmentReady = (draft: AssessmentDraft | null, composer: AssessmentComposer, disabled: boolean) => !disabled && !!draft && !!composer.source_gap && !!composer.eaggl_anchors.length;
 export const assessmentIsRunning = (value: CfdeAssessment) => value.status === "preparing" || value.status === "assessing";
 export function visibleAssessment(state: AssessmentState, binding: string): AssessmentState {
@@ -91,6 +100,8 @@ export function readAssessment(value: unknown): CfdeAssessment {
       || !Array.isArray(item.coverage.truncations) || !item.coverage.truncations.every(value => typeof value.source === "string" && Number.isInteger(value.included_chars) && Number.isInteger(value.total_chars)))) throw new AssessmentRequestError("The assessment coverage was incomplete. No score is available.", "INVALID_ASSESSMENT_RESPONSE");
   return item;
 }
+/** Seconds a status read may wait for a change; the 30 s request timeout stays above it. */
+export const ASSESSMENT_WAIT_SECONDS = 15;
 async function request(path: string, signal: AbortSignal, body?: { draft_version: number; composer: AssessmentComposer }, key?: string): Promise<CfdeAssessment> {
   const response = await fetch("/api/backend/v1/drafts/" + path, {
     method: body ? "POST" : "GET", credentials: "same-origin", cache: "no-store",
@@ -106,7 +117,8 @@ async function request(path: string, signal: AbortSignal, body?: { draft_version
 }
 export const assessmentApi = {
   start: (draft: AssessmentDraft, composer: AssessmentComposer, key: string, signal: AbortSignal) => request(encodeURIComponent(draft.id) + "/cfde-assessments", signal, { draft_version: draft.version, composer }, key),
-  get: (draftId: string, id: string, signal: AbortSignal) => request(encodeURIComponent(draftId) + "/cfde-assessments/" + encodeURIComponent(id), signal),
+  /** wait > 0 long-polls: a pending receipt answers when its status changes, its deadline passes or wait seconds elapse. */
+  get: (draftId: string, id: string, signal: AbortSignal, wait = 0) => request(encodeURIComponent(draftId) + "/cfde-assessments/" + encodeURIComponent(id) + (wait ? "?wait=" + wait : ""), signal),
 };
 function wait(ms: number, signal: AbortSignal) {
   return new Promise<void>((resolve, reject) => {
@@ -116,6 +128,9 @@ function wait(ms: number, signal: AbortSignal) {
     signal.addEventListener("abort", cancel, { once: true });
   });
 }
+/** Spacing of status reads that came back early with nothing changed: an API that does not long-poll, or one
+ * shutting down, is read at most at this cadence. A long-poll that waited is followed by the next at once. */
+export const assessmentPollFloor = (polls: number) => [1000, 2000, 3000][polls] ?? 4000;
 type AssessmentDependencies = {
   start: typeof assessmentApi.start; get: typeof assessmentApi.get;
   wait: typeof wait; now: () => number; key: () => string; pollingMs: number;
@@ -166,11 +181,16 @@ export class AssessmentController {
       const started = this.deps.now(); let polls = 0;
       while (assessmentIsRunning(resource) && !resource.stale) {
         publish("polling", resource);
-        if (this.deps.now() - started >= this.deps.pollingMs) { publish("waiting", resource, "This check is still running. Check its status again; this will not start another estimate."); return; }
-        await this.deps.wait(polls++ === 0 ? 1000 : 2000, controller.signal);
+        const elapsed = this.deps.now() - started;
+        if (elapsed >= this.deps.pollingMs) { publish("waiting", resource, "This check is still running. Check its status again; this will not start another estimate."); return; }
+        const sent = this.deps.now(), status = resource.status;
+        const next = accept(await this.deps.get(draft.id, resource.id, controller.signal, Math.min(ASSESSMENT_WAIT_SECONDS, Math.ceil((this.deps.pollingMs - elapsed) / 1000))));
         if (!current()) return;
-        resource = accept(await this.deps.get(draft.id, resource.id, controller.signal));
-        if (!current()) return;
+        if (next.status === status && assessmentIsRunning(next) && !next.stale) {
+          const floor = assessmentPollFloor(polls++) - (this.deps.now() - sent);
+          if (floor > 0) { await this.deps.wait(floor, controller.signal); if (!current()) return; }
+        }
+        resource = next;
       }
       if (resource.stale) publish("stale", resource, "This estimate is out of date. Check support again for the current draft.");
       else if (resource.status === "succeeded") publish("complete", resource);

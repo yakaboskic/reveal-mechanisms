@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { AssessmentAutoCheck, AssessmentController, AssessmentRequestError, assessmentApi, assessmentBinding, assessmentReady, assessmentResult, assessmentSupportLabel, idleAssessment, readAssessment, visibleAssessment, type AssessmentState, type CfdeAssessment } from "../src/lib/cfde-assessment";
+import { ASSESSMENT_WAIT_SECONDS, AssessmentAutoCheck, AssessmentController, AssessmentRequestError, assessmentApi, assessmentBinding, assessmentReady, assessmentResult, assessmentSupportLabel, idleAssessment, readAssessment, visibleAssessment, type AssessmentState, type CfdeAssessment } from "../src/lib/cfde-assessment";
 import { CfdeAssessmentFeedback, CfdeEstimateRing } from "../src/components/CfdeAssessmentView";
 import { CfdeAssessment as Assessment } from "../src/components/CfdeAssessment";
 
@@ -153,6 +153,66 @@ test("polling stops after the bounded window and status can be resumed without a
   await controller.run(); assert.equal(starts, 1);
 });
 
+test("status reads long-poll and the next read follows at once after a wait or a status change", async () => {
+  const waits: number[] = [], sleeps: number[] = []; let now = 0;
+  const answers = [{ took: 15_000, status: "preparing" }, { took: 400, status: "assessing" }, { took: 9_000, status: "succeeded" }] as const;
+  const { controller } = harness({ now: () => now, wait: async ms => { sleeps.push(ms); now += ms; }, start: async () => pending(),
+    get: async (_draft, _id, _signal, wait) => {
+      waits.push(wait ?? 0); const answer = answers[waits.length - 1]; now += answer.took;
+      return answer.status === "succeeded" ? resource() : resource({ status: answer.status, result: null, coverage: null });
+    } });
+  await controller.run();
+  assert.equal(controller.state.phase, "complete");
+  assert.deepEqual(waits, [ASSESSMENT_WAIT_SECONDS, ASSESSMENT_WAIT_SECONDS, ASSESSMENT_WAIT_SECONDS]);
+  assert.deepEqual(sleeps, [], "A read that waited, or saw a new status, is followed at once");
+});
+
+test("an API that answers status reads at once is still read at a backed-off cadence", async () => {
+  const sleeps: number[] = []; let now = 0, gets = 0;
+  const { controller } = harness({ now: () => now, wait: async ms => { sleeps.push(ms); now += ms; }, start: async () => pending(),
+    get: async () => { now += 100; return ++gets < 6 ? pending() : resource(); } });
+  await controller.run();
+  assert.equal(controller.state.phase, "complete");
+  assert.deepEqual(sleeps, [900, 1900, 2900, 3900, 3900], "1, 2, 3 then 4 s between unchanged answers, counting the read itself");
+});
+
+test("the long-poll never waits past the polling bound and a resumed check reads its status at once", async () => {
+  const waits: number[] = []; let now = 0;
+  const { controller } = harness({ pollingMs: 20_000, now: () => now, wait: async ms => { now += ms; }, start: async () => pending(),
+    get: async (_draft, _id, _signal, wait) => { waits.push(wait ?? 0); now += (wait ?? 0) * 1000; return pending(); } });
+  await controller.run();
+  assert.equal(controller.state.phase, "waiting");
+  assert.deepEqual(waits, [15, 5], "The last read waits only for the time left");
+  await controller.run();
+  assert.equal(waits[2], 0, "Check status answers immediately, then long-polls");
+  assert.equal(waits[3], 15);
+});
+
+test("the assessed subject alone binds a check: editor-only fields never start, cancel or hide one", async () => {
+  const anchored = { ...composer, context: "Anchored context", eaggl_anchors: [{ reference: { source_id: "factor:fixture" }, origin: "automatic", suggestion_id: "s1" }], mechanism_subquery: "", dismissed_source_ids: [] as string[] };
+  const binding = assessmentBinding(draft, anchored);
+  for (const edit of [{ mechanism_subquery: "insulin" }, { dismissed_source_ids: ["factor:other"] }, { eaggl_anchors: [{ reference: { source_id: "factor:fixture" }, origin: "manual", suggestion_id: null }] }])
+    assert.equal(assessmentBinding(draft, { ...anchored, ...edit }), binding, JSON.stringify(edit));
+  for (const edit of [{ context: "new" }, { research_direction: "new" }, { hypotheses: "new" }, { model: "other-model" }, { selected_kgs: ["prokn"] }, { upload_ids: ["upload"] },
+    { source_gap: { id: "gap:other" } }, { eaggl_anchors: [{ reference: { source_id: "factor:other" }, origin: "automatic", suggestion_id: "s1" }] }])
+    assert.notEqual(assessmentBinding(draft, { ...anchored, ...edit }), binding, JSON.stringify(edit));
+  assert.notEqual(assessmentBinding({ ...draft, version: 4 }, anchored), binding);
+  const time = clock(), calls: string[] = [];
+  const automatic = new AssessmentAutoCheck(value => { calls.push(value); return true; }, time.timers);
+  automatic.queue(binding, true); time.advance(1500);
+  automatic.queue(assessmentBinding(draft, { ...anchored, mechanism_subquery: "insulin" }), true); time.advance(5000);
+  assert.equal(calls.length, 1, "Typing a mechanism search does not post another check");
+  const old = deferred<CfdeAssessment>(); let signal: AbortSignal | undefined; const posted: unknown[] = [];
+  const { controller } = harness({ start: async (_draft, value, _key, requestSignal) => { posted.push(value); signal = requestSignal; return old.promise; } });
+  controller.bind(draft, anchored); const running = controller.run();
+  controller.bind(draft, { ...anchored, mechanism_subquery: "insulin", dismissed_source_ids: ["factor:other"] });
+  assert.equal(signal?.aborted, false);
+  old.resolve(resource()); await running;
+  assert.equal(controller.state.phase, "complete");
+  assert.equal(assessmentResult(visibleAssessment(controller.state, assessmentBinding(draft, { ...anchored, mechanism_subquery: "insulin" })))?.id, "assessment-fixture");
+  assert.deepEqual(posted, [anchored], "The check keeps the inputs it posted, so a retry replays its request exactly");
+});
+
 test("failed and interrupted operations do not automatically retry; an explicit retry has a new key", async () => {
   for (const status of ["failed", "interrupted"] as const) {
     const keys: string[] = [];
@@ -258,7 +318,10 @@ test("wire requests stay on the same-origin gateway, send exact inputs and have 
     const signal = new AbortController().signal;
     await assessmentApi.start(draft, composer, "request-fixture", signal);
     await assessmentApi.get(draft.id, "assessment-fixture", signal);
+    await assessmentApi.get(draft.id, "assessment-fixture", signal, ASSESSMENT_WAIT_SECONDS);
     assert.equal(calls[0].url, "/api/backend/v1/drafts/isolated-draft/cfde-assessments");
+    assert.equal(calls[1].url, "/api/backend/v1/drafts/isolated-draft/cfde-assessments/assessment-fixture");
+    assert.equal(calls[2].url, "/api/backend/v1/drafts/isolated-draft/cfde-assessments/assessment-fixture?wait=15");
     assert.deepEqual(JSON.parse(calls[0].init.body as string), { draft_version: 3, composer });
     assert.equal(new Headers(calls[0].init.headers).get("Idempotency-Key"), "request-fixture");
     assert.equal(calls[0].init.credentials, "same-origin"); assert.equal(calls[0].init.cache, "no-store");
