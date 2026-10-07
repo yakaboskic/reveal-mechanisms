@@ -3,7 +3,7 @@ import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState
 import { RevalidationCache } from "@/lib/revalidation-cache";
 import { loadWorkspaceData, workspaceTabs, workspaceKey, workspaceKeyParts, workspaceSize, type WorkspaceData, type WorkspaceTab, type WorkspaceKey } from "@/lib/workspace-data";
 import type { ReferenceState } from "@/lib/reference";
-import { onWorkspaceChange, invalidateWorkspace, resetWorkspaceCache, affectedWorkspaceTabs, connectWorkspaceEvents, type WorkspaceConnection } from "@/lib/workspace-events";
+import { onWorkspaceChange, invalidateWorkspace, resetWorkspaceCache, affectedWorkspaceTabs, shareWorkspaceEvents, type WorkspaceConnection } from "@/lib/workspace-events";
 import { terminal, type Schema } from "@/lib/client";
 import { onPageReturn } from "@/lib/page-return";
 import type { RefreshOptions } from "@/lib/session-identity";
@@ -13,7 +13,8 @@ type IdentityCheck = (options?: RefreshOptions) => Promise<Schema<"Me"> | null>;
 const Context = createContext<{ cache: Store; scope: string | null; checkIdentity: IdentityCheck; connection: WorkspaceConnection } | null>(null);
 const serverVersion = () => 0;
 
-export function WorkspaceCacheProvider({ scope, live = true, children, checkIdentity }: { scope: string | null; live?: boolean; children: ReactNode; checkIdentity: IdentityCheck }) {
+/** `owner`: the scope's user; every tab of that user in this browser shares one workspace event stream. */
+export function WorkspaceCacheProvider({ scope, owner, live = true, children, checkIdentity }: { scope: string | null; owner?: string | null; live?: boolean; children: ReactNode; checkIdentity: IdentityCheck }) {
   const [cache] = useState(() => new RevalidationCache(loadWorkspaceData));
   const [connection, setConnection] = useState<WorkspaceConnection>("connecting");
   const identityCheck = useRef(checkIdentity); identityCheck.current = checkIdentity;
@@ -33,7 +34,7 @@ export function WorkspaceCacheProvider({ scope, live = true, children, checkIden
   useEffect(() => {
     if (!scope || !live) return;
     const controller = new AbortController();
-    void connectWorkspaceEvents(controller.signal, {
+    void shareWorkspaceEvents(controller.signal, owner || scope, {
       status: setConnection,
       change: event => {
         invalidateWorkspace(event);
@@ -43,7 +44,7 @@ export function WorkspaceCacheProvider({ scope, live = true, children, checkIden
       revoked: () => { resetWorkspaceCache(); void identityCheck.current({ force: true }); },
     });
     return () => controller.abort();
-  }, [cache, scope, live]);
+  }, [cache, scope, owner, live]);
   return <Context.Provider value={{ cache, scope, checkIdentity, connection }}>{children}</Context.Provider>;
 }
 

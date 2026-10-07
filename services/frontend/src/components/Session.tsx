@@ -10,7 +10,7 @@ import { continuityPromptDismissed, dismissContinuityPrompt } from "@/lib/contin
 import { createSessionIdentity, emptyIdentity, sessionMe, sessionScope, type RefreshOptions, type SessionStatus } from "@/lib/session-identity";
 import { WorkspaceCacheProvider } from "./WorkspaceCache";
 import { GapDiscoveryProvider } from "./GapDiscoveryCache";
-import { invalidateWorkspace, resetWorkspaceCache } from "@/lib/workspace-events";
+import { announceSignOut, invalidateWorkspace, resetWorkspaceCache } from "@/lib/workspace-events";
 import "./session-menu.css";
 
 /** `ready`: the gateway principal is known, so data may load. `verified`: GET /v1/me confirmed it (display details, SSE). */
@@ -73,10 +73,13 @@ export function Session({ children }: { children: ReactNode }) {
     } catch { /* retain local selections when storage is unavailable */ }
   }, [me?.user_id]);
   const logout = async () => {
+    const owner = identity.principal?.user_id;
     session.clear(); resetWorkspaceCache(); setStatus(current => ({ ...current, canClaim: false, canAdmin: false }));
     await fetch("/api/session/logout", { method: "POST" });
     for (const key of Object.keys(sessionStorage)) if (key.startsWith("reveal:")) sessionStorage.removeItem(key);
     await signOut({ callbackUrl: "/" });
+    // Both cookies are gone, so the other tabs' identity checks find no principal and drop their private rows now.
+    if (owner) announceSignOut(owner);
   };
   const claim = async () => {
     try {
@@ -95,7 +98,7 @@ export function Session({ children }: { children: ReactNode }) {
   const claimDismissed = claimPromptKnown && claimPrompt?.dismissed;
   const workspaceScope = sessionScope(identity, status.canClaim);
   // Data starts once the principal is known; the event stream still waits for verification so page load leases do not grow.
-  return <SessionContext.Provider value={{ me, ready, verified, status, refresh }}><WorkspaceCacheProvider scope={workspaceScope} live={verified} checkIdentity={refresh}><GapDiscoveryProvider viewer={ready ? workspaceScope || "visitor" : null}>
+  return <SessionContext.Provider value={{ me, ready, verified, status, refresh }}><WorkspaceCacheProvider scope={workspaceScope} owner={identity.principal?.user_id} live={verified} checkIdentity={refresh}><GapDiscoveryProvider viewer={ready ? workspaceScope || "visitor" : null}>
     <a className="skip" href="#main">Skip to content</a>
     <header className="site-nav workspace-chrome">
       <nav className="site-information" aria-label="Community"><Link href="/about" aria-current={pathname === "/about" ? "page" : undefined}>About</Link><span className="site-information-divider" aria-hidden="true">|</span><Link href="/leaderboard" aria-current={pathname === "/leaderboard" ? "page" : undefined}>Leaderboard</Link></nav>
