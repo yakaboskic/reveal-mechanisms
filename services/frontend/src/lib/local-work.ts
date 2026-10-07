@@ -83,7 +83,7 @@ export function createLocalWorkClient(fetcher: typeof fetch = fetch) {
       const problem = await response.json().catch(() => ({}));
       throw new LocalWorkError(response.status, problem.code || "API_ERROR", problem.detail || problem.message || `Local research request failed (${response.status}).`);
     }
-    if (changesWorkspace(options.method || "GET", path)) invalidateWorkspace();
+    if (changesWorkspace(options.method || "GET", path)) invalidateWorkspace(undefined, true);
     if (response.status === 204) return undefined as T;
     return response.json();
   }

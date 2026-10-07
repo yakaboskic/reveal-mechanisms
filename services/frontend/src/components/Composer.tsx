@@ -66,7 +66,8 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
       }).catch(() => { /* Keep the last displayed tally; voting reports its own failures. */ });
     };
     refreshVote();
-    const unsubscribe = onCollectionInvalidation(["catalog", "gaps"], refreshVote);
+    // Every vote commits a public catalog event; draft and exploration echoes cannot change a tally.
+    const unsubscribe = onCollectionInvalidation(["catalog"], refreshVote, { local: false });
     return () => { active = false; controller?.abort(); unsubscribe(); };
   }, [selectedGapId, selectedVoteBinding, ready]);
   const [factors, setFactors] = useState<Record<string, Schema<"EagglFactor">>>({});

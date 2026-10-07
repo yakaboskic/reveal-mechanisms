@@ -9,7 +9,7 @@ export class ApiError extends Error {
 }
 const client = createClient<paths>({ baseUrl: "/api/backend", credentials: "same-origin" });
 client.use({ onResponse({ request, response }) {
-  if (response.ok && changesWorkspace(request.method, new URL(request.url).pathname)) invalidateWorkspace();
+  if (response.ok && changesWorkspace(request.method, new URL(request.url).pathname)) invalidateWorkspace(undefined, true);
   return response;
 } });
 const listSignal = (signal: AbortSignal, caller?: AbortSignal) => caller ? AbortSignal.any([signal, caller]) : signal;

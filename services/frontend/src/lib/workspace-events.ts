@@ -4,11 +4,13 @@ import type { WorkspaceTab } from "./workspace-data";
 import { alwaysVisible, documentVisibility, streamAttempt, untilAborted, type PageVisibility } from "./page-visibility";
 export type WorkspaceEvent = components["schemas"]["WorkspaceEvent"];
 export type WorkspaceConnection = "connecting" | "live" | "reconnecting" | "expired";
-const listeners = new Set<(reset: boolean, event?: WorkspaceEvent) => void>();
-export function onWorkspaceChange(listener: (reset: boolean, event?: WorkspaceEvent) => void) {
+type Listener = (reset: boolean, event?: WorkspaceEvent, local?: boolean) => void;
+const listeners = new Set<Listener>();
+export function onWorkspaceChange(listener: Listener) {
   listeners.add(listener); return () => { listeners.delete(listener); };
 }
-export function invalidateWorkspace(event?: WorkspaceEvent) { for (const listener of listeners) listener(false, event); }
+/** `local`: this tab's own committed mutation. It carries no event; the stream echoes the change after it. */
+export function invalidateWorkspace(event?: WorkspaceEvent, local = false) { for (const listener of listeners) listener(false, event, local); }
 export function resetWorkspaceCache() { for (const listener of listeners) listener(true); }
 
 export function changesWorkspace(method: string, path: string) {
