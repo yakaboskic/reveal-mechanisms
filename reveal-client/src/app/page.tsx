@@ -137,7 +137,8 @@ export default function Home() {
         void refresh(kinds).catch(error => { if (!controller.signal.aborted) setError(errorMessage(error)); });
       }, 120);
     };
-    void followWorkspace({ signal: controller.signal, onState: setWorkspaceState, onChange: change => {
+    // Every tab of this user shares one workspace stream; a job's stream is per tab and parks while hidden.
+    void followWorkspace({ signal: controller.signal, owner: principal.user_id, onState: setWorkspaceState, onChange: change => {
       const kinds = change ? change.collections.filter(value => ["drafts", "jobs"].includes(value)) : ["drafts", "jobs"];
       if (kinds.length) scheduleRefresh(kinds);
     } }).catch(error => { if (!controller.signal.aborted) setWorkspaceState(errorMessage(error)); });
@@ -159,7 +160,13 @@ export default function Home() {
         setActivity(items => items.some(item => item.id === event.id) ? items : [...items, event].slice(-1000));
         setJob(value => value?.id === id ? { ...value, status: event.status, stage: event.stage, result: event.result || value.result,
           updated_at: event.occurred_at, last_event_id: event.id } : value);
-        if (terminal(event.status)) { setStreamState("Activity stream ended"); void readLatest().then(() => refresh(["jobs"])).catch(error => setError(errorMessage(error))); }
+        if (!terminal(event.status)) return;
+        setStreamState("Activity stream ended");
+        // A job opened after it finished already holds this outcome (its stream is just its history); only a run
+        // that finishes now needs the saved job and the list.
+        const known = currentJob.current;
+        if (known?.id === id && terminal(known.status) && BigInt(known.last_event_id) >= BigInt(event.id)) return;
+        void readLatest().then(() => refresh(["jobs"])).catch(error => setError(errorMessage(error)));
       },
     }).then(() => { if (!controller.signal.aborted) setStreamState("Activity stream ended"); })
       .catch(error => { if (!controller.signal.aborted) setStreamState(errorMessage(error)); });

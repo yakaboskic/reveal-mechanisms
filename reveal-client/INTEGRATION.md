@@ -205,6 +205,15 @@ Stop job reconnection for `succeeded`, `insufficient_evidence`, `failed`, or
 Handle reset/access-revoked events and perform the requested one-time snapshot
 refresh. Collection invalidation comes from events rather than a refresh timer.
 
+Each open stream holds one HTTP connection. Over plain-HTTP/1.1 local development
+a browser allows six per origin across all tabs, and further requests queue
+behind them. `src/lib/events.ts` therefore parks any stream in a tab hidden for
+a minute and resumes it from its cursor when the tab is shown. Given the
+signed-in user, `followWorkspace` also shares one workspace stream across that
+user's tabs: a Web Lock elects the tab that streams and a BroadcastChannel
+carries its invalidations, state and cursor to the others. Without Web Locks
+(an insecure origin) each tab streams for itself.
+
 A same-origin server proxy lets browser session cookies authorize EventSource or
 fetch-stream requests. Do not place bearer tokens in URLs. For another server
 framework, forward the response body as a stream, disable buffering, and retain
