@@ -21,7 +21,8 @@ import test_mysql_pool as wire
 import test_research_http as research_http
 import test_research_polling as research_polling
 
-BUDGET = {'local_work_poll': 5, 'me': 3, 'readyz': 2, 'draft_patch': 10, 'mcp_get_operation': 5}
+BUDGET = {'local_work_poll': 5, 'me': 3, 'readyz': 2, 'draft_patch': 10, 'mcp_get_operation': 5,
+          'mcp_query_enqueue': 13, 'query_operation': 17}
 
 
 class LocalWorkPollBudget(unittest.TestCase):
@@ -81,6 +82,24 @@ class McpBudget(unittest.TestCase):
     grant = research_http.ResearchHTTPTests.grant
     rpc = research_http.ResearchHTTPTests.rpc
     tool = research_http.ResearchHTTPTests.tool
+
+    def test_query_tool_call_takes_the_fence_once_without_reading_operation_payloads(self):
+        args = {'research_request_id': self.work['research_request_id'], 'arguments': {'factor_id': 'fixture'},
+                'idempotency_key': 'budget'}
+        with patch.object(research_http.InlinePreparation, 'resume_operation', lambda *a, **k: None), \
+                count_round_trips() as budget:
+            result = self.tool(self.grant_value, 'get_factor', args)
+        self.assertFalse(result.get('isError'), result); print('\nmcp query enqueue', budget)
+        self.assertEqual((budget.kinds(), budget.unleased, budget.connects), (['read', 'write'], 0, 0), budget)
+        self.assertLessEqual(budget.trips(), BUDGET['mcp_query_enqueue'], budget)
+
+    def test_query_operation_commits_its_records_in_one_fence(self):
+        identity = research_http.ResearchHTTPTests.queued(self, self.grant_value, self.work, 'budget')
+        service = ResearchWorkService(self.repo, data_service=research_http.ResearchHTTPTests.Pages())
+        with count_round_trips() as budget: service.run_operation(identity)   # two captured files
+        print('\nquery operation', budget)
+        self.assertEqual((budget.kinds(), budget.unleased, budget.connects), (['write', 'read', 'write'], 0, 0), budget)
+        self.assertLessEqual(budget.trips(), BUDGET['query_operation'], budget)
 
     def test_read_tool_call_is_one_read_lease(self):
         with patch.object(research_http.InlinePreparation, 'resume_operation', lambda *a, **k: None), \

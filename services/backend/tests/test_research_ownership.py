@@ -50,7 +50,7 @@ class ResearchOwnershipTests(unittest.TestCase):
     def test_transfer_during_execution_fences_old_worker_without_error_handler_rollback(self):
         self.operation('query')
         service=ResearchWorkService(self.repo)
-        def transfer_during_query(operation):
+        def transfer_during_query(operation, **options):
             with self.repo.transaction() as tx: tx.transfer(self.owner,self.target)
             return {'unexpected':'old execution must not commit this'}
         with patch.object(service,'query',side_effect=transfer_during_query): service.run_operation('query')

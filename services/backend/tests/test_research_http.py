@@ -403,6 +403,72 @@ class ResearchHTTPTests(unittest.TestCase):
             self.assertEqual(tx.get('research_pin',work['research_request_id'])['data']['state'],'released')
         self.assertEqual(calls,['stale-original','replacement'])
 
+    class Pages:
+        """A reference capture with one exact upstream page beside its normalized result."""
+        def __init__(self,during=None): self.during=during
+        def query(self,name,arguments,*,generation_id):
+            if self.during: self.during()
+            source={'origin':'fixture:retained-reference','generation_id':generation_id}
+            value={'status':'complete','items':[{'factor':arguments.get('factor_id')}]}
+            raw=canonical_json({'operation':name,'arguments':arguments,'source':source,'result':value})
+            return QueryCapture(value,raw,'imported_reference',source,extra_files={'page-1':canonical_json({'page':1,'factor':arguments.get('factor_id')})})
+
+    def queued(self,grant,work,key,factor='fixture'):
+        return self.tool(grant,'get_factor',{'research_request_id':work['research_request_id'],
+            'arguments':{'factor_id':factor},'idempotency_key':key})['structuredContent']['operation_id']
+
+    def test_query_commits_artifacts_receipt_and_result_in_one_fence(self):
+        from round_trips import count_round_trips
+        from reveal_backend.repository import digest
+        work=self.create(); grant=self.grant(work); identity=self.queued(grant,work,'one-fence')
+        service=ResearchWorkService(self.repo,data_service=self.Pages())
+        with count_round_trips() as budget: service.run_operation(identity)
+        # The lease, one authorized read before the query, then one fence for artifacts, receipt and result.
+        self.assertEqual(budget.kinds(),['write','read','write'],budget)
+        with self.repo.read_transaction() as tx:
+            operation=tx.get('research_operation',identity)['data']; receipt=tx.get('evidence_receipt',identity)['data']
+            self.assertEqual(operation['state'],'succeeded',operation)
+            self.assertEqual(operation['result']['receipt_id'],identity)
+            self.assertEqual(sorted(operation['result']['artifacts']),sorted(receipt['context']['artifact_ids']))
+            self.assertEqual(len(receipt['context']['artifact_ids']),2)
+            for relative,artifact_id in receipt['context']['artifact_ids'].items():
+                artifact=tx.get('research_artifact',artifact_id)['data']
+                # The same ids retain() assigns, so receipts and their hashes are unchanged.
+                self.assertEqual(artifact_id,digest([work['id'],'source',artifact['sha256'],relative,
+                    {'research_request_id':work['research_request_id']}]))
+                self.assertEqual((artifact['filename'],artifact['purpose'],artifact['local_work_id']),(relative,'source',work['id']))
+        again=self.queued(grant,work,'one-fence-again')
+        with patch('reveal_backend.user_inputs.retain',side_effect=AssertionError('Retained blobs are reused, never uploaded again')):
+            ResearchWorkService(self.repo,data_service=self.Pages()).run_operation(again)
+        with self.repo.read_transaction() as tx:
+            self.assertEqual(tx.get('research_operation',again)['data']['state'],'succeeded')
+            first=tx.get('evidence_receipt',identity)['data']['context']['artifact_ids']
+            self.assertEqual(tx.get('evidence_receipt',again)['data']['context']['artifact_ids'],first)
+
+    def test_revocation_or_quota_failure_before_the_commit_writes_nothing(self):
+        work=self.create(); grant=self.grant(work)
+        def revoke():
+            with self.repo.transaction() as tx:
+                key=hashlib.sha256(grant['token'].encode()).hexdigest(); row=tx.get('research_access',key)
+                row['data']['revoked_at']=now(); tx.put('research_access',key,row['owner'],row['data'])
+        def artifacts():
+            with self.repo.read_transaction() as tx: return {r['id'] for r in tx.list('research_artifact',self.owner)}
+        full=self.queued(grant,work,'over-budget')
+        with self.repo.transaction() as tx:
+            tx.put('research_artifact','budget-filler',self.owner,{'id':'budget-filler','local_work_id':work['id'],
+                'filename':'filler.bin','sha256':'f'*64,'size_bytes':127_999_990,'purpose':'source','metadata':{},
+                'storage':{'store':'filesystem','key':'filler'}})
+        revoked=self.queued(grant,work,'revoked')
+        for identity,during,code in ((full,None,'RESEARCH_STORAGE_LIMIT'),(revoked,revoke,'AUTHORITY_REVOKED')):
+            with self.subTest(code=code):
+                before=artifacts()
+                ResearchWorkService(self.repo,data_service=self.Pages(during)).run_operation(identity)
+                with self.repo.read_transaction() as tx:
+                    operation=tx.get('research_operation',identity)['data']
+                    self.assertEqual((operation['state'],operation['error']['code']),('failed',code))
+                    self.assertIsNone(tx.get('evidence_receipt',identity))
+                self.assertEqual(artifacts(),before)   # no file of a two-file capture commits alone
+
     def test_local_browser_routes_cannot_convert_or_close_hosted_execution(self):
         work=self.create(); grant=self.grant(work)
         with self.repo.transaction() as tx:

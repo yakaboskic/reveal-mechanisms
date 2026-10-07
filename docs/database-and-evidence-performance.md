@@ -94,6 +94,24 @@ as the `notification`/`PUBLISH` row. A draft rename is now one fenced
 transaction of 10 round trips instead of two fenced transactions totalling 14
 plus a Redis call.
 
+Local research serves each request from one snapshot. A local-work status poll
+is one read transaction of five round trips: the principal and the work in one
+read, the frozen request, one read of the work's operations and grants, and
+`COMMIT`. Received operations and operations whose lease expired are resumed
+from those rows, not from a second read. The local-work list reads every work's
+operations, grants, requests, cited evidence and OAuth families in a fixed
+number of statements, however many works the owner has. An MCP read tool
+authenticates once, inside the transaction that serves it, and an
+authentication failure still returns the HTTP challenge. Write tools are still
+checked by the transport before dispatch, outside the global write fence, so
+an invalid credential never takes it. A data tool's background run takes the
+fence twice: once to lease the operation and once to commit its artifacts,
+receipt and result together, re-authorized under the lease. Between the two
+come one authorized read and the blob uploads, outside the lock. With two
+captured files that is 17 round trips, 10 of them under the fence, instead of
+54 with 28. Operation quotas are counted in SQL, so stored results are no
+longer read under the fence.
+
 Each API request logs one JSON line to stdout with the route template (never
 the raw path, query string, ids or parameters), status, duration, and its
 database cost: statements (including `COMMIT`, `ROLLBACK` and the fence),

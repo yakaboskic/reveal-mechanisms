@@ -30,6 +30,8 @@ RETAINERS = ThreadPoolExecutor(max_workers=4, thread_name_prefix='reveal-seed-re
 _scheduled_operations = set()
 _scheduled_operations_lock = threading.Lock()
 TERMINAL = {'succeeded', 'accepted', 'rejected', 'failed', 'cancelled'}
+# Kinds that run authorize_commit in their own first read and again in the fence that commits their result.
+SELF_AUTHORIZING = {'query', 'import', 'export'}
 MAX_ARTIFACT_BYTES = 8_000_000
 
 
@@ -85,6 +87,21 @@ def work_children(tx, owner, work_ids, *, operations=('validate', 'submit')):
         grouped[row[0]].setdefault(data.get('local_work_id'), []).append(
             {'id': row[1], 'owner': row[2], 'version': row[3], 'data': data})
     return grouped
+
+
+def operation_counts(tx, owner, work_id):
+    """(all, pending) research_operation counts of one work, without transferring their payloads."""
+    row = tx.execute('SELECT COUNT(*),COALESCE(SUM(CASE WHEN '+json_text(tx, 'state')+' IN (%s,%s) THEN 1 ELSE 0 END),0) '
+        'FROM reveal_records WHERE kind=%s AND owner_id=%s AND '+json_text(tx, 'local_work_id')+'=%s',
+        ('received', 'running', 'research_operation', owner, work_id)).fetchone()
+    return int(row[0]), int(row[1])
+
+
+def artifact_sizes(tx, owner, work_id):
+    """{sha256: size_bytes} of a work's retained artifacts, without transferring their descriptors."""
+    rows = tx.execute('SELECT '+json_text(tx, 'sha256')+','+json_text(tx, 'size_bytes')+' FROM reveal_records '
+        'WHERE kind=%s AND owner_id=%s AND '+json_text(tx, 'local_work_id')+'=%s', ('research_artifact', owner, work_id)).fetchall()
+    return {row[0]: int(row[1]) for row in rows}
 
 
 def pending_operations(rows):
@@ -242,28 +259,42 @@ def authenticate(tx, authorization, *, write=False, delegated=False):
             'me': me, 'oauth_family': family}
 
 
-def authorize_commit(tx, operation):
-    owner = operation['owner_user_id']; me = valid_principal(tx, owner)
-    work = owned(tx, 'local_work', operation['local_work_id'], owner)['data']
-    owned(tx, 'request', operation['research_request_id'], owner)
+def authorize_commit(tx, operation, *, extra=()):
+    """Recheck an operation's authority in this transaction, with one grant read and one batched record read.
+
+    Returns the authorized work and request, and the batched rows: extra exact keys arrive in the same read
+    but are NOT authorized; pass each through require_owned.
+    """
+    owner = operation['owner_user_id']; grant = None
     if operation.get('grant_id'):
-        grant = next((r['data'] for r in tx.list('research_access', owner)
+        # The first matching row in list() order, as before, without reading the owner's other grants.
+        grant = next((r['data'] for r in records_where(tx, 'research_access', owner, 'grant_id', operation['grant_id'])
                       if r['data']['grant_id'] == operation['grant_id']), None)
+    family_id = grant.get('oauth_family_id') if grant else None
+    keys = [('principal', owner), ('local_work', operation['local_work_id']), ('request', operation['research_request_id']), *extra]
+    if family_id: keys.append(('research_oauth_family', family_id))
+    records = tx.get_records(keys)
+    me = principal_record(records.get(('principal', owner)))
+    work = require_owned(tx, 'local_work', operation['local_work_id'], owner, records.get(('local_work', operation['local_work_id'])))['data']
+    request = require_owned(tx, 'request', operation['research_request_id'], owner,
+        records.get(('request', operation['research_request_id'])))['data']
+    if operation.get('grant_id'):
         if not grant or grant.get('revoked_at'):
             raise Problem(403, 'AUTHORITY_REVOKED', 'The connection was revoked before this operation committed.')
         from .research_oauth import check_grant_scope, require_registered_local
-        check_grant_scope(tx, owner, grant)
+        check_grant_scope(tx, owner, grant, me=me, family=records.get(('research_oauth_family', family_id)) if family_id else None)
         require_registered_local({'grant': grant, 'principal_kind': me.get('principal_kind')})
         if (grant['local_work_id'] != work['id'] or grant['research_request_id'] != operation['research_request_id']
                 or work['research_request_id'] != operation['research_request_id']
                 or (grant['kind'] == 'hosted') != bool(work.get('job_id'))):
             raise Problem(403, 'RESEARCH_SCOPE_MISMATCH', 'The operation authority does not match its execution context.')
         if grant['kind'] == 'hosted':
-            work = owned(tx, 'local_work', operation['local_work_id'], owner)['data']
-            job = owned(tx, 'job', work['job_id'], owner)['data']
-            queue = owned(tx, 'queue', work['job_id'], owner)['data']
+            execution = tx.get_records((('job', work['job_id']), ('queue', work['job_id'])))
+            job = require_owned(tx, 'job', work['job_id'], owner, execution.get(('job', work['job_id'])))['data']
+            queue = require_owned(tx, 'queue', work['job_id'], owner, execution.get(('queue', work['job_id'])))['data']
             if job['status'] in ('succeeded', 'failed', 'cancelled', 'insufficient_evidence', 'cancel_requested') or str(queue['attempt']) != str(grant['execution_id']):
                 raise Problem(403, 'EXECUTION_EXPIRED', 'The hosted execution is no longer active.')
+    return {'work': work, 'request': request, 'records': records}
 
 
 class ResearchWorkService:
@@ -379,7 +410,7 @@ class ResearchWorkService:
             'research_request_id': work['research_request_id'], 'grant_id': grant_id, 'kind': kind,
             'arguments': deepcopy(arguments), 'state': 'received', 'created_at': now(),
             'validation_only': kind == 'validate', 'account_ids': [], 'reused_account_ids': [], 'attempt': 0}
-        tx.put('research_operation', operation['id'], owner, operation)
+        tx.insert('research_operation', operation['id'], owner, operation)   # a fresh id: no pre-read
         return operation
 
     def kick(self, work_id):
@@ -462,6 +493,44 @@ class ResearchWorkService:
                 raise Problem(429, 'RESEARCH_STORAGE_LIMIT', 'This research work reached its retained artifact budget.')
             tx.put('research_artifact', identity, owner, value)
         return value
+
+    def stage(self, owner, work_id, data, filename, *, storage, purpose='source', metadata=None):
+        """retain() without the database: the same id and descriptor, uploading the blob only when storage
+        ({sha256: ref} of this work's retained blobs, extended in place) lacks it. commit_staged() writes it."""
+        if not isinstance(data, bytes) or len(data) > 32_000_000:
+            raise Problem(413, 'ARTIFACT_TOO_LARGE', 'A research artifact exceeds its limit.')
+        checksum = hashlib.sha256(data).hexdigest()
+        if checksum not in storage:
+            with measure('research_artifact', 'store'):
+                storage[checksum] = user_inputs.retain(data, user_inputs.TYPES.get(Path(filename).suffix, 'application/octet-stream'))
+        return {'id': digest([work_id, purpose, checksum, filename, metadata or {}]), 'local_work_id': work_id,
+            'filename': filename, 'sha256': checksum, 'size_bytes': len(data), 'storage': storage[checksum],
+            'purpose': purpose, 'metadata': metadata or {}, 'created_at': now()}
+
+    @staticmethod
+    def retained_storage(tx, owner, work_id):
+        """{sha256: storage} of a work's own retained blobs, so staging reuses them as retain() does."""
+        storage = {}
+        for row in work_records(tx, 'research_artifact', owner, work_id):
+            if not row['data'].get('retained_record') and row['data'].get('storage'):
+                storage.setdefault(row['data']['sha256'], row['data']['storage'])
+        return storage
+
+    @staticmethod
+    def commit_staged(tx, owner, work_id, staged):
+        """Rows to insert for staged artifacts ({id: value}) under the caller's fence, as retain() commits them:
+        existing ids are kept, and new blobs must fit the work's combined retained budget."""
+        if not staged: return []
+        existing = tx.get_many('research_artifact', sorted(staged))
+        if any(row['owner'] != owner for row in existing.values()):
+            raise Problem(404, 'NOT_FOUND', 'Artifact is unavailable.')
+        new = {identity: value for identity, value in staged.items() if identity not in existing}
+        if not new: return []
+        sizes = artifact_sizes(tx, owner, work_id)
+        added = {value['sha256']: value['size_bytes'] for value in new.values() if value['sha256'] not in sizes}
+        if added and sum(sizes.values()) + sum(added.values()) > 128_000_000:
+            raise Problem(429, 'RESEARCH_STORAGE_LIMIT', 'This research work reached its retained artifact budget.')
+        return [('research_artifact', identity, owner, value) for identity, value in new.items()]
 
     def retain_seed(self, owner, work_id, files):
         """Retain a bounded seed with two transactions, not two per artifact.
@@ -569,6 +638,23 @@ class ResearchWorkService:
                 'sha256': value['sha256'], 'manifest': built.manifest, 'artifacts': artifacts}
         return result
 
+    def settle(self, tx, operation, owner, current, result):
+        """Record a finished operation's result inside the caller's fence; current is its row read there."""
+        if operation['kind'] == 'prepare':
+            work = owned(tx, 'local_work', operation['local_work_id'], owner)['data']
+            tx.put('research_package', result['id'], owner, result)
+            work.update(package_id=result['id'], package_sha256=result['sha256'], last_activity=now(), last_error=None)
+            if work['state'] != 'closed': work['state'] = 'ready'
+            tx.put('local_work', work['id'], owner, work)
+            result = {'package_id': result['id'], 'package_sha256': result['sha256']}
+        elif operation['kind'] == 'submit':
+            result = self.commit_accounts(tx, current, result)
+        current.update(state='accepted' if operation['kind'] == 'submit' else 'succeeded', result=result, completed_at=now())
+        for key in ('report', 'account_ids', 'reused_account_ids'):
+            if key in result: current[key] = result[key]
+        tx.put('research_operation', operation['id'], owner, current)
+        self.release_pin_if_idle(tx, owned(tx, 'local_work', operation['local_work_id'], owner)['data'])
+
     def run_operation(self, operation_id):
         token = uid()
         with self.repo.transaction() as tx:
@@ -579,16 +665,22 @@ class ResearchWorkService:
             if operation['state'] == 'running' and operation.get('lease_until', '') > now(): return
             operation.update(state='running', lease_token=token, lease_until=deadline(900), attempt=operation['attempt'] + 1)
             tx.put('research_operation', operation_id, row['owner'], operation)
+        settled = []
+        def finalize(tx, current, result):
+            # Query, import and export commit their records, this result and the pin release in one fence.
+            self.settle(tx, operation, row['owner'], current, result); settled.append(True)
         try:
-            with self.repo.read_transaction() as tx: authorize_commit(tx, operation)
+            if operation['kind'] not in SELF_AUTHORIZING:
+                with self.repo.read_transaction() as tx: authorize_commit(tx, operation)
             if operation['kind'] == 'prepare': result = self.prepare(operation)
-            elif operation['kind'] == 'query': result = self.query(operation)
-            elif operation['kind'] == 'import': result = self.import_sources(operation)
+            elif operation['kind'] == 'query': result = self.query(operation, finalize=finalize)
+            elif operation['kind'] == 'import': result = self.import_sources(operation, finalize=finalize)
             elif operation['kind'] == 'export':
                 from .research_execution import export_context
-                result = export_context(self, operation)
+                result = export_context(self, operation, finalize=finalize)
             elif operation['kind'] in ('validate', 'submit'): result = self.validate(operation)
             else: raise Problem(422, 'INVALID_OPERATION', 'Unknown research operation.')
+            if settled: return
             with self.repo.transaction() as tx:
                 current = tx.get('research_operation', operation_id)['data']
                 if current.get('lease_token') != token: return
@@ -596,20 +688,7 @@ class ResearchWorkService:
                 if operation['kind'] == 'export':
                     from .research_execution import authorize_context_selection
                     authorize_context_selection(tx, row['owner'], operation['local_work_id'], operation['research_request_id'], operation['arguments'])
-                if operation['kind'] == 'prepare':
-                    work = owned(tx, 'local_work', operation['local_work_id'], row['owner'])['data']
-                    tx.put('research_package', result['id'], row['owner'], result)
-                    work.update(package_id=result['id'], package_sha256=result['sha256'], last_activity=now(), last_error=None)
-                    if work['state'] != 'closed': work['state'] = 'ready'
-                    tx.put('local_work', work['id'], row['owner'], work)
-                    result = {'package_id': result['id'], 'package_sha256': result['sha256']}
-                elif operation['kind'] == 'submit':
-                    result = self.commit_accounts(tx, current, result)
-                current.update(state='accepted' if operation['kind'] == 'submit' else 'succeeded', result=result, completed_at=now())
-                for key in ('report', 'account_ids', 'reused_account_ids'):
-                    if key in result: current[key] = result[key]
-                tx.put('research_operation', operation_id, row['owner'], current)
-                self.release_pin_if_idle(tx, owned(tx, 'local_work', operation['local_work_id'], row['owner'])['data'])
+                self.settle(tx, operation, row['owner'], current, result)
         except Exception as error:
             from .scientific_account_lint import AccountValidationError
             scientific_error = isinstance(error, AccountValidationError)
@@ -633,13 +712,13 @@ class ResearchWorkService:
                     if work['state'] != 'closed': work['state'] = 'preparation_failed'
                     work['last_error'] = current['error']; tx.put('local_work', work['id'], row['owner'], work)
 
-    def query(self, operation):
+    def query(self, operation, *, finalize=None):
         from .research_execution import capture_query
-        return capture_query(self, operation)
+        return capture_query(self, operation, finalize=finalize)
 
-    def import_sources(self, operation):
+    def import_sources(self, operation, *, finalize=None):
         from .research_execution import import_sources
-        return import_sources(self, operation)
+        return import_sources(self, operation, finalize=finalize)
 
     def validate(self, operation):
         from .research_execution import validate_submission

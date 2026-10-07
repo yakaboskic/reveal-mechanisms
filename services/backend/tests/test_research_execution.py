@@ -193,17 +193,21 @@ class ResearchExecutionTests(unittest.TestCase):
     def test_stale_import_worker_cannot_commit_or_overwrite_a_receipt(self):
         artifact=self.service.retain(self.owner,self.work_id,b'A captured local result.','result.txt',purpose='evidence')
         operation=self.operation('stale-import','import',{'artifact_ids':[artifact['id']]})
-        retain=execution.retain_context
+        stage=execution.stage_context
         def supersede(*args,**kwargs):
-            result=retain(*args,**kwargs)
+            result=stage(*args,**kwargs)
             with self.repo.transaction() as tx:
                 current=tx.get('research_operation',operation['id'])['data']; current['lease_token']='new-worker'
                 tx.put('research_operation',operation['id'],self.owner,current)
             return result
-        with patch.object(execution,'retain_context',side_effect=supersede):
+        with self.repo.read_transaction() as tx: before=len(tx.list('research_artifact',self.owner))
+        with patch.object(execution,'stage_context',side_effect=supersede):
             with self.assertRaises(Problem) as failure: execution.import_sources(self.service,operation)
         self.assertEqual(failure.exception.code,'STALE_OPERATION')
-        with self.repo.read_transaction() as tx: self.assertIsNone(tx.get('evidence_import',operation['id']))
+        with self.repo.read_transaction() as tx:
+            self.assertIsNone(tx.get('evidence_import',operation['id']))
+            # Staged artifacts commit only with the record that cites them.
+            self.assertEqual(len(tx.list('research_artifact',self.owner)),before)
 
 
 if __name__ == '__main__':

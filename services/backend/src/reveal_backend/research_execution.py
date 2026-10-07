@@ -8,7 +8,7 @@ import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor
 
-from .auth import Problem, owned
+from .auth import Problem, owned, require_owned
 from .repository import digest, now
 from .evidence_package import canonical_json, sha256
 from .runtime_config import ROOT, artifacts_root, mysql_connection, setting
@@ -92,25 +92,42 @@ def read_artifact_bytes(artifact):
     return raw
 
 
-def retain_context(service, operation, context):
+def stage_context(service, operation, context, storage, staged):
+    """Assign a capture's files the artifact ids retain() would, uploading only new blobs; the caller's
+    commit fence inserts the staged descriptors (service.commit_staged) with the record that cites them."""
     context = deepcopy(context); files = context.pop('files', {})
     context['artifact_ids'] = {}
     for relative, data in files.items():
         if not isinstance(data, bytes): raise ValueError('Capture file must contain bytes')
-        artifact = service.retain(operation['owner_user_id'], operation['local_work_id'], data, relative,
+        artifact = service.stage(operation['owner_user_id'], operation['local_work_id'], data, relative, storage=storage,
             metadata={'research_request_id': operation['research_request_id']})
+        staged.setdefault(artifact['id'], artifact)
         context['artifact_ids'][relative] = artifact['id']
     return context
 
 
-def capture_query(service, operation):
+def current_lease(tx, operation, authority, *, leased=False):
+    """This operation's row from the commit fence's batched read, if it still holds the caller's lease.
+    leased also requires the caller to hold a lease token at all."""
+    row = require_owned(tx, 'research_operation', operation['id'], operation['owner_user_id'],
+        authority['records'].get(('research_operation', operation['id'])))
+    if ((leased and not operation.get('lease_token')) or row['data'].get('lease_token') != operation.get('lease_token')
+            or row['data']['state'] != 'running'):
+        raise Problem(409, 'STALE_OPERATION', 'Another worker resumed this research operation.')
+    return row['data']
+
+
+def capture_query(service, operation, *, finalize=None):
+    """One read before the query and one fence after it: artifacts, receipt and (with finalize) the
+    operation's result commit together, re-authorized under the lease."""
     from .acceptance import public_runtime
     from .research_data import ReferenceQueryService, SmallModelBioIndex
-    args = operation['arguments']; owner = operation['owner_user_id']
+    args = operation['arguments']; owner = operation['owner_user_id']; identity = operation['id']
     with measure('research_query', 'context_read'), service.repo.read_transaction() as tx:
-        work = owned(tx, 'local_work', operation['local_work_id'], owner)['data']
-        previous = tx.get('evidence_receipt', operation['id'])
-        request = owned(tx, 'request', work['research_request_id'], owner)['data']
+        authority = authorize_commit(tx, operation, extra=(('evidence_receipt', identity),))
+        work, request = authority['work'], authority['request']
+        previous = authority['records'].get(('evidence_receipt', identity))
+        storage = {} if previous else service.retained_storage(tx, owner, work['id'])
     def response(receipt):
         context = receipt['context']
         return {'receipt_id': receipt['id'], 'source_mode': receipt['source_mode'], 'source': receipt['source'],
@@ -133,21 +150,23 @@ def capture_query(service, operation):
             capture = query_service.query(name, args.get('arguments', {}), generation_id=work['reference_generation_id'])
     with measure('research_query', 'materialization'):
         context = capture.materialize(public_runtime())
+    staged = {}
     with measure('research_query', 'retention'):
-        context = retain_context(service, operation, context)
+        context = stage_context(service, operation, context, storage, staged)
     receipt = {'id': operation['id'], 'local_work_id': work['id'], 'research_request_id': work['research_request_id'],
         'operation': name, 'arguments': args.get('arguments', {}), 'source_mode': capture.source_mode,
         'source': capture.source, 'result': capture.result, 'context': context, 'created_at': now(),
         'sha256': sha256(capture.raw)}
     with measure('research_query', 'receipt_commit'), service.repo.transaction() as tx:
-        authorize_commit(tx, operation)
-        current = owned(tx, 'research_operation', operation['id'], owner)['data']
-        if current.get('lease_token') != operation.get('lease_token') or current['state'] != 'running':
-            raise Problem(409, 'STALE_OPERATION', 'Another worker resumed this research operation.')
-        previous = tx.get('evidence_receipt', operation['id'])
-        if previous: return response(previous['data'])
-        tx.put('evidence_receipt', receipt['id'], owner, receipt)
-    return response(receipt)
+        authority = authorize_commit(tx, operation, extra=(('research_operation', identity), ('evidence_receipt', identity)))
+        current = current_lease(tx, operation, authority)
+        previous = authority['records'].get(('evidence_receipt', identity))
+        if previous: result = response(previous['data'])
+        else:
+            tx.insert_many(service.commit_staged(tx, owner, work['id'], staged) + [('evidence_receipt', identity, owner, receipt)])
+            result = response(receipt)
+        if finalize: finalize(tx, current, result)
+    return result
 
 
 def load_context(service, owner, work_id, arguments, *, artifact_records=None, timings=None):
@@ -242,28 +261,33 @@ def write_context(directory, package, files):
     return target
 
 
-def import_sources(service, operation):
+def import_sources(service, operation, *, finalize=None):
     from .evidence_imports import materialize_import
     args = operation['arguments']; owner = operation['owner_user_id']; work_id = operation['local_work_id']
+    identity = operation['id']
     def response(record):
         return {'import_id': record['id'], 'sources': record.get('sources', []), 'context': record['context'], 'verification': 'user_supplied'}
     with service.repo.read_transaction() as tx:
-        authorize_commit(tx, operation)
-        previous = tx.get('evidence_import', operation['id'])
+        authority = authorize_commit(tx, operation, extra=(('evidence_import', identity),))
+        previous = authority['records'].get(('evidence_import', identity))
         if previous:
             if previous['owner'] != owner: raise Problem(404, 'NOT_FOUND', 'The evidence import is unavailable.')
             authorize_import(tx, owner, previous['data'])
             return response(previous['data'])
-    package, _, inherited_reuse = load_context(service, owner, work_id, args)
-    contexts = []; imported = []
-    for number, artifact_id in enumerate(args['artifact_ids']):
-        with service.repo.read_transaction() as tx:
-            artifact = owned(tx, 'research_artifact', artifact_id, owner)['data']
+        storage = service.retained_storage(tx, owner, work_id)
+    package, input_files, inherited_reuse = load_context(service, owner, work_id, args)
+    contexts = []; imported = []; staged = {}; uploads = []
+    with service.repo.read_transaction() as tx:
+        rows = tx.get_records([('research_artifact', artifact_id) for artifact_id in args['artifact_ids']])
+        for artifact_id in args['artifact_ids']:
+            artifact = require_owned(tx, 'research_artifact', artifact_id, owner, rows.get(('research_artifact', artifact_id)))['data']
             if artifact['local_work_id'] != work_id or artifact['purpose'] != 'evidence':
                 raise Problem(404, 'NOT_FOUND', 'This evidence upload is unavailable.')
+            uploads.append(artifact)
+    for number, (artifact_id, artifact) in enumerate(zip(args['artifact_ids'], uploads)):
         context = materialize_import(artifact['filename'], user_inputs.read(artifact['storage']), args.get('metadata'),
             inputs=[{'dapper_context': package['dapper_context']}], import_id=operation['id']+'-'+str(number))
-        context = retain_context(service, operation, context); contexts.append(context)
+        context = stage_context(service, operation, context, storage, staged); contexts.append(context)
         imported.append({'artifact_id': artifact_id, 'source_ids': context['eligible_source_ids']})
     from .acceptance import build_validation_context
     combined = build_validation_context(package, contexts=contexts)
@@ -281,42 +305,46 @@ def import_sources(service, operation):
         merged['source_artifacts'] = combined['source_artifacts']
         merged['eligible_source_ids'] = combined['validation_context']['eligible_source_ids']
         merged['cfde_source_ids'] = combined['validation_context']['cfde_source_ids']
-        _, input_files, _ = load_context(service, owner, work_id, args)
         for relative, raw in input_files.items():
-            artifact = service.retain(owner, work_id, raw, relative, metadata={
+            artifact = service.stage(owner, work_id, raw, relative, storage=storage, metadata={
                 'research_request_id': operation['research_request_id'], 'reuse_receipt_ids': inherited_reuse['receipt_ids']})
+            staged.setdefault(artifact['id'], artifact)
             merged['artifact_ids'][relative] = artifact['id']
     record = {'id': operation['id'], 'local_work_id': work_id, 'research_request_id': operation['research_request_id'],
         'context': merged, 'declared_metadata': args.get('metadata', {}), 'created_at': now(), 'status': 'completed',
         'reuse_receipt_ids': inherited_reuse['receipt_ids'] if args.get('metadata', {}).get('origin') == 'locally_derived' else [],
         'sources': imported}
     with service.repo.transaction() as tx:
-        authorize_commit(tx, operation)
-        current = owned(tx, 'research_operation', operation['id'], owner)['data']
-        if (not operation.get('lease_token') or current.get('lease_token') != operation['lease_token']
-                or current['state'] != 'running'):
-            raise Problem(409, 'STALE_OPERATION', 'Another worker resumed this research operation.')
-        previous = tx.get('evidence_import', operation['id'])
+        authority = authorize_commit(tx, operation, extra=(('research_operation', identity), ('evidence_import', identity)))
+        current = current_lease(tx, operation, authority, leased=True)
+        previous = authority['records'].get(('evidence_import', identity))
         if previous:
             if previous['owner'] != owner: raise Problem(404, 'NOT_FOUND', 'The evidence import is unavailable.')
             authorize_import(tx, owner, previous['data'])
-            return response(previous['data'])
-        authorize_import(tx, owner, record)
-        tx.put('evidence_import', record['id'], owner, record)
-    return response(record)
+            result = response(previous['data'])
+        else:
+            authorize_import(tx, owner, record)
+            tx.insert_many(service.commit_staged(tx, owner, work_id, staged) + [('evidence_import', identity, owner, record)])
+            result = response(record)
+        if finalize: finalize(tx, current, result)
+    return result
 
 
-def export_context(service, operation):
-    """Build one durable closure without retaining copies of immutable seed blobs."""
+def export_context(service, operation, *, finalize=None):
+    """Build one durable closure without retaining copies of immutable seed blobs.
+
+    Its artifact descriptors commit in one fence with the selection's authorization (and, with finalize,
+    the operation's result), never one fenced transaction per borrowed source.
+    """
     owner, work_id = operation['owner_user_id'], operation['local_work_id']
     arguments = operation['arguments']; timings = {}; records = {}
     with service.repo.read_transaction() as tx:
-        authorize_commit(tx, operation)
-        work = owned(tx, 'local_work', work_id, owner)['data']
+        work = authorize_commit(tx, operation)['work']
+        storage = service.retained_storage(tx, owner, work_id)
     package, files, reused = load_context(service, owner, work_id, arguments,
         artifact_records=records, timings=timings)
     metadata = {'research_request_id': work['research_request_id'], 'reuse_receipt_ids': reused['receipt_ids']}
-    artifacts = []; started = time.monotonic()
+    artifacts = []; borrowed = {}; started = time.monotonic()
     for source in package['source_artifacts'].values():
         filename = source['path']; original = records.get(filename)
         if original and original.get('id'):
@@ -325,22 +353,20 @@ def export_context(service, operation):
             # Borrowed sources retain their original storage handle and dependency
             # authority. A content blob is never copied merely to export it.
             record = original['reused_record']
-            storage = record.get('storage') or {'store': 'filesystem', 'key': record['path'],
+            reference = record.get('storage') or {'store': 'filesystem', 'key': record['path'],
                 'sha256': source['sha256'], 'size_bytes': source['size_bytes']}
             artifact = {'id': digest([work_id, 'closure-source', filename, source['sha256'], metadata]),
                 'local_work_id': work_id, 'filename': filename, 'sha256': source['sha256'],
-                'size_bytes': source['size_bytes'], 'storage': storage, 'purpose': 'validation-context',
+                'size_bytes': source['size_bytes'], 'storage': reference, 'purpose': 'validation-context',
                 'metadata': metadata, 'retained_record': deepcopy(record), 'created_at': now()}
-            with service.repo.transaction() as tx:
-                authorize_commit(tx, operation)
-                authorize_context_selection(tx, owner, work_id, work['research_request_id'], arguments)
-                tx.put('research_artifact', artifact['id'], owner, artifact)
+            borrowed[artifact['id']] = artifact
         descriptor = service.artifact_view(artifact)
         descriptor.update(artifact_id=artifact['id'], filename=filename, path=filename,
             format=source.get('format', 'binary'), dapper_file_id=source['dapper_file_id'])
         artifacts.append(descriptor)
     raw = canonical_json(package)
-    artifact = service.retain(owner, work_id, raw, 'evidence-package.json', purpose='validation-context', metadata=metadata)
+    artifact = service.stage(owner, work_id, raw, 'evidence-package.json', storage=storage,
+        purpose='validation-context', metadata=metadata)
     package_descriptor = {**service.artifact_view(artifact), 'artifact_id': artifact['id'],
         'path': 'evidence-package.json', 'format': 'json'}
     artifacts.append(package_descriptor)
@@ -355,6 +381,14 @@ def export_context(service, operation):
         'reuse_receipt_ids': context['reuse_receipt_ids'], 'artifacts': artifacts,
         'package_artifact': package_descriptor, 'manifest': manifest, 'phase_timings_ms': timings}
     timings['response_construction_ms'] = round((time.monotonic()-started)*1000, 3)
+    with service.repo.transaction() as tx:
+        authority = authorize_commit(tx, operation, extra=[('research_operation', operation['id'])] +
+            [('research_artifact', identity) for identity in borrowed])
+        current = current_lease(tx, operation, authority)
+        authorize_context_selection(tx, owner, work_id, work['research_request_id'], arguments)
+        for identity, value in borrowed.items(): tx.put('research_artifact', identity, owner, value)
+        tx.insert_many(service.commit_staged(tx, owner, work_id, {artifact['id']: artifact}))
+        if finalize: finalize(tx, current, result)
     return result
 
 

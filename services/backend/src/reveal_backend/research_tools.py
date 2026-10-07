@@ -10,7 +10,7 @@ from jsonschema import Draft202012Validator
 
 from .auth import Problem, owned
 from .repository import digest, now, uid
-from .research_work import authenticate, idempotent, public_base, work_records, MAX_ARTIFACT_BYTES
+from .research_work import authenticate, idempotent, operation_counts, public_base, MAX_ARTIFACT_BYTES
 from . import user_inputs
 
 STRING = {'type': 'string', 'minLength': 1, 'maxLength': 1000}
@@ -370,9 +370,8 @@ def dispatch(service, authorization, name, arguments, *, rate_key=None, on_opera
             if name == 'retry_operation':
                 operation = check_child(tx, 'research_operation', arguments['operation_id'], authority)
                 if operation['state'] != 'failed': raise Problem(409, 'RETRY_NOT_AVAILABLE', 'Only failed infrastructure operations can retry the same input.')
-                pending = sum(r['data']['state'] in ('received','running')
-                              for r in work_records(tx, 'research_operation', owner, work['id']))
-                if pending >= 8: raise Problem(429, 'RESEARCH_BUSY', 'Wait for pending operations to finish.')
+                if operation_counts(tx, owner, work['id'])[1] >= 8:
+                    raise Problem(429, 'RESEARCH_BUSY', 'Wait for pending operations to finish.')
                 operation.update(state='received', error=None, grant_id=authority['grant']['grant_id'], owner_user_id=owner)
                 operation.pop('lease_token', None); operation.pop('lease_until', None)
                 tx.put('research_operation', operation['id'], owner, operation)
@@ -407,10 +406,10 @@ def dispatch(service, authorization, name, arguments, *, rate_key=None, on_opera
                     request = owned(tx, 'request', work['research_request_id'], owner)['data']
                     validate_graph(body['operation_id'], body['arguments'],
                         selected_graphs=request.get('composer', {}).get('selected_kgs', []))
-            operations = work_records(tx, 'research_operation', owner, work['id'])
-            if len(operations) >= 300: raise Problem(429, 'RESEARCH_BUDGET_EXCEEDED', 'This work reached its operation budget.')
-            if sum(r['data']['state'] in ('received', 'running') for r in operations) >= 8:
-                raise Problem(429, 'RESEARCH_BUSY', 'Wait for pending operations to finish.')
+            # Counted in SQL: stored results never cross the wire under the write fence.
+            total, pending = operation_counts(tx, owner, work['id'])
+            if total >= 300: raise Problem(429, 'RESEARCH_BUDGET_EXCEEDED', 'This work reached its operation budget.')
+            if pending >= 8: raise Problem(429, 'RESEARCH_BUSY', 'Wait for pending operations to finish.')
             operation = service.enqueue(tx, owner, work, kind, body, authority['grant']['grant_id'])
             work.update(last_activity=now(), last_action=name); tx.put('local_work', work['id'], owner, work)
             return {'operation_id': operation['id'], 'submission_id': operation['id'] if kind in ('validate', 'submit') else None, 'state': 'received'}

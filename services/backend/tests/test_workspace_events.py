@@ -214,6 +214,18 @@ class WorkspaceEventsTests(unittest.TestCase):
         for private in ('private-token', 'private-science', 'private-grant', 'private-report', 'private-account', 'private-lease'):
             self.assertNotIn(private, json.dumps(replay))
 
+    def test_enqueued_submission_inserts_without_a_pre_read_and_still_invalidates_runs(self):
+        from reveal_backend.research_work import ResearchWorkService
+        work = {'id': 'local-run', 'state': 'ready', 'research_request_id': 'request'}
+        with self.repo.transaction() as tx: tx.put('local_work', 'local-run', 'alice', work)
+        before = self.replay()[2]
+        with self.repo.transaction() as tx:
+            submission = ResearchWorkService(self.repo).enqueue(tx, 'alice', work, 'validate', {}, None)
+            query = ResearchWorkService(self.repo).enqueue(tx, 'alice', work, 'query', {}, None)
+        self.assertEqual([item['entity_id'] for item in self.replay(positions=before)[1]], [submission['id']])
+        with self.repo.read_transaction() as tx:
+            self.assertEqual(tx.get('research_operation', query['id'])['version'], 1)
+
     def test_hosted_or_unowned_research_operations_do_not_emit_local_run_events(self):
         before, other = self.replay()[2], self.replay('bob')[2]
         with patch.object(notifications, 'publish') as publish:
