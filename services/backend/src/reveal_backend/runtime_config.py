@@ -138,14 +138,15 @@ class _ReferenceRead:
             finally: self._slots.release()
 
 
-def reference_mysql_connection():
+def reference_mysql_connection(*, timeout_seconds=None):
     """Imported reference reads (factor pages, research data tools, assessments) on the application pool,
     capped at half of it so Repository transactions keep their sessions. Importers, migrations and the catalog
-    cold load keep direct connections."""
+    cold load keep direct connections. timeout_seconds bounds only a direct connect (pool size 0 or 1); a pooled
+    borrower bounds its reads with limit()."""
     from .mysql_pool import DatabaseBusy
     global _reference_slots
     maximum = int(setting('REVEAL_MYSQL_POOL_SIZE', '10'))
-    if maximum <= 1: return mysql_connection()
+    if maximum <= 1: return mysql_connection(**({'timeout_seconds': timeout_seconds} if timeout_seconds is not None else {}))
     cap = maximum // 2
     with _application_pool_lock:
         if _reference_slots is None or _reference_slots[0] != cap: _reference_slots = (cap, threading.BoundedSemaphore(cap))

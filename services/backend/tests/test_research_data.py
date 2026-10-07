@@ -1,5 +1,6 @@
 """Real SQL against retained-generation fixtures; no external scientific fetches."""
 from copy import deepcopy
+import hashlib
 import io
 import json
 from pathlib import Path
@@ -14,6 +15,7 @@ from reveal_backend.auth import Problem
 from reveal_backend.evidence_package import DapperRuntime, EvidenceBuildError, canonical_json, decode, sha256
 from reveal_backend.research_data import ReferenceQueryService, SmallModelBioIndex
 from reveal_backend.research_seed import prepare_research_seed, validate_seed_shape
+from reveal_backend.repository import digest
 from reveal_backend.runtime_config import ROOT, CURRENT_DAPPER_SNAPSHOT
 
 GEN='a'*64
@@ -35,7 +37,9 @@ class Cursor:
 
 
 class Connection:
-    def __init__(self,path,queries): self.c=sqlite3.connect(path); self.queries=queries
+    def __init__(self,path,queries):
+        self.c=sqlite3.connect(path); self.queries=queries
+        self.c.create_function('SHA2',2,lambda value,bits: hashlib.sha256(value.encode()).hexdigest() if value is not None else None)
     def cursor(self): return Cursor(self.c,self.queries)
     def close(self): self.c.close()
     def rollback(self): self.c.rollback()
@@ -50,7 +54,7 @@ class ReferenceQueryTests(unittest.TestCase):
             c.executescript('''
 CREATE TABLE reference_generations(generation_id TEXT,kind TEXT,model TEXT,status TEXT,eaggl_import_id TEXT,legacy_mapping_run_id TEXT,legacy_gene_set_import_id TEXT,manifest TEXT);
 CREATE TABLE reference_factors(generation_id TEXT,factor_key TEXT,public_id TEXT,eaggl_factor_id TEXT,kpn_trait_id TEXT,label TEXT,source_revision TEXT,metadata TEXT);
-CREATE TABLE eaggl_factors(import_id TEXT,factor_index INTEGER,factor_id TEXT,trait TEXT,label TEXT,input_sha256 TEXT,metadata TEXT);
+CREATE TABLE eaggl_factors(import_id TEXT,factor_index INTEGER,factor_id TEXT,trait TEXT,label TEXT,input_sha256 TEXT,metadata TEXT,factor_id_sha256 TEXT);
 CREATE TABLE eaggl_genes(import_id TEXT,gene_index INTEGER,symbol TEXT);
 CREATE TABLE eaggl_gene_loadings(import_id TEXT,factor_index INTEGER,gene_index INTEGER,loading REAL);
 CREATE TABLE cfde_gene_sets(generation_id TEXT,gene_set_id TEXT,collection_id TEXT,gene_set_name TEXT,library TEXT,n_genes INTEGER,n_genes_in_eaggl_universe INTEGER,metadata TEXT);
@@ -69,7 +73,7 @@ CREATE TABLE dapper_objects(id TEXT,payload TEXT);
                     (generation,'kpn-eaggl-capped','eaggl-capped-v1',status,IMP,None,None,'{"source_release":"fixture"}'))
                 c.execute('INSERT INTO reference_factors VALUES(?,?,?,?,?,?,?,?)',
                     (generation,KEY,FACTOR,'T2D::Factor1','KPN.TRAIT:0000398','retained' if generation==GEN else 'WRONG ACTIVE','e'*64,'{}'))
-            c.execute('INSERT INTO eaggl_factors VALUES(?,?,?,?,?,?,?)',(IMP,1,'T2D::Factor1','T2D','label','e'*64,'{}'))
+            c.execute('INSERT INTO eaggl_factors VALUES(?,?,?,?,?,?,?,?)',(IMP,1,'T2D::Factor1','T2D','label','e'*64,'{}',hashlib.sha256(b'T2D::Factor1').hexdigest()))
             for i,(symbol,loading) in enumerate([('GENE_A',.8),('GENE_B',.8),('literal%_',.1)]):
                 c.execute('INSERT INTO eaggl_genes VALUES(?,?,?)',(IMP,i,symbol))
                 c.execute('INSERT INTO eaggl_gene_loadings VALUES(?,?,?,?)',(IMP,1,i,loading))
@@ -136,6 +140,22 @@ CREATE TABLE dapper_objects(id TEXT,payload TEXT);
         self.assertEqual(self.query('resolve_gene',{'gene':'absent'}).result['status'],'empty')
         with self.assertRaises(Problem): self.query('query_sql',{'sql':'SELECT 1'})
         with self.assertRaises(Problem): self.query('search_genes',{'model':'small'})
+
+    def test_kpn_factor_lookup_uses_unique_keys_and_matches_the_exact_text_join(self):
+        from reveal_backend import research_data
+        connection = Connection(self.path, self.queries)
+        for identity in (FACTOR, KEY, 'T2D::Factor1', 'absent'):
+            with self.subTest(identity=identity):
+                indexed = self.service._kpn_factors(connection, GEN, IMP, [identity])
+                text = self.service._rows(connection, research_data.KPN_FACTOR_TEXT_JOIN, [IMP, GEN, identity, identity, identity],
+                                          research_data.KPN_FACTOR_COLUMNS)
+                self.assertEqual(indexed, text)
+        self.assertNotIn(' OR ', self.queries[0][0])
+        # An import keyed another way (e.g. a canonical-JSON digest) is still found, through the exact text join.
+        with sqlite3.connect(self.path) as c: c.execute('UPDATE eaggl_factors SET factor_id_sha256=?', (digest('T2D::Factor1'),))
+        self.assertEqual([row['factor_index'] for row in self.service._kpn_factors(connection, GEN, IMP, [FACTOR])], [1])
+        self.assertEqual(self.query('get_factor', {'factor_id': FACTOR}).result['items'][0]['factor_index'], 1)
+        connection.close()
 
     def test_gene_factors_join_from_the_gene_with_or_without_the_symbol_index(self):
         capture=self.query('get_gene_factors',{'gene':'GENE_A'})

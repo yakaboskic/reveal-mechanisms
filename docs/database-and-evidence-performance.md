@@ -202,6 +202,21 @@ instead of ranking the factor a second time. Measured from the laptop on
 seconds on a warm pool with nothing cached, and no database work once cached;
 a searched loadings page took 1.99, 0.85 and 0.34 seconds.
 
+A research factor lookup resolves its id through the unique keys on
+`reference_factors` and joins the import row by its SHA-256 factor id, instead
+of an `OR` that scanned all 4,037 factors of the generation and of the import
+(about 12 ms of server time per call). A CFDE assessment build reads its
+generation once and all of its KPN anchors at once: one statement for the
+factors, one for every anchor's top 50 genes and one for every anchor's top 50
+gene sets, each still bounded per anchor and ordered exactly as before. With
+the gene-set definitions and collections that is six `SELECT`s on one pooled
+session for any number of anchors, instead of 48 for five anchors (93 for
+ten) on a new TLS connection. The build's deadline bounds each socket read on
+the borrowed session and is restored before the session returns to the pool;
+past the deadline the session is dropped, never returned. Measured read-only
+for five real anchors on one connection from the laptop: the anchor reads took
+7.1-8.2 seconds before and 0.5-0.8 seconds after, with identical rows.
+
 The catalog reads the active reference generation and the active Vector
 snapshot together, in one statement, and pins that snapshot with the loaded
 generation. Semantic search and suggestions therefore read no pointer at all

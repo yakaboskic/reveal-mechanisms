@@ -15,11 +15,12 @@ from .auth import Problem
 from .evidence_package import canonical_json, sha256
 from .reference_generation import GENERATION_RE, KPN_MODEL
 from .research_data import ReferenceQueryService
-from .runtime_config import mysql_connection
+from .runtime_config import reference_mysql_connection
 from . import user_inputs
 
 FORMAT = 'reveal.cfde-assessment-state/1'
 TOP_N = 50
+BATCHED_MODELS = {KPN_MODEL}  # models whose anchors are read with factor_tops (three statements for every anchor)
 GENE_COLUMNS = ['symbol', 'gene_index', 'loading']
 SET_COLUMNS = ['gene_set_id', 'joint_loading', 'marginal_loading', 'joint_loading_text', 'marginal_loading_text',
                'joint_rank', 'marginal_rank', 'is_joint_top_factor']
@@ -57,14 +58,18 @@ def _remaining(deadline):
 
 
 class _DeadlineConnection:
-    """Timeouts apply only to this direct reference connection, never the pool."""
+    """Socket reads and writes end by the deadline: a pooled reference borrower applies it with limit() and restores
+    the pool's timeouts before release; a direct connection takes it on its own timeouts."""
     def __init__(self, connection, deadline):
         self.connection, self.deadline = connection, deadline
 
     def check(self):
         remaining = _remaining(self.deadline)
-        for attribute in ('_read_timeout', '_write_timeout'):
-            if hasattr(self.connection, attribute): setattr(self.connection, attribute, remaining)
+        limit = getattr(self.connection, 'limit', None)
+        if limit: limit(remaining)
+        else:
+            for attribute in ('_read_timeout', '_write_timeout'):
+                if hasattr(self.connection, attribute): setattr(self.connection, attribute, remaining)
 
     def cursor(self):
         self.check()
@@ -77,8 +82,9 @@ class _DeadlineConnection:
         self.check(); self.connection.rollback()
 
     def close(self):
-        if self.deadline is not None and time.monotonic() >= self.deadline and hasattr(self.connection, '_force_close'):
-            self.connection._force_close()
+        # Past the deadline a pooled session is dropped (never returned unsettled) and a direct one closed locally.
+        drop = getattr(self.connection, 'discard', None) or getattr(self.connection, '_force_close', None)
+        if self.deadline is not None and time.monotonic() >= self.deadline and drop: drop()
         else: self.connection.close()
 
 
@@ -389,7 +395,7 @@ def build_state(catalog, composer, inputs, *, connection_factory=None, deadline=
     if any(inputs.get(key, '') != composer.get(key, '') for key in user_inputs.INPUT_FIELDS) or \
             [item['id'] for item in inputs.get('uploads', [])] != composer.get('upload_ids', []):
         raise Problem(409, 'INPUT_REVISION_CHANGED', 'Resolved user inputs differ from the current composer.')
-    budget = Budget(); base_factory = connection_factory or (lambda: mysql_connection(timeout_seconds=_remaining(deadline)))
+    budget = Budget(); base_factory = connection_factory or (lambda: reference_mysql_connection(timeout_seconds=_remaining(deadline)))
     with _reference_connection(base_factory, deadline) as connection:
         return _read_state(catalog, snapshot, composer, inputs, gap, generation, budget,
                            lambda: connection, deadline)
@@ -398,7 +404,7 @@ def build_state(catalog, composer, inputs, *, connection_factory=None, deadline=
 def _read_state(catalog, snapshot, composer, inputs, gap, generation, budget, factory, deadline):
     # Cursors never leave the assembler. A per-call signing key avoids reading
     # application credentials simply to inspect a bounded first page.
-    reader = ReferenceQueryService(factory, cursor_secret=secrets.token_bytes(32))
+    reader = ReferenceQueryService(factory, cursor_secret=secrets.token_bytes(32), single_snapshot=True)
     connection = factory()
     try: pins = reader._generation(connection, generation)
     finally:
@@ -418,10 +424,21 @@ def _read_state(catalog, snapshot, composer, inputs, gap, generation, budget, fa
             'source': _source(gap, import_id=snapshot.dismech_import, commit=getattr(snapshot, 'source_commit', None))},
         'dismech': _dismech(snapshot, gap, budget), 'factors': [], 'user_inputs': _inputs(inputs, budget, deadline)}
     gene_count = set_count = 0; set_ids = set()
+    batched = snapshot.model in BATCHED_MODELS
+    if batched:
+        connection = factory()
+        try: exacts, tops = reader.factor_tops(connection, {'generation_id': generation, 'eaggl_import_id': pins['eaggl_import_id']},
+                                               [selection['reference']['source_id'] for selection in composer['eaggl_anchors']], TOP_N)
+        finally:
+            try: connection.rollback()
+            finally: connection.close()
     for selection in composer['eaggl_anchors']:
         _remaining(deadline)
         reference = selection['reference']; identity = reference['source_id']; record = snapshot.factors[identity]
-        exact = reader.query('get_factor', {'factor_id': identity, 'limit': 1}, generation_id=generation).result['items']
+        if batched:
+            exact = exacts[identity]
+            if isinstance(exact, Problem): raise exact
+        else: exact = reader.query('get_factor', {'factor_id': identity, 'limit': 1}, generation_id=generation).result['items']
         if not exact or (snapshot.model == KPN_MODEL and exact[0]['source_revision'] != reference['source_revision']):
             raise Problem(409, 'SOURCE_REVISION_CHANGED', 'A selected factor differs from its pinned imported revision.')
         factor = {'id': identity, 'dapper_id': record['object']['id'], 'source_revision': reference['source_revision'],
@@ -434,12 +451,15 @@ def _read_state(catalog, snapshot, composer, inputs, gap, generation, budget, fa
                 factor[target] = {'columns': columns, 'rows': [], 'status': 'numeric_loadings_not_stored'}
                 budget.absent(identity + ':numeric_gene_set_loadings')
                 continue
-            capture = reader.query('get_factor_loadings', {'factor_id': identity, 'kind': kind,
-                'metric': 'joint', 'limit': TOP_N}, generation_id=generation)
-            result = capture.result; items = result['items']
+            if batched: result = tops[(identity, kind)]; origin = result['origin']
+            else:
+                capture = reader.query('get_factor_loadings', {'factor_id': identity, 'kind': kind,
+                    'metric': 'joint', 'limit': TOP_N}, generation_id=generation)
+                result, origin = capture.result, capture.source['origin']
+            items = result['items']
             factor[target] = {'columns': columns, 'rows': [[row.get(key) for key in columns] for row in items],
                 'status': result['status'], 'has_more': result['truncated'], 'coverage': result.get('import_coverage'),
-                'source': capture.source['origin']}
+                'source': origin}
             if not items: budget.absent(identity + ':' + kind + '_loadings')
             if kind == 'gene': gene_count += len(items)
             else:

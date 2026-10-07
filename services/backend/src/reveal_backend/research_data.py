@@ -47,6 +47,25 @@ METRICS = {
 }
 
 
+KPN_FACTOR_COLUMNS = ('factor_key', 'public_id', 'eaggl_factor_id', 'kpn_trait_id', 'label', 'source_revision', 'metadata', 'factor_index')
+# A KPN factor by any of its ids: three unique-key lookups, then the import row by factor_lookup (SHA-256 of the
+# id, as the importer writes it). The OR form below scans every factor of the generation and of the import.
+KPN_FACTOR_LOOKUP = ('SELECT f.factor_key,f.public_id,f.eaggl_factor_id,f.kpn_trait_id,f.label,f.source_revision,f.metadata,e.factor_index'
+    ' FROM (SELECT factor_key FROM reference_factors WHERE generation_id=%s AND public_id IN ({marks})'
+    ' UNION SELECT factor_key FROM reference_factors WHERE generation_id=%s AND factor_key IN ({marks})'
+    ' UNION SELECT factor_key FROM reference_factors WHERE generation_id=%s AND eaggl_factor_id IN ({marks})) k'
+    ' JOIN reference_factors f ON f.generation_id=%s AND f.factor_key=k.factor_key'
+    ' LEFT JOIN eaggl_factors e ON e.import_id=%s AND e.factor_id_sha256=SHA2(f.eaggl_factor_id,256) AND e.factor_id=f.eaggl_factor_id')
+KPN_FACTOR_TEXT_JOIN = ('SELECT f.factor_key,f.public_id,f.eaggl_factor_id,f.kpn_trait_id,f.label,f.source_revision,f.metadata,e.factor_index'
+    ' FROM reference_factors f JOIN eaggl_factors e ON e.import_id=%s AND e.factor_id=f.eaggl_factor_id'
+    ' WHERE f.generation_id=%s AND (f.public_id=%s OR f.factor_key=%s OR f.eaggl_factor_id=%s)')
+KPN_FACTOR_TABLES = ['reference_factors', 'eaggl_factors']
+GENE_LOADING_TABLES, SET_LOADING_TABLES = ['eaggl_gene_loadings', 'eaggl_genes'], ['factor_gene_set_projections', 'cfde_gene_sets']
+GENE_ORDER, SET_ORDER = 'l.loading DESC,g.symbol,g.gene_index', 'p.joint_loading DESC,s.gene_set_id'
+SET_COLUMNS = ('gene_set_id', 'name', 'library', 'joint_loading', 'marginal_loading', 'joint_loading_text',
+               'marginal_loading_text', 'joint_rank', 'marginal_rank', 'is_joint_top_factor')
+
+
 def _json(value):
     return decode(value.encode() if isinstance(value, str) else value) if isinstance(value, (str, bytes)) else deepcopy(value)
 
@@ -174,10 +193,18 @@ class QueryCapture:
 
 
 class ReferenceQueryService:
-    def __init__(self, connection_factory, *, cursor_secret=None, max_capture_bytes=MAX_CAPTURE_BYTES):
+    def __init__(self, connection_factory, *, cursor_secret=None, max_capture_bytes=MAX_CAPTURE_BYTES, single_snapshot=False):
         self.connection_factory = connection_factory
         self.cursor_secret = cursor_secret.encode() if isinstance(cursor_secret, str) else cursor_secret
         self.max_capture_bytes = max_capture_bytes
+        # single_snapshot: every read of this instance shares one read view (an assessment build), so a generation row
+        # or factor lookup it already made is reused, as a copy, instead of read again.
+        self._memo = {} if single_snapshot else None
+
+    def _remembered(self, key, read):
+        if self._memo is None: return read()
+        if key not in self._memo: self._memo[key] = read()
+        return deepcopy(self._memo[key])
 
     @staticmethod
     def _rows(connection, sql, parameters, columns):
@@ -197,10 +224,80 @@ class ReferenceQueryService:
         if not isinstance(identity, str) or not GENERATION_RE.fullmatch(identity):
             raise Problem(422, 'INVALID_QUERY', 'An exact reference generation is required.')
         columns = ('generation_id', 'kind', 'model', 'status', 'eaggl_import_id', 'legacy_mapping_run_id', 'legacy_gene_set_import_id', 'manifest')
-        rows = self._rows(connection, 'SELECT ' + ','.join(columns) + ' FROM reference_generations WHERE generation_id=%s', [identity], columns)
+        rows = self._remembered(('generation', identity), lambda: self._rows(connection,
+            'SELECT ' + ','.join(columns) + ' FROM reference_generations WHERE generation_id=%s', [identity], columns))
         if not rows or rows[0]['status'] not in ('complete', 'superseded'):
             raise Problem(409, 'SOURCE_UNAVAILABLE', 'The pinned reference generation is not retained for research queries.')
         return rows[0]
+
+    def _kpn_factors(self, connection, generation, import_id, identities):
+        """reference_factors rows matching any of identities, each with its import factor_index. Rows of an import
+        not keyed by SHA-256(factor_id) are read again with the exact text join, per identity."""
+        found = self._rows(connection, KPN_FACTOR_LOOKUP.format(marks=','.join(['%s'] * len(identities))),
+                           [generation, *identities] * 3 + [generation, import_id], KPN_FACTOR_COLUMNS)
+        if all(row['factor_index'] is not None for row in found): return found
+        return [row for identity in identities for row in self._rows(connection, KPN_FACTOR_TEXT_JOIN,
+                [import_id, generation, identity, identity, identity], KPN_FACTOR_COLUMNS)]
+
+    def _bounded(self, result, limit):
+        """query()'s row and byte budget, in place: at most limit items (the rest flagged truncated), and the status."""
+        items = result.get('items', [])
+        has_more = result.pop('_more', False)
+        if len(items) > limit: items, has_more = items[:limit], True
+        result['items'] = items
+        # Bound serialized bytes as well as row count. Oversize singular
+        # authoritative objects are unavailable; never truncate their identity.
+        while len(canonical_json(result)) > self.max_capture_bytes - 20_000 and items:
+            items.pop(); has_more = True
+        if has_more and not items:
+            result.update(status='unavailable', reason='record_exceeds_capture_budget'); has_more = False
+        result.setdefault('status', 'partial' if has_more else 'complete' if items else 'empty')
+        return items, has_more
+
+    def factor_tops(self, connection, generation, identities, limit):
+        """What query('get_factor') and query('get_factor_loadings', kind=gene|gene_set, metric='joint', limit=limit)
+        return for each KPN identity, read in three statements for every identity instead of nine each: the
+        factors, then the top genes and the top gene sets of all of them (one bounded branch per factor). For each
+        identity: its factor items, or the Problem query() would raise, then per kind the result's items, status,
+        truncated, import_coverage and origin. Call it only inside the caller's single read view."""
+        for identity in identities: _text(identity, 'factor_id')
+        gen, imp = generation['generation_id'], generation['eaggl_import_id']
+        rows = self._kpn_factors(connection, gen, imp, identities)
+        factors, found = {}, []
+        for identity in identities:
+            matches = [row for row in rows if identity in (row['public_id'], row['factor_key'], row['eaggl_factor_id'])]
+            if not matches:  # an id the exact SQL comparison may still match: the single lookup decides
+                matches = self._kpn_factors(connection, gen, imp, [identity])
+            if len(matches) > 1:
+                factors[identity] = Problem(409, 'AMBIGUOUS_IDENTITY', 'The imported factor identifier is ambiguous.'); continue
+            result = {'items': deepcopy(matches[:1]), 'import_coverage': 'Exact imported factor metadata. Crosswalks describe routing correspondence, not scientific equivalence.'}
+            factors[identity] = self._bounded(result, 1)[0]
+            if factors[identity]: found.append((identity, factors[identity][0]))
+        tops = {}
+        for kind, tables, coverage, order, columns, branch, final in (
+                ('gene', GENE_LOADING_TABLES, GENE_COVERAGE, GENE_ORDER, ('symbol', 'gene_index', 'loading'),
+                 'SELECT %s AS anchor,g.symbol,g.gene_index,l.loading FROM eaggl_gene_loadings l JOIN eaggl_genes g'
+                 ' ON g.import_id=l.import_id AND g.gene_index=l.gene_index WHERE l.import_id=%s AND l.factor_index=%s', 'loading DESC,symbol,gene_index'),
+                ('gene_set', SET_LOADING_TABLES, SET_COVERAGE, SET_ORDER, SET_COLUMNS,
+                 'SELECT %s AS anchor,s.gene_set_id,s.gene_set_name,s.library,p.joint_loading,p.marginal_loading,p.joint_loading_text,'
+                 'p.marginal_loading_text,p.joint_rank,p.marginal_rank,p.is_joint_top_factor FROM factor_gene_set_projections p'
+                 ' JOIN cfde_gene_sets s ON s.generation_id=p.generation_id AND s.gene_set_id=p.gene_set_id'
+                 ' WHERE p.generation_id=%s AND p.scope=%s AND p.factor_key=%s', 'joint_loading DESC,gene_set_id')):
+            if not found: break
+            # query() filters LOWER(name) LIKE '%%' for an empty search: true for every NOT NULL symbol and set name.
+            sql = ' UNION ALL '.join('SELECT * FROM (' + branch + ' ORDER BY ' + order + ' LIMIT %s) a' + str(position)
+                                     for position in range(len(found))) + ' ORDER BY anchor,' + final
+            parameters = [value for position, (_, item) in enumerate(found) for value in
+                          ((position, imp, item['factor_index']) if kind == 'gene' else (position, gen, 'per_trait', item['factor_key'])) + (limit + 1,)]
+            grouped = [[] for _ in found]
+            for row in self._rows(connection, sql, parameters, ('anchor', *columns)):
+                grouped[row.pop('anchor')].append(row)
+            for (identity, _), items in zip(found, grouped):
+                result = {'items': items, 'import_coverage': coverage, 'ordering': order, 'total_rows': None}
+                items, truncated = self._bounded(result, limit)
+                tops[(identity, kind)] = {'items': items, 'status': result['status'], 'truncated': truncated, 'import_coverage': coverage,
+                    'origin': 'mysql:' + '+'.join(['reference_generations', *KPN_FACTOR_TABLES, *tables]) + '?generation_id=' + gen}
+        return factors, tops
 
     def catalog(self, generation_id):
         connection = self.connection_factory()
@@ -246,17 +343,7 @@ class ReferenceQueryService:
         try:
             generation = self._generation(connection, generation_id)
             result, tables = self._execute(connection, generation, operation, args, limit, offset)
-            items = result.get('items', [])
-            has_more = result.pop('_more', False)
-            if len(items) > limit: items, has_more = items[:limit], True
-            result['items'] = items
-            # Bound serialized bytes as well as row count. Oversize singular
-            # authoritative objects are unavailable; never truncate their identity.
-            while len(canonical_json(result)) > self.max_capture_bytes - 20_000 and items:
-                items.pop(); has_more = True
-            if has_more and not items:
-                result.update(status='unavailable', reason='record_exceeds_capture_budget'); has_more = False
-            result.setdefault('status', 'partial' if has_more else 'complete' if items else 'empty')
+            items, has_more = self._bounded(result, limit)
             result.update(returned_rows=len(items), limit=limit, offset=offset, truncated=has_more,
                           next_cursor=self._cursor(binding, offset + len(items)) if has_more else None)
             source = {'origin': 'mysql:' + '+'.join(tables) + '?generation_id=' + generation_id,
@@ -297,17 +384,17 @@ class ReferenceQueryService:
         def factor(identity):
             _text(identity, 'factor_id')
             if kpn:
-                columns = ('factor_key', 'public_id', 'eaggl_factor_id', 'kpn_trait_id', 'label', 'source_revision', 'metadata', 'factor_index')
-                found = rows('SELECT f.factor_key,f.public_id,f.eaggl_factor_id,f.kpn_trait_id,f.label,f.source_revision,f.metadata,e.factor_index'
-                    ' FROM reference_factors f JOIN eaggl_factors e ON e.import_id=%s AND e.factor_id=f.eaggl_factor_id'
-                    ' WHERE f.generation_id=%s AND (f.public_id=%s OR f.factor_key=%s OR f.eaggl_factor_id=%s)',
-                    [imp, gen, identity, identity, identity], columns, ['reference_factors', 'eaggl_factors'])
+                for table in KPN_FACTOR_TABLES:
+                    if table not in tables: tables.append(table)
+                found = self._remembered(('factor', gen, identity), lambda: self._kpn_factors(c, gen, imp, [identity]))
             else:
                 columns = ('factor_index', 'eaggl_factor_id', 'trait', 'label', 'source_revision', 'metadata', 'public_id', 'mapping')
-                found = rows('SELECT e.factor_index,e.factor_id,e.trait,e.label,e.input_sha256,e.metadata,l.cfde_node_id,l.payload'
+                found = self._remembered(('factor', gen, identity), lambda: rows('SELECT e.factor_index,e.factor_id,e.trait,e.label,e.input_sha256,e.metadata,l.cfde_node_id,l.payload'
                     ' FROM eaggl_factors e LEFT JOIN eaggl_cfde_factor_links l ON l.run_id=%s AND l.factor_index=e.factor_index'
                     ' WHERE e.import_id=%s AND (e.factor_id=%s OR l.cfde_node_id=%s)',
-                    [g['legacy_mapping_run_id'], imp, identity, identity], columns, ['eaggl_factors', 'eaggl_cfde_factor_links'])
+                    [g['legacy_mapping_run_id'], imp, identity, identity], columns, ['eaggl_factors', 'eaggl_cfde_factor_links']))
+                for table in ('eaggl_factors', 'eaggl_cfde_factor_links'):
+                    if table not in tables: tables.append(table)
             if len(found) > 1: raise Problem(409, 'AMBIGUOUS_IDENTITY', 'The imported factor identifier is ambiguous.')
             return found[0] if found else None
         search = a.get('q', '').lower().replace('!', '!!').replace('%', '!%').replace('_', '!_')

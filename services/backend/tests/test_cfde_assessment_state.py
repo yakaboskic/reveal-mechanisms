@@ -133,8 +133,8 @@ class AssessmentStateTests(unittest.TestCase):
                 self.composer['eaggl_anchors'].append({'reference': reference})
                 c.execute('INSERT INTO reference_factors VALUES(?,?,?,?,?,?,?,?)',
                     (references.GEN, key, identity, 'T2D::Factor' + str(number), 'KPN.TRAIT:0000398', 'factor', 'e' * 64, '{}'))
-                c.execute('INSERT INTO eaggl_factors VALUES(?,?,?,?,?,?,?)',
-                    (references.IMP, number, 'T2D::Factor' + str(number), 'T2D', 'factor', 'e' * 64, '{}'))
+                c.execute('INSERT INTO eaggl_factors VALUES(?,?,?,?,?,?,?,?)',
+                    (references.IMP, number, 'T2D::Factor' + str(number), 'T2D', 'factor', 'e' * 64, '{}', sha256(('T2D::Factor' + str(number)).encode())))
             for index in range(3, 53):
                 c.execute('INSERT INTO eaggl_genes VALUES(?,?,?)', (references.IMP, index, f'GENE_{index}'))
                 identity = 'dapper:GeneSet.' + str(index).zfill(32)
@@ -154,13 +154,85 @@ class AssessmentStateTests(unittest.TestCase):
         self.assertEqual(len(built['state']['collections']), 1)
         self.assertLess(len(canonical_json(built['state'])), 50_000)
 
+    def add_factors(self, count, genes=60):
+        """count more KPN anchors (the first with over 50 genes and sets), sharing gene sets."""
+        with sqlite3.connect(self.fixture.path) as c:
+            for number in range(2, count + 2):
+                identity = references.FACTOR.replace('Factor1', 'Factor' + str(number))
+                key = references.KEY.replace('Factor1', 'Factor' + str(number))
+                record = deepcopy(self.catalog.factors[references.FACTOR]); record['source_id'] = identity
+                record['object']['id'] = 'dapper:Mechanism.' + str(number); self.catalog.factors[identity] = record
+                self.composer['eaggl_anchors'].append({'reference': {'source': 'eaggl', 'source_id': identity,
+                    'source_revision': 'e' * 64, 'dapper_id': record['object']['id']}})
+                c.execute('INSERT INTO reference_factors VALUES(?,?,?,?,?,?,?,?)',
+                    (references.GEN, key, identity, 'T2D::Factor' + str(number), 'KPN.TRAIT:0000398', 'factor', 'e' * 64, '{}'))
+                c.execute('INSERT INTO eaggl_factors VALUES(?,?,?,?,?,?,?,?)',
+                    (references.IMP, number, 'T2D::Factor' + str(number), 'T2D', 'factor', 'e' * 64, '{}', sha256(('T2D::Factor' + str(number)).encode())))
+                for index in range(3, 3 + (genes if number == 2 else 5)):
+                    c.execute('INSERT OR IGNORE INTO eaggl_genes VALUES(?,?,?)', (references.IMP, index, f'GENE_{index:03}'))
+                    c.execute('INSERT INTO eaggl_gene_loadings VALUES(?,?,?,?)', (references.IMP, number, index, round(1 / (index + number), 6)))
+                    identity_set = 'dapper:GeneSet.' + str(index).zfill(32)
+                    c.execute('INSERT OR IGNORE INTO cfde_gene_sets VALUES(?,?,?,?,?,?,?,?)', (references.GEN, identity_set, 'collection',
+                        f'set {index}', 'GO', 10, 9, json.dumps({'dapper_gene_set': {'id': identity_set, 'name': f'set {index}', 'members': ['GENE_A']}})))
+                    c.execute('INSERT INTO factor_gene_set_projections VALUES(?,?,?,?,?,?,?,?,?,?,?)', (references.GEN, 'per_trait', key,
+                        identity_set, .5 if index % 7 else .25, .1, '0.5', '0.1', index, index + 1, 0))
+
+    def test_batched_anchor_reads_build_the_identical_state_in_six_selects(self):
+        self.add_factors(4)
+        with patch.object(assessment, 'BATCHED_MODELS', set()):
+            per_anchor = self.build(); per_anchor_queries = len(self.fixture.queries)
+        del self.fixture.queries[:]
+        batched = self.build()
+        self.assertEqual(canonical_json(batched), canonical_json(per_anchor))
+        self.assertTrue(batched['state']['factors'][1]['genes']['has_more'])
+        self.assertEqual(len(self.fixture.queries), 6)  # generation, factors, genes, gene sets, definitions, collections
+        self.assertGreaterEqual(per_anchor_queries, 6 + 2 * 5)  # memoized per-anchor reads: two loading reads per anchor
+        self.assertFalse(any(' OR ' in sql for sql, _ in self.fixture.queries))
+
+    def test_batched_anchor_errors_match_the_per_anchor_reads(self):
+        self.add_factors(2)
+        second = self.composer['eaggl_anchors'][1]['reference']['source_id']
+        with sqlite3.connect(self.fixture.path) as c:  # a third factor whose EAGGL id is the second anchor's public id
+            c.execute('INSERT INTO reference_factors VALUES(?,?,?,?,?,?,?,?)',
+                (references.GEN, 'KPN.TRAIT:0000398::Factor9', references.FACTOR.replace('Factor1', 'Factor9'), second, 'KPN.TRAIT:0000398', 'x', 'e' * 64, '{}'))
+            c.execute('INSERT INTO eaggl_factors VALUES(?,?,?,?,?,?,?,?)', (references.IMP, 9, second, 'T2D', 'x', 'e' * 64, '{}', sha256(second.encode())))
+        for models in (set(), {KPN_MODEL}):
+            with self.subTest(batched=bool(models)), patch.object(assessment, 'BATCHED_MODELS', models):
+                with self.assertRaises(Problem) as caught: self.build()
+                self.assertEqual(caught.exception.code, 'AMBIGUOUS_IDENTITY')
+        with sqlite3.connect(self.fixture.path) as c: c.execute("DELETE FROM reference_factors WHERE factor_key='KPN.TRAIT:0000398::Factor9'")
+        self.composer['eaggl_anchors'][2]['reference']['source_revision'] = '0' * 64
+        self.catalog.factors[self.composer['eaggl_anchors'][2]['reference']['source_id']]['source_revision'] = '0' * 64
+        for models in (set(), {KPN_MODEL}):
+            with self.subTest(batched=bool(models)), patch.object(assessment, 'BATCHED_MODELS', models):
+                with self.assertRaises(Problem) as caught: self.build()
+                self.assertEqual(caught.exception.code, 'SOURCE_REVISION_CHANGED')
+
+    def test_pooled_borrower_takes_the_deadline_and_is_dropped_once_it_passes(self):
+        class Borrowed(references.Connection):
+            def __init__(self, *args): super().__init__(*args); self.limits, self.ended = [], []
+            def limit(self, seconds): self.limits.append(seconds)
+            def close(self): self.ended.append('close'); super().close()
+            def discard(self): self.ended.append('discard'); super().close()
+        borrowed = Borrowed(self.fixture.path, self.fixture.queries)
+        with patch.object(assessment, 'reference_mysql_connection', return_value=borrowed):
+            assessment.build_state(self.catalog, self.composer, self.inputs, deadline=time.monotonic() + 5)
+        self.assertTrue(borrowed.limits and all(0 < seconds <= 5 for seconds in borrowed.limits))
+        self.assertEqual(borrowed.ended, ['close'])  # settled: the adaptor rolls back and returns it to the pool
+        expiring = Borrowed(self.fixture.path, self.fixture.queries)
+        with patch.object(assessment, 'reference_mysql_connection', return_value=expiring), \
+             patch.object(assessment.time, 'monotonic', side_effect=[0, 0, 0, 0, 0] + [100] * 50):
+            with self.assertRaises(Problem) as caught:
+                assessment.build_state(self.catalog, self.composer, self.inputs, deadline=10)
+        self.assertEqual((caught.exception.code, expiring.ended), ('CFDE_ASSESSMENT_TIMEOUT', ['discard']))
+
     def test_concurrent_cutover_cannot_mix_catalogs(self):
-        original = assessment.ReferenceQueryService.query
-        def query(reader, *args, **kwargs):
+        original = assessment.ReferenceQueryService.factor_tops
+        def factor_tops(reader, *args, **kwargs):
             result = original(reader, *args, **kwargs)
             self.catalog.reference_generation_id = references.OTHER
             return result
-        with patch.object(assessment.ReferenceQueryService, 'query', query):
+        with patch.object(assessment.ReferenceQueryService, 'factor_tops', factor_tops):
             with self.assertRaises(Problem) as caught: self.build()
         self.assertEqual(caught.exception.code, 'SOURCE_REVISION_CHANGED')
 
@@ -274,7 +346,7 @@ class AssessmentStateTests(unittest.TestCase):
         self.assertEqual(result['coverage']['gene_set_loading_count'], 1)
 
     def test_expired_deadline_does_no_catalog_or_source_work(self):
-        with patch.object(self.catalog, 'load') as load, patch.object(assessment, 'mysql_connection') as connect:
+        with patch.object(self.catalog, 'load') as load, patch.object(assessment, 'reference_mysql_connection') as connect:
             with self.assertRaises(Problem) as caught:
                 assessment.build_state(self.catalog, self.composer, self.inputs, deadline=time.monotonic() - 1)
         self.assertEqual(caught.exception.code, 'CFDE_ASSESSMENT_TIMEOUT')
@@ -307,7 +379,7 @@ class AssessmentStateTests(unittest.TestCase):
 
     def test_all_readers_share_one_connection_and_release_once(self):
         connection = self.tracked_connection()
-        with patch.object(assessment, 'mysql_connection', return_value=connection) as factory:
+        with patch.object(assessment, 'reference_mysql_connection', return_value=connection) as factory:
             built = assessment.build_state(self.catalog, self.composer, self.inputs, deadline=time.monotonic() + 10)
         factory.assert_called_once()
         self.assertGreater(factory.call_args.kwargs['timeout_seconds'], 0)
