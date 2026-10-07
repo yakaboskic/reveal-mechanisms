@@ -137,6 +137,16 @@ CREATE TABLE dapper_objects(id TEXT,payload TEXT);
         with self.assertRaises(Problem): self.query('query_sql',{'sql':'SELECT 1'})
         with self.assertRaises(Problem): self.query('search_genes',{'model':'small'})
 
+    def test_gene_factors_join_from_the_gene_with_or_without_the_symbol_index(self):
+        capture=self.query('get_gene_factors',{'gene':'GENE_A'})
+        statement=next(sql for sql,_ in reversed(self.queries) if 'FROM eaggl_genes g JOIN' in sql)
+        self.assertTrue(statement.startswith('SELECT /*+ JOIN_ORDER(g, l, f) */ '))
+        self.assertEqual(capture.result['items'],[{'factor_id':'T2D::Factor1','trait':'T2D','label':'label','loading':.8}])
+        self.assertEqual(self.query('get_gene_factors',{'gene':'urn:reveal:eaggl-gene:'+IMP+':0'}).result['status'],'empty')
+        # Migration 010 only adds the (import_id, symbol prefix) index online; the reader never depends on it.
+        sql='\n'.join(line for line in (ROOT/'schema/migrations/010_eaggl_gene_symbol_index.sql').read_text().splitlines() if not line.startswith('--'))
+        self.assertEqual(sql.strip(),'ALTER TABLE eaggl_genes ADD INDEX eaggl_genes_symbol (import_id, symbol(64)), ALGORITHM=INPLACE, LOCK=NONE;')
+
     def test_gene_crosswalk_requires_taxon_and_preserves_source_scope(self):
         from reveal_backend.gene_identity import MAPPING_REVISION
         with sqlite3.connect(self.path) as c:

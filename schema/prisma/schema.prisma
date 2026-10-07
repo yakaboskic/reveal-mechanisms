@@ -331,6 +331,7 @@ model EagglGene {
   eaggl_imports       EagglImport        @relation(fields: [import_id], references: [import_id], onDelete: NoAction, onUpdate: NoAction, map: "eaggl_genes_ibfk_1")
 
   @@id([import_id, gene_index])
+  @@index([import_id, symbol(length: 64)], map: "eaggl_genes_symbol")
   @@map("eaggl_genes")
 }
 

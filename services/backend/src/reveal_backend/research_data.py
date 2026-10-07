@@ -377,7 +377,9 @@ class ReferenceQueryService:
             return result,tables
         if op == 'get_gene_factors':
             gene = _text(a.get('gene'), 'gene')
-            return page('SELECT f.factor_id,f.trait,f.label,l.loading FROM eaggl_genes g JOIN eaggl_gene_loadings l'
+            # Gene first, whatever the optimizer guesses for the symbol filter: driven from eaggl_factors the plan
+            # reads every loading of the import (2.4M rows). A hint is a comment to SQLite and to older servers.
+            return page('SELECT /*+ JOIN_ORDER(g, l, f) */ f.factor_id,f.trait,f.label,l.loading FROM eaggl_genes g JOIN eaggl_gene_loadings l'
                 ' ON l.import_id=g.import_id AND l.gene_index=g.gene_index JOIN eaggl_factors f'
                 ' ON f.import_id=l.import_id AND f.factor_index=l.factor_index WHERE g.import_id=%s AND g.symbol=%s',
                 [imp,gene], ('factor_id','trait','label','loading'), ['eaggl_genes','eaggl_gene_loadings','eaggl_factors'],

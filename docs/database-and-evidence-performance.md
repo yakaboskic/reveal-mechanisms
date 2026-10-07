@@ -183,6 +183,19 @@ the processor warm: about 55 ms per APA render instead of about 2.4 seconds
 spent building the APA engine each time. The first APA render in a process
 still builds it once.
 
+## Reference reads
+
+The research `get_gene_factors` query joins from the gene by symbol, through
+the loadings' `(import_id, gene_index)` index, to its factors. A `JOIN_ORDER`
+hint fixes that order: unhinted, the optimizer's 10% guess for the TEXT symbol
+filter made it drive from all 4,037 factors and read every one of the import's
+2.4 million loadings (25-29 seconds cold in QA) to return a few dozen rows.
+Migration `010_eaggl_gene_symbol_index.sql` adds an online
+`(import_id, symbol(64))` index so the gene lookup reads one row instead of the
+import's 18,477 genes; `resolve_gene` uses it too. The reader is correct with
+or without the index, and migration 010 is applied by an operator, not by the
+application.
+
 Read-only measurements included transaction completion and pool reset:
 
 | Operation | Before | After |
