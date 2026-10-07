@@ -133,8 +133,10 @@ const browserSharing = (): StreamSharing => ({
 
 /**
  * One workspace stream per user and browser profile. The tab holding the user's Web Lock streams and rebroadcasts
- * what it applies on a BroadcastChannel; the other tabs apply that. Waiting for the lock and holding it both end
- * after a minute hidden, a closed tab releases it, and the next visible tab resumes from the last broadcast cursor.
+ * what it applies on a BroadcastChannel; the other tabs apply that. A tab hears only what is broadcast after it
+ * joins, and what it loaded before may predate that, so the first word it gets from a leader invalidates everything
+ * once, as its own stream's fresh replay would have. Waiting for the lock and holding it both end after a minute
+ * hidden, a closed tab releases it, and the next visible tab resumes from the last broadcast cursor.
  * Revocation reaches every tab, and none of those reconnects until its own identity changes. Without Web Locks or
  * BroadcastChannel (an insecure origin, an old browser) each tab streams for itself and still parks when hidden.
  */
@@ -142,7 +144,7 @@ export async function shareWorkspaceEvents(signal: AbortSignal, owner: string, h
   const { locks, channel: open, fetcher = fetch, page = documentVisibility() } = sharing;
   if (!locks || !open) return connectWorkspaceEvents(signal, handlers, fetcher, page);
   const channel = open(sharedName(owner));
-  let cursor = "", status: WorkspaceConnection = "connecting", leading = false, stopped = false, unusable = false;
+  let cursor = "", status: WorkspaceConnection = "connecting", leading = false, joined = false, stopped = false, unusable = false;
   let batch: (WorkspaceEvent | null)[] = [], term: ReturnType<typeof streamAttempt> | null = null, revokedAt = Infinity, yieldLock = () => {};
   const post = (message: Outgoing) => { try { channel.postMessage({ ...message, owner }); } catch { /* closed */ } };
   const flush = () => { if (batch.length) post({ type: "changes", events: batch, cursor }); batch = []; };
@@ -159,6 +161,7 @@ export async function shareWorkspaceEvents(signal: AbortSignal, owner: string, h
     if (data.type === "revoked") { if (!stopped) revoke(); return; }
     if (data.type === "hello") { if (leading) post({ type: "state", status, cursor }); else if (data.at > revokedAt) yieldLock(); return; }
     if (leading) return;
+    if (!joined) { joined = true; handlers.change(); }
     if (data.type === "state") { cursor = data.cursor; status = data.status; handlers.status(data.status); }
     if (data.type === "changes") { for (const event of data.events) handlers.change(event ?? undefined); cursor = data.cursor; }
   };
@@ -171,7 +174,8 @@ export async function shareWorkspaceEvents(signal: AbortSignal, owner: string, h
       try {
         await locks.request(sharedName(owner), { signal: attempt.signal }, async () => {
           if (attempt.signal.aborted || stopped) return;
-          leading = true;
+          // A tab that never heard a leader streams from "" and so replays everything itself.
+          leading = joined = true;
           try { await connectWorkspaceEvents(attempt.signal, lead, fetcher, alwaysVisible, cursor); } finally { leading = false; flush(); }
           // A revoked identity keeps the lock, so no tab that saw the revocation reconnects with it. A tab started
           // since (a new page) says hello after it and takes over.

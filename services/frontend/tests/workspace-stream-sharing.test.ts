@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
-import { announceSignOut, connectWorkspaceEvents, shareWorkspaceEvents, type StreamSharing, type WorkspaceConnection, type WorkspaceEvent } from "../src/lib/workspace-events";
+import { affectedWorkspaceTabs, announceSignOut, connectWorkspaceEvents, shareWorkspaceEvents, type StreamSharing, type WorkspaceConnection, type WorkspaceEvent } from "../src/lib/workspace-events";
 import { alwaysVisible, documentVisibility, parkHiddenAfterMs, type PageVisibility } from "../src/lib/page-visibility";
 
 const sample: WorkspaceEvent = { schema_version: 1, event_id: "scope:1", cursor: "1", scope: "workspace", event_type: "draft.changed", entity_id: "draft", entity_revision: 1, operation: "upsert", collections: ["drafts", "gaps"], committed_at: "2026-09-30T00:00:00Z" };
@@ -82,16 +82,17 @@ test("two tabs of one user hold one stream; the follower mirrors it and resumes 
   const following = shareWorkspaceEvents(closeB.signal, user, b.handlers, open(fetcher, alwaysVisible, shared)); await settle();
   assert.equal(opened.length, 1);
   opened[0].push(frame("workspace_change", change(1), "c1") + frame("ready", {}, "c2")); await settle();
-  assert.deepEqual(a.seen.changes, ["draft-1"]); assert.deepEqual(b.seen.changes, ["draft-1"]);
+  // B's first word from the leader invalidated everything once (undefined), as its own fresh replay would have.
+  assert.deepEqual(a.seen.changes, ["draft-1"]); assert.deepEqual(b.seen.changes, [undefined, "draft-1"]);
   assert.equal(b.seen.states.at(-1), "live");
   // A tab opened later learns the live status from the leader at once.
   const c = tab(), closeC = new AbortController();
   const late = shareWorkspaceEvents(closeC.signal, user, c.handlers, open(fetcher, alwaysVisible, shared)); await settle();
-  assert.equal(c.seen.states.at(-1), "live"); assert.equal(opened.length, 1);
+  assert.equal(c.seen.states.at(-1), "live"); assert.equal(opened.length, 1); assert.deepEqual(c.seen.changes, [undefined]);
   closeA.abort(); await leading; await settle();
   assert.equal(opened.length, 2); assert.equal(opened[1].cursor, "c2");
   opened[1].push(frame("workspace_change", change(2), "c3")); await settle();
-  assert.deepEqual(b.seen.changes, ["draft-1", "draft-2"]); assert.deepEqual(c.seen.changes, ["draft-2"]);
+  assert.deepEqual(b.seen.changes, [undefined, "draft-1", "draft-2"]); assert.deepEqual(c.seen.changes, [undefined, "draft-2"]);
   assert.deepEqual(a.seen.changes, ["draft-1"]);
   closeB.abort(); closeC.abort(); await Promise.all([following, late]);
 });
@@ -115,7 +116,24 @@ test("a replay burst reaches the other tabs as one message", async () => {
   opened[0].push(frame("workspace_change", change(1), "c1") + frame("workspace_change", change(2), "c2") + frame("workspace_change", change(3), "c3")); await settle();
   const batches = posted.filter(message => (message as { type: string }).type === "changes") as { events: WorkspaceEvent[]; cursor: string }[];
   assert.equal(batches.length, 1); assert.equal(batches[0].events.length, 3); assert.equal(batches[0].cursor, "c3");
-  assert.deepEqual(b.seen.changes, ["draft-1", "draft-2", "draft-3"]);
+  assert.deepEqual(b.seen.changes, [undefined, "draft-1", "draft-2", "draft-3"]);
+  close.abort(); await Promise.all(runs);
+});
+
+test("a tab that joins after a change it never heard invalidates every list once, then applies only what changes", async () => {
+  const user = owner(), { fetcher, opened } = server(), shared = locks();
+  const a = tab(), b = tab(), close = new AbortController();
+  const runs = [shareWorkspaceEvents(close.signal, user, a.handlers, open(fetcher, alwaysVisible, shared))]; await settle();
+  opened[0].push(frame("ready", {}, "c0")); await settle();
+  // Tab B loads its lists once its principal is known but joins only after GET /v1/me; draft-1 commits after its
+  // lists' snapshot and the leader broadcasts it before B joins.
+  opened[0].push(frame("workspace_change", change(1), "c1")); await settle();
+  runs.push(shareWorkspaceEvents(close.signal, user, b.handlers, open(fetcher, alwaysVisible, shared))); await settle();
+  assert.equal(opened.length, 1); assert.equal(b.seen.states.at(-1), "live");
+  assert.deepEqual(b.seen.changes, [undefined]);
+  assert.deepEqual(affectedWorkspaceTabs(undefined), ["drafts", "runs", "gaps", "accounts", "explorations"]);
+  opened[0].push(frame("workspace_change", change(2), "c2")); await settle();
+  assert.deepEqual(b.seen.changes, [undefined, "draft-2"]); assert.deepEqual(a.seen.changes, ["draft-1", "draft-2"]);
   close.abort(); await Promise.all(runs);
 });
 
@@ -168,12 +186,15 @@ test("a leader hidden for a minute hands the stream to a visible tab; hidden tab
   assert.equal(opened.length, 2); assert.equal(opened[0].signal.aborted, true); assert.equal(opened[1].cursor, "c1");
   pageA.show(); await settle();
   assert.equal(opened.length, 2);  // A follows again behind B
+  opened[1].push(frame("workspace_change", change(2), "c2")); await settle();
+  assert.deepEqual(a.seen.changes, ["draft-2"]);  // A streamed before, so following B needs no catch-up
+  assert.deepEqual(c.seen.changes, [undefined, "draft-2"]);
   pageB.hide(); pageB.park(); await settle();
   assert.equal(opened.length, 3);  // A takes over; C never queued while hidden
   pageA.hide(); pageA.park(); await settle();
   assert.equal(opened.length, 3); assert.equal(opened[2].signal.aborted, true);  // every tab hidden: no stream
   pageC.show(); await settle();
-  assert.equal(opened.length, 4); assert.equal(opened[3].cursor, "c1");
+  assert.equal(opened.length, 4); assert.equal(opened[3].cursor, "c2");
   close.abort(); await Promise.all(runs);
 });
 
