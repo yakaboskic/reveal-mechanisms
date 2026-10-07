@@ -31,14 +31,15 @@ def dapper_snapshot_for_pin(pin, *, root=ROOT):
 def setting(name, default=None):
     return os.environ.get(name, default)
 
-def mysql_connection(*, timeout_seconds=None):
+def mysql_connection(*, timeout_seconds=None, application_session=False):
     from .mysql_database import connect
     if not setting('REVEAL_MYSQL_PASSWORD'):
         raise RuntimeError('REVEAL_MYSQL_PASSWORD is required')
     return connect(host=setting('REVEAL_MYSQL_HOST', 'aurora-giant-bioindex.cluster-cxrzznxifeib.us-east-1.rds.amazonaws.com'),
         port=int(setting('REVEAL_MYSQL_PORT', '3306')), user=setting('REVEAL_MYSQL_USER', 'cyaka'),
         database=setting('REVEAL_MYSQL_DATABASE', 'cyaka_reveal_mechanisms'), ca_file=setting('REVEAL_MYSQL_CA_FILE') or None,
-        **({'timeout_seconds': timeout_seconds} if timeout_seconds is not None else {}))
+        **({'timeout_seconds': timeout_seconds} if timeout_seconds is not None else {}),
+        **({'application_session': True} if application_session else {}))
 
 
 _application_pool = None
@@ -62,33 +63,39 @@ def application_mysql_connection():
     from .mysql_pool import Pool
     from .runtime_metrics import measure
     global _application_pool, _application_pool_key
-    maximum = int(setting('REVEAL_MYSQL_POOL_SIZE', '4'))
+    maximum = int(setting('REVEAL_MYSQL_POOL_SIZE', '10'))
     if maximum == 0: return mysql_connection()
     wait = float(setting('REVEAL_MYSQL_POOL_WAIT_SECONDS', '5'))
+    # Idle expiry must stay a margin below the session wait_timeout: SQL is never replayed, so lending a
+    # session the server already killed would fail the next borrower.
+    idle = float(setting('REVEAL_MYSQL_POOL_IDLE_SECONDS', '240'))
+    lifetime = float(setting('REVEAL_MYSQL_POOL_LIFETIME_SECONDS', '3600'))
     clean_release = setting('REVEAL_MYSQL_POOL_CLEAN_RELEASE', '1') != '0'
     pipelined = setting('REVEAL_MYSQL_POOL_PIPELINED_RESET', '1') != '0'
-    if not 1 <= maximum <= 32 or not 0 < wait <= 30: raise ValueError('Invalid application database pool bounds')
+    if not (1 <= maximum <= 32 and 0 < wait <= 30 and 0 < idle <= db.SESSION_IDLE_KILL_SECONDS - 60
+            and idle <= lifetime <= 3600):
+        raise ValueError('Invalid application database pool bounds')
     ca_file = setting('REVEAL_MYSQL_CA_FILE') or None
     ca_revision = hashlib.sha256(Path(ca_file).read_bytes()).hexdigest() if ca_file else None
     database = setting('REVEAL_MYSQL_DATABASE', 'cyaka_reveal_mechanisms')
     # Never retain credentials in registry keys or diagnostic representations.
     key = (os.getpid(), setting('REVEAL_MYSQL_HOST'), setting('REVEAL_MYSQL_PORT'),
         setting('REVEAL_MYSQL_USER'), database, ca_file, ca_revision,
-        hashlib.sha256((setting('REVEAL_MYSQL_PASSWORD') or '').encode()).digest(), maximum, wait, clean_release, pipelined)
+        hashlib.sha256((setting('REVEAL_MYSQL_PASSWORD') or '').encode()).digest(), maximum, wait, idle, lifetime,
+        clean_release, pipelined)
     with _application_pool_lock:
         if _application_pool is None or key != _application_pool_key:
             if _application_pool is not None: _application_pool.close()
             reset_session = db.reset_application_session if pipelined else db.reset_application_session_sequential
             def factory():
-                connection = mysql_connection()
-                try: db.initialize_application_session(connection)
-                except BaseException:
-                    connection.close(); raise
-                return connection
+                with measure('database', 'CONNECT'): return mysql_connection(application_session=True)
             def reset(connection):
                 with measure('database', 'RESET'): reset_session(connection, database)
+            def validate(connection):
+                with measure('database', 'PING'): db.validate_idle_session(connection, 3)
             _application_pool = Pool(factory, reset, unchanged=db.application_session_unchanged if clean_release else None,
-                maximum=maximum, wait_seconds=wait)
+                validate=validate, maximum=maximum, wait_seconds=wait, idle_seconds=idle, lifetime_seconds=lifetime,
+                lifetime_jitter=0.1, validate_after_seconds=60)
             _application_pool_key = key
         pool = _application_pool
     return pool.acquire()

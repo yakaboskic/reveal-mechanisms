@@ -16,25 +16,37 @@ autocommit still off, and every statement on the lease was a plain `SELECT`,
 variables, user locks, temporary tables or similar session effects. Any other
 lease, including one with a failed statement, is reset: the MySQL session is
 reset, the configured database reselected, and transaction isolation, UTC,
-UTF-8 and autocommit settings restored, all in one pipelined round trip.
-Failed, interrupted or uncertain sessions are discarded; SQL is never
+UTF-8, autocommit and the session timeouts restored, all in one pipelined round
+trip. Failed, interrupted or uncertain sessions are discarded; SQL is never
 automatically replayed. Existing read-only snapshots, principal checks and
 exclusive write fences remain in use. Imports and migrations continue to use
-direct connections.
+direct connections and keep the server's session defaults.
+
+Pooled sessions wait at most 15 seconds for a row lock such as the global write
+fence (`innodb_lock_wait_timeout`), and the server ends a pooled session that
+sends nothing for 300 seconds (`wait_timeout`), which releases an orphaned fence
+holder within minutes rather than hours. Idle expiry therefore stays at or below
+240 seconds; connections idle longer than 60 seconds are checked with one
+`COM_PING` (3 second deadline) before reuse instead of being reconnected. Idle
+time includes host sleep.
 
 Optional process environment settings:
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
-| `REVEAL_MYSQL_POOL_SIZE` | `4` | Connections per process; `0` disables pooling, maximum `32`. |
+| `REVEAL_MYSQL_POOL_SIZE` | `10` | Connections per process; `0` disables pooling, maximum `32`. |
 | `REVEAL_MYSQL_POOL_WAIT_SECONDS` | `5` | Maximum wait for an available lease, up to `30` seconds. |
+| `REVEAL_MYSQL_POOL_IDLE_SECONDS` | `240` | Idle expiry; at most `240`, below the 300 second session `wait_timeout`. |
+| `REVEAL_MYSQL_POOL_LIFETIME_SECONDS` | `3600` | Connection lifetime, shortened per connection by up to 10% jitter; between the idle expiry and `3600`. |
 | `REVEAL_MYSQL_POOL_CLEAN_RELEASE` | `1` | `0` resets every returned connection. |
 | `REVEAL_MYSQL_POOL_PIPELINED_RESET` | `1` | `0` sends the three reset commands one round trip at a time, for example behind a proxy. |
 
-Idle connections expire after 60 seconds and all connections after five minutes.
 Changing database credentials, the CA file or these settings invalidates the
 process pool. The first request after startup or expiry still pays connection
-setup cost. Pooling does not cache private data, authorization decisions or
+setup cost. A new pooled connection sends its session settings with the
+handshake, and verified TLS is checked on the client from the completed,
+certificate- and host-verified handshake, so setup needs two statements instead
+of four. Pooling does not cache private data, authorization decisions or
 publication visibility.
 
 Scientific account reads batch account, publication and document-index records,
@@ -57,7 +69,8 @@ page-load benchmarks. The first pooled transaction measured 2.41 seconds.
 On 2026-10-07 (about 130 ms round trip from the development laptop), a warm
 one-query read transaction took a median 785 ms with the previous three-step
 reset, 523 ms with the pipelined reset on every return, and 408 ms with the
-clean return (20 interleaved samples each).
+clean return (20 interleaved samples each). A new pooled connection took 938 ms
+instead of 1,266 ms.
 
 ## Evidence collection
 

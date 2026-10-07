@@ -494,14 +494,20 @@ def test_initial_reference_connection_bounds_tls_verification(monkeypatch):
     from reveal_backend import mysql_database
     import pymysql
     monkeypatch.setenv('REVEAL_MYSQL_PASSWORD', 'isolated-test-password')
-    connection = MagicMock()
-    connection.cursor.return_value.__enter__.return_value.fetchone.return_value = ('Ssl_cipher', 'verified')
+    import ssl
+    connection = MagicMock(); connection._secure = True
+    connection._sock = MagicMock(spec=ssl.SSLSocket)  # the verified handshake itself proves TLS; no SHOW query
     connect = Mock(return_value=connection); monkeypatch.setattr(pymysql, 'connect', connect)
     mysql_database.connect(timeout_seconds=3)
     assert connect.call_args.kwargs['connect_timeout'] == 3
     assert connect.call_args.kwargs['read_timeout'] == 3
     assert connect.call_args.kwargs['write_timeout'] == 3
+    assert connect.call_args.kwargs['init_command'] is None and connect.call_args.kwargs['autocommit'] is False
     assert connection.reveal_verified_tls is True
+    connection.cursor.assert_not_called()
+    connection._sock = MagicMock()
+    with pytest.raises(ValueError, match='Verified TLS is required'): mysql_database.connect(timeout_seconds=3)
+    connection.close.assert_called_once()
 
 
 @pytest.mark.parametrize('variant', ['valid', 'nan', 'bad_choice', 'wrong_model', 'huge', 'redirect', 'timeout', 'provider_error', 'token_limit'])

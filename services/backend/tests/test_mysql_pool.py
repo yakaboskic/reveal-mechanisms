@@ -2,6 +2,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import socket
+import ssl
 import struct
 import tempfile
 import threading
@@ -11,9 +12,10 @@ from unittest.mock import MagicMock, patch
 
 import pymysql
 
+from reveal_backend import mysql_database
 from reveal_backend.mysql_pool import Pool, session_neutral
 from reveal_backend.mysql_database import (APPLICATION_SESSION_SQL, application_session_unchanged, reset_application_session,
-    reset_application_session_sequential)
+    reset_application_session_sequential, validate_idle_session)
 from reveal_backend.repository import Repository, Transaction
 from reveal_backend import runtime_config
 
@@ -249,6 +251,7 @@ class PoolTests(unittest.TestCase):
         with patch.dict('os.environ', {'REVEAL_MYSQL_POOL_SIZE': '1', 'REVEAL_MYSQL_PASSWORD': 'test-only-a', 'REVEAL_MYSQL_CA_FILE': ''}), \
                 patch.object(runtime_config, 'mysql_connection', side_effect=self.factory):
             first = runtime_config.application_mysql_connection(); first.commit(); first.close(); raw = self.created[-1]
+            self.assertEqual(self.factory_kwargs[-1], {'application_session': True})  # init_command, pooled only
             with patch.dict('os.environ', {'REVEAL_MYSQL_PASSWORD': 'test-only-b'}):
                 second = runtime_config.application_mysql_connection()
                 self.assertTrue(raw.closed); self.assertIsNot(second._entry.connection, raw)
@@ -370,7 +373,8 @@ class PipelinedResetTests(unittest.TestCase):
         self.assertTrue(frames.startswith(b'\x01\x00\x00\x00\x1f'))
         self.assertIn(b'\x02cyaka_expected', frames); self.assertTrue(frames.endswith(b'\x03' + APPLICATION_SESSION_SQL.encode()))
         self.assertEqual((raw.variables, raw.database, raw.reset_count, raw.reveal_session_defaults), ({}, 'cyaka_expected', 1, True))
-        for term in ("autocommit=0", "completion_type='NO_CHAIN'", "REPEATABLE-READ", "time_zone='+00:00'"):
+        for term in ("autocommit=0", "completion_type='NO_CHAIN'", "REPEATABLE-READ", "time_zone='+00:00'",
+                     "innodb_lock_wait_timeout=15", "wait_timeout=300"):
             self.assertIn(term, raw.sql[-1][0])
 
     def test_unsafe_preconditions_raise_before_writing(self):
@@ -441,7 +445,8 @@ class WireProtocolTests(unittest.TestCase):
         server = WireServer(b, fail_index); server.start(); self.servers.append(server); return connection
     def setUp(self): self.servers = []
     def pool(self, unchanged=application_session_unchanged):
-        pool = Pool(self.client, lambda c: reset_application_session(c, 'cyaka_expected'), unchanged=unchanged)
+        pool = Pool(self.client, lambda c: reset_application_session(c, 'cyaka_expected'), unchanged=unchanged,
+                    validate=lambda c: validate_idle_session(c, 1))
         self.addCleanup(pool.close); return pool
     def flights(self, run):
         before = self.servers[0].flights; run(); time.sleep(.05); return self.servers[0].flights - before
@@ -492,6 +497,66 @@ class WireProtocolTests(unittest.TestCase):
         connection.commit(); self.assertEqual(connection.server_status, 0)
         self.assertTrue(application_session_unchanged(connection))
 
+    def test_idle_validation_is_one_ping_with_a_short_deadline(self):
+        connection = self.client(); before = self.servers[0].flights
+        validate_idle_session(connection, 1); time.sleep(.05)
+        self.assertEqual(self.servers[0].flights - before, 1); self.assertEqual(self.servers[0].commands[-1][0], 0x0E)
+        self.assertEqual((connection._read_timeout, connection._write_timeout), (5, 5))
+
+
+class IdlePolicyTests(unittest.TestCase):
+    def setUp(self): self.created = []; self.clock = [0.0]; self.wall = [1000.0]
+    def factory(self):
+        connection = StatusConnection(); self.created.append(connection); return connection
+    def pool(self, **kwargs):
+        options = dict(unchanged=application_session_unchanged, validate=lambda c: validate_idle_session(c, 3),
+                       idle_seconds=240, lifetime_seconds=3600, validate_after_seconds=60,
+                       clock=lambda: self.clock[0], wall=lambda: self.wall[0])
+        options.update(kwargs)
+        pool = Pool(self.factory, lambda c: reset_application_session(c, 'cyaka_expected'), **options)
+        self.addCleanup(pool.close); return pool
+    def borrow(self, pool):
+        lease = pool.acquire(); lease.commit(); lease.close(); return lease._entry.connection
+    def advance(self, seconds, wall=None):
+        self.clock[0] += seconds; self.wall[0] += seconds if wall is None else wall
+
+    def test_recent_entries_skip_ping_long_idle_entries_get_one_and_expired_ones_reconnect(self):
+        pool = self.pool(); raw = self.borrow(pool)
+        self.advance(60); self.assertIs(self.borrow(pool), raw); self.assertEqual(raw.pings, 0)  # 0 RT hot path
+        self.advance(61); self.assertIs(self.borrow(pool), raw); self.assertEqual(raw.pings, 1)
+        self.assertEqual(raw.observed_timeouts, (3, 3)); self.assertEqual((raw._read_timeout, raw._write_timeout), (120, 120))
+        self.advance(240); fresh = self.borrow(pool)
+        self.assertIsNot(fresh, raw); self.assertTrue(raw.closed); self.assertEqual(raw.pings, 1)
+
+    def test_host_sleep_counts_as_idle_even_when_the_monotonic_clock_paused(self):
+        pool = self.pool(); raw = self.borrow(pool)
+        self.advance(0, wall=600)  # laptop slept; the server's wait_timeout kept counting
+        self.assertIsNot(self.borrow(pool), raw); self.assertTrue(raw.closed)
+        raw = self.created[-1]; self.advance(0, wall=90); self.borrow(pool); self.assertEqual(raw.pings, 1)
+
+    def test_failed_ping_discards_frees_capacity_and_connects_anew(self):
+        pool = self.pool(maximum=1); raw = self.borrow(pool); raw.ping_error = pymysql.err.OperationalError(2013, 'lost')
+        self.advance(90); lease = pool.acquire()
+        self.assertTrue(raw.closed); self.assertIsNot(lease._entry.connection, raw); self.assertEqual(len(self.created), 2)
+        lease.commit(); lease.close()
+        raw = self.created[-1]; raw.ping_error = KeyboardInterrupt(); self.advance(90)
+        with self.assertRaises(KeyboardInterrupt): pool.acquire()
+        self.assertTrue(raw.closed); self.assertEqual(pool.entries, set())
+
+    def test_pool_close_during_validation_never_hands_out_the_entry(self):
+        pool = self.pool(); raw = self.borrow(pool); self.advance(90)
+        pool.validate = lambda connection: pool.close()  # config rotation while the ping is in flight
+        with self.assertRaisesRegex(RuntimeError, 'closed'): pool.acquire()
+        self.assertTrue(raw.closed); self.assertEqual(pool.entries, set())
+
+    def test_lifetime_is_jittered_per_connection_and_enforced_on_release(self):
+        draws = iter([0.0, 1.0]); pool = self.pool(maximum=2, lifetime_jitter=0.1, rand=lambda: next(draws))
+        first, second = pool.acquire(), pool.acquire()
+        self.assertEqual((first._entry.expires, second._entry.expires), (3600, 3240))
+        self.advance(3300); first.commit(); second.commit(); first.close(); second.close()
+        self.assertFalse(first._entry.connection.closed); self.assertTrue(second._entry.connection.closed)
+
+
 class RuntimePoolSettingsTests(unittest.TestCase):
     def setUp(self):
         old_pool, old_key = runtime_config._application_pool, runtime_config._application_pool_key
@@ -510,9 +575,14 @@ class RuntimePoolSettingsTests(unittest.TestCase):
         with patch.dict('os.environ', values), patch.object(runtime_config, 'mysql_connection', side_effect=self.factory):
             return runtime_config.application_mysql_connection()
 
-    def test_clean_release_is_on_by_default(self):
-        lease = self.lease(); raw = self.created[-1]; lease.commit(); raw.trips = 0; lease.close()
-        self.assertEqual((raw.reset_count, raw.trips), (0, 0))
+    def test_defaults_size_ten_idle_below_session_wait_timeout_and_jittered_hour_lifetime(self):
+        lease = self.lease()
+        pool = runtime_config._application_pool
+        self.assertEqual((pool.maximum, pool.wait_seconds, pool.idle_seconds, pool.lifetime_seconds), (10, 5, 240, 3600))
+        self.assertEqual((pool.lifetime_jitter, pool.validate_after_seconds), (0.1, 60))
+        self.assertLessEqual(pool.idle_seconds, mysql_database.SESSION_IDLE_KILL_SECONDS - 60)
+        self.assertIn('wait_timeout=300', APPLICATION_SESSION_SQL); self.assertIn('innodb_lock_wait_timeout=15', APPLICATION_SESSION_SQL)
+        raw = self.created[-1]; lease.commit(); lease.close(); self.assertEqual(raw.reset_count, 0)  # clean release on
 
     def test_kill_switches_force_reset_and_sequential_reset_and_rotate_the_pool(self):
         lease = self.lease(REVEAL_MYSQL_POOL_CLEAN_RELEASE='0'); raw = self.created[-1]; raw.trips = 0
@@ -520,10 +590,56 @@ class RuntimePoolSettingsTests(unittest.TestCase):
         lease = self.lease(REVEAL_MYSQL_POOL_CLEAN_RELEASE='0', REVEAL_MYSQL_POOL_PIPELINED_RESET='0')
         self.assertTrue(raw.closed); raw = self.created[-1]; lease.commit(); raw.trips = 0; lease.close()
         self.assertEqual((raw.reset_count, raw.writes, raw.trips), (1, [], 3))
-        for env in ({'REVEAL_MYSQL_POOL_SIZE': '12'}, {'REVEAL_MYSQL_POOL_CLEAN_RELEASE': '1'}):
+        for env in ({'REVEAL_MYSQL_POOL_IDLE_SECONDS': '120'}, {'REVEAL_MYSQL_POOL_LIFETIME_SECONDS': '1800'}, {'REVEAL_MYSQL_POOL_SIZE': '12'}):
             with self.subTest(env=env):
                 before = runtime_config._application_pool; lease = self.lease(**env); lease.rollback(); lease.close()
                 self.assertIsNot(runtime_config._application_pool, before)
+
+    def test_bounds_keep_idle_expiry_below_the_server_kill(self):
+        for env in ({'REVEAL_MYSQL_POOL_IDLE_SECONDS': '241'}, {'REVEAL_MYSQL_POOL_IDLE_SECONDS': '0'},
+                    {'REVEAL_MYSQL_POOL_LIFETIME_SECONDS': '3601'}, {'REVEAL_MYSQL_POOL_LIFETIME_SECONDS': '100'},
+                    {'REVEAL_MYSQL_POOL_SIZE': '33'}):
+            with self.subTest(env=env), self.assertRaisesRegex(ValueError, 'pool bounds'): self.lease(**env)
+
+
+class HandshakeResult:
+    def __init__(self, sock, secure=None):
+        self._sock = sock; self._secure = isinstance(sock, ssl.SSLSocket) if secure is None else secure; self.closes = 0
+    def close(self): self.closes += 1
+    def cursor(self): raise AssertionError('No post-handshake TLS query')
+
+
+class ConnectTests(unittest.TestCase):
+    """Cold connects: TLS proven client-side and pooled session settings sent as init_command."""
+    def tls(self, version='TLSv1.3'):
+        sock = MagicMock(spec=ssl.SSLSocket); sock.version.return_value = version
+        sock.cipher.return_value = ('TLS_AES_256_GCM_SHA384', 'TLSv1.3', 256); return sock
+    def connect(self, connection, **kwargs):
+        factory = MagicMock(return_value=connection)
+        with patch.dict('os.environ', {'REVEAL_MYSQL_PASSWORD': 'test-only'}), patch.object(pymysql, 'connect', factory):
+            return mysql_database.connect(**kwargs), factory.call_args.kwargs
+
+    def test_pooled_connect_sends_settings_as_init_command_and_no_tls_query(self):
+        result, kwargs = self.connect(HandshakeResult(self.tls()), application_session=True)
+        self.assertEqual((kwargs['init_command'], kwargs['autocommit']), (APPLICATION_SESSION_SQL, False))
+        self.assertNotIn('collation', kwargs); self.assertIsInstance(kwargs['ssl'], ssl.SSLContext)
+        self.assertIs(result.reveal_verified_tls, True); self.assertIs(result.reveal_session_defaults, True)
+
+    def test_unpooled_connect_keeps_server_session_defaults(self):
+        result, kwargs = self.connect(HandshakeResult(self.tls()))
+        self.assertIsNone(kwargs['init_command']); self.assertIs(kwargs['autocommit'], False)
+        self.assertIs(result.reveal_verified_tls, True); self.assertFalse(hasattr(result, 'reveal_session_defaults'))
+
+    def test_plaintext_or_unverified_sessions_fail_closed(self):
+        for connection in (HandshakeResult(MagicMock(spec=socket.socket)), HandshakeResult(None),
+                           HandshakeResult(self.tls(), secure=False), HandshakeResult(self.tls(version=None))):
+            with self.subTest(sock=connection._sock):
+                with self.assertRaisesRegex(ValueError, 'Verified TLS is required'): self.connect(connection)
+                self.assertEqual(connection.closes, 1)
+        context = ssl.create_default_context(); context.check_hostname = False
+        with self.assertRaisesRegex(ValueError, 'Verified TLS'):
+            mysql_database.require_verified_tls(HandshakeResult(self.tls()), context)
+
 
 class ExactFetchTests(unittest.TestCase):
     def test_heterogeneous_fetch_only_returns_exact_pairs_and_binds_all_values(self):

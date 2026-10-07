@@ -8,9 +8,14 @@ import ssl
 import struct
 
 DEFAULT_HOST = 'aurora-giant-bioindex.cluster-cxrzznxifeib.us-east-1.rds.amazonaws.com'
+# Pooled Repository sessions only (importers hold long sessions and GET_LOCK): a writer queued on the
+# global fence gives up after 15 s, and the server ends a session silent for 300 s, such as an orphaned
+# fence holder. Pool idle expiry stays below that (runtime_config), so it never lends a killed session.
+SESSION_LOCK_WAIT_SECONDS, SESSION_IDLE_KILL_SECONDS = 15, 300
 APPLICATION_SESSION_SQL = ("SET SESSION autocommit=0, completion_type='NO_CHAIN', transaction_isolation='REPEATABLE-READ', "
     "time_zone='+00:00', character_set_client='utf8mb4', character_set_connection='utf8mb4', "
-    "character_set_results='utf8mb4', collation_connection='utf8mb4_unicode_ci'")
+    "character_set_results='utf8mb4', collation_connection='utf8mb4_unicode_ci', "
+    f"innodb_lock_wait_timeout={SESSION_LOCK_WAIT_SECONDS}, wait_timeout={SESSION_IDLE_KILL_SECONDS}")
 _COM_INIT_DB, _COM_QUERY, _COM_RESET_CONNECTION = 0x02, 0x03, 0x1F
 # server_status bits (PyMySQL 1.1.2 lacks IN_TRANS_READONLY) and the CLIENT_MULTI_STATEMENTS capability.
 _IN_TRANS, _AUTOCOMMIT, _MORE_RESULTS, _IN_TRANS_READONLY, _MULTI_STATEMENTS = 0x1, 0x2, 0x8, 0x2000, 0x10000
@@ -21,23 +26,34 @@ def validate_database(name):
         raise ValueError('Database must be a simple identifier with literal cyaka_ prefix')
 
 
+def require_verified_tls(connection, context):
+    """A completed handshake under CERT_REQUIRED + check_hostname is verified TLS; PyMySQL silently stays
+    plaintext when the server lacks CLIENT_SSL, leaving a plain socket. PyMySQL==1.1.2 internals: fail closed."""
+    sock = getattr(connection, '_sock', None)
+    if not (context.verify_mode == ssl.CERT_REQUIRED and context.check_hostname
+            and getattr(connection, '_secure', False) is True and isinstance(sock, ssl.SSLSocket)
+            and sock.version() and sock.cipher()):
+        raise ValueError('Verified TLS is required')
+
+
 def connect(*, host=DEFAULT_HOST, port=3306, user='cyaka', database='cyaka_reveal_mechanisms', ca_file=None,
-            timeout_seconds=None):
+            timeout_seconds=None, application_session=False):
+    """application_session (pool factory only) applies APPLICATION_SESSION_SQL as init_command; other
+    callers keep server time_zone/collation. PyMySQL runs init_command before autocommit(False), which then
+    sends nothing because the SET already reported autocommit off."""
     import pymysql
     validate_database(database)
     if timeout_seconds is not None and timeout_seconds <= 0: raise ValueError('Connection deadline elapsed')
     timeout = min(120, timeout_seconds) if timeout_seconds is not None else 120
     password = os.getenv('REVEAL_MYSQL_PASSWORD') or getpass.getpass('MySQL password (not saved): ')
+    context = ssl.create_default_context(cafile=ca_file)
     connection = pymysql.connect(host=host, port=port, user=user, password=password, database=database,
-        ssl=ssl.create_default_context(cafile=ca_file), charset='utf8mb4', autocommit=False,
+        ssl=context, charset='utf8mb4', autocommit=False, init_command=APPLICATION_SESSION_SQL if application_session else None,
         binary_prefix=True, connect_timeout=min(15, timeout), read_timeout=timeout, write_timeout=timeout)
     try:
-        with connection.cursor() as cursor:
-            cursor.execute("SHOW SESSION STATUS LIKE 'Ssl_cipher'")
-            row = cursor.fetchone()
-            if not row or not row[1]:
-                raise ValueError('Verified TLS is required')
+        require_verified_tls(connection, context)
         connection.reveal_verified_tls = True
+        if application_session: connection.reveal_session_defaults = True
         return connection
     except BaseException:
         connection.close()
@@ -95,6 +111,14 @@ def reset_application_session_sequential(connection, database):
     connection._read_ok_packet()
     connection.select_db(database)
     initialize_application_session(connection)
+
+
+def validate_idle_session(connection, timeout_seconds=3):
+    """COM_PING a long-idle pooled session under a short deadline: 1 round trip, no SQL, never reconnects."""
+    saved = connection._read_timeout, connection._write_timeout  # PyMySQL applies these on every read/write
+    connection._read_timeout = connection._write_timeout = timeout_seconds
+    try: connection.ping(reconnect=False)
+    finally: connection._read_timeout, connection._write_timeout = saved
 
 
 def insert_batch(cursor, table, columns, batch):
