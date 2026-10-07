@@ -212,7 +212,14 @@ containers use `TMPDIR=/work`, a 1 GiB work
 tmpfs and a 256 MiB checkpoint limit. Restore participates in the bounded step
 deadline; cancellation drains the restore thread before deleting its directory.
 REVEAL requests a 300-second target-group drain and a 120-second process stop
-window, while other DIG services retain their existing defaults.
+window, while other DIG services retain their existing defaults. The API runs
+`python -m reveal_backend.serve`. On SIGTERM it first ends open workspace and
+job event streams, which clients renew with their cursors exactly as at the
+240-second window, and answers new streams with the retryable 503. It then
+waits only for in-flight requests such as workflow steps, bounded by
+`REVEAL_GRACEFUL_SHUTDOWN_SECONDS` (default 110, inside the stop window).
+Previously each open stream held shutdown until SIGKILL, so a local restart
+with a browser tab open refused connections for up to 120 seconds.
 
 The shared QA and production ALBs currently retain their 60-second idle timeout;
 the nginx timeout configuration has not been inspected. Setting a 420-second

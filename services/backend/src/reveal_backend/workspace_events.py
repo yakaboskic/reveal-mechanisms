@@ -286,6 +286,7 @@ def stream_deadline(authorization, workspace_expires_at=None):
 async def workspace_response(repository, request, after=None):
     from fastapi.responses import StreamingResponse
     authorization = request.headers.get('authorization')
+    if redis_notifications.closing(): raise Problem(503, 'SERVICE_UNAVAILABLE', 'The service is restarting; reconnect shortly.')
     def identify():
         with repository.read_transaction() as tx: return principal(tx, authorization)
     identity = await asyncio.to_thread(identify); owner = identity['user_id']
@@ -300,7 +301,8 @@ async def workspace_response(repository, request, after=None):
             async with redis_notifications.hub().subscribe(['workspace:'+owner, 'public']) as subscription:
                 # SUBSCRIBE acknowledgment precedes the consistent RDS snapshot.
                 # Notifications queued while reading it trigger another replay.
-                while time.monotonic() < deadline:
+                # Shutdown ends the stream like its deadline: the client renews with its cursor.
+                while time.monotonic() < deadline and not redis_notifications.closing():
                     try:
                         current_owner, events, highwater, expired = await asyncio.to_thread(replay, repository, authorization, positions)
                         if current_owner != owner:
@@ -315,12 +317,13 @@ async def workspace_response(repository, request, after=None):
                             positions[event['scope']] = int(event['cursor'])
                             yield sse('workspace_change', event, encode_cursor(owner, positions))
                     yield sse('ready', {'schema_version':1}, encode_cursor(owner, positions))
-                    while time.monotonic() < deadline:
+                    while time.monotonic() < deadline and not redis_notifications.closing():
                         try: reason = await subscription.wait(min(15, max(.01, deadline-time.monotonic())))
                         except asyncio.TimeoutError:
                             # HTTP keepalive only: zero RDS reads/Redis commands.
                             yield ': heartbeat\n\n'
                             continue
+                        if redis_notifications.closing(): return
                         if reason == 'disconnected':
                             yield sse('connection_degraded', {'schema_version':1})
                             continue
@@ -339,10 +342,11 @@ async def job_event_stream(repository, request, job_id, authorization, cursor, l
             cursor = int(item['id'])
             yield sse(item['event_type'], item, item['id'])
         if initial['terminal']: return
+    if redis_notifications.closing(): return
     try:
         async with redis_notifications.hub().subscribe(['job:'+job_id]) as subscription:
             # The first read catches up on commits between `initial`'s snapshot and the SUBSCRIBE acknowledgment.
-            while time.monotonic() < deadline:
+            while time.monotonic() < deadline and not redis_notifications.closing():
                 try: data = await asyncio.to_thread(read_events, job_id, authorization, cursor, limit)
                 except Problem: return
                 for item in data['items']:
@@ -350,10 +354,11 @@ async def job_event_stream(repository, request, job_id, authorization, cursor, l
                     yield sse(item['event_type'], item, item['id'])
                 if data['terminal']: return
                 if len(data['items']) >= limit: continue
-                while time.monotonic() < deadline:
+                while time.monotonic() < deadline and not redis_notifications.closing():
                     try: await subscription.wait(min(15, max(.01, deadline-time.monotonic())))
                     except asyncio.TimeoutError:
                         yield ': heartbeat\n\n'; continue
+                    if redis_notifications.closing(): return
                     break
     except asyncio.TimeoutError:
         return  # client renews with its durable cursor

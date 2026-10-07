@@ -22,10 +22,28 @@ _hubs = weakref.WeakSet()
 _hubs_lock = threading.Lock()
 _client_lock = threading.Lock()
 _client = (None, None)
+_closing = False
 
 
 def active_hubs():
     with _hubs_lock: return list(_hubs)
+
+
+def closing():
+    """True once server shutdown began: event streams end at their next wait and new ones are refused."""
+    return _closing
+
+
+async def close_streams():
+    """Server shutdown: wake every stream waiting on this loop so it ends instead of running out its window.
+    Runs on the event loop, never in a signal handler, because active_hubs() takes a non-reentrant lock."""
+    global _closing
+    _closing = True
+    loop = asyncio.get_running_loop()
+    for bridge in active_hubs():
+        if bridge.loop is not loop: continue
+        for group in tuple(bridge.listeners.values()):
+            for listener in tuple(group): listener.wake('shutdown')
 
 
 def namespace():
@@ -98,7 +116,9 @@ def publish(channels):
     else:
         # Isolated tests/development can run in one process without Redis.
         for hub in active_hubs():
-            for name in channels: hub.loop.call_soon_threadsafe(hub.wake, name, 'changed')
+            try:
+                for name in channels: hub.loop.call_soon_threadsafe(hub.wake, name, 'changed')
+            except RuntimeError: pass  # that hub's event loop has closed; it has no listeners left
 
 
 class Subscription:

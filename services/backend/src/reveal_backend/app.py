@@ -925,8 +925,11 @@ async def get_events(job_id:str,request:Request,after:str='0',limit:int=100):
     try: cursor=int(request.headers.get('last-event-id') or after)
     except ValueError: raise Problem(400,'INVALID_CURSOR','Event cursor must be numeric.')
     if cursor<0: raise Problem(400,'INVALID_CURSOR','Event cursor must be nonnegative.')
+    stream='text/event-stream' in request.headers.get('accept','')
+    from .redis_notifications import closing
+    if stream and closing(): raise Problem(503,'SERVICE_UNAVAILABLE','The service is restarting; reconnect shortly.')
     authorization=request.headers.get('authorization'); initial=await asyncio.to_thread(read_events,job_id,authorization,cursor,limit)
-    if 'text/event-stream' not in request.headers.get('accept',''): return initial
+    if not stream: return initial
     from .workspace_events import job_event_stream
     return StreamingResponse(job_event_stream(repo, request, job_id, authorization, cursor, limit, read_events, initial),
         media_type='text/event-stream', headers={'Cache-Control':'private, no-store','X-Accel-Buffering':'no'})

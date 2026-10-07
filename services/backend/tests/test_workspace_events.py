@@ -484,6 +484,48 @@ class WorkspaceConnectTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(output[1:], [': heartbeat\n\n'])
 
 
+class ShutdownTests(unittest.IsolatedAsyncioTestCase):
+    setUp = WorkspaceEventsTests.setUp
+    authorization = WorkspaceEventsTests.authorization
+
+    async def asyncSetUp(self):
+        closing = patch.object(notifications, '_closing', False); closing.start(); self.addCleanup(closing.stop)
+        local = patch.object(notifications, 'configuration', return_value=('local','','')); local.start(); self.addCleanup(local.stop)
+
+    async def test_close_streams_ends_open_streams_without_another_read(self):
+        from types import SimpleNamespace
+        reads, replays, replay = [], [], events.replay
+        def read(*args): reads.append(args[2]); return {'items':[], 'terminal':False}
+        def counted(*args, **kwargs): replays.append(1); return replay(*args, **kwargs)
+        with patch.object(events, 'stream_deadline', return_value=time.monotonic()+60), patch.object(events, 'replay', counted):
+            workspace = (await events.workspace_response(self.repo, SimpleNamespace(headers={'authorization':self.authorization()}))).body_iterator
+            job = events.job_event_stream(None, None, 'job', 'proof', 0, 100, read, {'items':[], 'terminal':False})
+            while 'event: ready' not in await anext(workspace): pass
+            pending = asyncio.ensure_future(anext(job))
+            while not reads: await asyncio.sleep(.01)
+            await asyncio.sleep(.05)   # both now wait for a wake
+            started = time.monotonic()
+            await notifications.close_streams()
+            with self.assertRaises(StopAsyncIteration): await asyncio.wait_for(pending, 1)
+            with self.assertRaises(StopAsyncIteration): await asyncio.wait_for(anext(workspace), 1)
+            self.assertLess(time.monotonic()-started, 1)
+        self.assertEqual((reads, replays), ([0], [1]))   # shutdown is not a change: no further RDS read
+        self.assertTrue(notifications.closing())
+
+    async def test_streams_opened_during_shutdown_are_refused_or_end_at_once(self):
+        from types import SimpleNamespace
+        await notifications.close_streams()
+        with self.assertRaises(Problem) as refused:
+            await events.workspace_response(self.repo, SimpleNamespace(headers={'authorization':self.authorization()}))
+        self.assertEqual((refused.exception.status, refused.exception.code), (503, 'SERVICE_UNAVAILABLE'))
+        class Hub:
+            def subscribe(self, scopes): raise AssertionError('no subscription during shutdown')
+        with patch.object(notifications, 'hub', return_value=Hub()), patch.object(events, 'stream_deadline', return_value=time.monotonic()+60):
+            output = [chunk async for chunk in events.job_event_stream(None, None, 'job', 'proof', 0, 100, None,
+                {'items':[{'id':'1', 'event_type':'status'}], 'terminal':False})]
+        self.assertEqual([chunk.split('\n')[0] for chunk in output], ['id: 1'])   # what was already read is kept
+
+
 class WorkspaceEndpointTests(WorkspaceEventsTests):
     def test_workspace_endpoint_rejects_missing_auth_and_other_principals_cursor(self):
         from fastapi.testclient import TestClient
@@ -500,3 +542,11 @@ class WorkspaceEndpointTests(WorkspaceEventsTests):
             self.assertIn('"entity_id":"alice"',response.text)
             self.assertNotIn('"entity_id":"bob"',response.text)
             self.assertIn('no-store',response.headers['cache-control'])
+            with patch.object(notifications, '_closing', True):
+                response=client.get('/v1/me/workspace/events',headers={'Authorization':self.authorization('alice')})
+                self.assertEqual((response.status_code, response.json()['retryable']), (503, True))
+                with self.repo.transaction() as tx: job=jobs.enqueue(tx,'alice','analysis')
+                route='/v1/jobs/'+job['id']+'/events'
+                response=client.get(route,headers={'Authorization':self.authorization('alice'),'Accept':'text/event-stream'})
+                self.assertEqual(response.status_code, 503)
+                self.assertEqual(client.get(route,headers={'Authorization':self.authorization('alice')}).status_code, 200)   # JSON reads still served

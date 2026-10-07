@@ -135,7 +135,7 @@ Google and ORCID credentials enable registered sign-in. Register callbacks at `/
 
 ## Jobs during shutdown
 
-Shutdown stops the frontend and asks the API/worker containers to exit gracefully with a 120-second grace period. Worker shutdown must cancel its active remote execution and fence its attempt; queued jobs remain persisted. Browser disconnect alone never cancels a job. After an abrupt failure, recovery uses the stored attempt/remote handle and lease state; it must not duplicate paid execution or allow a stale attempt to overwrite cancellation or accepted results. Artifacts remain under `.runtime/artifacts` for inspection and restart.
+Shutdown stops the frontend and asks the API/worker containers to exit gracefully with a 120-second grace period. The API ends open event streams at once and waits only for in-flight requests. Worker shutdown must cancel its active remote execution and fence its attempt; queued jobs remain persisted. Browser disconnect alone never cancels a job. After an abrupt failure, recovery uses the stored attempt/remote handle and lease state; it must not duplicate paid execution or allow a stale attempt to overwrite cancellation or accepted results. Artifacts remain under `.runtime/artifacts` for inspection and restart.
 
 The final validation report records which shutdown, recovery and live execution behaviors were actually exercised. It is the source for verified coverage; the intended lifecycle above is not itself evidence of a passing test.
 
