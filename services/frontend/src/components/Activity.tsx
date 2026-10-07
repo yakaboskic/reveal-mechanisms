@@ -3,7 +3,8 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { activityMessage, activityProgress, activityRows, groupedWarnings, stageLabels, type ActivityRow } from "@/lib/activity";
 import { elapsedLabel, operationalStep, stageStateLabel, timedActivitySections, toolElapsed, type StepState } from "@/lib/activity-timing";
 import { prettyRecordedValue, recordedToolArguments, toolInvocation } from "@/lib/tool-display";
-import { api, ApiError, messageOf, readEvents, terminal, type Schema } from "@/lib/client";
+import { api, ApiError, messageOf, terminal, type Schema } from "@/lib/client";
+import { followJobEvents } from "@/lib/job-events";
 import { JobOutcome } from "./AnalysisOutcome";
 import { invalidateWorkspace } from "@/lib/workspace-events";
 import "./workspace-activity.css";
@@ -77,40 +78,12 @@ export function Activity({ initial, onJob, archived = false }: { initial: Schema
     }
   }, [initial]);
   useEffect(() => {
-    const controller = new AbortController(); let failures = 0;
+    const controller = new AbortController();
     const refresh = async () => { const value = await api.job(initial.id); if (!controller.signal.aborted) update(value); return value; };
-    const run = async () => {
-      while (!controller.signal.aborted) {
-        try {
-          setConnection(failures ? "Reconnecting to activity…" : "Retrieving job status and activity…");
-          const response = await fetch(`/api/backend/v1/jobs/${encodeURIComponent(initial.id)}/events?after=${cursor.current}`, { headers: { Accept: "text/event-stream", "Last-Event-ID": cursor.current }, signal: controller.signal });
-          await readEvents(response, event => {
-            if (event.job_id !== initial.id || BigInt(event.id) <= BigInt(cursor.current)) return;
-            cursor.current = event.id; setEvents(existing => [...existing, event]); setConnection("Live activity"); failures = 0;
-            if (terminal(event.status)) void refresh().catch(() => setConnection("Refreshing job status…"));
-          });
-          const current = await refresh(); if (terminal(current.status)) { setConnection(""); break; }
-        } catch (failure) {
-          if (controller.signal.aborted) break;
-          if (failure instanceof ApiError && failure.code === "EVENT_CURSOR_EXPIRED") {
-            try {
-              const current = await refresh(); cursor.current = current.last_event_id;
-              setError("Earlier activity has expired. The saved job and scientific results remain available.");
-              if (terminal(current.status)) break;
-            } catch {
-              failures++; setConnection("Connection interrupted. Reconnecting…");
-              if (failures >= 6) { setError("Activity could not reconnect. The job continues on the server."); break; }
-            }
-          } else {
-            failures++; setConnection("Connection interrupted. Reconnecting…");
-            try { const current = await refresh(); if (terminal(current.status)) break; } catch { /* preserve events while offline */ }
-            if (failures >= 6) { setError("Activity could not reconnect. The job continues on the server."); break; }
-          }
-        }
-        await new Promise<void>(resolve => { const timer = setTimeout(resolve, Math.min(1000 * 2 ** failures, 15000)); controller.signal.addEventListener("abort", () => { clearTimeout(timer); resolve(); }, { once: true }); });
-      }
-    };
-    void run().catch(failure => { if (!controller.signal.aborted) setError(messageOf(failure)); }); return () => controller.abort();
+    void followJobEvents(controller.signal, initial.id, cursor, {
+      event: event => setEvents(existing => [...existing, event]), connection: setConnection, error: setError, refresh, known: () => jobRef.current,
+    }).catch(failure => { if (!controller.signal.aborted) setError(messageOf(failure)); });
+    return () => controller.abort();
   }, [initial.id, retry]);
   const progress = activityProgress(job, events);
   const insufficient = !paragraph && progress.status === "insufficient_evidence";
