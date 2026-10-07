@@ -1,8 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { alwaysVisible, followJob, followWorkspace, pageVisibility, parkHiddenAfterMs, type StreamSharing, type Visibility } from "../src/lib/events";
-import type { JobEvent, WorkspaceEvent } from "../src/lib/types";
+import { api } from "../src/lib/api";
+import { alwaysVisible, followJob, followWorkspace, pageVisibility, parkHiddenAfterMs, savedOutcome, withJobEvent, type StreamSharing, type Visibility } from "../src/lib/events";
+import { terminal, type Job, type JobEvent, type WorkspaceEvent } from "../src/lib/types";
 
 const settle = async (rounds = 6) => { for (let i = 0; i < rounds; i++) await new Promise(resolve => setTimeout(resolve, 2)); };
 const change = (position: number) => ({ schema_version: 1, event_id: `scope:${position}`, cursor: String(position), scope: "workspace", event_type: "draft.changed",
@@ -125,9 +126,45 @@ test("the visibility source parks only after a full minute hidden", async contex
   stop();
 });
 
-test("the home page shares its workspace stream by user and reads a finished job only once", async () => {
+test("the home page shares its workspace stream by user and skips the job read only for the saved outcome", async () => {
   const page = await readFile(new URL("../src/app/page.tsx", import.meta.url), "utf8");
   assert.match(page, /followWorkspace\(\{ signal: controller\.signal, owner: principal\.user_id,/);
+  assert.match(page, /setJob\(value => value\?\.id === id \? withJobEvent\(value, event\) : value\);/);
   const terminalEvent = page.slice(page.indexOf("if (!terminal(event.status)) return;"), page.indexOf("void readLatest().then(() => refresh([\"jobs\"]))"));
-  assert.match(terminalEvent, /if \(known\?\.id === id && terminal\(known\.status\) && BigInt\(known\.last_event_id\) >= BigInt\(event\.id\)\) return;/);
+  assert.match(terminalEvent, /if \(savedOutcome\(currentJob\.current, event\)\) return;\n\s*$/);
+});
+
+/** The home page opening a saved job: followJob replays its history into the view, and a terminal event that is not the
+ * saved outcome reads the job (api.job) as readLatest does. Returns every request made and the job left on screen. */
+async function openSavedJob(context: { mock: { method: (object: object, name: string, fn: unknown) => unknown } }, saved: Job, history: JobEvent[]) {
+  const requests: string[] = [];
+  context.mock.method(globalThis, "fetch", async (url: string) => {
+    requests.push(url);
+    return url.endsWith("/events") ? new Response(history.map(value => frame(value.event_type, value, value.id)).join(""), { headers: { "content-type": "text/event-stream" } })
+      : Response.json(saved);
+  });
+  let shown = saved; const reads: Promise<void>[] = [];
+  await followJob(saved.id, { signal: new AbortController().signal, visibility: alwaysVisible, onState() {},
+    onResync: async () => { throw new Error("No resync expected"); },
+    onEvent: event => {
+      shown = withJobEvent(shown, event);
+      if (terminal(event.status) && !savedOutcome(saved, event)) reads.push(api.job(saved.id).then(value => { shown = value; }));
+    } });
+  await Promise.all(reads);
+  return { requests, shown };
+}
+const savedJob = (status: string, last: string) => ({ id: "job-1", status, stage: "complete", result: null, updated_at: "2026-10-07T00:00:00Z", last_event_id: last }) as unknown as Job;
+
+test("opening a finished job makes one request: its replay ends on the saved outcome", async context => {
+  const { requests, shown } = await openSavedJob(context, savedJob("succeeded", "3"), [item("1", "queued"), item("2"), item("3", "succeeded")]);
+  assert.equal(requests.length, 1); assert.match(requests[0], /\/jobs\/job-1\/events$/);
+  assert.equal(shown.status, "succeeded"); assert.equal(shown.last_event_id, "3");
+});
+
+test("opening a finished, review-retried job reads it again and ends on the saved status", async context => {
+  // A failed review is retried on the same job: failed, queued again, then succeeded. followJob stops at the first failure.
+  const history = [item("1"), item("2", "failed"), item("3", "queued"), item("4"), item("5", "succeeded")];
+  const { requests, shown } = await openSavedJob(context, savedJob("succeeded", "5"), history);
+  assert.equal(requests.length, 2); assert.match(requests[1], /\/jobs\/job-1$/);
+  assert.equal(shown.status, "succeeded"); assert.equal(shown.last_event_id, "5");
 });

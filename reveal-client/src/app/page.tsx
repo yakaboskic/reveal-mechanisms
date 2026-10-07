@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError, backend, errorMessage, request } from "../lib/api";
-import { followJob, followWorkspace } from "../lib/events";
+import { followJob, followWorkspace, savedOutcome, withJobEvent } from "../lib/events";
 import { activityMessage, activityStageLabel } from "../lib/activity";
 import { createMutationKeys } from "../lib/mutations";
 import { analysisAccountResults, localWorkApi, localWorkHref } from "../lib/local-work";
@@ -158,14 +158,12 @@ export default function Home() {
       onEvent: event => {
         if (controller.signal.aborted) return;
         setActivity(items => items.some(item => item.id === event.id) ? items : [...items, event].slice(-1000));
-        setJob(value => value?.id === id ? { ...value, status: event.status, stage: event.stage, result: event.result || value.result,
-          updated_at: event.occurred_at, last_event_id: event.id } : value);
+        setJob(value => value?.id === id ? withJobEvent(value, event) : value);
         if (!terminal(event.status)) return;
         setStreamState("Activity stream ended");
-        // A job opened after it finished already holds this outcome (its stream is just its history); only a run
-        // that finishes now needs the saved job and the list.
-        const known = currentJob.current;
-        if (known?.id === id && terminal(known.status) && BigInt(known.last_event_id) >= BigInt(event.id)) return;
+        // A job opened after it finished already holds this outcome (its stream is just its history). A run that
+        // finishes now, or a retried job's earlier terminal event, needs the saved job and the list.
+        if (savedOutcome(currentJob.current, event)) return;
         void readLatest().then(() => refresh(["jobs"])).catch(error => setError(errorMessage(error)));
       },
     }).then(() => { if (!controller.signal.aborted) setStreamState("Activity stream ended"); })

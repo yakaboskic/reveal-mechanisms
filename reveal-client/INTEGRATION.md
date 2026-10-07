@@ -197,7 +197,9 @@ assertions on new requests. Reconnect an ordinary stream closure with the saved
 cursor and bounded backoff. Authentication failure requires renewing the host
 session before reconnecting. Never fall back to timer-based job-status or Redis
 polling. A single `GET /v1/jobs/{id}` on initial recovery or after a terminal event
-is useful for the authoritative envelope.
+is useful for the authoritative envelope. A job loaded with that terminal event as
+its `last_event_id` needs no second read; a review retry can follow an earlier
+`failed` event on the same job, so any other terminal event does.
 
 Stop job reconnection for `succeeded`, `insufficient_evidence`, `failed`, or
 `cancelled`. `cancel_requested` is not terminal. For workspace collections, use

@@ -1,5 +1,5 @@
 import { ApiError, backend, errorMessage, responseError } from "./api";
-import { terminal, type JobEvent, type WorkspaceEvent } from "./types";
+import { terminal, type Job, type JobEvent, type WorkspaceEvent } from "./types";
 
 export type Frame = { event: string; data: string; id?: string };
 /** Streaming SSE framing, including CR/LF split across arbitrary UTF-8 chunks. */
@@ -101,6 +101,16 @@ const untilAborted = (signal: AbortSignal) => new Promise<void>(resolve => {
   if (signal.aborted) resolve(); else signal.addEventListener("abort", () => resolve(), { once: true });
 });
 
+/** The job a view shows once `event` is applied. */
+export const withJobEvent = (job: Job, event: JobEvent): Job => ({ ...job, status: event.status, stage: event.stage,
+  result: event.result || job.result, updated_at: event.occurred_at, last_event_id: event.id });
+/**
+ * A job opened after it finished already holds the outcome its replay ends with: only the terminal event that is its
+ * saved last event needs no job read. followJob stops at the first terminal event, and a review retry leaves earlier
+ * ones (failed, then queued again) in the history, so a replay that stops before the saved outcome must re-read it.
+ */
+export const savedOutcome = (known: Pick<Job, "id" | "status" | "last_event_id"> | null, event: JobEvent) =>
+  known?.id === event.job_id && terminal(known.status) && known.last_event_id === event.id;
 type StreamOptions = { signal: AbortSignal; onState: (state: string) => void; visibility?: Visibility };
 export async function followJob(jobId: string, options: StreamOptions & { onEvent: (event: JobEvent) => void;
   onResync: () => Promise<{ cursor: string; terminal: boolean }> }) {
