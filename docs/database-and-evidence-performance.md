@@ -216,6 +216,36 @@ concurrent requests wait for that build (at most 60 seconds) instead of each
 reading the 7-10 MB serving subset on its own pooled connection, and a failed
 build is reported to them, not repeated.
 
+`/readyz` (the ALB health path and the compose healthcheck) answers from
+memory. A readiness monitor in each API process reads the application database
+and both active pointers in one statement every 5 seconds (two round trips;
+the catalog's poller reuses that read instead of making its own), and
+re-verifies the sources (reference tables on a pooled session, the verified
+Vector snapshot, the Vector provider and the artifact bucket) in its own
+thread whenever the pointers change and at least once a minute. The snapshot
+summary is projected from the 31-53 MB row again only when that row's version
+changes. A probe therefore costs no database, S3 or Upstash call; before, each
+probe read the database and both pointers and called S3 twice (3.1-3.3 seconds
+from the laptop in the 2026-10-06 audit), and every other probe also opened a
+direct TLS connection, ran five reference queries, projected the snapshot row
+and called Upstash (6.6-8 seconds). Readiness still fails closed: a failed
+database read or verification answers 503 until the next successful one,
+within one 5 second interval, and so does a monitor whose last read is more
+than 15 seconds old. Right after a cutover the last verified sources are
+reported for up to two minutes while the new pointers are verified.
+`REVEAL_READINESS_MONITOR=0` turns the monitor off; probes then check
+synchronously as before. `/healthz` is unchanged.
+
+The API process also loads the catalog and the full DisMech mechanism corpus in
+a background thread at startup (`REVEAL_CATALOG_WARMUP`, on by default), so
+the first gap list, suggestion, draft or mechanism search no longer pays the
+cold load itself (17-29 seconds measured from the laptop) and requests that
+arrive meanwhile wait only for its remainder. A failed warmup changes nothing:
+the first request loads inline and fails closed. Nothing built is persisted.
+KPN trait metadata is read once per trait (711 rows) instead of being joined
+onto every one of the 4,037 factors, which removes about 6.6 MB from each KPN
+cold load.
+
 The research `get_gene_factors` query joins from the gene by symbol, through
 the loadings' `(import_id, gene_index)` index, to its factors. A `JOIN_ORDER`
 hint fixes that order: unhinted, the optimizer's 10% guess for the TEXT symbol
@@ -284,6 +314,7 @@ The inspected jobs also spent approximately 38–40 seconds setting up their Box
 runtime. That delay and model/external-KG latency are separate from evidence
 collection. Initial API source-catalog loading also remains a cold-start cost:
 the deployment check took 61.6 seconds before the pinned catalogs were ready.
+The API now pays it in a startup thread rather than on the first request.
 The read benchmarks above apply after normal initialization. More Box RAM does
 not remove the measured database and HTTP network
 waits. Running the API and worker near Aurora would reduce the remaining database

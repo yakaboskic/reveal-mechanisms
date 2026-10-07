@@ -14,6 +14,7 @@ from functools import lru_cache
 import json
 from pathlib import Path
 import re
+import threading
 
 import numpy as np
 
@@ -37,6 +38,8 @@ DAPPER_ID_RES = {'cfde_gene_set': re.compile(r'dapper:GeneSet\.[A-Za-z0-9_-]{32}
                  'cfde_collection': re.compile(r'dapper:GeneSetCollection\.[A-Za-z0-9_-]{32}')}
 # Manifest rows of gene sets/collections; their full bindings are in the export batches.
 COMPACT_KEYS = ('id', 'batch', 'original_vector_sha256', 'roundtrip_sha256')
+# Serving summaries of snapshot rows by (table prefix, environment, snapshot id): ((version, updated_at), summary).
+_summaries, _summaries_lock = {}, threading.Lock()
 
 
 def environment(name=None):
@@ -111,7 +114,17 @@ class VectorRegistry:
             *NAMESPACE_KEYS.values(), *(('factors', 'contexts') if not summary else ()))
         pairs = [f"'{key}',JSON_EXTRACT(payload,'$.{key}')" for key in fields]
         counts = ','.join(f"'{kind}',JSON_LENGTH(JSON_EXTRACT(payload,'$.{kind}'))" for kind in KINDS)
+        key = stamp = None
         with self.repo.read_transaction() as tx:
+            if summary:
+                # A summary projects the whole 31-53 MB row; re-project only when the row changed (every write bumps its
+                # version; a deleted and recreated row has a new updated_at). The key is read before the content.
+                key = (getattr(self.repo, 'table_prefix', None), self.scope, identity)
+                stamp = tx.execute('SELECT version,updated_at FROM reveal_records WHERE kind=%s AND id=%s',
+                                   ('vector_snapshot', identity)).fetchone()
+                stamp = tuple(stamp) if stamp else None
+                with _summaries_lock: cached = _summaries.get(key)
+                if stamp and cached and cached[0] == stamp: return deepcopy(cached[1])
             # SQLite's JSON extension spells the array-length function differently.
             if tx.sqlite: counts = counts.replace('JSON_LENGTH(', 'JSON_ARRAY_LENGTH(')
             parameters = []
@@ -133,8 +146,12 @@ class VectorRegistry:
         if (not state or state['snapshot_id'] != identity or state['status'] != 'complete'
                 or state['environment'] != self.scope or state['_serving_verified'] != True):
             raise VectorUnavailable('No verified Vector snapshot in this environment')
-        state = {key: value for key, value in state.items() if value is not None}
-        state['_serving_counts'] = {key: value for key, value in state['_serving_counts'].items() if value is not None}
+        state = {name: value for name, value in state.items() if value is not None}
+        state['_serving_counts'] = {name: value for name, value in state['_serving_counts'].items() if value is not None}
+        if stamp:
+            with _summaries_lock:
+                _summaries.pop(key, None); _summaries[key] = (stamp, deepcopy(state))
+                while len(_summaries) > 16: _summaries.pop(next(iter(_summaries)))
         return state
     def batch_done(self, identity, key):
         with self.repo.read_transaction() as tx:

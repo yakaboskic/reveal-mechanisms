@@ -883,6 +883,38 @@ class CatalogGenerationTests(unittest.TestCase):
         self.assertEqual((catalog.active_generation, catalog.loaded), (KPN2, True))
         self.assertEqual((catalog.dismech_embeddings['run_id'], catalog.retrieval_index().snapshot['context_run_id']), (context_run, context_run))
 
+    def test_startup_warmup_loads_off_the_request_path_and_fails_closed(self):
+        self.activate(KPN1, KPN_MODEL)  # Vector still serves the legacy snapshot: the warmup cannot load
+        catalog = Catalog()
+        with self.assertLogs(catalog_module.LOGGER, 'WARNING'): self.assertFalse(catalog.warm())
+        self.assertEqual((catalog.loaded, catalog.warmed.is_set()), (False, False))
+        with self.assertRaises(Problem): catalog.load()  # the first request still loads inline and fails closed
+        self.vectors.active = self.kpn1_snapshot
+        with patch.object(Catalog, 'dismech_catalog', autospec=True) as dismech:
+            catalog.start_warmup(); thread = catalog.warmup[1]; catalog.start_warmup()
+            thread.join(10)
+            self.assertIs(catalog.warmup[1], thread)  # one warmup per process
+        dismech.assert_called_once_with(catalog)  # the first full mechanism search is warm too
+        self.assertEqual((catalog.loaded, catalog.warmed.is_set(), catalog.active_generation), (True, True, KPN1))
+        self.insert_generation(KPN2, KPN_KIND, KPN_MODEL, factors=KPN_FACTORS)
+        self.activate(KPN2, KPN_MODEL, self.kpn_snapshot(KPN2, KPN_FACTORS), previous=KPN1)
+        self.clock.now += GENERATION_TTL_SECONDS
+        self.assertTrue(catalog.refresh_if_changed())
+        self.assertTrue(catalog.warmed.is_set()); self.assertIs(catalog.warmup[1], thread)  # process state survives a reload
+
+    def test_kpn_trait_metadata_is_read_once_per_trait(self):
+        mappings = [{'target_id': 'MONDO:0005148', 'predicate': 'exact'}]
+        self.db.run(f"UPDATE kpn_traits SET metadata='{json.dumps({'ontology_mappings': mappings})}' WHERE kpn_trait_id='KPN.TRAIT:0000398'")
+        self.activate(KPN1, KPN_MODEL, self.kpn1_snapshot)
+        catalog = self.load()
+        factor_statement = next(sql for sql in self.db.statements if 'FROM reference_factors f' in sql)
+        self.assertNotIn('t.metadata', factor_statement)
+        self.assertEqual(sum('FROM kpn_traits' in sql for sql in self.db.statements), 1)  # one read per generation, 711 rows in KPN
+        t2d = [catalog.factors[public_id('KPN.TRAIT:0000398', factor)]['kpn_trait'] for factor in ('Factor1', 'Factor2')]
+        self.assertEqual([trait['ontology_mappings'] for trait in t2d], [mappings, mappings])
+        self.assertIsNot(t2d[0]['ontology_mappings'], t2d[1]['ontology_mappings'])  # each factor owns its copy
+        self.assertEqual(catalog.factors[public_id('KPN.TRAIT:0000012', 'Factor1')]['kpn_trait']['ontology_mappings'], [])
+
     def test_a_failed_cold_load_leaves_no_partial_state(self):
         self.activate(KPN1, KPN_MODEL)  # Vector still serves the legacy snapshot.
         catalog = Catalog()

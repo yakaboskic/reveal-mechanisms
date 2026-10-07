@@ -101,6 +101,31 @@ class RetrievalTests(unittest.TestCase):
             with repo.transaction() as tx: tx.put('vector_snapshot', snapshot['snapshot_id'], 'catalog', snapshot)
             with self.assertRaises(VectorUnavailable): registry.serving(snapshot['snapshot_id'])
 
+    def test_serving_summary_is_projected_again_only_when_the_snapshot_row_changes(self):
+        from reveal_backend.repository import Transaction
+        snapshot, _, _ = fixture()
+        snapshot['verification'] = {'passed': True}
+        with TemporaryDirectory() as directory:
+            repo = Repository(Path(directory) / 'registry.sqlite3'); repo.migrate()
+            with repo.transaction() as tx: tx.put('vector_snapshot', snapshot['snapshot_id'], 'catalog', snapshot)
+            registry, statements = VectorRegistry(repo, environment_name='local'), []
+            execute = Transaction.execute
+            def recorded(tx, sql, params=()): statements.append(sql); return execute(tx, sql, params)
+            with patch.object(Transaction, 'execute', recorded):
+                first = registry.serving(snapshot['snapshot_id'], summary=True)
+                projections = sum('JSON_OBJECT' in sql for sql in statements)
+                first['run'] = 'changed by a caller'
+                again = registry.serving(snapshot['snapshot_id'], summary=True)
+                self.assertEqual(sum('JSON_OBJECT' in sql for sql in statements), projections)  # served from the version check
+                self.assertEqual(again['run'], snapshot['run'])
+                snapshot['run'] = dict(snapshot['run'], run_id='refit')
+                with repo.transaction() as tx: tx.put('vector_snapshot', snapshot['snapshot_id'], 'catalog', snapshot)
+                self.assertEqual(registry.serving(snapshot['snapshot_id'], summary=True)['run']['run_id'], 'refit')
+                self.assertEqual(sum('JSON_OBJECT' in sql for sql in statements), projections + 1)
+                snapshot['verification']['passed'] = False
+                with repo.transaction() as tx: tx.put('vector_snapshot', snapshot['snapshot_id'], 'catalog', snapshot)
+                with self.assertRaises(VectorUnavailable): registry.serving(snapshot['snapshot_id'], summary=True)
+
     def test_embedding_space_tolerates_mysql_json_float_presentation_only(self):
         snapshot, _, _ = fixture()
         run = deepcopy(snapshot['run'])

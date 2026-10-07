@@ -10,6 +10,7 @@ import os
 import base64
 import hmac
 import re
+from contextlib import asynccontextmanager
 from fastapi import BackgroundTasks, FastAPI, Request, Depends, Query
 from fastapi.responses import JSONResponse, StreamingResponse, Response, RedirectResponse
 from starlette.concurrency import run_in_threadpool
@@ -268,9 +269,13 @@ def ready():
     from .admin_read_keys import configuration as admin_key_configuration
     api_key_configuration()
     admin_key_configuration()
-    database = repo.readiness(); sources = catalog.readiness()
-    from .artifact_store import s3_enabled, store
-    if s3_enabled(): store().check()
+    from . import readiness
+    monitor = readiness.running()
+    if monitor: database, sources = monitor.snapshot()  # computed off the request path; no I/O here
+    else:
+        database = repo.readiness(); sources = catalog.readiness()
+        from .artifact_store import s3_enabled, store
+        if s3_enabled(): store().check()
     # Health probes must never generate recurring Redis commands. Notifications
     # are observed from subscriber state; authoritative API writes survive a
     # notification outage and retain their durable publication intent.
@@ -1290,5 +1295,22 @@ mount_workflow(app, repo)
 from .vector_workflow import mount_vector_workflow
 if jobs.transport() == 'workflow':
     mount_vector_workflow(app, repo)
+
+_routes_lifespan = app.router.lifespan_context
+
+@asynccontextmanager
+async def background_lifespan(application):
+    """The API process warms the catalog (REVEAL_CATALOG_WARMUP) and runs the readiness monitor
+    (REVEAL_READINESS_MONITOR) off the request path; both default on, and tests turn them off."""
+    from . import readiness
+    async with _routes_lifespan(application) as state:
+        warmup = getattr(catalog, 'start_warmup', None)
+        if warmup and os.getenv('REVEAL_CATALOG_WARMUP', '1') != '0': warmup()
+        monitor = readiness.start(lambda: repo, lambda: catalog) if os.getenv('REVEAL_READINESS_MONITOR', '1') != '0' else None
+        try: yield state
+        finally:
+            if monitor: readiness.stop(monitor)
+
+app.router.lifespan_context = background_lifespan
 
 app = mount_service(app, os.getenv('SERVICE_PATH_PREFIX', ''))

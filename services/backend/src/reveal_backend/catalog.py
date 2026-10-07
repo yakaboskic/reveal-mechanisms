@@ -46,8 +46,9 @@ VECTOR_BUILD_WAIT_SECONDS = 60.0  # a request waiting on another request's cold 
 SERVED_STATUSES = ('complete', 'superseded')
 SERVED_KINDS = {LEGACY_KIND: LEGACY_MODEL, KPN_KIND: KPN_MODEL}
 KPN_FACTOR_COLUMNS = ('factor_key', 'label', 'public_id', 'eaggl_factor_id', 'kpn_trait_id', 'factor_number', 'eaggl_import_id',
-                      'source_revision', 'metadata', 'phenotype_name', 'legacy_phenotype_id', 'trait_group', 'trait_type', 'trait_metadata')
-KPN_FACTORS = ('SELECT ' + ','.join('f.' + column for column in KPN_FACTOR_COLUMNS[:9]) + ',' + ','.join('t.' + column for column in KPN_FACTOR_COLUMNS[9:-1]) + ',t.metadata'
+                      'source_revision', 'metadata', 'phenotype_name', 'legacy_phenotype_id', 'trait_group', 'trait_type')
+# Trait metadata (about 6.6 MB of the KPN cold load when joined onto each of 4,037 factors) is read once per trait.
+KPN_FACTORS = ('SELECT ' + ','.join('f.' + column for column in KPN_FACTOR_COLUMNS[:9]) + ',' + ','.join('t.' + column for column in KPN_FACTOR_COLUMNS[9:])
                + ' FROM reference_factors f JOIN kpn_traits t ON t.generation_id=f.generation_id AND t.kpn_trait_id=f.kpn_trait_id'
                ' WHERE f.generation_id=%s ORDER BY f.kpn_trait_id,f.factor_number')
 
@@ -64,21 +65,23 @@ def vector_backend():
     return backend == 'upstash'
 
 
-def active_pointers(repo=None, vector=False):
+def active_pointers(repo=None, vector=False, *, inspect=None):
     """(active reference generation or None for legacy mode, active Vector snapshot id or None).
 
     REVEAL_REFERENCE_GENERATION_ID pins the generation. Otherwise both pointers come from one statement:
-    reference_reload flips them in one transaction, so a reader never sees a cutover half done."""
+    reference_reload flips them in one transaction, so a reader never sees a cutover half done. inspect(tx)
+    runs inside that read (the readiness monitor's database check), which then happens even when pinned."""
     pinned = setting('REVEAL_REFERENCE_GENERATION_ID')
     if pinned and not GENERATION_RE.fullmatch(pinned):
         raise Problem(503, 'SOURCE_NOT_READY', 'REVEAL_REFERENCE_GENERATION_ID is not a reference generation id.')
     repo = repo or Repository()
     registry = VectorRegistry(repo) if vector else None
-    if pinned: return pinned, registry.active_identity(required=False) if registry else None
+    if pinned and inspect is None: return pinned, registry.active_identity(required=False) if registry else None
     with repo.single_read() as tx:
-        if registry: tx.get_records([(ACTIVE_KIND, ACTIVE_ID), ('vector_active', registry.scope)])  # the reads below reuse it
+        tx.get_records([(ACTIVE_KIND, ACTIVE_ID)] + ([('vector_active', registry.scope)] if registry else []))  # the reads below reuse it
         active = read_active(tx)
-        return (active['generation_id'] if active else None), registry.active_identity_in(tx) if registry else None
+        if inspect: inspect(tx)
+        return pinned or (active['generation_id'] if active else None), registry.active_identity_in(tx) if registry else None
 
 
 def readiness_binding(generation_id, snapshot_id):
@@ -131,7 +134,7 @@ class Catalog:
     # Process-wide state that a reload (load() or refresh_if_changed()) keeps when it swaps in a freshly loaded catalog.
     PROCESS_STATE = frozenset({'lock', 'dismech_catalog_lock', 'vector_lock', 'refresh_lock', 'lookup_lock', 'repo', 'generation_cache', 'archive_cache',
                                'archive_unavailable_at', 'poll_seconds', 'poller', 'poller_lock', 'poller_stop', 'poller_wake', 'readiness_lock',
-                               'readiness_cache', 'observed_pointers'})
+                               'readiness_cache', 'observed_pointers', 'warmed', 'warmup'})
     def __init__(self, repo=None, *, poll_seconds=None):
         self.loaded = False
         self.lock = threading.Lock()
@@ -155,6 +158,7 @@ class Catalog:
         self.poll_seconds, self.poller, self.poller_lock, self.poller_stop = poll_seconds, None, threading.Lock(), threading.Event()
         # (read at, retrieval backend, generation, snapshot): the readiness monitor's latest pointer read.
         self.poller_wake, self.observed_pointers = threading.Event(), None
+        self.warmed, self.warmup = threading.Event(), None  # set once a startup warmup loaded everything
     def readiness(self):
         """Verify serving pins and coverage without materializing research corpora (the synchronous path, when no
         readiness monitor runs).
@@ -250,6 +254,22 @@ class Catalog:
             fresh.generation_checked_at = checked
             self.adopt(fresh)
         self.start_poller()
+    def warm(self):
+        """Load the catalog and the full DisMech corpus off the request path (API startup). Never raises and sets
+        nothing on failure: the first request then loads inline and fails closed, as without a warmup. Nothing
+        built here is persisted."""
+        try:
+            self.load(); self.dismech_catalog()
+        except Exception:
+            LOGGER.warning('Catalog warmup failed; the first request loads the catalog', exc_info=True)
+            return False
+        self.warmed.set(); return True
+    def start_warmup(self):
+        """Run warm() once per process on its own thread; requests that arrive meanwhile wait only for its remainder."""
+        with self.poller_lock:
+            if self.warmup and self.warmup[0] == os.getpid() and self.warmup[1].is_alive(): return
+            thread = threading.Thread(target=self.warm, name='catalog-warmup', daemon=True)
+            self.warmup = (os.getpid(), thread); thread.start()
     def fresh(self):
         fresh = type(self)(self.repo)
         if getattr(self, 'runtime', None) is not None: fresh.runtime = self.runtime  # The DAPPER runtime is process-wide.
@@ -346,6 +366,10 @@ class Catalog:
         cursor.execute(KPN_FACTORS, (identity,))
         rows = [dict(zip(KPN_FACTOR_COLUMNS, row)) for row in cursor.fetchall()]
         if not rows: raise Problem(503, 'SOURCE_NOT_READY', 'The reference generation has no factors.')
+        cursor.execute('SELECT kpn_trait_id,metadata FROM kpn_traits WHERE generation_id=%s', (identity,))
+        # One parsed dict per trait, shared by its factors: kpn_factors copies what it keeps and never mutates it.
+        traits = {trait: json.loads(metadata) if isinstance(metadata, (str, bytes)) else metadata for trait, metadata in cursor.fetchall()}
+        for row in rows: row['trait_metadata'] = traits.get(row['kpn_trait_id'])
         for row in rows:
             try: row['factor'] = parse_factor_key(row['factor_key'])['factor']
             except ReferenceInvariant: row['factor'] = None

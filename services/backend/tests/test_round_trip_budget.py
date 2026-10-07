@@ -24,12 +24,13 @@ import test_event_loop_offload as offload
 import test_mysql_pool as wire
 import test_publication as publication
 import test_research_http as research_http
+import test_readiness_monitor as readiness_monitor
 import test_research_polling as research_polling
 
 BUDGET = {'local_work_poll': 5, 'me': 2, 'readyz': 2, 'draft_patch': 10, 'mcp_get_operation': 5,
           'mcp_query_enqueue': 13, 'query_operation': 17, 'workspace_list': 4, 'workspace_detail': 4,
           'reconcile_idle': 4, 'job_dispatch': 11, 'gap_list': 5, 'gap_search': 5, 'gap_detail': 5,
-          'citation_render': 5}
+          'citation_render': 5, 'readyz_monitored': 0, 'readiness_tick': 2}
 
 
 class LocalWorkPollBudget(unittest.TestCase):
@@ -152,6 +153,21 @@ class AccountBudget(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.text); print('\n/readyz', budget)
         self.assertEqual((budget.kinds(), budget.unleased, budget.connects), (['single'], 0, 0), budget)
         self.assertLessEqual(budget.trips(), BUDGET['readyz'], budget)
+
+
+class ReadinessBudget(unittest.TestCase):
+    setUp = readiness_monitor.ReadinessMonitorTests.setUp
+    activate = readiness_monitor.ReadinessMonitorTests.activate
+    tick = readiness_monitor.ReadinessMonitorTests.tick
+
+    def test_monitored_probe_reads_nothing_and_each_tick_is_one_single_read(self):
+        with count_round_trips() as budget: self.tick()   # every 5 s: database, reference_active and vector_active
+        print('\nreadiness tick', budget)
+        self.assertEqual((budget.kinds(), budget.unleased, budget.connects), (['single'], 0, 0), budget)
+        self.assertLessEqual(budget.trips(), BUDGET['readiness_tick'], budget)
+        with count_round_trips() as budget: response = self.client.get('/readyz')
+        self.assertEqual(response.status_code, 200, response.text); print('\n/readyz monitored', budget)
+        self.assertLessEqual(budget.trips(), BUDGET['readyz_monitored'], budget)
 
 
 class GapDiscoveryBudget(unittest.TestCase):
