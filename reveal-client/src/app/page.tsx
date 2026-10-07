@@ -1,15 +1,29 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { version as clientVersion } from "../../package.json";
-import { api, ApiError, backend, errorMessage, request } from "../lib/api";
+import { api, ApiError, backend, errorMessage, request, type FactorLoading } from "../lib/api";
 import { followJob, followWorkspace } from "../lib/events";
 import { createMutationKeys } from "../lib/mutations";
 import { emptyComposer, terminal, withFactors, type AnalysisInput, type Composer, type Draft, type Factor, type Gap, type Job, type JobEvent, type Me, type Schema } from "../lib/types";
 
 type PendingSubmission = { body: AnalysisInput; key: string };
+type ParagraphProgress = { job?: Job; text?: string; error?: string };
 const readable = (value: string) => value.replaceAll("_", " ");
 const date = (value: string) => new Date(value).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+const setupStages = new Set(["queued", "freezing_inputs", "retrieving_cfde", "preparing_evidence", "starting_agent"]);
+function analysisHasStarted(job: Job) {
+  return job.kind !== "analysis" || terminal(job.status) || !setupStages.has(job.stage);
+}
+function investigationDraftName(search: string, gap: Gap | null) {
+  const stamp = date(new Date().toISOString());
+  const source = search.trim() || gap?.object.text || gap?.source.disease_label || "Investigation";
+  const label = source.replace(/\s+/g, " ").trim();
+  const suffix = ` · ${stamp}`;
+  const room = 120 - suffix.length;
+  const head = label.length > room ? label.slice(0, Math.max(1, room - 1)).trimEnd() + "…" : label;
+  return head + suffix;
+}
 const gapTitle = (gap: Gap) => gap.object.name || gap.object.text || "Knowledge gap";
 const gapBody = (gap: Gap) => gap.object.gap_description || gap.object.text || gap.source.source_id;
 function accountLevel(count: number, max: number) {
@@ -49,6 +63,77 @@ function GapOption({ gap, selected, disabled, maxAccounts, onSelect, onInspect }
   </div>;
 }
 const factorTitle = (factor: Factor) => factor.cfde_anchor.label || factor.object.name || factor.source_id;
+function matchedMechanisms(gap: Gap | null, ids: string[]) {
+  const bySource = new Map((gap?.attachments || []).flatMap(item => item.target ? [[item.target.source_id, item] as const] : []));
+  return ids.map(id => ({ id, label: bySource.get(id)?.label || id }));
+}
+type FactorNetRow = { sourceId: string; title: string; subtitle: string; mechanisms: { id: string; label: string }[]; cosine: number | null; selected: boolean; selectDisabled: boolean; onToggle: () => void; onInspect: (() => void) | null };
+function edgePaint(value: number | null) {
+  if (value == null || !Number.isFinite(value)) return { stroke: "#b7b9be", width: 1.5 };
+  const clamped = Math.max(-1, Math.min(1, value));
+  if (clamped === 0) return { stroke: "#b7b9be", width: 1.5 };
+  return { stroke: clamped < 0 ? "#f3ccc8" : "#c5daf0", width: 1.25 + Math.abs(clamped) * 5 };
+}
+function curvePath(x1: number, y1: number, x2: number, y2: number) {
+  const bend = Math.max(28, Math.abs(x2 - x1) * 0.46);
+  return `M ${x1} ${y1} C ${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2} ${y2}`;
+}
+function FactorNetwork({ gapLabel, rows, guide }: { gapLabel: string; rows: FactorNetRow[]; guide?: string }) {
+  const root = useRef<HTMLDivElement>(null);
+  const [graph, setGraph] = useState<{ width: number; height: number; links: { x1: number; y1: number; x2: number; y2: number; stroke: string; width: number; key: string; curve: boolean; label: string }[] }>({ width: 0, height: 0, links: [] });
+  const mechanisms = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const row of rows) for (const item of row.mechanisms) if (!seen.has(item.id)) seen.set(item.id, item.label);
+    return [...seen].map(([id, label]) => ({ id, label }));
+  }, [rows]);
+  const layoutKey = gapLabel + "|" + mechanisms.map(item => item.id).join(",") + "|" + rows.map(row => row.sourceId + ":" + row.cosine + ":" + row.selected + ":" + row.mechanisms.map(item => item.id).join(",")).join(";");
+  useLayoutEffect(() => {
+    const rootEl = root.current;
+    if (!rootEl) return;
+    const draw = () => {
+      const origin = rootEl.getBoundingClientRect();
+      const point = (id: string, side: "left" | "right") => {
+        const el = rootEl.querySelector(`[data-net-id="${CSS.escape(id)}"]`);
+        if (!(el instanceof HTMLElement)) return null;
+        const box = el.getBoundingClientRect();
+        return { x: (side === "left" ? box.left : box.right) - origin.left, y: box.top - origin.top + box.height / 2 };
+      };
+      const next: { x1: number; y1: number; x2: number; y2: number; stroke: string; width: number; key: string; curve: boolean; label: string }[] = [];
+      for (const item of mechanisms) {
+        const from = point("gap", "right");
+        const to = point("mech:" + item.id, "left");
+        if (from && to) next.push({ x1: from.x, y1: from.y, x2: to.x, y2: to.y, stroke: "#b7b9be", width: 1.6, key: "gap-" + item.id, curve: false, label: "" });
+      }
+      for (const row of rows) {
+        const paint = edgePaint(row.cosine);
+        const label = row.cosine == null ? "" : row.cosine.toLocaleString(undefined, { maximumFractionDigits: 3 });
+        for (const item of row.mechanisms) {
+          const from = point("mech:" + item.id, "right");
+          const to = point("factor:" + row.sourceId, "left");
+          if (from && to) next.push({ x1: from.x, y1: from.y, x2: to.x, y2: to.y, ...paint, key: item.id + "-" + row.sourceId, curve: true, label });
+        }
+      }
+      setGraph({ width: origin.width, height: origin.height, links: next });
+    };
+    draw();
+    const observer = new ResizeObserver(draw);
+    observer.observe(rootEl);
+    return () => observer.disconnect();
+  }, [layoutKey, mechanisms, rows]);
+  return <figure className="factor-net-figure">
+    <figcaption className="factor-net-legend">Cosine similarity: <span>-1</span><svg viewBox="0 0 28 14" aria-hidden="true"><polygon points="0,1 0,13 28,7" fill="#f3ccc8" /></svg><span>0</span><svg viewBox="0 0 28 14" aria-hidden="true"><polygon points="0,7 28,1 28,13" fill="#c5daf0" /></svg><span>1</span></figcaption>
+    {guide && <p className="factor-net-guide">{guide}</p>}
+    <div className="factor-net" ref={root}>
+      <svg className="factor-net-edges" width={graph.width} height={graph.height} aria-hidden="true">{graph.links.map(link => link.curve ? <path key={link.key} d={curvePath(link.x1, link.y1, link.x2, link.y2)} fill="none" stroke={link.stroke} strokeWidth={link.width} strokeLinecap="round" /> : <line key={link.key} x1={link.x1} y1={link.y1} x2={link.x2} y2={link.y2} stroke={link.stroke} strokeWidth={link.width} strokeLinecap="round" />)}</svg>
+      {graph.links.map(link => link.label ? <span className="net-edge-score" key={link.key} style={{ left: (link.x1 + link.x2) / 2, top: (link.y1 + link.y2) / 2 }}>{link.label}</span> : null)}
+      <div className="factor-net-col"><h3>Knowledge gap</h3><article className="net-gap" data-net-id="gap" title={gapLabel}><span>{gapLabel}</span></article></div>
+      <div className="factor-net-col factor-net-mechanisms"><h3>DisMech mechanism</h3>{mechanisms.map(item => <article className="net-mechanism" data-net-id={"mech:" + item.id} key={item.id}>{item.label}</article>)}</div>
+      <div className="factor-net-col factor-net-factors"><h3>EAGGL factor</h3>{rows.map(row => <article className={"net-factor" + (row.selected ? " selected" : "")} data-net-id={"factor:" + row.sourceId} key={row.sourceId}>
+        <div className="net-factor-row"><input type="checkbox" checked={row.selected} disabled={row.selectDisabled} aria-label={"Select " + row.title} onChange={row.onToggle} /><div className="net-factor-copy"><strong>{row.title}</strong>{row.subtitle && <small>{row.subtitle}</small>}{row.onInspect && <button type="button" className="gap-bubble inspect" onClick={row.onInspect}>Inspect factor</button>}</div></div>
+      </article>)}</div>
+    </div>
+  </figure>;
+}
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
 }
@@ -74,11 +159,16 @@ function gapSnippets(gap: Gap) {
     return [{ text: item.snippet.trim(), explanation: textField(item, "explanation"), title: textField(item, "reference_title"), source: textField(item, "evidence_source"), href: reference ? evidenceHref(reference) : null, support: textField(item, "supports") }];
   });
 }
+function attachedMechanisms(gap: Gap) {
+  return gap.attachments.filter(item => item.resolution === "resolved" && item.target?.source === "dismech" && (item.label || item.target.source_id));
+}
 function GapFacts({ gap }: { gap: Gap }) {
   const snippets = gapSnippets(gap);
+  const mechanisms = attachedMechanisms(gap);
   return <dl className="inspect-fields">
     {gap.object.gap_description && <div><dt>Rationale</dt><dd>{gap.object.gap_description}</dd></div>}
-    {!!snippets.length && <div><dt>Snippets</dt><dd><div className="snippet-list">{snippets.map((item, index) => <article className="snippet-card" key={index}><p className="snippet-text">“{item.text}”</p>{item.explanation && <p className="snippet-note">{item.explanation}</p>}{(item.title || item.source) && <div className="snippet-cite">{item.title && <p className="snippet-title">{item.href ? <a href={item.href} target="_blank" rel="noreferrer">{item.title}</a> : item.title}</p>}{item.source && <p className="snippet-source">{item.source}</p>}</div>}{item.support && <p><span>Supports</span>{item.support}</p>}</article>)}</div></dd></div>}
+    {!!mechanisms.length && <div><dt>DisMech mechanisms</dt><dd><ul className="mechanism-list">{mechanisms.map(item => <li key={item.target?.source_id || item.label}>{item.label || item.target?.source_id}</li>)}</ul></dd></div>}
+    {!!snippets.length && <div><dt>Snippets</dt><dd><div className="snippet-list">{snippets.map((item, index) => <article className="snippet-card" key={index}><p className="snippet-text">“<span>{item.text}</span>”</p>{item.explanation && <p className="snippet-note">{item.explanation}</p>}{(item.title || item.source) && <div className="snippet-cite">{item.title && <p className="snippet-title">{item.href ? <a href={item.href} target="_blank" rel="noreferrer">{item.title}</a> : item.title}</p>}{item.source && <p className="snippet-source">{item.source}</p>}</div>}{item.support && <p><span>Supports</span>{item.support}</p>}</article>)}</div></dd></div>}
   </dl>;
 }
 function diseaseBubble(gap: Gap) {
@@ -89,15 +179,196 @@ function diseaseBubble(gap: Gap) {
   const entity = (gap.object.about_entities || []).find(value => /^https?:\/\//i.test(value));
   return entity ? <a className="disease-bubble" href={entity} target="_blank" rel="noreferrer">{diseaseScope}</a> : <span className="disease-bubble">{diseaseScope}</span>;
 }
-function InspectCard({ title, open, closeLabel, badge, onOpen, onClose, children }: { title: string; open: boolean; closeLabel: string; badge?: ReactNode; onOpen: () => void; onClose: () => void; children: ReactNode }) {
-  return <section className={open ? "inspect-card open" : "inspect-card"}><div className="inspect-card-head"><button type="button" className="inspect-toggle" aria-expanded={open} onClick={onOpen}><span>{title}</span></button><button type="button" className="inspect-close" aria-label={closeLabel} onClick={onClose}>×</button>{open && badge && <div className="inspect-badge-row">{badge}</div>}</div>{open && <div className="inspect-body">{children}</div>}</section>;
+const LOADING_PAGE_SIZE = 10;
+function formatLoading(value: number | null | undefined) {
+  if (value == null || !Number.isFinite(value)) return "—";
+  const abs = Math.abs(value);
+  return abs !== 0 && abs < 0.0001 ? value.toExponential(2) : value.toLocaleString(undefined, { maximumFractionDigits: 4 });
+}
+function LoadingDot({ value }: { value: number | null | undefined }) {
+  if (value == null || !Number.isFinite(value)) return null;
+  return <span className="loading-dot" style={{ opacity: Math.min(1, Math.max(0, value)) }} aria-hidden="true" />;
+}
+function FactorSummary({ factor }: { factor: Factor }) {
+  return factor.cfde_anchor.subtitle ? <p>{factor.cfde_anchor.subtitle}</p> : null;
+}
+function wrapAtUnderscore(value: string) {
+  return value.split("_").map((part, index) => index === 0 ? part : <span key={index}>_<wbr />{part}</span>);
+}
+function loadingCut(raw: string) {
+  const value = Number(raw);
+  return raw.trim() && Number.isFinite(value) ? value : null;
+}
+function scoreValue(value: number | null | undefined) {
+  return value == null || !Number.isFinite(value) ? -Infinity : value;
+}
+function symbolKeys(value: string) {
+  const text = value.trim().toUpperCase();
+  if (!text) return [];
+  const cut = text.lastIndexOf(":");
+  return cut >= 0 ? [text, text.slice(cut + 1)] : [text];
+}
+function geneKeys(item: FactorLoading) {
+  return [...new Set([...symbolKeys(item.label), ...symbolKeys(item.id)])];
+}
+const CROSSING_LIMIT = 10;
+type CrossingSet = { item: FactorLoading; members: Set<string> | null };
+function dotSize(value: number | null | undefined) {
+  if (value == null || !Number.isFinite(value) || value <= 0) return 0;
+  return 3 + Math.min(1, value) * 8;
+}
+function ScoreDot({ value, tone }: { value: number | null | undefined; tone: "gene" | "joint" | "marginal" }) {
+  const size = dotSize(value);
+  if (!size) return null;
+  return <span className={"crossing-dot " + tone} style={{ width: size, height: size }} />;
+}
+function CrossingMap({ genes, sets }: { genes: FactorLoading[]; sets: CrossingSet[] }) {
+  return <div className="crossing">
+    <div className="crossing-scroll">
+      <table className="crossing-map" aria-label="Crossings of the top genes and gene sets">
+        <thead><tr><th className="set" />{genes.map(gene => <th className="gene" key={gene.id} scope="col"><span>{gene.label}</span></th>)}</tr></thead>
+        <tbody>{sets.map(set => {
+          const joint = set.item.joint_loading ?? set.item.loading;
+          return <tr key={set.item.id}>
+            <th className="set" scope="row">{wrapAtUnderscore(set.item.label)}</th>
+            {set.members == null
+              ? <td className="crossing-missing" colSpan={genes.length}>Membership unavailable</td>
+              : genes.map(gene => {
+                const member = geneKeys(gene).some(key => set.members?.has(key));
+                const detail = member
+                  ? `${gene.label} belongs to this gene set. Gene loading ${formatLoading(gene.loading)}, joint ${formatLoading(joint)}, marginal ${formatLoading(set.item.marginal_loading)}.`
+                  : `${gene.label} is not in this gene set.`;
+                return <td key={gene.id} className={member ? "member" : undefined} title={detail}>{member && <span className="crossing-dots">
+                  <span className="crossing-slot"><ScoreDot value={gene.loading} tone="gene" /></span>
+                  <span className="crossing-slot"><ScoreDot value={joint} tone="joint" /></span>
+                  <span className="crossing-slot"><ScoreDot value={set.item.marginal_loading} tone="marginal" /></span>
+                </span>}</td>;
+              })}
+          </tr>;
+        })}</tbody>
+      </table>
+    </div>
+    <ul className="crossing-legend"><li><span className="crossing-dot gene" />Gene loading</li><li><span className="crossing-dot joint" />Joint</li><li><span className="crossing-dot marginal" />Marginal</li></ul>
+  </div>;
+}
+function LoadingTable({ rows, kind, empty }: { rows: FactorLoading[]; kind: "gene" | "gene_set"; empty: string }) {
+  const [page, setPage] = useState(0);
+  const pages = Math.max(1, Math.ceil(rows.length / LOADING_PAGE_SIZE));
+  const visible = rows.slice(page * LOADING_PAGE_SIZE, page * LOADING_PAGE_SIZE + LOADING_PAGE_SIZE);
+  const title = kind === "gene" ? "Genes" : "Gene sets";
+  return <section className="loading-block">
+    {!rows.length && <p className="settings-note">{empty}</p>}
+    {!!visible.length && <table className="loading-table">
+      <thead>{kind === "gene" ? <tr><th>Gene</th><th className="num">Loading</th></tr> : <tr><th>Gene set</th><th className="source">Source</th><th className="num">Joint</th><th className="num">Marginal</th></tr>}</thead>
+      <tbody>{visible.map(item => kind === "gene"
+        ? <tr key={item.id}><td>{item.label}</td><td className="num"><LoadingDot value={item.loading} />{formatLoading(item.loading)}</td></tr>
+        : <tr key={item.id}><td className="set-id">{wrapAtUnderscore(item.label)}</td><td className="source">{item.library || "—"}</td><td className="num"><LoadingDot value={item.joint_loading ?? item.loading} />{formatLoading(item.joint_loading ?? item.loading)}</td><td className="num"><LoadingDot value={item.marginal_loading} />{formatLoading(item.marginal_loading)}</td></tr>)}</tbody>
+    </table>}
+    {rows.length > LOADING_PAGE_SIZE && <nav className="inspect-pages" aria-label={title + " pages"}><button type="button" className="step" aria-label="First page" disabled={page === 0} onClick={() => setPage(0)}>«</button><button type="button" className="step" aria-label="Previous page" disabled={page === 0} onClick={() => setPage(value => value - 1)}>‹</button>{page > 0 && <button type="button" className="page-num" aria-label={"Page " + page} onClick={() => setPage(page - 1)}>{page}</button>}<button type="button" className="current" aria-current="page">{page + 1}</button>{page < pages - 1 && <button type="button" className="page-num" aria-label={"Page " + (page + 2)} onClick={() => setPage(page + 1)}>{page + 2}</button>}<button type="button" className="step" aria-label="Next page" disabled={page >= pages - 1} onClick={() => setPage(value => value + 1)}>›</button><button type="button" className="step" aria-label="Last page" disabled={page >= pages - 1} onClick={() => setPage(pages - 1)}>»</button></nav>}
+  </section>;
+}
+function FactorLoadings({ sourceId }: { sourceId: string }) {
+  const [tab, setTab] = useState<"gene" | "gene_set">("gene");
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [geneQuery, setGeneQuery] = useState("");
+  const [geneMin, setGeneMin] = useState("");
+  const [jointMin, setJointMin] = useState("");
+  const [marginalMin, setMarginalMin] = useState("");
+  const [rows, setRows] = useState<{ gene: FactorLoading[] | null; gene_set: FactorLoading[] | null }>({ gene: null, gene_set: null });
+  const [note, setNote] = useState("");
+  const [crossing, setCrossing] = useState<{ genes: FactorLoading[]; sets: CrossingSet[] } | null>(null);
+  const [crossingNote, setCrossingNote] = useState("");
+  const [crossingBusy, setCrossingBusy] = useState(false);
+  const crossingAbort = useRef<AbortController | null>(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    crossingAbort.current?.abort();
+    setRows({ gene: null, gene_set: null }); setNote(""); setCrossing(null); setCrossingNote(""); setCrossingBusy(false);
+    void Promise.all((["gene", "gene_set"] as const).map(kind => api.factorLoadingsAll(sourceId, kind, controller.signal))).then(([gene, geneSet]) => {
+      setRows({ gene, gene_set: geneSet });
+    }).catch(error => {
+      if (controller.signal.aborted) return;
+      setRows({ gene: [], gene_set: [] }); setNote(errorMessage(error));
+    });
+    return () => { controller.abort(); crossingAbort.current?.abort(); };
+  }, [sourceId]);
+  async function checkCrossings() {
+    if (!rows.gene || !rows.gene_set) return;
+    const genes = [...rows.gene].sort((a, b) => scoreValue(b.loading) - scoreValue(a.loading)).slice(0, CROSSING_LIMIT);
+    const sets = [...rows.gene_set].sort((a, b) => scoreValue(b.joint_loading ?? b.loading) - scoreValue(a.joint_loading ?? a.loading)).slice(0, CROSSING_LIMIT);
+    if (!genes.length || !sets.length) { setCrossing(null); setCrossingNote("This factor does not have genes and gene sets to compare."); return; }
+    crossingAbort.current?.abort();
+    const controller = new AbortController();
+    crossingAbort.current = controller;
+    setCrossingBusy(true); setCrossingNote(""); setCrossing(null);
+    try {
+      const mapped = await Promise.all(sets.map(async item => {
+        if (!item.gene_set_id) return { item, members: null };
+        try {
+          const record = await api.catalogGeneSet(item.gene_set_id, controller.signal);
+          const raw = record.object?.members;
+          if (!Array.isArray(raw)) return { item, members: null };
+          return { item, members: new Set(raw.flatMap(value => typeof value === "string" ? symbolKeys(value) : [])) };
+        } catch (error) {
+          if (controller.signal.aborted) throw error;
+          return { item, members: null };
+        }
+      }));
+      if (!controller.signal.aborted) setCrossing({ genes, sets: mapped });
+    } catch (error) {
+      if (!controller.signal.aborted) setCrossingNote(errorMessage(error));
+    } finally {
+      if (!controller.signal.aborted) setCrossingBusy(false);
+    }
+  }
+  const filtered = useMemo(() => {
+    const query = geneQuery.trim().toLowerCase();
+    const geneCut = loadingCut(geneMin);
+    const jointCut = loadingCut(jointMin);
+    const marginalCut = loadingCut(marginalMin);
+    return {
+      gene: rows.gene?.filter(item => {
+        if (query && !`${item.label} ${item.id}`.toLowerCase().includes(query)) return false;
+        return geneCut == null || item.loading >= geneCut;
+      }) ?? null,
+      gene_set: rows.gene_set?.filter(item => {
+        const joint = item.joint_loading ?? item.loading;
+        if (jointCut != null && (joint == null || joint < jointCut)) return false;
+        return marginalCut == null || (item.marginal_loading != null && item.marginal_loading >= marginalCut);
+      }) ?? null,
+    };
+  }, [rows, geneQuery, geneMin, jointMin, marginalMin]);
+  const current = filtered[tab];
+  const filtersOn = [geneQuery, geneMin, jointMin, marginalMin].some(value => value.trim());
+  const empty = rows[tab]?.length ? "No loadings match these filters." : "No loadings for this factor.";
+  return <div className="loading-tabs">
+    <div className="loading-tools"><button type="button" className="loading-filter" aria-label="Filters" aria-expanded={filtersOpen} aria-pressed={filtersOn} onClick={() => setFiltersOpen(open => !open)}><svg viewBox="0 0 72 54" aria-hidden="true"><g fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round"><line x1="6" y1="10" x2="11.5" y2="10" /><line x1="28.5" y1="10" x2="66" y2="10" /><line x1="6" y1="27" x2="37.5" y2="27" /><line x1="54.5" y1="27" x2="66" y2="27" /><line x1="6" y1="44" x2="17.5" y2="44" /><line x1="34.5" y1="44" x2="66" y2="44" /></g><g fill="#fff" stroke="currentColor" strokeWidth="4"><circle cx="20" cy="10" r="6.5" /><circle cx="46" cy="27" r="6.5" /><circle cx="26" cy="44" r="6.5" /></g></svg></button></div>
+    {filtersOpen && <div className="loading-filters">
+      <label>Gene<input value={geneQuery} onChange={event => setGeneQuery(event.target.value)} placeholder="Search a gene" autoComplete="off" /></label>
+      <div className="loading-filter-scores">
+        <label>Gene loading<input type="number" inputMode="decimal" min={0} max={1} step="any" value={geneMin} onChange={event => setGeneMin(event.target.value)} placeholder="Any" /></label>
+        <label>Joint<input type="number" inputMode="decimal" min={0} max={1} step="any" value={jointMin} onChange={event => setJointMin(event.target.value)} placeholder="Any" /></label>
+        <label>Marginal<input type="number" inputMode="decimal" min={0} max={1} step="any" value={marginalMin} onChange={event => setMarginalMin(event.target.value)} placeholder="Any" /></label>
+      </div>
+      <button type="button" className="secondary crossing-check" disabled={!rows.gene || !rows.gene_set || crossingBusy} onClick={() => void checkCrossings()}>{crossingBusy ? "Checking crossings…" : "Check crossings of top 10 genes and gene sets"}</button>
+    </div>}
+    {crossingNote && <p className="settings-note">{crossingNote}</p>}
+    {crossing && <CrossingMap genes={crossing.genes} sets={crossing.sets} />}
+    <div role="tablist" aria-label="Factor loadings"><button type="button" role="tab" aria-selected={tab === "gene"} onClick={() => setTab("gene")}>Genes</button><button type="button" role="tab" aria-selected={tab === "gene_set"} onClick={() => setTab("gene_set")}>Gene sets</button></div>
+    {note && <p className="settings-note">{note}</p>}
+    {current ? <LoadingTable key={`${tab}|${geneQuery}|${geneMin}|${jointMin}|${marginalMin}`} rows={current} kind={tab} empty={empty} /> : !note && <p className="settings-note">Loading…</p>}
+  </div>;
+}
+function InspectCard({ title, open, summary = false, closable = true, closeLabel, badge, onOpen, onClose, children }: { title: string; open: boolean; summary?: boolean; closable?: boolean; closeLabel: string; badge?: ReactNode; onOpen: () => void; onClose: () => void; children: ReactNode }) {
+  return <section className={"inspect-card" + (open ? " open" : summary ? " summary" : "")}><div className="inspect-card-head"><button type="button" className="inspect-toggle" aria-expanded={open || summary} onClick={onOpen}><span>{title}</span></button>{closable && <button type="button" className="inspect-close" aria-label={closeLabel} onClick={onClose}>×</button>}{open && badge && <div className="inspect-badge-row">{badge}</div>}</div>{(open || summary) && <div className="inspect-body">{children}</div>}</section>;
 }
 function InspectColumn({ gap, factor, factorPending, focus, gapNote, factorNote, onFocus, onCloseGap, onCloseFactor }: {
-  gap: Gap | null; factor: Factor | null; factorPending: boolean; focus: "gap" | "factor"; gapNote: string; factorNote: string; onFocus: (focus: "gap" | "factor") => void; onCloseGap: () => void; onCloseFactor: () => void;
+  gap: Gap | null; factor: Factor | null; factorPending: boolean; focus: "gap" | "factor"; gapNote: string; factorNote: string;
+  onFocus: (focus: "gap" | "factor") => void; onCloseGap: () => void; onCloseFactor: () => void;
 }) {
   return <div className="inspect-frame">
     {gap && <InspectCard title={gap.object.text || gapTitle(gap)} open={focus === "gap"} closeLabel="Close gap inspection" badge={diseaseBubble(gap)} onOpen={() => onFocus("gap")} onClose={onCloseGap}><GapFacts gap={gap} />{gapNote && <p className="settings-note">{gapNote}</p>}</InspectCard>}
-    {(factor || factorPending) && <InspectCard title={factor ? factorTitle(factor) : "Loading factor…"} open={focus === "factor"} closeLabel="Close factor inspection" onOpen={() => onFocus("factor")} onClose={onCloseFactor}>{factor ? <>{factor.cfde_anchor.subtitle && <p>{factor.cfde_anchor.subtitle}</p>}{factor.object.description && factor.object.description !== factor.cfde_anchor.subtitle && <p>{factor.object.description}</p>}{factor.kpn_trait?.name && <dl className="settings-facts"><dt>Trait</dt><dd>{factor.kpn_trait.name}</dd></dl>}</> : <p className="settings-note">Loading the factor…</p>}{factorNote && <p className="settings-note">{factorNote}</p>}</InspectCard>}
+    {(factor || factorPending) && <InspectCard title={factor ? factorTitle(factor) : "Loading factor…"} open={focus === "factor"} closeLabel="Close factor inspection" onOpen={() => onFocus("factor")} onClose={onCloseFactor}>{factor ? <><FactorSummary factor={factor} /><FactorLoadings key={factor.source_id} sourceId={factor.source_id} /></> : <p className="settings-note">Loading the factor…</p>}{factorNote && <p className="settings-note">{factorNote}</p>}</InspectCard>}
   </div>;
 }
 function setLocation(kind: "draft" | "job", id: string | null) {
@@ -128,6 +399,8 @@ const productApis: { method: string; path: string; detail: string }[] = [
   { method: "GET", path: "/v1/knowledge-gaps/{id}", detail: "Load the knowledge gap selected for an investigation." },
   { method: "POST", path: "/v1/mechanisms/suggest", detail: "Suggest mechanism anchors for the selected gap." },
   { method: "GET", path: "/v1/mechanisms/{id}", detail: "Load a mechanism factor after it is selected." },
+  { method: "GET", path: "/v1/factor-loadings", detail: "Page the gene and gene-set loadings for a factor." },
+  { method: "GET", path: "/v1/catalog/gene-sets/{gene_set_id}", detail: "Load the genes that belong to a gene set." },
   { method: "GET", path: "/v1/jobs", detail: "List workspace jobs." },
   { method: "GET", path: "/v1/jobs/{id}", detail: "Open one job and its saved result." },
   { method: "POST", path: "/v1/jobs", detail: "Start an analysis from a saved draft." },
@@ -227,14 +500,18 @@ export default function Home() {
   const [factors, setFactors] = useState<Record<string, Factor>>({});
   const [factorMisses, setFactorMisses] = useState<Record<string, true>>({});
   const [job, setJob] = useState<Job | null>(null);
+  const [paragraphs, setParagraphs] = useState<Record<string, ParagraphProgress>>({});
+  const [startedDraftId, setStartedDraftId] = useState<string | null>(null);
   const [activity, setActivity] = useState<JobEvent[]>([]);
+  const [activityDetail, setActivityDetail] = useState(true);
+  const [activityLogOpen, setActivityLogOpen] = useState(false);
   const [streamState, setStreamState] = useState("");
   const [, setWorkspaceState] = useState("");
   const [streamAttempt, setStreamAttempt] = useState(0);
   const [pending, setPending] = useState<PendingSubmission | null>(null);
-  const [welcomeOpen, setWelcomeOpen] = useState(false);
+  const [welcomeOpen, setWelcomeOpen] = useState(true);
   const [panelView, setPanelView] = useState<"menu" | "draft" | "copy">("menu");
-  const [step, setStep] = useState<"gap" | "anchors" | "investigate" | null>("gap");
+  const [step, setStep] = useState<"gap" | "anchors" | "investigation" | null>("gap");
   const [activityOpen, setActivityOpen] = useState(false);
   const [draftPicker, setDraftPicker] = useState(false);
   const [deletingId, setDeletingId] = useState("");
@@ -257,8 +534,6 @@ export default function Home() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("settings");
   const [openLastDraft, setOpenLastDraft] = useState(false);
-  const [unsavedPrompt, setUnsavedPrompt] = useState(false);
-  const [draftPrompt, setDraftPrompt] = useState<null | "save" | "start">(null);
   const [focusNonce, setFocusNonce] = useState(0);
   const editorGeneration = useRef(0), jobGeneration = useRef(0);
   const collections = useRef<{ drafts: boolean; jobs: boolean; flight: Promise<void> | null }>({ drafts: false, jobs: false, flight: null });
@@ -266,6 +541,12 @@ export default function Home() {
   const searchAbort = useRef<AbortController | null>(null), suggestionAbort = useRef<AbortController | null>(null);
   const mutationKeys = useRef(createMutationKeys());
   const currentJob = useRef<Job | null>(null);
+  const submittedJob = useRef<string | null>(null);
+  const activityPinned = useRef<string | null>(null);
+  const activityCollapsed = useRef<string | null>(null);
+  const submittedDraft = useRef<string | null>(null);
+  const completionSaved = useRef(new Set<string>());
+  const saveRef = useRef<(asNew?: boolean, options?: { name?: string; quiet?: boolean; updateOnly?: boolean; draftId?: string; composer?: Composer }) => Promise<Draft | null>>(async () => null);
   const startFocus = useRef<string | null>(null);
   const sessionMenu = useRef<HTMLDivElement>(null);
   const helpMenu = useRef<HTMLDivElement>(null);
@@ -314,17 +595,46 @@ export default function Home() {
       const value = await api.draft(id);
       if (generation !== editorGeneration.current || owner !== identity.current) return;
       setDraft(value); setComposer(value.composer); setName(value.name || ""); setSuggestion(null); setGap(null);
-      setLocation("draft", id); setNotice("Saved draft loaded."); setError(""); setWelcomeOpen(false); setStep(value.composer.source_gap ? "anchors" : "gap");
+      setLocation("draft", id); setNotice("Saved draft loaded."); setError(""); setWelcomeOpen(false);
+      const suggestionController = new AbortController();
+      suggestionAbort.current = suggestionController;
+      const suggestionTask = value.composer.source_gap ? api.suggest(value.composer, suggestionController.signal).then(suggestion => {
+        if (suggestionController.signal.aborted || generation !== editorGeneration.current || owner !== identity.current) return;
+        setSuggestion(suggestion);
+        setFactors(values => ({ ...values, ...Object.fromEntries(suggestion.automatic_anchors.map(anchor => [anchor.factor.source_id, anchor.factor])) }));
+      }).catch(error => {
+        if (!suggestionController.signal.aborted && generation === editorGeneration.current && owner === identity.current) setError(errorMessage(error));
+      }).finally(() => { if (!suggestionController.signal.aborted && generation === editorGeneration.current) setSuggesting(false); }) : Promise.resolve();
+      if (value.composer.source_gap) setSuggesting(true);
       if (value.composer.source_gap) {
-        const selected = await api.gap(value.composer.source_gap.id);
-        if (generation === editorGeneration.current) setGap(selected);
+        try {
+          const selected = await api.gap(value.composer.source_gap.id);
+          if (generation === editorGeneration.current) setGap(selected);
+        } catch (error) { if (generation === editorGeneration.current && owner === identity.current) setError(errorMessage(error)); }
       }
+      await suggestionTask;
+      const [requestPage, jobPage] = await Promise.all([api.requests(), api.jobs()]);
+      if (generation !== editorGeneration.current || owner !== identity.current) return;
+      const requestIds = new Set(requestPage.items.filter(item => item.source_draft_id === id).map(item => item.id));
+      const linked = jobPage.items.filter(item => item.kind === "analysis" && !!item.research_request_id && requestIds.has(item.research_request_id))
+        .sort((a, b) => Number(b.status === "succeeded") - Number(a.status === "succeeded") || b.created_at.localeCompare(a.created_at))[0];
+      if (!linked) { setStartedDraftId(null); setStep(value.composer.source_gap ? "anchors" : "gap"); return; }
+      setStartedDraftId(id); submittedDraft.current = id; submittedJob.current = linked.id;
+      const finished = terminal(linked.status);
+      if (finished) activityCollapsed.current = linked.id;
+      setActivityDetail(true); setActivityLogOpen(!finished); setStep("investigation"); setActivityOpen(true);
+      await openJob(linked.id);
     } catch (error) { if (generation === editorGeneration.current && owner === identity.current) setError(errorMessage(error)); }
-  }, []);
+  }, [openJob]);
 
   useEffect(() => {
     let active = true;
-    api.session().then(value => { if (active) setPrincipal(value.principal); }).catch(error => { if (active) setError(errorMessage(error)); }).finally(() => { if (active) setChecking(false); });
+    api.session().then(value => {
+      if (!active) return;
+      if (value.principal) { setPrincipal(value.principal); setChecking(false); return; }
+      setChecking(false);
+      void connect();
+    }).catch(error => { if (active) { setError(errorMessage(error)); setChecking(false); } });
     return () => { active = false; };
   }, []);
   useEffect(() => { setOpenLastDraft(readOpenLastDraft()); }, []);
@@ -341,8 +651,9 @@ export default function Home() {
     setPending(storedIntent(principal.user_id));
     void refresh().catch(error => setError(errorMessage(error)));
     const params = new URLSearchParams(window.location.search);
+    if (params.get("draft") || params.get("job")) setWelcomeOpen(false);
     if (params.get("draft")) void openDraft(params.get("draft")!);
-    if (params.get("job")) { setActivityOpen(true); void openJob(params.get("job")!); }
+    if (params.get("job")) { setStep("investigation"); setActivityOpen(true); void openJob(params.get("job")!); }
     return () => { identity.current = null; ++editorGeneration.current; ++jobGeneration.current; };
   }, [principal?.user_id, refresh, openDraft, openJob]);
   useEffect(() => {
@@ -366,6 +677,11 @@ export default function Home() {
   useEffect(() => {
     if (!principal || !job) return;
     const id = job.id, controller = new AbortController();
+    if (!submittedJob.current && job.kind === "analysis" && !terminal(job.status)) {
+      const params = new URLSearchParams(window.location.search);
+      const draftId = params.get("draft");
+      if (draftId && params.get("job") === id) { submittedJob.current = id; submittedDraft.current = draftId; }
+    }
     setStreamState("Connecting to live activity…");
     async function readLatest() {
       const value = await api.job(id);
@@ -378,8 +694,16 @@ export default function Home() {
         if (controller.signal.aborted) return;
         setActivity(items => items.some(item => item.id === event.id) ? items : [...items, event].slice(-1000));
         setJob(value => value?.id === id ? { ...value, status: event.status, stage: event.stage, result: event.result || value.result,
-          updated_at: event.occurred_at, last_event_id: event.id } : value);
-        if (terminal(event.status)) { setStreamState("Activity complete"); void readLatest().then(() => refresh(["jobs"])).catch(error => setError(errorMessage(error))); }
+          updated_at: event.occurred_at, completed_at: terminal(event.status) ? event.occurred_at : value.completed_at, last_event_id: event.id } : value);
+        if (terminal(event.status)) {
+          setStreamState("Activity complete");
+          setStep("investigation"); setActivityDetail(true); setActivityLogOpen(false);
+          if (job.kind === "analysis" && submittedJob.current === id && !completionSaved.current.has(id)) {
+            completionSaved.current.add(id);
+            void saveRef.current(false, { quiet: true, updateOnly: true, draftId: submittedDraft.current || undefined }).then(saved => { if (!saved) completionSaved.current.delete(id); });
+          }
+          void readLatest().then(() => refresh(["jobs"])).catch(error => setError(errorMessage(error)));
+        }
       },
     }).then(() => { if (!controller.signal.aborted) setStreamState("Activity complete"); })
       .catch(error => { if (!controller.signal.aborted) setStreamState(errorMessage(error)); });
@@ -387,6 +711,37 @@ export default function Home() {
   // The stream owns status changes; only selecting a different job reconnects it.
   }, [principal?.user_id, job?.id, streamAttempt, refresh]);
   useEffect(() => () => { searchAbort.current?.abort(); suggestionAbort.current?.abort(); }, []);
+  const paragraphKey = job?.result?.kind === "analysis" ? job.result.paragraph_job_ids.join(",") : "";
+  useEffect(() => {
+    const ids = paragraphKey ? paragraphKey.split(",") : [];
+    if (!ids.length) { setParagraphs({}); return; }
+    let active = true;
+    const timers = new Map<string, ReturnType<typeof setTimeout>>();
+    setParagraphs({});
+    async function load(id: string) {
+      try {
+        const value = await api.job(id);
+        if (!active) return;
+        if (value.result?.kind === "paragraph" && value.status === "succeeded") {
+          const record = await request<Record<string, unknown>>(backend("paragraphs/" + encodeURIComponent(value.result.paragraph_id)));
+          if (!active) return;
+          setParagraphs(current => ({ ...current, [id]: { job: value, text: paragraphText(record) } }));
+          return;
+        }
+        setParagraphs(current => ({ ...current, [id]: { ...current[id], job: value } }));
+        if (!terminal(value.status)) timers.set(id, setTimeout(() => void load(id), 3000));
+      } catch (err) {
+        if (active) setParagraphs(current => ({ ...current, [id]: { ...current[id], error: errorMessage(err) } }));
+      }
+    }
+    for (const id of ids) void load(id);
+    return () => { active = false; for (const timer of timers.values()) clearTimeout(timer); };
+  }, [paragraphKey]);
+  useEffect(() => {
+    if (!job || !terminal(job.status) || activityCollapsed.current === job.id) return;
+    activityCollapsed.current = job.id;
+    setStep("investigation"); setActivityDetail(true); setActivityLogOpen(false);
+  }, [job]);
   useEffect(() => {
     if (welcomeOpen || !startFocus.current) return;
     const id = startFocus.current;
@@ -399,8 +754,7 @@ export default function Home() {
   }, [welcomeOpen, activityOpen, step, focusNonce]);
   useEffect(() => {
     if (step === "anchors" && !gapChosen) setStep("gap");
-    else if (step === "investigate" && !(gapChosen && anchorChosen)) setStep(gapChosen ? "anchors" : "gap");
-  }, [step, gapChosen, anchorChosen]);
+  }, [step, gapChosen]);
   useEffect(() => {
     if (!sessionOpen && !helpOpen) return;
     function close(event: MouseEvent) {
@@ -413,12 +767,6 @@ export default function Home() {
     document.addEventListener("keydown", onKey);
     return () => { document.removeEventListener("mousedown", close); document.removeEventListener("keydown", onKey); };
   }, [sessionOpen, helpOpen]);
-  useEffect(() => {
-    if (!unsavedPrompt && !draftPrompt) return;
-    function onKey(event: KeyboardEvent) { if (event.key === "Escape") { setUnsavedPrompt(false); setDraftPrompt(null); } }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [unsavedPrompt, draftPrompt]);
   useEffect(() => {
     if (!draftPicker) return;
     function onKey(event: KeyboardEvent) { if (event.key === "Escape") { if (pendingDelete) setPendingDelete(null); else setDraftPicker(false); } }
@@ -551,15 +899,28 @@ export default function Home() {
     ++editorGeneration.current; suggestionAbort.current?.abort(); setSuggesting(false);
     setDraft(null); setName(""); setComposer(emptyComposer()); setGap(null); setSuggestion(null);
     setQuery(""); setGaps([]); setSearched(false); setLocation("draft", null); setNotice(""); setError("");
-    setStep("gap"); setActivityOpen(false); setWelcomeOpen(false); setPanelView("menu"); setUnsavedPrompt(false); setDraftPrompt(null);
+    setStep("gap"); setActivityOpen(false); setWelcomeOpen(false); setPanelView("menu");
     startFocus.current = "gap-search"; setFocusNonce(value => value + 1);
+  }
+  function startSession() {
+    setSessionOpen(false);
+    if (dirty && (draft || composer.source_gap || name) && !window.confirm("Start a new session? Unsaved changes will be discarded.")) return;
+    ++editorGeneration.current; suggestionAbort.current?.abort(); setSuggesting(false);
+    setDraft(null); setName(""); setComposer(emptyComposer()); setGap(null); setSuggestion(null);
+    setQuery(""); setGaps([]); setSearched(false); setLocation("draft", null); setLocation("job", null);
+    setNotice(""); setError(""); setStep("gap"); setActivityOpen(false); setPanelView("menu");
+    setWelcomeOpen(true);
+    currentJob.current = null; setJob(null);
+  }
+  function startSearch() {
+    beginWithoutDraft();
   }
   function startFrom(action: "draft" | "gap" | "jobs") {
     setSessionOpen(false);
     if (action === "draft") { if (newDraft()) { setPanelView("draft"); setWelcomeOpen(true); } return; }
     if (action === "gap") { beginWithoutDraft(); return; }
     if (panelView === "copy") setName(keptName.current);
-    if (action === "jobs") { setActivityOpen(true); startFocus.current = "job-select"; }
+    if (action === "jobs") { setStep("investigation"); setActivityOpen(true); }
     else { setStep("gap"); startFocus.current = "gap-search"; }
     setWelcomeOpen(false); setPanelView("menu");
   }
@@ -573,7 +934,7 @@ export default function Home() {
     ++editorGeneration.current; suggestionAbort.current?.abort(); setSuggesting(false);
     setDraft(null); setName(""); setComposer(emptyComposer()); setGap(null); setSuggestion(null);
     setQuery(""); setGaps([]); setSearched(false); setLocation("draft", null); setNotice(""); setError("");
-    setStep("gap"); setActivityOpen(false); setWelcomeOpen(false); setPanelView("menu"); setUnsavedPrompt(false); setDraftPrompt(null);
+    setStep("gap"); setActivityOpen(false); setWelcomeOpen(false); setPanelView("menu");
     searchAbort.current?.abort(); const controller = new AbortController(); searchAbort.current = controller;
     setSearching(true);
     try { const values = await api.gaps("", controller.signal); if (!controller.signal.aborted) { setGaps(values); setSearched(true); } }
@@ -601,20 +962,31 @@ export default function Home() {
     } catch (error) { setError(errorMessage(error)); }
     finally { setDeletingId(""); }
   }
-  async function save(asNew = false): Promise<Draft | null> {
+  async function save(asNew = false, options?: { name?: string; quiet?: boolean; updateOnly?: boolean; draftId?: string; composer?: Composer }): Promise<Draft | null> {
+    if (options?.updateOnly && (!draft || (options.draftId && draft.id !== options.draftId))) return null;
     const fromStart = welcomeOpen && panelView === "draft";
     const fromCopy = asNew || (welcomeOpen && panelView === "copy");
-    setBusy("save"); setError("");
+    const savedName = (options?.name ?? name).trim();
+    const savedComposer = options?.composer ?? composer;
+    if (!options?.quiet) setBusy("save");
+    setError("");
     try {
-      const value = await mutationKeys.current.run(["save", fromCopy ? null : draft?.id, fromCopy ? null : draft?.version, composer, name], key => api.save(fromCopy ? null : draft, composer, name, key));
+      const value = await mutationKeys.current.run(["save", fromCopy ? null : draft?.id, fromCopy ? null : draft?.version, savedComposer, savedName], key => api.save(fromCopy ? null : draft, savedComposer, savedName, key));
       setDraft(value); setComposer(value.composer); setName(value.name || ""); setLocation("draft", value.id);
       if (fromStart) { setGaps([]); setSearched(false); setNotice(""); setStep("gap"); setActivityOpen(false); setWelcomeOpen(false); setPanelView("menu"); }
       else if (fromCopy) { setNotice(""); setWelcomeOpen(false); setPanelView("menu"); setStep(value.composer.source_gap ? "anchors" : "gap"); }
-      else { setUnsavedPrompt(false); setDraftPrompt(null); }
       await refresh();
       return value;
     } catch (error) { setError(error instanceof ApiError && error.status === 409 && error.code !== "REFERENCE_GENERATION_SUPERSEDED" ? "This draft changed on the server. Open the saved draft again to review it before saving. Your local selections remain visible." : errorMessage(error)); return null; }
-    finally { setBusy(""); }
+    finally { if (!options?.quiet) setBusy(""); }
+  }
+  saveRef.current = save;
+  async function startInvestigation() {
+    if (pending) { await beginAnalysis(); return; }
+    if (!composer.source_gap || !composer.eaggl_anchors.length) return;
+    const next = { ...composer, selected_kgs: ["biomarkerkg", "prokn"] as Composer["selected_kgs"] };
+    const saved = await save(false, { composer: next, ...(draft ? {} : { name: investigationDraftName(query, gap) }) });
+    if (saved) await beginAnalysis(saved);
   }
   async function beginAnalysis(saved?: Draft) {
     if (!principal) return;
@@ -627,7 +999,7 @@ export default function Home() {
     try {
       const value = await api.submit(intent.body, intent.key);
       sessionStorage.removeItem("reveal-submit:" + principal.user_id); setPending(null);
-      currentJob.current = value; setJob(value); setActivity([]); setLocation("job", value.id); setActivityOpen(true); setNotice("Analysis submitted. Live activity will appear alongside your draft."); await refresh();
+      submittedJob.current = value.id; submittedDraft.current = intent.body.draft_id; setStartedDraftId(intent.body.draft_id); activityPinned.current = null; activityCollapsed.current = null; currentJob.current = value; setJob(value); setActivity([]); setLocation("job", value.id); setActivityDetail(true); setActivityLogOpen(true); setStep("investigation"); setActivityOpen(true); setNotice("Analysis submitted. Live activity will appear alongside your draft."); await refresh();
     } catch (error) {
       // A later refusal cannot disprove an earlier committed request whose response was lost.
       setError(errorMessage(error));
@@ -676,90 +1048,107 @@ export default function Home() {
   const maxGapAccounts = Math.max(0, ...gaps.map(item => item.scientific_accounts?.count ?? 0));
   const inWorkspace = Boolean(principal) && !welcomeOpen;
   const errorNotice = error ? <div className="notice error" role="alert"><span>{error}</span><button className="quiet" onClick={() => setError("")} aria-label="Dismiss error">Dismiss</button></div> : null;
+  const paragraphWriting = Object.values(paragraphs).some(item => item.job && !terminal(item.job.status));
+  const factorBubbles = () => composer.eaggl_anchors.map(anchor => { const factor = factors[anchor.reference.source_id]; const title = factor ? factorTitle(factor) : anchor.reference.source_id; return <span className="factor-bubble" key={anchor.reference.source_id}>{title}</span>; });
+  const investigationPanel = <>
+    {gap ? <p className="investigation-gap">{gap.object.text || gapTitle(gap)}</p> : <p className="investigation-gap muted">Select a knowledge gap to investigate.</p>}
+    {!!composer.eaggl_anchors.length && <div className="investigation-factors">{factorBubbles()}</div>}
+    {job && <div className="activity-status-row"><p>Started {date(job.created_at)}</p>{job.completed_at && <p>Completed {date(job.completed_at)}</p>}<span className={"status " + job.status}>{readable(job.status)}</span>{paragraphWriting && <span className="status running">Writing the paragraph</span>}{!terminal(job.status) && <button className="danger small" onClick={cancel} disabled={!!busy || job.status === "cancel_requested"}>{job.status === "cancel_requested" ? "Stopping…" : "Stop"}</button>}</div>}
+    {!!job?.warnings.length && <div className="notice"><ul>{job.warnings.map(value => <li key={value}>{value}</li>)}</ul></div>}
+    {job?.failure && <div className="notice error" role="alert"><div><strong>Research could not complete</strong><p>{job.failure.message}</p><span className="small">{job.failure.code}</span>{job.failure.code.startsWith("REVIEW_") && job.failure.retryable && <p><button className="secondary" onClick={retryReview} disabled={!!busy}>{busy === "review" ? "Requesting review…" : "Retry saved review"}</button></p>}</div></div>}
+    {job?.status === "cancelled" && <p className="notice">This job was stopped. No successful result is implied.</p>}
+    {job?.result && <ResultView job={job} paragraphs={paragraphs} />}
+    {job && <div className="activity-fold"><button type="button" aria-expanded={activityLogOpen} onClick={() => setActivityLogOpen(open => !open)}>Activity</button>{activityLogOpen && <div className="event-log" aria-label="Job activity events">{!activity.length && <p className="empty">Loading saved activity…</p>}{activity.map(event => <article className={"event " + event.event_type} key={event.id}><div className="event-header"><span>{event.detail?.tool_name || readable(event.event_type)}</span><time dateTime={event.occurred_at}>{new Date(event.occurred_at).toLocaleTimeString()}</time></div><p>{event.message}</p>{event.detail?.output_excerpt && <details><summary>Captured output</summary><pre>{event.detail.output_excerpt}</pre></details>}{event.detail?.artifact_sha256 && <a href={backend("artifacts/" + event.detail.artifact_sha256)} target="_blank" rel="noreferrer">Open captured artifact</a>}</article>)}</div>}</div>}
+    {job && <details className="record-details"><summary>Job record and evidence</summary><p className="small">Job ID: {job.id}</p><div className="result-links"><a href={backend("jobs/" + job.id)} target="_blank" rel="noreferrer">Job JSON</a><a href={backend("jobs/" + job.id + "/evidence-package")} target="_blank" rel="noreferrer">Frozen evidence package</a></div><pre>{JSON.stringify(job, null, 2)}</pre></details>}
+  </>;
+  const activeStep = step === "anchors" || step === "investigation" ? step : "gap";
   return <>
     <header className="site-header"><div className="brand"><div className="brand-logos"><img src="/brand/cfde-knowledge-center.svg" alt="CFDE Knowledge Center" /><span className="brand-rule" aria-hidden="true" /><img src="/brand/cfde-ecosystem.png" alt="Common Fund Data Ecosystem" /></div><span className="brand-rule" aria-hidden="true" /><div className="brand-copy"><h1><span className="brand-reveal">REVEAL</span><span className="brand-product">client</span></h1><p>Scientific questions, evidence, and live research</p></div></div>
       <div className="connection">
         {principal && <div className="session-menu" ref={sessionMenu}><button className="secondary" aria-expanded={sessionOpen} aria-haspopup="menu" aria-controls="session-menu" onClick={() => { setHelpOpen(false); setSessionOpen(open => !open); }}>Session</button>
-          {sessionOpen && <div id="session-menu" className="session-menu-list" role="menu"><button role="menuitem" onClick={() => startFrom("draft")}>Start a new draft</button><button role="menuitem" onClick={openCopy} disabled={!draft}>Save as new draft</button><button role="menuitem" onClick={showDrafts} disabled={!drafts.length}>Open saved draft</button><button role="menuitem" onClick={() => startFrom("gap")}>Choose a knowledge gap</button><button role="menuitem" onClick={() => startFrom("jobs")}>Workspace jobs</button></div>}
+          {sessionOpen && <div id="session-menu" className="session-menu-list" role="menu"><button role="menuitem" onClick={startSession}>Start session</button><button role="menuitem" onClick={showDrafts} disabled={!drafts.length}>Saved drafts</button><button role="menuitem" onClick={() => { setSessionOpen(false); void browseTrending(); }}>Trending gaps</button></div>}
         </div>}
         {principal && <div className="session-menu" ref={helpMenu}><button className="secondary" aria-expanded={helpOpen} aria-haspopup="menu" aria-controls="help-menu" onClick={() => { setSessionOpen(false); setHelpOpen(open => !open); }}>Help</button>
           {helpOpen && <div id="help-menu" className="session-menu-list" role="menu"><button role="menuitem" onClick={() => setHelpOpen(false)}>Learn REVEAL client</button><button role="menuitem" onClick={() => setHelpOpen(false)}>Quick start tutorial</button></div>}
         </div>}
-        {principal ? <button onClick={disconnect} disabled={!!busy}>{busy === "disconnect" ? "Disconnecting…" : "Disconnect workspace"}</button> : <span className="connection-status">Disconnected</span>}
+        {principal ? <span className="connection-status" role="status">Workspace connected</span> : <button onClick={() => void connect()} disabled={checking || busy === "connect"}>{checking || busy === "connect" ? "Connecting…" : "Connect workspace"}</button>}
         <button type="button" className="settings-button" aria-label="Settings" aria-expanded={settingsOpen} onClick={() => { setSessionOpen(false); setHelpOpen(false); setSettingsTab("settings"); setSettingsOpen(true); }}><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.48.48 0 0 0-.48-.41h-3.84a.48.48 0 0 0-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 0 0-.59.22L2.74 8.87a.48.48 0 0 0 .12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32a.49.49 0 0 0-.12-.61l-2.03-1.58zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z" /></svg></button>
       </div></header>
-    {inWorkspace && <div className="workspace-bar">{draft ? <div className="draft-tools">{dirty && <button type="button" className="save-updates" onClick={() => save()} disabled={!mutable || suggesting}>{busy === "save" ? "Saving…" : "Save updates"}</button>}{name.trim() && <p className="draft-badge">{name.trim()}</p>}</div> : <div className="draft-tools"><button type="button" className="save-updates" onClick={() => setDraftPrompt("save")} disabled={!mutable || suggesting}>Save draft</button></div>}{errorNotice}</div>}
+    {inWorkspace && <div className="workspace-bar"><div className="step-rail" role="tablist" aria-label="Investigation steps"><button type="button" role="tab" aria-selected={activeStep === "gap"} className={"step-rail-card" + (activeStep === "gap" ? " active" : "")} onClick={() => setStep("gap")}><span className="step-rail-title"><span className="step-number">1</span>Choose a knowledge gap</span>{activeStep !== "gap" && gap && <span className="step-rail-summary">{gap.object.text || gapTitle(gap)}</span>}</button><button type="button" role="tab" aria-selected={activeStep === "anchors"} className={"step-rail-card" + (activeStep === "anchors" ? " active" : "") + (gapChosen ? "" : " inactive")} disabled={!gapChosen && activeStep !== "anchors"} onClick={() => { if (gapChosen) setStep("anchors"); }}><span className="step-rail-title"><span className="step-number">2</span>Select mechanism anchors</span>{activeStep !== "anchors" && anchorChosen && <span className="step-rail-summary bubbles">{factorBubbles()}</span>}</button><button type="button" role="tab" aria-selected={activeStep === "investigation"} className={"step-rail-card" + (activeStep === "investigation" ? " active" : "") + (job ? "" : " inactive")} disabled={!job && activeStep !== "investigation"} onClick={() => { if (job) setStep("investigation"); }}><span className="step-rail-title"><span className="step-number">3</span>Investigation</span>{activeStep !== "investigation" && job && <span className="step-rail-summary">{paragraphWriting ? "Writing the paragraph" : readable(job.status)}</span>}</button></div>{errorNotice}</div>}
     <main className={inWorkspace ? "workspace" : undefined}>
       {!inWorkspace && errorNotice}
-      {!principal ? <section className="welcome"><div className="welcome-lead"><h2>Choose the gap. Ground the claim.</h2><svg className="welcome-mark" viewBox="0 0 132 18" aria-hidden="true"><line x1="16" y1="9" x2="116" y2="9" stroke="#a7a9ad" strokeWidth="1.7" /><circle cx="9" cy="9" r="6.1" fill="#fff" stroke="#e07b39" strokeWidth="1.8" /><circle cx="123" cy="9" r="7" fill="#e07b39" /></svg><button onClick={connect} disabled={!!busy || checking}>{checking ? "Checking workspace…" : busy === "connect" ? "Connecting…" : "Connect workspace"}</button></div><div className="welcome-cards"><a className="welcome-card" href="#learn-reveal-client" onClick={event => event.preventDefault()}><svg viewBox="0 0 72 56" aria-hidden="true"><path d="M36 12v32M14 16c7 5 15 5 22-2 7 7 15 7 22 2v28c-7 5-15 5-22-2-7 7-15 7-22 2V16z" /></svg><strong>Learn REVEAL client</strong><span>A guide to the workspace, from a knowledge gap to a grounded claim.</span></a><a className="welcome-card" href="#quick-start-demo" onClick={event => event.preventDefault()}><svg viewBox="0 0 72 56" aria-hidden="true"><rect x="14" y="12" width="44" height="32" rx="3" /><path className="card-icon-fill" d="M33 22l12 6-12 6z" /></svg><strong>Watch quick start demo</strong><span>A short walkthrough of connecting and starting an investigation.</span></a></div></section> : welcomeOpen ? (panelView === "draft" || panelView === "copy" ? <div className="welcome-panel-stage"><section className="welcome-panel" role="dialog" aria-modal="true" aria-labelledby="welcome-heading"><button type="button" className="panel-back" aria-label="Back to welcome" onClick={() => { if (panelView === "copy") setName(keptName.current); else { setName(""); setNotice(""); } setPanelView("menu"); }}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22.9 12H6M11 6l-6 6 6 6" /></svg></button><div className="draft-start"><h2 id="welcome-heading">{panelView === "copy" ? "Save as a new draft" : "Start a draft"}</h2><label htmlFor="draft-name">Draft name</label><input id="draft-name" value={name} maxLength={120} onChange={event => setName(event.target.value)} disabled={!mutable} placeholder="Name this investigation" autoFocus />{notice && <p className="notice" role="status">{notice}</p>}<div className="actions"><button onClick={() => save(panelView === "copy")} disabled={!mutable || !name.trim() || (panelView !== "copy" && !dirty)}>{busy === "save" ? "Saving…" : "Save draft"}</button></div></div></section></div> : <div className="welcome-panel-stage"><section className="welcome-panel" aria-labelledby="welcome-menu-heading"><h2 id="welcome-menu-heading">Welcome to your workspace</h2><div className="welcome-menu"><button type="button" onClick={() => startFrom("draft")}>Start a draft</button><button type="button" onClick={showDrafts} disabled={!drafts.length}>Open a draft</button><button type="button" onClick={() => startFrom("jobs")}>Workspace jobs</button><hr className="welcome-rule" /><button type="button" onClick={() => void browseTrending()} disabled={searching}>Browse trending knowledge gaps</button></div></section></div>) : <>
-        <div className={(inspectGap || inspectFactorId) ? "workspace-frames" : "workspace-stage"}>
+      {(!principal || (welcomeOpen && panelView === "menu")) ? <section className="welcome"><div className="welcome-lead"><h2>Choose the gap. Ground the claim.</h2><svg className="welcome-mark" viewBox="0 0 132 18" aria-hidden="true"><line x1="16" y1="9" x2="116" y2="9" stroke="#a7a9ad" strokeWidth="1.7" /><circle cx="9" cy="9" r="6.1" fill="#fff" stroke="#e07b39" strokeWidth="1.8" /><circle cx="123" cy="9" r="7" fill="#e07b39" /></svg><div className="welcome-choices"><button type="button" onClick={startSearch} disabled={!principal || checking || busy === "connect"}>Search knowledge gaps</button><button type="button" onClick={() => void browseTrending()} disabled={!principal || checking || busy === "connect" || searching}>Trending knowledge gaps</button></div></div><img className="welcome-flow" src="/workflow.svg" alt="From a DisMech knowledge gap to the claims library. Select a gap. Find CFDE EAGGL factors that match the DisMech mechanisms attached to that gap, then select factors. Initiating an investigation collects CFDE evidence for those factors and drafts a report. A scientific account then claims the report for the claims library." /><div className="welcome-cards"><a className="welcome-card" href="#learn-reveal-client" onClick={event => event.preventDefault()}><svg viewBox="0 0 72 56" aria-hidden="true"><path d="M36 12v32M14 16c7 5 15 5 22-2 7 7 15 7 22 2v28c-7 5-15 5-22-2-7 7-15 7-22 2V16z" /></svg><strong>Learn REVEAL client</strong><span>A guide to the workspace, from a knowledge gap to a grounded claim.</span></a><a className="welcome-card" href="#quick-start-demo" onClick={event => event.preventDefault()}><svg viewBox="0 0 72 56" aria-hidden="true"><rect x="14" y="12" width="44" height="32" rx="3" /><path className="card-icon-fill" d="M33 22l12 6-12 6z" /></svg><strong>Watch quick start demo</strong><span>A short walkthrough of connecting and starting an investigation.</span></a></div></section> : welcomeOpen ? <div className="welcome-panel-stage"><section className="welcome-panel" role="dialog" aria-modal="true" aria-labelledby="welcome-heading"><button type="button" className="panel-back" aria-label="Back to welcome" onClick={() => { if (panelView === "copy") setName(keptName.current); else { setName(""); setNotice(""); } setPanelView("menu"); }}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22.9 12H6M11 6l-6 6 6 6" /></svg></button><div className="draft-start"><h2 id="welcome-heading">{panelView === "copy" ? "Save as a new draft" : "Start a draft"}</h2><label htmlFor="draft-name">Draft name</label><input id="draft-name" value={name} maxLength={120} onChange={event => setName(event.target.value)} disabled={!mutable} placeholder="Name this investigation" autoFocus />{notice && <p className="notice" role="status">{notice}</p>}<div className="actions"><button onClick={() => save(panelView === "copy")} disabled={!mutable || !name.trim() || (panelView !== "copy" && !dirty)}>{busy === "save" ? "Saving…" : "Save draft"}</button></div></div></section></div> : <>
+        <div className={inspectGap || inspectFactorId ? "workspace-frames" : "workspace-frames steps-only"}>
         <div className="steps">
-          <section className={step === "gap" ? "step open" : "step"}>
-            <button type="button" className="step-toggle" aria-expanded={step === "gap"} aria-describedby="step-gap-guide" onClick={() => setStep(current => current === "gap" ? null : "gap")}><span className="step-number">1</span>Choose a knowledge gap</button>
-            {step !== "gap" && gap ? <p id="step-gap-guide" className="step-chosen">{gap.object.text || gapTitle(gap)}</p> : <p id="step-gap-guide" className="step-guide">Find an existing scientific question that evidence still leaves unexplained. The gap you select becomes the question this investigation will try to ground.</p>}
-            {step === "gap" && <div className="step-body"><form className="search-control" autoComplete="off" onSubmit={event => { event.preventDefault(); void search(); }}><label className="sr-only" htmlFor="gap-search">Search knowledge gaps</label><input id="gap-search" name="reveal-gap-search" type="text" inputMode="search" autoComplete="off" autoCorrect="off" spellCheck={false} value={query} onChange={event => setQuery(event.target.value)} placeholder="Search a disease or research question" /><button type="submit" className="secondary" disabled={searching}>{searching ? "Searching…" : "Search"}</button></form>
+          {activeStep === "gap" && <section className="step open">
+            <h2 className="step-heading"><span className="step-number">1</span>Choose a knowledge gap</h2>
+            <p className="step-guide">Find an existing scientific question that evidence still leaves unexplained. The gap you select becomes the question this investigation will try to ground.</p>
+            <div className="step-body"><form className="search-control" autoComplete="off" onSubmit={event => { event.preventDefault(); void search(); }}><label className="sr-only" htmlFor="gap-search">Search knowledge gaps</label><input id="gap-search" name="reveal-gap-search" type="text" inputMode="search" autoComplete="off" autoCorrect="off" spellCheck={false} value={query} onChange={event => setQuery(event.target.value)} placeholder="Search a disease or research question" /><button type="submit" className="secondary" disabled={searching}>{searching ? "Searching…" : "Search"}</button></form>
               {gaps.length > 0 && <div className="gap-results"><p className="gap-guide">{query.trim() ? `${gaps.length} knowledge gap${gaps.length === 1 ? "" : "s"} found.` : `${gaps.length} trending knowledge gaps.`} Click one to select for the next step.</p><div className="gap-list" aria-label="Knowledge gap search results">{gaps.map(value => <GapOption key={value.source.source_id} gap={value} maxAccounts={maxGapAccounts} selected={composer.source_gap?.source_id === value.source.source_id} disabled={!mutable} onSelect={() => selectGap(value)} onInspect={() => void openInspect(value)} />)}</div><ul className="gap-legend"><li><span className="gap-swatch accounts" aria-hidden="true" />Accounts</li><li><span className="gap-swatch up" aria-hidden="true" />Upvotes</li><li><span className="gap-swatch down" aria-hidden="true" />Downvotes</li></ul></div>}
               {searched && !searching && !gaps.length && <p className="empty">No matching gaps. Try a broader disease name.</p>}
-</div>}
-          </section>
-          <section className={step === "anchors" ? "step open" : gapChosen ? "step" : "step inactive"}>
-            <button type="button" className="step-toggle" aria-expanded={step === "anchors"} aria-describedby="step-anchors-guide" disabled={!gapChosen} onClick={() => { if (gapChosen) setStep(current => current === "anchors" ? null : "anchors"); }}><span className="step-number">2</span>Select mechanism anchors</button>
-            {step !== "anchors" && anchorChosen ? <p id="step-anchors-guide" className="step-chosen">{composer.eaggl_anchors.map(anchor => { const factor = factors[anchor.reference.source_id]; return factor ? factorTitle(factor) : anchor.reference.source_id; }).join(", ")}</p> : <p id="step-anchors-guide" className="step-guide">Choose genetic factors that may help explain the selected gap. At least one factor is required to start an investigation, and none is selected for you.{suggestion?.limitations.length ? ` ${suggestion.limitations.join(" ")}` : ""}</p>}
-            {step === "anchors" && <div className="step-body">{!composer.source_gap ? <p className="empty">Select a question to find related genetic mechanisms.</p> : <>
-                {!anchorChosen && <p className="gap-guide">At least one factor has to be selected to initiate investigation.</p>}
-                <div className="anchor-list">{anchorIds.map(sourceId => {
+            </div>
+          </section>}
+          {activeStep === "anchors" && <section className="step open">
+            <h2 className="step-heading"><span className="step-number">2</span>Select mechanism anchors</h2>
+            <p className="step-guide">Choose genetic factors that may help explain the selected gap. At least one factor is required to start an investigation, and none is selected for you.{suggestion?.limitations.length ? ` ${suggestion.limitations.join(" ")}` : ""}</p>
+            <div className="step-body">{!composer.source_gap ? <p className="empty">Select a question to find related genetic mechanisms.</p> : <>
+                {!!anchorIds.length && <FactorNetwork guide={anchorChosen ? undefined : "At least one factor has to be selected to initiate investigation."} gapLabel={gap?.object.text || (gap ? gapTitle(gap) : "Knowledge gap")} rows={anchorIds.map(sourceId => {
                   const factor = factors[sourceId], selected = composer.eaggl_anchors.some(value => value.reference.source_id === sourceId);
                   const title = factor ? factorTitle(factor) : factorMisses[sourceId] ? sourceId : "Loading…";
-                  return <label className={selected ? "anchor selected" : "anchor"} key={sourceId}><input type="checkbox" checked={selected} disabled={!mutable || (!selected && composer.eaggl_anchors.length >= 10)} onChange={() => setComposer(current => selected ? { ...current, eaggl_anchors: current.eaggl_anchors.filter(value => value.reference.source_id !== sourceId) } : factor && suggestion ? withFactors(current, [factor], suggestion.suggestion_id) : current)} /><span><strong>{title}</strong>{factor?.cfde_anchor.subtitle && <small>{factor.cfde_anchor.subtitle}</small>}</span><button type="button" className="gap-bubble inspect" onClick={event => { event.preventDefault(); event.stopPropagation(); void openFactorInspect(sourceId); }}>Inspect factor</button></label>;
-                })}{!suggestedIds.length && (suggesting ? <p role="status" className="loading">Finding relevant mechanisms…</p> : <button type="button" className="quiet suggestion-refresh" disabled={!mutable} onClick={() => void suggest(composer, false)}>Show suggestions</button>)}</div>
-                {anchorChosen && <button type="button" className="step-next" onClick={() => setStep("investigate")}>Select evidence and initiate investigation in step 3.</button>}
+                  const suggested = suggestion?.automatic_anchors.find(anchor => anchor.factor.source_id === sourceId);
+                  const cosine = suggested?.ranking.metric === "cosine_similarity" ? suggested.ranking.value : null;
+                  return { sourceId, title, subtitle: factor?.cfde_anchor.subtitle || "", mechanisms: matchedMechanisms(gap, suggested?.matched_context_ids || []), cosine, selected, selectDisabled: !mutable || (!selected && composer.eaggl_anchors.length >= 10), onToggle: () => setComposer(current => selected ? { ...current, eaggl_anchors: current.eaggl_anchors.filter(value => value.reference.source_id !== sourceId) } : factor && suggestion ? withFactors(current, [factor], suggestion.suggestion_id) : current), onInspect: factor ? () => void openFactorInspect(sourceId) : null };
+                })} />}
+                {!suggestedIds.length && (suggesting ? <p role="status" className="loading">Finding relevant mechanisms…</p> : <button type="button" className="quiet suggestion-refresh" disabled={!mutable} onClick={() => void suggest(composer, false)}>Show suggestions</button>)}
+                {(anchorChosen || pending) && <>
+                  {pending && <div className="notice"><span>A submission needs confirmation. Recover it with the original request key before starting another.</span><button className="quiet small" onClick={discardSubmission} disabled={!!busy}>Discard recovery</button></div>}
+                  {startedDraftId && startedDraftId === draft?.id ? <p className="investigation-started">Investigation started</p> : <button type="button" className="step-next" onClick={() => void startInvestigation()} disabled={!mutable || suggesting || (!pending && (!composer.source_gap || !composer.eaggl_anchors.length))}>{busy === "submit" ? "Submitting…" : busy === "save" ? "Saving draft…" : pending ? "Recover submission" : "Start investigation"}</button>}
+                </>}
               </>}
-</div>}
-          </section>
-          <section className={step === "investigate" ? "step open" : gapChosen && anchorChosen ? "step" : "step inactive"}>
-            <button type="button" className="step-toggle" aria-expanded={step === "investigate"} aria-describedby="step-investigate-guide" disabled={!(gapChosen && anchorChosen)} onClick={() => { if (gapChosen && anchorChosen) setStep(current => current === "investigate" ? null : "investigate"); }}><span className="step-number">3</span>Investigate</button>
-            <p id="step-investigate-guide" className="step-guide">Start an analysis of the gap and the factors you selected. Choose any extra knowledge-graph evidence, then begin the investigation.</p>
-            {step === "investigate" && <div className="step-body"><p className="step-local">These options add knowledge-graph evidence the analysis can search along with your gap and factors. BiomarkerKG supplies literature-linked biomarkers and diseases; ProKN supplies genes, proteins, pathways, and diseases.</p><fieldset disabled={!mutable}><legend>Knowledge graph evidence</legend>{(["biomarkerkg", "prokn"] as const).map(value => <label className="check" key={value}><input type="checkbox" checked={composer.selected_kgs.includes(value)} onChange={event => setComposer(current => ({ ...current, selected_kgs: event.target.checked ? [...current.selected_kgs, value] : current.selected_kgs.filter(kg => kg !== value) }))} />{value === "biomarkerkg" ? "BiomarkerKG" : "ProKN"}</label>)}</fieldset>
-              <p className="step-follow">The analysis freezes that evidence, searches the graphs you leave checked, and drafts one scientific account. If the account is accepted, a research paragraph follows, and you can follow the run in Research activity.</p>
-              {pending && <div className="notice"><span>A submission needs confirmation. Recover it with the original request key before starting another.</span><button className="quiet small" onClick={discardSubmission} disabled={!!busy}>Discard recovery</button></div>}
-              <div className="actions"><button onClick={() => { if (!pending && !draft) { setDraftPrompt("start"); return; } if (!pending && dirty) { setUnsavedPrompt(true); return; } void beginAnalysis(); }} disabled={!mutable || suggesting || (!pending && (!composer.source_gap || !composer.eaggl_anchors.length))}>{busy === "submit" ? "Submitting…" : pending ? "Recover submission" : "Start analysis"}</button></div>
-</div>}
-          </section>
+            </div>
+          </section>}
+          {activeStep === "investigation" && <section className="step open">
+            <h2 className="step-heading"><span className="step-number">3</span>Investigation</h2>
+            <div className="step-body">{investigationPanel}</div>
+          </section>}
         </div>
-        {(inspectGap || inspectFactorId) && <InspectColumn gap={inspectGap} factor={inspectFactor} factorPending={!!inspectFactorId && !inspectFactor} focus={inspectGap && inspectFactorId ? inspectFocus : inspectGap ? "gap" : "factor"} gapNote={inspectGapNote} factorNote={inspectFactorNote} onFocus={setInspectFocus} onCloseGap={closeGapInspect} onCloseFactor={closeFactorInspect} />}
+        {(inspectGap || inspectFactorId) && <InspectColumn gap={inspectGap} factor={inspectFactor} factorPending={!!inspectFactorId && !inspectFactor} focus={inspectGap && inspectFactorId ? (inspectFocus === "factor" ? "factor" : "gap") : inspectGap ? "gap" : "factor"} gapNote={inspectGapNote} factorNote={inspectFactorNote} onFocus={setInspectFocus} onCloseGap={closeGapInspect} onCloseFactor={closeFactorInspect} />}
         </div>
-        {activityOpen ? <section className="activity-float activity-pane" aria-labelledby="activity-heading"><div className="section-heading"><div><p className="step-label">Follow the evidence</p><h2 id="activity-heading">Research activity</h2></div><div className="activity-heading-actions">{job && <span className={"status " + job.status}>{readable(job.status)}</span>}<button type="button" className="quiet" onClick={() => setActivityOpen(false)}>Collapse</button></div></div><label htmlFor="job-select">Workspace jobs</label><select id="job-select" value={job?.id || ""} disabled={!!busy} onChange={event => { if (event.target.value) void openJob(event.target.value); }}><option value="">Choose a job to follow</option>{jobs.map(value => <option key={value.id} value={value.id}>{value.kind === "analysis" ? "Analysis" : "Paragraph"} — {readable(value.status)} — {date(value.created_at)}</option>)}</select>
-            {moreRecords && <p className="small muted">Showing the most recent 100 drafts and jobs. A saved page URL can reopen an older item.</p>}
-            {!job ? <div className="activity-empty"><svg viewBox="0 0 64 64" aria-hidden="true"><path d="M12 43h8l7-22 10 32 7-23 4 13h8" /><path d="M8 12v44h48" /></svg><h3>Your investigation will appear here.</h3><p>Start an analysis or select an existing job. Events arrive live as evidence is collected and reviewed.</p></div> : <>
-              <div className="job-meta"><p>{job.kind === "analysis" ? "Analysis" : "Research paragraph"} started {date(job.created_at)}</p><span className="small muted">{readable(job.stage)}</span></div>
-              <div className="stream-toolbar"><span className="small muted" role="status">{streamState}</span><div><button className="quiet small" onClick={() => setStreamAttempt(value => value + 1)}>Reconnect</button>{!terminal(job.status) && <button className="danger small" onClick={cancel} disabled={!!busy || job.status === "cancel_requested"}>{job.status === "cancel_requested" ? "Stopping…" : "Stop job"}</button>}</div></div>
-              {!!job.warnings.length && <div className="notice"><ul>{job.warnings.map(value => <li key={value}>{value}</li>)}</ul></div>}
-              {job.failure && <div className="notice error" role="alert"><div><strong>Research could not complete</strong><p>{job.failure.message}</p><span className="small">{job.failure.code}</span>{job.failure.code.startsWith("REVIEW_") && job.failure.retryable && <p><button className="secondary" onClick={retryReview} disabled={!!busy}>{busy === "review" ? "Requesting review…" : "Retry saved review"}</button></p>}</div></div>}
-              {job.status === "cancelled" && <p className="notice">This job was stopped. No successful result is implied.</p>}
-              <div className="event-log" aria-label="Job activity events">{!activity.length && <p className="empty">Loading saved activity…</p>}{activity.map(event => <article className={"event " + event.event_type} key={event.id}><div className="event-header"><span>{event.detail?.tool_name || readable(event.event_type)}</span><time dateTime={event.occurred_at}>{new Date(event.occurred_at).toLocaleTimeString()}</time></div><p>{event.message}</p>{event.detail?.output_excerpt && <details><summary>Captured output</summary><pre>{event.detail.output_excerpt}</pre></details>}{event.detail?.artifact_sha256 && <a href={backend("artifacts/" + event.detail.artifact_sha256)} target="_blank" rel="noreferrer">Open captured artifact</a>}</article>)}</div>
-              {job.result && <ResultView job={job} openJob={openJob} />}
-              <details className="record-details"><summary>Job record and evidence</summary><p className="small">Job ID: {job.id}</p><div className="result-links"><a href={backend("jobs/" + job.id)} target="_blank" rel="noreferrer">Job JSON</a><a href={backend("jobs/" + job.id + "/evidence-package")} target="_blank" rel="noreferrer">Frozen evidence package</a></div><pre>{JSON.stringify(job, null, 2)}</pre></details>
-            </>}
-</section> : job ? <button type="button" className="activity-launcher" onClick={() => setActivityOpen(true)}>Research activity</button> : null}
       </>}
     </main>
-    {unsavedPrompt && <div className="warning-stage"><section className="warning-panel" role="alertdialog" aria-modal="true" aria-labelledby="unsaved-heading"><h2 id="unsaved-heading">Save updates first</h2><p>This draft has unsaved changes. Saving them starts the investigation.</p><div className="actions"><button type="button" className="save-updates" onClick={async () => { const saved = await save(); if (saved) await beginAnalysis(saved); }} disabled={!mutable || suggesting}>{busy === "save" ? "Saving…" : busy === "submit" ? "Starting…" : "Save updates"}</button><button type="button" className="quiet" onClick={() => setUnsavedPrompt(false)}>Cancel</button></div></section></div>}
-    {draftPrompt && <div className="warning-stage"><section className="warning-panel" role="dialog" aria-modal="true" aria-labelledby="draft-save-heading"><h2 id="draft-save-heading">{draftPrompt === "start" ? "Save a draft first" : "Save a draft"}</h2><p>{draftPrompt === "start" ? "Name this draft to keep the gap and factors you selected. Saving it starts the investigation." : "Name this draft to keep the gap and factors you selected."}</p><label htmlFor="gap-draft-name">Draft name</label><input id="gap-draft-name" value={name} maxLength={120} onChange={event => setName(event.target.value)} disabled={!mutable} placeholder="Name this investigation" autoFocus /><div className="actions"><button type="button" className="save-updates" onClick={async () => { const startAnalysis = draftPrompt === "start"; const saved = await save(); if (saved && startAnalysis) await beginAnalysis(saved); }} disabled={!mutable || suggesting || !name.trim()}>{busy === "save" ? "Saving…" : busy === "submit" ? "Starting…" : "Save draft"}</button><button type="button" className="quiet" onClick={() => setDraftPrompt(null)}>Cancel</button></div></section></div>}
     {draftPicker && <SavedDrafts drafts={drafts} jobs={jobs} requests={draftRequests} gapLabels={gapLabels} factorLabels={factorLabels} ready={catalogReady} requestsReady={requestsReady} page={draftPage} deletingId={deletingId} onPage={setDraftPage} onOpen={chooseDraft} onDelete={setPendingDelete} onClose={() => { setPendingDelete(null); setDraftPicker(false); }} />}
     {settingsOpen && <SettingsPanel tab={settingsTab} openLastDraft={openLastDraft} onTab={setSettingsTab} onOpenLastDraft={value => { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ openLastDraft: value })); setOpenLastDraft(value); }} onClose={() => setSettingsOpen(false)} />}
     {pendingDelete && <div className="warning-stage"><section className="warning-panel" role="alertdialog" aria-modal="true" aria-labelledby="delete-draft-heading" aria-describedby="delete-draft-copy"><h2 id="delete-draft-heading">Delete this draft</h2><p id="delete-draft-copy">{`Delete "${pendingDelete.name || "Untitled draft"}"? A submitted investigation from this draft stays available.`}</p><div className="actions"><button type="button" className="secondary" autoFocus onClick={() => setPendingDelete(null)}>Cancel</button><button type="button" className="confirm-delete" disabled={!!deletingId} onClick={() => void removeDraft(pendingDelete)}>{deletingId ? "Deleting…" : "Delete"}</button></div></section></div>}
   </>;
 }
 
-type ResultRecord = { path: string; title: string; data?: Record<string, unknown>; error?: string };
+const QA_SITE = "https://reveal-mechanisms-qa.vercel.app";
+type ResultRecord = { path: string; title: string; publishHref?: string; data?: Record<string, unknown>; error?: string };
 function textValue(value: unknown): string { return typeof value === "string" ? value : ""; }
-function ResultView({ job, openJob }: { job: Job; openJob: (id: string) => Promise<void> }) {
+function paragraphText(data: Record<string, unknown>) {
+  const document = data.document as { paragraphs?: { text?: unknown }[] } | undefined;
+  return (document?.paragraphs || []).map(item => textValue(item.text)).filter(Boolean).join("\n\n");
+}
+function ParagraphView({ progress }: { progress?: ParagraphProgress }) {
+  const paragraphJob = progress?.job;
+  const writing = !!paragraphJob && !terminal(paragraphJob.status);
+  const text = progress?.text || "";
+  if (!writing && !text && !progress?.error && !paragraphJob?.failure && paragraphJob?.status !== "cancelled") return null;
+  return <section className="paragraph-result">
+    {writing && <p className="paragraph-status" role="status">Writing the paragraph…</p>}
+    {progress?.error && <p role="alert" className="error-text">{progress.error}</p>}
+    {paragraphJob?.failure && <p role="alert" className="error-text">{paragraphJob.failure.message}</p>}
+    {paragraphJob?.status === "cancelled" && <p className="paragraph-status">Paragraph writing was stopped.</p>}
+    {text && <><h3>Paragraph</h3><p className="research-text">{text}</p></>}
+  </section>;
+}
+function ResultView({ job, paragraphs }: { job: Job; paragraphs: Record<string, ParagraphProgress> }) {
   const [records, setRecords] = useState<ResultRecord[]>([]);
   const result = job.result;
   useEffect(() => {
     if (!result) return;
     let active = true;
-    const paths = result.kind === "analysis" ? result.account_ids.map(id => ({ path: "accounts/" + encodeURIComponent(id), title: "Scientific account" }))
+    const paths = result.kind === "analysis" ? result.account_ids.map(id => ({ path: "accounts/" + encodeURIComponent(id), title: "Scientific account", publishHref: QA_SITE + "/accounts/" + encodeURIComponent(id) }))
       : result.kind === "paragraph" ? [{ path: "paragraphs/" + encodeURIComponent(result.paragraph_id), title: "Research paragraph" }]
       : [{ path: "analysis-outcomes/" + encodeURIComponent(result.outcome_id), title: "Insufficient evidence" }];
     setRecords(paths);
@@ -782,11 +1171,12 @@ function ResultView({ job, openJob }: { job: Job; openJob: (id: string) => Promi
           {textValue(record.data.scope_note) && <p className="scope-note">{textValue(record.data.scope_note)}</p>}
         </>}
         {object?.closing_remarks && <p>{textValue(object.closing_remarks)}</p>}
+        {record.publishHref && <a className="publish-report" href={record.publishHref} target="_blank" rel="noreferrer">Publish</a>}
         {paragraphs.map((paragraph, index) => <p className="research-text" key={textValue(paragraph.id) || index}>{textValue(paragraph.text)}</p>)}
         <div className="result-links"><a href={backend(record.path)} target="_blank" rel="noreferrer">Open saved JSON</a>{result.kind === "paragraph" && <a href={backend("paragraphs/" + encodeURIComponent(result.paragraph_id) + "/export?format=markdown")} target="_blank" rel="noreferrer">Export paragraph Markdown</a>}{artifacts.filter(artifact => artifact.availability === "available" && /^[a-f0-9]{64}$/.test(artifact.file.sha256 || "")).map(artifact => <a key={artifact.file.id} href={backend("artifacts/" + artifact.file.sha256)} target="_blank" rel="noreferrer">{artifact.file.filename || artifact.file.name || "Evidence artifact"}</a>)}</div>
         <details><summary>Inspect result</summary><pre>{JSON.stringify(record.data, null, 2)}</pre></details>
       </>}</article>;
     })}
-    {result.kind === "analysis" && result.paragraph_job_ids.length > 0 && <div className="paragraph-followup"><h4>Research paragraphs</h4><p className="small muted">Paragraphs run as separate jobs after account validation.</p>{result.paragraph_job_ids.map((id, index) => <button className="secondary" key={id} onClick={() => void openJob(id)}>Follow paragraph {index + 1}</button>)}</div>}
+    {result.kind === "analysis" && result.paragraph_job_ids.map(id => <ParagraphView key={id} progress={paragraphs[id]} />)}
   </section>;
 }

@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1240 300" fill="none">
+  <title>From a knowledge gap to claims</title>
+  <desc>Select a DisMech knowledge gap, match CFDE EAGGL factors to its DisMech mechanisms, choose factors, collect CFDE evidence and draft an investigation report, then create a scientific account and claims.</desc>
+  <g font-family="Segoe UI, Arial, sans-serif">
+    <g fill="#6b6b6b" font-size="11.5" font-weight="600">
+      <text x="300" y="68" text-anchor="middle">Find CFDE EAGGL factors that match</text>
+      <text x="300" y="84" text-anchor="middle">the DisMech mechanisms attached</text>
+      <text x="300" y="100" text-anchor="middle">to the selected gap</text>
+      <text x="640" y="52" text-anchor="middle">Initiate investigation</text>
+      <text x="640" y="68" text-anchor="middle">Collect CFDE evidence</text>
+      <text x="640" y="84" text-anchor="middle">for the selected factors</text>
+      <text x="640" y="100" text-anchor="middle">and draft the report</text>
+      <text x="960" y="76" text-anchor="middle">Create a scientific account</text>
+      <text x="960" y="92" text-anchor="middle">and claim the report</text>
+    </g>
+    <g stroke="#a7a9ad" stroke-width="7" stroke-linecap="round">
+      <line x1="178" y1="148" x2="408" y2="148" />
+      <line x1="520" y1="148" x2="748" y2="148" />
+      <line x1="852" y1="148" x2="1052" y2="148" />
+    </g>
+    <g fill="#a7a9ad">
+      <path d="M408 138h14l12 10-12 10h-14z" />
+      <path d="M748 138h14l12 10-12 10h-14z" />
+      <path d="M1052 138h14l12 10-12 10h-14z" />
+    </g>
+    <polygon points="166,148 143.1,187.6 97.3,187.6 74.4,148 97.3,108.4 143.1,108.4" fill="#fbeee3" stroke="#e07b39" stroke-width="2.4" />
+    <circle cx="120" cy="148" r="14" fill="#fff" stroke="#e07b39" stroke-width="2" />
+    <path d="M112.5 148.4l4.8 4.8 10.4-11" stroke="#e07b39" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" />
+    <g stroke="#9bb4d4" stroke-width="2">
+      <line x1="478" y1="134" x2="508" y2="120" />
+      <line x1="478" y1="146" x2="514" y2="164" />
+      <line x1="466" y1="158" x2="490" y2="174" />
+      <line x1="460" y1="128" x2="472" y2="140" />
+    </g>
+    <circle cx="456" cy="124" r="8" fill="#e7eef6" stroke="#2c5c97" stroke-width="2" />
+    <circle cx="472" cy="144" r="17" fill="#d5e2f3" stroke="#2c5c97" stroke-width="2.2" />
+    <circle cx="514" cy="116" r="11" fill="#e7eef6" stroke="#2c5c97" stroke-width="2" />
+    <circle cx="518" cy="166" r="10" fill="#e7eef6" stroke="#2c5c97" stroke-width="2" />
+    <circle cx="486" cy="176" r="7.5" fill="#e7eef6" stroke="#2c5c97" stroke-width="2" />
+    <rect x="748" y="110" width="104" height="76" rx="8" fill="#e7f3ec" stroke="#1f7a4d" stroke-width="2.2" />
+    <path d="M828 110v16h24" fill="#d7eadf" stroke="#1f7a4d" stroke-width="2.2" stroke-linejoin="round" />
+    <g stroke="#7eaa90" stroke-width="2" stroke-linecap="round">
+      <line x1="764" y1="142" x2="824" y2="142" />
+      <line x1="764" y1="154" x2="812" y2="154" />
+      <line x1="764" y1="166" x2="800" y2="166" />
+    </g>
+    <g fill="#f4eef8" stroke="#6b4c9a" stroke-width="2">
+      <rect x="1072" y="112" width="72" height="48" rx="6" />
+      <rect x="1084" y="124" width="72" height="48" rx="6" />
+      <rect x="1096" y="136" width="72" height="48" rx="6" />
+    </g>
+    <g fill="#2c5c97" font-size="15" font-weight="700">
+      <text x="120" y="230" text-anchor="middle">Select DisMech</text>
+      <text x="120" y="250" text-anchor="middle">knowledge gap</text>
+      <text x="490" y="230" text-anchor="middle">Select CFDE</text>
+      <text x="490" y="250" text-anchor="middle">EAGGL factors</text>
+      <text x="800" y="230" text-anchor="middle">Investigation</text>
+      <text x="800" y="250" text-anchor="middle">report</text>
+      <text x="1120" y="240" text-anchor="middle">Claims library</text>
+    </g>
+    <text x="120" y="274" text-anchor="middle" fill="#6b6b6b" font-size="13">Select a gap</text>
+  </g>
+</svg>

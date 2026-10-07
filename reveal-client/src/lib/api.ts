@@ -25,6 +25,9 @@ export async function request<T>(path: string, options: { method?: string; body?
   return response.json();
 }
 export const backend = (path: string) => "/api/backend/v1/" + path;
+export type FactorLoading = { id: string; label: string; loading: number; rank: number; gene_set_id?: string | null; library?: string | null; joint_loading?: number | null; marginal_loading?: number | null };
+export type CatalogGeneSet = { id: string; object?: { members?: unknown[] | null } | null };
+export type FactorLoadings = { items: FactorLoading[]; total: number; offset: number; limit: number; next_offset: number | null };
 export const api = {
   session: () => request<{ principal: Me | null }>("/api/session"),
   connect: () => request<{ principal: Me }>("/api/session", { method: "POST", body: {} }),
@@ -36,6 +39,22 @@ export const api = {
   requests: (signal?: AbortSignal) => request<Page<Schema<"ResearchRequest">>>(backend("research-requests?limit=100"), { signal }),
   gap: (id: string, signal?: AbortSignal) => request<Gap>(backend("knowledge-gaps/" + encodeURIComponent(id)), { signal }),
   factor: (id: string, signal?: AbortSignal) => request<Factor>(backend("mechanisms/" + encodeURIComponent(id)), { signal }),
+  factorLoadings: (sourceId: string, kind: "gene" | "gene_set", offset: number, limit: number, signal?: AbortSignal) => {
+    const params = new URLSearchParams({ source_id: sourceId, kind, limit: String(limit), offset: String(offset), sort: "loading" });
+    if (kind === "gene_set") params.set("metric", "joint");
+    return request<FactorLoadings>(backend("factor-loadings?" + params), { signal });
+  },
+  catalogGeneSet: (id: string, signal?: AbortSignal) => request<CatalogGeneSet>(backend("catalog/gene-sets/" + encodeURIComponent(id)), { signal }),
+  factorLoadingsAll: async (sourceId: string, kind: "gene" | "gene_set", signal?: AbortSignal) => {
+    const items: FactorLoading[] = [];
+    let offset = 0;
+    for (;;) {
+      const page = await api.factorLoadings(sourceId, kind, offset, 500, signal);
+      items.push(...page.items);
+      if (page.next_offset == null || items.length >= page.total) return items;
+      offset = page.next_offset;
+    }
+  },
   gaps: async (query: string, signal?: AbortSignal): Promise<Gap[]> => {
     if (!query.trim()) return (await request<Schema<"GapList">>(backend("knowledge-gaps?limit=12"), { signal })).items;
     return (await request<Schema<"GapSearchResults">>(backend("knowledge-gaps/search?mode=fuzzy&limit=12&q=" + encodeURIComponent(query)), { signal })).items.map(hit => hit.gap);
