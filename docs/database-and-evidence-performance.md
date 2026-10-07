@@ -62,7 +62,10 @@ request that runs out of pooled connections, raises `DatabaseBusy`, a
 `TimeoutError`, which the API returns as the existing retryable 503
 `SERVICE_UNAVAILABLE` and logs as `Database busy`, not as an unhandled failure.
 Clients retry with their idempotency key. The database row lock remains the
-only cross-process authority.
+only cross-process authority. Event streams survive a busy pool: when the
+workspace replay or the job event read gets `DatabaseBusy`, the stream sends a
+heartbeat comment, waits 0.5-2 seconds (never past its window) and reads the
+same cursor again, instead of ending.
 
 A read that is genuinely one statement, such as readiness, uses
 `Repository.single_read()`: one plain `SELECT` with no `START TRANSACTION`,

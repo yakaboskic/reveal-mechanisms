@@ -14,10 +14,12 @@ import json
 import logging
 import os
 import queue
+import random
 import threading
 import time
 
 from .auth import Problem, principal, credential_expiry
+from .mysql_pool import DatabaseBusy
 from .repository import now, uid, digest, canonical
 from .runtime_metrics import measure
 from . import redis_notifications
@@ -283,6 +285,12 @@ def stream_deadline(authorization, workspace_expires_at=None):
     return time.monotonic()+lifetime
 
 
+async def busy_pause(deadline):
+    """A read found the pool busy (DatabaseBusy: no pooled session, so no statement ran): wait 0.5-2 s, never past the
+    stream's deadline, then read the same positions again on a fresh snapshot."""
+    await asyncio.sleep(min(random.uniform(.5, 2.), max(0., deadline-time.monotonic())))
+
+
 async def workspace_response(repository, request, after=None):
     from fastapi.responses import StreamingResponse
     authorization = request.headers.get('authorization')
@@ -307,6 +315,12 @@ async def workspace_response(repository, request, after=None):
                         current_owner, events, highwater, expired = await asyncio.to_thread(replay, repository, authorization, positions)
                         if current_owner != owner:
                             yield sse('access_revoked', {'schema_version':1}); return
+                    except DatabaseBusy:
+                        # A busy pool keeps the stream open: positions stay where they were.
+                        if redis_notifications.closing() or time.monotonic() >= deadline: return
+                        yield ': heartbeat\n\n'
+                        await busy_pause(deadline)
+                        continue
                     except Problem:
                         yield sse('access_revoked', {'schema_version':1}); return
                     if expired:
@@ -328,7 +342,7 @@ async def workspace_response(repository, request, after=None):
                             yield sse('connection_degraded', {'schema_version':1})
                             continue
                         break
-        except asyncio.TimeoutError:
+        except asyncio.TimeoutError:   # the subscription timed out; a busy database is handled above
             yield sse('connection_degraded', {'schema_version':1})
     return StreamingResponse(generate(), media_type='text/event-stream', headers={'Cache-Control':'private, no-store', 'X-Accel-Buffering':'no'})
 
@@ -348,6 +362,12 @@ async def job_event_stream(repository, request, job_id, authorization, cursor, l
             # The first read catches up on commits between `initial`'s snapshot and the SUBSCRIBE acknowledgment.
             while time.monotonic() < deadline and not redis_notifications.closing():
                 try: data = await asyncio.to_thread(read_events, job_id, authorization, cursor, limit)
+                except DatabaseBusy:
+                    # A busy pool keeps the stream open; the cursor does not move.
+                    if redis_notifications.closing() or time.monotonic() >= deadline: return
+                    yield ': heartbeat\n\n'
+                    await busy_pause(deadline)
+                    continue
                 except Problem: return
                 for item in data['items']:
                     cursor = int(item['id'])
@@ -361,7 +381,7 @@ async def job_event_stream(repository, request, job_id, authorization, cursor, l
                     if redis_notifications.closing(): return
                     break
     except asyncio.TimeoutError:
-        return  # client renews with its durable cursor
+        return  # the subscription timed out; the client renews with its durable cursor
 
 
 def register(app, repository_provider):

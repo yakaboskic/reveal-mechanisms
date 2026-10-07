@@ -14,6 +14,7 @@ import httpx
 import jwt
 from reveal_backend import jobs, workspace_events as events, redis_notifications as notifications
 from reveal_backend.auth import Problem
+from reveal_backend.mysql_pool import DatabaseBusy
 from reveal_backend.repository import Repository, Transaction, digest
 
 
@@ -477,6 +478,34 @@ class PushOnlyStreamTests(unittest.IsolatedAsyncioTestCase):
             await anext(events.job_event_stream(None,None,'job','proof',0,100,read,{'items':[], 'terminal':False}))
         self.assertEqual(reads, [0, 0])
 
+    async def test_a_busy_pool_keeps_the_job_stream_open_and_reads_the_same_cursor_again(self):
+        reads, pauses = [], []
+        def read(job_id, authorization, cursor, limit):
+            reads.append(cursor)
+            if len(reads) == 1: raise DatabaseBusy('Application database connection pool is busy')
+            return {'items':[{'id':'2', 'event_type':'status'}], 'terminal':False}
+        async def pause(deadline): pauses.append(deadline)
+        initial = {'items':[{'id':'1', 'event_type':'status'}], 'terminal':False}
+        with patch.object(notifications,'configuration',return_value=('local','','')), patch.object(events,'busy_pause',pause), \
+                patch.object(events,'stream_deadline',return_value=time.monotonic()+.3):
+            output = [chunk async for chunk in events.job_event_stream(None,None,'job','proof',0,100,read,initial)]
+        self.assertEqual(reads, [1, 1])   # the busy read did not move the cursor
+        self.assertEqual(len(pauses), 1)
+        self.assertEqual([chunk.split('\n')[0] for chunk in output], ['id: 1', ': heartbeat', 'id: 2', ': heartbeat'])
+
+    async def test_a_busy_pool_pauses_with_jitter_never_past_the_window_and_ends_like_a_renewal(self):
+        reads = []
+        def read(job_id, authorization, cursor, limit):
+            reads.append(cursor); raise DatabaseBusy('Application database connection pool is busy')
+        with patch.object(notifications,'configuration',return_value=('local','','')), \
+                patch.object(events.random,'uniform',return_value=30.) as jitter, \
+                patch.object(events,'stream_deadline',return_value=time.monotonic()+.2):
+            started = time.monotonic()
+            output = [chunk async for chunk in events.job_event_stream(None,None,'job','proof',0,100,read,{'items':[], 'terminal':False})]
+        self.assertLess(time.monotonic()-started, 1)   # capped at the deadline, not the 30 s drawn
+        jitter.assert_called_with(.5, 2.)
+        self.assertEqual((reads, output), ([0], [': heartbeat\n\n']))
+
 
 class WorkspaceConnectTests(unittest.IsolatedAsyncioTestCase):
     setUp = WorkspaceEventsTests.setUp
@@ -494,6 +523,26 @@ class WorkspaceConnectTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(calls), 1)
         self.assertIn('event: ready', output[0])
         self.assertEqual(output[1:], [': heartbeat\n\n'])
+
+    async def test_a_busy_pool_keeps_the_workspace_stream_open_and_replays_the_same_positions(self):
+        from types import SimpleNamespace
+        calls, pauses = [], []
+        change = {'schema_version':1, 'event_id':'e:1', 'cursor':'1', 'scope':'workspace', 'event_type':'draft.changed',
+                  'entity_id':'d', 'entity_revision':1, 'operation':'upsert', 'collections':['drafts']}
+        def replay(repository, authorization, positions, limit=500):
+            calls.append(dict(positions))
+            if len(calls) == 1: raise DatabaseBusy('Application database connection pool is busy')
+            return 'alice', [change], {'workspace':1, 'public':0}, False
+        async def pause(deadline): pauses.append(deadline)
+        with patch.object(notifications,'configuration',return_value=('local','','')), patch.object(events,'replay',replay), \
+                patch.object(events,'busy_pause',pause), patch.object(events,'stream_deadline',return_value=time.monotonic()+.3):
+            response = await events.workspace_response(self.repo, SimpleNamespace(headers={'authorization':self.authorization()}))
+            output = [chunk async for chunk in response.body_iterator]
+        self.assertEqual(calls, [{'workspace':0, 'public':0}] * 2)   # the busy replay did not move the positions
+        self.assertEqual(len(pauses), 1)
+        self.assertEqual([chunk.split('\n')[1 if chunk.startswith('id:') else 0] for chunk in output],
+                         [': heartbeat', 'event: workspace_change', 'event: ready', ': heartbeat'])
+        self.assertNotIn('connection_degraded', ''.join(output))
 
 
 class ShutdownTests(unittest.IsolatedAsyncioTestCase):

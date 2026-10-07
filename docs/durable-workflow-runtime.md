@@ -60,7 +60,9 @@ candidate retrieval. Upstash Redis provides Pub/Sub wakeups only.
   cursors. `workspace_change`, `ready`, `resync_required`, `connection_degraded`,
   and `access_revoked` are the stream event names. Job SSE keeps its existing
   event contract but wakes from notifications. A stream renews before gateway
-  authorization expires.
+  authorization expires. A read that finds the database pool busy sends a
+  heartbeat comment and retries the same cursor after 0.5-2 seconds; the
+  stream stays open.
 - Vector snapshots require compatible embedding spaces, complete source-binding
   inventories, verified numeric readback and an ANN quality gate. Activation
   is a compare-and-swap registry update. Semantic outages return an explicit
