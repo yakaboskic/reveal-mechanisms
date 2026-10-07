@@ -36,6 +36,7 @@ class FenceBusy(DatabaseBusy):
 SELECT_ROW = 'SELECT owner_id,version,payload FROM reveal_records WHERE kind=%s AND id=%s'
 FENCE = 'SELECT revision FROM reveal_transaction_lock WHERE id=1 FOR UPDATE'
 LOCK_NOWAIT = 3572   # ER_LOCK_NOWAIT: FOR UPDATE NOWAIT found the row locked
+LOCK_WAIT_TIMEOUT = 1205   # ER_LOCK_WAIT_TIMEOUT: queued on the fence past innodb_lock_wait_timeout
 _READ = re.compile(r'\s*\(*\s*(SELECT|SHOW)\b', re.I)
 _PLAIN_SELECT = re.compile(r'\s*\(*\s*SELECT\b', re.I)
 _NOT_PLAIN = re.compile(r'@|\b(FOR\s+UPDATE|FOR\s+SHARE|LOCK\s+IN\s+SHARE\s+MODE|INTO|GET_LOCK|RELEASE_LOCK|RELEASE_ALL_LOCKS|'
@@ -377,7 +378,8 @@ class Repository:
     @contextmanager
     def transaction(self, *, nowait=False):
         """The global write fence. nowait (background sweeps) raises FenceBusy at once instead of queueing
-        behind another writer, in this process or any other."""
+        behind another writer, in this process or any other. A writer that queued on the fence past the session's
+        lock wait gets DatabaseBusy: the body never ran, so the caller's retry (idempotency key) is safe."""
         gate = None
         if not self.sqlite_path:
             gate = writer_gate(self.table_prefix); started = time.perf_counter()
@@ -394,8 +396,10 @@ class Repository:
                 else:
                     try: tx.execute(FENCE + ' NOWAIT' if nowait else FENCE).fetchone()
                     except Exception as error:
-                        if nowait and getattr(error, 'args', (None,))[:1] == (LOCK_NOWAIT,):
+                        code = getattr(error, 'args', (None,))[:1]
+                        if nowait and code == (LOCK_NOWAIT,):
                             raise FenceBusy('The application write fence is held') from None
+                        if code == (LOCK_WAIT_TIMEOUT,): raise DatabaseBusy('Write fence lock wait timed out') from error
                         raise
                     granted = time.perf_counter()
                 yield tx

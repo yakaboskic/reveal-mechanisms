@@ -98,7 +98,7 @@ async def problem_handler(request, exc):
 @app.exception_handler(DatabaseBusy)
 async def database_busy(request, exc):
     import logging
-    logging.getLogger('reveal').warning('Database busy: %s', exc)  # fixed text: pool or writer admission
+    logging.getLogger('reveal').warning('Database busy: %s', exc)  # fixed text: pool, writer admission or fence lock wait
     return await problem_handler(request, Problem(503, 'SERVICE_UNAVAILABLE', 'The service is temporarily unavailable; retry shortly.'))
 
 @app.exception_handler(Exception)

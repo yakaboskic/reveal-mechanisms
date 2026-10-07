@@ -215,6 +215,34 @@ class WriterGateTests(unittest.TestCase):
         self.assertLess(time.monotonic() - started, 0.1); self.assertEqual(len(sessions), 4)
         finish()
 
+    def test_a_fence_lock_wait_timeout_is_database_busy_before_the_body_runs(self):
+        class Timed(wire.FakeCursor):   # queued on the fence past innodb_lock_wait_timeout
+            def execute(self, sql, params=()):
+                if sql == repository.FENCE:
+                    self.connection.trips += 1; self.connection.sql.append((sql, params))
+                    raise pymysql.err.OperationalError(1205, 'Lock wait timeout exceeded; try restarting transaction')
+                return super().execute(sql, params)
+        sessions = []
+        def connect():
+            session = wire.StatusConnection(); session.cursor = lambda *args: Timed(session); sessions.append(session); return session
+        repo = Repository(); repo.connect = connect
+        with patch('reveal_backend.workspace_events.publish_committed') as publish:
+            with self.assertRaises(DatabaseBusy) as caught:
+                with repo.transaction(): self.fail('entered without the fence')
+        self.assertNotIsInstance(caught.exception, repository.FenceBusy)
+        self.assertEqual(str(caught.exception), 'Write fence lock wait timed out')
+        self.assertEqual(caught.exception.__cause__.args[0], 1205)
+        self.assertEqual(([sql for sql, _ in sessions[0].sql], sessions[0].closed), ([repository.FENCE], True))
+        self.assertEqual(sessions[0].trips, 2); publish.assert_not_called()   # the fence, then ROLLBACK
+        self.assertEqual(repository.writer_gate(repo.table_prefix)._value, repository.WRITERS)
+        class Lost(Timed):   # any other fence failure keeps its own type
+            def execute(self, sql, params=()):
+                if sql == repository.FENCE: raise pymysql.err.OperationalError(2013, 'Lost connection to MySQL server during query')
+                return super().execute(sql, params)
+        repo.connect = lambda: (lambda session: (setattr(session, 'cursor', lambda *args: Lost(session)), session)[1])(wire.StatusConnection())
+        with self.assertRaises(pymysql.err.OperationalError):
+            with repo.transaction(): pass
+
     def test_gate_is_released_on_failures_and_before_publication(self):
         repo = self.repo()
         for _ in range(3):
@@ -260,6 +288,24 @@ class BusyResponseTests(unittest.TestCase):
                 self.assertEqual(response.status_code, 503)
                 self.assertEqual((response.json()['code'], response.json()['retryable']), ('SERVICE_UNAVAILABLE', True))
                 self.assertNotIn('busy', response.text)
+
+    def test_a_fence_lock_wait_timeout_is_the_same_503_and_logged_as_busy_not_unhandled(self):
+        user = self.provision(); headers = {'Authorization': 'Bearer ' + self.token(user), 'Idempotency-Key': 'fence'}
+        class Timed(wire.FakeCursor):
+            def execute(self, sql, params=()):
+                if sql == repository.FENCE: raise pymysql.err.OperationalError(1205, 'Lock wait timeout exceeded; try restarting transaction')
+                return super().execute(sql, params)
+        def connect():
+            session = wire.StatusConnection(); session.cursor = lambda *args: Timed(session); return session
+        aurora = Repository(); aurora.connect = connect   # the real fence path, in front of the route's own repository
+        with patch.object(self.repo, 'transaction', side_effect=lambda **options: aurora.transaction(**options)), \
+                self.assertLogs('reveal', 'WARNING') as logs:
+            response = self.client.post('/v1/drafts', headers=headers, json={'composer': application.COMPOSER})
+        self.assertEqual(response.status_code, 503)
+        body = response.json(); body.pop('request_id')
+        self.assertEqual(body, {'type': 'urn:reveal:problem:service_unavailable', 'title': 'Service Unavailable', 'status': 503,
+            'code': 'SERVICE_UNAVAILABLE', 'detail': 'The service is temporarily unavailable; retry shortly.', 'retryable': True})
+        self.assertEqual(logs.output, ['WARNING:reveal:Database busy: Write fence lock wait timed out'])
 
 
 if __name__ == '__main__': unittest.main()

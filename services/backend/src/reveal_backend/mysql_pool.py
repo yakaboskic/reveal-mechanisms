@@ -44,7 +44,7 @@ _FETCH = frozenset(('fetchone', 'fetchmany', 'fetchall'))
 
 
 class DatabaseBusy(TimeoutError):
-    """Retryable 503: no pooled session or writer slot within the wait bound; no SQL was sent."""
+    """Retryable 503: no pooled session, writer slot or write fence within the wait bound; no application statement ran."""
 
 
 def session_neutral(sql):
