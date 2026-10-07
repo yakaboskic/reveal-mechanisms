@@ -237,7 +237,8 @@ and both active pointers in one statement every 5 seconds (two round trips;
 the catalog's poller reuses that read instead of making its own), and
 re-verifies the sources (reference tables on a pooled session, the verified
 Vector snapshot, the Vector provider and the artifact bucket) in its own
-thread whenever the pointers change and at least once a minute. The snapshot
+thread whenever the pointers change, at least once a minute, and at the next
+5 second check after a failed verification. The snapshot
 summary is projected from the 31-53 MB row again only when that row's version
 changes. A probe therefore costs no database, S3 or Upstash call; before, each
 probe read the database and both pointers and called S3 twice (3.1-3.3 seconds

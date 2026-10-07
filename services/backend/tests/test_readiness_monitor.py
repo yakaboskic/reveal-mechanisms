@@ -95,15 +95,32 @@ class ReadinessMonitorTests(unittest.TestCase):
         with patch.object(api, 'catalog', Catalog()), patch.object(Catalog, 'readiness', return_value={'sources': 'checked'}):
             self.assertEqual(self.probe()[1]['sources'], {'sources': 'checked'})
 
-    def test_a_failed_verification_is_reported_with_its_code_until_one_passes(self):
+    def test_a_failed_verification_is_reported_with_its_code_and_retried_at_the_next_tick(self):
         self.sources.failure = Problem(503, 'SEMANTIC_SEARCH_UNAVAILABLE', 'Vector provider unavailable')
-        self.tick()
-        for _ in range(2):
-            status, body = self.probe()
-            self.assertEqual((status, body['code'], body['detail']), (503, 'SEMANTIC_SEARCH_UNAVAILABLE', 'Vector provider unavailable'))
+        with self.assertLogs(readiness.LOGGER, 'WARNING') as logs:
+            self.tick(); self.tick()  # not retried twice within one tick
+            self.assertEqual(len(self.sources.verified), 1)
+            for _ in range(2):
+                status, body = self.probe()
+                self.assertEqual((status, body['code'], body['detail']), (503, 'SEMANTIC_SEARCH_UNAVAILABLE', 'Vector provider unavailable'))
+            self.now[0] += GENERATION_TTL_SECONDS; self.tick()
+            self.assertEqual((len(self.sources.verified), self.probe()[1]['code']), (2, 'SEMANTIC_SEARCH_UNAVAILABLE'))
+        self.assertEqual(len(logs.records), 1)  # an ongoing failure is logged once
         self.sources.failure = None
-        self.now[0] += READINESS_VERIFICATION_TTL_SECONDS; self.tick()
-        self.assertEqual(self.probe()[0], 200)
+        self.now[0] += GENERATION_TTL_SECONDS; self.tick()
+        self.assertEqual((self.probe()[0], len(self.sources.verified)), (200, 3))
+        self.now[0] += GENERATION_TTL_SECONDS; self.tick()
+        self.assertEqual(len(self.sources.verified), 3)  # a pass holds for the verification TTL again
+
+    def test_a_busy_reference_pool_during_verification_costs_one_tick(self):
+        self.tick()
+        self.now[0] += READINESS_VERIFICATION_TTL_SECONDS
+        self.sources.failure = DatabaseBusy('Reference read capacity is busy'); self.tick()
+        status, body = self.probe()
+        self.assertEqual((status, body['code']), (503, 'SERVICE_UNAVAILABLE'))
+        self.sources.failure = None
+        self.now[0] += GENERATION_TTL_SECONDS; self.tick()
+        self.assertEqual((self.probe()[0], len(self.sources.verified)), (200, 3))
 
     def test_a_cutover_is_verified_and_a_missing_snapshot_pointer_fails_closed(self):
         self.tick()

@@ -3,10 +3,10 @@
 Every GENERATION_TTL_SECONDS one statement reads the application database and both active pointers
 (reference_active, vector_active); the catalog's poller reuses that read. Sources (reference tables,
 the verified Vector snapshot and provider, the artifact store) are re-verified in their own thread
-whenever the pointers change and at least every READINESS_VERIFICATION_TTL_SECONDS. A probe does no
-I/O. Readiness fails closed: a failed read or verification answers 503 until the next success, and so
-does a monitor whose last read is older than POINTER_MAX_AGE (hung or stopped). Nothing here takes the
-write fence, writes, or retries a failed read inside a tick.
+whenever the pointers change, at least every READINESS_VERIFICATION_TTL_SECONDS, and at the next tick
+after a failed verification. A probe does no I/O. Readiness fails closed: a failed read or verification
+answers 503 until the next success, and so does a monitor whose last read is older than POINTER_MAX_AGE
+(hung or stopped). Nothing here takes the write fence, writes, or retries a failed read inside a tick.
 """
 import logging
 import os
@@ -36,7 +36,7 @@ class ReadinessMonitor:
         self.repo, self.catalog, self.interval, self.clock = repo, catalog, interval, clock
         self.lock, self.stopped, self.thread, self.pid = threading.Lock(), threading.Event(), None, os.getpid()
         self.current = None    # (read at, database facts, binding, binding first seen at, error)
-        self.verified = None   # (binding, verified at, sources, error)
+        self.verified = None   # (binding, verified at or failed attempt at, sources, error)
         self.verifying = False
 
     def tick(self):
@@ -60,21 +60,23 @@ class ReadinessMonitor:
             seen = self.current[3] if self.current and self.current[2] == binding else now
             self.current = (now, database, binding, seen, None)
             verified = self.verified
-            due = not self.verifying and (verified is None or verified[0] != binding
-                                          or now - verified[1] >= READINESS_VERIFICATION_TTL_SECONDS)
+            # a pass holds for the TTL; a failure (stamped when it was attempted) is retried at the next tick
+            due = not self.verifying and (verified is None or verified[0] != binding or now - verified[1] >= (
+                READINESS_VERIFICATION_TTL_SECONDS if verified[3] is None else self.interval / 2))
             if due: self.verifying = True
-        if due: threading.Thread(target=self.verify, args=(catalog, binding), name='readiness-verify', daemon=True).start()
+        if due: threading.Thread(target=self.verify, args=(catalog, binding, now), name='readiness-verify', daemon=True).start()
 
-    def verify(self, catalog, binding):
+    def verify(self, catalog, binding, attempted):
         try:
             sources = catalog.verify_binding(binding)
             from .artifact_store import s3_enabled, store
             if s3_enabled(): store().check()
             outcome = (binding, self.clock(), sources, None)
         except Exception as error:
-            LOGGER.warning('Source verification failed (%s)', type(error).__name__)
-            outcome = (binding, self.clock(), None, error)
-        with self.lock: self.verified, self.verifying = outcome, False
+            outcome = (binding, attempted, None, error)
+        with self.lock: previous, self.verified, self.verifying = self.verified, outcome, False
+        if outcome[3] is not None and (previous is None or previous[3] is None):
+            LOGGER.warning('Source verification failed (%s)', type(outcome[3]).__name__)
 
     def snapshot(self):
         """(database facts, sources) from memory, or raise why readiness is not confirmed. No I/O."""
