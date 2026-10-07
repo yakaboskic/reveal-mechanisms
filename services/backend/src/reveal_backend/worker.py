@@ -588,7 +588,8 @@ class Worker:
                         if captured.get(file.get('sha256')):
                             access[file['id']]={'file':file,'download_url':base+file['sha256'],'expires_at':None,'availability':'available','verification':'checksum_verified'}
                 snapshots.append(dict(access))
-            projections=[{node['id']:object_projection(doc,node['id'],snapshot) for node in dapper_nodes(doc)} for doc,snapshot in zip(documents,snapshots)]
+            projections=[{identity:object_projection(doc,identity,snapshot) for identity in dict.fromkeys(
+                [*(node['id'] for node in dapper_nodes(doc)),doc['scientific_accounts'][0]['id']])} for doc,snapshot in zip(documents,snapshots)]
             shas=[sha256(path.read_bytes()) for _,_,path in accepted]
             owner=job.get('owner_user_id')   # the fenced job row decides; a changed owner only costs the reads below
             keys=[('job',job['id']),('queue',job['id']),('execution',job['id']),(ACTIVE_KIND,ACTIVE_ID),('local_work',job['id']),
