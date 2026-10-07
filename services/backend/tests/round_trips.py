@@ -14,7 +14,8 @@ from reveal_backend.repository import Repository, Transaction
 # Statements SQLite does not send through tx.execute, per lease kind.
 OPEN = {'read': 1,     # START TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY
         'write': 1,    # SELECT ... FOR UPDATE on the global fence (SQLite uses BEGIN IMMEDIATE)
-        'single': 0}   # single_read(): the SELECT opens its own statement-level read view
+        'single': 0,   # single_read(): the SELECT opens its own statement-level read view
+        'append': 0}   # append(): the INSERT opens its own transaction (autocommit off), no fence
 END = 1                # COMMIT, or ROLLBACK for single_read
 RELEASE = 0            # a clean lease returns to idle with no command; non-neutral SQL costs a 1-trip reset
 
@@ -34,7 +35,8 @@ class Budget:
 @contextmanager
 def count_round_trips():
     budget = Budget()
-    originals = {'read': Repository.read_transaction, 'write': Repository.transaction, 'single': Repository.single_read}
+    names = {'read': 'read_transaction', 'write': 'transaction', 'single': 'single_read', 'append': '_append_lease'}
+    originals = {kind: getattr(Repository, name) for kind, name in names.items()}
     execute = Transaction.execute
 
     def lease(kind, original):
@@ -59,8 +61,7 @@ def count_round_trips():
     # Modules bind mysql_connection by name; patch every binding plus the source for lazy imports.
     targets = [runtime_config] + [module for name, module in list(sys.modules.items())
         if name.startswith('reveal_backend.') and getattr(module, 'mysql_connection', None) is runtime_config.mysql_connection]
-    patches = [patch.object(Repository, {'read': 'read_transaction', 'write': 'transaction', 'single': 'single_read'}[kind],
-                            lease(kind, original)) for kind, original in originals.items()]
+    patches = [patch.object(Repository, names[kind], lease(kind, original)) for kind, original in originals.items()]
     patches += [patch.object(Transaction, 'execute', counted)]
     patches += [patch.object(module, 'mysql_connection', unpooled) for module in targets]
     for item in patches: item.start()

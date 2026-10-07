@@ -586,11 +586,11 @@ def build_suggestions(body):
         item.setdefault('reason','Similarity to selected source context; inspect for relevance, not biological support.')
     context_provenance=catalog.context_embedding_provenance(contexts,**index) if precomputed else {'context_embedding_origin':'user_subquery'}
     suggestion_id=uid()
-    with repo.transaction() as tx:
-        tx.insert_many([('suggestion',suggestion_id,'catalog',{'mode':body.get('mode','semantic'),'embedding_run_id':catalog.embedding_run,'mapping_run_id':catalog.mapping_run,
-            **context_provenance,'hits':{x['record']['source_id']:{'ranking':x['ranking'],'matched_context_ids':x['contexts'],'reason':x['reason'],
-                **({'retrieval':x['retrieval']} if 'retrieval' in x else {}),
-                **({'context_similarities':x['context_similarities']} if 'context_similarities' in x else {})} for x in items}})])
+    # A new uuid-keyed audit row, committed before its id is returned; only a later fenced draft write reads it.
+    repo.append('suggestion',suggestion_id,'catalog',{'mode':body.get('mode','semantic'),'embedding_run_id':catalog.embedding_run,'mapping_run_id':catalog.mapping_run,
+        **context_provenance,'hits':{x['record']['source_id']:{'ranking':x['ranking'],'matched_context_ids':x['contexts'],'reason':x['reason'],
+            **({'retrieval':x['retrieval']} if 'retrieval' in x else {}),
+            **({'context_similarities':x['context_similarities']} if 'context_similarities' in x else {})} for x in items}})
     return {'suggestion_id':suggestion_id,'automatic_anchors':[{'factor':x['record'],'ranking':x['ranking'],'matched_context_ids':x['contexts'],'reason':x['reason']} for x in items],
         'automatic_target_count':5,'search':catalog.provenance(query,body.get('mode','semantic'),True,**index),'limitations':['Retrieval similarity is not evidence of biological support.']}
 

@@ -1,7 +1,6 @@
 """Query reuse must preserve scientific retrieval and keep the API responsive."""
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import contextmanager
 from copy import deepcopy
 import json
 from pathlib import Path
@@ -222,12 +221,7 @@ class SuggestionResponsivenessTests(unittest.IsolatedAsyncioTestCase):
             def provenance(self, *args): return {}
 
         class Repository:
-            @contextmanager
-            def transaction(self):
-                delay('transaction')
-                yield self
-                delay('commit')
-            def insert_many(self, records): rows.extend(records)
+            def append(self, *record): delay('append'); rows.append(record)   # committed before the response
 
         ticks = 0
         with patch.object(api, 'catalog', Source()), patch.object(api, 'repo', Repository()):
@@ -236,8 +230,8 @@ class SuggestionResponsivenessTests(unittest.IsolatedAsyncioTestCase):
                 ticks += 1
                 await asyncio.sleep(.005)
             result = await task
-        self.assertGreaterEqual(ticks, 8)
-        self.assertEqual(stages, ['source', 'transaction', 'commit'])
+        self.assertGreaterEqual(ticks, 6)
+        self.assertEqual(stages, ['source', 'append'])
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0][:3], ('suggestion', result['suggestion_id'], 'catalog'))
         self.assertEqual(rows[0][3]['mapping_run_id'], 'mapping')

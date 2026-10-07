@@ -2,8 +2,10 @@
 
 One indexed row lock serializes short application transactions, including claims,
 leases, idempotency, ownership transfers and acceptance/outbox. Network/agent work
-never runs inside this lock. The only write outside it deletes notification_outbox
-rows after their Redis wakeup was published (discard_notifications). SQLite is
+never runs inside this lock. Only two writes run outside it: deleting
+notification_outbox rows after their Redis wakeup was published
+(discard_notifications), and appending one new immutable row of an untracked kind
+that no fenced decision reads before its id is returned (append). SQLite is
 available only to isolated unit tests.
 """
 from contextlib import contextmanager
@@ -357,6 +359,28 @@ class Repository:
             if gate is not None: gate.release()
         from .workspace_events import publish_committed
         publish_committed(self, pending)   # queues the wakeup; SQLite delivers it inline
+    def append(self, kind, identity, owner, data):
+        """Insert one new immutable row of an untracked kind without the write fence, committed on return.
+
+        For uuid-keyed audit rows (suggestion) that no fenced decision reads until the caller hands their id
+        out: no outbox or workspace event, no read-modify-write, and a duplicate key fails as an INSERT does."""
+        from .workspace_events import tracked
+        if tracked(kind): raise ValueError(kind + ' is tracked; write it in transaction()')
+        with self._append_lease() as tx:
+            tx.execute('INSERT INTO reveal_records(kind,id,owner_id,version,payload,updated_at) VALUES (%s,%s,%s,1,%s,%s)',
+                       (kind, identity, owner, canonical(data), now()))
+    @contextmanager
+    def _append_lease(self):
+        connection = self.connect()
+        try:
+            yield Transaction(connection, bool(self.sqlite_path), self.table_prefix)
+            with metrics.measure('database', 'COMMIT'): connection.commit()
+        except BaseException:
+            try:
+                with metrics.measure('database', 'ROLLBACK'): connection.rollback()
+            except Exception: pass
+            raise
+        finally: connection.close()
     def discard_notifications(self, ids):
         """Delete published notification_outbox rows without the write fence. They are inserted once under the
         fence and never read-modify-written, and a delete that is lost or repeated only repeats a wakeup. READ

@@ -30,7 +30,7 @@ import test_research_polling as research_polling
 BUDGET = {'local_work_poll': 5, 'me': 2, 'readyz': 2, 'draft_patch': 10, 'mcp_get_operation': 5,
           'mcp_query_enqueue': 13, 'query_operation': 17, 'workspace_list': 4, 'workspace_detail': 4,
           'reconcile_idle': 4, 'job_dispatch': 11, 'gap_list': 5, 'gap_search': 5, 'gap_detail': 5,
-          'citation_render': 5, 'readyz_monitored': 0, 'readiness_tick': 2}
+          'citation_render': 5, 'readyz_monitored': 0, 'readiness_tick': 2, 'suggest': 2}
 
 
 class LocalWorkPollBudget(unittest.TestCase):
@@ -153,6 +153,32 @@ class AccountBudget(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.text); print('\n/readyz', budget)
         self.assertEqual((budget.kinds(), budget.unleased, budget.connects), (['single'], 0, 0), budget)
         self.assertLessEqual(budget.trips(), BUDGET['readyz'], budget)
+
+
+class SuggestionBudget(unittest.TestCase):
+    setUp = application.ApplicationTests.setUp
+
+    def test_suggestion_audit_row_is_one_unfenced_append_committed_before_the_response(self):
+        import json
+        from pathlib import Path
+        from reveal_backend import app as api
+        root = Path(__file__).resolve().parents[3]
+        body = json.loads((root / 'api/examples/suggestMechanisms.dismech_context.json').read_text())['request']['body']
+        gap = next(iter(json.loads((root / 'api/examples/getKnowledgeGap.request.json').read_text())['responses']['200']['examples'].values()))
+        class Source:
+            mechanisms = {}; embedding_run = 'embedding'; mapping_run = 'mapping'
+            def selected(self, reference): return gap
+            def suggest_factors(self, *args, **kwargs): return []
+            def context_embedding_provenance(self, *args): return {'dismech_embedding_run_id': 'context-run'}
+            def provenance(self, *args): return {}
+        with patch.object(api, 'catalog', Source()), count_round_trips() as budget, \
+                patch.object(self.repo, 'transaction', side_effect=AssertionError('suggest took the write fence')):
+            response = self.client.post('/v1/mechanisms/suggest', json=body)
+        self.assertEqual(response.status_code, 200, response.text); print('\nsuggest', budget)
+        self.assertEqual((budget.kinds(), budget.unleased, budget.connects, budget.locked_trips()), (['append'], 0, 0, 0), budget)
+        self.assertLessEqual(budget.trips(), BUDGET['suggest'], budget)
+        with self.repo.read_transaction() as tx:
+            self.assertEqual(tx.get('suggestion', response.json()['suggestion_id'])['owner'], 'catalog')
 
 
 class ReadinessBudget(unittest.TestCase):
@@ -283,7 +309,7 @@ class WireConstantsTests(unittest.TestCase):
         return raw.trips
 
     def test_lease_overhead_constants_match_the_pool(self):
-        for method, kind in (('read_transaction', 'read'), ('transaction', 'write'), ('single_read', 'single')):
+        for method, kind in (('read_transaction', 'read'), ('transaction', 'write'), ('single_read', 'single'), ('_append_lease', 'append')):
             with self.subTest(method=method):
                 self.assertEqual(self.lease_trips(method), 1 + OPEN[kind] + END + RELEASE)
 

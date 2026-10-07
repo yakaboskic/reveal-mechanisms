@@ -93,6 +93,35 @@ class SingleReadTests(unittest.TestCase):
             self.assertEqual(repo.readiness(), {'database': 'sqlite-test', 'tls': False})
 
 
+class AppendTests(unittest.TestCase):
+    def test_append_is_one_insert_and_a_commit_without_the_fence_or_writer_gate(self):
+        created = []
+        def factory():
+            connection = wire.StatusConnection(); created.append(connection); return connection
+        pool = Pool(factory, lambda c: reset_application_session(c, 'cyaka_expected'), unchanged=application_session_unchanged)
+        self.addCleanup(pool.close); repo = Repository(); repo.connect = pool.acquire
+        with pool.acquire() as warm: warm.commit()
+        raw = created[0]; raw.sql.clear(); raw.trips = 0
+        with patch.object(repository, 'writer_gate', side_effect=AssertionError('append took the writer gate')):
+            repo.append('suggestion', 'uuid-key', 'catalog', {'hits': {}})
+        self.assertEqual(([sql.split('(')[0].strip() for sql, _ in raw.sql], raw.trips, raw.reset_count, len(created)),
+                         (['INSERT INTO reveal_records'], 2, 0, 1))   # INSERT, COMMIT; a clean release sends nothing
+
+    def test_tracked_kinds_never_bypass_the_fence(self):
+        repo = Repository(); repo.connect = lambda: self.fail('connected for a tracked kind')
+        for kind in ('draft', 'exploration', 'vote', 'event'):
+            with self.subTest(kind=kind), self.assertRaisesRegex(ValueError, 'tracked'): repo.append(kind, 'id', 'owner', {})
+
+    def test_sqlite_append_is_visible_once_returned_and_a_duplicate_key_writes_nothing(self):
+        import sqlite3
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Repository(str(Path(directory) / 'app.sqlite')); repo.migrate()
+            repo.append('suggestion', 's1', 'catalog', {'n': 1})
+            with repo.read_transaction() as tx: self.assertEqual(tx.get('suggestion', 's1'), {'owner': 'catalog', 'version': 1, 'data': {'n': 1}})
+            with self.assertRaises(sqlite3.IntegrityError): repo.append('suggestion', 's1', 'catalog', {'n': 2})
+            with repo.read_transaction() as tx: self.assertEqual(tx.get('suggestion', 's1')['data'], {'n': 1})
+
+
 class WriterGateTests(unittest.TestCase):
     def setUp(self):
         for item in (patch.object(repository, '_writer_gates', {}), patch.object(repository, 'SESSION_LOCK_WAIT_SECONDS', 0.2)):

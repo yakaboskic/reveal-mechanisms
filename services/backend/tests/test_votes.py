@@ -122,6 +122,21 @@ class VotingTests(unittest.TestCase):
         self.publish('private',1,owner=self.other)
         self.assertEqual(self.request('get',route).status_code,404)
 
+    def test_every_vote_wakes_other_viewers_on_the_public_catalog_collection(self):
+        # An open Composer refreshes its gap vote only on 'catalog' invalidations, never on its own draft or
+        # exploration echoes, so gap and account votes (cast, changed or cleared) must each commit one.
+        from reveal_backend import workspace_events as events
+        def public(positions):
+            _, items, highwater, _ = events.replay(self.repo, self.headers(self.other)['Authorization'], positions)
+            return [(item['event_type'], item['entity_id'], item['collections']) for item in items if item['scope'] == 'public'], highwater
+        self.publish(); route = '/v1/accounts/' + self.account_id + '/vote'
+        _, positions = public({'workspace': 0, 'public': 0})
+        for value, path in ((1, None), (-1, None), (0, None), (1, route)):
+            with self.subTest(value=value, account=bool(path)):
+                self.assertEqual(self.vote(value, route=path).status_code, 200)
+                changes, positions = public(positions)
+                self.assertEqual(changes, [('catalog.updated', 'catalog', ['catalog', 'accounts', 'gaps', 'explorations'])])
+
     def test_known_catalog_gap_required_and_body_is_closed(self):
         self.assertEqual(self.vote(1,route=self.gap_route('missing-gap')).status_code,404)
         for body in ({'vote':True},{'vote':2},{'vote':1,'owner':self.other},{'vote':1,'gap_id':self.gap['object']['id']},{}):

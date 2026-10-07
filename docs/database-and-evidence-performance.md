@@ -183,6 +183,14 @@ the processor warm: about 55 ms per APA render instead of about 2.4 seconds
 spent building the APA engine each time. The first APA render in a process
 still builds it once.
 
+Mechanism suggestions (`POST /v1/mechanisms/suggest`) write their uuid-keyed
+audit row with one `INSERT` and `COMMIT` outside the global write fence
+(`Repository.append`), before the response hands out its id. The row is
+immutable, untracked and read only by a later fenced draft write, so the fence
+protected nothing; it made each Composer gap open wait behind every other
+writer, including that open's own exploration write. A suggestion is now two
+round trips with no lock wait instead of a fenced transaction of three.
+
 ## Reference reads
 
 Request-path reads of the imported reference tables (the factor and gene-set
