@@ -122,7 +122,7 @@ Proposed API:
 
 - `GET /v1/citations/{dapper_id}` — native citation metadata, selected revision, object and resolver links.
 - `GET /v1/citations/{dapper_id}?format=bibtex|biblatex|csl-json|apa|mla&revision=...&locale=en-US` — one-item export; URL-encode opaque IDs.
-- `POST /v1/citations/render` — saved `paragraph_id`, style and locale; the server loads its ordered occurrences and exact target/metadata revisions; returns in-text citations, bibliography, and rendering manifest.
+- `POST /v1/citations/render` — saved `paragraph_id`, style and locale; the server loads its ordered occurrences and exact target/metadata revisions; returns in-text citations, bibliography, and rendering manifest. Rendering is a read: it uses one read-only snapshot and persists nothing. Each API process keeps a warm citeproc engine per style and resets its processor state before every render, so output matches a freshly built engine.
 - A stable configured public URL such as `/id/{dapper_id}` — HTML landing page for that exact version. The deployment domain is still to be selected; `example.org` above is only documentation.
 
 Minting and citation export do not require a new human approval gate. Minted objects remain inspectable under existing access controls; publication follows the application's actual visibility policy. A public-looking URL or a citation request must not silently publish a private gap or agent result. Corrections/withdrawals retain the original identifier and a durable notice where allowed, while enforcing applicable access controls.

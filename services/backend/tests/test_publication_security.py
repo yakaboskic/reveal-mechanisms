@@ -288,7 +288,7 @@ class PublicationSecurityTests(unittest.TestCase):
             with self.assertRaises(RuntimeError): reader.put(kind, ACCOUNT, self.owner, {})
         self.assertIsNone(reader.get('citation', PRIVATE + ':1'))
         self.assertIsNone(reader.get('citation', CLAIM + ':2'))
-        reader.put('citation_rendering', 'deterministic-cache-only', self.owner, {})
+        with self.assertRaises(RuntimeError): reader.put('citation_rendering', 'rendering-is-never-persisted', self.owner, {})
 
 
 if __name__ == '__main__':

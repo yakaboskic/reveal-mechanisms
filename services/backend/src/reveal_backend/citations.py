@@ -1,12 +1,15 @@
 """Immutable citation registry, pinned CSL rendering and complete Paragraph exports."""
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from functools import lru_cache
 import hashlib
 import html
 import json
+import os
 from pathlib import Path
 import re
+import threading
 from types import ModuleType
 from urllib.parse import quote, urlsplit
 
@@ -218,31 +221,71 @@ def assets():
     return manifest, result
 
 
+# The pinned processor runs warm: one QuickJS runtime per process holds citeproc.js and one engine per style, so a
+# render costs the citation clusters (~60 ms), not building the APA engine (~2.4 s). QuickJS runtimes must only
+# ever be used from the thread that created them, so a single dedicated thread owns it; it is rebuilt after an
+# error or ENGINE_RENDERS renders. restoreProcessorState([]) gives each render citeproc's fresh registry, so labels,
+# disambiguation and bibliography match a fresh engine's.
+ENGINE_RENDERS = 500
+_citeproc, _citeproc_lock = {}, threading.Lock()
+RENDER_JS = '''var ENGINES = {}, input = null;
+function engine(style) {
+  return ENGINES[style] || (ENGINES[style] = new module.exports.Engine({retrieveLocale: function() { return LOCALE; },
+    retrieveItem: function(id) { return input.items[id]; }}, STYLES[style], 'en-US', true));
+}
+function render(style) {
+  var processor = ENGINES[style]; processor.restoreProcessorState([]);
+  processor.setOutputFormat('text'); processor.updateItems(Object.keys(input.items));
+  var prior=[], labels=[];
+  input.keys.forEach(function(key,i){
+    var result=processor.processCitationCluster({citationID:'occ-'+i,citationItems:[{id:key}],properties:{noteIndex:0}},prior,[]);
+    result[1].forEach(function(change){labels[change[0]]=change[1];}); prior.push(['occ-'+i,0]);
+  });
+  var bib=processor.makeBibliography();
+  return JSON.stringify({labels:labels, ids:bib ? bib[0].entry_ids : [], entries:bib ? bib[1] : []});
+}'''
+
+
+def citeproc_thread():
+    """This process's citeproc thread (after a fork, a new one with a new runtime)."""
+    with _citeproc_lock:
+        if _citeproc.get('pid') != os.getpid():
+            _citeproc.clear()
+            _citeproc.update(pid=os.getpid(), thread=ThreadPoolExecutor(1, thread_name_prefix='citeproc'), state={})
+        return _citeproc['thread'], _citeproc['state']
+
+
+def _process(state, style, items, keys):
+    """Runs only on the citeproc thread."""
+    import quickjs
+    try:
+        if state.get('context') is None or state['renders'] >= ENGINE_RENDERS:
+            state.clear(); _, files = assets()
+            context = quickjs.Context()
+            context.set_memory_limit(256 * 1024 * 1024)
+            context.set_max_stack_size(8 * 1024 * 1024)
+            context.set_time_limit(10)   # CPU seconds per eval
+            context.eval('var module={exports:{}}; var console={log:function(){},warn:function(){}};')
+            context.eval(files['citeproc.js'])
+            context.eval('var LOCALE=' + json.dumps(files['en-US.xml']) + '; var STYLES=' +
+                         json.dumps({name: files[name + '.csl'] for name in ('apa', 'mla')}) + ';' + RENDER_JS)
+            state.update(context=context, renders=0)
+        context = state['context']; state['renders'] += 1
+        context.eval('engine(' + json.dumps(style) + '); true')
+        return json.loads(context.eval('input=' + json.dumps({'items': items, 'keys': keys}) + '; render(' + json.dumps(style) + ')'))
+    except BaseException:
+        state.clear()   # never reuse an engine after a partial render
+        raise
+
+
 def render_records(records, occurrences, style, locale='en-US'):
     if style not in ('apa', 'mla') or locale != 'en-US':
         raise Problem(422, 'CITATION_STYLE_UNAVAILABLE', 'Available citation styles are APA/MLA with the pinned en-US locale.')
-    import quickjs
     manifest, files = assets()
     items = {item['id']: item for item in map(csl, records)}
     keys = [x['target_id'] + '@' + str(x['citation_metadata_revision']) for x in occurrences]
-    context = quickjs.Context()
-    context.set_memory_limit(256 * 1024 * 1024)
-    context.set_max_stack_size(8 * 1024 * 1024)
-    context.set_time_limit(10)
-    context.eval('var module={exports:{}}; var console={log:function(){},warn:function(){}};')
-    context.eval(files['citeproc.js'])
-    context.eval('var input=' + json.dumps({'items': items, 'keys': keys, 'style': files[style + '.csl'], 'locale': files['en-US.xml']}) + ';')
-    rendered = json.loads(context.eval('''(function(){
-      var engine = new module.exports.Engine({retrieveLocale:function(){return input.locale;}, retrieveItem:function(id){return input.items[id];}},input.style,'en-US',true);
-      engine.setOutputFormat('text'); engine.updateItems(Object.keys(input.items));
-      var prior=[], labels=[];
-      input.keys.forEach(function(key,i){
-        var result=engine.processCitationCluster({citationID:'occ-'+i,citationItems:[{id:key}],properties:{noteIndex:0}},prior,[]);
-        result[1].forEach(function(change){labels[change[0]]=change[1];}); prior.push(['occ-'+i,0]);
-      });
-      var bib=engine.makeBibliography();
-      return JSON.stringify({labels:labels, ids:bib ? bib[0].entry_ids : [], entries:bib ? bib[1] : []});
-    })()'''))
+    thread, state = citeproc_thread()
+    rendered = thread.submit(_process, state, style, items, keys).result()
     bibliography = []
     lookup = {r['target_id'] + '@' + str(r['metadata_revision']): r for r in records}
     for identities, value in zip(rendered['ids'], rendered['entries']):
@@ -255,6 +298,16 @@ def render_records(records, occurrences, style, locale='en-US'):
                 'citation_profile': 'reveal-citation-v1', 'metadata_checksums': [digest(r) for r in records]}}
 
 
+def prefetch(tx, user, keys):
+    """Read every cited target's dependency row, exact registry revision and grant in one statement. get() then
+    serves them from the transaction's identity map, so its authorization and error order are unchanged."""
+    if not keys or not hasattr(tx, 'get_records'): return
+    targets = list(dict.fromkeys(target for target, _ in keys))
+    tx.get_records([('scientific_dependencies', digest([user, target])) for target in targets] +
+                   [('citation', f'{target}:{revision}') for target, revision in keys] +
+                   [('grant', digest([user, target])) for target in targets])
+
+
 def load_paragraph(tx, user, identity):
     row = owned(tx, 'paragraph', identity, user)['data']
     result = row.get('result', row)
@@ -262,6 +315,9 @@ def load_paragraph(tx, user, identity):
     if len(matches) != 1:
         raise Problem(422, 'INVALID_PARAGRAPH', 'The saved paragraph is ambiguous.')
     paragraph = matches[0]
+    prefetch(tx, user, list(dict.fromkeys((occurrence['target_id'], occurrence['citation_metadata_revision'])
+        for occurrence in paragraph.get('citations', []) if isinstance(occurrence, dict) and isinstance(occurrence.get('target_id'), str)
+        and type(occurrence.get('citation_metadata_revision')) is int)))
     records, seen = [], set()
     for occurrence in paragraph.get('citations', []):
         start, end = occurrence['start'], occurrence['end']
@@ -276,12 +332,15 @@ def load_paragraph(tx, user, identity):
     return paragraph, records
 
 
+def render_paragraph(paragraph, records, paragraph_id, style='apa', locale='en-US'):
+    """Pure: needs no transaction, so routes run it after their read lease is returned. Nothing is persisted."""
+    return {'paragraph_id': paragraph_id, 'style': style, 'locale': locale,
+            **render_records(records, paragraph.get('citations', []), style, locale)}
+
+
 def render(tx, user, paragraph_id, style='apa', locale='en-US'):
     paragraph, records = load_paragraph(tx, user, paragraph_id)
-    result = {'paragraph_id': paragraph_id, 'style': style, 'locale': locale,
-              **render_records(records, paragraph.get('citations', []), style, locale)}
-    tx.put('citation_rendering', digest(result), user, result)
-    return result
+    return render_paragraph(paragraph, records, paragraph_id, style, locale)
 
 
 def tex(value):

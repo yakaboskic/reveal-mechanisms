@@ -157,5 +157,4 @@ class SnapshotReader:
     def list(self, kind, owner=None):
         return [{'owner': self.user, 'data': row} for row in self.snapshot['citation_metadata']] if kind == 'citation' else []
     def put(self, kind, identity, owner, data):
-        if kind != 'citation_rendering': raise RuntimeError('Public snapshot is read-only')
-        # Rendering is deterministic and needs no persistent owner-side cache.
+        raise RuntimeError('Public snapshot is read-only')

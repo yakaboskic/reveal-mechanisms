@@ -1252,17 +1252,23 @@ def export_paragraph(dapper_id:str,request:Request,format:str='markdown'):
 
 @app.post('/v1/citations/render')
 async def render_citations(request:Request):
-    from .citations import render
-    body=await request.json(); validate(body,'CitationRenderInput')
-    with repo.transaction() as tx:
-        user=optional_identity(tx,request)
-        try:
-            if not user: raise Problem(404,'NOT_FOUND','Paragraph unavailable.')
-            return render(tx,user,body['paragraph_id'],body.get('style','apa'),body.get('locale','en-US'))
-        except Problem as error:
-            if error.status!=404: raise
-            _,snapshot=publication.find(tx,body['paragraph_id'],'paragraph'); reader=publication.SnapshotReader(snapshot)
-            return render(reader,reader.user,body['paragraph_id'],body.get('style','apa'),body.get('locale','en-US'))
+    from .citations import load_paragraph, render_paragraph
+    body=await request.json()
+    def run():
+        # A read snapshot, never the write fence: rendering persists nothing.
+        validate(body,'CitationRenderInput'); identity=body['paragraph_id']
+        with repo.read_transaction() as tx:
+            user=optional_identity(tx,request)
+            try:
+                if not user: raise Problem(404,'NOT_FOUND','Paragraph unavailable.')
+                paragraph,records=load_paragraph(tx,user,identity)
+            except Problem as error:
+                if error.status!=404: raise
+                _,snapshot=publication.find(tx,identity,'paragraph'); reader=publication.SnapshotReader(snapshot)
+                paragraph,records=load_paragraph(reader,reader.user,identity)
+        # The CSL engine runs after the pooled connection is returned.
+        return render_paragraph(paragraph,records,identity,body.get('style','apa'),body.get('locale','en-US'))
+    return await run_in_threadpool(run)
 
 
 from .workspace_events import register as register_workspace_events

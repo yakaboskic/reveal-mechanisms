@@ -19,7 +19,6 @@ SOURCE = Path(__file__).resolve().parents[1] / 'src/reveal_backend'
 BLOCKING = {'transaction', 'read_transaction', 'single_read', 'discard_notifications', 'preload_catalog'}
 # Sites that are not on the API event loop, or that a later change owns. Each needs a reason.
 ALLOWED = {
-    ('app.py', 'render_citations'): 'citation rendering is split into read, render and write by its own change (F35)',
     ('deployment.py', '_run_probe'): 'standalone legacy worker process, not the API loop',
     ('worker.py', '_process'): 'standalone legacy worker process, not the API loop',
 }

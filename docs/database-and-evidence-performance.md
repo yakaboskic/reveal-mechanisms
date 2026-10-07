@@ -173,6 +173,16 @@ skips words whose difflib upper bounds cannot reach the 0.7 threshold, using a
 word index built with each catalog load (about 35 ms and 14 MB). Results and
 scores are identical; a search takes about 15 ms of CPU instead of 0.3-0.9 s.
 
+Citation rendering (`POST /v1/citations/render`) reads one snapshot instead of
+taking the global write fence. It no longer writes the unread
+`citation_rendering` row, and it reads every cited revision, grant and
+dependency row in one statement: 5 round trips instead of 45 for the fixture
+paragraph with 13 citations. The CSL engine runs after the connection is
+returned, off the event loop, on one per-process citeproc thread that keeps
+the processor warm: about 55 ms per APA render instead of about 2.4 seconds
+spent building the APA engine each time. The first APA render in a process
+still builds it once.
+
 Read-only measurements included transaction completion and pool reset:
 
 | Operation | Before | After |

@@ -20,13 +20,16 @@ from reveal_backend.workflow_routes import dispatch_job, sweep
 import test_account_discovery as account_discovery
 import test_application as application
 import test_durable_workflow as durable
+import test_event_loop_offload as offload
 import test_mysql_pool as wire
+import test_publication as publication
 import test_research_http as research_http
 import test_research_polling as research_polling
 
 BUDGET = {'local_work_poll': 5, 'me': 2, 'readyz': 2, 'draft_patch': 10, 'mcp_get_operation': 5,
           'mcp_query_enqueue': 13, 'query_operation': 17, 'workspace_list': 4, 'workspace_detail': 4,
-          'reconcile_idle': 4, 'job_dispatch': 11, 'gap_list': 5, 'gap_search': 5, 'gap_detail': 5}
+          'reconcile_idle': 4, 'job_dispatch': 11, 'gap_list': 5, 'gap_search': 5, 'gap_detail': 5,
+          'citation_render': 5}
 
 
 class LocalWorkPollBudget(unittest.TestCase):
@@ -172,6 +175,36 @@ class GapDiscoveryBudget(unittest.TestCase):
                     self.assertEqual(response.status_code, 200, response.text); print('\n' + route, budget)
                     self.assertEqual((budget.kinds(), budget.unleased, budget.connects), (['read'], 0, 0), budget)
                     self.assertLessEqual(budget.trips(), BUDGET[name] - (0 if headers else 1), budget)   # no principal read
+
+
+class CitationRenderBudget(unittest.TestCase):
+    setUp = publication.PublicationTests.setUp
+    seed = publication.PublicationTests.seed
+    principal = publication.PublicationTests.principal
+    headers = publication.PublicationTests.headers
+    request = publication.PublicationTests.request
+    publish = publication.PublicationTests.publish
+    loop_guard = offload.RuntimeOffloadTests.loop_guard
+
+    def render(self, owner=None):
+        with patch.object(self.repo, 'transaction', side_effect=AssertionError('rendering took the write fence')), \
+                self.loop_guard() as on_loop, count_round_trips() as budget:
+            response = self.request('post', '/v1/citations/render', owner, json={'paragraph_id': self.paragraph_id, 'style': 'mla', 'locale': 'en-US'})
+        self.assertEqual(response.status_code, 200, response.text); print('\ncitation render', budget)
+        self.assertEqual(on_loop, [])   # the read lease and the CSL engine never run on the event loop
+        return response.json(), budget
+
+    def test_render_is_one_read_snapshot_whatever_the_citation_count(self):
+        owned, budget = self.render(self.owner)
+        cited = {item['target_id'] for item in owned['bibliography']}
+        self.assertGreater(len(cited), 1)
+        self.assertEqual((budget.kinds(), budget.unleased, budget.connects, budget.locked_trips()), (['read'], 0, 0, 0), budget)
+        self.assertLessEqual(budget.trips(), BUDGET['citation_render'], budget)
+        with self.repo.read_transaction() as tx: self.assertEqual(tx.list('citation_rendering'), [])
+        self.assertEqual(self.publish().status_code, 200)
+        public, budget = self.render()   # the published snapshot, for a reader without a session
+        self.assertEqual(budget.kinds(), ['read'], budget)
+        self.assertEqual(public['bibliography'], owned['bibliography'])
 
 
 class TrackedWriteBudget(unittest.TestCase):
