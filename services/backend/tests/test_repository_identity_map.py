@@ -111,7 +111,8 @@ class EquivalenceTests(unittest.TestCase):
                          'workflow_activity', 'idempotency', 'local_work', 'draft'} <= kinds, kinds)
         self.assertGreater(sum(row[0] == 'workspace_event' for row in after), 5)
         reads = lambda sent: sum(sql.startswith('SELECT') for sql in sent)
-        self.assertLess(len(sent_after), len(sent_before) - 20, (len(sent_after), len(sent_before)))
+        # prepare_commit batches its cursor reads itself, so the map no longer saves its per-change pre-reads.
+        self.assertLess(len(sent_after), len(sent_before) - 10, (len(sent_after), len(sent_before)))
         self.assertEqual([sql for sql in sent_after if not sql.startswith('SELECT')],
                          [sql for sql in sent_before if not sql.startswith('SELECT')])   # identical writes, in order
         self.assertLess(reads(sent_after), reads(sent_before))

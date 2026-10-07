@@ -20,7 +20,8 @@ import httpx
 log = logging.getLogger(__name__)
 _hubs = weakref.WeakSet()
 _hubs_lock = threading.Lock()
-_clients = threading.local()
+_client_lock = threading.Lock()
+_client = (None, None)
 
 
 def active_hubs():
@@ -53,30 +54,45 @@ def configuration():
     return 'local', '', ''
 
 
+def _publisher_client(mode, endpoint, token):
+    """One thread-safe client per process and configuration. httpx keeps an idle connection for only 5 s by
+    default, shorter than the gap between most writes, so every publish paid a new TLS handshake."""
+    global _client
+    key = (os.getpid(), mode, endpoint, hashlib.sha256(token.encode()).hexdigest())
+    with _client_lock:
+        current, client = _client
+        if current == key: return client
+        if client is not None and current[0] == os.getpid():
+            try: client.close()
+            except Exception: pass  # a publish still using it fails and stays in the outbox
+        if mode == 'rest':
+            client = httpx.Client(base_url=endpoint, headers={'Authorization': 'Bearer '+token}, timeout=3,
+                limits=httpx.Limits(max_connections=4, max_keepalive_connections=2, keepalive_expiry=55))
+        elif mode == 'resp':
+            import redis
+            client = redis.Redis.from_url(endpoint, socket_timeout=3, socket_connect_timeout=3, health_check_interval=0)
+        else: client = None
+        _client = (key, client)
+        return client
+
+
 def publish(channels):
     """Bounded post-commit publication, one command per changed audience/job."""
     channels = list(dict.fromkeys(channels))
     if not channels: return
     mode, endpoint, token = configuration()
-    key = (mode, endpoint, token)
-    if getattr(_clients, 'key', None) != key:
-        previous = getattr(_clients, 'client', None)
-        if previous is not None: previous.close()
-        if mode == 'rest':
-            client = httpx.Client(base_url=endpoint, headers={'Authorization': 'Bearer '+token}, timeout=3)
-        elif mode == 'resp':
-            import redis
-            client = redis.Redis.from_url(endpoint, socket_timeout=3, socket_connect_timeout=3, health_check_interval=0)
-        else: client = None
-        _clients.key, _clients.client = key, client
+    client = _publisher_client(mode, endpoint, token)
     if mode == 'rest':
-        response = _clients.client.post('/pipeline', json=[['PUBLISH', name, 'changed'] for name in channels])
+        body = [['PUBLISH', name, 'changed'] for name in channels]
+        try: response = client.post('/pipeline', json=body)
+        except (httpx.RemoteProtocolError, httpx.ReadError, httpx.WriteError):
+            response = client.post('/pipeline', json=body)  # once, for a kept-alive socket the provider closed
         response.raise_for_status()
         result = response.json()
         if not isinstance(result, list) or len(result) != len(channels) or any('error' in item for item in result):
             raise RuntimeError('Redis publication was not acknowledged')
     elif mode == 'resp':
-        pipeline = _clients.client.pipeline(transaction=False)
+        pipeline = client.pipeline(transaction=False)
         for name in channels: pipeline.publish(name, 'changed')
         pipeline.execute()
     else:

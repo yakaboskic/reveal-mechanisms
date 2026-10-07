@@ -72,6 +72,28 @@ new workspace events and notification outbox rows are inserted without a
 lookup. Rows the transaction wrote itself are always read back from the
 database.
 
+A write that changes a tracked record commits its workspace events and one
+notification outbox row inside its own fenced transaction. That bookkeeping is
+one cursor `SELECT`, one `UPDATE` per changed audience and one multi-row
+`INSERT`, however many records changed; previously each change cost three
+statements under the lock, so a 65-grant acceptance sent about 200. The writer
+no longer waits for Redis or takes the fence a second time. After `COMMIT`, one
+background thread per process `PUBLISH`es the wakeups, coalescing whatever
+queued meanwhile into one pipeline, then deletes the published outbox rows with
+one `DELETE` outside the write fence, under `READ COMMITTED` so that a row
+reconciliation already removed takes no gap lock. Outbox rows are inserted once
+and never updated, so a lost or repeated delete only repeats a wakeup. If Redis
+or the delete fails, the 10,000-entry queue is full, or the process exits
+first, the row stays and the scheduled reconciliation publishes it again:
+delivery remains at least once. One HTTPS client per process keeps its Upstash
+connection for 55 seconds (httpx defaults to 5) and retries a POST once when
+the provider closed the kept-alive socket. `REVEAL_NOTIFICATION_DELIVERY=inline`
+publishes before the writer returns, as SQLite repositories always do. Admin
+telemetry reports the queue as `notifications.publish_queue` and publish time
+as the `notification`/`PUBLISH` row. A draft rename is now one fenced
+transaction of 10 round trips instead of two fenced transactions totalling 14
+plus a Redis call.
+
 Each API request logs one JSON line to stdout with the route template (never
 the raw path, query string, ids or parameters), status, duration, and its
 database cost: statements (including `COMMIT`, `ROLLBACK` and the fence),

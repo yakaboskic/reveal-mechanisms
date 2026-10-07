@@ -2,7 +2,9 @@
 
 One indexed row lock serializes short application transactions, including claims,
 leases, idempotency, ownership transfers and acceptance/outbox. Network/agent work
-never runs inside this lock. SQLite is available only to isolated unit tests.
+never runs inside this lock. The only write outside it deletes notification_outbox
+rows after their Redis wakeup was published (discard_notifications). SQLite is
+available only to isolated unit tests.
 """
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -144,11 +146,17 @@ class Transaction:
             track(self, kind, identity, owner, data)
     def insert(self, kind, identity, owner, data, *, replace=False):
         """Insert a key known to be new with no pre-read. replace=True puts instead if it exists after all."""
-        try: self.insert_many([(kind, identity, owner, data)])
+        self.insert_new([(kind, identity, owner, data)], (kind,) if replace else ())
+    def insert_new(self, records, replace=()):
+        """Insert keys known to be new in one statement with no pre-read. If one exists after all, the failed
+        statement changed nothing; rows of a kind in replace are then put() one by one, others inserted alone."""
+        try: self.insert_many(records)
         except Exception as error:
             import pymysql
             if not replace or not isinstance(error, (sqlite3.IntegrityError, pymysql.err.IntegrityError)): raise
-            self.put(kind, identity, owner, data)
+            for kind, identity, owner, data in records:
+                if kind in replace: self.put(kind, identity, owner, data)
+                else: self.insert_many([(kind, identity, owner, data)])
     def update_existing(self, kind, identity, owner, data):
         """Update a row already read under the transaction's exclusive fence."""
         from .workspace_events import tracked, track
@@ -334,10 +342,33 @@ class Repository:
                 if granted is not None: metrics.observe('database', 'LOCK_HOLD', (time.perf_counter()-granted)*1000)
                 connection.close()
         finally:
-            # Before publish_committed, which opens its own fenced transaction.
             if gate is not None: gate.release()
         from .workspace_events import publish_committed
-        publish_committed(self, pending)
+        publish_committed(self, pending)   # queues the wakeup; SQLite delivers it inline
+    def discard_notifications(self, ids):
+        """Delete published notification_outbox rows without the write fence. They are inserted once under the
+        fence and never read-modify-written, and a delete that is lost or repeated only repeats a wakeup. READ
+        COMMITTED keeps an id that reconciliation already deleted from taking a gap lock that would stall a
+        fenced INSERT; the SET costs the lease its reset on release."""
+        ids = list(dict.fromkeys(ids))
+        if not ids: return 0
+        connection = self.connect()
+        try:
+            tx = Transaction(connection, bool(self.sqlite_path), self.table_prefix)
+            if not self.sqlite_path: tx.execute('SET TRANSACTION ISOLATION LEVEL READ COMMITTED')
+            deleted = 0
+            for offset in range(0, len(ids), 500):
+                part = ids[offset:offset + 500]
+                deleted += tx.execute('DELETE FROM reveal_records WHERE kind=%s AND id IN (' + ','.join(['%s'] * len(part)) + ')',
+                                      ('notification_outbox', *part)).rowcount
+            with metrics.measure('database', 'COMMIT'): connection.commit()
+            return deleted
+        except BaseException:
+            try:
+                with metrics.measure('database', 'ROLLBACK'): connection.rollback()
+            except Exception: pass
+            raise
+        finally: connection.close()
     def migrate(self):
         connection = self.connect() if self.sqlite_path else mysql_connection()
         try:

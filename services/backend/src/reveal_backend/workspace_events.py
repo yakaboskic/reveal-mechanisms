@@ -1,19 +1,25 @@
 """Committed workspace change log and push-only SSE delivery.
 
-Events/outbox share the application's RDS transaction fence. Redis is a wakeup
-only: replay always reads authorized durable records, never message payloads.
+Events and their outbox row commit inside the writer's RDS transaction fence. A
+background publisher then PUBLISHes and deletes the outbox row without the fence.
+Redis is a wakeup only: replay always reads authorized durable records, never
+message payloads.
 """
 import asyncio
+import atexit
 import base64
 import hashlib
 import hmac
 import json
 import logging
 import os
+import queue
+import threading
 import time
 
 from .auth import Problem, principal, credential_expiry
 from .repository import now, uid, digest, canonical
+from .runtime_metrics import measure
 from . import redis_notifications
 
 log = logging.getLogger(__name__)
@@ -92,47 +98,132 @@ def ownership_changed(tx, source, target):
 
 
 def prepare_commit(tx):
-    """Called under the write fence immediately before the authoritative commit."""
+    """Called under the write fence immediately before the authoritative commit. However many changes, it reads
+    every scope's cursor in one SELECT, updates each existing cursor once and inserts all events, new cursors and
+    the outbox row in one statement."""
     timestamp = now()
-    channels = set()
-    for (owner, kind, identity), mutation in sorted(tx.workspace_changes.items()):
+    changes = sorted(tx.workspace_changes.items())
+    cursors = {}
+    for (owner, _, _), _ in changes:
         scope = 'public' if owner == 'public' else 'workspace:'+owner
-        state_id = digest(scope)
-        state = tx.get('workspace_cursor', state_id)
-        sequence = (state['data']['sequence'] if state else 0) + 1
-        tx.put('workspace_cursor', state_id, owner, {'sequence':sequence, 'oldest':(state['data'].get('oldest', 1) if state else 1)})
-        envelope = {'schema_version':1, 'event_id':state_id+':'+str(sequence), 'cursor':str(sequence),
+        cursors.setdefault(scope, {'owner':owner, 'id':digest(scope)})
+    found = tx.get_many('workspace_cursor', [cursor['id'] for cursor in cursors.values()]) if cursors else {}
+    for cursor in cursors.values():
+        state = found.get(cursor['id'])
+        cursor.update(new=state is None, sequence=state['data']['sequence'] if state else 0,
+            oldest=state['data'].get('oldest', 1) if state else 1)
+    records = []
+    for (owner, kind, identity), mutation in changes:
+        scope = 'public' if owner == 'public' else 'workspace:'+owner
+        cursor = cursors[scope]; cursor['sequence'] += 1; sequence = cursor['sequence']
+        envelope = {'schema_version':1, 'event_id':cursor['id']+':'+str(sequence), 'cursor':str(sequence),
             'scope':'public' if owner == 'public' else 'workspace', 'committed_at':timestamp, **mutation}
-        # The cursor advances under this fence, so the key is new; replace=True keeps put()'s overwrite if not.
-        tx.insert('workspace_event', state_id+':'+str(sequence).zfill(20), owner, envelope, replace=True)
-        channels.add(redis_notifications.channel(scope))
+        records.append(('workspace_event', cursor['id']+':'+str(sequence).zfill(20), owner, envelope))
+    for cursor in cursors.values():
+        state = {'sequence':cursor['sequence'], 'oldest':cursor['oldest']}
+        if cursor['new']: records.append(('workspace_cursor', cursor['id'], cursor['owner'], state))
+        else: tx.update_existing('workspace_cursor', cursor['id'], cursor['owner'], state)
+    channels = {redis_notifications.channel(scope) for scope in cursors}
     channels.update(redis_notifications.channel('job:'+job_id) for job_id in tx.notification_jobs)
-    if not channels: return []
-    identity = uid()
-    tx.insert('notification_outbox', identity, 'system', {'channels':sorted(channels), 'created_at':timestamp})
-    return [{'id':identity, 'channels':sorted(channels)}]
+    pending = [{'id':uid(), 'channels':sorted(channels)}] if channels else []
+    for item in pending:
+        records.append(('notification_outbox', item['id'], 'system', {'channels':item['channels'], 'created_at':timestamp}))
+    # The cursors advance under this fence, so every key is new; an event key that exists after all keeps put()'s overwrite.
+    for offset in range(0, len(records), 100): tx.insert_new(records[offset:offset+100], ('workspace_event',))
+    return pending
 
 
-def publish_committed(repository, pending):
+def deliver(repository, pending):
+    """PUBLISH, then delete the acknowledged outbox rows outside the write fence. A failure of either leaves the
+    rows for reconcile_notifications; nothing is retried here and no SQL is replayed."""
     if not pending: return 0
     try:
-        redis_notifications.publish([name for item in pending for name in item['channels']])
-        with repository.transaction() as tx:
-            for item in pending: tx.remove('notification_outbox', item['id'])
-        return len(pending)
+        with measure('notification', 'PUBLISH'):
+            redis_notifications.publish([name for item in pending for name in item['channels']])
     except Exception as error:
         # Do not reveal provider URLs/tokens or turn a committed save into 503.
         log.warning('Committed notifications remain pending (%s)', type(error).__name__)
         return 0
+    try: repository.discard_notifications([item['id'] for item in pending])
+    except Exception as error:
+        log.warning('Published notifications await reconciliation (%s)', type(error).__name__)
+    return len(pending)
+
+
+class Publisher:
+    """One daemon thread per process delivers committed wakeups after the writer returns. Whatever is queued when
+    it starts a batch shares one PUBLISH pipeline and one DELETE per repository. A full queue, a failure or process
+    exit leaves outbox rows that reconcile_notifications republishes, so delivery stays at-least-once."""
+    def __init__(self, limit=10000):
+        self.limit = limit
+        self._after_fork()
+
+    def _after_fork(self):
+        self.lock, self.pid, self.queue, self.thread = threading.Lock(), None, None, None
+
+    def submit(self, repository, pending):
+        with self.lock:
+            if self.pid != os.getpid(): self.pid, self.queue, self.thread = os.getpid(), queue.Queue(self.limit), None
+            if self.thread is None or not self.thread.is_alive():
+                self.thread = threading.Thread(target=self._run, args=(self.queue,), name='reveal-notifications', daemon=True)
+                self.thread.start()
+            work = self.queue
+        try: work.put_nowait((repository, pending)); return True
+        except queue.Full:
+            log.warning('Notification queue is full; reconciliation will deliver'); return False
+
+    def _run(self, work):
+        while True:
+            batch = [work.get()]
+            while len(batch) < 500:
+                try: batch.append(work.get_nowait())
+                except queue.Empty: break
+            groups = {}
+            for repository, pending in batch:
+                groups.setdefault((repository.sqlite_path, repository.table_prefix), (repository, []))[1].extend(pending)
+            try:
+                for repository, pending in groups.values(): deliver(repository, pending)
+            finally:
+                for _ in batch: work.task_done()
+
+    def backlog(self):
+        work = self.queue if self.pid == os.getpid() else None
+        return work.qsize() if work is not None else 0
+
+    def flush(self, timeout=2.0):
+        """Wait until everything submitted so far was delivered or left for reconciliation; False on timeout."""
+        work = self.queue if self.pid == os.getpid() else None
+        if work is None: return True
+        deadline = time.monotonic()+timeout
+        with work.all_tasks_done:
+            while work.unfinished_tasks:
+                remaining = deadline-time.monotonic()
+                if remaining <= 0: return False
+                work.all_tasks_done.wait(remaining)
+        return True
+
+
+publisher = Publisher()
+if hasattr(os, 'register_at_fork'): os.register_at_fork(after_in_child=publisher._after_fork)
+atexit.register(publisher.flush)
+
+
+def publish_committed(repository, pending):
+    """After COMMIT and the lease release. The background publisher delivers for Aurora; SQLite repositories and
+    REVEAL_NOTIFICATION_DELIVERY=inline deliver before returning. Returns how many were delivered or queued."""
+    if not pending: return 0
+    mode = os.getenv('REVEAL_NOTIFICATION_DELIVERY') or ('inline' if repository.sqlite_path else 'background')
+    if mode == 'inline': return deliver(repository, pending)
+    return len(pending) if publisher.submit(repository, pending) else 0
 
 
 def reconcile_notifications(repository, limit=100):
-    """Invoke from managed reconciliation; reads RDS, only PUBLISHes to Redis."""
+    """Invoke from managed reconciliation; reads RDS, PUBLISHes to Redis, then deletes what was published."""
     with repository.read_transaction() as tx:
         rows = tx.execute('SELECT id,payload FROM reveal_records WHERE kind=%s ORDER BY updated_at,id LIMIT %s',
             ('notification_outbox', min(1000, max(1, limit)))).fetchall()
         pending = [{'id':row[0], **json.loads(row[1])} for row in rows]
-    return publish_committed(repository, pending)
+    return deliver(repository, pending)
 
 
 def encode_cursor(owner, positions):
@@ -273,6 +364,7 @@ def notification_health(repository):
         row = tx.execute('SELECT COUNT(*),MIN(updated_at) FROM reveal_records WHERE kind=%s', ('notification_outbox',)).fetchone()
     bridges = [bridge.health() for bridge in redis_notifications.active_hubs()]
     return {'transport':redis_notifications.configuration()[0], 'outbox_pending':row[0], 'oldest_pending_at':row[1],
+        'publish_queue':publisher.backlog(),
         'subscriptions':sum(item['subscriptions'] for item in bridges),
         'connected':sum(item['connected'] for item in bridges),
         'connections':sum(item['connections'] for item in bridges),

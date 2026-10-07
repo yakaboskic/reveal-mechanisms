@@ -5,14 +5,16 @@ import json
 import os
 from pathlib import Path
 import tempfile
+import threading
 import time
 import unittest
 from unittest.mock import patch
 
+import httpx
 import jwt
 from reveal_backend import jobs, workspace_events as events, redis_notifications as notifications
 from reveal_backend.auth import Problem
-from reveal_backend.repository import Repository, digest
+from reveal_backend.repository import Repository, Transaction, digest
 
 
 class WorkspaceEventsTests(unittest.TestCase):
@@ -239,6 +241,34 @@ class WorkspaceEventsTests(unittest.TestCase):
             tx.put('principal','alice','alice',row['data'])
         with self.assertRaises(Problem): self.replay()
 
+    def test_bookkeeping_is_one_cursor_read_one_update_per_existing_scope_and_one_insert(self):
+        statements, prepare, execute = [], events.prepare_commit, Transaction.execute
+        def counted(tx):
+            with patch.object(Transaction, 'execute', lambda self, sql, params=(): statements.append(sql.split()[0]) or execute(self, sql, params)):
+                return prepare(tx)
+        before, other = self.replay()[2], self.replay('bob')[2]
+        with patch.object(events, 'prepare_commit', counted), patch.object(notifications, 'publish') as publish:
+            with self.repo.transaction() as tx:
+                for index in range(5): tx.put('draft', 'd%d' % index, 'alice', {'id':'d%d' % index})
+                tx.put('publication', 'p', 'alice', {'account_id':'a', 'visibility':'public'})   # first public event
+        self.assertEqual(statements, ['SELECT', 'UPDATE', 'INSERT'])   # alice's cursor exists; public's is new
+        self.assertEqual(set(publish.call_args.args[0]), {notifications.channel('workspace:alice'), notifications.channel('public')})
+        mine = self.replay(positions=before)[1]
+        self.assertEqual([item['cursor'] for item in mine if item['scope'] == 'workspace'], [str(before['workspace']+n) for n in range(1, 7)])
+        self.assertEqual([(item['cursor'], item['entity_id']) for item in self.replay('bob', positions=other)[1]], [('1', 'catalog')])
+        with self.repo.read_transaction() as tx:
+            cursor = tx.get('workspace_cursor', digest('workspace:alice'))
+            self.assertEqual((cursor['data'], cursor['version']), ({'sequence':before['workspace']+6, 'oldest':1}, 2))
+            self.assertEqual(tx.get('workspace_cursor', digest('public'))['data'], {'sequence':1, 'oldest':1})
+            self.assertEqual(tx.list('notification_outbox'), [])
+
+    def test_an_event_key_that_exists_after_all_keeps_the_overwrite(self):
+        with self.repo.transaction() as tx: tx.remove('workspace_cursor', digest('workspace:alice'))   # sequence restarts at 1
+        with self.repo.transaction() as tx: tx.put('draft', 'again', 'alice', {'id':'again'})
+        _, replay, highwater, _ = self.replay()
+        self.assertEqual(highwater['workspace'], 1)
+        self.assertEqual([(item['cursor'], item['entity_id']) for item in replay if item['scope'] == 'workspace'], [('1', 'again')])
+
     def test_delete_and_bulk_mutations_produce_committed_events(self):
         with self.repo.transaction() as tx: tx.insert_many([('draft','first','alice',{'id':'first'})])
         with self.repo.transaction() as tx: tx.update_existing('draft','first','alice',{'id':'first','changed':True})
@@ -246,6 +276,131 @@ class WorkspaceEventsTests(unittest.TestCase):
         drafts=[item for item in self.replay()[1] if item['entity_id']=='first']
         self.assertEqual([item['operation'] for item in drafts],['upsert','upsert','remove'])
         self.assertEqual([item['entity_revision'] for item in drafts],[1,2,3])
+
+
+class BackgroundDeliveryTests(unittest.TestCase):
+    def setUp(self):
+        WorkspaceEventsTests.setUp(self)
+        mode = patch.dict(os.environ, {'REVEAL_NOTIFICATION_DELIVERY':'background'}); mode.start(); self.addCleanup(mode.stop)
+
+    def outbox(self):
+        with self.repo.read_transaction() as tx: return len(tx.list('notification_outbox'))
+
+    def test_writer_returns_before_the_publish_which_then_deletes_the_row_without_a_second_fence(self):
+        release, published, fenced, transaction = threading.Event(), [], [], Repository.transaction
+        def publish(channels): release.wait(5); published.append(channels)
+        def counted(repo): fenced.append(threading.current_thread().name); return transaction(repo)
+        with patch.object(notifications, 'publish', side_effect=publish), patch.object(Repository, 'transaction', counted):
+            with self.repo.transaction() as tx: tx.put('draft', 'draft-1', 'alice', {'id':'draft-1'})
+            self.assertEqual((published, self.outbox()), ([], 1))   # committed with its outbox row; Redis not awaited
+            release.set(); self.assertTrue(events.publisher.flush(5))
+        self.assertEqual(published, [[notifications.channel('workspace:alice')]])
+        self.assertEqual((self.outbox(), fenced), (0, [threading.current_thread().name]))   # one fence, the writer's
+
+    def test_failed_background_publish_leaves_the_row_for_reconciliation(self):
+        with patch.object(notifications, 'publish', side_effect=ConnectionError('down')), self.assertLogs(events.log, 'WARNING'):
+            with self.repo.transaction() as tx: tx.put('draft', 'draft-1', 'alice', {'id':'draft-1'})
+            self.assertTrue(events.publisher.flush(5))
+        self.assertEqual(self.outbox(), 1)
+        with patch.object(notifications, 'publish') as publish:
+            self.assertEqual(events.reconcile_notifications(self.repo), 1); publish.assert_called_once()
+        self.assertEqual(self.outbox(), 0)
+
+    def test_a_burst_shares_one_publish_and_one_delete(self):
+        release, calls, discards = threading.Event(), [], []
+        discard = Repository.discard_notifications
+        def publish(channels): release.wait(5); calls.append(sorted(channels))
+        def counted(repo, ids): discards.append(len(ids)); return discard(repo, ids)
+        with patch.object(notifications, 'publish', side_effect=publish), patch.object(Repository, 'discard_notifications', counted):
+            for index, owner in enumerate(('alice', 'bob', 'alice')):   # the first holds the thread; two queue behind it
+                with self.repo.transaction() as tx: tx.put('draft', 'd%d' % index, owner, {'id':'d%d' % index})
+            release.set(); self.assertTrue(events.publisher.flush(5))
+        self.assertEqual(len(calls), len(discards))
+        self.assertEqual(sum(discards), 3)
+        self.assertLessEqual(len(calls), 2)
+        self.assertEqual(self.outbox(), 0)
+
+    def test_full_queue_and_forked_process_leave_rows_for_reconciliation(self):
+        started, release, delivered = threading.Event(), threading.Event(), []
+        def deliver(repository, pending): started.set(); release.wait(5); delivered.append(pending)
+        publisher = events.Publisher(limit=1)
+        with patch.object(events, 'deliver', deliver):
+            self.assertTrue(publisher.submit(self.repo, ['a'])); self.assertTrue(started.wait(5))
+            self.assertTrue(publisher.submit(self.repo, ['b']))
+            self.assertEqual(publisher.backlog(), 1)
+            with self.assertLogs(events.log, 'WARNING'): self.assertFalse(publisher.submit(self.repo, ['c']))
+            release.set(); self.assertTrue(publisher.flush(5))
+            first = publisher.thread
+            publisher.pid = -1   # as after fork: the parent's queue and thread are not this process's
+            self.assertTrue(publisher.flush(0))
+            self.assertTrue(publisher.submit(self.repo, ['d'])); self.assertTrue(publisher.flush(5))
+            self.assertIsNot(publisher.thread, first)
+        self.assertEqual(delivered, [['a'], ['b'], ['d']])
+        publisher._after_fork(); self.assertTrue(publisher.lock.acquire(blocking=False))
+
+    def test_queue_full_still_commits_and_reports_nothing_delivered(self):
+        with patch.object(events.publisher, 'submit', return_value=False), patch.object(notifications, 'publish') as publish:
+            with self.repo.transaction() as tx: tx.put('draft', 'draft-1', 'alice', {'id':'draft-1'})
+        publish.assert_not_called()
+        self.assertEqual(self.outbox(), 1)
+        self.assertEqual(events.reconcile_notifications(self.repo), 1)
+
+
+class DiscardWireTests(unittest.TestCase):
+    def test_discard_is_unfenced_read_committed_and_resets_its_pooled_lease(self):
+        import test_mysql_pool as wire
+        from reveal_backend import repository
+        from reveal_backend.mysql_database import application_session_unchanged, reset_application_session
+        from reveal_backend.mysql_pool import Pool
+        class Cursor(wire.FakeCursor): rowcount = 2
+        class Connection(wire.StatusConnection):
+            def cursor(self, *args): return Cursor(self)
+        created = []
+        def factory(): created.append(Connection()); return created[-1]
+        pool = Pool(factory, lambda c: reset_application_session(c, 'cyaka_expected'), unchanged=application_session_unchanged)
+        self.addCleanup(pool.close); repo = Repository(); repo.connect = pool.acquire
+        with patch.object(repository, 'writer_gate', side_effect=AssertionError('the delete is never fenced')):
+            self.assertEqual(repo.discard_notifications(['a', 'b', 'a']), 2)
+        sent = created[0].sql
+        self.assertEqual(sent[:2], [('SET TRANSACTION ISOLATION LEVEL READ COMMITTED', ()),
+            ('DELETE FROM reveal_records WHERE kind=%s AND id IN (%s,%s)', ('notification_outbox', 'a', 'b'))])
+        self.assertFalse(any('FOR UPDATE' in sql for sql, _ in sent))
+        self.assertEqual(created[0].reset_count, 1)   # SET TRANSACTION is not session-neutral: the lease is reset
+
+
+class PublishClientTests(unittest.TestCase):
+    def test_one_long_lived_rest_client_per_process_and_configuration(self):
+        settings = {'UPSTASH_REDIS_REST_URL':'https://notify.invalid', 'UPSTASH_REDIS_REST_TOKEN':'token-1',
+            'REVEAL_NOTIFICATION_REDIS_URL':'', 'REVEAL_NOTIFICATION_REDIS_REST_URL':'', 'REVEAL_NOTIFICATION_REDIS_REST_TOKEN':''}
+        with patch.dict(os.environ, settings), patch.object(notifications, '_client', (None, None)):
+            first = notifications._publisher_client(*notifications.configuration())
+            box = []
+            worker = threading.Thread(target=lambda: box.append(notifications._publisher_client(*notifications.configuration())))
+            worker.start(); worker.join()
+            self.assertIs(box[0], first)
+            self.assertEqual(first._transport._pool._keepalive_expiry, 55)   # httpx 0.28.1 default is 5 s
+            with patch.dict(os.environ, {'UPSTASH_REDIS_REST_TOKEN':'token-2'}):
+                rotated = notifications._publisher_client(*notifications.configuration())
+            self.assertIsNot(rotated, first); self.assertTrue(first.is_closed)
+            rotated.close()
+
+    def test_rest_publish_retries_once_on_a_closed_keepalive_socket(self):
+        class Client:
+            calls = 0
+            def post(self, path, json):
+                Client.calls += 1
+                if Client.calls == 1: raise httpx.RemoteProtocolError('Server disconnected without sending a response.')
+                return httpx.Response(200, json=[{'result':1}], request=httpx.Request('POST', 'https://notify.invalid/pipeline'))
+        with patch.object(notifications, 'configuration', return_value=('rest', 'https://notify.invalid', 'token')), \
+                patch.object(notifications, '_publisher_client', return_value=Client()):
+            notifications.publish(['one'])
+            self.assertEqual(Client.calls, 2)
+            Client.calls = -5   # a timeout is not retried
+            class Slow(Client):
+                def post(self, path, json): Client.calls += 1; raise httpx.ReadTimeout('slow')
+            with patch.object(notifications, '_publisher_client', return_value=Slow()), self.assertRaises(httpx.ReadTimeout):
+                notifications.publish(['one'])
+            self.assertEqual(Client.calls, -4)
 
 
 class PushOnlyStreamTests(unittest.IsolatedAsyncioTestCase):

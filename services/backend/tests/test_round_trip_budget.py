@@ -5,10 +5,13 @@ BUDGET holds the current counts, so a regression fails here. When a change remov
 new count in the same commit. Never raise an entry or relax a lease-kind assertion without review: a read
 that becomes a write costs the same trips but holds the global write fence.
 """
+import os
+import threading
 import unittest
 from unittest.mock import patch
 
 from round_trips import END, OPEN, RELEASE, count_round_trips
+from reveal_backend import redis_notifications, workspace_events
 from reveal_backend.mysql_database import application_session_unchanged, reset_application_session
 from reveal_backend.mysql_pool import Pool
 from reveal_backend.repository import Repository
@@ -17,7 +20,7 @@ import test_application as application
 import test_mysql_pool as wire
 import test_research_http as research_http
 
-BUDGET = {'local_work_poll': 11, 'me': 3, 'readyz': 2}
+BUDGET = {'local_work_poll': 11, 'me': 3, 'readyz': 2, 'draft_patch': 10}
 
 
 class LocalWorkPollBudget(unittest.TestCase):
@@ -72,6 +75,31 @@ class AccountBudget(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.text); print('\n/readyz', budget)
         self.assertEqual((budget.kinds(), budget.unleased, budget.connects), (['single'], 0, 0), budget)
         self.assertLessEqual(budget.trips(), BUDGET['readyz'], budget)
+
+
+class TrackedWriteBudget(unittest.TestCase):
+    setUp = application.ApplicationTests.setUp
+    provision = application.ApplicationTests.provision
+    token = application.ApplicationTests.token
+    headers = application.ApplicationTests.headers
+    draft = application.ApplicationTests.draft
+
+    def test_tracked_write_is_one_fenced_lease_and_publishes_after_the_response(self):
+        user = self.provision(); draft = self.draft(user)
+        release, published = threading.Event(), []
+        def publish(channels): release.wait(5); published.append(channels)
+        with patch.dict(os.environ, {'REVEAL_NOTIFICATION_DELIVERY': 'background'}), \
+                patch.object(redis_notifications, 'publish', side_effect=publish):
+            with count_round_trips() as budget:
+                response = self.client.patch('/v1/drafts/' + draft['id'], headers=self.headers(user),
+                                             json={'expected_version': draft['version'], 'name': 'Renamed'})
+            self.assertEqual((response.status_code, published), (200, []), response.text); print('\ndraft patch', budget)
+            release.set(); self.assertTrue(workspace_events.publisher.flush(5))
+        self.assertEqual(budget.kinds(), ['write'], budget)   # no second fenced transaction deletes the outbox row
+        self.assertEqual((budget.unleased, budget.connects), (0, 0), budget)
+        self.assertLessEqual(budget.trips(), BUDGET['draft_patch'], budget)
+        self.assertEqual(len(published), 1)
+        with self.repo.read_transaction() as tx: self.assertEqual(tx.list('notification_outbox'), [])
 
 
 class WireConstantsTests(unittest.TestCase):
