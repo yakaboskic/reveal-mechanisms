@@ -127,9 +127,9 @@ four, so a workspace tab's parallel requests no longer queue behind each other
 or behind writers. Listing drafts no longer runs expiry cleanup: it was three
 extra owner-wide lists under the fence on every call. Managed reconciliation
 finds expired editors and uploads and stale executions by id in one read
-snapshot, and takes the fence, with `NOWAIT`, only when something is due, re-
-reading and deciding each candidate again under it. An idle tick is one read of
-four round trips instead of a fenced cleanup plus one fenced transaction per
+snapshot, and takes the fence, with `NOWAIT`, only when something is due,
+re-reading and deciding each candidate again under it. An idle tick is one read
+of four round trips instead of a fenced cleanup plus one fenced transaction per
 unfinished execution; a held fence defers the work to the next tick.
 
 Each API request logs one JSON line to stdout with the route template (never
