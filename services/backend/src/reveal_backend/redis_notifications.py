@@ -117,6 +117,12 @@ class Subscription:
         # This timeout controls HTTP keepalives only, never a Redis command.
         return await asyncio.wait_for(self.queue.get(), timeout)
 
+    def discard_pending(self):
+        """Drop a queued wake that the caller's next durable read subsumes; keep a disconnect signal."""
+        try: reason = self.queue.get_nowait()
+        except asyncio.QueueEmpty: return
+        if reason == 'disconnected': self.queue.put_nowait(reason)
+
 
 class NotificationHub:
     def __init__(self):
@@ -143,6 +149,9 @@ class NotificationHub:
                     self.ready[name] = asyncio.Event()
                     self.tasks[name] = asyncio.create_task(self._consume(name))
             await asyncio.wait_for(asyncio.gather(*(self.ready[name].wait() for name in names)), 5)
+            # Callers read the durable log right after this yields. That read starts after every SUBSCRIBE ack, so
+            # it covers any wake queued so far, including _subscribed's own 'replay' for a new channel.
+            subscription.discard_pending()
             yield subscription
         finally:
             stopped = []

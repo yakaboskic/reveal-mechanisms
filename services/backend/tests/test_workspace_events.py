@@ -425,13 +425,64 @@ class PushOnlyStreamTests(unittest.IsolatedAsyncioTestCase):
             bridge=notifications.NotificationHub()
             async with bridge.subscribe(['workspace:alice']) as first, bridge.subscribe(['workspace:alice']) as second:
                 self.assertEqual(len(bridge.tasks),1)
-                await first.wait(1)
+                self.assertTrue(first.queue.empty())   # the subscribe's own 'replay' is subsumed by the caller's first read
                 bridge.wake(notifications.channel('workspace:alice'))
                 bridge.wake(notifications.channel('workspace:alice'))
                 self.assertEqual(await first.wait(1),'resync')
                 self.assertEqual(await second.wait(1),'resync')
             self.assertEqual(len(bridge.tasks),0)
             await bridge.close()
+
+    async def test_job_connect_streams_the_initial_read_then_reads_once_after_the_ack(self):
+        reads = []
+        def read(job_id, authorization, cursor, limit): reads.append(cursor); return {'items':[], 'terminal':False}
+        initial = {'items':[{'id':'1', 'event_type':'status', 'status':'running'}], 'terminal':False}
+        with patch.object(notifications,'configuration',return_value=('local','','')), \
+                patch.object(events,'stream_deadline',return_value=time.monotonic()+.3):
+            output = [chunk async for chunk in events.job_event_stream(None,None,'job','proof',0,100,read,initial)]
+        self.assertTrue(output[0].startswith('id: 1\nevent: status\n'))
+        self.assertEqual((reads, output[1:]), ([1], [': heartbeat\n\n']))   # the handler's read is not repeated
+
+    async def test_finished_job_connect_streams_the_initial_read_without_subscribing(self):
+        class Hub:
+            def subscribe(self, scopes): raise AssertionError('a finished job needs no wakeups')
+        initial = {'items':[{'id':'1', 'event_type':'status'}, {'id':'2', 'event_type':'completed'}], 'terminal':True}
+        with patch.object(notifications,'hub',return_value=Hub()), patch.object(events,'stream_deadline',return_value=time.monotonic()+60):
+            output = [chunk async for chunk in events.job_event_stream(None,None,'job','proof',0,100,None,initial)]
+        self.assertEqual([chunk.split('\n')[0] for chunk in output], ['id: 1', 'id: 2'])
+
+    async def test_a_wake_during_the_catch_up_read_reads_again(self):
+        loop, reads = asyncio.get_running_loop(), []
+        def read(job_id, authorization, cursor, limit):
+            reads.append(cursor)
+            if len(reads) == 1:
+                woke = threading.Event()
+                loop.call_soon_threadsafe(lambda: (notifications.hub().wake(notifications.channel('job:job')), woke.set()))
+                self.assertTrue(woke.wait(5))
+            return {'items':[], 'terminal':False}
+        with patch.object(notifications,'configuration',return_value=('local','','')), \
+                patch.object(events,'stream_deadline',return_value=time.monotonic()+.5):
+            await anext(events.job_event_stream(None,None,'job','proof',0,100,read,{'items':[], 'terminal':False}))
+        self.assertEqual(reads, [0, 0])
+
+
+class WorkspaceConnectTests(unittest.IsolatedAsyncioTestCase):
+    setUp = WorkspaceEventsTests.setUp
+    authorization = WorkspaceEventsTests.authorization
+
+    async def test_workspace_connect_replays_once_before_waiting(self):
+        from types import SimpleNamespace
+        calls = []
+        def replay(repository, authorization, positions, limit=500):
+            calls.append(dict(positions)); return 'alice', [], {'workspace':0, 'public':0}, False
+        with patch.object(notifications,'configuration',return_value=('local','','')), patch.object(events,'replay',replay), \
+                patch.object(events,'stream_deadline',return_value=time.monotonic()+.3):
+            response = await events.workspace_response(self.repo, SimpleNamespace(headers={'authorization':self.authorization()}))
+            output = [chunk async for chunk in response.body_iterator]
+        self.assertEqual(len(calls), 1)
+        self.assertIn('event: ready', output[0])
+        self.assertEqual(output[1:], [': heartbeat\n\n'])
+
 
 class WorkspaceEndpointTests(WorkspaceEventsTests):
     def test_workspace_endpoint_rejects_missing_auth_and_other_principals_cursor(self):

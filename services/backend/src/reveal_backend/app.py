@@ -928,7 +928,7 @@ async def get_events(job_id:str,request:Request,after:str='0',limit:int=100):
     authorization=request.headers.get('authorization'); initial=await asyncio.to_thread(read_events,job_id,authorization,cursor,limit)
     if 'text/event-stream' not in request.headers.get('accept',''): return initial
     from .workspace_events import job_event_stream
-    return StreamingResponse(job_event_stream(repo, request, job_id, authorization, cursor, limit, read_events),
+    return StreamingResponse(job_event_stream(repo, request, job_id, authorization, cursor, limit, read_events, initial),
         media_type='text/event-stream', headers={'Cache-Control':'private, no-store','X-Accel-Buffering':'no'})
 
 @app.get('/v1/me/explorations')

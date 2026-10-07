@@ -330,11 +330,18 @@ async def workspace_response(repository, request, after=None):
     return StreamingResponse(generate(), media_type='text/event-stream', headers={'Cache-Control':'private, no-store', 'X-Accel-Buffering':'no'})
 
 
-async def job_event_stream(repository, request, job_id, authorization, cursor, limit, read_events):
-    """Retains the public JobEvent envelope; only changes its wakeup source."""
+async def job_event_stream(repository, request, job_id, authorization, cursor, limit, read_events, initial=None):
+    """Retains the public JobEvent envelope; only changes its wakeup source. `initial` is the handler's authorizing
+    read: it is streamed first, and a finished job never subscribes."""
     deadline = stream_deadline(authorization)
+    if initial is not None:
+        for item in initial['items']:
+            cursor = int(item['id'])
+            yield sse(item['event_type'], item, item['id'])
+        if initial['terminal']: return
     try:
         async with redis_notifications.hub().subscribe(['job:'+job_id]) as subscription:
+            # The first read catches up on commits between `initial`'s snapshot and the SUBSCRIBE acknowledgment.
             while time.monotonic() < deadline:
                 try: data = await asyncio.to_thread(read_events, job_id, authorization, cursor, limit)
                 except Problem: return
