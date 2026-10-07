@@ -511,11 +511,13 @@ class WorkflowExecution:
         require(state.stored_bootstrap({'dispatch_input': snapshot}), 'Bootstrap bundle must have an immutable S3 reference')
         self.bootstrap_config(job, execution, snapshot)
         await run_sync(self.checkpoint, payload, token, root, dispatch_input=snapshot, evidence_package=package if job['kind'] == 'analysis' else None)
-        with self.repository.transaction() as tx:
-            owner, _ = state.owned(tx, payload, token)
-            current = tx.get('job', job['id'])['data']; current['owner_user_id'] = owner
-            if current['status'] != 'cancel_requested': current['status'] = 'running'
-            jobs.event(tx, current, 'status', 'Frozen evidence saved. Preparing isolated research execution.')
+        def mark_running():
+            with self.repository.transaction() as tx:
+                owner, _ = state.owned(tx, payload, token)
+                current = tx.get('job', job['id'])['data']; current['owner_user_id'] = owner
+                if current['status'] != 'cancel_requested': current['status'] = 'running'
+                jobs.event(tx, current, 'status', 'Frozen evidence saved. Preparing isolated research execution.')
+        await run_sync(mark_running)
         return {'next_phase': 'create'}
 
     async def validate(self, payload, token, job, queue, execution, root, request, inputs):

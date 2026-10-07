@@ -569,86 +569,90 @@ class Worker:
             for checksum,source in captured.items():
                 source['retained']=await asyncio.to_thread(retained_file,source['path'],checksum)
         await asyncio.to_thread(self.save_workspace,job,token,artifacts_root()/job['id'])
-        evidence_sha256=sha256(package_path.read_bytes())
-        package = decode(package_path.read_bytes())
-        validation = package.get('validation_context', {})
         from .analysis_outcomes import creation_stamp, stamp_gap, stamped
-        with self.repository.transaction() as tx:
-            pair=jobs.fenced(tx,job['id'],token)
-            if not pair or pair[0]['status']=='cancel_requested': return
-            current,_=pair; owner=current['owner_user_id']; accounts=[]; paragraphs=[]; manifest_accounts=[]
-            reused = {'contexts': [], 'borrowed_ids': [], 'citation_metadata': []}
-            existing = validation.get('existing_account_ids', [])
-            if validation:
-                from .scientific_reuse import record_dependencies
-                reused = record_dependencies(tx, owner, frozen['id'], validation.get('reuse_receipt_ids', []),
-                    [doc['scientific_accounts'][0]['id'] for doc, _, _ in accepted] + existing)
-                require(set(existing) <= {a['account_id'] for a in reused['existing_accounts']}, 'Reused result authority changed')
-            retained_ids = {n['id'] for c in reused['contexts'] for rows in c['dapper_context'].values() if isinstance(rows, list)
-                for n in rows if isinstance(n, dict) and 'id' in n}
-            borrowed_ids = set(reused['borrowed_ids'])
-            persist_source_artifacts(tx,owner,source_artifacts)
-            for doc,report,path in accepted:
-                if mode=='box':
-                    for file in doc.get('files',[]):
-                        source=captured.get(file.get('sha256'))
-                        if source:
-                            tx.put('artifact',digest([owner,file['sha256']]),owner,{'sha256':file['sha256'],'file':file,**source['retained'],'job_id':job['id']})
-                            url=setting('NEXTAUTH_URL','http://localhost:3000').rstrip('/')+'/api/backend/v1/artifacts/'+file['sha256']
-                            artifact_access[file['id']]={'file':file,'download_url':url,'expires_at':None,'availability':'available','verification':'checksum_verified'}
-                runtime=decode(Path(result.runtime_manifest_path).read_bytes()) if result.runtime_manifest_path else {'model_id':None,'harness_version':None}
-                runtime['model_id']=runtime.get('model_id') or runtime.get('model')
-                actor=doc['scientific_accounts'][0].get('was_attributed_to',[None])[0]
-                metadata=register(tx,owner,doc,{**frozen['attribution'],'person_id':actor},now(),runtime=runtime,
-                    retained_citation_metadata=reused['citation_metadata'], retained_object_ids=retained_ids)
-                account=doc['scientific_accounts'][0]; identity=account['id']; gap=next(g for g in doc['knowledge_gaps'] if g['id']==account['question'])
-                outbox_key=digest([owner,identity,'default-paragraph']); previous=tx.get('outbox',outbox_key)
-                if previous:
-                    paragraph=tx.get('job',previous['data']['job_id'])['data']
-                    old_account=owned(tx,'account',identity,owner)['data']
-                    state=old_account['result']['research_statement']
-                else:
-                    paragraph=jobs.enqueue(tx,owner,'paragraph',account_id=identity,inputs={'kind':'paragraph','account_id':identity})
-                    state={'status':'queued','job_id':paragraph['id'],'paragraph_id':None}
-                envelope=object_envelope(doc,identity,metadata,artifact_access); envelope['research_statement']=state
-                summary={'account':account,'knowledge_gap':gap,'claim_count':len(account['component_claims']),'created_at':now(),'job_id':job['id'],'research_statement':state}
-                if not previous:
-                    # A job that finishes after its reference generation was superseded is born archived.
-                    stamp=creation_stamp(tx,owner,job['research_request_id'],gap=stamp_gap(frozen['composer'].get('source_gap'),frozen.get('question_id')),scientific_document=doc,
-                        analysis={'job_id':job['id'],'request_id':job['research_request_id'],'evidence_package_sha256':evidence_sha256,'account_id':identity})
-                    tx.put('account',digest([owner,identity]),owner,stamped('account',{'result':envelope,'summary':deepcopy(summary)},stamp))
-                    tx.put('account_membership',digest([owner,identity]),owner,stamped('account_membership',{'account_id':identity,'summary':summary},stamp))
-                document_sha=sha256(path.read_bytes())
-                tx.put('scientific_document',digest([owner,document_sha]),owner,{'sha256':document_sha,'document':doc,'job_id':job['id'],'observed_at':now(),
-                    'citation_metadata':metadata,'artifact_access':artifact_access})
-                for rows in doc.values():
-                    if isinstance(rows,list):
-                        for node in rows:
-                            if isinstance(node,dict) and str(node.get('id','')).startswith('dapper:'):
-                                if node['id'] not in borrowed_ids:
-                                    tx.put('grant',digest([owner,node['id']]),owner,{'target_id':node['id']})
-                                projection=object_envelope(doc,node['id'],metadata,artifact_access)
-                                tx.put('object_observation',digest([owner,node['id'],sha256(canonical_json(node))]),owner,{'object_id':node['id'],'payload':node,'document_sha256':document_sha})
-                                if not tx.get('object',digest([owner,node['id']])):
-                                    tx.put('object',digest([owner,node['id']]),owner,projection)
-                                    tx.put('object_document',digest([owner,node['id']]),owner,{'object_id':node['id'],'sha256':document_sha})
-                if not previous: tx.put('outbox',outbox_key,owner,{'account_id':identity,'job_id':paragraph['id'],'dispatched':True})
-                accounts.append(identity); paragraphs.append(paragraph['id'])
-                manifest_accounts.append({'path':str(path.resolve().relative_to(directory.resolve())),'sha256':sha256(path.read_bytes()),'account_id':identity,'lint_report_sha256':sha256(canonical_json(report))})
-            public={'kind':'analysis','request_id':job['research_request_id'],'account_ids':accounts,'enrichment':enrichment_status(result,frozen['composer']['selected_kgs'],mode),
-                'paragraph_job_ids':paragraphs,'evidence_package_sha256':evidence_sha256}
-            if validation: public.update(reused_account_ids=existing, seed_sha256=validation['seed_sha256'])
-            current.update(status='succeeded',stage='complete',result=public,completed_at=now())
-            jobs.event(tx,current,'result','Gap analysis complete.' if mode=='box' else 'Development simulation complete — not a scientific result.')
-            manifest={'format':'reveal.agent-output/1','job_id':job['id'],'attempt':pair[1]['attempt'],'status':'succeeded','input_package_sha256':public['evidence_package_sha256'],
-                'runtime_manifest_sha256':sha256(Path(result.runtime_manifest_path).read_bytes()) if result.runtime_manifest_path else digest({'mode':mode}),
-                'ledger_manifest_sha256':sha256(Path(result.ledger_manifest_path).read_bytes()) if result.ledger_manifest_path else None,'accounts':manifest_accounts,'reason':None}
-            # S3 mode already has the exact output checkpoint and RDS result.
-            if not s3_enabled(): (directory/'worker-output.json').write_bytes(canonical_json(manifest))
+        from .workflow_execution import drain_on_cancel
+        def persist():
+            # One fenced transaction in one worker thread: the event loop keeps serving while it holds the fence.
+            evidence_sha256=sha256(package_path.read_bytes())
+            package = decode(package_path.read_bytes())
+            validation = package.get('validation_context', {})
+            with self.repository.transaction() as tx:
+                pair=jobs.fenced(tx,job['id'],token)
+                if not pair or pair[0]['status']=='cancel_requested': return
+                current,_=pair; owner=current['owner_user_id']; accounts=[]; paragraphs=[]; manifest_accounts=[]
+                reused = {'contexts': [], 'borrowed_ids': [], 'citation_metadata': []}
+                existing = validation.get('existing_account_ids', [])
+                if validation:
+                    from .scientific_reuse import record_dependencies
+                    reused = record_dependencies(tx, owner, frozen['id'], validation.get('reuse_receipt_ids', []),
+                        [doc['scientific_accounts'][0]['id'] for doc, _, _ in accepted] + existing)
+                    require(set(existing) <= {a['account_id'] for a in reused['existing_accounts']}, 'Reused result authority changed')
+                retained_ids = {n['id'] for c in reused['contexts'] for rows in c['dapper_context'].values() if isinstance(rows, list)
+                    for n in rows if isinstance(n, dict) and 'id' in n}
+                borrowed_ids = set(reused['borrowed_ids'])
+                persist_source_artifacts(tx,owner,source_artifacts)
+                for doc,report,path in accepted:
+                    if mode=='box':
+                        for file in doc.get('files',[]):
+                            source=captured.get(file.get('sha256'))
+                            if source:
+                                tx.put('artifact',digest([owner,file['sha256']]),owner,{'sha256':file['sha256'],'file':file,**source['retained'],'job_id':job['id']})
+                                url=setting('NEXTAUTH_URL','http://localhost:3000').rstrip('/')+'/api/backend/v1/artifacts/'+file['sha256']
+                                artifact_access[file['id']]={'file':file,'download_url':url,'expires_at':None,'availability':'available','verification':'checksum_verified'}
+                    runtime=decode(Path(result.runtime_manifest_path).read_bytes()) if result.runtime_manifest_path else {'model_id':None,'harness_version':None}
+                    runtime['model_id']=runtime.get('model_id') or runtime.get('model')
+                    actor=doc['scientific_accounts'][0].get('was_attributed_to',[None])[0]
+                    metadata=register(tx,owner,doc,{**frozen['attribution'],'person_id':actor},now(),runtime=runtime,
+                        retained_citation_metadata=reused['citation_metadata'], retained_object_ids=retained_ids)
+                    account=doc['scientific_accounts'][0]; identity=account['id']; gap=next(g for g in doc['knowledge_gaps'] if g['id']==account['question'])
+                    outbox_key=digest([owner,identity,'default-paragraph']); previous=tx.get('outbox',outbox_key)
+                    if previous:
+                        paragraph=tx.get('job',previous['data']['job_id'])['data']
+                        old_account=owned(tx,'account',identity,owner)['data']
+                        state=old_account['result']['research_statement']
+                    else:
+                        paragraph=jobs.enqueue(tx,owner,'paragraph',account_id=identity,inputs={'kind':'paragraph','account_id':identity})
+                        state={'status':'queued','job_id':paragraph['id'],'paragraph_id':None}
+                    envelope=object_envelope(doc,identity,metadata,artifact_access); envelope['research_statement']=state
+                    summary={'account':account,'knowledge_gap':gap,'claim_count':len(account['component_claims']),'created_at':now(),'job_id':job['id'],'research_statement':state}
+                    if not previous:
+                        # A job that finishes after its reference generation was superseded is born archived.
+                        stamp=creation_stamp(tx,owner,job['research_request_id'],gap=stamp_gap(frozen['composer'].get('source_gap'),frozen.get('question_id')),scientific_document=doc,
+                            analysis={'job_id':job['id'],'request_id':job['research_request_id'],'evidence_package_sha256':evidence_sha256,'account_id':identity})
+                        tx.put('account',digest([owner,identity]),owner,stamped('account',{'result':envelope,'summary':deepcopy(summary)},stamp))
+                        tx.put('account_membership',digest([owner,identity]),owner,stamped('account_membership',{'account_id':identity,'summary':summary},stamp))
+                    document_sha=sha256(path.read_bytes())
+                    tx.put('scientific_document',digest([owner,document_sha]),owner,{'sha256':document_sha,'document':doc,'job_id':job['id'],'observed_at':now(),
+                        'citation_metadata':metadata,'artifact_access':artifact_access})
+                    for rows in doc.values():
+                        if isinstance(rows,list):
+                            for node in rows:
+                                if isinstance(node,dict) and str(node.get('id','')).startswith('dapper:'):
+                                    if node['id'] not in borrowed_ids:
+                                        tx.put('grant',digest([owner,node['id']]),owner,{'target_id':node['id']})
+                                    projection=object_envelope(doc,node['id'],metadata,artifact_access)
+                                    tx.put('object_observation',digest([owner,node['id'],sha256(canonical_json(node))]),owner,{'object_id':node['id'],'payload':node,'document_sha256':document_sha})
+                                    if not tx.get('object',digest([owner,node['id']])):
+                                        tx.put('object',digest([owner,node['id']]),owner,projection)
+                                        tx.put('object_document',digest([owner,node['id']]),owner,{'object_id':node['id'],'sha256':document_sha})
+                    if not previous: tx.put('outbox',outbox_key,owner,{'account_id':identity,'job_id':paragraph['id'],'dispatched':True})
+                    accounts.append(identity); paragraphs.append(paragraph['id'])
+                    manifest_accounts.append({'path':str(path.resolve().relative_to(directory.resolve())),'sha256':sha256(path.read_bytes()),'account_id':identity,'lint_report_sha256':sha256(canonical_json(report))})
+                public={'kind':'analysis','request_id':job['research_request_id'],'account_ids':accounts,'enrichment':enrichment_status(result,frozen['composer']['selected_kgs'],mode),
+                    'paragraph_job_ids':paragraphs,'evidence_package_sha256':evidence_sha256}
+                if validation: public.update(reused_account_ids=existing, seed_sha256=validation['seed_sha256'])
+                current.update(status='succeeded',stage='complete',result=public,completed_at=now())
+                jobs.event(tx,current,'result','Gap analysis complete.' if mode=='box' else 'Development simulation complete — not a scientific result.')
+                manifest={'format':'reveal.agent-output/1','job_id':job['id'],'attempt':pair[1]['attempt'],'status':'succeeded','input_package_sha256':public['evidence_package_sha256'],
+                    'runtime_manifest_sha256':sha256(Path(result.runtime_manifest_path).read_bytes()) if result.runtime_manifest_path else digest({'mode':mode}),
+                    'ledger_manifest_sha256':sha256(Path(result.ledger_manifest_path).read_bytes()) if result.ledger_manifest_path else None,'accounts':manifest_accounts,'reason':None}
+                # S3 mode already has the exact output checkpoint and RDS result.
+                if not s3_enabled(): (directory/'worker-output.json').write_bytes(canonical_json(manifest))
+        await drain_on_cancel(asyncio.to_thread(persist))
 
     async def accept_paragraph(self,job,token,raw,inputs,directory):
         from .box_paragraph import assemble_paragraph
-        assembled=assemble_paragraph(raw,inputs,dapper_root=release_root(),release_lock=LOCK)
+        assembled=await asyncio.to_thread(assemble_paragraph,raw,inputs,dapper_root=release_root(),release_lock=LOCK)
         document=deepcopy(inputs['account_document'])
         activity_id='urn:reveal:paragraph-execution:'+job['id']
         document.setdefault('activities',[]).append({'id':activity_id,'name':'REVEAL cited research statement generation',
@@ -667,27 +671,30 @@ class Worker:
         paragraph=document['paragraphs'][-1]
         await asyncio.to_thread(self.save_workspace,job,token,artifacts_root()/job['id'])
         if not await self.begin_persistence(job,token,'Saving the validated research statement and its exact citations.'): return
-        with self.repository.transaction() as tx:
-            pair=jobs.fenced(tx,job['id'],token)
-            if not pair or pair[0]['status']=='cancel_requested': return
-            current,_=pair; owner=current['owner_user_id']; stored=owned(tx,'account',job['input_account_id'],owner)['data']
-            # Exact registry revision is required; never substitute latest.
-            for occurrence in paragraph['citations']: owned(tx,'citation',occurrence['target_id']+':'+str(occurrence['citation_metadata_revision']),owner)
-            envelope=object_envelope(document,paragraph['id'],stored['result']['citation_metadata'])
-            document_sha=sha256(path.read_bytes())
-            tx.put('scientific_document',digest([owner,document_sha]),owner,{'sha256':document_sha,'document':document,'job_id':job['id'],'observed_at':now(),
-                'citation_metadata':stored['result']['citation_metadata'],'artifact_access':{a['file']['id']:a for a in stored['result']['artifacts']}})
-            tx.put('object_document',digest([owner,paragraph['id']]),owner,{'object_id':paragraph['id'],'sha256':document_sha})
-            tx.put('paragraph',digest([owner,paragraph['id']]),owner,{'result':envelope,'account_id':job['input_account_id']}); tx.put('object',digest([owner,paragraph['id']]),owner,envelope)
-            tx.put('grant',digest([owner,paragraph['id']]),owner,{'target_id':paragraph['id']})
-            state={'status':'succeeded','job_id':job['id'],'paragraph_id':paragraph['id']}
-            stored['result']['research_statement']=state; stored['summary']['research_statement']=state
-            tx.put('account',digest([owner,job['input_account_id']]),owner,stored)
-            member=tx.get('account_membership',digest([owner,job['input_account_id']]))
-            if member:
-                member['data']['summary']['research_statement']=state; tx.put('account_membership',member['id'] if 'id' in member else digest([owner,job['input_account_id']]),owner,member['data'])
-            current.update(status='succeeded',stage='complete',completed_at=now(),result={'kind':'paragraph','account_id':job['input_account_id'],'paragraph_id':paragraph['id']})
-            jobs.event(tx,current,'result','Cited research statement complete.')
+        from .workflow_execution import drain_on_cancel
+        def persist():
+            with self.repository.transaction() as tx:
+                pair=jobs.fenced(tx,job['id'],token)
+                if not pair or pair[0]['status']=='cancel_requested': return
+                current,_=pair; owner=current['owner_user_id']; stored=owned(tx,'account',job['input_account_id'],owner)['data']
+                # Exact registry revision is required; never substitute latest.
+                for occurrence in paragraph['citations']: owned(tx,'citation',occurrence['target_id']+':'+str(occurrence['citation_metadata_revision']),owner)
+                envelope=object_envelope(document,paragraph['id'],stored['result']['citation_metadata'])
+                document_sha=sha256(path.read_bytes())
+                tx.put('scientific_document',digest([owner,document_sha]),owner,{'sha256':document_sha,'document':document,'job_id':job['id'],'observed_at':now(),
+                    'citation_metadata':stored['result']['citation_metadata'],'artifact_access':{a['file']['id']:a for a in stored['result']['artifacts']}})
+                tx.put('object_document',digest([owner,paragraph['id']]),owner,{'object_id':paragraph['id'],'sha256':document_sha})
+                tx.put('paragraph',digest([owner,paragraph['id']]),owner,{'result':envelope,'account_id':job['input_account_id']}); tx.put('object',digest([owner,paragraph['id']]),owner,envelope)
+                tx.put('grant',digest([owner,paragraph['id']]),owner,{'target_id':paragraph['id']})
+                state={'status':'succeeded','job_id':job['id'],'paragraph_id':paragraph['id']}
+                stored['result']['research_statement']=state; stored['summary']['research_statement']=state
+                tx.put('account',digest([owner,job['input_account_id']]),owner,stored)
+                member=tx.get('account_membership',digest([owner,job['input_account_id']]))
+                if member:
+                    member['data']['summary']['research_statement']=state; tx.put('account_membership',member['id'] if 'id' in member else digest([owner,job['input_account_id']]),owner,member['data'])
+                current.update(status='succeeded',stage='complete',completed_at=now(),result={'kind':'paragraph','account_id':job['input_account_id'],'paragraph_id':paragraph['id']})
+                jobs.event(tx,current,'result','Cited research statement complete.')
+        await drain_on_cancel(asyncio.to_thread(persist))
 
     async def run(self):
         from .job_transport import RedisTransport

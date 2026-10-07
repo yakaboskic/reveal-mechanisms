@@ -130,7 +130,10 @@ finds expired editors and uploads and stale executions by id in one read
 snapshot, and takes the fence, with `NOWAIT`, only when something is due,
 re-reading and deciding each candidate again under it. An idle tick is one read
 of four round trips instead of a fenced cleanup plus one fenced transaction per
-unfinished execution; a held fence defers the work to the next tick.
+unfinished execution; a held fence defers the work to the next tick. Async
+handlers read the request body on the event loop and run validation, catalog
+loads and their transactions in the threadpool, so a writer waiting on the
+fence no longer stalls every other request in the process.
 
 Each API request logs one JSON line to stdout with the route template (never
 the raw path, query string, ids or parameters), status, duration, and its

@@ -242,8 +242,7 @@ def mount_workflow(app, repository):
     url = config(); receiver = Receiver(os.environ['QSTASH_CURRENT_SIGNING_KEY'], os.environ['QSTASH_NEXT_SIGNING_KEY'])
     engine = WorkflowExecution(repository)
 
-    async def failure(context, status, body, headers):
-        payload = context.request_payload
+    def mark_retry(payload):
         with repository.transaction() as tx:
             row = tx.get('execution', payload['job_id'])
             if not row: return
@@ -254,6 +253,9 @@ def mount_workflow(app, repository):
             # Never declare cleanup finished from a scheduler failure callback.
             execution.update(disposition='retry', expected_at=now(), scheduler_failure_at=now())
             tx.put('execution', payload['job_id'], row['owner'], execution)
+
+    async def failure(context, status, body, headers):
+        await asyncio.to_thread(mark_retry, context.request_payload)
 
     @Serve(app).post(PATH, qstash_client=client(), receiver=receiver, url=url, retries=5, failure_function=failure)
     async def research(context):

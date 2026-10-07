@@ -109,6 +109,28 @@ class JobSubmissionResponsivenessTests(unittest.IsolatedAsyncioTestCase):
                 result = await submission
         self.assertEqual(result.status_code, 202, result.text)
 
+    async def test_draft_writes_hold_the_fence_off_the_event_loop(self):
+        composer = {'source_gap': None, 'eaggl_anchors': [], 'dismissed_source_ids': [], 'mechanism_subquery': '',
+                    'model': 'cfde-inc-v2', 'selected_kgs': []}
+        self.repo.pause = True
+        async with self.client() as client:
+            write = asyncio.create_task(client.post('/v1/drafts', json={'composer': composer}, headers=self.headers(uid())))
+            try:
+                for _ in range(40):
+                    if self.repo.entered.is_set(): break
+                    await asyncio.sleep(.005)
+                self.assertTrue(self.repo.entered.is_set())
+                self.assertNotEqual(self.repo.submission_thread, threading.get_ident())
+                health = await asyncio.wait_for(client.get('/healthz'), timeout=.5)
+                self.assertEqual(health.status_code, 200)
+                me = await asyncio.wait_for(client.get('/v1/me', headers=self.headers(uid())), timeout=.5)
+                self.assertEqual(me.status_code, 200, me.text)   # a snapshot read never queues behind the writer
+                self.assertFalse(write.done())
+            finally:
+                self.repo.release.set()
+                result = await write
+        self.assertEqual(result.status_code, 201, result.text)
+
     async def test_overlapping_retries_create_exactly_one_request_job_and_event(self):
         headers = self.headers(uid())
         async with self.client() as client:

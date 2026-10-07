@@ -12,6 +12,7 @@ import hmac
 import re
 from fastapi import FastAPI, Request, Depends, Query
 from fastapi.responses import JSONResponse, StreamingResponse, Response, RedirectResponse
+from starlette.concurrency import run_in_threadpool
 from jsonschema import Draft202012Validator
 from .auth import Problem, decode_assertion, owned, require_owned, principal, publication_principal, service_authority
 from .catalog import GENERATION_TTL_SECONDS, Catalog
@@ -319,18 +320,23 @@ def admin_exploration(record_id: str, request: Request):
     return admin_scientific_detail(request, 'analysis_outcome', record_id)
 
 
+# Async handlers read the request body on the event loop and run validation, catalog loads and every
+# transaction in the threadpool: one blocking statement here would stall every other request in the process.
 @app.post('/internal/v1/principals/anonymous', status_code=201)
 async def provision(request: Request):
-    service_authority(request.headers.get('authorization')); body = await request.json(); validate(body,'AnonymousProvisionInput',True)
-    with repo.transaction() as tx:
-        def create():
-            cutoff=(datetime.now(timezone.utc)-timedelta(hours=1)).isoformat().replace('+00:00','Z')
-            count=sum(1 for r in tx.list('principal') if r['data'].get('created_at','')>=cutoff and r['data']['me']['principal_kind']=='anonymous')
-            if count>=int(os.getenv('REVEAL_ANONYMOUS_PROVISIONS_PER_HOUR','100')):
-                raise Problem(429,'ANONYMOUS_QUOTA_EXCEEDED','Anonymous workspace creation is temporarily rate limited.')
-            me = fresh_principal('anonymous'); tx.put('principal', me['user_id'], me['user_id'], {'me':me,'retired':False,'created_at':now()})
-            return {k:me[k] for k in ('user_id','principal_kind','workspace_expires_at')}
-        return idempotent(tx,'gateway','anonymous',request.headers.get('idempotency-key'),body,create)
+    service_authority(request.headers.get('authorization')); body = await request.json()
+    def run():
+        validate(body,'AnonymousProvisionInput',True)
+        with repo.transaction() as tx:
+            def create():
+                cutoff=(datetime.now(timezone.utc)-timedelta(hours=1)).isoformat().replace('+00:00','Z')
+                count=sum(1 for r in tx.list('principal') if r['data'].get('created_at','')>=cutoff and r['data']['me']['principal_kind']=='anonymous')
+                if count>=int(os.getenv('REVEAL_ANONYMOUS_PROVISIONS_PER_HOUR','100')):
+                    raise Problem(429,'ANONYMOUS_QUOTA_EXCEEDED','Anonymous workspace creation is temporarily rate limited.')
+                me = fresh_principal('anonymous'); tx.put('principal', me['user_id'], me['user_id'], {'me':me,'retired':False,'created_at':now()})
+                return {k:me[k] for k in ('user_id','principal_kind','workspace_expires_at')}
+            return idempotent(tx,'gateway','anonymous',request.headers.get('idempotency-key'),body,create)
+    return await run_in_threadpool(run)
 
 def resolve_identity(tx, body, preferred=None):
     identity = digest([body['issuer'],body['subject']]); existing = tx.get('identity',identity)
@@ -343,39 +349,45 @@ def resolve_identity(tx, body, preferred=None):
 
 @app.post('/internal/v1/principals/resolve')
 async def resolve(request: Request):
-    service_authority(request.headers.get('authorization')); body = await request.json(); validate(body,'VerifiedIdentityInput',True)
-    proof=request.headers.get('x-reveal-anonymous-session')
-    source=decode_assertion(proof,'anonymous_session') if proof else None
-    with repo.transaction() as tx:
-        preferred=None
-        if source:
-            row=tx.get('principal',source.get('sub',''))
-            if not row or row['data']['retired'] or row['data']['me']['principal_kind']!='anonymous' or row['data']['me']['workspace_expires_at']<=now():
-                raise Problem(401,'INVALID_IDENTITY_PROOF','The source workspace proof is no longer active.')
-            preferred=source['sub']
-        return {'user_id':resolve_identity(tx,body,preferred),'principal_kind':'registered'}
+    service_authority(request.headers.get('authorization')); body = await request.json()
+    def run():
+        validate(body,'VerifiedIdentityInput',True)
+        proof=request.headers.get('x-reveal-anonymous-session')
+        source=decode_assertion(proof,'anonymous_session') if proof else None
+        with repo.transaction() as tx:
+            preferred=None
+            if source:
+                row=tx.get('principal',source.get('sub',''))
+                if not row or row['data']['retired'] or row['data']['me']['principal_kind']!='anonymous' or row['data']['me']['workspace_expires_at']<=now():
+                    raise Problem(401,'INVALID_IDENTITY_PROOF','The source workspace proof is no longer active.')
+                preferred=source['sub']
+            return {'user_id':resolve_identity(tx,body,preferred),'principal_kind':'registered'}
+    return await run_in_threadpool(run)
 
 @app.post('/internal/v1/principals/claim')
 async def claim_workspace(request: Request):
-    service_authority(request.headers.get('authorization')); body = await request.json(); validate(body,'WorkspaceClaimInput',True)
-    source = decode_assertion(body['anonymous_session_assertion'],'anonymous_session')
-    target = decode_assertion(body['verified_login_assertion'],'verified_identity')
-    profile = target.get('verified_identity',{}); validate(profile,'VerifiedIdentityInput',True)
-    with repo.transaction() as tx:
-        def perform():
-            row = tx.get('principal',source.get('sub',''))
-            if not row or row['data']['retired'] or row['data']['me']['principal_kind']!='anonymous' or row['data']['me']['workspace_expires_at']<=now():
-                raise Problem(409,'PRINCIPAL_ALREADY_CLAIMED','The source workspace is no longer claimable.')
-            target_id = resolve_identity(tx,profile,source['sub']); transferred = target_id != source['sub']
-            if transferred:
-                tx.transfer(source['sub'],target_id); row['data']['retired']=True
-                tx.put('principal',source['sub'],source['sub'],row['data'])
-            result={'mode':'transferred' if transferred else 'upgraded','user_id':target_id,'principal_kind':'registered','source_retired':transferred,'historical_attribution_unchanged':True}
-            tx.put('transfer',uid(),target_id,{'source':source['sub'],'target':target_id,'occurred_at':now(),'result':result})
-            return result
-        # Do not retain raw signed proofs in audit/idempotency payloads.
-        safe={'source':source.get('sub'),'target':digest([profile['issuer'],profile['subject']]),'consent':body['consent']}
-        return idempotent(tx,'gateway','claim',request.headers.get('idempotency-key'),safe,perform)
+    service_authority(request.headers.get('authorization')); body = await request.json()
+    def run():
+        validate(body,'WorkspaceClaimInput',True)
+        source = decode_assertion(body['anonymous_session_assertion'],'anonymous_session')
+        target = decode_assertion(body['verified_login_assertion'],'verified_identity')
+        profile = target.get('verified_identity',{}); validate(profile,'VerifiedIdentityInput',True)
+        with repo.transaction() as tx:
+            def perform():
+                row = tx.get('principal',source.get('sub',''))
+                if not row or row['data']['retired'] or row['data']['me']['principal_kind']!='anonymous' or row['data']['me']['workspace_expires_at']<=now():
+                    raise Problem(409,'PRINCIPAL_ALREADY_CLAIMED','The source workspace is no longer claimable.')
+                target_id = resolve_identity(tx,profile,source['sub']); transferred = target_id != source['sub']
+                if transferred:
+                    tx.transfer(source['sub'],target_id); row['data']['retired']=True
+                    tx.put('principal',source['sub'],source['sub'],row['data'])
+                result={'mode':'transferred' if transferred else 'upgraded','user_id':target_id,'principal_kind':'registered','source_retired':transferred,'historical_attribution_unchanged':True}
+                tx.put('transfer',uid(),target_id,{'source':source['sub'],'target':target_id,'occurred_at':now(),'result':result})
+                return result
+            # Do not retain raw signed proofs in audit/idempotency payloads.
+            safe={'source':source.get('sub'),'target':digest([profile['issuer'],profile['subject']]),'consent':body['consent']}
+            return idempotent(tx,'gateway','claim',request.headers.get('idempotency-key'),safe,perform)
+    return await run_in_threadpool(run)
 
 # Workspace reads never take the global write fence: one consistent snapshot authorizes and reads, so they
 # neither queue behind writers nor serialize against each other. /v1/me is exactly one principal row.
@@ -626,25 +638,28 @@ def list_drafts(request:Request,limit:int=50,cursor:str|None=None):
 
 @app.post('/v1/drafts',status_code=201)
 async def create_draft(request:Request):
-    body=await request.json(); validate(body,'DraftCreate'); preload_catalog(body['composer'])
-    with repo.transaction() as tx:
-        user=principal(tx,request.headers.get('authorization'))['user_id']
-        def create():
-            draft={'id':uid(),'owner_user_id':user,'version':1,'composer':body['composer'],'created_at':now(),'updated_at':now()}
-            lifecycle=body.get('lifecycle','saved')
-            draft.update(lifecycle=lifecycle,expires_at=user_inputs.expiration() if lifecycle=='temporary' else None)
-            if body.get('source_draft_id'):
-                source=user_inputs.available(owned(tx,'draft',body['source_draft_id'],user)['data'])
-                if not user_inputs.saved(source): raise Problem(422,'SOURCE_DRAFT_NOT_SAVED','Only a saved draft can supply editor lineage.')
-                source_version=body.get('source_draft_version',source['version'])
-                if source_version>source['version']:
-                    raise Problem(409,'SOURCE_DRAFT_VERSION_CONFLICT','The supplied source draft revision does not exist.',current_version=source['version'])
-                draft.update(source_draft_id=source['id'],source_draft_version=source_version)
-            user_inputs.resolve(tx,user,body['composer'])
-            if 'name' in body: draft['name']=body['name'].strip()
-            freeze_draft_bindings(tx,draft['id'],user,body['composer'])
-            tx.put('draft',draft['id'],user,draft); return draft
-        return idempotent(tx,user,'draft',request.headers.get('idempotency-key'),body,create)
+    body=await request.json()
+    def run():
+        validate(body,'DraftCreate'); preload_catalog(body['composer'])
+        with repo.transaction() as tx:
+            user=principal(tx,request.headers.get('authorization'))['user_id']
+            def create():
+                draft={'id':uid(),'owner_user_id':user,'version':1,'composer':body['composer'],'created_at':now(),'updated_at':now()}
+                lifecycle=body.get('lifecycle','saved')
+                draft.update(lifecycle=lifecycle,expires_at=user_inputs.expiration() if lifecycle=='temporary' else None)
+                if body.get('source_draft_id'):
+                    source=user_inputs.available(owned(tx,'draft',body['source_draft_id'],user)['data'])
+                    if not user_inputs.saved(source): raise Problem(422,'SOURCE_DRAFT_NOT_SAVED','Only a saved draft can supply editor lineage.')
+                    source_version=body.get('source_draft_version',source['version'])
+                    if source_version>source['version']:
+                        raise Problem(409,'SOURCE_DRAFT_VERSION_CONFLICT','The supplied source draft revision does not exist.',current_version=source['version'])
+                    draft.update(source_draft_id=source['id'],source_draft_version=source_version)
+                user_inputs.resolve(tx,user,body['composer'])
+                if 'name' in body: draft['name']=body['name'].strip()
+                freeze_draft_bindings(tx,draft['id'],user,body['composer'])
+                tx.put('draft',draft['id'],user,draft); return draft
+            return idempotent(tx,user,'draft',request.headers.get('idempotency-key'),body,create)
+    return await run_in_threadpool(run)
 
 @app.get('/v1/drafts/{draft_id}')
 def get_draft(draft_id:str,request:Request):
@@ -669,55 +684,64 @@ def get_cfde_assessment(draft_id: str, assessment_id: str, request: Request):
 
 @app.patch('/v1/drafts/{draft_id}')
 async def patch_draft(draft_id:str,request:Request):
-    body=await request.json(); validate(body,'DraftPatch')
-    if 'composer' in body: preload_catalog(body['composer'])
-    with repo.transaction() as tx:
-        user=principal(tx,request.headers.get('authorization'))['user_id']
-        def update():
-            row=owned(tx,'draft',draft_id,user); draft=user_inputs.available(row['data'])
-            if draft['version']!=body['expected_version']: raise Problem(409,'VERSION_CONFLICT','This draft changed in another tab.',current_version=draft['version'])
-            if 'composer' in body:
-                user_inputs.resolve(tx,user,body['composer'])
-                freeze_draft_bindings(tx,draft_id,user,body['composer'])
-                draft['composer']=body['composer']
-            if 'name' in body: draft['name']=body['name'].strip()
-            if body.get('lifecycle')=='saved':
-                if not draft.get('name'): raise Problem(422,'DRAFT_NAME_REQUIRED','Name the draft before saving it.')
-                draft.update(lifecycle='saved',expires_at=None,saved_at=now())
-            elif not user_inputs.saved(draft): draft['expires_at']=user_inputs.expiration()
-            draft.update(version=draft['version']+1,updated_at=now(),owner_user_id=user)
-            tx.put('draft',draft_id,user,draft,expected=row['version']); return draft
-        return idempotent(tx,user,'draft:'+draft_id,request.headers.get('idempotency-key'),body,update)
+    body=await request.json()
+    def run():
+        validate(body,'DraftPatch')
+        if 'composer' in body: preload_catalog(body['composer'])
+        with repo.transaction() as tx:
+            user=principal(tx,request.headers.get('authorization'))['user_id']
+            def update():
+                row=owned(tx,'draft',draft_id,user); draft=user_inputs.available(row['data'])
+                if draft['version']!=body['expected_version']: raise Problem(409,'VERSION_CONFLICT','This draft changed in another tab.',current_version=draft['version'])
+                if 'composer' in body:
+                    user_inputs.resolve(tx,user,body['composer'])
+                    freeze_draft_bindings(tx,draft_id,user,body['composer'])
+                    draft['composer']=body['composer']
+                if 'name' in body: draft['name']=body['name'].strip()
+                if body.get('lifecycle')=='saved':
+                    if not draft.get('name'): raise Problem(422,'DRAFT_NAME_REQUIRED','Name the draft before saving it.')
+                    draft.update(lifecycle='saved',expires_at=None,saved_at=now())
+                elif not user_inputs.saved(draft): draft['expires_at']=user_inputs.expiration()
+                draft.update(version=draft['version']+1,updated_at=now(),owner_user_id=user)
+                tx.put('draft',draft_id,user,draft,expected=row['version']); return draft
+            return idempotent(tx,user,'draft:'+draft_id,request.headers.get('idempotency-key'),body,update)
+    return await run_in_threadpool(run)
 
 @app.delete('/v1/drafts/{draft_id}')
 async def delete_draft(draft_id:str,request:Request):
-    body=await request.json(); validate(body,'DraftDelete')
-    with repo.transaction() as tx:
-        user=principal(tx,request.headers.get('authorization'))['user_id']
-        def remove():
-            draft=owned(tx,'draft',draft_id,user)['data']
-            if draft['version']!=body['expected_version']: raise Problem(409,'VERSION_CONFLICT','This draft changed in another tab. Refresh before deleting it.',current_version=draft['version'])
-            tx.remove('draft',draft_id); tx.remove('draft_binding',draft_id)
-            # Editable state may be removed; submitted evidence and results remain immutable.
-            remaining=[r['data'] for r in tx.list('draft',user) if user_inputs.saved(r['data'])]
-            remaining.sort(key=lambda d:(d['updated_at'],d['id']),reverse=True)
-            for row in tx.list('exploration',user):
-                exploration=row['data']
-                if exploration.get('draft_id')!=draft_id: continue
-                gap_id=exploration['source_gap']['id']
-                exploration['draft_id']=next((d['id'] for d in remaining if (d['composer'].get('source_gap') or {}).get('id')==gap_id),None)
-                tx.put('exploration',row['id'],user,exploration,expected=row['version'])
-            return {'id':draft_id,'deleted':True}
-        return idempotent(tx,user,'delete-draft:'+draft_id,request.headers.get('idempotency-key'),body,remove)
+    body=await request.json()
+    def run():
+        validate(body,'DraftDelete')
+        with repo.transaction() as tx:
+            user=principal(tx,request.headers.get('authorization'))['user_id']
+            def remove():
+                draft=owned(tx,'draft',draft_id,user)['data']
+                if draft['version']!=body['expected_version']: raise Problem(409,'VERSION_CONFLICT','This draft changed in another tab. Refresh before deleting it.',current_version=draft['version'])
+                tx.remove('draft',draft_id); tx.remove('draft_binding',draft_id)
+                # Editable state may be removed; submitted evidence and results remain immutable.
+                remaining=[r['data'] for r in tx.list('draft',user) if user_inputs.saved(r['data'])]
+                remaining.sort(key=lambda d:(d['updated_at'],d['id']),reverse=True)
+                for row in tx.list('exploration',user):
+                    exploration=row['data']
+                    if exploration.get('draft_id')!=draft_id: continue
+                    gap_id=exploration['source_gap']['id']
+                    exploration['draft_id']=next((d['id'] for d in remaining if (d['composer'].get('source_gap') or {}).get('id')==gap_id),None)
+                    tx.put('exploration',row['id'],user,exploration,expected=row['version'])
+                return {'id':draft_id,'deleted':True}
+            return idempotent(tx,user,'delete-draft:'+draft_id,request.headers.get('idempotency-key'),body,remove)
+    return await run_in_threadpool(run)
 
 @app.post('/v1/uploads',status_code=201)
 async def initiate_upload(request:Request):
-    body=await request.json(); validate(body,'UploadCreate')
-    with repo.transaction() as tx:
-        user=principal(tx,request.headers.get('authorization'))['user_id']
-        result=idempotent(tx,user,'uploads',request.headers.get('idempotency-key'),body,lambda:user_inputs.initiate(tx,user,body))
-        current=owned(tx,'upload',result['upload']['id'],user)['data']
-        return {'upload':user_inputs.public_upload(current),'transfer':user_inputs.transfer(current)}
+    body=await request.json()
+    def run():
+        validate(body,'UploadCreate')
+        with repo.transaction() as tx:
+            user=principal(tx,request.headers.get('authorization'))['user_id']
+            result=idempotent(tx,user,'uploads',request.headers.get('idempotency-key'),body,lambda:user_inputs.initiate(tx,user,body))
+            current=owned(tx,'upload',result['upload']['id'],user)['data']
+            return {'upload':user_inputs.public_upload(current),'transfer':user_inputs.transfer(current)}
+    return await run_in_threadpool(run)
 
 @app.get('/v1/uploads')
 def list_uploads(request:Request,draft_id:str):
@@ -739,19 +763,22 @@ async def upload_content(upload_id:str,request:Request):
     async for part in request.stream():
         raw.extend(part)
         if len(raw)>user_inputs.MAX_FILE_BYTES*4//3+100: raise Problem(413,'UPLOAD_TOO_LARGE','Upload exceeds 8 MB.')
-    try: body=json.loads(raw)
-    except ValueError: raise Problem(422,'INVALID_UPLOAD','Invalid upload body.') from None
-    with repo.transaction() as tx:
-        user=principal(tx,request.headers.get('authorization'))['user_id']
-        return user_inputs.stage_local(tx,user,upload_id,body.get('content_base64'))
+    def run():
+        try: body=json.loads(raw)
+        except ValueError: raise Problem(422,'INVALID_UPLOAD','Invalid upload body.') from None
+        with repo.transaction() as tx:
+            user=principal(tx,request.headers.get('authorization'))['user_id']
+            return user_inputs.stage_local(tx,user,upload_id,body.get('content_base64'))
+    return await run_in_threadpool(run)
 
 @app.post('/v1/uploads/{upload_id}/complete')
-async def complete_upload(upload_id:str,request:Request):
+def complete_upload(upload_id:str,request:Request):
+    # Each transaction opens and closes in this one threadpool call; extraction runs between them, outside both.
     with repo.read_transaction() as tx:
         user=principal(tx,request.headers.get('authorization'))['user_id']
         before=owned(tx,'upload',upload_id,user); value=before['data']
     failure=None
-    try: completed=await asyncio.to_thread(user_inputs.complete,value)
+    try: completed=user_inputs.complete(value)
     except Problem as error:
         failure=error; completed={**value,'status':'failed','error':error.detail}
     with repo.transaction() as tx:
@@ -771,11 +798,11 @@ def remove_upload(upload_id:str,request:Request):
         return user_inputs.public_upload(value)
 
 @app.get('/v1/uploads/{upload_id}/download')
-async def download_upload(upload_id:str,request:Request):
+def download_upload(upload_id:str,request:Request):
     with repo.read_transaction() as tx:
         user=principal(tx,request.headers.get('authorization'))['user_id']; value=owned(tx,'upload',upload_id,user)['data']
         if value['status']!='ready': raise Problem(404,'NOT_FOUND','Upload is unavailable.')
-    data=await asyncio.to_thread(user_inputs.read,value['storage'])
+    data=user_inputs.read(value['storage'])
     return Response(data,media_type=value['media_type'],headers={'Content-Disposition':"attachment; filename*=UTF-8''"+quote(value['filename'],safe=''),
         'X-Content-Type-Options':'nosniff','Cache-Control':'private, no-store'})
 
