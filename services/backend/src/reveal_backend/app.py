@@ -15,7 +15,7 @@ from fastapi.responses import JSONResponse, StreamingResponse, Response, Redirec
 from jsonschema import Draft202012Validator
 from .auth import Problem, decode_assertion, owned, require_owned, principal, publication_principal, service_authority
 from .catalog import GENERATION_TTL_SECONDS, Catalog
-from .repository import Repository, now, uid, digest
+from .repository import DatabaseBusy, Repository, now, uid, digest
 from .runtime_config import ROOT, artifacts_root
 from .service_routing import mount_service
 from . import jobs
@@ -87,6 +87,12 @@ def validate(value, name, gateway=False):
 async def problem_handler(request, exc):
     return JSONResponse({'type': 'urn:reveal:problem:'+exc.code.lower(), 'title': exc.code.replace('_',' ').title(),
         'status': exc.status, 'code': exc.code, 'detail': exc.detail, 'request_id': uid(), 'retryable': exc.status in (429,503), **exc.extra}, status_code=exc.status, media_type='application/problem+json')
+
+@app.exception_handler(DatabaseBusy)
+async def database_busy(request, exc):
+    import logging
+    logging.getLogger('reveal').warning('Database busy: %s', exc)  # fixed text: pool or writer admission
+    return await problem_handler(request, Problem(503, 'SERVICE_UNAVAILABLE', 'The service is temporarily unavailable; retry shortly.'))
 
 @app.exception_handler(Exception)
 async def internal_error(request, exc):

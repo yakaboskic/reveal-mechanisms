@@ -43,6 +43,10 @@ _STATEFUL = re.compile(r'@|\b(GET_LOCK|RELEASE_LOCK|RELEASE_ALL_LOCKS|IS_USED_LO
 _FETCH = frozenset(('fetchone', 'fetchmany', 'fetchall'))
 
 
+class DatabaseBusy(TimeoutError):
+    """Retryable 503: no pooled session or writer slot within the wait bound; no SQL was sent."""
+
+
 def session_neutral(sql):
     if isinstance(sql, (bytes, bytearray)): sql = bytes(sql).decode('utf-8', 'replace')
     return isinstance(sql, str) and bool(_NEUTRAL.match(sql)) and not _STATEFUL.search(sql)
@@ -77,7 +81,7 @@ class Pool:
     def acquire(self):
         self._process(); deadline = self.clock() + self.wait_seconds
         while True:
-            stale = []; selected = check = None; create = False
+            stale = []; selected = check = None; create = busy = False
             with self.condition:
                 if self.closed: raise RuntimeError('Connection pool is closed')
                 while self.idle:
@@ -97,9 +101,10 @@ class Pool:
                         self.creating += 1; create = True
                     else:
                         remaining = deadline - self.clock()
-                        if remaining <= 0: raise TimeoutError('Application database connection pool is busy')
-                        self.condition.wait(remaining)
+                        if remaining <= 0: busy = True
+                        else: self.condition.wait(remaining)
             for entry in stale: _close(entry.connection)
+            if busy: raise DatabaseBusy('Application database connection pool is busy')
             if selected is not None: return Lease(self, selected)
             if check is not None:
                 try: self.validate(check.connection)

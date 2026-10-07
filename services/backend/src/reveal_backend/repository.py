@@ -11,8 +11,11 @@ import json
 import os
 import re
 import sqlite3
+import threading
 import time
 from uuid import uuid4
+from .mysql_database import application_session_unchanged
+from .mysql_pool import DatabaseBusy
 from .runtime_config import ROOT, mysql_connection, application_mysql_connection
 
 def now(): return datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
@@ -23,7 +26,11 @@ def digest(value): return hashlib.sha256(canonical(value).encode()).hexdigest()
 class Conflict(Exception): pass
 
 SELECT_ROW = 'SELECT owner_id,version,payload FROM reveal_records WHERE kind=%s AND id=%s'
+FENCE = 'SELECT revision FROM reveal_transaction_lock WHERE id=1 FOR UPDATE'
 _READ = re.compile(r'\s*\(*\s*(SELECT|SHOW)\b', re.I)
+_PLAIN_SELECT = re.compile(r'\s*\(*\s*SELECT\b', re.I)
+_NOT_PLAIN = re.compile(r'@|\b(FOR\s+UPDATE|FOR\s+SHARE|LOCK\s+IN\s+SHARE\s+MODE|INTO|GET_LOCK|RELEASE_LOCK|RELEASE_ALL_LOCKS|'
+                        r'IS_USED_LOCK|SLEEP|LAST_INSERT_ID)\b', re.I)
 _MISS = object()
 _TEXT_BUDGET = 8 << 20  # payload characters one transaction may remember; beyond it rows keep only owner/version
 
@@ -209,6 +216,34 @@ class Transaction:
         self.execute('UPDATE reveal_records SET owner_id=%s WHERE owner_id=%s AND kind NOT IN (' +
                      ','.join(['%s'] * len(excluded)) + ')', (target, source, *excluded))
 
+class SingleRead(Transaction):
+    """Exactly one plain SELECT: no locking read, user variable or lock, INTO or second statement."""
+    _used = False
+    def execute(self, sql, params=()):
+        if self._used: raise RuntimeError('single_read() runs one statement; use read_transaction()')
+        if not isinstance(sql, str) or not _PLAIN_SELECT.match(sql) or _NOT_PLAIN.search(sql):
+            raise RuntimeError('single_read() accepts only one plain SELECT')
+        self._used = True
+        return super().execute(sql, params)
+
+# Admission to the global fence: at most WRITERS fenced transactions per table prefix per process hold a pooled
+# session (one with the fence, one queued on it); the rest wait here, not on a pooled session, for at most the
+# pool wait. The database row lock stays the only cross-process authority.
+WRITERS = 2
+_writer_gates, _writer_lock = {}, threading.Lock()
+
+def _after_fork():
+    global _writer_gates, _writer_lock
+    _writer_gates, _writer_lock = {}, threading.Lock()
+
+if hasattr(os, 'register_at_fork'): os.register_at_fork(after_in_child=_after_fork)
+
+def writer_gate(prefix):
+    with _writer_lock:
+        gate = _writer_gates.get(prefix)
+        if gate is None: gate = _writer_gates[prefix] = threading.BoundedSemaphore(WRITERS)
+        return gate
+
 class Repository:
     def __init__(self, sqlite_path=None, table_prefix=None):
         self.sqlite_path = sqlite_path
@@ -242,22 +277,55 @@ class Repository:
             raise
         finally: connection.close()
     @contextmanager
-    def transaction(self):
+    def single_read(self):
+        """One plain SELECT with no START: InnoDB's statement-level consistent read, ended by ROLLBACK, so a clean
+        pooled lease costs 2 round trips. Only for reads that are genuinely one statement, never an
+        authorization+data pair: those need read_transaction()'s single snapshot."""
         connection = self.connect()
-        pending = []
         try:
-            tx = Transaction(connection, bool(self.sqlite_path), self.table_prefix)
-            if self.sqlite_path: connection.execute('BEGIN IMMEDIATE')
-            else: tx.execute('SELECT revision FROM reveal_transaction_lock WHERE id=1 FOR UPDATE').fetchone()
+            tx = SingleRead(connection, bool(self.sqlite_path), self.table_prefix)
+            if self.sqlite_path:
+                connection.execute('PRAGMA query_only=ON')
+                connection.execute('BEGIN')
+            elif not application_session_unchanged(connection):
+                # Unpooled, unproven or open-transaction session: chosen before any SQL is sent, never a retry.
+                if not getattr(connection, 'reveal_session_defaults', False):
+                    Transaction.execute(tx, 'SET TRANSACTION ISOLATION LEVEL REPEATABLE READ')
+                Transaction.execute(tx, 'START TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY')
             yield tx
-            from .workspace_events import prepare_commit
-            pending = prepare_commit(tx)
-            connection.commit()
+            # Ends the implicit read view; nothing can persist, and the lease settles for a clean release.
+            connection.rollback()
         except BaseException:
             try: connection.rollback()
             except Exception: pass
             raise
         finally: connection.close()
+    @contextmanager
+    def transaction(self):
+        gate = None
+        if not self.sqlite_path:
+            gate = writer_gate(self.table_prefix)
+            if not gate.acquire(timeout=min(30.0, max(0.0, float(os.getenv('REVEAL_MYSQL_POOL_WAIT_SECONDS', '5'))))):
+                raise DatabaseBusy('Application database writers are busy')
+        pending = []
+        try:
+            connection = self.connect()
+            try:
+                tx = Transaction(connection, bool(self.sqlite_path), self.table_prefix)
+                if self.sqlite_path: connection.execute('BEGIN IMMEDIATE')
+                else: tx.execute(FENCE).fetchone()
+                yield tx
+                from .workspace_events import prepare_commit
+                pending = prepare_commit(tx)
+                connection.commit()
+            except BaseException:
+                try: connection.rollback()
+                except Exception: pass
+                raise
+            finally: connection.close()
+        finally:
+            # Before publish_committed, which opens its own fenced transaction.
+            if gate is not None: gate.release()
         from .workspace_events import publish_committed
         publish_committed(self, pending)
     def migrate(self):
@@ -273,13 +341,14 @@ class Repository:
             connection.commit()
         finally: connection.close()
     def readiness(self):
-        with self.read_transaction() as tx:
+        with self.single_read() as tx:
             tx.execute('SELECT 1 FROM reveal_records LIMIT 1').fetchone()
-            if self.sqlite_path: return {'database': 'sqlite-test', 'tls': False}
-            if getattr(tx.connection, 'reveal_verified_tls', False):
-                return {'database': 'aurora-mysql', 'tls': True}
+            verified = getattr(tx.connection, 'reveal_verified_tls', False)
+        if self.sqlite_path: return {'database': 'sqlite-test', 'tls': False}
+        if verified: return {'database': 'aurora-mysql', 'tls': True}
+        with self.read_transaction() as tx:  # only sessions not opened by mysql_database.connect
             row = tx.execute("SHOW SESSION STATUS LIKE 'Ssl_cipher'").fetchone()
-            return {'database': 'aurora-mysql', 'tls': bool(row and row[1])}
+        return {'database': 'aurora-mysql', 'tls': bool(row and row[1])}
 
 def main():
     import argparse

@@ -49,6 +49,26 @@ certificate- and host-verified handshake, so setup needs two statements instead
 of four. Pooling does not cache private data, authorization decisions or
 publication visibility.
 
+At most two write transactions per table prefix and process hold a pooled
+connection on the global write fence: one holding it and one queued behind it.
+Further writers wait inside the process, not on a pooled connection, for at
+most `REVEAL_MYSQL_POOL_WAIT_SECONDS`, so readers keep their connections when
+writers contend. Running out of either a writer slot or a pooled connection
+raises `DatabaseBusy`, a `TimeoutError`, which the API returns as the existing
+retryable 503 `SERVICE_UNAVAILABLE`. The database row lock remains the only
+cross-process authority.
+
+A read that is genuinely one statement, such as readiness, uses
+`Repository.single_read()`: one plain `SELECT` with no `START TRANSACTION`,
+ended by `ROLLBACK`, or two round trips on a clean pooled connection. It
+rejects a second statement and any locking read, user variable, user lock or
+`INTO` before sending it. Authorization followed by data reads keep
+`read_transaction()`'s single snapshot. Within any transaction, a row already
+read is not read again before it is updated, removed or read a second time, and
+new workspace events and notification outbox rows are inserted without a
+lookup. Rows the transaction wrote itself are always read back from the
+database.
+
 Scientific account reads batch account, publication and document-index records,
 then load the complete stored scientific document. This reduces data queries
 from seven to three while retaining provenance pagination and exact payload
