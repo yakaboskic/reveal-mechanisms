@@ -339,6 +339,20 @@ class CatalogGenerationTests(unittest.TestCase):
         self.assertEqual(self.runtimes, [])
         self.assertFalse(any('payload' in sql or 'f.factor_key' in sql for sql in self.db.statements))
 
+    def test_readiness_database_cost_per_cache_regime_stays_within_budget(self):
+        # (application record reads, direct connects, direct statements); lower these with each readiness fix.
+        budget = {'cold': (1, 1, 5), 'within pointer TTL': (0, 0, 0), 'pointer recheck': (1, 0, 0), 'verification': (1, 1, 5)}
+        self.activate(KPN1, KPN_MODEL, self.kpn1_snapshot)
+        catalog = Catalog(); seen = {}
+        for regime, advance in (('cold', 0), ('within pointer TTL', 0), ('pointer recheck', GENERATION_TTL_SECONDS + 1),
+                                ('verification', catalog_module.READINESS_VERIFICATION_TTL_SECONDS + 1)):
+            self.clock.now += advance; before = (self.repo.reads, self.db.opened, len(self.db.statements))
+            catalog.readiness()
+            seen[regime] = (self.repo.reads - before[0], self.db.opened - before[1], len(self.db.statements) - before[2])
+        for regime, limits in budget.items():
+            with self.subTest(regime=regime):
+                self.assertTrue(all(cost <= limit for cost, limit in zip(seen[regime], limits)), (regime, seen[regime]))
+
     def test_plain_browse_and_selected_bindings_do_not_load_semantic_corpora(self):
         self.activate(KPN1, KPN_MODEL, self.kpn1_snapshot)
         original = self.vectors.registry
