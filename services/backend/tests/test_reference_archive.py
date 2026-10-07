@@ -163,7 +163,7 @@ class ClassificationTests(unittest.TestCase):
         written = set()
         for path in SOURCE.glob('*.py'):
             text = path.read_text()
-            written |= set(re.findall(r"\b(?:put|update_existing|remove|insert_many)\(\s*\[?\(?'([a-z_]+)'", text))
+            written |= set(re.findall(r"\b(?:put|update_existing|remove|insert_many|insert)\(\s*\[?\(?'([a-z_]+)'", text))
             # Batched rows are appended as (kind, id, owner, data) tuples before insert_many.
             written |= set(re.findall(r"\brecords\.append\(\(\s*'([a-z_]+)'\s*,", text))
         written |= {reference.ACTIVE_KIND, reference.CONTROL_KIND, reference.ARCHIVE_RUN_KIND, reference.RELOAD_KIND}

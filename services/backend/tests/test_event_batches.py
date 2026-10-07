@@ -110,9 +110,10 @@ class EventBatchTests(unittest.TestCase):
             self.persist([remote(i) for i in range(2,22)])
         # SQLite executes BEGIN separately; Aurora additionally takes its one
         # transaction fence. The per-batch work is constant in either backend.
-        # Notification delivery adds a job-state comparison, durable outbox
-        # insert and post-publication delete, independent of event batch size.
-        self.assertEqual(len(single),9); self.assertEqual(len(batch),9)
+        # Notification delivery adds a durable outbox insert (no pre-read: its
+        # key is new) and post-publication delete, independent of batch size.
+        # The job row read for the lease check is not read again to update it.
+        self.assertEqual(len(single),7); self.assertEqual(len(batch),7)
         self.assertEqual(sum(sql.startswith('INSERT') for sql in batch),2)
         self.assertEqual(sum(sql.startswith('UPDATE') for sql in batch),1)
         self.assertIn('id IN (',batch[2])

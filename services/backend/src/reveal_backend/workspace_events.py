@@ -103,12 +103,13 @@ def prepare_commit(tx):
         tx.put('workspace_cursor', state_id, owner, {'sequence':sequence, 'oldest':(state['data'].get('oldest', 1) if state else 1)})
         envelope = {'schema_version':1, 'event_id':state_id+':'+str(sequence), 'cursor':str(sequence),
             'scope':'public' if owner == 'public' else 'workspace', 'committed_at':timestamp, **mutation}
-        tx.put('workspace_event', state_id+':'+str(sequence).zfill(20), owner, envelope)
+        # The cursor advances under this fence, so the key is new; replace=True keeps put()'s overwrite if not.
+        tx.insert('workspace_event', state_id+':'+str(sequence).zfill(20), owner, envelope, replace=True)
         channels.add(redis_notifications.channel(scope))
     channels.update(redis_notifications.channel('job:'+job_id) for job_id in tx.notification_jobs)
     if not channels: return []
     identity = uid()
-    tx.put('notification_outbox', identity, 'system', {'channels':sorted(channels), 'created_at':timestamp})
+    tx.insert('notification_outbox', identity, 'system', {'channels':sorted(channels), 'created_at':timestamp})
     return [{'id':identity, 'channels':sorted(channels)}]
 
 

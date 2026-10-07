@@ -22,6 +22,15 @@ def digest(value): return hashlib.sha256(canonical(value).encode()).hexdigest()
 
 class Conflict(Exception): pass
 
+SELECT_ROW = 'SELECT owner_id,version,payload FROM reveal_records WHERE kind=%s AND id=%s'
+_READ = re.compile(r'\s*\(*\s*(SELECT|SHOW)\b', re.I)
+_MISS = object()
+_TEXT_BUDGET = 8 << 20  # payload characters one transaction may remember; beyond it rows keep only owner/version
+
+def _exact(identity):
+    # ids are ascii_bin (PAD SPACE): a trailing space or a non-ASCII literal can match a different stored id.
+    return isinstance(identity, str) and identity.isascii() and not identity.endswith(' ')
+
 def application_prefix(value=None):
     value = value or os.getenv('REVEAL_APPLICATION_TABLE_PREFIX', 'reveal')
     if not re.fullmatch(r'reveal(?:_[a-z][a-z0-9_]{0,30})?', value):
@@ -32,10 +41,16 @@ def application_sql(sql, prefix):
     return re.sub(r'\breveal_(records|transaction_lock)\b', lambda match: prefix+'_'+match[1], sql)
 
 class Transaction:
+    """Rows read in this transaction are remembered by (kind, id). Under REPEATABLE READ a re-read returns the
+    same bytes, so get/put/update_existing/remove skip it. Rows this transaction wrote keep only owner and
+    version (MySQL JSON need not round-trip our text), and any SQL that is not a plain read and was not sent by
+    a keyed helper forgets everything. The map lives on this object, never on the pooled connection."""
     def __init__(self, connection, sqlite=False, table_prefix='reveal'):
         self.connection, self.sqlite, self.table_prefix = connection, sqlite, table_prefix
         self.workspace_changes, self.notification_jobs = {}, set()
+        self._rows, self._keyed, self._held = {}, False, 0
     def execute(self, sql, params=()):
+        if self._rows and not self._keyed and not _READ.match(sql): self._rows.clear()
         cursor = self.connection.cursor()
         started = time.perf_counter()
         failed = False
@@ -49,23 +64,62 @@ class Transaction:
             from .runtime_metrics import observe
             observe('database', sql.split()[0].upper(), (time.perf_counter()-started)*1000, failed)
         return cursor
+    def _known(self, kind, identity):
+        return self._rows.get((kind, identity), _MISS) if _exact(identity) else _MISS
+    def _learn(self, kind, identity, owner=None, version=None, text=None, absent=False):
+        if not _exact(identity): return
+        if absent: self._rows[(kind, identity)] = None; return
+        if text is not None:
+            if self._held + len(text) > _TEXT_BUDGET: text = None
+            else: self._held += len(text)
+        self._rows[(kind, identity)] = (owner, version, text)
+    def _write(self, sql, params, identities):
+        # A keyed write keeps the map; one with an inexact id may change another key's row, so it clears it.
+        self._keyed = all(_exact(identity) for identity in identities)
+        try: return self.execute(sql, params)
+        finally: self._keyed = False
     def get(self, kind, identity):
-        row = self.execute('SELECT owner_id,version,payload FROM reveal_records WHERE kind=%s AND id=%s', (kind, identity)).fetchone()
-        if row is None: return None
+        entry = self._known(kind, identity)
+        if entry is None: return None
+        if entry is not _MISS and entry[2] is not None:
+            return {'owner': entry[0], 'version': entry[1], 'data': json.loads(entry[2])}
+        row = self.execute(SELECT_ROW, (kind, identity)).fetchone()
+        if row is None: self._learn(kind, identity, absent=True); return None
+        self._learn(kind, identity, row[0], row[1], row[2])
         return {'owner': row[0], 'version': row[1], 'data': json.loads(row[2])}
+    def _old(self, kind, identity, data):
+        """The row a write replaces; data only when track() diffs it."""
+        entry = self._known(kind, identity)
+        if entry is _MISS and not data:
+            row = self.execute('SELECT owner_id,version FROM reveal_records WHERE kind=%s AND id=%s', (kind, identity)).fetchone()
+            if row is None: self._learn(kind, identity, absent=True); return None
+            self._learn(kind, identity, row[0], row[1]); return {'owner': row[0], 'version': row[1], 'data': None}
+        if entry is None: return None
+        if entry is _MISS or (data and entry[2] is None): return self.get(kind, identity)
+        return {'owner': entry[0], 'version': entry[1], 'data': json.loads(entry[2]) if data else None}
     def get_many(self, kind, identities):
         if not identities: return {}
         rows = self.execute('SELECT id,owner_id,version,payload FROM reveal_records WHERE kind=%s AND id IN ('+
             ','.join(['%s'] * len(identities))+')', (kind, *identities)).fetchall()
-        return {row[0]: {'owner': row[1], 'version': row[2], 'data': json.loads(row[3])} for row in rows}
+        result = {}
+        for row in rows:
+            self._learn(kind, row[0], row[1], row[2], row[3])
+            result[row[0]] = {'owner': row[1], 'version': row[2], 'data': json.loads(row[3])}
+        for identity in identities:
+            if identity not in result: self._learn(kind, identity, absent=True)
+        return result
     def get_records(self, keys):
-        """Fetch exact heterogeneous record keys without widening access or caching."""
+        """Fetch exact heterogeneous record keys without widening access."""
         keys = list(dict.fromkeys(keys)); result = {}
         for offset in range(0, len(keys), 250):
             batch = keys[offset:offset + 250]
             rows = self.execute('SELECT kind,id,owner_id,version,payload FROM reveal_records WHERE (kind,id) IN (' +
                 ','.join(['(%s,%s)'] * len(batch)) + ')', tuple(value for key in batch for value in key)).fetchall()
-            result.update({(row[0], row[1]): {'owner': row[2], 'version': row[3], 'data': json.loads(row[4])} for row in rows})
+            for row in rows:
+                self._learn(row[0], row[1], row[2], row[3], row[4])
+                result[(row[0], row[1])] = {'owner': row[2], 'version': row[3], 'data': json.loads(row[4])}
+            for key in batch:
+                if key not in result: self._learn(*key, absent=True)
         return result
     def insert_many(self, records):
         """Insert new records in one SQL statement; conflicts roll back the batch."""
@@ -73,17 +127,32 @@ class Transaction:
         values = []
         for kind, identity, owner, data in records:
             values.extend((kind, identity, owner, 1, canonical(data), now()))
-        self.execute('INSERT INTO reveal_records(kind,id,owner_id,version,payload,updated_at) VALUES '+
-            ','.join(['(%s,%s,%s,%s,%s,%s)'] * len(records)), tuple(values))
+        self._write('INSERT INTO reveal_records(kind,id,owner_id,version,payload,updated_at) VALUES '+
+            ','.join(['(%s,%s,%s,%s,%s,%s)'] * len(records)), tuple(values), [record[1] for record in records])
         from .workspace_events import track
-        for kind, identity, owner, data in records: track(self, kind, identity, owner, data)
+        for kind, identity, owner, data in records:
+            self._learn(kind, identity, owner, 1)
+            track(self, kind, identity, owner, data)
+    def insert(self, kind, identity, owner, data, *, replace=False):
+        """Insert a key known to be new with no pre-read. replace=True puts instead if it exists after all."""
+        try: self.insert_many([(kind, identity, owner, data)])
+        except Exception as error:
+            import pymysql
+            if not replace or not isinstance(error, (sqlite3.IntegrityError, pymysql.err.IntegrityError)): raise
+            self.put(kind, identity, owner, data)
     def update_existing(self, kind, identity, owner, data):
         """Update a row already read under the transaction's exclusive fence."""
         from .workspace_events import tracked, track
-        old = self.get(kind, identity) if tracked(kind) else None
-        cursor = self.execute('UPDATE reveal_records SET owner_id=%s,version=version+1,payload=%s,updated_at=%s WHERE kind=%s AND id=%s',
-            (owner, canonical(data), now(), kind, identity))
+        old = self._old(kind, identity, True) if tracked(kind) else None
+        entry = self._known(kind, identity)
+        known = old['version'] if old else entry[1] if entry is not _MISS and entry is not None else None
+        sql = 'UPDATE reveal_records SET owner_id=%s,version=version+1,payload=%s,updated_at=%s WHERE kind=%s AND id=%s'
+        params = (owner, canonical(data), now(), kind, identity)
+        cursor = self._write(sql + ' AND version=%s', params + (known,), [identity]) if known is not None else \
+            self._write(sql, params, [identity])
         if cursor.rowcount != 1: raise Conflict('Expected existing record')
+        if known is not None: self._learn(kind, identity, owner, known + 1)
+        elif _exact(identity): self._rows.pop((kind, identity), None)
         track(self, kind, identity, owner, data, old, revision=old['version']+1 if old else 1)
     def list(self, kind, owner=None):
         sql, args = 'SELECT id,owner_id,version,payload,updated_at FROM reveal_records WHERE kind=%s', [kind]
@@ -93,26 +162,30 @@ class Transaction:
         # preserving the stored timestamp ordering and ascending ID tie-break.
         rows = sorted(self.execute(sql, args).fetchall(), key=lambda row: row[0])
         rows.sort(key=lambda row: row[4], reverse=True)
+        for r in rows: self._learn(kind, r[0], r[1], r[2], r[3])
         return [{'id': r[0], 'owner': r[1], 'version': r[2], 'data': json.loads(r[3])}
                 for r in rows]
     def put(self, kind, identity, owner, data, expected=None):
-        old = self.get(kind, identity)
+        from .workspace_events import tracked, track
+        old = self._old(kind, identity, tracked(kind))
         if expected is not None and (old is None or old['version'] != expected): raise Conflict('Version conflict')
         version = old['version'] + 1 if old else 1
         if old:
-            self.execute('UPDATE reveal_records SET owner_id=%s,version=%s,payload=%s,updated_at=%s WHERE kind=%s AND id=%s',
-                         (owner, version, canonical(data), now(), kind, identity))
+            cursor = self._write('UPDATE reveal_records SET owner_id=%s,version=%s,payload=%s,updated_at=%s WHERE kind=%s AND id=%s AND version=%s',
+                                 (owner, version, canonical(data), now(), kind, identity, old['version']), [identity])
+            if cursor.rowcount != 1: raise Conflict('Record changed outside the write fence')
         else:
-            self.execute('INSERT INTO reveal_records(kind,id,owner_id,version,payload,updated_at) VALUES (%s,%s,%s,%s,%s,%s)',
-                         (kind, identity, owner, version, canonical(data), now()))
-        from .workspace_events import track
+            self._write('INSERT INTO reveal_records(kind,id,owner_id,version,payload,updated_at) VALUES (%s,%s,%s,%s,%s,%s)',
+                        (kind, identity, owner, version, canonical(data), now()), [identity])
+        self._learn(kind, identity, owner, version)
         track(self, kind, identity, owner, data, old, revision=version)
         return version
     def remove(self, kind, identity):
         from .workspace_events import tracked, track
-        old = self.get(kind, identity) if tracked(kind) else None
+        old = self._old(kind, identity, True) if tracked(kind) else None
         if old: track(self, kind, identity, old['owner'], old['data'], operation='remove', revision=old['version']+1)
-        self.execute('DELETE FROM reveal_records WHERE kind=%s AND id=%s', (kind, identity))
+        self._write('DELETE FROM reveal_records WHERE kind=%s AND id=%s', (kind, identity), [identity])
+        self._learn(kind, identity, absent=True)
     def transfer(self, source, target):
         from .workspace_events import ownership_changed
         ownership_changed(self, source, target)
