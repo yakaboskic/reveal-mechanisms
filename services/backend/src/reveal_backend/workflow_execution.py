@@ -379,6 +379,10 @@ class WorkflowExecution:
         if phase in ('review_init', 'review_call', 'review_tools'):
             return {'next_phase': 'validate', 'validated_paths': None}
         adapter = self.box_adapter(queue)
+        if phase in ('launch', 'capture'):
+            # Validation and commit follow the Box run: let the DAPPER helper warm up while it runs.
+            from .acceptance import prewarm
+            prewarm()
         if phase == 'create':
             if box: return {'next_phase': 'bootstrap'}
             if execution.get('creation_intent'):

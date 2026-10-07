@@ -118,7 +118,7 @@ report = validate_scientific_account(
 )
 ```
 
-This reruns the same linter in **final** mode and raises `AccountValidationError` with `.report` on failure. The fresh interpreter avoids accidentally importing the collector's older DAPPER snapshot. The backend must run this against returned document bytes, never trust a report supplied by the agent, and persist/compare the report's hashes with the artifacts it accepts.
+This reruns the same linter in **final** mode and raises `AccountValidationError` with `.report` on failure. The fresh interpreter avoids accidentally importing the collector's older DAPPER snapshot. Trusted identity minting, cited-text assembly and the Paragraph lint keep that isolation in one warm helper interpreter per backend process, bound to the verified release (`REVEAL_DAPPER_HELPER=0` starts a fresh interpreter per call instead). The backend must run this against returned document bytes, never trust a report supplied by the agent, and persist/compare the report's hashes with the artifacts it accepts.
 
 Passing this validator establishes structure and source fidelity. Draft and final modes use the same checks; final mode additionally requires minted scientific identities after trusted assembly. Trusted attribution/job ownership and execution-ledger/tool-policy enforcement remain worker responsibilities. Once those deterministic checks pass, the worker saves the account. No second AI review or scientific verdict is required. A correct source quotation does not by itself prove that an interpretation is scientifically correct. Failed worker lint reports are retained alongside the output so their findings remain inspectable.
 

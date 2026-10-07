@@ -53,8 +53,14 @@ def assemble_paragraph(output: dict, paragraph_input: dict, *, dapper_root: Path
     graph and registry validation, and mints the final immutable object.
     """
     from .dapper_release import verify_release
-    verify_release(dapper_root, release_lock)
+    from . import dapper_helper
+    release = verify_release(dapper_root, release_lock)
     segments = validate_paragraph_segments(output, paragraph_input)
+    if dapper_helper.enabled():
+        ok, assembled = dapper_helper.request(dapper_root, release, 'assemble', {'segments': segments}, 30)
+        if not ok:
+            raise ValueError('Pinned DAPPER paragraph assembly failed')
+        return assembled
     program = '''import json,sys
 from pathlib import Path
 sys.path.insert(0,str(Path(sys.argv[1])/'schema'))

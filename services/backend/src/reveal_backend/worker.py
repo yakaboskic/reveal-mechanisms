@@ -11,7 +11,7 @@ import socket
 import time
 from .agent_execution import ExecutionRequest, MAX_EMIT_BATCH_EVENTS, MAX_EMIT_BATCH_BYTES, emit_batch_size
 from .auth import Problem, owned
-from .acceptance import assemble_account, object_envelope, object_projection, with_citations, release_root, LOCK, mint, validate_paragraph_document
+from .acceptance import assemble_account, object_envelope, object_projection, with_citations, release_root, LOCK, mint, prewarm, validate_paragraph_document
 from .evidence_package import DapperRuntime, canonical_json, decode, require, sha256
 from .evidence_schema import validate_package_shape, load_generated_schema
 from .evidence_collector import collect_package
@@ -456,6 +456,7 @@ class Worker:
                     else:
                         from .box_adapter import BoxExecutionAdapter
                         adapter=BoxExecutionAdapter(ROOT,environ={**os.environ,'REVEAL_CLAUDE_MODEL':snapshot['model']})
+                if mode=='box': prewarm()
                 result=await adapter.execute(request,emit,cancelled,checkpoint)
             # The Box deleted checkpoint already saved the exact final capture
             # and its cleanup marker. Other adapters/replays still need a save.
@@ -689,14 +690,15 @@ class Worker:
         if not await self.begin_persistence(job,token,'Saving the validated research statement and its exact citations.'): return
         from .workflow_execution import drain_on_cancel
         def persist():
+            # The envelope depends on the fence only through citation metadata: project it before taking the fence.
+            projection=object_projection(document,paragraph['id']); document_sha=sha256(path.read_bytes())
             with self.repository.transaction() as tx:
                 pair=jobs.fenced(tx,job['id'],token)
                 if not pair or pair[0]['status']=='cancel_requested': return
                 current,_=pair; owner=current['owner_user_id']; stored=owned(tx,'account',job['input_account_id'],owner)['data']
                 # Exact registry revision is required; never substitute latest.
                 for occurrence in paragraph['citations']: owned(tx,'citation',occurrence['target_id']+':'+str(occurrence['citation_metadata_revision']),owner)
-                envelope=object_envelope(document,paragraph['id'],stored['result']['citation_metadata'])
-                document_sha=sha256(path.read_bytes())
+                envelope=with_citations(projection,stored['result']['citation_metadata'])
                 tx.put('scientific_document',digest([owner,document_sha]),owner,{'sha256':document_sha,'document':document,'job_id':job['id'],'observed_at':now(),
                     'citation_metadata':stored['result']['citation_metadata'],'artifact_access':{a['file']['id']:a for a in stored['result']['artifacts']}})
                 tx.put('object_document',digest([owner,paragraph['id']]),owner,{'object_id':paragraph['id'],'sha256':document_sha})

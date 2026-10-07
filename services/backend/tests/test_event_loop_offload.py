@@ -133,7 +133,7 @@ class RuntimeOffloadTests(unittest.TestCase):
         def mint(value, path): path.write_bytes(canonical_json(value)); return value
         stubs = [patch('reveal_backend.box_paragraph.assemble_paragraph', return_value={'text': 'Statement.', 'citations': []}),
                  patch.object(worker, 'mint', side_effect=mint), patch.object(worker, 'validate_paragraph_document', return_value={'valid': True}),
-                 patch.object(worker, 'object_envelope', return_value={'root_id': 'paragraph'}),
+                 patch.object(worker, 'object_projection', return_value=({'root_id': 'paragraph'}, set())),
                  patch.object(worker.Worker, 'save_workspace', lambda *args: None)]
         for item in stubs: item.start(); self.addCleanup(item.stop)
         directory = Path(self.temp.name) / 'paragraph'; directory.mkdir()

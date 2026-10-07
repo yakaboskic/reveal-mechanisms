@@ -10,6 +10,7 @@ from .runtime_config import ROOT, CURRENT_DAPPER_SNAPSHOT, setting
 from .repository import digest, now
 from .evidence_package import canonical_json, decode, require, sha256
 from .dapper_release import verify_release
+from . import dapper_helper
 from .scientific_account_lint import validate_scientific_account
 from .source_validation import ledger_sources, validate_new_files, validate_observations
 
@@ -100,8 +101,12 @@ def public_runtime():
     return DapperRuntime(CURRENT_DAPPER_SNAPSHOT)
 
 def mint(document,path):
-    root=release_root(); verify_release(root,LOCK)
+    root=release_root(); release=verify_release(root,LOCK)
     path.write_bytes(canonical_json(document))
+    if dapper_helper.enabled():
+        ok,detail=dapper_helper.request(root,release,'mint',{'path':os.path.abspath(path)},120)
+        require(ok,'Trusted DAPPER identity assembly failed: '+str(detail)[-1500:])
+        return decode(path.read_bytes())
     program='''import json,sys
 from pathlib import Path
 root=Path(sys.argv[1]); sys.path[:0]=[str(root/'schema/identity'),str(root/'schema')]
@@ -134,8 +139,12 @@ def replace_authored_attribution(document,trusted,person,activity):
 
 
 @lru_cache(maxsize=4)
-def _reference_fields(root, lock_sha256):
+def _reference_fields(root, lock_sha256, commit=None):
     """Use the same pinned schema as lint, isolated from imported catalog schemas."""
+    if commit and dapper_helper.enabled():
+        ok,fields=dapper_helper.request(root,{'lock_sha256':lock_sha256,'commit':commit},'reference_fields',{},120)
+        require(ok,'Trusted reference schema could not be loaded: '+str(fields)[-1500:])
+        return fields
     program='''import json,sys,yaml
 from pathlib import Path
 schema=Path(sys.argv[1])/'schema'
@@ -156,7 +165,7 @@ print(json.dumps(fields))
 def hydrate_inputs(document,trusted,edges=()):
     """Hydrate exact schema-declared references, never IDs mentioned in prose."""
     root=release_root(); release=verify_release(root,LOCK)
-    fields=_reference_fields(str(root.resolve()),release['lock_sha256'])
+    fields=_reference_fields(str(root.resolve()),release['lock_sha256'],release.get('commit'))
     for _ in range(len(trusted)+1):
         present={node['id'] for rows in document.values() if isinstance(rows,list)
                  for node in rows if isinstance(node,dict) and 'id' in node}
@@ -294,7 +303,11 @@ def object_projection(document,identity,artifact_access=None,*,max_depth=5,max_n
 
 def validate_paragraph_document(path):
     """Use pinned upstream lint with an application-owned terminal Paragraph profile."""
-    verify_release(release_root(),LOCK)
+    release=verify_release(release_root(),LOCK)
+    if dapper_helper.enabled():
+        ok,findings=dapper_helper.request(release_root(),release,'lint_paragraph',{'path':os.path.abspath(path)},120)
+        require(ok,'Paragraph linter runtime failed')
+        return paragraph_report(findings)
     program='''import sys,json,yaml
 from pathlib import Path
 from dataclasses import asdict
@@ -309,6 +322,12 @@ print(json.dumps([asdict(x) for x in report.findings]))
 '''
     result=subprocess.run([sys.executable,'-I','-B','-c',program,str(release_root()),str(path)],capture_output=True,text=True,timeout=120)
     require(result.returncode==0,'Paragraph linter runtime failed')
-    findings=json.loads(result.stdout)
+    return paragraph_report(json.loads(result.stdout))
+
+def paragraph_report(findings):
     require(not any(x['severity']=='error' for x in findings),'Paragraph validation failed: '+str(findings)[:2000])
     return {'profile':'reveal-paragraph','valid':True,'findings':findings}
+
+def prewarm():
+    """Warm this process's DAPPER helper while a Box runs, so trusted assembly and linting start warm."""
+    dapper_helper.prewarm(release_root(),LOCK)

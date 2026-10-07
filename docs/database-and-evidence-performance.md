@@ -378,6 +378,35 @@ citations, borrowed and retained nodes, and box captures) and requires identical
 rows: owners, versions, payloads, timestamps, job events, workspace events and
 the notification outbox.
 
+Paragraph acceptance projects its object envelope before taking the write fence
+too (the first projection in a process loads the public DAPPER runtime, about
+0.7 seconds on the laptop, which was spent holding the fence). Its pinned DAPPER
+work (cited-text assembly, identity minting and the Paragraph lint) used to start
+three cold `python -I -B` interpreters and verify the release three times, each
+verification running five `git` processes and hashing the 35 locked files: about
+4 seconds per commit on the laptop and 12.5-14.5 seconds of the 14-16 second
+commit step in QA. Each API or worker process now keeps one warm helper
+interpreter (`dapper_helper.py`) that loads the release's schema, vocabulary and
+validator once and serves assembly, minting, paragraph linting and the reference
+field map. It is still a separate `-I -B` interpreter, never the API process
+(which imports another DAPPER snapshot), and it runs the per-call programs'
+exact code: over the DAPPER examples and their failing variants, served in both
+orders by one helper, minted bytes, lint findings, assembled text and reference
+fields equal the per-call programs'. Every request still verifies the release
+first, and a different release, an error, a crash, a timeout, 256 requests or
+30 idle minutes restart it. Release verification still rehashes every locked
+file on each call; only its five `git` checks are reused, while HEAD and the ref
+it names, the refs, config, index, ignore and attribute files and every entry
+under `schema/` keep the stat they had when the checks passed (status runs with
+`GIT_OPTIONAL_LOCKS=0`, so it never rewrites the index). A commit's DAPPER work
+now starts one interpreter and five `git` processes per process, then none:
+4.0 seconds became 28 ms warm on the laptop (3.2 seconds for the first commit in
+a process). The Workflow's launch and capture steps, and the legacy worker
+before a Box run, warm the helper in a background thread while the Box works, so
+the first commit takes about 70 ms. `REVEAL_DAPPER_HELPER=0` restores the
+per-call interpreters; `REVEAL_DAPPER_PREWARM=0` leaves the first request to
+start the helper. Account linting still runs its own interpreter per account.
+
 The inspected jobs also spent approximately 38–40 seconds setting up their Box
 runtime. That delay and model/external-KG latency are separate from evidence
 collection. Initial API source-catalog loading also remains a cold-start cost:
