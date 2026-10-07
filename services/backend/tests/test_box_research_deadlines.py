@@ -228,7 +228,10 @@ def test_hosted_lint_passes_only_shared_remaining_budget(hosted,monkeypatch):
     (output/'account-1.json').write_text('{}')
     (state/'runtime.json').write_text(json.dumps({'evidence_package':str(research.seed_path),'dapper_root':'fixture'}))
     tick=[100.0]; observed=[]
-    def materialize(): tick[0]+=12; return research.seed_path
+    def materialize(*, deadline, progress):
+        assert deadline == 155
+        progress('export_wait'); tick[0]+=12
+        return research.seed_path
     monkeypatch.setattr(box_remote,'time',SimpleNamespace(monotonic=lambda:tick[0]))
     monkeypatch.setattr(box_remote,'STATE',state); monkeypatch.setattr(box_remote,'OUTPUT',output)
     monkeypatch.setattr(box_remote,'RESEARCH',SimpleNamespace(materialize=materialize))

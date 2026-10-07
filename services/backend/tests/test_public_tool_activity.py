@@ -13,6 +13,16 @@ def encoded(value):
 
 
 class PublicToolActivityTests(unittest.TestCase):
+    def test_failed_provider_completion_marks_authoring_not_capture_failed(self):
+        for kind in ('analysis', 'paragraph'):
+            job = {'kind': kind, 'warnings': []}
+            result = public_activity(job, 'agent_completed', {'status': 'failed', 'message': 'Agent stopped.'})
+            self.assertEqual(job['stage'], 'authoring_paragraph' if kind == 'paragraph' else 'authoring_account')
+            self.assertEqual(result[2]['state'], 'failed')
+            result = public_activity(job, 'agent_completed', {'status': 'succeeded', 'message': 'Output ready for capture.'})
+            self.assertEqual(job['stage'], 'collecting_output')
+            self.assertEqual(result[2]['state'], 'completed')
+
     def test_hosted_catalog_has_explicit_safe_argument_projection(self):
         from reveal_backend.box_research import ALLOWED_TOOLS
         from reveal_backend.research_tools import private_definitions

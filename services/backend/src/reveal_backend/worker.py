@@ -49,7 +49,8 @@ def public_activity(job,kind,payload):
         else:
             # A provider result ends authoring, not the job. Output still needs
             # durable capture and deterministic validation before acceptance.
-            job['stage']='collecting_output'
+            job['stage']=(('authoring_paragraph' if job.get('kind')=='paragraph' else 'authoring_account')
+                          if payload.get('status')=='failed' else 'collecting_output')
             # This is a completion notice, not the start of a timed capture
             # operation. The job remains running in its collection stage.
             detail=activity('preparation','failed' if payload.get('status')=='failed' else 'completed','harness')

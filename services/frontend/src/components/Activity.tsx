@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { activityProgress, activityRows, groupedWarnings, stageLabels, type ActivityRow } from "@/lib/activity";
-import { elapsedLabel, operationalStep, timedActivitySections, toolElapsed, type StepState } from "@/lib/activity-timing";
+import { activityMessage, activityProgress, activityRows, groupedWarnings, stageLabels, type ActivityRow } from "@/lib/activity";
+import { elapsedLabel, operationalStep, stageStateLabel, timedActivitySections, toolElapsed, type StepState } from "@/lib/activity-timing";
 import { prettyRecordedValue, recordedToolArguments, toolInvocation } from "@/lib/tool-display";
 import { api, ApiError, messageOf, readEvents, terminal, type Schema } from "@/lib/client";
 import { JobOutcome } from "./AnalysisOutcome";
@@ -39,8 +39,8 @@ function ActivityEntry({ row, active, now, step, onInspect }: { row: ActivityRow
   const narrative = event.detail?.kind === "agent_message";
   return <div className={`activity-entry ${narrative ? "agent-update" : "system-update"} ${event.detail?.state || ""}`} data-step-state={narrative ? undefined : step.state}>
     {narrative && <span className="entry-label">Agent update</span>}
-    {!narrative && <span className={`work-dot is-${step.state}`} aria-label={step.state === "working" ? "Working" : step.state === "completed" ? "Complete" : step.state === "failed" ? "Failed" : "Stopped or unavailable"} role="img" />}
-    <p>{event.message}</p>
+    {!narrative && <span className={`work-dot is-${step.state}`} aria-label={step.state === "working" ? "Working" : step.state === "completed" ? "Complete" : step.state === "failed" ? "Failed" : step.state === "ended" ? "Ended" : "Stopped or unavailable"} role="img" />}
+    <p>{activityMessage(event)}</p>
     {!narrative && step.durationMs != null && <span className="step-duration" aria-live="off" title={step.state === "working" ? "Elapsed in this step" : "Time in this step"}>{elapsedLabel(step.durationMs)}</span>}
     {event.detail?.counts && <small>{event.detail.counts.nodes} nodes, {event.detail.counts.edges} edges ({event.detail.counts.scope})</small>}
   </div>;
@@ -48,7 +48,7 @@ function ActivityEntry({ row, active, now, step, onInspect }: { row: ActivityRow
 /** `archived`: the analysis was frozen on a superseded reference generation, so its saved output cannot be accepted. */
 export function Activity({ initial, onJob, archived = false }: { initial: Schema<"Job">; onJob: (job: Schema<"Job">) => void; archived?: boolean }) {
   const paragraph = initial.kind === "paragraph";
-  const labels = paragraph ? { ...stageLabels, preparation: "Statement preparation", research: "Writing statement", collection: "Collecting statement", validation: "Checking claims and citations", saving: "Saving statement" } : stageLabels;
+  const labels = paragraph ? { ...stageLabels, preparation: "Statement preparation", research: "Writing statement", validation: "Checking claims and citations", saving: "Saving statement", outcome: "Statement outcome" } : stageLabels;
   const [job, setJob] = useState(initial);
   const [events, setEvents] = useState<Schema<"JobEvent">[]>([]);
   const [connection, setConnection] = useState("Connecting to activity…");
@@ -171,12 +171,12 @@ export function Activity({ initial, onJob, archived = false }: { initial: Schema
         <div className="activity-content" ref={content}>
           {sections.map(section => {
             const current = section.current;
-            const working = active && current;
             const state = section.state;
+            const working = state === "working";
             const rows = activityRows(section.events.filter(event => event.event_type !== "warning"));
-            const label = working ? progress.status === "cancel_requested" ? "Stopping" : section.stage === "preparation" && progress.stage === "queued" ? "Queued" : "Working" : state === "failed" ? "Could not complete" : state === "stopped" ? "Stopped" : "Complete";
+            const label = working && progress.status === "cancel_requested" ? "Stopping" : working && section.stage === "preparation" && progress.stage === "queued" ? "Queued" : stageStateLabel(section.stage, state);
             return <details className="activity-stage" data-stage={section.stage} data-state={state} key={section.id} open={current || section.stage === "research" || section.stage === "validation"}>
-              <summary>{working ? <Pulse /> : <span className="stage-mark" aria-hidden="true">{state === "completed" ? "✓" : state === "failed" ? "!" : "·"}</span>}<span className="stage-name">{labels[section.stage]}</span><span className="stage-state">{label}</span><span className="stage-duration" aria-live="off" title={section.durationMs == null ? "Waiting for the recorded stage boundaries" : working ? "Elapsed in this stage" : "Total time in this stage"}>{section.durationMs == null ? "—" : elapsedLabel(section.durationMs)}</span></summary>
+              <summary>{working ? <Pulse /> : <span className="stage-mark" aria-hidden="true">{state === "completed" ? "✓" : state === "failed" ? "!" : "·"}</span>}<span className="stage-name">{labels[section.stage]}</span><span className="stage-state">{label}</span>{section.stage !== "outcome" && <span className="stage-duration" aria-live="off" title={section.durationMs == null ? "Waiting for the recorded stage boundaries" : working ? "Elapsed in this stage" : "Total time in this stage"}>{section.durationMs == null ? "—" : elapsedLabel(section.durationMs)}</span>}</summary>
               <div className="stage-log" role="log" aria-live="off" aria-label={`${labels[section.stage]} log`}>
                 {!section.events.length && <p className="activity-waiting">{active && !events.length ? "Retrieving the agent’s latest status and recorded activity…" : progress.stage === "queued" ? "Waiting for a research worker…" : active ? "Retrieving this stage’s activity…" : "No further activity recorded."}</p>}
                 {rows.map((row, index) => <ActivityEntry key={row.event.id} row={row} active={working} now={now} step={operationalStep(row, rows.slice(index + 1), section, now)} onInspect={pauseFollowing} />)}

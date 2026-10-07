@@ -57,6 +57,15 @@ async def run_sync(function, *args, **kwargs):
     return await drain_on_cancel(asyncio.to_thread(function, *args, **kwargs))
 
 
+def capture_message(execution, *, restoring=False):
+    failed = (execution.get('box') or {}).get('state', {}).get('status') in ('failed', 'cancelled')
+    if restoring:
+        return ('Restoring preserved partial output and diagnostics.' if failed else
+                'Restoring captured output and evidence for validation.')
+    return ('Preserving partial output and diagnostics from the stopped agent.' if failed else
+            'Preserving generated output and evidence for validation.')
+
+
 def probe_task_identity():
     """Nonpaid probe evidence only; never request ECS credentials or use IAM."""
     uri = os.getenv('ECS_CONTAINER_METADATA_URI_V4')
@@ -176,6 +185,19 @@ class WorkflowExecution:
                     item = jobs.event_record(current, *mapped)
                     records.append(('event', payload['job_id']+':'+item['id'].zfill(12), owner, item))
                     changed = True
+            # Report a known execution failure before any capture/restore work.
+            # The job stays nonterminal until its diagnostics are durably saved;
+            # preserving files is not evidence that the agent finished an account.
+            if (handle.get('phase') == 'terminal' and handle.get('state', {}).get('status') == 'failed'
+                    and execution.get('failure_notice_attempt') != execution['authoring_attempt']):
+                mapped = public_activity(current, 'stage', {
+                    'stage': 'authoring_paragraph' if current['kind'] == 'paragraph' else 'authoring_account',
+                    'state': 'failed',
+                    'message': 'The research agent stopped before finishing. Preserving its partial output and diagnostics.'})
+                item = jobs.event_record(current, *mapped)
+                records.append(('event', payload['job_id']+':'+item['id'].zfill(12), owner, item))
+                execution['failure_notice_attempt'] = execution['authoring_attempt']
+                changed = True
             tx.insert_many(records)
             if changed: tx.update_existing('job', payload['job_id'], owner, current)
             execution['box'] = handle
@@ -253,7 +275,7 @@ class WorkflowExecution:
                     async with asyncio.timeout(int(setting('REVEAL_WORKFLOW_STEP_TIMEOUT_SECONDS', '360'))):
                         if execution['phase'] == 'validate':
                             await run_sync(self.activity, payload, token, 'stage',
-                                {'stage':'collecting_output','message':'Restoring the saved execution result and evidence.'})
+                                {'stage':'collecting_output','message':capture_message(execution, restoring=True)})
                         if execution.get('workspace') and scratch:
                             await self.restore_workspace(execution['workspace'], root)
                         workspace_ready = True
@@ -358,7 +380,7 @@ class WorkflowExecution:
             if execution.get('capture_complete'):
                 return {'next_phase':'validate' if await run_sync(state.capture_handed_off,self.repository,payload) else 'cleanup'}
             await run_sync(self.activity,payload,token,'stage',
-                {'stage':'collecting_output','message':'Capturing completed output and evidence.'})
+                {'stage':'collecting_output','message':capture_message(execution)})
             descriptor=queue['dispatch_input']
             require(isinstance(descriptor.get('selected_graphs'),list),'Direct capture requires its frozen graph selection')
             binding={'job_id':job['id'],'attempt':execution['authoring_attempt'],
@@ -399,7 +421,7 @@ class WorkflowExecution:
         if phase == 'capture':
             if execution.get('capture_complete'):
                 return {'next_phase': 'validate' if await run_sync(state.capture_handed_off, self.repository, payload) else 'cleanup'}
-            await run_sync(self.activity, payload, token, 'stage', {'stage': 'collecting_output', 'message': 'Capturing completed output and evidence.'})
+            await run_sync(self.activity, payload, token, 'stage', {'stage': 'collecting_output', 'message': capture_message(execution)})
             handle = await adapter.capture_once(request, box)
             marker = read_capture_marker(request, handle)
             require(marker, 'Capture checkpoint is missing')
@@ -504,7 +526,7 @@ class WorkflowExecution:
             if result.status == 'failed':
                 await run_sync(self.activity, payload, token, 'stage', {
                     'stage': 'authoring_paragraph' if job['kind'] == 'paragraph' else 'authoring_account',
-                    'state': 'failed', 'message': 'Agent execution stopped before a completed output was available.'})
+                    'state': 'failed', 'message': 'Agent execution did not finish. Its partial output and diagnostics have been preserved.'})
             await run_sync(jobs.finish, self.repository, job['id'], token, result.status,
                                    failure=authoring_failure(result, request) if result.status == 'failed' else None)
             return {'next_phase': 'complete', 'done': True}

@@ -7,10 +7,14 @@ from copy import deepcopy
 import hashlib
 import ipaddress
 import json
+import math
+import os
 from pathlib import Path, PurePosixPath
+import queue
 import re
 import threading
 import time
+import uuid
 from urllib.parse import quote, urlsplit
 from urllib.request import Request, build_opener, HTTPRedirectHandler
 
@@ -25,6 +29,9 @@ ALLOWED_TOOLS = frozenset({
     'reuse_scientific_objects', 'get_evidence_result', 'export_evidence_context', 'read_evidence',
 })
 MAX_RESPONSE = 10_000_000
+AUTHORING_PHASES = frozenset({'input_read', 'structure_preflight', 'cache_verification',
+    'export_wait', 'artifact_download', 'full_lint', 'diagnostic_report', 'draft_hydration', 'draft_write'})
+_authoring_timing_lock = threading.RLock()
 
 
 def canonical(value):
@@ -37,6 +44,120 @@ class ResearchAccessError(ValueError):
 
 def require(value, message):
     if not value: raise ResearchAccessError(message)
+
+
+def authoring_timing_snapshot(path, *, terminal=False, clock=None):
+    """Bounded operational timing only; no arguments, paths or source content."""
+    clock = clock or time.monotonic
+    path = Path(path)
+    with _authoring_timing_lock:
+        if not path.is_file() or path.is_symlink() or path.stat().st_size > 100_000: return None
+        try: data = json.loads(path.read_bytes())
+        except (OSError, ValueError): return None
+    if not isinstance(data, dict) or data.get('format') != 'reveal.authoring-timing/1' or not isinstance(data.get('calls'), list): return None
+    calls = []; rejected = 0
+    numeric = lambda value, maximum: type(value) in (int, float) and math.isfinite(value) and 0 <= value <= maximum
+    for item in data.get('calls', [])[-32:]:
+        if (not isinstance(item, dict) or not isinstance(item.get('call_id'), str) or
+                not re.fullmatch('[a-f0-9]{32}', item['call_id']) or
+                item.get('tool') not in ('lint_account', 'write_account_draft') or
+                item.get('phase') not in AUTHORING_PHASES or item.get('status') not in ('running', 'completed', 'failed') or
+                any(not numeric(item.get(key), 1e12) for key in ('started', 'phase_started')) or
+                not numeric(item.get('elapsed_ms'), 3_600_000) or not isinstance(item.get('durations_ms'), dict)):
+            rejected += 1; continue
+        durations = {key: value for key, value in item.get('durations_ms', {}).items()
+                     if key in AUTHORING_PHASES and numeric(value, 3_600_000)}
+        if len(durations) != len(item['durations_ms']): rejected += 1; continue
+        value = {key: item[key] for key in ('call_id', 'tool', 'phase', 'status', 'started', 'phase_started', 'elapsed_ms')}
+        value['durations_ms'] = durations
+        if value['status'] == 'running':
+            current = clock()
+            elapsed, active = (current-value['started'])*1000, (current-value['phase_started'])*1000
+            if not numeric(elapsed, 3_600_000) or not numeric(active, 3_600_000): rejected += 1; continue
+            value['elapsed_ms'] = round(elapsed, 3)
+            value['active_phase_elapsed_ms'] = round(active, 3)
+            if terminal: value['status'] = 'interrupted'
+        calls.append(value)
+    dropped = data.get('dropped_calls', 0)
+    if type(dropped) is not int or not 0 <= dropped <= 1_000_000: dropped = 0
+    dropped += max(0, len(data['calls'])-32)
+    return {'format': 'reveal.authoring-timing/1', 'calls': calls, 'dropped_calls': dropped,
+            'rejected_records': rejected, 'complete': dropped == 0 and rejected == 0}
+
+
+class AuthoringTiming:
+    """One local checker budget and an atomic, separately captured phase journal."""
+    def __init__(self, path, tool, deadline, *, clock=None):
+        self.path, self.deadline, self.clock = Path(path), deadline, clock or time.monotonic
+        current = self.clock()
+        self.value = {'call_id': uuid.uuid4().hex, 'tool': tool, 'status': 'running', 'phase': 'input_read',
+            'started': current, 'phase_started': current, 'elapsed_ms': 0, 'durations_ms': {}}
+        with _authoring_timing_lock:
+            self._save()
+
+    def _save(self):
+        # The runner owns this directory; the model cannot edit operational
+        # metadata. Atomic replacement also makes five-second snapshots safe.
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = self.path.with_suffix('.tmp')
+        require(not self.path.is_symlink() and not temporary.is_symlink(), 'Unsafe authoring timing destination')
+        with _authoring_timing_lock:
+            previous = authoring_timing_snapshot(self.path, clock=self.clock) or {'calls': []}
+            calls = previous['calls']; dropped = previous.get('dropped_calls', 0)
+            matches = [index for index, item in enumerate(calls) if item['call_id'] == self.value['call_id']]
+            if matches: calls[matches[0]] = deepcopy(self.value)
+            elif not dropped or not calls or self.value['started'] >= calls[0]['started']:
+                calls.append(deepcopy(self.value))
+            if len(calls) > 32:
+                dropped += len(calls)-32; calls = calls[-32:]
+            raw = canonical({'format': 'reveal.authoring-timing/1', 'calls': calls, 'dropped_calls': dropped})
+            require(len(raw) <= 100_000, 'Authoring timing exceeds operational metadata bound')
+            descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
+            with os.fdopen(descriptor, 'wb') as handle:
+                os.fchmod(handle.fileno(), 0o600)
+                handle.write(raw)
+            temporary.replace(self.path)
+
+    def check(self):
+        require(self.clock() < self.deadline, 'Authoring check deadline reached; retry the same draft/lint call to resume verified evidence. No validation succeeded.')
+
+    def require_remaining(self, minimum):
+        remaining = max(0, self.deadline-self.clock())
+        require(remaining >= minimum,
+            f'Only {remaining:.3f} seconds remain in the current execution/tool budget; too little to start an authoring check. No validation succeeded. Save the draft and its exact diagnostics for a new attempt; do not infer insufficient scientific evidence.')
+
+    def phase(self, name):
+        require(name in AUTHORING_PHASES, 'Unknown authoring timing phase')
+        self.check()
+        current = self.clock(); previous = self.value['phase']
+        durations = self.value['durations_ms']
+        durations[previous] = round(durations.get(previous, 0) + (current-self.value['phase_started'])*1000, 3)
+        self.value.update(phase=name, phase_started=current, elapsed_ms=round((current-self.value['started'])*1000, 3))
+        self._save()
+
+    def feedback(self, result, execution_deadline=None):
+        self.check()
+        if type(execution_deadline) not in (int, float): return result
+        current = self.clock()
+        remaining = round(max(0, execution_deadline-current), 3)
+        value = deepcopy(result)
+        value.setdefault('structuredContent', {})['execution_budget'] = {
+            'remaining_seconds': remaining,
+            'authoring_call_elapsed_seconds': round(max(0, current-self.value['started']), 3)}
+        value.setdefault('content', []).append({'type': 'text', 'text':
+            f'Execution time remaining: {remaining:.3f} seconds. Prioritize required repairs, then return the completed output; optional expansion is not required. This timing is operational guidance, not a scientific finding.'})
+        return value
+
+    def __enter__(self):
+        self.check(); return self
+
+    def __exit__(self, kind, value, traceback):
+        current = self.clock(); phase = self.value['phase']
+        self.value['durations_ms'][phase] = round(self.value['durations_ms'].get(phase, 0) + (current-self.value['phase_started'])*1000, 3)
+        self.value.update(status='failed' if kind or current >= self.deadline else 'completed',
+                          elapsed_ms=round((current-self.value['started'])*1000, 3))
+        self._save()
+        if kind is None: self.check()  # A late checker/report can never return success.
 
 
 def validate_context(value):
@@ -103,6 +224,7 @@ class ResearchInvocation:
         self.cancelled = threading.Event()
 
     def check(self):
+        require(not self.client._frozen, 'Hosted research execution has ended')
         require(not self.cancelled.is_set() and time.monotonic() < self.deadline,
                 'Research response deadline reached; retry the same tool with identical arguments to recover its durable operation. This is unavailable evidence, not an empty result.')
 
@@ -141,6 +263,7 @@ class HostedResearchClient:
         self._lock = threading.RLock()
         self._materialize_lock = threading.RLock()
         self._calls = threading.local()
+        self._transport_slots = threading.BoundedSemaphore(4)
         self.operations = {}
         self.receipt_ids, self.reuse_receipt_ids, self.existing_account_ids = set(), set(), set()
         self._sequence = 0
@@ -169,31 +292,47 @@ class HostedResearchClient:
     def _http(self, url, body=None, maximum=MAX_RESPONSE):
         invocation = getattr(self._calls, 'current', None)
         if invocation: invocation.check()
-        timeout = min(self.timeout, invocation.deadline-time.monotonic()) if invocation else self.timeout
+        deadline = min(time.monotonic() + self.timeout, invocation.deadline) if invocation else time.monotonic() + self.timeout
+        timeout = deadline - time.monotonic()
         require(timeout > 0, 'Research response deadline reached; retry the same tool with identical arguments')
         request = Request(url, body, {'Authorization': 'Bearer ' + self._token,
             'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream',
             'MCP-Protocol-Version': '2025-03-26'}, method='POST' if body is not None else 'GET')
+        require(self._transport_slots.acquire(blocking=False), 'Research transport has outstanding reads; retry after they finish')
+        outcome = queue.Queue(maxsize=1)
+        abandoned = threading.Event()
+        def read_response():
+            # Only bytes cross this boundary. A DNS/socket read that outlives
+            # the caller cannot modify journals, receipts or cached artifacts.
+            try:
+                with self._opener.open(request, timeout=timeout) as response:
+                    require(response.geturl() == url, 'Research response changed its destination')
+                    read = getattr(response, 'read1', response.read)
+                    chunks, received = [], 0
+                    while received <= maximum:
+                        require(not abandoned.is_set() and time.monotonic() < deadline, 'Research response deadline reached')
+                        if invocation: invocation.check()
+                        chunk = read(min(65_536, maximum + 1 - received))
+                        if not chunk: break
+                        chunks.append(chunk); received += len(chunk)
+                    raw = b''.join(chunks)
+                    require(len(raw) <= maximum, 'Research response exceeds capture limit')
+                    require(self._token.encode() not in raw, 'Research response contains credential material')
+                    outcome.put((True, raw))
+            except Exception as exc:
+                outcome.put((False, exc))
+            finally: self._transport_slots.release()
+        threading.Thread(target=read_response, daemon=True).start()
         try:
-            with self._opener.open(request, timeout=timeout) as response:
-                require(response.geturl() == url, 'Research response changed its destination')
-                # read1 performs at most one underlying read. Check the common
-                # deadline between chunks, including a slowly streamed body.
-                read = getattr(response, 'read1', response.read)
-                chunks, received = [], 0
-                while received <= maximum:
-                    if invocation: invocation.check()
-                    chunk = read(min(65_536, maximum + 1 - received))
-                    if not chunk: break
-                    chunks.append(chunk); received += len(chunk)
-                raw = b''.join(chunks)
-                if invocation: invocation.check()
-                require(len(raw) <= maximum, 'Research response exceeds capture limit')
-                require(self._token.encode() not in raw, 'Research response contains credential material')
-                return raw
-        except ResearchAccessError: raise
-        except Exception as exc:
-            raise ResearchAccessError(type(exc).__name__ + ': research service unavailable; retry the same tool with identical arguments to recover the operation') from None
+            success, value = outcome.get(timeout=max(0, deadline-time.monotonic()))
+        except queue.Empty:
+            abandoned.set()
+            raise ResearchAccessError('Research response deadline reached; retry the same tool with identical arguments to recover its durable operation') from None
+        if invocation: invocation.check()
+        require(time.monotonic() < deadline, 'Research response deadline reached; retry the same tool with identical arguments')
+        if success: return value
+        if isinstance(value, ResearchAccessError): raise value
+        raise ResearchAccessError(type(value).__name__ + ': research service unavailable; retry the same tool with identical arguments to recover the operation') from None
 
     def rpc(self, method, params=None):
         with self._lock:
@@ -368,13 +507,16 @@ class HostedResearchClient:
         invocation.accept(result)
         return result
 
-    def materialize(self):
+    def materialize(self, *, deadline=None, progress=None):
         # The export acknowledgement, observations and downloads share one
         # deadline. Already verified local files survive for incremental retry.
         invocation = self.begin_bounded_call('export_evidence_context', {}, self.operation_wait)
+        if deadline is not None: invocation.deadline = min(invocation.deadline, deadline)
         previous = getattr(self._calls, 'current', None)
         self._calls.current = invocation
-        try: return self._materialize()
+        try:
+            invocation.check()
+            return self._materialize(progress=progress)
         except ResearchAccessError as exc:
             with self._lock:
                 arguments = {'receipt_ids': sorted(self.receipt_ids), 'reuse_receipt_ids': sorted(self.reuse_receipt_ids)}
@@ -383,8 +525,7 @@ class HostedResearchClient:
             raise ResearchAccessError(str(exc)+suffix+' Retry the same draft/lint call to resume verified incremental materialization.') from None
         finally: self._calls.current = previous
 
-    def _materialize(self):
-        self.definitions()
+    def _materialize(self, *, progress=None):
         if not self._materialize_lock.acquire(blocking=False):
             raise ResearchAccessError('Evidence materialization is already running; no duplicate export was started')
         try:
@@ -392,6 +533,11 @@ class HostedResearchClient:
             require(not self._frozen, 'Hosted research execution has ended')
             with self._lock:
                 arguments = {'receipt_ids': sorted(self.receipt_ids), 'reuse_receipt_ids': sorted(self.reuse_receipt_ids)}
+            if progress: progress('cache_verification')
+            cached = self._cached_materialization(arguments)
+            if cached is not None: return cached
+            if progress: progress('export_wait')
+            self.definitions()
             result = self.call('export_evidence_context', arguments)
             require(not result.get('isError'), 'Evidence closure export failed')
             value = self.payload(result)
@@ -409,6 +555,7 @@ class HostedResearchClient:
             if operation_id:
                 require(value.get('state') == 'succeeded', 'Evidence closure export failed')
                 value = value.get('result', {})
+            if progress: progress('artifact_download')
             if value.get('format') == 'reveal.validation-context-export/2':
                 descriptor = value.get('package_artifact', {})
                 require(descriptor.get('sha256') == value.get('package_sha256'), 'Exported package descriptor differs')
@@ -500,6 +647,60 @@ class HostedResearchClient:
             self._calls.current.check()
             (self.root / 'manifest.json').write_bytes(canonical(value.get('manifest', {})))
             with self._lock: self._write_receipts()
+            marker = {'format': 'reveal.hosted-materialization/1',
+                'selection_sha256': self._selection_hash(arguments, seed_raw),
+                'package_sha256': value['package_sha256'],
+                'manifest_sha256': hashlib.sha256(canonical(value.get('manifest', {}))).hexdigest()}
+            self._calls.current.check()
+            target = self.root / 'materialized.json'; temporary = target.with_suffix('.tmp')
+            require(not target.is_symlink() and not temporary.is_symlink(), 'Evidence destination is unsafe')
+            temporary.write_bytes(canonical(marker)); temporary.replace(target); target.chmod(0o444)
+            self._calls.current.check()
             return package_path
         finally:
             self._materialize_lock.release()
+
+    def _selection_hash(self, arguments, seed_raw):
+        return hashlib.sha256(canonical([self.context, self.execution_id, arguments,
+            hashlib.sha256(seed_raw).hexdigest()])).hexdigest()
+
+    def _cached_materialization(self, arguments):
+        """Recheck exact local bytes; this draft aid grants no acceptance authority."""
+        marker_path = self.root / 'materialized.json'
+        require(not marker_path.is_symlink(), 'Evidence destination is unsafe')
+        if not marker_path.is_file(): return None
+        require(marker_path.stat().st_size <= 4096, 'Cached materialization marker exceeds bound')
+        marker = json.loads(marker_path.read_bytes())
+        require(marker.get('format') == 'reveal.hosted-materialization/1', 'Invalid cached materialization marker')
+        with self.seed_path.open('rb') as handle: seed_raw = handle.read(8_000_001)
+        require(len(seed_raw) <= 8_000_000, 'Seed evidence package size exceeds bound')
+        if marker.get('selection_sha256') != self._selection_hash(arguments, seed_raw): return None
+        def read(relative, maximum, checksum):
+            self._calls.current.check()
+            require(isinstance(relative, str) and len(relative) < 1024 and '\\' not in relative
+                and all(part and not part.startswith('.') for part in relative.split('/')),
+                'Evidence artifact path is unsafe')
+            path = self.root / relative
+            require(not path.is_symlink() and path.resolve().is_relative_to(self.root.resolve()), 'Evidence destination is unsafe')
+            if not path.is_file(): return None
+            with path.open('rb') as handle: raw = handle.read(maximum+1)
+            require(len(raw) <= maximum and hashlib.sha256(raw).hexdigest() == checksum, 'Cached evidence checksum differs')
+            return raw
+        raw = read('evidence-package.json', 8_000_000, marker.get('package_sha256'))
+        manifest_raw = read('manifest.json', MAX_RESPONSE, marker.get('manifest_sha256'))
+        if raw is None or manifest_raw is None: return None
+        package = json.loads(raw); seed = json.loads(seed_raw)
+        require(package.get('selection') == seed.get('selection') and
+            package.get('research_request_id') == self.context['research_request_id'],
+            'Cached evidence changed the frozen research question')
+        total = len(raw)
+        for descriptor in package.get('source_artifacts', {}).values():
+            relative, size = descriptor['path'], descriptor['size_bytes']
+            require(relative.startswith(('sources/', 'imports/', 'reuse/')) and type(size) is int and 0 <= size <= 8_000_000,
+                'Evidence artifact exceeds bounds')
+            total += size; require(total <= 32_000_000, 'Evidence closure exceeds bounded local capture')
+            data = read(relative, size, descriptor.get('sha256'))
+            if data is None: return None
+            require(len(data) == size, 'Cached evidence size differs')
+        self._calls.current.check()
+        return self.root / 'evidence-package.json'

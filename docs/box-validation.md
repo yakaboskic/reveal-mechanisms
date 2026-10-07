@@ -461,3 +461,40 @@ evidence materialization, an earlier draft/lint/repair cycle and bounded provide
 timing diagnostics. The execution timeout stays unchanged. Regression fixtures
 are synthetic; the colleague's retained account and original investigation
 workspace are not modified, revalidated, submitted or rerun.
+
+## October 7 local timeout: failure reported after preservation
+
+Local job `81404538-9c6f-4acd-bb2a-91c1d4baca4c` uniquely matched the reported
+`lint_account` timeout message among the inspected recent local and QA failures.
+Its retained runtime ran for 900.226 seconds. The first draft write began at
+636.3 seconds and failed after 22.7 seconds while observing/materializing an
+export. That durable export succeeded in 20.063 seconds and was recovered by a
+later status read. The successful write retry began at 751.0 seconds and took
+12.4 seconds. The first lint took 7.026 seconds and reported two non-verbatim
+EvidenceItem snippets, one activity-input warning and an optional CFDE advisory.
+It reported no schema errors. After a Read and two Edits, a second lint started
+with only 6.734 seconds left and was interrupted at the overall deadline.
+
+The timeout occurred at 23:32:27 UTC, before capture at 23:32:41 and restoration
+at 23:33:16. The workflow reported the authoring failure at 23:33:37 and saved
+the terminal job at 23:33:41. Capturing files did not mean that the agent had
+finished its account. The old UI also inferred completion from stage transitions
+and displayed the late failure notification as another short agent attempt.
+
+The frozen contract, skill, documentation and release-manifest hashes match
+`ae8f214`, not the later `0d652e8` kit. It lacks the new skeleton and timing
+checkpoints. Recorded tool intervals cover 80.290 seconds of the run; the older
+telemetry cannot classify the remaining gaps as provider compute, throttling,
+network delay or reasoning. The account and evidence have not been edited or
+revalidated. The exact retained diagnostic bytes and investigation receipt are
+under `.runtime/timeout-investigation/81404538-9c6f-4acd-bb2a-91c1d4baca4c/`.
+
+The follow-up reports a known stopped agent before preserving diagnostics,
+keeps preservation distinct from scientific completion, and projects historical
+late failure notices without inventing another timed attempt. Repeated draft
+checks reuse an exact verified local evidence closure for the same captured
+receipt selection. New materialization still uses the authorized export API;
+final account acceptance still reauthorizes and validates the source context.
+Checker calls inherit the remaining execution budget and retain bounded phase
+timings without prompt, source or provider-response text. The 900-second agent
+limit is not increased.

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError, backend, errorMessage, request } from "../lib/api";
 import { followJob, followWorkspace } from "../lib/events";
+import { activityMessage, activityStageLabel } from "../lib/activity";
 import { createMutationKeys } from "../lib/mutations";
 import { analysisAccountResults, localWorkApi, localWorkHref } from "../lib/local-work";
 import { ResearchModeMenu } from "../components/ResearchModeMenu";
@@ -158,9 +159,9 @@ export default function Home() {
         setActivity(items => items.some(item => item.id === event.id) ? items : [...items, event].slice(-1000));
         setJob(value => value?.id === id ? { ...value, status: event.status, stage: event.stage, result: event.result || value.result,
           updated_at: event.occurred_at, last_event_id: event.id } : value);
-        if (terminal(event.status)) { setStreamState("Activity complete"); void readLatest().then(() => refresh(["jobs"])).catch(error => setError(errorMessage(error))); }
+        if (terminal(event.status)) { setStreamState("Activity stream ended"); void readLatest().then(() => refresh(["jobs"])).catch(error => setError(errorMessage(error))); }
       },
-    }).then(() => { if (!controller.signal.aborted) setStreamState("Activity complete"); })
+    }).then(() => { if (!controller.signal.aborted) setStreamState("Activity stream ended"); })
       .catch(error => { if (!controller.signal.aborted) setStreamState(errorMessage(error)); });
     return () => controller.abort();
   // The stream owns status changes; only selecting a different job reconnects it.
@@ -297,12 +298,12 @@ export default function Home() {
             <label htmlFor="job-select">Workspace jobs</label><select id="job-select" value={job?.id || ""} disabled={!!busy} onChange={event => { if (event.target.value) void openJob(event.target.value); }}><option value="">Choose a job to follow</option>{jobs.map(value => <option key={value.id} value={value.id}>{value.kind === "analysis" ? "Analysis" : "Paragraph"} — {readable(value.status)} — {date(value.created_at)}</option>)}</select>
             {moreRecords && <p className="small muted">Showing the most recent 100 drafts and jobs. A saved page URL can reopen an older item.</p>}
             {!job ? <div className="activity-empty"><svg viewBox="0 0 64 64" aria-hidden="true"><path d="M12 43h8l7-22 10 32 7-23 4 13h8" /><path d="M8 12v44h48" /></svg><h3>Your investigation will appear here.</h3><p>Start an analysis or select an existing job. Events arrive live as evidence is collected and reviewed.</p></div> : <>
-              <div className="job-meta"><p>{job.kind === "analysis" ? "Analysis" : "Research paragraph"} started {date(job.created_at)}</p><span className="small muted">{readable(job.stage)}</span></div>
+              <div className="job-meta"><p>{job.kind === "analysis" ? "Analysis" : "Research paragraph"} started {date(job.created_at)}</p><span className="small muted">{activityStageLabel(job.stage)}</span></div>
               <div className="stream-toolbar"><span className="small muted" role="status">{streamState}</span><div><button className="quiet small" onClick={() => setStreamAttempt(value => value + 1)}>Reconnect</button>{!terminal(job.status) && <button className="danger small" onClick={cancel} disabled={!!busy || job.status === "cancel_requested"}>{job.status === "cancel_requested" ? "Stopping…" : "Stop job"}</button>}</div></div>
               {!!job.warnings.length && <div className="notice"><ul>{job.warnings.map(value => <li key={value}>{value}</li>)}</ul></div>}
               {job.failure && <div className="notice error" role="alert"><div><strong>Research could not complete</strong><p>{job.failure.message}</p><span className="small">{job.failure.code}</span>{job.failure.code.startsWith("REVIEW_") && job.failure.retryable && <p><button className="secondary" onClick={retryReview} disabled={!!busy}>{busy === "review" ? "Requesting review…" : "Retry saved review"}</button></p>}</div></div>}
               {job.status === "cancelled" && <p className="notice">This job was stopped. No successful result is implied.</p>}
-              <div className="event-log" aria-label="Job activity events">{!activity.length && <p className="empty">Loading saved activity…</p>}{activity.map(event => <article className={"event " + event.event_type} key={event.id}><div className="event-header"><span>{event.detail?.tool_name || readable(event.event_type)}</span><time dateTime={event.occurred_at}>{new Date(event.occurred_at).toLocaleTimeString()}</time></div><p>{event.message}</p>{event.detail?.output_excerpt && <details><summary>Captured output</summary><pre>{event.detail.output_excerpt}</pre></details>}{event.detail?.artifact_sha256 && <a href={backend("artifacts/" + event.detail.artifact_sha256)} target="_blank" rel="noreferrer">Open captured artifact</a>}</article>)}</div>
+              <div className="event-log" aria-label="Job activity events">{!activity.length && <p className="empty">Loading saved activity…</p>}{activity.map(event => <article className={"event " + event.event_type} key={event.id}><div className="event-header"><span>{event.detail?.tool_name || readable(event.event_type)}</span><time dateTime={event.occurred_at}>{new Date(event.occurred_at).toLocaleTimeString()}</time></div><p>{activityMessage(event)}</p>{event.detail?.output_excerpt && <details><summary>Captured output</summary><pre>{event.detail.output_excerpt}</pre></details>}{event.detail?.artifact_sha256 && <a href={backend("artifacts/" + event.detail.artifact_sha256)} target="_blank" rel="noreferrer">Open captured artifact</a>}</article>)}</div>
               {job.result && <ResultView job={job} openJob={openJob} />}
               <details className="record-details"><summary>Job record and evidence</summary><p className="small">Job ID: {job.id}</p><div className="result-links"><a href={backend("jobs/" + job.id)} target="_blank" rel="noreferrer">Job JSON</a><a href={backend("jobs/" + job.id + "/evidence-package")} target="_blank" rel="noreferrer">Frozen evidence package</a></div><pre>{JSON.stringify(job, null, 2)}</pre></details>
             </>}

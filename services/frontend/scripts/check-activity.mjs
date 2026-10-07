@@ -96,6 +96,14 @@ async function harness(name, viewport) {
     window.__activityFixture = mock;
     window.fetch = async (input, init) => {
       const url = new URL(typeof input === 'string' ? input : input.url, location.href);
+      if (url.pathname === '/api/backend/v1/me/workspace/events') {
+        let closed = false;
+        const body = new ReadableStream({ start(controller) {
+          controller.enqueue(encoder.encode(': isolated workspace fixture\n\n'));
+          init?.signal?.addEventListener('abort', () => { if (!closed) { closed = true; controller.close(); } }, { once: true });
+        }, cancel() { closed = true; } });
+        return new Response(body, { status: 200, headers: { 'content-type': 'text/event-stream' } });
+      }
       if (!/^\/api\/backend\/v1\/jobs\/[^/]+\/events$/.test(url.pathname)) return original(input, init);
       mock.requests.push({ path: url.pathname, after: url.searchParams.get('after'), lastEventId: new Headers(init?.headers).get('Last-Event-ID') });
       const stream = { controller: null, closed: false };
@@ -121,6 +129,10 @@ async function harness(name, viewport) {
     if (path === '/api/backend/v1/me') return respond({ user_id: userId, display_name: 'Activity browser fixture', email: null,
       email_verified: null, orcid: null, orcid_authenticated: false, person: null, principal_kind: 'anonymous', workspace_expires_at: null });
     if (path === `/api/backend/v1/jobs/${jobId}`) { if (state.jobGate) await state.jobGate.promise; return respond(state.job); }
+    if (path === `/api/backend/v1/research-requests/${requestId}`) return respond({ id: requestId, owner_user_id: userId,
+      source_draft_id: draftId, source_draft_version: 1, composer, question_id: gap.object.id,
+      document: { knowledge_gaps: [gap.object] }, attribution: { user_id: userId, person_id: null, display_name: 'Activity browser fixture',
+        orcid: null, orcid_authenticated: false, observed_at: now, principal_kind: 'anonymous' }, submitted_at: now, linked_dismech_context: [] });
     if (path === `/api/backend/v1/drafts/${draftId}`) return respond(draft);
     if (path === '/api/backend/v1/knowledge-gaps') return respond(fixture.gaps);
     if (path === '/api/backend/v1/knowledge-gaps/search') return respond({ items: [], next_cursor: null });
@@ -278,7 +290,7 @@ async function replayAheadScenario() {
     await h.page.getByText('Fixture replay: an earlier research update is still arriving.', { exact: true }).waitFor();
     await stage(h, 'validation');
     const research = h.page.locator('.activity-stage[data-stage="research"]');
-    assert.equal(await research.getAttribute('data-state'), 'completed');
+    assert.equal(await research.getAttribute('data-state'), 'ended');
     assert.equal(await research.locator('.pulse').count(), 0, 'Older replayed research must not regain the active pulse');
     assert.equal(await h.page.locator('.activity-stage').last().getAttribute('data-stage'), 'validation');
     h.result.checks.push('Fetched job validation at cursor 50 stays active while research event 1 replays; the older stage has no pulse');
@@ -304,11 +316,11 @@ async function outputCollectionScenario(name, viewport) {
     await stage(h, 'collection');
     const research = h.page.locator('.activity-stage[data-stage="research"]');
     const collection = h.page.locator('.activity-stage[data-stage="collection"]');
-    assert.equal(await research.getAttribute('data-state'), 'completed');
-    assert.equal(await research.locator('.stage-state').innerText(), 'Complete');
+    assert.equal(await research.getAttribute('data-state'), 'ended');
+    assert.equal(await research.locator('.stage-state').innerText(), 'Ended');
     assert.equal(await research.locator('.stage-duration').innerText(), '10s');
     assert.equal(await research.locator('.pulse').count(), 0);
-    assert.equal(await collection.locator('.stage-name').innerText(), 'Collecting results');
+    assert.equal(await collection.locator('.stage-name').innerText(), 'Preserving output and evidence');
     await h.page.getByText(prose, { exact: true }).waitFor();
     const timer = collection.locator('.stage-duration');
     const before = await timer.innerText();
@@ -325,8 +337,59 @@ async function outputCollectionScenario(name, viewport) {
     assert.equal(await research.locator('.stage-duration').innerText(), '10s');
     await h.page.getByText(prose, { exact: true }).waitFor();
     assert.equal(h.state.job.stage, 'authoring_account', 'SSE alone advances every displayed stage');
-    h.result.checks.push('Final agent prose remains visible; research completes at handoff; output collection becomes the only working section before any refreshed job snapshot');
+    h.result.checks.push('Final agent prose remains visible; research ends at handoff without implying success; preservation becomes the only working section before any refreshed job snapshot');
     h.result.checks.push('Collection timer advances independently, then stops at scientific validation without claiming the job is accepted');
+    assert.deepEqual(h.state.errors, []); assert.deepEqual(h.state.unexpected, []);
+    assert.ok(h.state.requests.every(request => request.method === 'GET'));
+  } finally { await h.close(); }
+}
+async function failedCaptureScenario(name, viewport, early) {
+  const h = await harness(name, viewport);
+  try {
+    h.state.job = { ...h.state.job, stage: 'authoring_account' };
+    h.state.gapGate.release(); await h.open();
+    const base = Date.now() - 960000;
+    const time = seconds => new Date(base + seconds * 1000).toISOString();
+    await h.emit([h.event('Fixture agent reading the exact source.', 'authoring_account', { occurred_at: time(0) })]);
+    if (early) {
+      await h.emit([h.event('Fixture execution reached its 900-second limit while checking the draft.', 'authoring_account', {
+        occurred_at: time(900), detail: detail({ kind: 'preparation', state: 'failed', source: 'harness' }),
+      })]);
+      await stage(h, 'research', 'failed');
+      assert.equal(await h.page.locator('.activity-stage[data-stage="research"] .stage-duration').innerText(), '15m 0s');
+    }
+    await h.emit([h.event('Capturing completed output and evidence.', 'collecting_output', {
+      occurred_at: time(900), detail: detail({ kind: 'preparation', source: 'worker' }),
+    })]);
+    await stage(h, 'collection');
+    await h.page.getByText('Preserving available output and evidence.', { exact: true }).waitFor();
+    if (early) assert.equal(await h.page.locator('.activity-stage[data-stage="research"]').getAttribute('data-state'), 'failed');
+    await screenshot(h, 'preserving-after-failure');
+    await h.emit([h.event('Restoring the saved execution result and evidence.', 'collecting_output', {
+      occurred_at: time(934), detail: detail({ kind: 'preparation', source: 'worker' }),
+    }), h.event('Agent execution stopped before a completed output was available.', 'authoring_account', {
+      occurred_at: time(955), detail: detail({ kind: 'preparation', state: 'failed', source: 'worker' }),
+    })]);
+    h.state.job.failure = { code: 'AGENT_FAILED', message: 'Fixture: the agent reached its execution limit while checking the draft. No output was accepted.', retryable: true };
+    h.state.job.completed_at = time(959);
+    await h.emit([h.event(h.state.job.failure.message, 'authoring_account', { occurred_at: time(959), status: 'failed', event_type: 'failure', detail: null })]);
+    await h.page.evaluate(() => window.__activityFixture.finish());
+    await stage(h, 'outcome', 'failed');
+    const research = h.page.locator('.activity-stage[data-stage="research"]');
+    const collection = h.page.locator('.activity-stage[data-stage="collection"]');
+    const outcome = h.page.locator('.activity-stage[data-stage="outcome"]');
+    assert.equal(await research.count(), 1, 'No second timed research stage for a late failure notice');
+    assert.equal(await research.getAttribute('data-state'), 'failed');
+    assert.equal(await research.locator('.stage-duration').innerText(), '15m 0s');
+    assert.equal(await collection.locator('.stage-state').innerText(), 'Preserved');
+    assert.equal(await collection.locator('.stage-duration').innerText(), '55s');
+    assert.equal(await outcome.locator('.stage-duration, .step-duration').count(), 0, 'Outcome reporting must not look like a four-second agent run');
+    assert.equal(await h.page.getByText('Scientific accounts ready', { exact: true }).count(), 0);
+    assert.equal(await h.page.getByText('Collecting results', { exact: true }).count(), 0);
+    assert.deepEqual(await h.page.locator('.activity-stage').evaluateAll(nodes => nodes.map(node => node.dataset.stage)), ['research', 'collection', 'outcome']);
+    await screenshot(h, 'failed-outcome');
+    h.result.checks.push('Failed authoring stays failed during preservation; preserved evidence never implies accepted science');
+    h.result.checks.push('Historical late failure retains chronology and original agent duration, with an untimed outcome notice');
     assert.deepEqual(h.state.errors, []); assert.deepEqual(h.state.unexpected, []);
     assert.ok(h.state.requests.every(request => request.method === 'GET'));
   } finally { await h.close(); }
@@ -477,6 +540,8 @@ try {
     ['replay-ahead', replayAheadScenario],
     ['output-collection-desktop', () => outputCollectionScenario('output-collection-desktop', { width: 1280, height: 900 })],
     ['output-collection-mobile', () => outputCollectionScenario('output-collection-mobile', { width: 390, height: 844 })],
+    ['failed-capture-historical', () => failedCaptureScenario('failed-capture-historical', { width: 1280, height: 900 }, false)],
+    ['failed-capture-early-mobile', () => failedCaptureScenario('failed-capture-early-mobile', { width: 390, height: 844 }, true)],
     ['compact-tools-desktop', () => compactToolsScenario('compact-tools-desktop', { width: 1280, height: 900 })],
     ['compact-tools-mobile', () => compactToolsScenario('compact-tools-mobile', { width: 390, height: 844 })],
   ].filter(([name]) => !filter || filter.test(name));

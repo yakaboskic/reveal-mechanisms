@@ -276,43 +276,53 @@ def terminate(process):
 
 def lint_tool(filename, ledger):
     deadline = time.monotonic() + 55
-    from .scientific_account_lint import lint_scientific_account
-    from .authoring_structure import preflight_document, diagnostic_response
-    from .evidence_package import decode
-    path = OUTPUT / filename
-    if path.is_symlink() or not path.is_file() or path.stat().st_size > 4_000_000:
-        return {'isError': True, 'content': [{'type': 'text', 'text': 'Account output missing, symlinked or oversized'}]}
-    frozen = STATE / ('lint-' + filename)
-    frozen.write_bytes(path.read_bytes())
-    runtime = json.loads((STATE / 'runtime.json').read_text())
-    try:
-        document = decode(frozen.read_bytes(), 'yaml' if path.suffix in ('.yaml', '.yml') else 'json')
-    except ValueError:
-        raise DraftValidationError('Account is not valid JSON/YAML; repair its document syntax') from None
-    structure = preflight_document(document, dapper_root=runtime['dapper_root'],
-        release_lock=BASE / 'bundle/services/backend/agent-runtime/dapper-release.json',
-        timeout=min(12, max(0.1, deadline - time.monotonic())))
-    if not structure['valid']:
-        return diagnostic_response(structure, output=OUTPUT, filename=filename,
-            capture_roots=(OUTPUT, STATE / 'ledger', STATE / 'runtime.json'))
-    # The final manifest is written only when execution ends. Snapshot completed
-    # captures under the ledger lock so draft lint sees the same trusted bytes
-    # without freezing or interrupting the agent's remaining tool calls.
-    ledger_path = ledger.root / 'lint-sources.json'
-    with ledger.lock:
-        write_json(ledger_path, json.loads(ledger.sanitized_bytes({'calls': ledger.entries})[0]))
-    evidence_path = RESEARCH.materialize() if RESEARCH else runtime['evidence_package']
-    remaining = deadline - time.monotonic()
-    if remaining <= 0:
-        raise DraftValidationError('Draft lint deadline reached during evidence materialization; retry this call to resume verified progress')
-    report = lint_scientific_account(frozen, dapper_root=runtime['dapper_root'],
-                                     release_lock=BASE / 'bundle/services/backend/agent-runtime/dapper-release.json',
-                                     evidence_package=evidence_path, ledger_path=ledger_path, mode='draft', timeout=remaining)
-    checks = {finding.get('check') for finding in report.get('findings', []) if finding.get('severity') == 'error'}
-    if checks & {'source-ancestry', 'claim-evidence'}:
-        report['repair_guidance'] = 'Each component Claim needs explicit, target-matched EvidenceItems and unchanged eligible scientific source Files with exact locators. Use captured reference data, authorized prior science or eligible independent evidence. Seek a relevant CFDE connection when supported and explain its absence when not; never attach an unrelated row to satisfy guidance. If no useful supported interpretation exists, save an insufficient-evidence outcome identifying the missing observation.'
-    return diagnostic_response(report, output=OUTPUT, filename=filename,
-        capture_roots=(OUTPUT, STATE / 'ledger', STATE / 'runtime.json'))
+    from .box_research import AuthoringTiming
+    with AuthoringTiming(STATE / 'ledger/authoring-timing.json', 'lint_account', deadline, clock=time.monotonic) as timing:
+        from .scientific_account_lint import lint_scientific_account
+        from .authoring_structure import preflight_document, diagnostic_response
+        from .evidence_package import decode
+        path = OUTPUT / filename
+        if path.is_symlink() or not path.is_file() or path.stat().st_size > 4_000_000:
+            return {'isError': True, 'content': [{'type': 'text', 'text': 'Account output missing, symlinked or oversized'}]}
+        frozen = STATE / ('lint-' + filename)
+        frozen.write_bytes(path.read_bytes())
+        runtime = json.loads((STATE / 'runtime.json').read_text())
+        deadline = min(deadline, runtime.get('execution_deadline_monotonic', deadline))
+        timing.deadline = deadline
+        timing.require_remaining(1)
+        timing.phase('structure_preflight')
+        try:
+            document = decode(frozen.read_bytes(), 'yaml' if path.suffix in ('.yaml', '.yml') else 'json')
+        except ValueError:
+            raise DraftValidationError('Account is not valid JSON/YAML; repair its document syntax') from None
+        timing.require_remaining(0.1)
+        structure = preflight_document(document, dapper_root=runtime['dapper_root'],
+            release_lock=BASE / 'bundle/services/backend/agent-runtime/dapper-release.json',
+            timeout=min(12, deadline - time.monotonic()))
+        if not structure['valid']:
+            timing.phase('diagnostic_report')
+            return timing.feedback(diagnostic_response(structure, output=OUTPUT, filename=filename,
+                capture_roots=(OUTPUT, STATE / 'ledger', STATE / 'runtime.json')), runtime.get('execution_deadline_monotonic'))
+        # The final manifest is written only when execution ends. Snapshot completed
+        # captures under the ledger lock so draft lint sees the same trusted bytes
+        # without freezing or interrupting the agent's remaining tool calls.
+        ledger_path = ledger.root / 'lint-sources.json'
+        with ledger.lock:
+            write_json(ledger_path, json.loads(ledger.sanitized_bytes({'calls': ledger.entries})[0]))
+        evidence_path = RESEARCH.materialize(deadline=deadline, progress=timing.phase) if RESEARCH else runtime['evidence_package']
+        timing.phase('full_lint')
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise DraftValidationError('Draft lint deadline reached during evidence materialization; retry this call to resume verified progress')
+        report = lint_scientific_account(frozen, dapper_root=runtime['dapper_root'],
+                                         release_lock=BASE / 'bundle/services/backend/agent-runtime/dapper-release.json',
+                                         evidence_package=evidence_path, ledger_path=ledger_path, mode='draft', timeout=remaining)
+        checks = {finding.get('check') for finding in report.get('findings', []) if finding.get('severity') == 'error'}
+        if checks & {'source-ancestry', 'claim-evidence'}:
+            report['repair_guidance'] = 'Each component Claim needs explicit, target-matched EvidenceItems and unchanged eligible scientific source Files with exact locators. Use captured reference data, authorized prior science or eligible independent evidence. Seek a relevant CFDE connection when supported and explain its absence when not; never attach an unrelated row to satisfy guidance. If no useful supported interpretation exists, save an insufficient-evidence outcome identifying the missing observation.'
+        timing.phase('diagnostic_report')
+        return timing.feedback(diagnostic_response(report, output=OUTPUT, filename=filename,
+            capture_roots=(OUTPUT, STATE / 'ledger', STATE / 'runtime.json')), runtime.get('execution_deadline_monotonic'))
 
 
 def deadline_reason(request, last_activity=None):
@@ -379,6 +389,9 @@ def runtime_completion(request, started, status, reason, process=None, parser=No
     timing = timing if timing is not None else getattr(parser, 'timing', None)
     if timing is not None:
         summary['timing'] = timing.snapshot()
+    from .box_research import authoring_timing_snapshot
+    authoring = authoring_timing_snapshot(STATE / 'ledger/authoring-timing.json', terminal=True, clock=time.monotonic)
+    if authoring is not None: summary['authoring_timing'] = authoring
     try:
         import resource
         usage = resource.getrusage(resource.RUSAGE_CHILDREN)
@@ -392,65 +405,77 @@ def runtime_completion(request, started, status, reason, process=None, parser=No
 def write_draft_tool(filename, document):
     """Representation assistance only: source hydration never implies acceptance."""
     deadline = time.monotonic() + 55
-    if not isinstance(document, dict) or len(canonical(document)) > 4_000_000:
-        raise DraftValidationError('Invalid or oversized draft document')
-    if not isinstance(document.get('scientific_accounts'), list) or len(document['scientific_accounts']) != 1:
-        raise DraftValidationError('Expected document={"scientific_accounts":[one account],"claims":[...],"propositions":[...],"evidence_items":[...]}; group values must be arrays, not a class instance or graph/nodes envelope')
-    runtime = json.loads((STATE / 'runtime.json').read_text())
-    from .authoring_structure import preflight_document, diagnostic_response
-    structure = preflight_document(document, dapper_root=runtime['dapper_root'],
-        release_lock=BASE / 'bundle/services/backend/agent-runtime/dapper-release.json',
-        timeout=min(12, max(0.1, deadline - time.monotonic())))
-    if not structure['valid']:
-        return diagnostic_response(structure, output=OUTPUT, filename=filename,
-            capture_roots=(OUTPUT, STATE / 'ledger', STATE / 'runtime.json'))
-    evidence_path = RESEARCH.materialize() if RESEARCH else Path(runtime['evidence_package'])
-    package = json.loads(Path(evidence_path).read_text())
-    trusted = {n['id']: (group, n) for group, rows in package['dapper_context'].items() if isinstance(rows, list) for n in rows if isinstance(n, dict) and 'id' in n}
-    for rows in document.values():
-        if isinstance(rows, list):
-            for node in rows:
-                if isinstance(node, dict) and node.get('id') in trusted and node != trusted[node['id']][1]:
-                    raise PolicyError('A trusted source object was changed')
-    def exact_references(value):
-        if isinstance(value, dict):
-            for child in value.values():
-                yield from exact_references(child)
-        elif isinstance(value, list):
-            for child in value:
-                yield from exact_references(child)
-        elif isinstance(value, str):
-            yield value
-    for _ in range(len(trusted) + 1):
+    from .box_research import AuthoringTiming
+    with AuthoringTiming(STATE / 'ledger/authoring-timing.json', 'write_account_draft', deadline, clock=time.monotonic) as timing:
+        if not isinstance(document, dict) or len(canonical(document)) > 4_000_000:
+            raise DraftValidationError('Invalid or oversized draft document')
+        if not isinstance(document.get('scientific_accounts'), list) or len(document['scientific_accounts']) != 1:
+            raise DraftValidationError('Expected document={"scientific_accounts":[one account],"claims":[...],"propositions":[...],"evidence_items":[...]}; group values must be arrays, not a class instance or graph/nodes envelope')
+        runtime = json.loads((STATE / 'runtime.json').read_text())
+        deadline = min(deadline, runtime.get('execution_deadline_monotonic', deadline))
+        timing.deadline = deadline
+        timing.require_remaining(1)
+        timing.phase('structure_preflight')
+        from .authoring_structure import preflight_document, diagnostic_response
+        timing.require_remaining(0.1)
+        structure = preflight_document(document, dapper_root=runtime['dapper_root'],
+            release_lock=BASE / 'bundle/services/backend/agent-runtime/dapper-release.json',
+            timeout=min(12, deadline - time.monotonic()))
+        if not structure['valid']:
+            timing.phase('diagnostic_report')
+            return timing.feedback(diagnostic_response(structure, output=OUTPUT, filename=filename,
+                capture_roots=(OUTPUT, STATE / 'ledger', STATE / 'runtime.json')), runtime.get('execution_deadline_monotonic'))
+        evidence_path = RESEARCH.materialize(deadline=deadline, progress=timing.phase) if RESEARCH else Path(runtime['evidence_package'])
+        timing.phase('draft_hydration')
+        package = json.loads(Path(evidence_path).read_text())
+        trusted = {n['id']: (group, n) for group, rows in package['dapper_context'].items() if isinstance(rows, list) for n in rows if isinstance(n, dict) and 'id' in n}
+        for rows in document.values():
+            if isinstance(rows, list):
+                for node in rows:
+                    if isinstance(node, dict) and node.get('id') in trusted and node != trusted[node['id']][1]:
+                        raise PolicyError('A trusted source object was changed')
+        def exact_references(value):
+            if isinstance(value, dict):
+                for child in value.values():
+                    yield from exact_references(child)
+            elif isinstance(value, list):
+                for child in value:
+                    yield from exact_references(child)
+            elif isinstance(value, str):
+                yield value
+        for _ in range(len(trusted) + 1):
+            if time.monotonic() >= deadline:
+                raise DraftValidationError('Draft preparation deadline reached; retry this call to resume verified evidence materialization')
+            present = {n['id'] for rows in document.values() if isinstance(rows, list) for n in rows if isinstance(n, dict) and 'id' in n}
+            references = set(exact_references(document))
+            missing = [identity for identity in trusted if identity not in present and identity in references]
+            if not missing:
+                break
+            for identity in missing:
+                group, node = trusted[identity]
+                document.setdefault(group, []).append(node)
+        context = runtime.get('draft_attribution')
+        if context:
+            for group in ('persons', 'organizations', 'activities'):
+                document[group] = [node for node in document.get(group, []) if node.get('id') in trusted]
+                document[group].extend(context.get(group, []))
+            for group in ('claims', 'scientific_accounts'):
+                for node in document.get(group, []):
+                    if node.get('id') not in trusted:
+                        node['was_generated_by'] = context['activities'][0]['id']
+                        node['was_attributed_to'] = [context['organizations'][0]['id']]
+        path = OUTPUT / filename
         if time.monotonic() >= deadline:
             raise DraftValidationError('Draft preparation deadline reached; retry this call to resume verified evidence materialization')
-        present = {n['id'] for rows in document.values() if isinstance(rows, list) for n in rows if isinstance(n, dict) and 'id' in n}
-        references = set(exact_references(document))
-        missing = [identity for identity in trusted if identity not in present and identity in references]
-        if not missing:
-            break
-        for identity in missing:
-            group, node = trusted[identity]
-            document.setdefault(group, []).append(node)
-    context = runtime.get('draft_attribution')
-    if context:
-        for group in ('persons', 'organizations', 'activities'):
-            document[group] = [node for node in document.get(group, []) if node.get('id') in trusted]
-            document[group].extend(context.get(group, []))
-        for group in ('claims', 'scientific_accounts'):
-            for node in document.get(group, []):
-                if node.get('id') not in trusted:
-                    node['was_generated_by'] = context['activities'][0]['id']
-                    node['was_attributed_to'] = [context['organizations'][0]['id']]
-    path = OUTPUT / filename
-    if time.monotonic() >= deadline:
-        raise DraftValidationError('Draft preparation deadline reached; retry this call to resume verified evidence materialization')
-    if path.is_symlink():
-        raise PolicyError('Draft output symlink forbidden')
-    path.write_bytes(canonical(document))
-    user = pwd.getpwnam('reveal-agent')
-    os.chown(path, user.pw_uid, user.pw_gid)
-    return {'content': [{'type': 'text', 'text': 'Draft saved to ' + str(path) + '. Run lint_account; this file has not been accepted or minted.'}]}
+        if path.is_symlink():
+            raise PolicyError('Draft output symlink forbidden')
+        timing.phase('draft_write')
+        raw = canonical(document)
+        timing.check()
+        path.write_bytes(raw)
+        user = pwd.getpwnam('reveal-agent')
+        os.chown(path, user.pw_uid, user.pw_gid)
+        return timing.feedback({'content': [{'type': 'text', 'text': 'Draft saved to ' + str(path) + '. Run lint_account; this file has not been accepted or minted.'}]}, runtime.get('execution_deadline_monotonic'))
 
 
 def main():
@@ -484,6 +509,9 @@ def main():
         if runtime is not None and (force or observed - last_checkpoint >= 5):
             runtime['timing_checkpoint'] = {'recorded_at': stamp(), 'timing': timing.snapshot(),
                                           'last_observable_activity': last_activity}
+            from .box_research import authoring_timing_snapshot
+            authoring = authoring_timing_snapshot(STATE / 'ledger/authoring-timing.json', clock=time.monotonic)
+            if authoring is not None: runtime['timing_checkpoint']['authoring_timing'] = authoring
             write_json(STATE / 'runtime.json', runtime)
             os.chmod(STATE / 'runtime.json', 0o600)
             last_checkpoint = observed
@@ -496,6 +524,7 @@ def main():
         SECRETS = tuple(value for value in credentials.values() if isinstance(value, str) and value)
         ledger.secrets = SECRETS
         work, runtime, prompt = setup(request)
+        runtime['execution_deadline_monotonic'] = started + request['timeout_seconds']
         if runtime.get('research_context'):
             RESEARCH = HostedResearchClient(runtime['research_context'], credentials.get('REVEAL_RESEARCH_TOKEN'),
                 STATE / 'ledger/research-context', seed_path=runtime['evidence_package'],

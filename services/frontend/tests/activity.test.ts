@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { activityProgress, activityRows, activitySections, coalesceMessageDeltas } from "../src/lib/activity";
+import { activityMessage, activityProgress, activityRows, activitySections, coalesceMessageDeltas } from "../src/lib/activity";
 import type { Schema } from "../src/lib/client";
 
 function event(id: string, message: string, delta?: boolean): Schema<"JobEvent"> {
@@ -16,6 +16,17 @@ test("explicit text deltas form one readable row without changing persisted even
   assert.deepEqual(coalesceMessageDeltas(input).map(e => [e.id, e.message]), [["11", "I'll read αβ evidence."]]);
   assert.equal(JSON.stringify(input), original);
   assert.equal(input.at(-1)?.id, "13");
+});
+
+test("legacy capture wording is presented neutrally without changing historical records or agent prose", () => {
+  const capture = { ...event("1", "Capturing completed output and evidence."), stage: "collecting_output" as const,
+    detail: { ...event("1", "").detail!, kind: "preparation" as const, source: "worker" as const } };
+  const saved = JSON.stringify(capture);
+  assert.equal(activityMessage(capture), "Preserving available output and evidence.");
+  for (const message of ["Restoring the saved execution result and evidence.", "Restoring saved execution result and evidence."])
+    assert.equal(activityMessage({ ...capture, message }), "Restoring saved output and evidence.");
+  assert.equal(JSON.stringify(capture), saved);
+  assert.equal(activityMessage({ ...capture, detail: { ...capture.detail, source: "harness", kind: "agent_message" } }), capture.message);
 });
 
 test("full and legacy messages, tool activity, stages and jobs remain separate", () => {

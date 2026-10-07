@@ -15,11 +15,20 @@ export function coalesceMessageDeltas(events: Schema<"JobEvent">[]): Schema<"Job
 }
 
 type Event = Schema<"JobEvent">;
-export type ActivityStage = "preparation" | "setup" | "research" | "collection" | "validation" | "saving";
+export type ActivityStage = "preparation" | "setup" | "research" | "collection" | "validation" | "saving" | "outcome";
 export const stageLabels: Record<ActivityStage, string> = {
   preparation: "Evidence preparation", setup: "Runtime setup", research: "Research agent",
-  collection: "Collecting results", validation: "Checking account and sources", saving: "Saving results",
+  collection: "Preserving output and evidence", validation: "Checking account and sources", saving: "Saving results", outcome: "Research outcome",
 };
+
+/** Older capture wording described a finished process, not a successful result. */
+export function activityMessage(event: Event) {
+  if (event.stage === "collecting_output" && event.detail?.source === "worker") {
+    if (event.message === "Capturing completed output and evidence.") return "Preserving available output and evidence.";
+    if (["Restoring the saved execution result and evidence.", "Restoring saved execution result and evidence."].includes(event.message)) return "Restoring saved output and evidence.";
+  }
+  return event.message;
+}
 
 export function activityStage(stage: Schema<"Job">["stage"]): ActivityStage {
   if (["queued", "freezing_inputs", "retrieving_cfde", "preparing_evidence"].includes(stage)) return "preparation";
@@ -34,8 +43,12 @@ export function activityStage(stage: Schema<"Job">["stage"]): ActivityStage {
 export function activitySections(events: Event[]) {
   const sections: { id: string; stage: ActivityStage; events: Event[] }[] = [];
   for (const event of events) {
-    const stage = activityStage(event.stage);
+    let stage = activityStage(event.stage);
     const previous = sections.at(-1);
+    // Historical runs reported an authoring failure only after capture. Keep
+    // the notice in replay order without inventing a second research attempt.
+    if (stage === "research" && (previous?.stage === "collection" || previous?.stage === "outcome") &&
+      (event.status === "failed" || event.detail?.kind === "preparation" && event.detail.state === "failed")) stage = "outcome";
     const ended = previous?.events.at(-1)?.status;
     const resumed = ended && ["failed", "cancelled", "succeeded", "insufficient_evidence"].includes(ended) && ["queued", "running", "cancel_requested"].includes(event.status);
     if (previous?.stage === stage && !resumed) previous.events.push(event);

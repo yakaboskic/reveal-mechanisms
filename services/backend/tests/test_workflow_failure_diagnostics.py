@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 from reveal_backend import jobs, workflow_state as state
 from reveal_backend.agent_execution import ExecutionRequest, ExecutionResult
@@ -12,7 +12,7 @@ from reveal_backend.evidence_package import EvidenceBuildError
 from reveal_backend.repository import Repository, digest
 from reveal_backend.scientific_account_lint import AccountValidationError
 from reveal_backend.scientific_grounding import ScientificReviewUnavailable
-from reveal_backend.workflow_execution import WorkflowExecution
+from reveal_backend.workflow_execution import WorkflowExecution, capture_message
 from test_durable_workflow import MemoryStore
 
 
@@ -120,6 +120,61 @@ class WorkflowFailureDiagnosticsTests(unittest.IsolatedAsyncioTestCase):
             events = [row['data'] for row in tx.list('event') if row['data']['job_id'] == job['id']]
         self.assertNotIn('validating', [event['stage'] for event in events])
         self.assertTrue(any(event['stage'] == 'collecting_output' for event in events))
+
+    async def test_known_agent_failure_is_reported_before_capture_and_survives_capture_retry(self):
+        job, payload = self.seed('observe')
+        handle = {'box_id': 'timed-out-box', 'job_id': job['id'], 'attempt': 2,
+                  'phase': 'running', 'cursor': 0, 'capture_protocol': 's3-v1'}
+        with self.repo.transaction() as tx:
+            execution = tx.get('execution', job['id'])['data']
+            execution.update(box=handle, capacity_reserved=True)
+            tx.put('execution', job['id'], 'owner', execution)
+            queue = tx.get('queue', job['id'])['data']
+            queue['dispatch_input'].update(sha256='a'*64, selected_graphs=[])
+            tx.put('queue', job['id'], 'owner', queue)
+            current = tx.get('job', job['id'])['data']; current['status'] = 'running'
+            tx.put('job', job['id'], 'owner', current)
+        terminal = {**handle, 'phase': 'terminal', 'state': {'status': 'failed',
+                    'reason': 'Agent execution limit reached; PRIVATE_PROVIDER_DETAIL'}}
+        adapter = Mock()
+        adapter.inspect_once = AsyncMock(return_value=(terminal, [], True))
+        adapter.capture_to_store = AsyncMock(side_effect=StorageUnavailable('retry storage'))
+        self.engine.adapter = adapter
+        first = await self.engine.step(payload, 0)
+        self.assertEqual(first['phase'], 'capture')
+        current, execution, files = self.saved(job)
+        self.assertEqual(current['status'], 'running')  # Finalization still requires durable preservation.
+        self.assertIsNone(current['failure'])
+        self.assertTrue(execution['capacity_reserved'])
+        self.assertEqual(execution['failure_notice_attempt'], 2)
+        with self.repo.read_transaction() as tx:
+            events = [r['data'] for r in tx.list('event') if r['data']['job_id'] == job['id']]
+        failures = [e for e in events if (e.get('detail') or {}).get('state') == 'failed']
+        self.assertEqual(len(failures), 1)
+        self.assertEqual(failures[0]['stage'], 'authoring_account')
+        self.assertNotIn('PRIVATE_PROVIDER_DETAIL', json.dumps(events))
+        # A lost acknowledgement does not invent a second failed agent attempt.
+        self.assertEqual(await self.engine.step(payload, 0), first)
+        with self.assertRaises(StorageUnavailable): await self.engine.step(payload, 1)
+        current, execution, after = self.saved(job)
+        self.assertEqual(current['status'], 'running')
+        self.assertEqual(after, files)
+        self.assertTrue(execution['capacity_reserved'])
+        adapter.delete_once.assert_not_called()
+        with self.repo.read_transaction() as tx:
+            events = [r['data'] for r in tx.list('event') if r['data']['job_id'] == job['id']]
+        self.assertEqual(sum((e.get('detail') or {}).get('state') == 'failed' for e in events), 1)
+        preservation = next(e for e in events if e['stage'] == 'collecting_output')
+        self.assertIn('partial output and diagnostics', preservation['message'])
+        self.assertLess(int(failures[0]['id']), int(preservation['id']))
+
+    def test_capture_messages_never_claim_a_completed_scientific_result(self):
+        for status in ('failed', 'cancelled', 'succeeded', 'insufficient_evidence'):
+            for restoring in (False, True):
+                with self.subTest(status=status, restoring=restoring):
+                    message = capture_message({'box': {'state': {'status': status}}}, restoring=restoring)
+                    self.assertNotIn('completed', message)
+                    self.assertIn('partial output', message) if status in ('failed', 'cancelled') else self.assertIn('validation', message)
 
     async def test_diagnostic_message_is_redacted_then_bounded_and_phase_is_classified(self):
         for phase, error, code in (
