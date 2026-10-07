@@ -166,6 +166,8 @@ class ClassificationTests(unittest.TestCase):
             written |= set(re.findall(r"\b(?:put|update_existing|remove|insert_many|insert)\(\s*\[?\(?'([a-z_]+)'", text))
             # Batched rows are appended as (kind, id, owner, data) tuples before insert_many.
             written |= set(re.findall(r"\brecords\.append\(\(\s*'([a-z_]+)'\s*,", text))
+            # Unfenced inserts of untracked rows (Repository.append).
+            written |= set(re.findall(r"\brepo(?:sitory)?\.append\(\s*'([a-z_]+)'", text))
         written |= {reference.ACTIVE_KIND, reference.CONTROL_KIND, reference.ARCHIVE_RUN_KIND, reference.RELOAD_KIND}
         self.assertTrue({'account', 'suggestion', 'workspace_cursor', 'remote_event', 'vector_batch'} <= written)
         self.assertEqual(sorted(kind for kind in written if archive.classify(kind) is None), [])
