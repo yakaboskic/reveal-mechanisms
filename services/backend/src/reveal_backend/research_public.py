@@ -19,7 +19,7 @@ from .evidence_package import canonical_json, sha256
 from .repository import digest, now, uid
 from .research_data import OPERATIONS, READER_VERSION, CAPTURE_FORMAT, ReferenceQueryService, SmallModelBioIndex
 from .research_work import idempotent, public_base, valid_principal
-from .runtime_config import mysql_connection, setting
+from .runtime_config import reference_mysql_connection, setting
 from . import user_inputs, research_graphs
 
 OWNER = 'public-research'
@@ -100,7 +100,7 @@ def _rate_limit(service, rate_key):
 
 
 def _reader(service):
-    return service.data_service or ReferenceQueryService(mysql_connection,
+    return service.data_service or ReferenceQueryService(reference_mysql_connection,
         cursor_secret=setting('REVEAL_RESEARCH_CURSOR_SECRET', setting('REVEAL_GATEWAY_SECRET', '')))
 
 

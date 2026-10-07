@@ -210,8 +210,8 @@ def data_capabilities(service, authorization, name, arguments):
             raise Problem(404,'NOT_FOUND','The requested research context is unavailable.')
         generation=work['reference_generation_id']
     from .research_data import ReferenceQueryService, SmallModelBioIndex
-    from .runtime_config import mysql_connection
-    reader=service.data_service or ReferenceQueryService(mysql_connection)
+    from .runtime_config import reference_mysql_connection
+    reader=service.data_service or ReferenceQueryService(reference_mysql_connection)
     try: catalog=reader.catalog(generation)
     except Problem: raise
     except Exception:

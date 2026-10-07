@@ -602,6 +602,79 @@ class RuntimePoolSettingsTests(unittest.TestCase):
             with self.subTest(env=env), self.assertRaisesRegex(ValueError, 'pool bounds'): self.lease(**env)
 
 
+class ReferenceReadTests(RuntimePoolSettingsTests):
+    """Reference reads borrow application sessions: capped, settled by ROLLBACK, deadlines restored, never replayed."""
+    def setUp(self):
+        super().setUp()
+        self.addCleanup(setattr, runtime_config, '_reference_slots', runtime_config._reference_slots)
+        runtime_config._reference_slots = None
+    def read(self, **env):
+        values = {'REVEAL_MYSQL_PASSWORD': 'test-only', 'REVEAL_MYSQL_CA_FILE': '', **env}
+        with patch.dict('os.environ', values), patch.object(runtime_config, 'mysql_connection', side_effect=self.factory):
+            return runtime_config.reference_mysql_connection()
+    test_defaults_size_ten_idle_below_session_wait_timeout_and_jittered_hour_lifetime = None
+    test_kill_switches_force_reset_and_sequential_reset_and_rotate_the_pool = None
+    test_bounds_keep_idle_expiry_below_the_server_kill = None
+
+    def test_close_settles_with_one_rollback_and_a_clean_release(self):
+        read = self.read(); raw = self.created[-1]
+        with read.cursor() as cursor: cursor.execute('SELECT symbol FROM eaggl_genes WHERE import_id=%s', ('x',))
+        raw.trips = 0; read.close(); read.close()
+        self.assertEqual((raw.trips, raw.reset_count, raw.closed), (1, 0, False))  # ROLLBACK, then zero-command release
+        again = self.read(); self.assertEqual(len(self.created), 1)
+        again.rollback(); raw.trips = 0; again.close(); self.assertEqual(raw.trips, 0)  # the reader already settled
+        self.assertFalse(hasattr(again, '_read_timeout') or hasattr(again, '_force_close') or hasattr(again, 'autocommit'))
+
+    def test_failed_rollback_or_discard_drops_the_session_and_frees_its_slot(self):
+        small = {'REVEAL_MYSQL_POOL_SIZE': '4', 'REVEAL_MYSQL_POOL_WAIT_SECONDS': '0.05'}  # two reference slots
+        read = self.read(**small); raw = self.created[-1]; raw.rollback_error = pymysql.err.OperationalError(2013, 'lost')
+        read.close(); self.assertTrue(raw.closed)
+        read = self.read(**small); raw = self.created[-1]
+        with read.cursor() as cursor: cursor.execute('SELECT 1')
+        raw.trips = 0; read.discard(); self.assertEqual((raw.trips, raw.closed), (0, True))  # past a deadline: no round trip
+        reads = [self.read(**small), self.read(**small)]  # both slots came back
+        for read in reads: read.close()
+
+    def test_reads_hold_at_most_half_the_pool_and_release_on_every_path(self):
+        reads = [self.read(REVEAL_MYSQL_POOL_SIZE='4', REVEAL_MYSQL_POOL_WAIT_SECONDS='0.05') for _ in range(2)]
+        with self.assertRaises(runtime_config_busy()): self.read(REVEAL_MYSQL_POOL_SIZE='4', REVEAL_MYSQL_POOL_WAIT_SECONDS='0.05')
+        writer = self.lease(REVEAL_MYSQL_POOL_SIZE='4'); writer.rollback(); writer.close()  # Repository keeps its share
+        reads.pop().close()
+        with patch.object(runtime_config, 'application_mysql_connection', side_effect=OSError('connect failed')):
+            with self.assertRaises(OSError): self.read(REVEAL_MYSQL_POOL_SIZE='4')
+        reads.append(self.read(REVEAL_MYSQL_POOL_SIZE='4', REVEAL_MYSQL_POOL_WAIT_SECONDS='0.05'))  # the failed connect freed it
+        for read in reads: read.close()
+
+    def test_deadline_applies_to_the_socket_and_is_restored_before_release(self):
+        read = self.read(); raw = self.created[-1]; seen = []
+        read.limit(2.5); self.assertEqual((raw._read_timeout, raw._write_timeout), (2.5, 2.5))
+        with patch.object(runtime_config._application_pool, 'release', side_effect=lambda entry, *a, **k: seen.append(
+                (entry.connection._read_timeout, entry.connection._write_timeout))):
+            read.close()
+        self.assertEqual(seen, [(120, 120)])
+
+    def test_request_path_reference_readers_borrow_pooled_sessions(self):
+        from types import SimpleNamespace
+        from reveal_backend import catalog, factor_details, research_execution, research_public, worker, evidence_database
+        self.assertIs(research_public._reader(SimpleNamespace(data_service=None)).connection_factory, runtime_config.reference_mysql_connection)
+        for module in (research_execution, factor_details, catalog):
+            self.assertIs(module.reference_mysql_connection, runtime_config.reference_mysql_connection, module.__name__)
+        # Worker evidence collection and the catalog cold load keep their own direct connections.
+        self.assertIs(worker.mysql_connection, runtime_config.mysql_connection)
+        self.assertIs(evidence_database.mysql_connection, runtime_config.mysql_connection)
+
+    def test_unpooled_configurations_connect_directly(self):
+        for size in ('0', '1'):
+            with self.subTest(size=size):
+                connection = self.read(REVEAL_MYSQL_POOL_SIZE=size)
+                self.assertIs(connection, self.created[-1]); self.assertIsNone(runtime_config._application_pool)
+
+
+def runtime_config_busy():
+    from reveal_backend.mysql_pool import DatabaseBusy
+    return DatabaseBusy
+
+
 class HandshakeResult:
     def __init__(self, sock, secure=None):
         self._sock = sock; self._secure = isinstance(sock, ssl.SSLSocket) if secure is None else secure; self.closes = 0

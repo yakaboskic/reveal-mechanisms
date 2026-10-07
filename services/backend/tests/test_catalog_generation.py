@@ -251,7 +251,7 @@ class CatalogGenerationTests(unittest.TestCase):
         for name in PINS: os.environ.pop(name, None)
         vector_client = patch('reveal_backend.vector_retrieval.client_from_environment', return_value=self.vectors.provider)
         vector_client.start(); self.addCleanup(vector_client.stop)
-        for target, value in [('mysql_connection', self.db), ('Repository', lambda: self.repo), ('DapperRuntime', runtime),
+        for target, value in [('mysql_connection', self.db), ('reference_mysql_connection', self.db), ('Repository', lambda: self.repo), ('DapperRuntime', runtime),
                               ('VectorRegistry', self.vectors.registry), ('UpstashFactorIndex', self.vectors.index_class()),
                               ('monotonic', self.clock)]:
             context = patch.object(catalog_module, target, value); context.start(); self.addCleanup(context.stop)

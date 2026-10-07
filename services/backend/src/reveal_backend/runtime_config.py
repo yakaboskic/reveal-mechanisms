@@ -47,20 +47,22 @@ def mysql_connection(*, timeout_seconds=None, application_session=False):
 _application_pool = None
 _application_pool_key = None
 _application_pool_lock = threading.Lock()
+_reference_slots = None  # (cap, BoundedSemaphore): reference reads may hold at most half the pool
 
 
 def _after_fork():
-    global _application_pool, _application_pool_key, _application_pool_lock
+    global _application_pool, _application_pool_key, _application_pool_lock, _reference_slots
     _application_pool_lock = threading.Lock()
     if _application_pool is not None: _application_pool._process()
-    _application_pool = None; _application_pool_key = None
+    _application_pool = None; _application_pool_key = None; _reference_slots = None
 
 
 if hasattr(os, 'register_at_fork'): os.register_at_fork(after_in_child=_after_fork)
 
 
 def application_mysql_connection():
-    """Lease a bounded clean session, only for runtime Repository transactions."""
+    """Lease a bounded clean session for runtime Repository transactions (and, through
+    reference_mysql_connection, capped SELECT-only reference reads)."""
     from . import mysql_database as db
     from .mysql_pool import Pool
     from .runtime_metrics import measure, observe
@@ -100,6 +102,59 @@ def application_mysql_connection():
             _application_pool_key = key
         pool = _application_pool
     return pool.acquire()
+
+
+class _ReferenceRead:
+    """A SELECT-only borrower of an application lease for imported reference tables. close() ends its read view
+    with ROLLBACK (the clean, zero-command pooled release) and discard() drops the session without a round trip.
+    No __getattr__: raw session state (autocommit, _force_close, timeouts) is unreachable except through limit(),
+    whose deadline is restored before the pool sees the session again. Never retried, never nested in a
+    Repository lease."""
+    def __init__(self, lease, slots):
+        self._lease, self._slots, self._settled, self._done, self._saved = lease, slots, False, False, None
+    def cursor(self):
+        self._settled = False; return self._lease.cursor()
+    def rollback(self):
+        self._lease.rollback(); self._settled = True
+    def limit(self, seconds):
+        """Bound each read and write to seconds (assessment deadlines)."""
+        connection = self._lease._entry.connection  # PyMySQL==1.1.2 applies these on every socket read/write
+        if self._saved is None: self._saved = connection._read_timeout, connection._write_timeout
+        connection._read_timeout = connection._write_timeout = seconds
+    def close(self): self._finish(True)
+    def discard(self): self._finish(False)
+    def _finish(self, settle):
+        if self._done: return
+        self._done = True
+        try:
+            if self._saved is not None:
+                connection = self._lease._entry.connection
+                connection._read_timeout, connection._write_timeout = self._saved
+            if settle and not self._settled:
+                try: self._lease.rollback()
+                except Exception: pass  # the lease is now broken, so the pool discards it
+        finally:
+            try: self._lease.close()  # unsettled (discard, failed rollback): the pool closes the session
+            finally: self._slots.release()
+
+
+def reference_mysql_connection():
+    """Imported reference reads (factor pages, research data tools, assessments) on the application pool,
+    capped at half of it so Repository transactions keep their sessions. Importers, migrations and the catalog
+    cold load keep direct connections."""
+    from .mysql_pool import DatabaseBusy
+    global _reference_slots
+    maximum = int(setting('REVEAL_MYSQL_POOL_SIZE', '10'))
+    if maximum <= 1: return mysql_connection()
+    cap = maximum // 2
+    with _application_pool_lock:
+        if _reference_slots is None or _reference_slots[0] != cap: _reference_slots = (cap, threading.BoundedSemaphore(cap))
+        slots = _reference_slots[1]
+    if not slots.acquire(timeout=float(setting('REVEAL_MYSQL_POOL_WAIT_SECONDS', '5'))):
+        raise DatabaseBusy('Reference read capacity is busy')
+    try: return _ReferenceRead(application_mysql_connection(), slots)
+    except BaseException:
+        slots.release(); raise
 
 def artifacts_root():
     if setting('REVEAL_ARTIFACT_STORE') == 's3':

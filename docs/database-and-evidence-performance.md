@@ -185,6 +185,23 @@ still builds it once.
 
 ## Reference reads
 
+Request-path reads of the imported reference tables (the factor and gene-set
+pages, the research data tools and public research queries, archived factor
+lookups) borrow sessions from the same process pool instead of opening a new
+verified-TLS connection each time (about 1.2 seconds from the development
+laptop). They are plain `SELECT`s ended by `ROLLBACK`, so the session returns
+to the pool with no reset, and at most half of the pool may serve them at once,
+so repository transactions always keep the rest. The catalog cold load, worker
+evidence collection, importers and migrations keep direct connections. A
+factor's import index and loading summaries cannot change for a complete
+import or generation, so each process reads them once; the active gnomAD pin
+is re-read at most every 5 seconds. The gene summary counts loadings without
+ranking them, and a loading search returns its match count with the page
+instead of ranking the factor a second time. Measured from the laptop on
+2026-10-07 with the real code: a factor detail took 1.85 seconds before, 0.90
+seconds on a warm pool with nothing cached, and no database work once cached;
+a searched loadings page took 1.99, 0.85 and 0.34 seconds.
+
 The research `get_gene_factors` query joins from the gene by symbol, through
 the loadings' `(import_id, gene_index)` index, to its factors. A `JOIN_ORDER`
 hint fixes that order: unhinted, the optimizer's 10% guess for the TEXT symbol

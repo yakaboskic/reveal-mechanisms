@@ -30,18 +30,19 @@ SET1, SET2 = ['dapper:GeneSet.' + c * 32 for c in ('a', 'b')]
 
 
 class Cursor:
-    def __init__(self, connection): self.cursor = connection.cursor()
+    def __init__(self, connection, statements): self.cursor, self.statements = connection.cursor(), statements
     def __enter__(self): return self
     def __exit__(self, *exc): self.cursor.close()
-    def execute(self, sql, args=()): self.cursor.execute(sql.replace('%s', '?'), args)
+    def execute(self, sql, args=()): self.statements.append(sql); self.cursor.execute(sql.replace('%s', '?'), args)
     def fetchall(self): return self.cursor.fetchall()
 
 
 class Connection:
-    def __init__(self, path):
-        self.connection = sqlite3.connect(path)
+    def __init__(self, path, statements=None, opened=None):
+        self.connection, self.statements = sqlite3.connect(path), statements if statements is not None else []
         self.connection.create_function('CONCAT', -1, lambda *values: ''.join(str(v) for v in values))
-    def cursor(self): return Cursor(self.connection)
+        if opened is not None: opened.append(self)
+    def cursor(self): return Cursor(self.connection, self.statements)
     def close(self): self.connection.close()
 
 
@@ -83,8 +84,12 @@ CREATE TABLE gnomad_gene_constraints(import_id TEXT,gene_symbol TEXT,gene_id TEX
                 c.execute('INSERT INTO factor_gene_set_projections VALUES(?,?,?,?,?,?,?,?)', (GENERATION, 'per_trait', 'KPN.TRAIT:0000398::Factor1', identity, joint, marginal, jr, mr))
             # Same gene-set identity in another generation must never leak through.
             c.execute('INSERT INTO cfde_gene_sets VALUES(?,?,?,?,?,?,?,?)', ('old', SET1, COLLECTION, 'WRONG GENERATION', 'BAD', 9, 9, '{}'))
-        self.db_patch = patch.object(details, 'mysql_connection', lambda: Connection(self.path))
+        self.statements, self.opened = [], []
+        details.clear_caches(); self.addCleanup(details.clear_caches)
+        self.db_patch = patch.object(details, 'reference_mysql_connection', lambda: Connection(self.path, self.statements, self.opened))
         self.db_patch.start(); self.addCleanup(self.db_patch.stop)
+        self.clock = [1000.0]
+        clock = patch.object(details, 'monotonic', lambda: self.clock[0]); clock.start(); self.addCleanup(clock.stop)
         self.cat_patch = patch.object(api, 'catalog', self.catalog)
         self.cat_patch.start(); self.addCleanup(self.cat_patch.stop)
         self.client = TestClient(api.app)
@@ -162,8 +167,35 @@ CREATE TABLE gnomad_gene_constraints(import_id TEXT,gene_symbol TEXT,gene_id TEX
         self.assertEqual(route.status_code,200,route.text)
         self.assertEqual(route.json()['items'][0]['id'],SET2)
 
+    def test_warm_pages_read_only_what_changes_with_the_request(self):
+        self.annotations()
+        cold = details.factor_detail(self.catalog, FACTOR['source_id'])
+        self.assertEqual(len(self.statements), 4)  # factor index, gnomAD pin, gene and gene-set summaries
+        self.assertFalse(any('ROW_NUMBER' in sql for sql in self.statements))  # the summary never ranks the factor
+        del self.statements[:]
+        self.assertEqual(details.factor_detail(self.catalog, FACTOR['source_id']), cold)
+        self.assertEqual((self.statements, len(self.opened)), ([], 1))  # warm detail: no statement and no lease
+        page = self.loadings(gnomad_import_id='a'*64)
+        self.assertEqual(len(self.statements), 1)  # only the page itself
+        del self.statements[:]
+        searched = self.loadings(q='gabr', gnomad_import_id='a'*64)
+        self.assertEqual((len(self.statements), searched['total'], [item['rank'] for item in searched['items']]), (1, 3, [1, 2, 3]))
+        self.assertEqual(searched['summary'], page['summary'])
+        self.assertEqual(self.loadings(q='gabr', limit=1, offset=1)['total'], 3)
+        self.assertEqual((self.loadings(q='gabr', offset=10)['total'], self.loadings(q='absent')['total']), (3, 0))
+        self.clock[0] += details.PIN_TTL_SECONDS; del self.statements[:]
+        details.factor_detail(self.catalog, FACTOR['source_id'])
+        self.assertEqual(len(self.statements), 1)  # past the TTL only the pin is re-read
+
+    def test_failed_factor_lookup_is_not_cached(self):
+        with sqlite3.connect(self.path) as c: c.execute('UPDATE eaggl_factors SET factor_id=?', ('other',))
+        with self.assertRaises(Problem) as caught: details.factor_detail(self.catalog, FACTOR['source_id'])
+        self.assertEqual(caught.exception.code, 'SOURCE_NOT_READY')
+        with sqlite3.connect(self.path) as c: c.execute('UPDATE eaggl_factors SET factor_id=?', ('T2D::Factor1',))
+        self.assertEqual(details.factor_detail(self.catalog, FACTOR['source_id'])['genes']['total'], 4)
+
     def test_exact_generation_and_revision_are_checked_before_database(self):
-        with patch.object(details, 'mysql_connection', side_effect=AssertionError('No unpinned query')):
+        with patch.object(details, 'reference_mysql_connection', side_effect=AssertionError('No unpinned query')):
             for options in ({'generation_id': '0' * 64}, {'source_revision': '0' * 64}):
                 for method in (details.factor_detail, details.factor_loadings):
                     with self.assertRaises(Problem) as caught: method(self.catalog, FACTOR['source_id'], **options)
@@ -241,6 +273,9 @@ CREATE TABLE gnomad_gene_constraints(import_id TEXT,gene_symbol TEXT,gene_id TEX
     def test_annotation_pin_rejects_changes_and_is_environment_scoped(self):
         self.assertIsNone(self.loadings(gnomad_import_id='none')['gnomad'])
         self.annotations()
+        self.assertIsNone(details.factor_detail(self.catalog, FACTOR['source_id'])['gnomad'])  # the pin is re-read every 5 s
+        self.assertEqual(self.loadings(gnomad_import_id='a'*64)['gnomad']['import_id'], 'a'*64)  # a newer pin is re-read, never a 409
+        self.clock[0] += details.PIN_TTL_SECONDS
         detail = details.factor_detail(self.catalog, FACTOR['source_id'])
         self.assertEqual(detail['gnomad']['import_id'], 'a'*64)
         self.validate(detail, 'FactorDetail')
@@ -269,6 +304,7 @@ CREATE TABLE gnomad_gene_constraints(import_id TEXT,gene_symbol TEXT,gene_id TEX
         with patch.object(details, '_rows', side_effect=ProgrammingError(1146, "Table 'db.gnomad_constraint_active' doesn't exist")):
             self.assertIsNone(details._gnomad(None))
         for error in (OperationalError(2006, 'Server gone away'), ProgrammingError(1146, "Table 'db.eaggl_genes' doesn't exist")):
+            self.clock[0] += details.PIN_TTL_SECONDS  # failures are never cached; the absent table is, for the TTL
             with patch.object(details, '_rows', side_effect=error), self.assertRaises(type(error)):
                 details._gnomad(None)
 

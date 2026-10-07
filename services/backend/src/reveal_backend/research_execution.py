@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 from .auth import Problem, owned, require_owned
 from .repository import digest, now
 from .evidence_package import canonical_json, sha256
-from .runtime_config import ROOT, artifacts_root, mysql_connection, setting
+from .runtime_config import ROOT, artifacts_root, reference_mysql_connection, setting
 from .research_work import authorize_commit, public_base
 from .runtime_metrics import measure
 from . import user_inputs
@@ -135,7 +135,7 @@ def capture_query(service, operation, *, finalize=None):
             'source_ref': context.get('source_ref'), 'object_resolution': context.get('object_resolution', []),
             'reference_objects': context.get('reference_objects', []), 'artifacts': context['artifact_ids']}
     if previous: return response(previous['data'])
-    query_service = service.data_service or ReferenceQueryService(mysql_connection,
+    query_service = service.data_service or ReferenceQueryService(reference_mysql_connection,
         cursor_secret=setting('REVEAL_RESEARCH_CURSOR_SECRET', setting('REVEAL_GATEWAY_SECRET', '')))
     name = args['operation_id']
     if name in SmallModelBioIndex.INDEXES:

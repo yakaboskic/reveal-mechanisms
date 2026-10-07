@@ -20,7 +20,7 @@ import threading
 from time import monotonic
 from .auth import Problem
 from .repository import Repository, canonical, digest, now
-from .runtime_config import ROOT, CURRENT_DAPPER_SNAPSHOT, setting, mysql_connection
+from .runtime_config import ROOT, CURRENT_DAPPER_SNAPSHOT, setting, mysql_connection, reference_mysql_connection
 from .evidence_package import DapperRuntime, canonical_json, sha256
 from .eaggl_embeddings import database_search_index
 from .fuzzy import FuzzyWords
@@ -609,7 +609,7 @@ class Catalog:
         with self.lookup_lock: unavailable = self.archive_unavailable_at
         # Migration 008 absent or nothing archived yet (legacy mode): no connection until the TTL passes.
         if unavailable is not None and monotonic() - unavailable < GENERATION_TTL_SECONDS: return []
-        connection = mysql_connection()
+        connection = reference_mysql_connection()
         try:
             with connection.cursor() as cursor:
                 cursor.execute('SELECT archive_id,generation_id,source_id,snapshot,captured_at FROM archived_reference_factors WHERE '

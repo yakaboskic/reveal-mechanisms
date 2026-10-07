@@ -1,6 +1,6 @@
-"""Bounded, process-local leases for application MySQL transactions only.
+"""Bounded, process-local leases for application MySQL transactions and SELECT-only reference reads.
 
-Importers/migrations use direct connections. A connection is never shared across
+Importers, migrations and the catalog cold load use direct connections. A connection is never shared across
 borrowers. It returns to idle only after a full reset, or when the OK packet of its
 final COMMIT/ROLLBACK proves no open transaction and every statement on the lease
 was session-neutral; anything else is reset or discarded.
