@@ -690,9 +690,12 @@ async def create_cfde_assessment(draft_id: str, request: Request):
         'Location': request.url.path.rstrip('/')+'/'+result['id'], 'Retry-After': '2'})
 
 @app.get('/v1/drafts/{draft_id}/cfde-assessments/{assessment_id}')
-def get_cfde_assessment(draft_id: str, assessment_id: str, request: Request):
+async def get_cfde_assessment(draft_id: str, assessment_id: str, request: Request, wait: str = '0'):
+    """wait=N (0-20 s, optional) long-polls a pending receipt instead of polling it every 2 s."""
     from . import cfde_assessment
-    return cfde_assessment.get(repo, catalog, request.headers.get('authorization'), draft_id, assessment_id)
+    if not (wait.isascii() and wait.isdigit() and int(wait) <= cfde_assessment.MAX_WAIT_SECONDS):
+        raise Problem(422,'INVALID_QUERY','Invalid query parameter: wait')
+    return await cfde_assessment.poll(repo, catalog, request.headers.get('authorization'), draft_id, assessment_id, int(wait))
 
 @app.patch('/v1/drafts/{draft_id}')
 async def patch_draft(draft_id:str,request:Request):

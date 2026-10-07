@@ -45,9 +45,10 @@ class ServeShutdownTests(unittest.IsolatedAsyncioTestCase):
         order = []
         async def close(): order.append('streams')
         async def shutdown(self, sockets=None): order.append('uvicorn')
-        with patch.object(notifications, 'close_streams', close), patch.object(uvicorn.Server, 'shutdown', shutdown):
+        with patch.object(notifications, 'close_streams', close), patch.object(uvicorn.Server, 'shutdown', shutdown), \
+                patch.object(serve.cfde_assessment.wakeups, 'wake_all', lambda: order.append('long-polls')):
             await serve.Server(uvicorn.Config(FastAPI())).shutdown()
-        self.assertEqual(order, ['streams', 'uvicorn'])   # uvicorn is pinned at 0.34.2; guards an upgrade
+        self.assertEqual(order, ['streams', 'long-polls', 'uvicorn'])   # uvicorn is pinned at 0.34.2; guards an upgrade
 
     async def test_open_stream_ends_at_shutdown_while_an_in_flight_request_finishes(self):
         app = FastAPI()

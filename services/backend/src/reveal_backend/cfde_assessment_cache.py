@@ -162,13 +162,19 @@ def projection_fields(tx, private_data):
     return value['public'] if value else {}
 
 
+def leader_rows(key, public):
+    """A new leader's reference, and the rows that create its version and move the current-cache index to it."""
+    if not _hash(key) or not isinstance(public, dict) or not _uuid(public.get('id')): raise ValueError('Invalid shared leader')
+    leader = public['id']; reference = {'key': key, 'leader': leader}
+    return reference, [(KIND, digest([key, leader]), OWNER, {'key': key, 'leader': leader, 'public': _public(public)}),
+                       (INDEX_KIND, key, OWNER, {'leader': leader})]
+
+
 def create_shared(tx, key, public):
     """Create a new leader version and move only its current-cache index."""
-    if not _hash(key) or not isinstance(public, dict) or not _uuid(public.get('id')): raise ValueError('Invalid shared leader')
-    leader = public['id']; identity = digest([key, leader]); reference = {'key': key, 'leader': leader}
-    if tx.get(KIND, identity): return reference  # Idempotence never moves a newer index backwards.
-    tx.put(KIND, identity, OWNER, {'key': key, 'leader': leader, 'public': _public(public)})
-    tx.put(INDEX_KIND, key, OWNER, {'leader': leader})
+    reference, rows = leader_rows(key, public)
+    if tx.get(*rows[0][:2]): return reference  # Idempotence never moves a newer index backwards.
+    for row in rows: tx.put(*row)
     return reference
 
 

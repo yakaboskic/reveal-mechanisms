@@ -54,9 +54,10 @@ def principal(tx, authorization):
 
 def principal_with(tx, authorization, keys):
     """principal() and exact extra keys in one read. The principal is accepted first, so an invalid session
-    still fails 401 before any 404; the extra rows are NOT authorized: pass each through require_owned."""
+    still fails 401 before any 404; the extra rows are NOT authorized: pass each through require_owned.
+    keys may be a function of the credential's principal id, for keys derived from the owner."""
     identity, claims = _credential(authorization)
-    rows = tx.get_records((('principal', identity), *keys))
+    rows = tx.get_records((('principal', identity), *(keys(identity) if callable(keys) else keys)))
     return _accept(rows.get(('principal', identity)), claims), rows
 
 

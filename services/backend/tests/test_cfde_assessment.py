@@ -1,9 +1,12 @@
 """Isolated draft assessments: no live provider, scientific writes or user accounts."""
+import asyncio
 from contextlib import contextmanager
 from copy import deepcopy
+from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
 import threading
+import time
 from unittest.mock import Mock
 
 import httpx
@@ -572,3 +575,134 @@ def test_model_projection_preserves_mixed_species_and_structured_qualifiers():
     assert [source['organism'] for source in result['gene_set_sources']] == ['human', 'mouse']
     assert result['eaggl_mechanisms'][0]['top_gene_sets']['rows'][0][-1] == {'dose': {'value': 10, 'unit': 'nM'}, 'tissue': 'liver'}
     assert 'never-send' not in json.dumps(result)
+
+
+@pytest.mark.parametrize('edit', ['subquery', 'dismissed', 'origin'])
+def test_editor_only_edits_reuse_a_completed_private_forecast_with_their_own_receipt(case, edit):
+    first = start(case).json(); case.queue.run()
+    composer = case.body['composer']
+    if edit == 'subquery': composer['mechanism_subquery'] = 'typed while browsing mechanisms'
+    elif edit == 'dismissed': composer['dismissed_source_ids'] = ['factor:dismissed-suggestion']
+    else: composer['eaggl_anchors'][0].update(origin='automatic', suggestion_id=uid())
+    current = start(case, headers=case.headers(case.owner)).json(); api.validate(current, 'CfdeAssessment')
+    assert current['id'] != first['id'] and (current['status'], current['stale']) == ('succeeded', False)
+    assert current['composer_sha256'] == digest(composer) != first['composer_sha256']
+    assert current['result'] == read(case, first).json()['result']
+    assert not case.queue.calls and case.provider.call_count == 1   # no second billed attempt or quota use
+    with case.repo.read_transaction() as tx:
+        receipt = tx.get('cfde_assessment', current['id'])['data']
+    assert receipt['composer'] == composer and receipt['owns_attempt'] is False and receipt['reused_assessment_id'] == first['id']
+
+
+@pytest.mark.parametrize('edit', ['anchor_order', 'graphs'])
+def test_forecast_inputs_still_need_a_new_attempt(case, edit):
+    start(case); case.queue.run()
+    composer = case.body['composer']
+    if edit == 'anchor_order':
+        extra = deepcopy(composer['eaggl_anchors'][0]); extra['reference'] = {**extra['reference'], 'source_id': extra['reference']['source_id'] + 'b'}
+        composer['eaggl_anchors'] = [extra, composer['eaggl_anchors'][0]]
+    else: composer['selected_kgs'] = [] if composer.get('selected_kgs') else ['prokn']
+    assert start(case, headers=case.headers(case.owner)).json()['status'] == 'preparing'
+    assert len(case.queue.calls) == 1
+
+
+def test_rejections_decided_on_the_snapshot_never_take_the_write_fence(case, monkeypatch):
+    monkeypatch.setattr(case.repo, 'transaction', Mock(side_effect=AssertionError('rejection took the write fence')))
+    no_anchor = deepcopy(case.body); no_anchor['composer']['eaggl_anchors'] = []
+    assert start(case, body=no_anchor).json()['code'] == 'ANCHOR_REQUIRED'
+    assert start(case, body={**case.body, 'draft_version': 9}, headers=case.headers(case.owner)).json()['code'] == 'VERSION_CONFLICT'
+    foreign = deepcopy(case.body); foreign['composer']['upload_ids'] = [uid()]
+    assert start(case, body=foreign, headers=case.headers(case.owner)).status_code == 404
+    monkeypatch.setattr(assessment, '_slots', Mock(acquire=Mock(return_value=False)))
+    assert start(case, headers=case.headers(case.owner)).json()['code'] == 'CFDE_ASSESSMENT_BUSY'
+    monkeypatch.delenv('TYPESAFE_API_KEY')
+    assert start(case, headers=case.headers(case.owner)).json()['code'] == 'CFDE_ASSESSMENT_UNAVAILABLE'
+    assert not case.queue.calls
+
+
+def test_the_fenced_decision_rereads_rows_and_reuses_work_created_after_the_snapshot(case):
+    # Snapshot rows are never carried into the write fence: a receipt committed between the two is found there.
+    transaction, raced = case.repo.transaction, []
+    @contextmanager
+    def racing(*args, **kwargs):
+        if not raced:
+            raced.append(None); raced.append(start(case, headers=case.headers(case.owner)).json())
+        with transaction(*args, **kwargs) as tx: yield tx
+    case.repo.transaction = racing
+    response = start(case)
+    assert response.status_code == 202, response.text
+    assert response.json()['id'] == raced[1]['id'] and len(case.queue.calls) == 1
+    assert assessment._slots._value == 3   # the losing request's reserved slot was returned; the worker keeps one
+
+
+def test_a_principal_row_keyed_apart_from_its_user_id_falls_back_to_exact_reads(case):
+    first = start(case).json()
+    with case.repo.transaction() as tx:
+        tx.put('principal', 'alias-subject', 'alias-subject', tx.get('principal', case.owner)['data'])
+    alias = case.headers('alias-subject')
+    assert case.client.get(case.route + '/' + first['id'], headers=alias).json() == read(case, first).json()
+    assert start(case, headers=alias).json()['id'] == first['id']   # the owner's pending work, as before
+
+
+def wait_read(case, result, wait, *, owner=None):
+    began = time.monotonic()
+    response = case.client.get(case.route + '/' + result['id'] + '?wait=%s' % wait, headers=case.headers(owner or case.owner))
+    return response, time.monotonic() - began
+
+
+def test_long_poll_answers_as_soon_as_the_worker_changes_status(case):
+    first = start(case).json()
+    worker = threading.Timer(.3, case.queue.run); worker.start()
+    try: response, elapsed = wait_read(case, first, 10)
+    finally: worker.join(5)
+    assert response.status_code == 200, response.text
+    assert response.json()['status'] in ('assessing', 'succeeded') and .25 < elapsed < 5
+    response, elapsed = wait_read(case, first, 10)   # finished: answered at once from one read
+    assert response.json()['status'] == 'succeeded' and elapsed < 1
+
+
+def test_long_poll_followers_wake_on_their_shared_leader(case):
+    case.body['composer'].pop('context')
+    start(case)
+    owner, _, route, follower = another_draft_check(case, case.body)
+    worker = threading.Timer(.3, case.queue.run); worker.start()
+    try:
+        began = time.monotonic()
+        response = case.client.get(route + '/' + follower['id'] + '?wait=10', headers=case.headers(owner))
+        elapsed = time.monotonic() - began
+    finally: worker.join(5)
+    assert response.json()['status'] in ('assessing', 'succeeded') and elapsed < 5
+
+
+def test_long_poll_rereads_when_its_wait_or_the_deadline_ends(case):
+    from round_trips import count_round_trips
+    first = start(case).json()
+    with count_round_trips() as budget: response, elapsed = wait_read(case, first, 1)
+    assert response.json()['status'] == 'preparing' and .9 < elapsed < 3
+    assert budget.kinds() == ['read', 'read'] and budget.locked_trips() == 0   # no lease is held while waiting
+    with case.repo.transaction() as tx:
+        data = tx.get('cfde_assessment', first['id'])['data']
+        data['public']['expires_at'] = (datetime.now(timezone.utc) + timedelta(seconds=.5)).isoformat().replace('+00:00', 'Z')
+        tx.put('cfde_assessment', first['id'], case.owner, data)
+    response, elapsed = wait_read(case, first, 20)
+    assert response.json()['status'] == 'interrupted' and elapsed < 3
+    for wait in ('21', '-1', 'soon'):
+        response = case.client.get(case.route + '/' + first['id'] + '?wait=' + wait, headers=case.headers(case.owner))
+        assert response.status_code == 422 and response.json()['code'] == 'INVALID_QUERY'
+
+
+def test_wakeups_never_miss_a_change_and_end_at_shutdown(monkeypatch):
+    from reveal_backend import redis_notifications
+    wakeups = assessment.Wakeups()
+    async def scenario():
+        seen = wakeups.mark(); wakeups.notify('another')   # any change since the read: answer at once
+        began = time.monotonic(); await wakeups.wait('key', seen, 5); assert time.monotonic() - began < .5
+        waiting = asyncio.ensure_future(wakeups.wait('key', wakeups.mark(), 5)); await asyncio.sleep(.05)
+        threading.Thread(target=wakeups.notify, args=('key',)).start()   # the worker commits on its own thread
+        await asyncio.wait_for(waiting, 1); assert wakeups.waiting == {}
+        waiting = asyncio.ensure_future(wakeups.wait('key', wakeups.mark(), 5)); await asyncio.sleep(.05)
+        monkeypatch.setattr(redis_notifications, '_closing', True)
+        wakeups.wake_all(); await asyncio.wait_for(waiting, 1)
+        began = time.monotonic(); await wakeups.wait('key', wakeups.mark(), 5); assert time.monotonic() - began < .5
+        assert wakeups.waiting == {}
+    asyncio.run(scenario())

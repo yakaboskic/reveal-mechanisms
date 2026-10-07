@@ -1,7 +1,8 @@
 """Container entrypoint: uvicorn whose shutdown first ends open event streams.
 
-Otherwise each SSE stream runs out its window of up to 240 s while uvicorn waits
-for connections to close, and the API refuses connections until SIGKILL. Real
+Otherwise each SSE stream runs out its window of up to 240 s (and each CFDE status
+long-poll its wait of up to 20 s) while uvicorn waits for connections to close,
+and the API refuses connections until SIGKILL. Real
 in-flight requests, including workflow steps of up to 360 s that the deploy drain
 windows were sized for, still finish; REVEAL_GRACEFUL_SHUTDOWN_SECONDS (default
 110, under the 120 s compose and ECS stop windows) bounds the whole wait.
@@ -11,12 +12,13 @@ import sys
 
 import uvicorn
 
-from . import redis_notifications
+from . import cfde_assessment, redis_notifications
 
 
 class Server(uvicorn.Server):
     async def shutdown(self, sockets=None):
         await redis_notifications.close_streams()
+        cfde_assessment.wakeups.wake_all()   # status long-polls re-read and answer now
         await super().shutdown(sockets=sockets)
 
 

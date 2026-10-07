@@ -161,14 +161,19 @@ def extend(b, f, e):
     get = b.operation(path + '/{assessment_id}', 'get', 'getCfdeAssessment', 'CFDE assessment',
         'Read a CFDE support assessment', common +
         'Read only this owner/draft-bound assessment. Polling makes no remote calls and never starts '
-        'or retries preparation, model work or research. No result after failure is replaced by a '
+        'or retries preparation, model work or research. With wait=N (1-20 seconds) a pending, current receipt '
+        'is long-polled: the response is read again and returned once its status changes, its deadline passes '
+        'or N seconds elapse, whichever comes first, so clients need not poll every two seconds. '
+        'No result after failure is replaced by a '
         'no verdict. Pending work past its deadline is reported as interrupted; completed results remain readable. '
         'Shared work is projected through this owner receipt: created_at is this receipt creation, '
         'updated_at remains the original forecast update, and expires_at remains its operation deadline. '
         'An unavailable assessment returns 404; inspect stale input pins '
         'before displaying a saved prediction for the current editor. ',
         'CfdeAssessment', examples, parameters=[draft_parameter,
-            b.parameter('assessment_id', 'path', uuid, assessment_id, True)],
+            b.parameter('assessment_id', 'path', uuid, assessment_id, True),
+            b.parameter('wait', 'query', {'type': 'integer', 'minimum': 0, 'maximum': 20, 'default': 0}, 10,
+                description='Seconds to long-poll a pending receipt; 0 answers at once.')],
         errors=('401', '403', '404', '422', '503'))
     for op in (create, get):
         op['responses']['410'] = {'description': 'Temporary editor expired.', 'content': b.content('Problem',

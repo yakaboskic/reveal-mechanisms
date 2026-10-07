@@ -191,6 +191,20 @@ protected nothing; it made each Composer gap open wait behind every other
 writer, including that open's own exploration write. A suggestion is now two
 round trips with no lock wait instead of a fenced transaction of three.
 
+A CFDE assessment POST, fired 1.5 seconds after each settled Composer edit,
+reads its principal, draft, idempotency, cache and upload rows in one statement
+and the receipts they name in a second, then rejects (replays, version
+conflicts, busy, unconfigured) without the write fence. Otherwise it re-reads
+those keys in one statement under the fence, counts the daily quota only for a
+new attempt, and inserts every new row in one statement. A private miss is 8
+round trips with 4 under the fence instead of 17 and 11; a busy or
+unconfigured check takes no fence at all. A status
+poll reads the principal, draft and receipt in one statement (3 round trips;
+4 when it follows a shared forecast). `?wait=` long-polls a pending receipt,
+holding no connection while it waits, so a client re-reads only when the status
+changes. The worker batches each transaction's reads in one statement: 17 round
+trips per private attempt, 10 of them under the fence, instead of 25 and 17.
+
 ## Reference reads
 
 Request-path reads of the imported reference tables (the factor and gene-set

@@ -17,6 +17,8 @@ from reveal_backend.mysql_pool import Pool
 from reveal_backend.repository import Repository
 from reveal_backend.research_work import ResearchWorkService, deadline
 from reveal_backend.workflow_routes import dispatch_job, sweep
+import test_cfde_assessment as cfde
+from test_cfde_assessment import case  # noqa: F401 (pytest fixture)
 import test_account_discovery as account_discovery
 import test_application as application
 import test_durable_workflow as durable
@@ -30,7 +32,8 @@ import test_research_polling as research_polling
 BUDGET = {'local_work_poll': 5, 'me': 2, 'readyz': 2, 'draft_patch': 10, 'mcp_get_operation': 5,
           'mcp_query_enqueue': 13, 'query_operation': 17, 'workspace_list': 4, 'workspace_detail': 4,
           'reconcile_idle': 4, 'job_dispatch': 11, 'gap_list': 5, 'gap_search': 5, 'gap_detail': 5,
-          'citation_render': 5, 'readyz_monitored': 0, 'readiness_tick': 2, 'suggest': 2}
+          'citation_render': 5, 'readyz_monitored': 0, 'readiness_tick': 2, 'suggest': 2,
+          'cfde_start': 8, 'cfde_start_locked': 4, 'cfde_reuse_locked': 3, 'cfde_poll': 3, 'cfde_worker': 17}
 
 
 class LocalWorkPollBudget(unittest.TestCase):
@@ -292,6 +295,31 @@ class WorkflowBudget(unittest.IsolatedAsyncioTestCase):
         print('\njob dispatch', budget)
         self.assertEqual((budget.kinds(), budget.leases[0], budget.unleased, budget.connects), (['read', 'write'], ['read', 1], 0, 0), budget)
         self.assertLessEqual(budget.trips(), BUDGET['job_dispatch'], budget)
+
+
+def test_cfde_assessment_admission_is_one_snapshot_then_one_short_fence(case):
+    # Auto-fired 1.5 s after each settled edit: the snapshot decides and rejects, the fence re-decides and writes.
+    with count_round_trips() as budget: first = cfde.start(case).json()   # a private miss starts an attempt
+    print('\ncfde start', budget)
+    assert (budget.leases, budget.unleased, budget.connects) == ([['read', 1], ['write', 3]], 0, 0), budget
+    assert budget.trips() <= BUDGET['cfde_start'] and budget.locked_trips() <= BUDGET['cfde_start_locked'], budget
+    with count_round_trips() as budget: again = cfde.start(case, headers=case.headers(case.owner)).json()
+    print('\ncfde reuse', budget)   # unchanged inputs, new key: the pending receipt, one INSERT under the fence
+    assert again['id'] == first['id'] and budget.kinds() == ['read', 'write'], budget
+    assert budget.trips() <= BUDGET['cfde_start'] and budget.locked_trips() <= BUDGET['cfde_reuse_locked'], budget
+    with count_round_trips() as budget: response = case.client.get(case.route + '/' + first['id'], headers=case.headers(case.owner))
+    print('\ncfde poll', budget)
+    assert response.status_code == 200 and (budget.leases, budget.unleased) == ([['read', 1]], 0), budget
+    assert budget.trips() <= BUDGET['cfde_poll'], budget
+    with count_round_trips() as budget: case.queue.run()
+    print('\ncfde worker', budget)   # one read, then preparing, assessing and succeeded: each one batch plus its writes
+    assert budget.kinds() == ['read', 'write', 'write', 'write'] and budget.trips() <= BUDGET['cfde_worker'], budget
+
+
+def test_cfde_shared_receipts_poll_with_one_more_read(case):
+    case.body['composer'].pop('context'); first = cfde.start(case).json()
+    with count_round_trips() as budget: case.client.get(case.route + '/' + first['id'], headers=case.headers(case.owner))
+    assert (budget.leases, budget.unleased) == ([['read', 2]], 0) and budget.trips() <= BUDGET['cfde_poll'] + 1, budget
 
 
 class WireConstantsTests(unittest.TestCase):

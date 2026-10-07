@@ -197,4 +197,15 @@ class IdentityMapTests(unittest.TestCase):
             row = tx.get('queue', 'j1'); self.assertEqual((row['version'], row['data']), (2, {'attempt': 7}))
 
 
+    def test_absent_is_true_only_for_keys_this_transaction_read_and_found_missing(self):
+        with self.repo.transaction() as tx:
+            tx.get_records([('job', 'j1'), ('job', 'nope'), ('job', 'nope ')])
+            self.assertEqual([tx.absent('job', identity) for identity in ('j1', 'nope', 'nope ', 'unread')],
+                             [False, True, False, False])   # a padded id is never remembered
+            tx.insert_many([('job', 'nope', 'alice', {'id': 'nope'})]); self.assertFalse(tx.absent('job', 'nope'))
+            tx.remove('job', 'j1'); self.assertTrue(tx.absent('job', 'j1'))
+            tx.get('queue', 'j1'); tx.execute('UPDATE reveal_records SET owner_id=%s WHERE kind=%s', ('bob', 'queue'))
+            self.assertFalse(tx.absent('job', 'j1'))   # raw SQL forgets everything
+
+
 if __name__ == '__main__': unittest.main()

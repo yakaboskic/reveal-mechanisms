@@ -83,6 +83,9 @@ class Transaction:
         return cursor
     def _known(self, kind, identity):
         return self._rows.get((kind, identity), _MISS) if _exact(identity) else _MISS
+    def absent(self, kind, identity):
+        """True when this transaction read (kind, identity) and found no row, so it can be inserted unread."""
+        return self._known(kind, identity) is None
     def _learn(self, kind, identity, owner=None, version=None, text=None, absent=False):
         if not _exact(identity): return
         if absent: self._rows[(kind, identity)] = None; return
