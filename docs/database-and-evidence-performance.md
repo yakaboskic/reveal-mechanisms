@@ -51,12 +51,15 @@ publication visibility.
 
 At most two write transactions per table prefix and process hold a pooled
 connection on the global write fence: one holding it and one queued behind it.
-Further writers wait inside the process, not on a pooled connection, for at
-most `REVEAL_MYSQL_POOL_WAIT_SECONDS`, so readers keep their connections when
-writers contend. Running out of either a writer slot or a pooled connection
-raises `DatabaseBusy`, a `TimeoutError`, which the API returns as the existing
-retryable 503 `SERVICE_UNAVAILABLE`. The database row lock remains the only
-cross-process authority.
+Further writers wait inside the process, not on a pooled connection, so readers
+keep their connections when writers contend. That wait is bounded by the same
+15 second session lock wait, not by `REVEAL_MYSQL_POOL_WAIT_SECONDS`, so a
+queued writer never fails sooner than it would have on the fence itself, even
+while another process holds the fence for longer than the pool wait. A writer
+that is still not admitted after 15 seconds, or a request that runs out of
+pooled connections, raises `DatabaseBusy`, a `TimeoutError`, which the API
+returns as the existing retryable 503 `SERVICE_UNAVAILABLE`. The database row
+lock remains the only cross-process authority.
 
 A read that is genuinely one statement, such as readiness, uses
 `Repository.single_read()`: one plain `SELECT` with no `START TRANSACTION`,

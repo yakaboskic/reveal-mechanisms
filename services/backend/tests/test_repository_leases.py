@@ -8,6 +8,8 @@ import time
 import unittest
 from unittest.mock import patch
 
+import pymysql
+
 from reveal_backend import repository
 from reveal_backend.mysql_database import application_session_unchanged, reset_application_session
 from reveal_backend.mysql_pool import DatabaseBusy, Pool
@@ -93,7 +95,7 @@ class SingleReadTests(unittest.TestCase):
 
 class WriterGateTests(unittest.TestCase):
     def setUp(self):
-        for item in (patch.object(repository, '_writer_gates', {}), patch.dict(os.environ, {'REVEAL_MYSQL_POOL_WAIT_SECONDS': '0.2'})):
+        for item in (patch.object(repository, '_writer_gates', {}), patch.object(repository, 'SESSION_LOCK_WAIT_SECONDS', 0.2)):
             item.start(); self.addCleanup(item.stop)
         self.connects = 0
 
@@ -124,6 +126,41 @@ class WriterGateTests(unittest.TestCase):
         finish()
         with repo.transaction(): pass
         self.assertEqual(self.connects, 4)
+
+    def test_writers_queued_behind_an_external_fence_holder_longer_than_the_pool_wait_still_succeed(self):
+        lock_wait, fence, counter = 1.5, threading.Lock(), threading.Lock()   # scaled 15 s innodb_lock_wait_timeout
+        open_sessions, peak = [0], [0]
+        class Fenced(wire.FakeCursor):
+            def execute(self, sql, params=()):
+                if sql.endswith('FOR UPDATE'):
+                    if not fence.acquire(timeout=lock_wait): raise pymysql.err.OperationalError(1205, 'Lock wait timeout exceeded')
+                    self.connection.holding = True
+                return super().execute(sql, params)
+        class Session(wire.StatusConnection):
+            holding = False
+            def __init__(self):
+                super().__init__()
+                with counter: open_sessions[0] += 1; peak[0] = max(peak[0], open_sessions[0])
+            def cursor(self, *args): return Fenced(self)
+            def end(self):
+                if self.holding: self.holding = False; fence.release()
+            def commit(self): super().commit(); self.end()
+            def rollback(self): super().rollback(); self.end()
+            def close(self):
+                if not self.closed:
+                    with counter: open_sessions[0] -= 1
+                super().close(); self.end()
+        repo = Repository(); repo.connect = Session
+        fence.acquire(); holder = threading.Timer(0.6, fence.release)   # another process holds the fence 0.6 s
+        holder.start(); self.addCleanup(holder.cancel)
+        def writer(index):
+            time.sleep(0.02 * index)
+            with repo.transaction(): time.sleep(0.05)
+            return 'ok'
+        with patch.object(repository, 'SESSION_LOCK_WAIT_SECONDS', lock_wait), \
+                patch.dict(os.environ, {'REVEAL_MYSQL_POOL_WAIT_SECONDS': '0.1'}), ThreadPoolExecutor(3) as executor:
+            self.assertEqual(list(executor.map(writer, range(3))), ['ok'] * 3)
+        self.assertEqual((peak[0], open_sessions[0]), (repository.WRITERS, 0))   # the third never parked a session
 
     def test_gate_is_released_on_failures_and_before_publication(self):
         repo = self.repo()

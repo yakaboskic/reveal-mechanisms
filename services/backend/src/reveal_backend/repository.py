@@ -15,7 +15,7 @@ import threading
 import time
 from uuid import uuid4
 from . import runtime_metrics as metrics
-from .mysql_database import application_session_unchanged
+from .mysql_database import SESSION_LOCK_WAIT_SECONDS, application_session_unchanged
 from .mysql_pool import DatabaseBusy
 from .runtime_config import ROOT, mysql_connection, application_mysql_connection
 
@@ -230,7 +230,8 @@ class SingleRead(Transaction):
 
 # Admission to the global fence: at most WRITERS fenced transactions per table prefix per process hold a pooled
 # session (one with the fence, one queued on it); the rest wait here, not on a pooled session, for at most the
-# pool wait. The database row lock stays the only cross-process authority.
+# session lock wait, so a queued writer never fails sooner than it would have on FOR UPDATE. The database row
+# lock stays the only cross-process authority.
 WRITERS = 2
 _writer_gates, _writer_lock = {}, threading.Lock()
 
@@ -309,7 +310,7 @@ class Repository:
         gate = None
         if not self.sqlite_path:
             gate = writer_gate(self.table_prefix); started = time.perf_counter()
-            admitted = gate.acquire(timeout=min(30.0, max(0.0, float(os.getenv('REVEAL_MYSQL_POOL_WAIT_SECONDS', '5')))))
+            admitted = gate.acquire(timeout=SESSION_LOCK_WAIT_SECONDS)
             metrics.observe('database', 'WRITER_WAIT', (time.perf_counter()-started)*1000, not admitted)
             if not admitted: raise DatabaseBusy('Application database writers are busy')
         pending = []
