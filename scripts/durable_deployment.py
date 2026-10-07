@@ -129,7 +129,21 @@ def main():
         print(json.dumps(configure(RUNTIME/'backend.env',apply=True,host=True)))
     elif args.action=='status': compose('ps')
     elif args.action=='logs': compose('logs','--tail','60','api','frontend')
-    else: compose('down')
+    else:
+        compose('down')
+        print(json.dumps(stop_managed_schedule(args.scheduler)))
+
+
+def stop_managed_schedule(scheduler):
+    """After the stack is down, stop managed QStash pushing reconciliation into a dead callback. The local
+    development scheduler stops with its own process; its schedules are left alone."""
+    env = RUNTIME / 'backend.env'
+    managed = scheduler == 'managed' or (env.exists() and read_env(env).get('REVEAL_WORKFLOW_URL', '').startswith('https://'))
+    if not managed: return {'schedule': 'local scheduler; unchanged'}
+    from configure_workflow_schedule import remove
+    try: return remove(env)
+    except Exception as error:   # the stack is already down; report, never print credentials
+        return {'schedule': 'removal failed ('+type(error).__name__+'); rerun configure_workflow_schedule.py --remove'}
 
 
 if __name__=='__main__': main()

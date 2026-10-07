@@ -31,9 +31,15 @@ candidate retrieval. Upstash Redis provides Pub/Sub wakeups only.
   These are Box requests, not Redis polling. No handler remains alive while
   waiting for the agent's next observation.
 - Managed reconciliation pushes to `/internal/workflows/reconcile-v1` once per
-  minute. It repairs RDS dispatch/notification outboxes and stale execution.
+  minute (every five minutes for a local deployment; set `REVEAL_RECONCILE_CRON`
+  to `* * * * *`, `*/2 * * * *` or `*/5 * * * *`). It repairs RDS
+  dispatch/notification outboxes, stale execution and expired research inputs.
   It does not scan, read, or ping Redis. Its stable schedule ID includes the
-  application table prefix and job namespace.
+  application table prefix and job namespace. Ticks are not retried: one read
+  snapshot finds the work, the write fence is taken only for that work and
+  never waited for, and a busy database answers 200 `{"status": "deferred"}`
+  so the next tick resumes it. `durable_deployment.py down` removes a managed
+  schedule after the stack stops.
 - Redis consumers use the supplied HTTPS REST streaming subscription. A backend
   shares subscriptions across interested browser clients. Idle SSE heartbeats
   write HTTP comments only. There are no recurring Redis commands. Pub/Sub has
@@ -188,7 +194,8 @@ For managed QStash against a local HTTPS tunnel, configure the public
 `REVEAL_WORKFLOW_URL` and use `--scheduler managed`. The tunnel is a development
 callback path; cloud deployment uses the stable DIG HTTPS endpoint.
 
-After startup, reconciliation can be inspected/reapplied idempotently:
+After startup, reconciliation can be inspected/reapplied idempotently, or
+removed with `--remove` once the stack is stopped:
 
 ```sh
 .venv/bin/python scripts/configure_workflow_schedule.py \

@@ -121,3 +121,62 @@ def test_platform_qa_isolates_authoritative_state_and_callbacks():
     assert config['qa']['secrets']['REVEAL_GATEWAY_SECRET'] != config['prod']['secrets']['REVEAL_GATEWAY_SECRET']
     for key in ('REVEAL_API_KEY_SHA256', 'REVEAL_API_KEY_USER_ID'):
         assert config['qa']['secrets'][key] != config['prod']['secrets'][key]
+
+
+schedule_spec = importlib.util.spec_from_file_location('configure_workflow_schedule', ROOT/'scripts/configure_workflow_schedule.py')
+schedule = importlib.util.module_from_spec(schedule_spec)
+schedule_spec.loader.exec_module(schedule)
+
+
+class FakeScheduler:
+    created, deleted, fail = [], [], False
+    def __init__(self, token, base_url=None, retry=True):
+        assert retry is False
+        self.schedule = self
+    def create(self, **kwargs): FakeScheduler.created.append(kwargs)
+    def delete(self, identity):
+        if FakeScheduler.fail: raise OSError('scheduler unreachable')
+        FakeScheduler.deleted.append(identity)
+
+
+def schedule_env(path, **extra):
+    values = {'QSTASH_TOKEN': 'token', 'QSTASH_CURRENT_SIGNING_KEY': 'current', 'QSTASH_NEXT_SIGNING_KEY': 'next',
+              'REVEAL_WORKFLOW_URL': 'http://127.0.0.1:18001/internal/workflows/research-v1', 'REVEAL_JOB_NAMESPACE': 'reveal-workflow-local',
+              'REVEAL_APPLICATION_TABLE_PREFIX': 'reveal_workflow_local', 'REVEAL_ENVIRONMENT': 'development', **extra}
+    path.write_text(''.join(f'{key}={value}\n' for key, value in values.items()))
+    return path
+
+
+@pytest.mark.parametrize('extra,cron', [({'REVEAL_LOCAL_DEPLOYMENT': '1'}, '*/5 * * * *'), ({}, '* * * * *'),
+                                        ({'REVEAL_LOCAL_DEPLOYMENT': '1', 'REVEAL_RECONCILE_CRON': '* * * * *'}, '* * * * *'),
+                                        ({'REVEAL_RECONCILE_CRON': '*/2 * * * *'}, '*/2 * * * *')])
+def test_reconcile_schedule_cadence_is_configurable_and_never_retried(tmp_path, monkeypatch, extra, cron):
+    monkeypatch.setattr(schedule, 'QStash', FakeScheduler); FakeScheduler.created = []
+    path = schedule_env(tmp_path/'backend.env', **extra)
+    planned = schedule.configure(path)
+    assert (planned['cron'], planned['applied'], FakeScheduler.created) == (cron, False, [])
+    applied = schedule.configure(path, apply=True, host=True)
+    assert applied['schedule_id'] == planned['schedule_id'] and applied['interval'] == schedule.CADENCES[cron]
+    [created] = FakeScheduler.created
+    assert (created['cron'], created['retries'], created['schedule_id']) == (cron, 0, planned['schedule_id'])
+    assert created['destination'].endswith('/internal/workflows/reconcile-v1')
+
+
+def test_reconcile_schedule_rejects_other_cadences(tmp_path):
+    with pytest.raises(ValueError, match='Unsupported reconcile cadence'):
+        schedule.configure(schedule_env(tmp_path/'backend.env', REVEAL_RECONCILE_CRON='*/30 * * * *'))
+
+
+def test_down_removes_only_a_managed_schedule(tmp_path, monkeypatch):
+    monkeypatch.setattr(schedule, 'QStash', FakeScheduler); monkeypatch.setitem(sys.modules, 'configure_workflow_schedule', schedule)
+    monkeypatch.setattr(module, 'RUNTIME', tmp_path); FakeScheduler.deleted = []; FakeScheduler.fail = False
+    schedule_env(tmp_path/'backend.env')
+    assert module.stop_managed_schedule('local') == {'schedule': 'local scheduler; unchanged'}
+    assert FakeScheduler.deleted == []
+    identity = schedule.configure(tmp_path/'backend.env')['schedule_id']
+    assert module.stop_managed_schedule('managed') == {'schedule_id': identity, 'removed': True}
+    schedule_env(tmp_path/'backend.env', REVEAL_WORKFLOW_URL='https://tunnel.example/internal/workflows/research-v1')
+    assert module.stop_managed_schedule('local')['removed'] and FakeScheduler.deleted == [identity, identity]
+    FakeScheduler.fail = True
+    reported = module.stop_managed_schedule('local')
+    assert 'removal failed (OSError)' in reported['schedule'] and 'token' not in json.dumps(reported)

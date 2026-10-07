@@ -67,6 +67,39 @@ def test_temporary_hidden_explicit_save_atomic_and_expiry(client):
     assert client.client.get('/v1/drafts/'+expired['id'],headers=client.headers(owner)).status_code==404
 
 
+def test_draft_listing_is_a_pure_read_and_reconciliation_expires_editors(client):
+    from reveal_backend.workflow_routes import sweep
+    owner=client.provision(); kept=client.draft(owner); expired=temporary(client,owner)
+    with client.repo.transaction() as tx:
+        expired['expires_at']='2000-01-01T00:00:00Z'; tx.put('draft',expired['id'],owner,expired)
+        tx.put('exploration','visit',owner,{'source_gap':{'id':'gap'},'draft_id':expired['id']})
+    with patch.object(client.repo,'transaction',side_effect=AssertionError('GET must not take the write fence')):
+        listed=client.client.get('/v1/drafts',headers=client.headers(owner))
+    assert listed.status_code==200 and [d['id'] for d in listed.json()['items']]==[kept['id']]
+    with client.repo.read_transaction() as tx: assert tx.get('draft',expired['id'])   # the listing deleted nothing
+    assert client.client.get('/v1/drafts/'+expired['id'],headers=client.headers(owner)).status_code==410
+    assert sweep(client.repo)==(0,False)
+    assert client.client.get('/v1/drafts/'+expired['id'],headers=client.headers(owner)).status_code==404
+    with client.repo.read_transaction() as tx:
+        assert tx.get('draft',kept['id']) and tx.get('exploration','visit')['data']['draft_id'] is None
+
+
+def test_cleanup_decides_snapshot_candidates_again_under_the_fence(client):
+    owner,other=client.provision(),client.provision()
+    renewed,removed=temporary(client,owner),temporary(client,other)
+    with client.repo.transaction() as tx:
+        for draft,draft_owner in ((renewed,owner),(removed,other)):
+            draft['expires_at']='2000-01-01T00:00:00Z'; tx.put('draft',draft['id'],draft_owner,draft)
+    with client.repo.read_transaction() as tx: candidates=user_inputs.cleanup_candidates(tx)
+    assert sorted(candidates[0])==sorted([renewed['id'],removed['id']]) and candidates[1]==[]
+    with client.repo.transaction() as tx:   # renewed between the snapshot and the fence
+        renewed['expires_at']=user_inputs.expiration(); tx.put('draft',renewed['id'],owner,renewed)
+    with client.repo.transaction() as tx:
+        assert user_inputs.cleanup(tx,candidates=candidates)==[removed['id']]
+        assert tx.get('draft',renewed['id']) and not tx.get('draft',removed['id'])
+        assert user_inputs.cleanup_candidates(tx,owner)==([],[])
+
+
 def test_submission_clone_preserves_loaded_saved_revision_after_concurrent_edit(client):
     owner=client.provision(); source=client.draft(owner)
     loaded=deepcopy(source['composer'])
@@ -136,8 +169,17 @@ def test_upload_checksum_owner_clone_and_retained_request(client):
     with client.repo.transaction() as tx:
         stored=tx.get('upload',item['id'])['data']; stored['expires_at']='2000-01-01T00:00:00Z'; tx.put('upload',item['id'],owner,stored)
         user_inputs.cleanup(tx,owner)
-        assert tx.get('upload',item['id'])
+        retained=tx.get('upload',item['id'])['data']
+        assert retained['expires_at']=='2000-01-01T00:00:00Z' and retained['reference_recheck_at']>user_inputs.now()
+        assert user_inputs.cleanup_candidates(tx,owner)==([],[])   # rechecked a day later, not every sweep
+    assert 'reference_recheck_at' not in client.client.get(path,headers=client.headers(owner)).json()
     assert client.client.post(path+'/complete',json={},headers=client.headers(owner)).json()['storage']==item['storage']
+    with client.repo.transaction() as tx:
+        tx.remove('request','frozen')
+        stored=tx.get('upload',item['id'])['data']; stored['reference_recheck_at']='2000-01-01T00:00:00Z'; tx.put('upload',item['id'],owner,stored)
+        assert user_inputs.cleanup_candidates(tx,owner)==([],[item['id']])
+        user_inputs.cleanup(tx,owner)
+        assert not tx.get('upload',item['id'])   # no longer referenced once due again
 
 
 def test_upload_bad_bytes_and_unsupported_types(client):

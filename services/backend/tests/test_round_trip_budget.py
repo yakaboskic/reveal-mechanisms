@@ -16,13 +16,16 @@ from reveal_backend.mysql_database import application_session_unchanged, reset_a
 from reveal_backend.mysql_pool import Pool
 from reveal_backend.repository import Repository
 from reveal_backend.research_work import ResearchWorkService, deadline
+from reveal_backend.workflow_routes import sweep
 import test_application as application
+import test_durable_workflow as durable
 import test_mysql_pool as wire
 import test_research_http as research_http
 import test_research_polling as research_polling
 
 BUDGET = {'local_work_poll': 5, 'me': 2, 'readyz': 2, 'draft_patch': 10, 'mcp_get_operation': 5,
-          'mcp_query_enqueue': 13, 'query_operation': 17, 'workspace_list': 4, 'workspace_detail': 4}
+          'mcp_query_enqueue': 13, 'query_operation': 17, 'workspace_list': 4, 'workspace_detail': 4,
+          'reconcile_idle': 4}
 
 
 class LocalWorkPollBudget(unittest.TestCase):
@@ -170,6 +173,18 @@ class TrackedWriteBudget(unittest.TestCase):
         self.assertLessEqual(budget.trips(), BUDGET['draft_patch'], budget)
         self.assertEqual(len(published), 1)
         with self.repo.read_transaction() as tx: self.assertEqual(tx.list('notification_outbox'), [])
+
+
+class WorkflowBudget(unittest.IsolatedAsyncioTestCase):
+    setUp = durable.WorkflowTests.setUp
+    new = durable.WorkflowTests.new
+
+    async def test_idle_reconciliation_is_one_snapshot_off_the_fence(self):
+        self.new()   # a job awaiting delivery is the dispatcher's, not a recovery candidate
+        with count_round_trips() as budget: self.assertEqual(sweep(self.repo), (0, False))
+        print('\nreconcile sweep', budget)
+        self.assertEqual((budget.leases, budget.unleased, budget.connects, budget.locked_trips()), ([['read', 2]], 0, 0, 0), budget)
+        self.assertLessEqual(budget.trips(), BUDGET['reconcile_idle'], budget)
 
 
 class WireConstantsTests(unittest.TestCase):

@@ -259,25 +259,50 @@ def referenced(tx, identity):
     return identity in referenced_ids(tx)
 
 
-def cleanup(tx, owner=None, limit=100):
-    """Expire metadata only. Shared content-addressed object versions are retained."""
-    expired=[]
-    for row in tx.list('draft',owner):
+def cleanup_candidates(tx, owner=None, limit=100):
+    """Ids of expired temporary editors and of expired uploads due a reference check, without payloads.
+
+    A superset of what cleanup() removes: it re-reads and re-decides each id, so this may run in a lock-free
+    snapshot. A referenced upload is checked again only after its private reference_recheck_at."""
+    if tx.sqlite:
+        field=lambda name: "json_extract(payload,'$."+name+"')"
+        temporary="json_type(payload,'$.lifecycle') IS NOT NULL AND COALESCE("+field('lifecycle')+",'')<>'saved'"
+    else:
+        field=lambda name: "NULLIF(JSON_UNQUOTE(JSON_EXTRACT(payload,'$."+name+"')),'null')"
+        temporary="COALESCE(JSON_UNQUOTE(JSON_EXTRACT(payload,'$.lifecycle')),'saved')<>'saved'"   # JSON null is not saved
+    scope=' AND owner_id=%s' if owner is not None else ''
+    sql=('SELECT kind,id FROM (SELECT kind,id FROM reveal_records WHERE kind=%s'+scope+" AND COALESCE("+field('expires_at')+",'')<=%s AND "
+         +temporary+' ORDER BY id LIMIT %s) d UNION ALL SELECT kind,id FROM (SELECT kind,id FROM reveal_records WHERE kind=%s'+scope+
+         ' AND '+field('expires_at')+"<=%s AND COALESCE("+field('reference_recheck_at')+",'')<=%s ORDER BY id LIMIT %s) u")
+    t=now(); owned=(owner,) if owner is not None else ()
+    rows=tx.execute(sql,('draft',*owned,t,limit,'upload',*owned,t,t,limit)).fetchall()
+    return [i for k,i in rows if k=='draft'],[i for k,i in rows if k=='upload']
+
+
+def cleanup(tx, owner=None, limit=100, candidates=None):
+    """Expire metadata only. Shared content-addressed object versions are retained.
+
+    Runs under the write fence and decides every candidate again from its current row. An expired upload that is
+    still referenced is kept and rechecked a day later (a private field; expires_at, which feeds quotas and
+    public metadata, never moves)."""
+    drafts,uploads=candidates if candidates is not None else cleanup_candidates(tx,owner,limit)
+    expired=[]; owners=set()
+    for identity,row in tx.get_many('draft',drafts).items():
         draft=row['data']
-        if not saved(draft) and draft.get('expires_at','')<=now():
-            tx.remove('draft',row['id']); tx.remove('draft_binding',row['id']); expired.append(row['id'])
-            if len(expired)>=limit: break
-    for row in tx.list('exploration',owner):
-        if row['data'].get('draft_id') in expired:
-            value={**row['data'],'draft_id':None}; tx.put('exploration',row['id'],row['owner'],value)
-    selected=None; removed=0
-    for row in tx.list('upload',owner):
-        value=row['data']
-        if value['expires_at']>now(): continue
-        if selected is None: selected=referenced_ids(tx,owner)
-        if row['id'] not in selected:
-            tx.remove('upload',row['id']); removed+=1
-            if removed>=limit: break
+        if (owner is None or row['owner']==owner) and not saved(draft) and draft.get('expires_at','')<=now():
+            tx.remove('draft',identity); tx.remove('draft_binding',identity); expired.append(identity); owners.add(row['owner'])
+    if expired:
+        for scope in [owner] if owner is not None else sorted(owners):
+            for row in tx.list('exploration',scope):   # an exploration names only its owner's draft
+                if row['data'].get('draft_id') in expired:
+                    value={**row['data'],'draft_id':None}; tx.put('exploration',row['id'],row['owner'],value)
+    due={identity:row for identity,row in tx.get_many('upload',uploads).items()
+         if (owner is None or row['owner']==owner) and row['data']['expires_at']<=now() and (row['data'].get('reference_recheck_at') or '')<=now()}
+    if due:
+        selected=referenced_ids(tx,owner)
+        for identity,row in due.items():
+            if identity in selected: tx.put('upload',identity,row['owner'],{**row['data'],'reference_recheck_at':expiration(24)})
+            else: tx.remove('upload',identity)
     return expired
 
 

@@ -11,7 +11,7 @@ from urllib.parse import urlparse
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from . import jobs, workflow_state as state
-from .repository import now, digest
+from .repository import DatabaseBusy, FenceBusy, now, digest
 from .workflow_execution import WorkflowExecution
 
 PATH = '/internal/workflows/research-v1'
@@ -174,42 +174,64 @@ async def dispatch_job(repository, job_id):
     return await dispatch_pending(repository, limit=1, job_id=job_id)
 
 
-def reconcile_stale(repository, limit=25):
-    recovered = 0
-    from .user_inputs import cleanup
-    with repository.transaction() as tx: cleanup(tx)
-    # Read indexed execution pages ordered by oldest update. Completed records
-    # move to an archive kind at completion in a future compaction migration;
-    # SQL JSON filtering keeps terminal records from starving active work now.
+def sweep(repository, limit=25):
+    """Expire research inputs and re-fence stale executions; returns (recovered, deferred).
+
+    One read snapshot finds the candidates: expired editors and uploads by id only, and executions whose lease
+    and expected time have both passed (a superset of what the in-lock checks accept, so nothing due is missed).
+    The write fence is taken only when there is a candidate, never waiting behind another writer: a held fence
+    defers that work to the next tick. Every candidate is re-read and decided again under the fence.
+    """
+    from .user_inputs import cleanup, cleanup_candidates
+    recovered, deferred = 0, False
+    # Completed records move to an archive kind at completion in a future compaction migration;
+    # SQL JSON filtering keeps terminal and in-progress records from starving stale work now.
     with repository.read_transaction() as tx:
-        expr = "json_extract(payload,'$.disposition')" if tx.sqlite else "JSON_UNQUOTE(JSON_EXTRACT(payload,'$.disposition'))"
-        namespace_expr = "json_extract(payload,'$.namespace')" if tx.sqlite else "JSON_UNQUOTE(JSON_EXTRACT(payload,'$.namespace'))"
-        rows = tx.execute('SELECT id FROM reveal_records WHERE kind=%s AND ' + namespace_expr + '=%s AND ' + expr +
-            ' NOT IN (%s,%s) ORDER BY updated_at,id LIMIT %s', ('execution', jobs.namespace(), 'complete', 'recovery_required', min(limit, 100))).fetchall()
+        candidates = cleanup_candidates(tx)
+        text = ((lambda name: "json_extract(payload,'$." + name + "')") if tx.sqlite else
+                (lambda name: "JSON_UNQUOTE(JSON_EXTRACT(payload,'$." + name + "'))"))
+        due = (lambda name: 'COALESCE(' + (text(name) if tx.sqlite else 'NULLIF(' + text(name) + ",'null')") + ",'')<=%s")
+        rows = tx.execute('SELECT e.id FROM reveal_records e WHERE e.kind=%s AND ' + text('namespace') + '=%s AND ' + text('disposition') +
+            ' NOT IN (%s,%s) AND ' + due('lease_until') + ' AND ' + due('expected_at') + ' AND NOT EXISTS (SELECT 1 FROM reveal_records d'
+            ' WHERE d.kind=%s AND d.id=e.id) ORDER BY e.updated_at,e.id LIMIT %s',
+            ('execution', jobs.namespace(), 'complete', 'recovery_required', now(), now(), 'workflow_dispatch', min(limit, 100))).fetchall()
+    if any(candidates):
+        try:
+            with repository.transaction(nowait=True) as tx: cleanup(tx, candidates=candidates)
+        except FenceBusy: deferred = True
     for (identity,) in rows:
-        with repository.transaction() as tx:
-            row = tx.get('execution', identity); execution = row['data']
-            if execution.get('namespace') != jobs.namespace(): continue
-            if (execution.get('lease_until') or '') > now() or execution.get('expected_at', '') > now(): continue
-            if tx.get('workflow_dispatch', identity): continue
-            # Explicit generation fencing permits recovery without two owners.
-            # Effect intents/capture/review reservations survive unchanged.
-            recoveries = execution.get('recoveries', 0) + 1
-            if recoveries > 3:
-                execution.update(disposition='recovery_required', diagnostic='Managed recovery budget exhausted')
-                tx.put('execution', identity, row['owner'], execution); continue
-            generation = execution['generation'] + 1
-            execution.update(generation=generation, recoveries=recoveries, fence=None, lease_until=None, step=None,
-                             run_id=None, disposition='ready', updated_at=now(), expected_at=state.after(180))
-            tx.put('execution', identity, row['owner'], execution)
-            queue = tx.get('queue', identity)['data']; queue.update(token=None, lease_until=None)
-            tx.put('queue', identity, row['owner'], queue)
-            tx.put('workflow_dispatch', identity, row['owner'], {'job_id': identity, 'namespace': execution['namespace'],
-                'generation': generation, 'index': execution['phase_index'], 'dispatch_id': digest([identity, generation]),
-                'run_id': 'reveal-' + digest([identity, generation])[:40], 'attempts': 0, 'published_at': None,
-                'created_at': now(), 'next_attempt_at': now()})
-            recovered += 1
-    return recovered
+        try:
+            with repository.transaction(nowait=True) as tx:
+                row = tx.get('execution', identity)
+                if not row: continue
+                execution = row['data']
+                if execution.get('namespace') != jobs.namespace(): continue
+                if (execution.get('lease_until') or '') > now() or execution.get('expected_at', '') > now(): continue
+                if tx.get('workflow_dispatch', identity): continue
+                # Explicit generation fencing permits recovery without two owners.
+                # Effect intents/capture/review reservations survive unchanged.
+                recoveries = execution.get('recoveries', 0) + 1
+                if recoveries > 3:
+                    execution.update(disposition='recovery_required', diagnostic='Managed recovery budget exhausted')
+                    tx.put('execution', identity, row['owner'], execution); continue
+                generation = execution['generation'] + 1
+                execution.update(generation=generation, recoveries=recoveries, fence=None, lease_until=None, step=None,
+                                 run_id=None, disposition='ready', updated_at=now(), expected_at=state.after(180))
+                tx.put('execution', identity, row['owner'], execution)
+                queue = tx.get('queue', identity)['data']; queue.update(token=None, lease_until=None)
+                tx.put('queue', identity, row['owner'], queue)
+                tx.put('workflow_dispatch', identity, row['owner'], {'job_id': identity, 'namespace': execution['namespace'],
+                    'generation': generation, 'index': execution['phase_index'], 'dispatch_id': digest([identity, generation]),
+                    'run_id': 'reveal-' + digest([identity, generation])[:40], 'attempts': 0, 'published_at': None,
+                    'created_at': now(), 'next_attempt_at': now()})
+                recovered += 1
+        except FenceBusy:
+            deferred = True; break
+    return recovered, deferred
+
+
+def reconcile_stale(repository, limit=25):
+    return sweep(repository, limit)[0]
 
 
 def mount_workflow(app, repository):
@@ -277,14 +299,20 @@ def mount_workflow(app, repository):
     async def reconcile(request: Request):
         payload = await authorized(request)
         if payload is None: return JSONResponse({'error': 'Invalid workflow signature'}, status_code=401)
-        recovered = await asyncio.to_thread(reconcile_stale, repository)
-        delivery = await dispatch_pending(repository)
-        cleanup = await dispatch_cleanup(repository)
-        from .vector_workflow import dispatch_pending as dispatch_vectors
-        vector_delivery = await dispatch_vectors(repository)
-        from .workspace_events import reconcile_notifications
-        notifications = await asyncio.to_thread(reconcile_notifications, repository)
-        return {'recovered': recovered, **delivery, 'cleanup':cleanup, 'vector_delivery': vector_delivery, 'notifications': notifications}
+        # A busy database is not a failed tick: answer 200 so the scheduler does not retry; the next tick resumes.
+        try:
+            recovered, deferred = await asyncio.to_thread(sweep, repository)
+            delivery = await dispatch_pending(repository)
+            cleanup = await dispatch_cleanup(repository)
+            from .vector_workflow import dispatch_pending as dispatch_vectors
+            vector_delivery = await dispatch_vectors(repository)
+            from .workspace_events import reconcile_notifications
+            notifications = await asyncio.to_thread(reconcile_notifications, repository)
+        except DatabaseBusy:
+            log.warning('Reconciliation deferred: the application database is busy')
+            return {'status': 'deferred'}
+        return {'status': 'deferred' if deferred else 'ok', 'recovered': recovered, **delivery, 'cleanup':cleanup,
+                'vector_delivery': vector_delivery, 'notifications': notifications}
 
     @app.post(CLEANUP_PATH, include_in_schema=False)
     async def cleanup(request: Request):

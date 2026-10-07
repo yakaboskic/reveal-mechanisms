@@ -27,7 +27,7 @@ Inputs and resulting accounts remain private. Publishing an account or explorati
 
 ## Retention and local rollout
 
-Expired temporary drafts and unreferenced upload metadata are cleaned by managed workflow reconciliation (about once a minute; listing drafts is a pure read that already hides temporary editors, and an expired editor answers `EDITOR_EXPIRED` until it is removed). Removing an upload referenced by any live saved draft or frozen request returns `UPLOAD_IN_USE`. Cleanup never deletes shared content-addressed original/extraction objects. S3 staging expiry is configured separately and applies only to `local/uploads/staging/`, including noncurrent versions.
+Expired temporary drafts and unreferenced upload metadata are cleaned by managed workflow reconciliation (about once a minute; listing drafts is a pure read that already hides temporary editors, and an expired editor answers `EDITOR_EXPIRED` until it is removed). An expired upload that is still referenced is checked again a day later rather than on every pass. Removing an upload referenced by any live saved draft or frozen request returns `UPLOAD_IN_USE`. Cleanup never deletes shared content-addressed original/extraction objects. S3 staging expiry is configured separately and applies only to `local/uploads/staging/`, including noncurrent versions.
 
 The current local deployment uses `.runtime/workflow/backend.env`, `reveal_workflow_local_*` application tables and the `local/` S3 prefix. It may use remote development backing services. The legacy local README is not the deployment authority; see [Durable workflow runtime](durable-workflow-runtime.md).
 
