@@ -162,6 +162,30 @@ class WriterGateTests(unittest.TestCase):
             self.assertEqual(list(executor.map(writer, range(3))), ['ok'] * 3)
         self.assertEqual((peak[0], open_sessions[0]), (repository.WRITERS, 0))   # the third never parked a session
 
+    def test_nowait_writer_never_queues_on_the_fence_or_the_gate(self):
+        class Held(wire.FakeCursor):   # another process holds the fence row
+            def execute(self, sql, params=()):
+                if sql.endswith('FOR UPDATE NOWAIT'):
+                    self.connection.trips += 1; self.connection.sql.append((sql, params))
+                    raise pymysql.err.OperationalError(3572, 'Statement aborted because lock(s) could not be acquired immediately and NOWAIT is set.')
+                return super().execute(sql, params)
+        sessions = []
+        def connect():
+            session = wire.StatusConnection(); session.cursor = lambda *args: Held(session); sessions.append(session); return session
+        repo = Repository(); repo.connect = connect
+        with self.assertRaises(repository.FenceBusy) as caught:
+            with repo.transaction(nowait=True): self.fail('entered without the fence')
+        self.assertIsInstance(caught.exception, DatabaseBusy)   # still the retryable 503 if it ever reached a route
+        self.assertEqual(([sql for sql, _ in sessions[0].sql], sessions[0].closed), ([repository.FENCE + ' NOWAIT'], True))
+        self.assertEqual(repository.writer_gate(repo.table_prefix)._value, repository.WRITERS)
+        with repo.transaction(): pass   # ordinary writers still wait on the plain fence
+        self.assertEqual(sessions[1].sql[0][0], repository.FENCE)
+        finish = self.hold(repo, 2); started = time.monotonic()
+        with self.assertRaises(repository.FenceBusy):   # this process's writer slots are full: no wait either
+            with repo.transaction(nowait=True): pass
+        self.assertLess(time.monotonic() - started, 0.1); self.assertEqual(len(sessions), 4)
+        finish()
+
     def test_gate_is_released_on_failures_and_before_publication(self):
         repo = self.repo()
         for _ in range(3):

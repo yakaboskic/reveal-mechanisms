@@ -28,8 +28,12 @@ def digest(value): return hashlib.sha256(canonical(value).encode()).hexdigest()
 
 class Conflict(Exception): pass
 
+class FenceBusy(DatabaseBusy):
+    """transaction(nowait=True) found the write fence held, in this process or another; nothing was written."""
+
 SELECT_ROW = 'SELECT owner_id,version,payload FROM reveal_records WHERE kind=%s AND id=%s'
 FENCE = 'SELECT revision FROM reveal_transaction_lock WHERE id=1 FOR UPDATE'
+LOCK_NOWAIT = 3572   # ER_LOCK_NOWAIT: FOR UPDATE NOWAIT found the row locked
 _READ = re.compile(r'\s*\(*\s*(SELECT|SHOW)\b', re.I)
 _PLAIN_SELECT = re.compile(r'\s*\(*\s*SELECT\b', re.I)
 _NOT_PLAIN = re.compile(r'@|\b(FOR\s+UPDATE|FOR\s+SHARE|LOCK\s+IN\s+SHARE\s+MODE|INTO|GET_LOCK|RELEASE_LOCK|RELEASE_ALL_LOCKS|'
@@ -72,7 +76,7 @@ class Transaction:
             raise
         finally:
             name = sql.split()[0].upper()
-            if name == 'SELECT' and sql.endswith(' FOR UPDATE'): name = 'FENCE'
+            if name == 'SELECT' and sql.endswith((' FOR UPDATE', ' FOR UPDATE NOWAIT')): name = 'FENCE'
             metrics.observe('database', name, (time.perf_counter()-started)*1000, failed)
         return cursor
     def _known(self, kind, identity):
@@ -314,13 +318,15 @@ class Repository:
             raise
         finally: connection.close()
     @contextmanager
-    def transaction(self):
+    def transaction(self, *, nowait=False):
+        """The global write fence. nowait (background sweeps) raises FenceBusy at once instead of queueing
+        behind another writer, in this process or any other."""
         gate = None
         if not self.sqlite_path:
             gate = writer_gate(self.table_prefix); started = time.perf_counter()
-            admitted = gate.acquire(timeout=SESSION_LOCK_WAIT_SECONDS)
+            admitted = gate.acquire(blocking=False) if nowait else gate.acquire(timeout=SESSION_LOCK_WAIT_SECONDS)
             metrics.observe('database', 'WRITER_WAIT', (time.perf_counter()-started)*1000, not admitted)
-            if not admitted: raise DatabaseBusy('Application database writers are busy')
+            if not admitted: raise (FenceBusy if nowait else DatabaseBusy)('Application database writers are busy')
         pending = []
         try:
             connection = self.connect()
@@ -328,7 +334,13 @@ class Repository:
             try:
                 tx = Transaction(connection, bool(self.sqlite_path), self.table_prefix)
                 if self.sqlite_path: connection.execute('BEGIN IMMEDIATE')
-                else: tx.execute(FENCE).fetchone(); granted = time.perf_counter()
+                else:
+                    try: tx.execute(FENCE + ' NOWAIT' if nowait else FENCE).fetchone()
+                    except Exception as error:
+                        if nowait and getattr(error, 'args', (None,))[:1] == (LOCK_NOWAIT,):
+                            raise FenceBusy('The application write fence is held') from None
+                        raise
+                    granted = time.perf_counter()
                 yield tx
                 from .workspace_events import prepare_commit
                 pending = prepare_commit(tx)

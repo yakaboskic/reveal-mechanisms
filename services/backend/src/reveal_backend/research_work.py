@@ -20,7 +20,7 @@ import threading
 from urllib.parse import urlsplit
 
 from .auth import Problem, owned, require_owned
-from .repository import canonical, digest, now, uid
+from .repository import FenceBusy, canonical, digest, now, uid
 from .runtime_config import ROOT, CURRENT_DAPPER_SNAPSHOT, setting
 from .runtime_metrics import measure
 from . import user_inputs
@@ -102,6 +102,28 @@ def artifact_sizes(tx, owner, work_id):
     rows = tx.execute('SELECT '+json_text(tx, 'sha256')+','+json_text(tx, 'size_bytes')+' FROM reveal_records '
         'WHERE kind=%s AND owner_id=%s AND '+json_text(tx, 'local_work_id')+'=%s', ('research_artifact', owner, work_id)).fetchall()
     return {row[0]: int(row[1]) for row in rows}
+
+
+def unsettled_operations(tx, owner, work_id):
+    """How many of one work's research_operations are not terminal, without transferring their payloads."""
+    state = json_text(tx, 'state')
+    return int(tx.execute('SELECT COUNT(*) FROM reveal_records WHERE kind=%s AND owner_id=%s AND '+json_text(tx, 'local_work_id')+
+        '=%s AND ('+state+' IS NULL OR '+state+' NOT IN ('+','.join(['%s'] * len(TERMINAL))+'))',
+        ('research_operation', owner, work_id, *sorted(TERMINAL))).fetchone()[0])
+
+
+def open_operations(tx):
+    """Every unsettled research_operation in one kind-range read; settled payloads never cross the wire."""
+    state = json_text(tx, 'state')
+    rows = tx.execute('SELECT id,owner_id,payload FROM reveal_records WHERE kind=%s AND ('+state+' IS NULL OR '+state+
+        ' NOT IN ('+','.join(['%s'] * len(TERMINAL))+'))', ('research_operation', *sorted(TERMINAL))).fetchall()
+    return [{'id': row[0], 'owner': row[1], 'data': json.loads(row[2])} for row in sorted(rows)]
+
+
+def needs_close(work, principal):
+    """An open (or closed but unstamped) local work past its lifetime or whose principal is gone."""
+    if work['state'] == 'closed' and work.get('closed_at'): return False
+    return work['expires_at'] <= now() or not principal or bool(principal['data'].get('retired'))
 
 
 def pending_operations(rows):
@@ -382,13 +404,13 @@ class ResearchWorkService:
 
     @staticmethod
     def release_pin_if_idle(tx, work):
+        """Release a closed work's generation pin once every operation settled; a released pin stays as it was."""
         if work['state'] != 'closed': return
-        if any(r['data']['local_work_id'] == work['id'] and r['data']['state'] not in TERMINAL
-               for r in work_records(tx, 'research_operation', work['owner_user_id'], work['id'])): return
         pin = tx.get('research_pin', work['research_request_id'])
-        if pin:
-            pin['data'].update(state='released', released_at=now())
-            tx.put('research_pin', work['research_request_id'], pin['owner'], pin['data'])
+        if not pin or pin['data'].get('state') == 'released': return
+        if unsettled_operations(tx, work['owner_user_id'], work['id']): return
+        pin['data'].update(state='released', released_at=now())
+        tx.put('research_pin', work['research_request_id'], pin['owner'], pin['data'])
 
     @staticmethod
     def operation_view(operation, *, tx, owner, strict=False, resolved=None):
@@ -447,22 +469,46 @@ class ResearchWorkService:
         future.add_done_callback(finished)
 
     def reconcile(self):
-        """Recover short operations and release expired idle generation pins."""
-        pending = []
-        with self.repo.transaction() as tx:
-            for row in tx.list('local_work'):
-                work = row['data']
-                if work.get('job_id'):
-                    pending.append(work['id'])
-                    continue  # hosted lifecycle owns its work/pin lease
-                principal = tx.get('principal', row['owner'])
-                retired = not principal or principal['data'].get('retired')
-                if work['expires_at'] <= now() or retired:
-                    work.update(state='closed', closed_at=work.get('closed_at') or now())
-                    tx.put('local_work', row['id'], row['owner'], work)
-                self.release_pin_if_idle(tx, work)
-                pending.append(work['id'])
-        for identity in pending: self.kick(identity)
+        """Recover short operations, close expired local work and release idle generation pins.
+
+        One snapshot finds what must change. The write fence is taken only for those rows, without waiting
+        behind another writer (a busy fence defers them to the next cycle), and each is re-read and decided
+        again under it. Recovery is scheduled from the same snapshot's unsettled operations.
+        """
+        with self.repo.read_transaction() as tx:
+            works = tx.list('local_work')
+            if not works: return
+            local = [row for row in works if not row['data'].get('job_id')]   # hosted lifecycle owns its work/pin
+            keys = [('principal', row['owner']) for row in local
+                    if not (row['data']['state'] == 'closed' and row['data'].get('closed_at'))]
+            keys += [('research_pin', row['data']['research_request_id']) for row in local if row['data']['state'] == 'closed']
+            rows = tx.get_records(keys) if keys else {}
+            operations = open_operations(tx)
+        busy = {(op['owner'], op['data'].get('local_work_id')) for op in operations}
+        candidates = []
+        for row in local:
+            work = row['data']
+            pin = rows.get(('research_pin', work['research_request_id'])) if work['state'] == 'closed' else None
+            if (needs_close(work, rows.get(('principal', row['owner'])))
+                    or (pin and pin['data'].get('state') != 'released' and (work['owner_user_id'], work['id']) not in busy)):
+                candidates.append(row['id'])
+        if candidates:
+            try:
+                with self.repo.transaction(nowait=True) as tx:
+                    current = tx.get_many('local_work', candidates)
+                    principals = tx.get_many('principal', sorted({row['owner'] for row in current.values()}))
+                    for identity in candidates:
+                        row = current.get(identity)
+                        if not row or row['data'].get('job_id'): continue
+                        work = row['data']
+                        if needs_close(work, principals.get(row['owner'])):
+                            work.update(state='closed', closed_at=work.get('closed_at') or now())
+                            tx.put('local_work', identity, row['owner'], work)
+                        self.release_pin_if_idle(tx, work)
+            except FenceBusy: pass
+        # kick()'s match: the operation's owner and work are the local_work row's.
+        owned_by = {(row['owner'], row['id']) for row in works}
+        self.resume_pending([op for op in operations if (op['owner'], op['data'].get('local_work_id')) in owned_by])
 
     def retain(self, owner, work_id, data, filename, *, purpose='source', metadata=None):
         if len(data) > 32_000_000: raise Problem(413, 'ARTIFACT_TOO_LARGE', 'A research artifact exceeds its limit.')

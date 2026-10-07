@@ -110,7 +110,15 @@ receipt and result together, re-authorized under the lease. Between the two
 come one authorized read and the blob uploads, outside the lock. With two
 captured files that is 17 round trips, 10 of them under the fence, instead of
 54 with 28. Operation quotas are counted in SQL, so stored results are no
-longer read under the fence.
+longer read under the fence. The 30 second research recovery loop reads one
+snapshot: local works, their principals and closed works' pins, and every
+unsettled operation. It resumes received and lease-expired operations from that
+snapshot. It takes the write fence only when a work must close or an idle pin
+must be released, re-reading and deciding each one again under the fence. It
+uses `FOR UPDATE NOWAIT`, so a fence held by another writer defers those
+changes to the next cycle instead of queueing. A closed work and a released pin
+are no longer rewritten every cycle. In steady state a cycle is one read of
+five round trips, instead of a fenced transaction plus one read per work.
 
 Each API request logs one JSON line to stdout with the route template (never
 the raw path, query string, ids or parameters), status, duration, and its
