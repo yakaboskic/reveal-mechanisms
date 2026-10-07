@@ -7,6 +7,7 @@ import unittest
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
+import pymysql
 
 from round_trips import count_round_trips
 from reveal_backend import app as api, readiness
@@ -73,18 +74,52 @@ class ReadinessMonitorTests(unittest.TestCase):
         self.tick(); self.assertEqual(len(self.sources.verified), 1)  # sources re-verified only once a minute
         self.now[0] += READINESS_VERIFICATION_TTL_SECONDS; self.tick(); self.assertEqual(len(self.sources.verified), 2)
 
+    def busy_tick(self, error=None):
+        with patch.object(Repository, 'single_read', side_effect=error or DatabaseBusy('Application database connection pool is busy')):
+            self.monitor.tick()
+
     def test_an_unreachable_database_turns_readiness_false_at_the_next_tick(self):
         self.tick(); self.assertEqual(self.probe()[0], 200)
-        self.now[0] += GENERATION_TTL_SECONDS
-        with patch.object(Repository, 'single_read', side_effect=DatabaseBusy('Application database connection pool is busy')):
-            self.monitor.tick()
+        self.now[0] += GENERATION_TTL_SECONDS; self.busy_tick(OSError('connection refused'))
         status, body = self.probe()
         self.assertEqual((status, body['code']), (503, 'SERVICE_UNAVAILABLE'))
-        with patch.object(Repository, 'single_read', side_effect=OSError('connection refused')): self.monitor.tick()
-        self.assertEqual(self.probe()[0], 503)
         self.now[0] += GENERATION_TTL_SECONDS; self.tick()
         self.assertEqual(self.probe()[0], 200)  # recovers on the next good read, with no new verification
         self.assertEqual(len(self.sources.verified), 1)
+        self.now[0] += GENERATION_TTL_SECONDS; self.busy_tick()
+        self.now[0] += GENERATION_TTL_SECONDS; self.busy_tick(pymysql.err.OperationalError(1045, 'Access denied'))
+        self.assertEqual(self.probe()[0], 503)  # only busy ticks keep the last good read; an auth error does not
+        self.monitor.current = None; self.busy_tick()
+        self.assertEqual(self.probe()[1]['code'], 'SERVICE_UNAVAILABLE')  # busy with no good read to keep: not ready
+
+    def test_a_busy_pool_keeps_the_last_good_read_for_a_minute(self):
+        self.tick(); started = self.now[0]
+        with self.assertLogs(readiness.LOGGER, 'WARNING') as logs:
+            while self.now[0] + GENERATION_TTL_SECONDS - started < readiness.BUSY_MAX_AGE:
+                self.now[0] += GENERATION_TTL_SECONDS; self.busy_tick()
+                status, body = self.probe()
+                self.assertEqual((status, body['database'], body['sources']['snapshot']), (200, 'sqlite-test', 'snapshot-1'))
+            self.now[0] = started + readiness.BUSY_MAX_AGE; self.busy_tick()
+            status, body = self.probe()
+            self.assertEqual((status, body['code']), (503, 'SERVICE_UNAVAILABLE'))  # a minute without a good read
+        self.assertEqual([record.getMessage() for record in logs.records],
+                         ['Readiness check deferred: the database is busy', 'Readiness check failed (DatabaseBusy)'])
+        self.now[0] += GENERATION_TTL_SECONDS; self.tick()
+        self.assertEqual(self.probe()[0], 200)
+        self.now[0] += GENERATION_TTL_SECONDS; self.busy_tick()
+        self.now[0] += GENERATION_TTL_SECONDS; self.busy_tick(OSError('connection refused'))
+        self.assertEqual(self.probe()[0], 503)  # any other failure ends the grace at once
+
+    def test_a_monitor_that_stops_ticking_while_busy_still_fails_after_the_pointer_age(self):
+        self.tick(); started = self.now[0]
+        for _ in range(4): self.now[0] += GENERATION_TTL_SECONDS; self.busy_tick()
+        last = self.now[0]   # then the monitor hangs: no more ticks
+        self.now[0] = last + readiness.POINTER_MAX_AGE
+        self.assertEqual(self.probe()[0], 200)
+        self.now[0] = last + readiness.POINTER_MAX_AGE + 1
+        self.assertLess(self.now[0] - started, readiness.BUSY_MAX_AGE)
+        status, body = self.probe()
+        self.assertEqual((status, body['code']), (503, 'SOURCE_NOT_READY'))
 
     def test_a_hung_or_stopped_monitor_never_keeps_a_cached_ready(self):
         self.tick(); self.assertEqual(self.probe()[0], 200)
@@ -112,15 +147,34 @@ class ReadinessMonitorTests(unittest.TestCase):
         self.now[0] += GENERATION_TTL_SECONDS; self.tick()
         self.assertEqual(len(self.sources.verified), 3)  # a pass holds for the verification TTL again
 
-    def test_a_busy_reference_pool_during_verification_costs_one_tick(self):
-        self.tick()
+    def test_a_busy_reference_pool_during_verification_keeps_the_verified_sources(self):
+        self.tick(); verified = self.now[0]
         self.now[0] += READINESS_VERIFICATION_TTL_SECONDS
-        self.sources.failure = DatabaseBusy('Reference read capacity is busy'); self.tick()
-        status, body = self.probe()
-        self.assertEqual((status, body['code']), (503, 'SERVICE_UNAVAILABLE'))
+        self.sources.failure = DatabaseBusy('Reference read capacity is busy')
+        with self.assertLogs(readiness.LOGGER, 'WARNING') as logs:
+            self.tick()
+            status, body = self.probe()
+            self.assertEqual((status, body['sources']['snapshot']), (200, 'snapshot-1'))
+            self.now[0] += GENERATION_TTL_SECONDS; self.tick()  # retried at the next tick
+            self.assertEqual((self.probe()[0], len(self.sources.verified)), (200, 3))
+            while self.now[0] - verified <= readiness.VERIFY_MAX_AGE:
+                self.now[0] += GENERATION_TTL_SECONDS; self.tick()
+            status, body = self.probe()
+            self.assertEqual((status, body['code'], body['detail']), (503, 'SOURCE_NOT_READY', 'Source verification is overdue.'))
+        self.assertEqual([record.getMessage() for record in logs.records], ['Source verification deferred: the database is busy'])
         self.sources.failure = None
         self.now[0] += GENERATION_TTL_SECONDS; self.tick()
-        self.assertEqual((self.probe()[0], len(self.sources.verified)), (200, 3))
+        self.assertEqual(self.probe()[0], 200)
+        self.now[0] += READINESS_VERIFICATION_TTL_SECONDS
+        self.sources.failure = Problem(503, 'SEMANTIC_SEARCH_UNAVAILABLE', 'Vector provider unavailable'); self.tick()
+        self.assertEqual(self.probe()[1]['code'], 'SEMANTIC_SEARCH_UNAVAILABLE')  # other failures are not kept
+
+    def test_a_busy_first_verification_is_not_ready(self):
+        self.sources.failure = DatabaseBusy('Reference read capacity is busy'); self.tick()
+        self.assertEqual(self.probe()[1]['code'], 'SERVICE_UNAVAILABLE')
+        self.sources.failure = None
+        self.now[0] += GENERATION_TTL_SECONDS; self.tick()
+        self.assertEqual((self.probe()[0], len(self.sources.verified)), (200, 2))
 
     def test_a_cutover_is_verified_and_a_missing_snapshot_pointer_fails_closed(self):
         self.tick()

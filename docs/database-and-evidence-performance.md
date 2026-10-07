@@ -275,7 +275,13 @@ direct TLS connection, ran five reference queries, projected the snapshot row
 and called Upstash (6.6-8 seconds). Readiness still fails closed: a failed
 database read or verification answers 503 until the next successful one,
 within one 5 second interval, and so does a monitor whose last read is more
-than 15 seconds old. Right after a cutover the last verified sources are
+than 15 seconds old. A busy pool (`DatabaseBusy`) is load, not an outage, so a
+load spike does not take the task out of the ALB: while every check since the
+last good read found the pool busy and the monitor still ticks, that read keeps
+answering for up to 60 seconds, and a busy verification keeps the last verified
+sources (still at most 3 minutes old) and is retried at the next check. Any
+other failure, such as a refused connection or a failed TLS or credential
+check, answers 503 at once. Right after a cutover the last verified sources are
 reported for up to two minutes while the new pointers are verified.
 `REVEAL_READINESS_MONITOR=0` turns the monitor off; probes then check
 synchronously as before. `/healthz` is unchanged.

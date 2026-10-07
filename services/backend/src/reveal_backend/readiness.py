@@ -6,7 +6,10 @@ the verified Vector snapshot and provider, the artifact store) are re-verified i
 whenever the pointers change, at least every READINESS_VERIFICATION_TTL_SECONDS, and at the next tick
 after a failed verification. A probe does no I/O. Readiness fails closed: a failed read or verification
 answers 503 until the next success, and so does a monitor whose last read is older than POINTER_MAX_AGE
-(hung or stopped). Nothing here takes the write fence, writes, or retries a failed read inside a tick.
+(hung or stopped). A busy pool is load, not an outage: while every failure since the last good read is
+DatabaseBusy and the monitor still ticks, that read answers for up to BUSY_MAX_AGE, and a busy
+verification keeps the last verified sources (still bounded by VERIFY_MAX_AGE). Nothing here takes the
+write fence, writes, or retries a failed read inside a tick.
 """
 import logging
 import os
@@ -15,11 +18,13 @@ from time import monotonic
 
 from .auth import Problem
 from .catalog import GENERATION_TTL_SECONDS, READINESS_VERIFICATION_TTL_SECONDS, active_pointers, readiness_binding, vector_backend
+from .mysql_pool import DatabaseBusy
 
 LOGGER = logging.getLogger(__name__)
 POINTER_MAX_AGE = 3 * GENERATION_TTL_SECONDS
 VERIFY_MAX_AGE = 3 * READINESS_VERIFICATION_TTL_SECONDS
 NEW_BINDING_GRACE = 2 * READINESS_VERIFICATION_TTL_SECONDS  # a cutover keeps the last verified sources this long
+BUSY_MAX_AGE = 60.0  # the last good read answers this long while every later tick found the pool busy
 _monitor = None
 
 
@@ -36,8 +41,9 @@ class ReadinessMonitor:
         self.repo, self.catalog, self.interval, self.clock = repo, catalog, interval, clock
         self.lock, self.stopped, self.thread, self.pid = threading.Lock(), threading.Event(), None, os.getpid()
         self.current = None    # (read at, database facts, binding, binding first seen at, error)
+        self.busy = None       # when the latest tick found the pool busy, while current is the last good read
         self.verified = None   # (binding, verified at or failed attempt at, sources, error)
-        self.verifying = False
+        self.verifying = self.verify_busy = False
 
     def tick(self):
         repo, catalog = self.repo(), self.catalog()
@@ -50,15 +56,22 @@ class ReadinessMonitor:
             database = facts['database'] or repo.readiness()  # sessions not opened by mysql_database.connect
             binding = readiness_binding(generation, snapshot)
         except Exception as error:
-            with self.lock: previous, self.current = self.current, (self.clock(), None, None, None, error)
-            if previous is None or previous[4] is None: LOGGER.warning('Readiness check failed (%s)', type(error).__name__)
+            now = self.clock()
+            with self.lock:
+                previous, busy = self.current, self.busy
+                kept = isinstance(error, DatabaseBusy) and previous is not None and previous[4] is None and now - previous[0] < BUSY_MAX_AGE
+                if kept: self.busy = now
+                else: self.current, self.busy = (now, None, None, None, error), None
+            if kept:
+                if busy is None: LOGGER.warning('Readiness check deferred: the database is busy')
+            elif previous is None or previous[4] is None: LOGGER.warning('Readiness check failed (%s)', type(error).__name__)
             return
         observe = getattr(catalog, 'observe_pointers', None)
         if observe: observe(generation, snapshot)
         now = self.clock()
         with self.lock:
             seen = self.current[3] if self.current and self.current[2] == binding else now
-            self.current = (now, database, binding, seen, None)
+            self.current, self.busy = (now, database, binding, seen, None), None
             verified = self.verified
             # a pass holds for the TTL; a failure (stamped when it was attempted) is retried at the next tick
             due = not self.verifying and (verified is None or verified[0] != binding or now - verified[1] >= (
@@ -74,16 +87,25 @@ class ReadinessMonitor:
             outcome = (binding, self.clock(), sources, None)
         except Exception as error:
             outcome = (binding, attempted, None, error)
-        with self.lock: previous, self.verified, self.verifying = self.verified, outcome, False
-        if outcome[3] is not None and (previous is None or previous[3] is None):
+        with self.lock:
+            previous, busy = self.verified, self.verify_busy
+            # a busy pool keeps the last verified sources; the next tick retries, and VERIFY_MAX_AGE still bounds them
+            kept = isinstance(outcome[3], DatabaseBusy) and previous is not None and previous[3] is None
+            if not kept: self.verified = outcome
+            self.verify_busy, self.verifying = kept, False
+        if kept:
+            if not busy: LOGGER.warning('Source verification deferred: the database is busy')
+        elif outcome[3] is not None and (previous is None or previous[3] is None):
             LOGGER.warning('Source verification failed (%s)', type(outcome[3]).__name__)
 
     def snapshot(self):
         """(database facts, sources) from memory, or raise why readiness is not confirmed. No I/O."""
         now = self.clock()
-        with self.lock: current, verified = self.current, self.verified
-        if current is None or now - current[0] > POINTER_MAX_AGE:
-            raise Problem(503, 'SOURCE_NOT_READY', 'Readiness has not been confirmed recently.')
+        with self.lock: current, verified, busy = self.current, self.verified, self.busy
+        # a monitor that stopped ticking (hung or stopped) fails after POINTER_MAX_AGE, busy or not
+        fresh = current is not None and (now - current[0] <= POINTER_MAX_AGE or
+            busy is not None and now - busy <= POINTER_MAX_AGE and now - current[0] < BUSY_MAX_AGE)
+        if not fresh: raise Problem(503, 'SOURCE_NOT_READY', 'Readiness has not been confirmed recently.')
         if current[4] is not None: raise _answer(current[4])
         if verified is not None and verified[0] != current[2] and (verified[3] is not None or now - current[3] > NEW_BINDING_GRACE):
             verified = None  # the active pointers changed and their sources are not verified yet
