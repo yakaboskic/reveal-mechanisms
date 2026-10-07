@@ -76,12 +76,19 @@ def representation(tx, user, target, format='native', revision=None, locale='en-
     raise Problem(422, 'CITATION_FORMAT_UNAVAILABLE', 'Choose native, csl-json, bibtex, biblatex, apa or mla.')
 
 
-def register(tx, user, document, attribution, generated_at, *, runtime=None, retained_citation_metadata=(), retained_object_ids=()):
+def register(tx, user, document, attribution, generated_at, *, runtime=None, retained_citation_metadata=(), retained_object_ids=(),
+             writes=None):
     """Called inside trusted scientific acceptance, never from a browser body.
 
     Reusing a digest grants access to its unchanged first registry revision.
     Missing source authorship, DOI and software version remain unknown.
+    writes (scientific_writes.AcceptanceWrites) plans the grants and new records for the acceptance's one batched
+    write instead of putting them here, and answers reads from that plan first.
     """
+    read = writes.get if writes else tx.get
+    def put(kind, identity, data):
+        if writes: writes.put(kind, identity, user, data)
+        else: tx.put(kind, identity, user, data)
     base = setting('REVEAL_CANONICAL_URL', setting('NEXTAUTH_URL', 'http://localhost:3000')).rstrip('/')
     if urlsplit(base).scheme not in ('http', 'https') or urlsplit(base).username:
         raise Problem(503, 'RESOLVER_NOT_CONFIGURED', 'Configure an HTTP(S) canonical resolver origin.')
@@ -110,8 +117,8 @@ def register(tx, user, document, attribution, generated_at, *, runtime=None, ret
             if identity in retained_object_ids:
                 # Missing historical metadata is unknown, not current authorship.
                 continue
-            existing = tx.get('citation', f'{identity}:1')
-            grant(tx, user, identity)
+            existing = read('citation', f'{identity}:1')
+            put('grant', digest([user, identity]), {'target_id': identity})
             if existing:
                 records.append(existing['data'])
                 continue
@@ -131,10 +138,10 @@ def register(tx, user, document, attribution, generated_at, *, runtime=None, ret
                     if len(actors) == 1:
                         person = actors[0]
                 if not person:
-                    actor = tx.get('citation_actor', user)
+                    actor = read('citation_actor', user)
                     if not actor:
                         actor = {'data': {'id': 'urn:reveal:actor:' + uid()}}
-                        tx.put('citation_actor', user, user, actor['data'])
+                        put('citation_actor', user, actor['data'])
                     person = actor['data']['id']
                 author = {'agent_id': person, 'kind': 'person', 'roles': ['agent_operator'],
                           'source': {'source_ref': person, 'recorded_at': attribution.get('observed_at', stamp)},
@@ -165,7 +172,7 @@ def register(tx, user, document, attribution, generated_at, *, runtime=None, ret
                 record['date_provenance']['generated_at'] = {'source_ref': activity or provenance['source_ref'], 'recorded_at': generated_at}
             record['metadata_checksum'] = digest(record)
             validate_record(record)
-            tx.put('citation', f'{identity}:1', user, record)
+            put('citation', f'{identity}:1', record)
             records.append(record)
     return records
 

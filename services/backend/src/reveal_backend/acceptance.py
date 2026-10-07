@@ -233,6 +233,17 @@ def assemble_account(raw_path,package_path,output_path,attribution,job,attempt,e
 
 
 def object_envelope(document,identity,metadata,artifact_access=None,*,max_depth=5,max_nodes=250,offset=0,continuation=None):
+    return with_citations(object_projection(document,identity,artifact_access,max_depth=max_depth,max_nodes=max_nodes,
+        offset=offset,continuation=continuation),metadata)
+
+def with_citations(projection,metadata):
+    """The envelope of an object_projection with the citation metadata of the objects it retains."""
+    envelope,retained=projection
+    return dict(envelope,citation_metadata=[m for m in metadata if m['target_id'] in retained])
+
+def object_projection(document,identity,artifact_access=None,*,max_depth=5,max_nodes=250,offset=0,continuation=None):
+    """(envelope without its citation metadata, ids it retains). Citation metadata is the only input acceptance
+    reads under the write fence, so the costly projection can be made before taking it."""
     runtime=public_runtime()
     document,errors=runtime.transform(document,runtime.schema,runtime.groups,compact_dapper=True)
     require(not errors,'Public object projection contains unresolved identifiers')
@@ -274,13 +285,12 @@ def object_envelope(document,identity,metadata,artifact_access=None,*,max_depth=
             if values: projected[group]=values
     document=projected
     missing-=retained
-    metadata=[m for m in metadata if m['target_id'] in retained]
-    lock=decode(LOCK.read_bytes())
-    return {'root_id':identity,'schema':{'schema_sha256':lock['files']['schema/dapper.yaml'],'dependency_snapshot_sha256':sha256(LOCK.read_bytes()),'identity_profile':'DAPPER-ID-1'},
+    raw=LOCK.read_bytes(); lock=decode(raw)
+    return {'root_id':identity,'schema':{'schema_sha256':lock['files']['schema/dapper.yaml'],'dependency_snapshot_sha256':sha256(raw),'identity_profile':'DAPPER-ID-1'},
         'document':document,'payloads':[{'object_id':n['id'],'payload_sha256':sha256(canonical_json(n))} for rows in document.values() if isinstance(rows,list) for n in rows if isinstance(n,dict) and str(n.get('id','')).startswith('dapper:')],
-        'citation_metadata':metadata,'artifacts':[(artifact_access or {}).get(f['id'],{'file':f,'download_url':None,'expires_at':None,'availability':'not_available','verification':'source_reported'}) for f in document.get('files',[])],
+        'citation_metadata':None,'artifacts':[(artifact_access or {}).get(f['id'],{'file':f,'download_url':None,'expires_at':None,'availability':'not_available','verification':'source_reported'}) for f in document.get('files',[])],
         'coverage':{'direction':'upstream','max_depth':max_depth,'max_nodes':max_nodes,'complete':not missing,'missing_ids':sorted(missing-retained),
-            'next_cursor':continuation(end) if continuation and capacity and end<len(upstream) else None}}
+            'next_cursor':continuation(end) if continuation and capacity and end<len(upstream) else None}},retained
 
 def validate_paragraph_document(path):
     """Use pinned upstream lint with an application-owned terminal Paragraph profile."""

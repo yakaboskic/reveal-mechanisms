@@ -455,8 +455,8 @@ class ReferenceGuardTests(unittest.TestCase):
         path = directory / 'accepted-1.json'; path.write_bytes(canonical_json(doc))
         frozen = {'question_id': GAP_ID, 'composer': {'selected_kgs': [], 'source_gap': deepcopy(COMPOSER['source_gap'])},
                   'attribution': {'user_id': self.owner}}
-        envelope = lambda document, root, *args, **kwargs: {'root_id': root, 'document': {}}
-        with patch('reveal_backend.citations.register', return_value=[]), patch.object(worker, 'object_envelope', side_effect=envelope):
+        projection = lambda document, root, *args, **kwargs: ({'root_id': root, 'document': {}}, {root})
+        with patch('reveal_backend.citations.register', return_value=[]), patch.object(worker, 'object_projection', side_effect=projection):
             asyncio.run(worker.Worker(self.repo).accept_accounts(job, queue['token'], [(doc, {'valid': True}, path)], frozen, package,
                         SimpleNamespace(runtime_manifest_path=None, ledger_manifest_path=None), directory, 'deterministic'))
         with self.repo.read_transaction() as tx:

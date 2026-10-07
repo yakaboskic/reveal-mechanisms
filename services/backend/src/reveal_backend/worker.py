@@ -11,7 +11,7 @@ import socket
 import time
 from .agent_execution import ExecutionRequest, MAX_EMIT_BATCH_EVENTS, MAX_EMIT_BATCH_BYTES, emit_batch_size
 from .auth import Problem, owned
-from .acceptance import assemble_account, object_envelope, release_root, LOCK, mint, validate_paragraph_document
+from .acceptance import assemble_account, object_envelope, object_projection, with_citations, release_root, LOCK, mint, validate_paragraph_document
 from .evidence_package import DapperRuntime, canonical_json, decode, require, sha256
 from .evidence_schema import validate_package_shape, load_generated_schema
 from .evidence_collector import collect_package
@@ -570,16 +570,40 @@ class Worker:
                 source['retained']=await asyncio.to_thread(retained_file,source['path'],checksum)
         await asyncio.to_thread(self.save_workspace,job,token,artifacts_root()/job['id'])
         from .analysis_outcomes import creation_stamp, stamp_gap, stamped
+        from .reference_generation import ACTIVE_KIND, ACTIVE_ID
+        from .scientific_writes import AcceptanceWrites, acceptance_keys, dapper_nodes
         from .workflow_execution import drain_on_cancel
+        base=setting('NEXTAUTH_URL','http://localhost:3000').rstrip('/')+'/api/backend/v1/artifacts/'
         def persist():
             # One fenced transaction in one worker thread: the event loop keeps serving while it holds the fence.
             evidence_sha256=sha256(package_path.read_bytes())
             package = decode(package_path.read_bytes())
             validation = package.get('validation_context', {})
+            # Envelopes depend on the fence only through citation metadata: project every node now, with each
+            # document's artifact access as of that document (box captures are added document by document).
+            documents=[doc for doc,_,_ in accepted]; snapshots=[]; access=dict(artifact_access)
+            for doc in documents:
+                if mode=='box':
+                    for file in doc.get('files',[]):
+                        if captured.get(file.get('sha256')):
+                            access[file['id']]={'file':file,'download_url':base+file['sha256'],'expires_at':None,'availability':'available','verification':'checksum_verified'}
+                snapshots.append(dict(access))
+            projections=[{node['id']:object_projection(doc,node['id'],snapshot) for node in dapper_nodes(doc)} for doc,snapshot in zip(documents,snapshots)]
+            shas=[sha256(path.read_bytes()) for _,_,path in accepted]
+            owner=job.get('owner_user_id')   # the fenced job row decides; a changed owner only costs the reads below
+            keys=[('job',job['id']),('queue',job['id']),('execution',job['id']),(ACTIVE_KIND,ACTIVE_ID),('local_work',job['id']),
+                ('research_pin',job.get('research_request_id')),*acceptance_keys(owner,documents),
+                *(('scientific_document',digest([owner,sha])) for sha in shas)]
+            for doc in documents:
+                identity=doc['scientific_accounts'][0]['id']
+                keys+=[('outbox',digest([owner,identity,'default-paragraph'])),('account',digest([owner,identity])),('account_membership',digest([owner,identity]))]
+                if mode=='box': keys+=[('artifact',digest([owner,file['sha256']])) for file in doc.get('files',[]) if captured.get(file.get('sha256'))]
             with self.repository.transaction() as tx:
+                tx.get_records([key for key in keys if isinstance(key[1],str)],bare=('object',))   # one read for the whole commit
                 pair=jobs.fenced(tx,job['id'],token)
                 if not pair or pair[0]['status']=='cancel_requested': return
                 current,_=pair; owner=current['owner_user_id']; accounts=[]; paragraphs=[]; manifest_accounts=[]
+                writes=AcceptanceWrites(tx,owner)
                 reused = {'contexts': [], 'borrowed_ids': [], 'citation_metadata': []}
                 existing = validation.get('existing_account_ids', [])
                 if validation:
@@ -591,53 +615,44 @@ class Worker:
                     for n in rows if isinstance(n, dict) and 'id' in n}
                 borrowed_ids = set(reused['borrowed_ids'])
                 persist_source_artifacts(tx,owner,source_artifacts)
-                for doc,report,path in accepted:
+                for (doc,report,path),projection,snapshot,document_sha in zip(accepted,projections,snapshots,shas):
                     if mode=='box':
                         for file in doc.get('files',[]):
                             source=captured.get(file.get('sha256'))
-                            if source:
-                                tx.put('artifact',digest([owner,file['sha256']]),owner,{'sha256':file['sha256'],'file':file,**source['retained'],'job_id':job['id']})
-                                url=setting('NEXTAUTH_URL','http://localhost:3000').rstrip('/')+'/api/backend/v1/artifacts/'+file['sha256']
-                                artifact_access[file['id']]={'file':file,'download_url':url,'expires_at':None,'availability':'available','verification':'checksum_verified'}
+                            if source: writes.put('artifact',digest([owner,file['sha256']]),owner,{'sha256':file['sha256'],'file':file,**source['retained'],'job_id':job['id']})
                     runtime=decode(Path(result.runtime_manifest_path).read_bytes()) if result.runtime_manifest_path else {'model_id':None,'harness_version':None}
                     runtime['model_id']=runtime.get('model_id') or runtime.get('model')
                     actor=doc['scientific_accounts'][0].get('was_attributed_to',[None])[0]
                     metadata=register(tx,owner,doc,{**frozen['attribution'],'person_id':actor},now(),runtime=runtime,
-                        retained_citation_metadata=reused['citation_metadata'], retained_object_ids=retained_ids)
+                        retained_citation_metadata=reused['citation_metadata'], retained_object_ids=retained_ids, writes=writes)
                     account=doc['scientific_accounts'][0]; identity=account['id']; gap=next(g for g in doc['knowledge_gaps'] if g['id']==account['question'])
-                    outbox_key=digest([owner,identity,'default-paragraph']); previous=tx.get('outbox',outbox_key)
+                    outbox_key=digest([owner,identity,'default-paragraph'])
+                    # A second document of an account accepted earlier in this commit reads its rows as written.
+                    if writes.planned('outbox',outbox_key): writes.flush()
+                    previous=tx.get('outbox',outbox_key)
                     if previous:
                         paragraph=tx.get('job',previous['data']['job_id'])['data']
                         old_account=owned(tx,'account',identity,owner)['data']
                         state=old_account['result']['research_statement']
                     else:
-                        paragraph=jobs.enqueue(tx,owner,'paragraph',account_id=identity,inputs={'kind':'paragraph','account_id':identity})
+                        paragraph,rows=jobs.new(owner,'paragraph',account_id=identity,inputs={'kind':'paragraph','account_id':identity})
+                        writes.insert(rows); jobs.update_paragraph_state(tx,paragraph)
                         state={'status':'queued','job_id':paragraph['id'],'paragraph_id':None}
-                    envelope=object_envelope(doc,identity,metadata,artifact_access); envelope['research_statement']=state
+                    envelope=with_citations(projection[identity],metadata); envelope['research_statement']=state
                     summary={'account':account,'knowledge_gap':gap,'claim_count':len(account['component_claims']),'created_at':now(),'job_id':job['id'],'research_statement':state}
                     if not previous:
                         # A job that finishes after its reference generation was superseded is born archived.
                         stamp=creation_stamp(tx,owner,job['research_request_id'],gap=stamp_gap(frozen['composer'].get('source_gap'),frozen.get('question_id')),scientific_document=doc,
                             analysis={'job_id':job['id'],'request_id':job['research_request_id'],'evidence_package_sha256':evidence_sha256,'account_id':identity})
-                        tx.put('account',digest([owner,identity]),owner,stamped('account',{'result':envelope,'summary':deepcopy(summary)},stamp))
-                        tx.put('account_membership',digest([owner,identity]),owner,stamped('account_membership',{'account_id':identity,'summary':summary},stamp))
-                    document_sha=sha256(path.read_bytes())
-                    tx.put('scientific_document',digest([owner,document_sha]),owner,{'sha256':document_sha,'document':doc,'job_id':job['id'],'observed_at':now(),
-                        'citation_metadata':metadata,'artifact_access':artifact_access})
-                    for rows in doc.values():
-                        if isinstance(rows,list):
-                            for node in rows:
-                                if isinstance(node,dict) and str(node.get('id','')).startswith('dapper:'):
-                                    if node['id'] not in borrowed_ids:
-                                        tx.put('grant',digest([owner,node['id']]),owner,{'target_id':node['id']})
-                                    projection=object_envelope(doc,node['id'],metadata,artifact_access)
-                                    tx.put('object_observation',digest([owner,node['id'],sha256(canonical_json(node))]),owner,{'object_id':node['id'],'payload':node,'document_sha256':document_sha})
-                                    if not tx.get('object',digest([owner,node['id']])):
-                                        tx.put('object',digest([owner,node['id']]),owner,projection)
-                                        tx.put('object_document',digest([owner,node['id']]),owner,{'object_id':node['id'],'sha256':document_sha})
-                    if not previous: tx.put('outbox',outbox_key,owner,{'account_id':identity,'job_id':paragraph['id'],'dispatched':True})
+                        writes.put('account',digest([owner,identity]),owner,stamped('account',{'result':envelope,'summary':deepcopy(summary)},stamp))
+                        writes.put('account_membership',digest([owner,identity]),owner,stamped('account_membership',{'account_id':identity,'summary':summary},stamp))
+                    writes.put('scientific_document',digest([owner,document_sha]),owner,{'sha256':document_sha,'document':doc,'job_id':job['id'],'observed_at':now(),
+                        'citation_metadata':metadata,'artifact_access':snapshot})
+                    writes.document(doc,document_sha,metadata,projection.__getitem__,borrowed_ids)
+                    if not previous: writes.put('outbox',outbox_key,owner,{'account_id':identity,'job_id':paragraph['id'],'dispatched':True})
                     accounts.append(identity); paragraphs.append(paragraph['id'])
-                    manifest_accounts.append({'path':str(path.resolve().relative_to(directory.resolve())),'sha256':sha256(path.read_bytes()),'account_id':identity,'lint_report_sha256':sha256(canonical_json(report))})
+                    manifest_accounts.append({'path':str(path.resolve().relative_to(directory.resolve())),'sha256':document_sha,'account_id':identity,'lint_report_sha256':sha256(canonical_json(report))})
+                writes.flush()
                 public={'kind':'analysis','request_id':job['research_request_id'],'account_ids':accounts,'enrichment':enrichment_status(result,frozen['composer']['selected_kgs'],mode),
                     'paragraph_job_ids':paragraphs,'evidence_package_sha256':evidence_sha256}
                 if validation: public.update(reused_account_ids=existing, seed_sha256=validation['seed_sha256'])

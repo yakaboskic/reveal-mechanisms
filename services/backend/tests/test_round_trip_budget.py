@@ -20,6 +20,7 @@ from reveal_backend.workflow_routes import dispatch_job, sweep
 import test_cfde_assessment as cfde
 from test_cfde_assessment import case  # noqa: F401 (pytest fixture)
 import test_account_discovery as account_discovery
+import test_acceptance_batch as acceptance_batch
 import test_application as application
 import test_durable_workflow as durable
 import test_event_loop_offload as offload
@@ -29,7 +30,7 @@ import test_research_http as research_http
 import test_readiness_monitor as readiness_monitor
 import test_research_polling as research_polling
 
-BUDGET = {'local_work_poll': 5, 'me': 2, 'readyz': 2, 'draft_patch': 8, 'mcp_get_operation': 5, 'job_create': 8, 'draft_create': 7,
+BUDGET = {'local_work_poll': 5, 'me': 2, 'readyz': 2, 'draft_patch': 8, 'mcp_get_operation': 5, 'job_create': 8, 'draft_create': 7, 'account_acceptance': 12,
           'mcp_query_enqueue': 13, 'query_operation': 17, 'workspace_list': 4, 'workspace_detail': 4,
           'reconcile_idle': 4, 'job_dispatch': 11, 'observe_tick': 11, 'observe_tick_events': 13, 'gap_list': 5, 'gap_search': 5, 'gap_detail': 5,
           'citation_render': 5, 'readyz_monitored': 0, 'readiness_tick': 2, 'suggest': 2,
@@ -303,6 +304,21 @@ class SubmissionBudget(unittest.TestCase):
         self.assertEqual(response.status_code, 201, response.text); print('\ndraft create', budget)
         self.assertEqual((budget.kinds(), budget.unleased, budget.connects), (['write'], 0, 0), budget)
         self.assertLessEqual(budget.trips(), BUDGET['draft_create'], budget)
+
+
+class AcceptanceBudget(unittest.TestCase):
+    setUp = acceptance_batch.AcceptanceBatchTests.setUp
+    claimed = acceptance_batch.AcceptanceBatchTests.claimed
+    accept = acceptance_batch.AcceptanceBatchTests.accept
+
+    def test_account_acceptance_is_one_fence_with_a_few_batched_statements(self):
+        # The 63-node fixture account: one read of every row it can touch, multi-row INSERTs, the result event.
+        claimed = self.claimed(self.repo, acceptance_batch.OWNER)
+        with count_round_trips() as budget:
+            self.accept(self.repo, acceptance_batch.W.Worker, acceptance_batch.OWNER, [self.document], claimed=claimed)
+        print('\naccount acceptance', budget)   # the read is the helper's own status check afterwards
+        self.assertEqual((budget.kinds(), budget.unleased, budget.connects), (['write', 'read'], 0, 0), budget)
+        self.assertLessEqual(budget.leases[0][1] + OPEN['write'] + END + RELEASE, BUDGET['account_acceptance'], budget)
 
 
 class WorkflowBudget(unittest.IsolatedAsyncioTestCase):

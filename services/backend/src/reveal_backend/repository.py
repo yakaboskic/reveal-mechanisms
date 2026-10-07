@@ -128,19 +128,26 @@ class Transaction:
         for identity in identities:
             if identity not in result: self._learn(kind, identity, absent=True)
         return result
-    def get_records(self, keys):
-        """Fetch exact heterogeneous record keys without widening access."""
+    def get_records(self, keys, *, bare=()):
+        """Fetch exact heterogeneous record keys without widening access. Rows of a kind in bare come back with
+        owner and version only (data None), for existence checks that need no payload."""
         keys = list(dict.fromkeys(keys)); result = {}
+        column = 'CASE WHEN kind IN (' + ','.join(['%s'] * len(bare)) + ') THEN NULL ELSE payload END' if bare else 'payload'
         for offset in range(0, len(keys), 250):
             batch = keys[offset:offset + 250]
-            rows = self.execute('SELECT kind,id,owner_id,version,payload FROM reveal_records WHERE (kind,id) IN (' +
-                ','.join(['(%s,%s)'] * len(batch)) + ')', tuple(value for key in batch for value in key)).fetchall()
+            rows = self.execute('SELECT kind,id,owner_id,version,' + column + ' FROM reveal_records WHERE (kind,id) IN (' +
+                ','.join(['(%s,%s)'] * len(batch)) + ')', (*bare, *(value for key in batch for value in key))).fetchall()
             for row in rows:
                 self._learn(row[0], row[1], row[2], row[3], row[4])
-                result[(row[0], row[1])] = {'owner': row[2], 'version': row[3], 'data': json.loads(row[4])}
+                result[(row[0], row[1])] = {'owner': row[2], 'version': row[3], 'data': None if row[4] is None else json.loads(row[4])}
             for key in batch:
                 if key not in result: self._learn(*key, absent=True)
         return result
+    def exists(self, kind, identity):
+        """Whether the row exists, from this transaction's reads and writes when known; never reads its payload."""
+        entry = self._known(kind, identity)
+        if entry is not _MISS: return entry is not None
+        return self._old(kind, identity, False) is not None
     def insert_many(self, records):
         """Insert new records in one SQL statement; conflicts roll back the batch."""
         if not records: return
@@ -166,6 +173,51 @@ class Transaction:
             for kind, identity, owner, data in records:
                 if kind in replace: self.put(kind, identity, owner, data)
                 else: self.insert_many([(kind, identity, owner, data)])
+    def apply_puts(self, writes, fresh=(), *, rows=250, size=4 << 20):
+        """The final state of sequential put()s in one pass. Each (kind, id, owner, data, count) is `count` puts of
+        one key whose last data is `data`; a tracked kind repeats identical data. Owners, payloads, versions and
+        workspace events are the puts'. Keys this transaction read as absent, and `fresh` rows (new uuids), go in
+        multi-row INSERTs; rows read with an unchanged payload get one version bump per count; each changed row one
+        UPDATE; a key this transaction has not read is put() as before."""
+        from .workspace_events import tracked, track
+        inserts, bumps = [(kind, identity, owner, data, 1) for kind, identity, owner, data in fresh], {}
+        for kind, identity, owner, data, count in writes:
+            entry = self._known(kind, identity)
+            if entry is None: inserts.append((kind, identity, owner, data, count)); continue
+            if entry is _MISS or (entry[2] is None and tracked(kind)):
+                for _ in range(count): self.put(kind, identity, owner, data)
+                continue
+            old = json.loads(entry[2]) if entry[2] is not None else _MISS
+            if old == data and entry[0] == owner:
+                bumps.setdefault(count, []).append((kind, identity, owner, entry[1])); continue
+            cursor = self._write('UPDATE reveal_records SET owner_id=%s,version=%s,payload=%s,updated_at=%s WHERE kind=%s AND id=%s AND version=%s',
+                                 (owner, entry[1] + count, canonical(data), now(), kind, identity, entry[1]), [identity])
+            if cursor.rowcount != 1: raise Conflict('Record changed outside the write fence')
+            self._learn(kind, identity, owner, entry[1] + count)
+            track(self, kind, identity, owner, data, None if old is _MISS else {'owner': entry[0], 'version': entry[1], 'data': old},
+                  revision=entry[1] + 1)
+        for count, unchanged in bumps.items():
+            for offset in range(0, len(unchanged), 250):
+                part = unchanged[offset:offset + 250]
+                cursor = self._write('UPDATE reveal_records SET version=version+%s,updated_at=%s WHERE (kind,id) IN (' +
+                    ','.join(['(%s,%s)'] * len(part)) + ')', (count, now(), *(value for row in part for value in row[:2])),
+                    [row[1] for row in part])
+                if cursor.rowcount != len(part): raise Conflict('Record changed outside the write fence')
+                for kind, identity, owner, version in part: self._learn(kind, identity, owner, version + count)
+        batch, held = [], 0
+        def flush():
+            if not batch: return
+            self._write('INSERT INTO reveal_records(kind,id,owner_id,version,payload,updated_at) VALUES '+
+                ','.join(['(%s,%s,%s,%s,%s,%s)'] * len(batch)), tuple(value for row in batch for value in row), [row[1] for row in batch])
+            batch.clear()
+        for kind, identity, owner, data, count in inserts:
+            text = canonical(data)
+            if batch and (len(batch) >= rows or held + len(text) > size): flush(); held = 0
+            batch.append((kind, identity, owner, count, text, now())); held += len(text)
+        flush()
+        for kind, identity, owner, data, count in inserts:
+            self._learn(kind, identity, owner, count)
+            track(self, kind, identity, owner, data)
     def update_existing(self, kind, identity, owner, data):
         """Update a row already read under the transaction's exclusive fence."""
         from .workspace_events import tracked, track

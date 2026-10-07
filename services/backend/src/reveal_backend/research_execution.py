@@ -446,30 +446,40 @@ def validate_submission(service, operation):
 
 
 def commit_accounts(service, tx, operation, prepared):
-    from .acceptance import object_envelope
+    from .acceptance import object_envelope, object_projection
     from .citations import register
     from .scientific_reuse import record_dependencies
+    from .scientific_writes import AcceptanceWrites, acceptance_keys
     from .analysis_outcomes import creation_stamp, stamp_gap, stamped
+    from .reference_generation import ACTIVE_KIND, ACTIVE_ID
     owner = operation['owner_user_id']; work_id = operation['local_work_id']; args = operation['arguments']
+    documents = [accepted['document'] for accepted in prepared['validated']]
+    # One read for every row the commit can touch; owned() and the planned writes are served from it.
+    tx.get_records([('request', operation['research_request_id']), (ACTIVE_KIND, ACTIVE_ID), *acceptance_keys(owner, documents),
+        *(('artifact', digest([owner, record['sha256']])) for record in prepared['source_records']),
+        *(('account', digest([owner, doc['scientific_accounts'][0]['id']])) for doc in documents),
+        *(('account_membership', digest([owner, doc['scientific_accounts'][0]['id']])) for doc in documents),
+        *(('scientific_document', digest([owner, accepted['storage']['sha256']])) for accepted in prepared['validated'])], bare=('object',))
     frozen = owned(tx, 'request', operation['research_request_id'], owner)['data']
     reused = record_dependencies(tx, owner, frozen['id'], prepared['reused']['receipt_ids'],
         prepared['account_ids'] + prepared['reused_account_ids'])
     retained_ids = {n['id'] for c in reused['contexts'] for rows in c['dapper_context'].values() if isinstance(rows, list)
                     for n in rows if isinstance(n, dict) and 'id' in n}
-    borrowed_ids = set(reused['borrowed_ids']); access = {}
+    borrowed_ids = set(reused['borrowed_ids']); access = {}; writes = AcceptanceWrites(tx, owner)
     for record in prepared['source_records']:
         file = record['file']
-        tx.put('artifact', digest([owner, record['sha256']]), owner, record)
+        writes.put('artifact', digest([owner, record['sha256']]), owner, record)
         access[file['id']] = {'file': file, 'download_url': setting('NEXTAUTH_URL', 'http://localhost:3000').rstrip('/')+'/api/backend/v1/artifacts/'+record['sha256'],
             'expires_at': None, 'availability': 'available', 'verification': 'checksum_verified'}
     for accepted in prepared['validated']:
         doc = accepted['document']; account = doc['scientific_accounts'][0]; identity = account['id']
         actor = account.get('was_attributed_to', [None])[0]
         metadata = register(tx, owner, doc, {**frozen['attribution'], 'person_id': actor}, now(),
-            runtime={'model_id': None, 'harness_version': None}, retained_citation_metadata=reused['citation_metadata'], retained_object_ids=retained_ids)
+            runtime={'model_id': None, 'harness_version': None}, retained_citation_metadata=reused['citation_metadata'], retained_object_ids=retained_ids,
+            writes=writes)
         state = {'status': 'not_requested', 'job_id': None, 'paragraph_id': None}
         gap = next(g for g in doc['knowledge_gaps'] if g['id'] == account['question'])
-        previous = tx.get('account', digest([owner, identity]))
+        previous = writes.get('account', digest([owner, identity]))
         if not previous:
             envelope = object_envelope(doc, identity, metadata, access); envelope['research_statement'] = state
             summary = {'account': account, 'knowledge_gap': gap, 'claim_count': len(account['component_claims']),
@@ -477,21 +487,14 @@ def commit_accounts(service, tx, operation, prepared):
             stamp = creation_stamp(tx, owner, frozen['id'], gap=stamp_gap(frozen['composer'].get('source_gap'), frozen.get('question_id')),
                 scientific_document=doc, analysis={'job_id': work_id, 'request_id': frozen['id'],
                     'evidence_package_sha256': prepared['evidence_manifest_sha256'], 'account_id': identity})
-            tx.put('account', digest([owner, identity]), owner, stamped('account', {'result': envelope, 'summary': deepcopy(summary)}, stamp))
-            tx.put('account_membership', digest([owner, identity]), owner, stamped('account_membership', {'account_id': identity, 'summary': summary}, stamp))
+            writes.put('account', digest([owner, identity]), owner, stamped('account', {'result': envelope, 'summary': deepcopy(summary)}, stamp))
+            writes.put('account_membership', digest([owner, identity]), owner, stamped('account_membership', {'account_id': identity, 'summary': summary}, stamp))
         document_sha = accepted['storage']['sha256']
-        tx.put('scientific_document', digest([owner, document_sha]), owner, {'sha256': document_sha, 'document': doc,
+        writes.put('scientific_document', digest([owner, document_sha]), owner, {'sha256': document_sha, 'document': doc,
             'job_id': work_id, 'local_work_id': work_id, 'observed_at': now(), 'citation_metadata': metadata, 'artifact_access': access,
             'evidence_manifest_sha256': prepared['evidence_manifest_sha256']})
-        for rows in doc.values():
-            if not isinstance(rows, list): continue
-            for node in rows:
-                if not isinstance(node, dict) or not str(node.get('id', '')).startswith('dapper:'): continue
-                if node['id'] not in borrowed_ids:
-                    tx.put('grant', digest([owner, node['id']]), owner, {'target_id': node['id']})
-                tx.put('object_observation', digest([owner, node['id'], sha256(canonical_json(node))]), owner,
-                    {'object_id': node['id'], 'payload': node, 'document_sha256': document_sha})
-                if not tx.get('object', digest([owner, node['id']])):
-                    tx.put('object', digest([owner, node['id']]), owner, object_envelope(doc, node['id'], metadata, access))
-                    tx.put('object_document', digest([owner, node['id']]), owner, {'object_id': node['id'], 'sha256': document_sha})
+        # Objects absent before this commit are projected here, under the fence, and only those.
+        writes.document(doc, document_sha, metadata, lambda node, doc=doc: object_projection(doc, node, access), borrowed_ids)
+    writes.flush()
     return {k: prepared[k] for k in ('report', 'account_ids', 'reused_account_ids', 'existing_accounts', 'evidence_manifest_sha256')}
+

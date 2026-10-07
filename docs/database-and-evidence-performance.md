@@ -359,8 +359,24 @@ atomic acceptance transaction. Existing rows and repeated checksums retain the
 same update order, version increments and last-write behavior. A local database
 replay of 84 captured file descriptors used four SQL statements instead of 168,
 with identical final owners, versions, payloads and fixed timestamps. This is a
-query-count comparison, not a new live acceptance timing. Citation registration,
-scientific object projection and the account/paragraph outbox remain unchanged.
+query-count comparison, not a new live acceptance timing.
+
+Account acceptance (the Workflow commit step and MCP account submission) writes
+every other row the same way. One statement reads every citation, grant, object,
+observation, account, outbox and job row the commit can touch. Citation
+registration, grants, object observations, objects and the account rows are then
+planned in the order the per-row writes used and written by
+`Transaction.apply_puts`: new rows in multi-row `INSERT`s, rows rewritten with an
+unchanged payload in one version bump, and one `UPDATE` per changed row. Object
+envelopes are projected before the write fence is taken; only their citation
+metadata is attached under it. The 63-node fixture account sends 10 statements
+under the fence instead of 576, so a laptop commit holds the fence for about 2
+seconds instead of up to 174. An equivalence test replays the previous per-row
+transaction against a copy of the database (a fresh owner, a re-accept, two
+accounts or two documents of one account sharing nodes, another owner's
+citations, borrowed and retained nodes, and box captures) and requires identical
+rows: owners, versions, payloads, timestamps, job events, workspace events and
+the notification outbox.
 
 The inspected jobs also spent approximately 38–40 seconds setting up their Box
 runtime. That delay and model/external-KG latency are separate from evidence
