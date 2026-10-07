@@ -194,13 +194,21 @@ def finish_cleanup(repository, payload, token, handle=None, *, error=None):
 
 def acquire(repository, payload, index, *, lease_seconds=600):
     """Acquire exactly the persisted next phase, or replay its committed result."""
+    job, _, execution, replay = acquire_step(repository, payload, index, lease_seconds=lease_seconds)
+    return job, execution, replay
+
+
+def acquire_step(repository, payload, index, *, lease_seconds=600):
+    """acquire() that also returns the queue row it leased: one read, then the execution and queue updates. The
+    rows are the step's read-only snapshot; every later write re-reads its rows under the fence."""
     key = digest([payload['job_id'], payload['generation'], index])
     with repository.transaction() as tx:
+        tx.get_records([('execution', payload['job_id']), ('workflow_step', key), ('job', payload['job_id']), ('queue', payload['job_id'])])
         row = tx.get('execution', payload['job_id'])
         if not row: raise StaleExecution('Execution is unavailable')
         state = row['data']; check(state, payload)
         cached = tx.get('workflow_step', key)
-        if cached: return None, None, cached['data']['result']
+        if cached: return None, None, None, cached['data']['result']
         if state['disposition'] == 'recovery_required': raise RecoveryRequired('Execution needs explicit operator recovery')
         if index != state['phase_index']: raise StaleExecution('Workflow phase index is stale')
         if state.get('lease_until') and state['lease_until'] > now(): raise StepBusy('Another request owns this step')
@@ -229,7 +237,7 @@ def acquire(repository, payload, index, *, lease_seconds=600):
         queue.update(token=token, lease_until=state['lease_until'], worker_id='workflow', attempt=state['authoring_attempt'])
         tx.put('execution', payload['job_id'], row['owner'], state)
         tx.put('queue', payload['job_id'], row['owner'], queue)
-        return job, dict(state, deferred=deferred), None
+        return job, dict(queue), dict(state, deferred=deferred), None
 
 
 def save(repository, payload, token, **updates):
@@ -240,8 +248,13 @@ def save(repository, payload, token, **updates):
     return state
 
 
-def complete(repository, payload, token, *, next_phase, sleep=0, done=False, **updates):
+def complete(repository, payload, token, *, next_phase, sleep=0, done=False, observation=None, **updates):
+    """Finish the step in one fenced transaction: one read, its records in one INSERT, then execution and queue.
+    observation (an observe step's Box inspection) commits its cursor and events here too."""
+    jid = payload['job_id']
     with repository.transaction() as tx:
+        tx.get_records([('execution', jid), ('queue', jid), *([('job', jid)] if done else []),
+                        *(observation.keys() if observation else [])])
         owner, state = owned(tx, payload, token)
         if done:
             from . import jobs
@@ -256,15 +269,19 @@ def complete(repository, payload, token, *, next_phase, sleep=0, done=False, **u
                 jobs.event(tx, current, 'status', 'Stopped by the workspace owner.')
             if current['status'] not in jobs.TERMINAL:
                 raise StaleExecution('An execution cannot finish before its authoritative job outcome')
+        records = observation.apply(tx, owner, state) if observation else []
         result = {'phase': next_phase, 'index': state['phase_index'] + 1, 'sleep': sleep, 'done': done}
         if state['phase'] == 'capture' and state.get('cleanup_id'):
             result['cleanup_id'] = state['cleanup_id']
-        tx.put('workflow_step', state['step'], owner, {'job_id': payload['job_id'], 'generation': payload['generation'],
-            'phase': state['phase'], 'index': state['phase_index'], 'result': result, 'completed_at': now()})
+        # acquire proved the step key absent under this fence; an existing one is overwritten as put() did.
+        records.append(('workflow_step', state['step'], owner, {'job_id': payload['job_id'], 'generation': payload['generation'],
+            'phase': state['phase'], 'index': state['phase_index'], 'result': result, 'completed_at': now()}))
+        tx.insert_new(records, ('workflow_step',))
         state.update(updates, phase=next_phase, phase_index=result['index'], fence=None, lease_until=None,
             step=None, updated_at=now(), expected_at=after(sleep + 120), disposition='complete' if done else 'ready')
         tx.put('execution', payload['job_id'], owner, state)
         queue = tx.get('queue', payload['job_id'])['data']; queue.update(token=None, lease_until=None)
+        if observation: queue['remote_handle'] = observation.handle
         tx.put('queue', payload['job_id'], owner, queue)
         return result
 

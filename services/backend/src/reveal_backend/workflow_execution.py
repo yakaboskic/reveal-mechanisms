@@ -95,6 +95,57 @@ def probe_task_identity():
         raise ValueError('Deployment probe could not obtain a valid ECS task identity') from None
 
 
+class Observation:
+    """One Box inspection, committed under the step's fence: the remote cursor, deduplicated remote_event rows
+    and the public events they map to."""
+    def __init__(self, payload, handle, events):
+        self.job_id, self.handle, self.events = payload['job_id'], handle, events
+        self.deliveries = [digest([self.job_id, detail['remote_stream_id'], detail['remote_sequence']]) for _, detail in events]
+        self.failed = handle.get('phase') == 'terminal' and handle.get('state', {}).get('status') == 'failed'
+
+    def keys(self):
+        """The rows apply() reads, for the transaction's one batched read."""
+        return ([('job', self.job_id)] if self.events or self.failed else []) + [('remote_event', d) for d in dict.fromkeys(self.deliveries)]
+
+    def apply(self, tx, owner, execution):
+        """Returns the new remote_event and event records for the caller's single INSERT, updates the job when
+        its public state changed, and moves the cursor onto execution (the caller writes execution and queue)."""
+        records = []; changed = False
+        current = tx.get('job', self.job_id)['data'] if self.events or self.failed else None
+        if current is not None: current['owner_user_id'] = owner
+        seen = {delivery for delivery in dict.fromkeys(self.deliveries) if tx.get('remote_event', delivery)}
+        for (kind, detail), delivery in zip(self.events, self.deliveries):
+            if delivery in seen: continue
+            seen.add(delivery)
+            records.append(('remote_event', delivery, owner, {'job_id': self.job_id, 'sequence': detail['remote_sequence']}))
+            mapped = public_activity(current, kind, detail)
+            if mapped:
+                item = jobs.event_record(current, *mapped)
+                records.append(('event', self.job_id+':'+item['id'].zfill(12), owner, item))
+                changed = True
+        # Report a known execution failure before any capture/restore work.
+        # The job stays nonterminal until its diagnostics are durably saved;
+        # preserving files is not evidence that the agent finished an account.
+        if self.failed and execution.get('failure_notice_attempt') != execution['authoring_attempt']:
+            mapped = public_activity(current, 'stage', {
+                'stage': 'authoring_paragraph' if current['kind'] == 'paragraph' else 'authoring_account',
+                'state': 'failed',
+                'message': 'The research agent stopped before finishing. Preserving its partial output and diagnostics.'})
+            item = jobs.event_record(current, *mapped)
+            records.append(('event', self.job_id+':'+item['id'].zfill(12), owner, item))
+            execution['failure_notice_attempt'] = execution['authoring_attempt']
+            changed = True
+        if changed: tx.update_existing('job', self.job_id, owner, current)
+        execution['box'] = self.handle
+        return records
+
+
+def transient_database(error):
+    """A lost connection, lock wait timeout or deadlock: the transaction rolled back and the step can retry."""
+    import pymysql
+    return isinstance(error, (pymysql.err.OperationalError, pymysql.err.InterfaceError))
+
+
 class WorkflowExecution:
     def __init__(self, repository=None, *, storage=None, adapter=None):
         self.repository = repository or Repository()
@@ -167,40 +218,13 @@ class WorkflowExecution:
             if mapped: jobs.event(tx, current, *mapped)
 
     def observe_commit(self, payload, token, handle, events):
-        """Acknowledge remote cursor and deduplicated public events atomically."""
-        deliveries = [digest([payload['job_id'], detail['remote_stream_id'], detail['remote_sequence']])
-                      for _, detail in events]
+        """Acknowledge remote cursor and deduplicated public events atomically, before the step completes. Paid
+        handles (create, launch, abandoned cleanup) need this; an observe step commits with its completion."""
+        observation = Observation(payload, handle, events)
         with self.repository.transaction() as tx:
+            tx.get_records([('execution', payload['job_id']), ('queue', payload['job_id']), *observation.keys()])
             owner, execution = state.owned(tx, payload, token)
-            current = tx.get('job', payload['job_id'])['data']; current['owner_user_id'] = owner
-            seen = set(tx.get_many('remote_event', list(dict.fromkeys(deliveries))))
-            records = []; changed = False
-            for (kind, detail), delivery in zip(events, deliveries):
-                if delivery in seen: continue
-                seen.add(delivery)
-                records.append(('remote_event', delivery, owner,
-                                {'job_id': payload['job_id'], 'sequence': detail['remote_sequence']}))
-                mapped = public_activity(current, kind, detail)
-                if mapped:
-                    item = jobs.event_record(current, *mapped)
-                    records.append(('event', payload['job_id']+':'+item['id'].zfill(12), owner, item))
-                    changed = True
-            # Report a known execution failure before any capture/restore work.
-            # The job stays nonterminal until its diagnostics are durably saved;
-            # preserving files is not evidence that the agent finished an account.
-            if (handle.get('phase') == 'terminal' and handle.get('state', {}).get('status') == 'failed'
-                    and execution.get('failure_notice_attempt') != execution['authoring_attempt']):
-                mapped = public_activity(current, 'stage', {
-                    'stage': 'authoring_paragraph' if current['kind'] == 'paragraph' else 'authoring_account',
-                    'state': 'failed',
-                    'message': 'The research agent stopped before finishing. Preserving its partial output and diagnostics.'})
-                item = jobs.event_record(current, *mapped)
-                records.append(('event', payload['job_id']+':'+item['id'].zfill(12), owner, item))
-                execution['failure_notice_attempt'] = execution['authoring_attempt']
-                changed = True
-            tx.insert_many(records)
-            if changed: tx.update_existing('job', payload['job_id'], owner, current)
-            execution['box'] = handle
+            tx.insert_many(observation.apply(tx, owner, execution))
             tx.update_existing('execution', payload['job_id'], owner, execution)
             queue = tx.get('queue', payload['job_id'])['data']; queue['remote_handle'] = handle
             tx.update_existing('queue', payload['job_id'], owner, queue)
@@ -256,11 +280,11 @@ class WorkflowExecution:
             raise StorageUnavailable('Workflow failure diagnostics could not be retained') from storage_error
 
     async def step(self, payload, index):
-        job, execution, replay = await run_sync(state.acquire, self.repository, payload, index)
+        job, queue, execution, replay = await run_sync(state.acquire_step, self.repository, payload, index)
         if replay is not None: return replay
         token = execution['fence']
         try:
-            if execution.get('deferred'):
+            if execution.pop('deferred'):
                 return await run_sync(state.complete, self.repository, payload, token, next_phase=execution['phase'], sleep=10)
             # Even an acknowledgment lost after outcome commit must replay the
             # authoritative outcome rather than attempting scientific work twice.
@@ -279,7 +303,9 @@ class WorkflowExecution:
                         if execution.get('workspace') and scratch:
                             await self.restore_workspace(execution['workspace'], root)
                         workspace_ready = True
-                        result = await self.operate(payload, token, job, execution, root)
+                        # An observe step decides on acquire's snapshot instead of reading it again.
+                        result = await self.operate(payload, token, job, execution, root,
+                                                    **({'queue': queue} if execution['phase'] == 'observe' else {}))
                 except (state.StepBusy, state.RecoveryRequired, state.StaleExecution,
                         BoxTransportError, StorageUnavailable, TimeoutError, OSError):
                     raise
@@ -289,7 +315,12 @@ class WorkflowExecution:
                     await run_sync(self.retain_failure, payload, token, root if workspace_ready else None,
                                    execution['phase'], exc)
                     raise
-                return await run_sync(state.complete, self.repository, payload, token, **result)
+                try: return await run_sync(state.complete, self.repository, payload, token, **result)
+                except Exception as exc:
+                    # Its rows rolled back with it: the Box cursor and events are inspected again on the retry.
+                    if result.get('observation') and transient_database(exc):
+                        raise StorageUnavailable('Observation commit interrupted; retry the same phase') from exc
+                    raise
         except state.StepBusy:
             return await run_sync(state.complete, self.repository, payload, token,
                                            next_phase=execution['phase'], sleep=10)
@@ -320,8 +351,9 @@ class WorkflowExecution:
             await run_sync(jobs.finish, self.repository, payload['job_id'], token, 'failed', failure=failure)
             return await run_sync(state.complete, self.repository, payload, token, next_phase='complete', done=True)
 
-    async def operate(self, payload, token, job, execution, root):
-        job, queue, execution = await run_sync(self.context, payload)
+    async def operate(self, payload, token, job, execution, root, queue=None):
+        """queue, when given, is the step's own snapshot from acquire (observe); otherwise the rows are read again."""
+        if queue is None: job, queue, execution = await run_sync(self.context, payload)
         phase = execution['phase']; box = execution.get('box')
         if job['status'] in ('cancel_requested', 'cancelled'):
             if execution.get('capture_complete') and await run_sync(state.capture_handed_off, self.repository, payload):
@@ -374,8 +406,9 @@ class WorkflowExecution:
         if phase == 'observe':
             if time.time() > execution.get('deadline', float('inf')): await adapter.cancel_once(box)
             handle, events, terminal = await adapter.inspect_once(box)
-            await run_sync(self.observe_commit, payload, token, handle, events)
-            return {'next_phase': 'capture' if terminal else 'observe', 'sleep': 0 if terminal else 5}
+            # The cursor and events commit with the step's completion: one fenced transaction per tick.
+            return {'next_phase': 'capture' if terminal else 'observe', 'sleep': 0 if terminal else 5,
+                    'observation': Observation(payload, handle, events)}
         if phase == 'capture' and box.get('capture_protocol') == 's3-v1':
             if execution.get('capture_complete'):
                 return {'next_phase':'validate' if await run_sync(state.capture_handed_off,self.repository,payload) else 'cleanup'}

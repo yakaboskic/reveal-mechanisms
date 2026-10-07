@@ -29,7 +29,16 @@ candidate retrieval. Upstash Redis provides Pub/Sub wakeups only.
 - Box observation performs one bounded status request followed by a durable
   Workflow sleep. The selected Python SDK does not expose `wait_for_event`.
   These are Box requests, not Redis polling. No handler remains alive while
-  waiting for the agent's next observation.
+  waiting for the agent's next observation. An observe step is two fenced
+  transactions: acquiring it reads its execution, step, job and queue in one
+  statement, and the Box cursor, deduplicated events and step result commit
+  with its completion (11 round trips with no events, 13 with events; it was
+  28 and 32 across four transactions). The step decides on the snapshot it
+  acquired; the completion re-reads execution and queue under the fence, so a
+  cancellation committed meanwhile is kept. If that commit loses its database
+  connection, the step is released for a retry, which inspects the Box again
+  from the saved cursor. Paid handles (creation, launch, abandoned cleanup)
+  still commit before their step completes.
 - Managed reconciliation pushes to `/internal/workflows/reconcile-v1` once per
   minute (every five minutes for a local deployment; set `REVEAL_RECONCILE_CRON`
   to `* * * * *`, `*/2 * * * *` or `*/5 * * * *`). It repairs RDS

@@ -31,7 +31,7 @@ import test_research_polling as research_polling
 
 BUDGET = {'local_work_poll': 5, 'me': 2, 'readyz': 2, 'draft_patch': 8, 'mcp_get_operation': 5, 'job_create': 8, 'draft_create': 7,
           'mcp_query_enqueue': 13, 'query_operation': 17, 'workspace_list': 4, 'workspace_detail': 4,
-          'reconcile_idle': 4, 'job_dispatch': 11, 'gap_list': 5, 'gap_search': 5, 'gap_detail': 5,
+          'reconcile_idle': 4, 'job_dispatch': 11, 'observe_tick': 11, 'observe_tick_events': 13, 'gap_list': 5, 'gap_search': 5, 'gap_detail': 5,
           'citation_render': 5, 'readyz_monitored': 0, 'readiness_tick': 2, 'suggest': 2,
           'cfde_start': 8, 'cfde_start_locked': 4, 'cfde_reuse_locked': 3, 'cfde_poll': 3, 'cfde_worker': 17}
 
@@ -308,6 +308,23 @@ class SubmissionBudget(unittest.TestCase):
 class WorkflowBudget(unittest.IsolatedAsyncioTestCase):
     setUp = durable.WorkflowTests.setUp
     new = durable.WorkflowTests.new
+    observing = durable.WorkflowTests.observing
+
+    async def test_observe_tick_is_one_batched_acquire_and_one_commit(self):
+        # Every ~5 s per running job: acquire (one read, two updates), then the completion with the observation.
+        job, payload, handle, adapter, engine = self.observing()
+        with patch.object(workspace_events, 'publish_committed'), count_round_trips() as budget:
+            self.assertEqual((await engine.step(payload, 0))['phase'], 'observe')
+        print('\nobserve tick', budget)
+        self.assertEqual((budget.kinds(), budget.unleased, budget.connects), (['write', 'write'], 0, 0), budget)
+        self.assertLessEqual(budget.trips(), BUDGET['observe_tick'], budget)
+        events = [('tool_call', {'remote_stream_id': 's', 'remote_sequence': n, 'tool_name': 't', 'call_id': str(n)}) for n in range(3)]
+        adapter.inspect_once.return_value = ({**handle, 'cursor': 3}, events, False)
+        with patch.object(workspace_events, 'publish_committed'), count_round_trips() as budget:
+            await engine.step(payload, 1)
+        print('\nobserve tick with events', budget)
+        self.assertEqual(budget.kinds(), ['write', 'write'], budget)
+        self.assertLessEqual(budget.trips(), BUDGET['observe_tick_events'], budget)
 
     async def test_idle_reconciliation_is_one_snapshot_off_the_fence(self):
         self.new()   # a job awaiting delivery is the dispatcher's, not a recovery candidate

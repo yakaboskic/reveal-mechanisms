@@ -12,6 +12,7 @@ from reveal_backend.repository import Repository, Transaction, digest
 from reveal_backend.workflow_execution import WorkflowExecution
 from reveal_backend.workflow_routes import dispatch_pending, reconcile_stale, mount_workflow
 from reveal_backend.box_adapter import BoxTransportError
+from reveal_backend.artifact_store import StorageUnavailable
 from reveal_backend.box_mcp import Ledger
 from reveal_backend.evidence_package import canonical_json
 from reveal_backend.scientific_grounding import ScientificReviewUnavailable
@@ -270,6 +271,78 @@ class WorkflowTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(tx.list('remote_event')), 3)
             self.assertEqual(len(tx.list('event')), 4)
             self.assertEqual(tx.get('queue', job['id'])['data']['remote_handle']['cursor'], 3)
+
+    def observing(self, kind='paragraph'):
+        """A running Box in its observe phase, with an adapter whose inspections the test sets."""
+        job, payload = self.new(kind)
+        handle = {'box_id': 'box', 'job_id': job['id'], 'attempt': 1, 'phase': 'running', 'cursor': 0}
+        with self.repo.transaction() as tx:
+            execution = tx.get('execution', job['id'])['data']; execution.update(phase='observe', box=handle, capacity_reserved=True)
+            tx.put('execution', job['id'], 'owner', execution)
+            current = tx.get('job', job['id'])['data']; current.update(status='running', stage='authoring_paragraph')
+            tx.put('job', job['id'], 'owner', current)
+        adapter = Mock(); adapter.inspect_once = AsyncMock(return_value=(handle, [], False))
+        return job, payload, handle, adapter, WorkflowExecution(self.repo, storage=self.store, adapter=adapter)
+
+    async def test_observe_tick_commits_cursor_events_and_step_in_one_transaction(self):
+        job, payload, handle, adapter, engine = self.observing()
+        events = [('agent_message', {'remote_stream_id': 's', 'remote_sequence': n, 'message': 'm%d' % n}) for n in (1, 2)]
+        adapter.inspect_once.return_value = ({**handle, 'cursor': 2}, events + events[:1], False)
+        fences = []; transaction = Repository.transaction
+        def counted(repo, **kwargs): fences.append(1); return transaction(repo, **kwargs)
+        with patch.object(Repository, 'transaction', counted), \
+                patch.object(Repository, 'read_transaction', side_effect=AssertionError('observe re-read its snapshot')):
+            result = await engine.step(payload, 0)
+        self.assertEqual((result['phase'], result['sleep'], len(fences)), ('observe', 5, 2))   # acquire, then complete
+        with self.repo.read_transaction() as tx:
+            execution = tx.get('execution', job['id'])['data']
+            self.assertEqual((execution['box']['cursor'], execution['phase_index'], execution['fence']), (2, 1, None))
+            self.assertEqual(tx.get('queue', job['id'])['data']['remote_handle']['cursor'], 2)
+            self.assertEqual(len(tx.list('remote_event')), 2)
+            self.assertEqual(tx.get('job', job['id'])['data']['last_event_id'], '3')   # queued plus two remote events
+            self.assertIsNotNone(tx.get('workflow_step', digest([job['id'], payload['generation'], 0])))
+            self.assertNotIn('observation', execution)
+        adapter.inspect_once.return_value = ({**handle, 'cursor': 2}, events, False)   # redelivered events
+        await engine.step(payload, 1)
+        with self.repo.read_transaction() as tx: self.assertEqual(len(tx.list('event')), 3)
+
+    async def test_failed_observe_commit_leaves_no_partial_rows_and_retries_the_phase(self):
+        import pymysql
+        job, payload, handle, adapter, engine = self.observing()
+        events = [('agent_message', {'remote_stream_id': 's', 'remote_sequence': 1, 'message': 'first'})]
+        inspected = []
+        async def inspect(box): inspected.append(box); return {**handle, 'cursor': 1}, events, False
+        adapter.inspect_once.side_effect = inspect
+        put = Transaction.put
+        def lost(tx, kind, *args, **kwargs):   # the completion's last write, after its events were inserted
+            if kind == 'queue' and inspected:
+                inspected.clear()   # once: the release that follows writes normally
+                raise pymysql.err.OperationalError(2013, 'Lost connection to MySQL server during query')
+            return put(tx, kind, *args, **kwargs)
+        with patch.object(Transaction, 'put', lost):
+            with self.assertRaises(StorageUnavailable): await engine.step(payload, 0)
+        execution = self.execution(payload)
+        self.assertEqual((execution['phase'], execution['phase_index'], execution['box']['cursor']), ('observe', 0, 0))
+        self.assertEqual((execution['fence'], execution['disposition']), (None, 'retry'))   # released, not parked for recovery
+        with self.repo.read_transaction() as tx:
+            self.assertEqual((tx.list('remote_event'), tx.list('workflow_step')), ([], []))
+            self.assertEqual(tx.get('job', job['id'])['data']['last_event_id'], '1')
+        adapter.inspect_once.side_effect = None; adapter.inspect_once.return_value = ({**handle, 'cursor': 1}, events, False)
+        self.assertEqual((await engine.step(payload, 0))['phase'], 'observe')
+        with self.repo.read_transaction() as tx: self.assertEqual(len(tx.list('remote_event')), 1)
+
+    async def test_cancellation_committed_during_an_observe_tick_survives_its_completion(self):
+        job, payload, handle, adapter, engine = self.observing()
+        async def inspect(box):
+            with self.repo.transaction() as tx: jobs.cancel(tx, tx.get('job', job['id'])['data'])
+            return box, [], False
+        adapter.inspect_once.side_effect = inspect
+        await engine.step(payload, 0)
+        execution = self.execution(payload)
+        self.assertTrue(execution['cancel_requested'])
+        self.assertEqual(execution['phase_index'], 1)
+        with self.repo.read_transaction() as tx:
+            self.assertEqual(tx.get('job', job['id'])['data']['status'], 'cancel_requested')
 
     async def test_environment_namespace_is_checked_against_service_configuration(self):
         _,payload=self.new()
