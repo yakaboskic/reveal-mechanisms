@@ -58,12 +58,15 @@ if hasattr(os, 'register_at_fork'): os.register_at_fork(after_in_child=_after_fo
 
 def application_mysql_connection():
     """Lease a bounded clean session, only for runtime Repository transactions."""
-    from .mysql_database import initialize_application_session, reset_application_session
+    from . import mysql_database as db
     from .mysql_pool import Pool
+    from .runtime_metrics import measure
     global _application_pool, _application_pool_key
     maximum = int(setting('REVEAL_MYSQL_POOL_SIZE', '4'))
     if maximum == 0: return mysql_connection()
     wait = float(setting('REVEAL_MYSQL_POOL_WAIT_SECONDS', '5'))
+    clean_release = setting('REVEAL_MYSQL_POOL_CLEAN_RELEASE', '1') != '0'
+    pipelined = setting('REVEAL_MYSQL_POOL_PIPELINED_RESET', '1') != '0'
     if not 1 <= maximum <= 32 or not 0 < wait <= 30: raise ValueError('Invalid application database pool bounds')
     ca_file = setting('REVEAL_MYSQL_CA_FILE') or None
     ca_revision = hashlib.sha256(Path(ca_file).read_bytes()).hexdigest() if ca_file else None
@@ -71,17 +74,20 @@ def application_mysql_connection():
     # Never retain credentials in registry keys or diagnostic representations.
     key = (os.getpid(), setting('REVEAL_MYSQL_HOST'), setting('REVEAL_MYSQL_PORT'),
         setting('REVEAL_MYSQL_USER'), database, ca_file, ca_revision,
-        hashlib.sha256((setting('REVEAL_MYSQL_PASSWORD') or '').encode()).digest(), maximum, wait)
+        hashlib.sha256((setting('REVEAL_MYSQL_PASSWORD') or '').encode()).digest(), maximum, wait, clean_release, pipelined)
     with _application_pool_lock:
         if _application_pool is None or key != _application_pool_key:
             if _application_pool is not None: _application_pool.close()
+            reset_session = db.reset_application_session if pipelined else db.reset_application_session_sequential
             def factory():
                 connection = mysql_connection()
-                try: initialize_application_session(connection)
+                try: db.initialize_application_session(connection)
                 except BaseException:
                     connection.close(); raise
                 return connection
-            _application_pool = Pool(factory, lambda connection: reset_application_session(connection, database),
+            def reset(connection):
+                with measure('database', 'RESET'): reset_session(connection, database)
+            _application_pool = Pool(factory, reset, unchanged=db.application_session_unchanged if clean_release else None,
                 maximum=maximum, wait_seconds=wait)
             _application_pool_key = key
         pool = _application_pool

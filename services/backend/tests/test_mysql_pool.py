@@ -1,53 +1,95 @@
 """Exclusive bounded leases must never reuse unresolved or contaminated sessions."""
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+import socket
+import struct
 import tempfile
 import threading
 import time
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
-from reveal_backend.mysql_pool import Pool
-from reveal_backend.mysql_database import reset_application_session
+import pymysql
+
+from reveal_backend.mysql_pool import Pool, session_neutral
+from reveal_backend.mysql_database import (APPLICATION_SESSION_SQL, application_session_unchanged, reset_application_session,
+    reset_application_session_sequential)
 from reveal_backend.repository import Repository, Transaction
 from reveal_backend import runtime_config
 
 
 class FakeCursor:
     def __init__(self, connection): self.connection = connection; self.closed = False
-    def execute(self, sql, params=()): self.connection.sql.append((sql, params)); return 1
+    def execute(self, sql, params=()):
+        self.connection.trips += 1
+        if self.connection.execute_error: raise self.connection.execute_error
+        self.connection.sql.append((sql, params)); return 1
+    def executemany(self, sql, rows): return self.execute(sql, rows)
     def fetchone(self): return (1,)
+    def callproc(self, name, args=()): self.connection.trips += 1; return args
     def close(self): self.closed = True
     def __enter__(self): return self
     def __exit__(self, *args): self.close()
 
 
 class FakeConnection:
+    """PyMySQL-shaped session. No server_status, so release cannot prove it clean and always resets."""
     def __init__(self):
         self.sql = []; self.closed = False; self.reset_count = 0; self.uncommitted = False
         self.variables = {}; self.database = 'cyaka_expected'; self.pid_close = False
-        self.commit_error = self.rollback_error = self.reset_error = None
-    def cursor(self): return FakeCursor(self)
+        self.commit_error = self.rollback_error = self.reset_error = self.execute_error = self.ping_error = None
+        self.trips = 0; self.writes = []; self.pending = []; self.pings = 0
+        self._sock = object(); self._result = None; self._next_seq_id = 0; self._read_timeout = self._write_timeout = 120
+    def cursor(self, *args): return FakeCursor(self)
     def commit(self):
+        self.trips += 1
         if self.commit_error: raise self.commit_error
         self.uncommitted = False
     def rollback(self):
+        self.trips += 1
         if self.rollback_error: raise self.rollback_error
         self.uncommitted = False
     def close(self): self.closed = True
     def _force_close(self): self.pid_close = True; self.closed = True
     def _execute_command(self, code, payload):
         if self.reset_error: raise self.reset_error
-        assert code == 0x1F and payload == b''
-        self.reset_count += 1; self.variables = {}; self.uncommitted = False
-    def _read_ok_packet(self): pass
-    def select_db(self, database): self.database = database
+        self.trips += 1; self.pending.append((code, payload.encode() if isinstance(payload, str) else payload))
+    def _write_bytes(self, data):
+        if self.reset_error: raise self.reset_error
+        self.trips += 1; self.writes.append(data); offset = 0
+        while offset < len(data):  # PyMySQL first packets: 3-byte length, sequence 0, command
+            length = int.from_bytes(data[offset:offset + 3], 'little'); assert data[offset + 3] == 0
+            self.pending.append((data[offset + 4], data[offset + 5:offset + 4 + length])); offset += 4 + length
+    def _read_ok_packet(self):
+        code, payload = self.pending.pop(0)
+        if code == 0x1F: self.reset_count += 1; self.variables = {}; self.uncommitted = False
+        elif code == 0x02: self.database = payload.decode()
+        elif code == 0x03: self.sql.append((payload.decode(), ())); self.on_settings()
+        elif code == 0x0E: self.pings += 1
+        else: raise AssertionError(hex(code))
+    def on_settings(self): pass
+    def select_db(self, database): self._execute_command(0x02, database); self._read_ok_packet()
+    def ping(self, reconnect=True):
+        assert reconnect is False; self.observed_timeouts = (self._read_timeout, self._write_timeout)
+        if self.ping_error: raise self.ping_error
+        self._execute_command(0x0E, b''); self._read_ok_packet()
+
+
+class StatusConnection(FakeConnection):
+    """Reports server_status from the final OK packet like PyMySQL, after init_command applied the defaults."""
+    status_after_end = 0
+    def __init__(self):
+        super().__init__(); self.server_status = 0; self.reveal_session_defaults = True
+        self.client_flag = pymysql.constants.CLIENT.CAPABILITIES
+    def commit(self): super().commit(); self.server_status = self.status_after_end
+    def rollback(self): super().rollback(); self.server_status = self.status_after_end
+    def on_settings(self): self.server_status = 0
 
 
 class PoolTests(unittest.TestCase):
-    def setUp(self): self.created = []
-    def factory(self):
-        connection = FakeConnection(); self.created.append(connection); return connection
+    def setUp(self): self.created = []; self.factory_kwargs = []
+    def factory(self, **kwargs):
+        connection = FakeConnection(); self.created.append(connection); self.factory_kwargs.append(kwargs); return connection
     def pool(self, **kwargs):
         pool = Pool(self.factory, lambda c: reset_application_session(c, 'cyaka_expected'), **kwargs)
         self.addCleanup(pool.close); return pool
@@ -213,6 +255,275 @@ class PoolTests(unittest.TestCase):
                 second.commit(); second.close()
             runtime_config._application_pool.close()
 
+
+class CleanReleaseTests(unittest.TestCase):
+    """A settled lease that ran only session-neutral SQL returns to idle with no round trip."""
+    def setUp(self): self.created = []
+    def factory(self):
+        connection = StatusConnection(); self.created.append(connection); return connection
+    def pool(self, **kwargs):
+        pool = Pool(self.factory, lambda c: reset_application_session(c, 'cyaka_expected'),
+                    unchanged=application_session_unchanged, **kwargs)
+        self.addCleanup(pool.close); return pool
+    def cycle(self, statements=('SELECT 1',), end='commit', after=None, status=0, many=False):
+        pool = self.pool(maximum=1); lease = pool.acquire(); raw = self.created[-1]; raw.status_after_end = status
+        for sql in statements:
+            cursor = lease.cursor()
+            if many: cursor.executemany(sql, [(1,)])
+            else: cursor.execute(sql)
+        getattr(lease, end)()
+        if after: after(lease)
+        raw.trips = 0; lease.close(); return pool, raw
+
+    def assert_reset_once(self, raw):
+        self.assertEqual((raw.reset_count, len(raw.writes), raw.trips), (1, 1, 1))  # one pipelined write = 1 RT
+        self.assertEqual(raw.database, 'cyaka_expected'); self.assertEqual(raw.sql[-1][0], APPLICATION_SESSION_SQL)
+
+    def test_clean_read_and_write_leases_release_with_zero_commands(self):
+        for statements in (('START TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY', 'SELECT owner_id FROM reveal_records WHERE kind=%s'),
+                           ('SELECT revision FROM reveal_transaction_lock WHERE id=1 FOR UPDATE', 'UPDATE reveal_records SET payload=%s',
+                            'INSERT INTO reveal_records VALUES (%s)', 'DELETE FROM reveal_records WHERE id=%s'),
+                           ('SELECT /*+ MAX_EXECUTION_TIME(5000) */ 1', 'WITH x AS (SELECT 1) SELECT * FROM x', '(SELECT 1) UNION (SELECT 2)')):
+            for end in ('commit', 'rollback'):  # rollback = the handler raised after neutral SQL
+                with self.subTest(statements=statements[0], end=end):
+                    pool, raw = self.cycle(statements, end)
+                    self.assertEqual((raw.reset_count, raw.writes, raw.trips, raw.closed), (0, [], 0, False))
+                    again = pool.acquire(); self.assertIs(again._entry.connection, raw); again.close()
+
+    def test_stateful_or_unknown_statements_force_one_pipelined_full_reset(self):
+        for sql in ('SET @x=1', 'SELECT @x:=1', 'SELECT 1 INTO @x', 'SELECT GET_LOCK(%s,0)', 'SELECT RELEASE_ALL_LOCKS()',
+                    'CREATE TEMPORARY TABLE t (a int)', 'USE cyaka_other', 'SET SESSION time_zone=%s', 'SET TRANSACTION READ ONLY',
+                    'LOCK TABLES reveal_records READ', 'PREPARE s FROM %s', 'SHOW SESSION STATUS', 'CALL p()', 'DO SLEEP(0)',
+                    'SAVEPOINT a', 'SELECT LAST_INSERT_ID(5)', '/* hint */ SELECT 1', 'COMMIT', 'ROLLBACK AND CHAIN',
+                    "SELECT 1 INTO OUTFILE '/tmp/x'", 'SELECT SQL_CALC_FOUND_ROWS 1', b'SET @y=2', None):
+            with self.subTest(sql=sql):
+                pool, raw = self.cycle(('SELECT 1', sql)); self.assert_reset_once(raw)
+        pool, raw = self.cycle(('SET @z=%s',), many=True); self.assert_reset_once(raw)
+
+    def test_statement_after_settle_raw_calls_failures_and_cursor_calls_force_reset(self):
+        for after in (lambda lease: lease.cursor().execute('SELECT 1'),       # snapshot reopened after COMMIT
+                      lambda lease: lease.select_db('cyaka_other'),           # raw connection method
+                      lambda lease: lease.cursor().callproc('p'),             # non-fetch cursor method
+                      lambda lease: lease.cursor(dict)):                      # custom/unbuffered cursor class
+            with self.subTest(after=after):
+                pool, raw = self.cycle(after=after); self.assert_reset_once(raw)
+        pool = self.pool(maximum=1); lease = pool.acquire(); raw = self.created[-1]
+        raw.execute_error = pymysql.err.OperationalError(1205, 'Lock wait timeout exceeded')
+        with self.assertRaises(pymysql.err.OperationalError): lease.cursor().execute('SELECT 1')
+        raw.execute_error = None; lease.rollback(); raw.trips = 0; lease.close(); self.assert_reset_once(raw)
+
+    def test_server_status_session_marker_and_capabilities_veto_the_skip(self):
+        for status in (0x1, 0x2, 0x8, 0x2000, 0x2001, None):  # chained txn, autocommit=1, more results, read-only txn
+            with self.subTest(status=status):
+                pool, raw = self.cycle(status=status); self.assert_reset_once(raw)
+        for attribute, value in (('reveal_session_defaults', False), ('client_flag', pymysql.constants.CLIENT.MULTI_STATEMENTS)):
+            with self.subTest(attribute=attribute):
+                pool = self.pool(maximum=1); lease = pool.acquire(); raw = self.created[-1]
+                setattr(raw, attribute, value); lease.commit(); raw.trips = 0; lease.close()
+                self.assertEqual(raw.reset_count, 1)
+        pool = Pool(self.factory, lambda c: reset_application_session(c, 'cyaka_expected'),
+                    unchanged=MagicMock(side_effect=RuntimeError('predicate failed')))
+        self.addCleanup(pool.close); lease = pool.acquire(); raw = self.created[-1]; lease.commit(); lease.close()
+        self.assertEqual((raw.reset_count, raw.closed), (1, False))
+
+    def test_unsettled_uncertain_interrupted_or_failed_reset_leases_are_discarded(self):
+        pool = self.pool(maximum=1); lease = pool.acquire(); raw = self.created[-1]
+        lease.cursor().execute('SELECT 1'); lease.close()
+        self.assertEqual((raw.closed, raw.reset_count), (True, 0))
+        lease = pool.acquire(); raw = self.created[-1]; cursor = lease.cursor()
+        with patch.object(cursor.cursor, 'execute', side_effect=KeyboardInterrupt):
+            with self.assertRaises(KeyboardInterrupt): cursor.execute('SELECT 1')
+        lease.rollback(); lease.close()  # a stale reply may be unread: never reuse
+        self.assertEqual((raw.closed, raw.reset_count), (True, 0))
+        lease = pool.acquire(); raw = self.created[-1]; lease.cursor().execute('SET @x=1'); lease.commit()
+        raw.reset_error = ConnectionError('lost'); lease.close(); self.assertTrue(raw.closed)
+        self.assertIsNot(pool.acquire()._entry.connection, raw)
+
+    def test_repository_read_and_write_leases_cost_three_round_trips_with_no_release(self):
+        pool = self.pool(maximum=1); repo = Repository(); repo.connect = pool.acquire
+        with pool.acquire() as warm: warm.commit()
+        raw = self.created[0]
+        with patch('reveal_backend.workspace_events.prepare_commit', return_value=[]), \
+                patch('reveal_backend.workspace_events.publish_committed'):
+            for method in ('read_transaction', 'transaction'):
+                raw.trips = 0
+                with getattr(repo, method)() as tx: tx.execute('SELECT 1')
+                with self.subTest(method=method):
+                    self.assertEqual(raw.trips, 3)  # OPEN + statement + COMMIT; release 0
+                    self.assertEqual((raw.reset_count, len(self.created)), (0, 1))
+            with self.assertRaises(LookupError):
+                with repo.read_transaction() as tx: tx.execute('SELECT 1'); raise LookupError('404 after read')
+        self.assertEqual(raw.reset_count, 0)  # ROLLBACK ended the snapshot; nothing stateful ran
+
+    def test_classifier_is_allowlist_first(self):
+        self.assertTrue(session_neutral(' select 1')); self.assertTrue(session_neutral('START  TRANSACTION READ WRITE'))
+        for sql in ('', 'EXPLAIN SELECT 1', 'REPLACE INTO t VALUES (1)', 'HANDLER t OPEN', 'XA START 1', 'SELECT is_used_lock(%s)', 42):
+            with self.subTest(sql=sql): self.assertFalse(session_neutral(sql))
+
+
+class PipelinedResetTests(unittest.TestCase):
+    def test_reset_is_one_write_in_order_and_clears_contamination(self):
+        raw = FakeConnection(); raw.database = 'cyaka_other'; raw.variables['x'] = 1
+        reset_application_session(raw, 'cyaka_expected')
+        self.assertEqual(raw.trips, 1); self.assertEqual(len(raw.writes), 1)
+        frames = raw.writes[0]
+        self.assertTrue(frames.startswith(b'\x01\x00\x00\x00\x1f'))
+        self.assertIn(b'\x02cyaka_expected', frames); self.assertTrue(frames.endswith(b'\x03' + APPLICATION_SESSION_SQL.encode()))
+        self.assertEqual((raw.variables, raw.database, raw.reset_count, raw.reveal_session_defaults), ({}, 'cyaka_expected', 1, True))
+        for term in ("autocommit=0", "completion_type='NO_CHAIN'", "REPEATABLE-READ", "time_zone='+00:00'"):
+            self.assertIn(term, raw.sql[-1][0])
+
+    def test_unsafe_preconditions_raise_before_writing(self):
+        raw = FakeConnection(); raw._sock = None
+        with self.assertRaises(pymysql.err.InterfaceError): reset_application_session(raw, 'cyaka_expected')
+        raw = FakeConnection(); raw._result = MagicMock(unbuffered_active=True, has_next=False)
+        with self.assertRaises(pymysql.err.InterfaceError): reset_application_session(raw, 'cyaka_expected')
+        with self.assertRaises(ValueError): reset_application_session(FakeConnection(), 'other; DROP')
+        self.assertEqual(raw.writes, [])
+
+    def test_sequential_kill_switch_variant_has_the_same_effect_in_three_round_trips(self):
+        raw = FakeConnection(); raw.database = 'cyaka_other'; raw.variables['x'] = 1
+        reset_application_session_sequential(raw, 'cyaka_expected')
+        self.assertEqual((raw.trips, raw.variables, raw.database, raw.sql[-1][0]), (3, {}, 'cyaka_expected', APPLICATION_SESSION_SQL))
+
+    def test_private_pymysql_primitives_are_pinned(self):
+        self.assertEqual(pymysql.VERSION_STRING, '1.1.2')  # review reset/TLS/ping internals before upgrading
+        self.assertFalse(pymysql.constants.CLIENT.CAPABILITIES & pymysql.constants.CLIENT.MULTI_STATEMENTS)
+
+
+class WireServer(threading.Thread):
+    """In-process MySQL command-phase peer for REAL PyMySQL framing; counts client flights (round trips)."""
+    def __init__(self, sock, fail_index=None):
+        super().__init__(daemon=True); self.sock, self.fail_index = sock, fail_index
+        self.commands, self.flights = [], 0; self.state = {'db': 'cyaka_expected', 'autocommit': 0, 'trans': 0, 'ro': 0}
+    def status(self):
+        s = self.state; return (0x1 if s['trans'] else 0) | (0x2 if s['autocommit'] else 0) | (0x2000 if s['trans'] and s['ro'] else 0)
+    @staticmethod
+    def packets(seq, *bodies):
+        return b''.join(struct.pack('<I', len(body))[:3] + bytes([seq + index]) + body for index, body in enumerate(bodies))
+    def ok(self): return b'\x00\x00\x00' + struct.pack('<HH', self.status(), 0)
+    def eof(self): return b'\xfe\x00\x00' + struct.pack('<H', self.status())
+    def run(self):
+        buffer = b''; index = 0
+        while True:
+            try: data = self.sock.recv(65536)
+            except OSError: return
+            if not data: return
+            buffer += data; replies = b''; counted = False
+            while len(buffer) >= 4 and len(buffer) >= 4 + int.from_bytes(buffer[:3], 'little'):
+                length = int.from_bytes(buffer[:3], 'little'); body = buffer[4:4 + length]; buffer = buffer[4 + length:]
+                command, payload = body[0], body[1:]
+                if command == 0x01: return  # COM_QUIT
+                if not counted: self.flights += 1; counted = True
+                self.commands.append((command, payload)); s = self.state; text = payload.decode().upper()
+                if index == self.fail_index: reply = self.packets(1, b'\xff' + struct.pack('<H', 1047) + b'#08S01Unknown')
+                elif command == 0x1F: s.update(autocommit=1, trans=0, ro=0, db=s['db']); reply = self.packets(1, self.ok())
+                elif command == 0x02: s['db'] = payload.decode(); reply = self.packets(1, self.ok())
+                elif command == 0x0E: reply = self.packets(1, self.ok())
+                elif text.startswith('START TRANSACTION'): s.update(trans=1, ro=int('READ ONLY' in text)); reply = self.packets(1, self.ok())
+                elif text in ('COMMIT', 'ROLLBACK'): s.update(trans=0, ro=0); reply = self.packets(1, self.ok())
+                elif text.startswith('SET SESSION'): s['autocommit'] = 0; reply = self.packets(1, self.ok())
+                elif text.startswith('SELECT'):
+                    s['trans'] = 1; column = b'\x03def\x00\x00\x00\x011\x00\x0c' + struct.pack('<HIBHB', 63, 1, 8, 0, 0) + b'\x00\x00'
+                    reply = self.packets(1, b'\x01', column, self.eof(), self.eof())  # one column, zero rows
+                else: s['trans'] = 1; reply = self.packets(1, self.ok())
+                replies += reply; index += 1
+            if replies: self.sock.sendall(replies)
+
+
+class WireProtocolTests(unittest.TestCase):
+    """Real PyMySQL 1.1.2 Connection objects over a socketpair: exact round trips per pooled lease."""
+    def client(self, fail_index=None):
+        a, b = socket.socketpair(); self.addCleanup(b.close)
+        connection = pymysql.connections.Connection(defer_connect=True, autocommit=False, read_timeout=5, write_timeout=5)
+        connection._sock = a; connection._rfile = a.makefile('rb'); connection._next_seq_id = 0
+        connection.server_status = 0; connection.reveal_session_defaults = True  # as init_command leaves it
+        server = WireServer(b, fail_index); server.start(); self.servers.append(server); return connection
+    def setUp(self): self.servers = []
+    def pool(self, unchanged=application_session_unchanged):
+        pool = Pool(self.client, lambda c: reset_application_session(c, 'cyaka_expected'), unchanged=unchanged)
+        self.addCleanup(pool.close); return pool
+    def flights(self, run):
+        before = self.servers[0].flights; run(); time.sleep(.05); return self.servers[0].flights - before
+
+    def test_warm_read_and_write_leases_cost_statements_plus_two_and_release_free(self):
+        pool = self.pool(); repo = Repository(); repo.connect = pool.acquire
+        with pool.acquire() as warm: warm.commit()
+        def read():
+            with repo.read_transaction() as tx: tx.execute('SELECT 1').fetchall()
+        def write():
+            with patch('reveal_backend.workspace_events.prepare_commit', return_value=[]), \
+                    patch('reveal_backend.workspace_events.publish_committed'):
+                with repo.transaction() as tx: tx.execute("UPDATE reveal_records SET version=version WHERE kind='x'")
+        self.assertEqual(self.flights(read), 3)    # START, SELECT, COMMIT (was 6 with the 3-step reset)
+        self.assertEqual(self.flights(write), 3)   # FOR UPDATE, UPDATE, COMMIT
+        self.assertEqual(len(self.servers), 1)     # one socket, reused
+        self.assertNotIn(0x1F, [command for command, _ in self.servers[0].commands])
+
+    def test_dirty_lease_reset_is_one_flight_and_kill_switch_resets_every_lease(self):
+        pool = self.pool()
+        with pool.acquire() as warm: warm.commit()
+        def dirty():
+            with pool.acquire() as lease: lease.cursor().execute('SET @x=1'); lease.commit()
+        self.assertEqual(self.flights(dirty), 3)   # SET, COMMIT, pipelined RESET+INIT_DB+SET SESSION
+        self.assertEqual([command for command, _ in self.servers[0].commands[-3:]], [0x1F, 0x02, 0x03])
+        self.assertEqual(self.servers[0].state['autocommit'], 0)
+        pool = self.pool(unchanged=None); self.servers.clear()
+        def clean():
+            with pool.acquire() as lease:
+                cursor = lease.cursor(); cursor.execute('SELECT 1'); cursor.fetchall(); lease.commit()
+        with pool.acquire() as warm: warm.commit()
+        self.assertEqual(self.flights(clean), 3)   # SELECT, COMMIT, one pipelined reset
+
+    def test_err_on_any_pipelined_reply_raises_and_the_pool_discards(self):
+        for fail in (0, 1, 2):
+            with self.subTest(fail=fail):
+                connection = self.client(fail)
+                with self.assertRaises(pymysql.err.MySQLError): reset_application_session(connection, 'cyaka_expected')
+        pool = Pool(lambda: self.client(1), lambda c: reset_application_session(c, 'cyaka_expected'))
+        self.addCleanup(pool.close); lease = pool.acquire(); raw = lease._entry.connection; lease.commit()
+        lease.close(); self.assertIsNone(raw._sock)
+        self.assertIsNot(pool.acquire()._entry.connection, raw)
+
+    def test_commit_ok_packet_proves_the_session_reusable(self):
+        connection = self.client()
+        with connection.cursor() as cursor: cursor.execute('START TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY')
+        self.assertEqual(connection.server_status, 0x2001); self.assertFalse(application_session_unchanged(connection))
+        connection.commit(); self.assertEqual(connection.server_status, 0)
+        self.assertTrue(application_session_unchanged(connection))
+
+class RuntimePoolSettingsTests(unittest.TestCase):
+    def setUp(self):
+        old_pool, old_key = runtime_config._application_pool, runtime_config._application_pool_key
+        self.addCleanup(setattr, runtime_config, '_application_pool', old_pool)
+        self.addCleanup(setattr, runtime_config, '_application_pool_key', old_key)
+        runtime_config._application_pool = None; runtime_config._application_pool_key = None
+        self.created = []; environment = patch.dict('os.environ'); environment.start(); self.addCleanup(environment.stop)
+        for name in [name for name in runtime_config.os.environ if name.startswith('REVEAL_MYSQL_POOL_')]:
+            del runtime_config.os.environ[name]
+    def tearDown(self):
+        if runtime_config._application_pool is not None: runtime_config._application_pool.close()
+    def factory(self, **kwargs):
+        connection = StatusConnection(); self.created.append(connection); return connection
+    def lease(self, **env):
+        values = {'REVEAL_MYSQL_PASSWORD': 'test-only', 'REVEAL_MYSQL_CA_FILE': '', **env}
+        with patch.dict('os.environ', values), patch.object(runtime_config, 'mysql_connection', side_effect=self.factory):
+            return runtime_config.application_mysql_connection()
+
+    def test_clean_release_is_on_by_default(self):
+        lease = self.lease(); raw = self.created[-1]; lease.commit(); raw.trips = 0; lease.close()
+        self.assertEqual((raw.reset_count, raw.trips), (0, 0))
+
+    def test_kill_switches_force_reset_and_sequential_reset_and_rotate_the_pool(self):
+        lease = self.lease(REVEAL_MYSQL_POOL_CLEAN_RELEASE='0'); raw = self.created[-1]; raw.trips = 0
+        lease.commit(); lease.close(); self.assertEqual((raw.reset_count, len(raw.writes)), (1, 1))
+        lease = self.lease(REVEAL_MYSQL_POOL_CLEAN_RELEASE='0', REVEAL_MYSQL_POOL_PIPELINED_RESET='0')
+        self.assertTrue(raw.closed); raw = self.created[-1]; lease.commit(); raw.trips = 0; lease.close()
+        self.assertEqual((raw.reset_count, raw.writes, raw.trips), (1, [], 3))
+        for env in ({'REVEAL_MYSQL_POOL_SIZE': '12'}, {'REVEAL_MYSQL_POOL_CLEAN_RELEASE': '1'}):
+            with self.subTest(env=env):
+                before = runtime_config._application_pool; lease = self.lease(**env); lease.rollback(); lease.close()
+                self.assertIsNot(runtime_config._application_pool, before)
 
 class ExactFetchTests(unittest.TestCase):
     def test_heterogeneous_fetch_only_returns_exact_pairs_and_binds_all_values(self):

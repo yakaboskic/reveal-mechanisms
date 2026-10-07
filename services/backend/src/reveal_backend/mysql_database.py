@@ -5,8 +5,15 @@ import getpass
 import os
 import re
 import ssl
+import struct
 
 DEFAULT_HOST = 'aurora-giant-bioindex.cluster-cxrzznxifeib.us-east-1.rds.amazonaws.com'
+APPLICATION_SESSION_SQL = ("SET SESSION autocommit=0, completion_type='NO_CHAIN', transaction_isolation='REPEATABLE-READ', "
+    "time_zone='+00:00', character_set_client='utf8mb4', character_set_connection='utf8mb4', "
+    "character_set_results='utf8mb4', collation_connection='utf8mb4_unicode_ci'")
+_COM_INIT_DB, _COM_QUERY, _COM_RESET_CONNECTION = 0x02, 0x03, 0x1F
+# server_status bits (PyMySQL 1.1.2 lacks IN_TRANS_READONLY) and the CLIENT_MULTI_STATEMENTS capability.
+_IN_TRANS, _AUTOCOMMIT, _MORE_RESULTS, _IN_TRANS_READONLY, _MULTI_STATEMENTS = 0x1, 0x2, 0x8, 0x2000, 0x10000
 
 
 def validate_database(name):
@@ -40,26 +47,52 @@ def connect(*, host=DEFAULT_HOST, port=3306, user='cyaka', database='cyaka_revea
 def initialize_application_session(connection):
     """Canonical settings for Repository-only leases; one server round trip."""
     with connection.cursor() as cursor:
-        cursor.execute("SET SESSION autocommit=0, transaction_isolation='REPEATABLE-READ', "
-            "time_zone='+00:00', character_set_client='utf8mb4', character_set_connection='utf8mb4', "
-            "character_set_results='utf8mb4', collation_connection='utf8mb4_unicode_ci'")
+        cursor.execute(APPLICATION_SESSION_SQL)
     connection.reveal_session_defaults = True
 
 
-def reset_application_session(connection, database):
-    """Clear server state without reauthentication; failures discard the socket.
+def application_session_unchanged(connection):
+    """Zero-round-trip proof from the OK packet of a lease's final COMMIT/ROLLBACK: no transaction (row lock,
+    read view or READ ONLY flag) is open, autocommit is still 0, no result is pending and one execute() is one
+    statement. Session/user variables are invisible here; the lease's statement classification guards them."""
+    status, flags = getattr(connection, 'server_status', None), getattr(connection, 'client_flag', None)
+    return (getattr(connection, 'reveal_session_defaults', False) is True and type(status) is int and type(flags) is int
+            and not status & (_IN_TRANS | _AUTOCOMMIT | _MORE_RESULTS | _IN_TRANS_READONLY) and not flags & _MULTI_STATEMENTS)
 
-    MySQL's documented COM_RESET_CONNECTION (0x1f) rolls back, releases locks,
-    drops temporary tables and clears session/user variables. PyMySQL 1.1.2
-    exposes no public reset method; use its command/OK-packet primitives, also
-    used by ping(). No reconnect or SQL replay is allowed here.
+
+def _command(code, payload):
+    # PyMySQL's own first-packet layout: 3-byte length, sequence id 0, command byte.
+    return struct.pack('<I', len(payload) + 1)[:3] + b'\x00' + bytes([code]) + payload
+
+
+def reset_application_session(connection, database):
+    """COM_RESET_CONNECTION, COM_INIT_DB and the canonical SET SESSION in one write, acknowledged in order:
+    one round trip. RESET rolls back, releases locks, drops temporary tables and clears variables, but keeps a
+    borrower-selected schema and restores autocommit=1 and the server time zone (measured on Aurora 3.10.3),
+    so neither INIT_DB nor SET may be dropped. Any error leaves unread replies: Pool.release must discard the
+    socket. No reconnect or SQL replay. PyMySQL==1.1.2 primitives, as used by its own ping().
     https://dev.mysql.com/doc/c-api/8.0/en/mysql-reset-connection.html
     """
+    import pymysql
     validate_database(database)
-    connection._execute_command(0x1F, b'')
+    if connection._sock is None: raise pymysql.err.InterfaceError(0, 'Session reset on a closed socket')
+    pending = connection._result
+    if pending is not None and (pending.unbuffered_active or pending.has_next):
+        raise pymysql.err.InterfaceError(0, 'Unfinished result before session reset')
+    connection._result = None
+    connection._write_bytes(_command(_COM_RESET_CONNECTION, b'') + _command(_COM_INIT_DB, database.encode('ascii'))
+                            + _command(_COM_QUERY, APPLICATION_SESSION_SQL.encode('ascii')))
+    for _ in range(3):
+        connection._next_seq_id = 1  # each reply is sequence 1 of its own command
+        connection._read_ok_packet()
+    connection.reveal_session_defaults = True
+
+
+def reset_application_session_sequential(connection, database):
+    """The same three commands, one round trip each (REVEAL_MYSQL_POOL_PIPELINED_RESET=0, e.g. behind a proxy)."""
+    validate_database(database)
+    connection._execute_command(_COM_RESET_CONNECTION, b'')
     connection._read_ok_packet()
-    # RESET does not promise to restore the selected schema. Never inherit a
-    # borrower-selected database, even if future Repository code selects one.
     connection.select_db(database)
     initialize_application_session(connection)
 
