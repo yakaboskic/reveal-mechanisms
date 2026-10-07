@@ -409,7 +409,8 @@ start the helper. Account linting still runs its own interpreter per account.
 
 The inspected jobs also spent approximately 38–40 seconds setting up their Box
 runtime. That delay and model/external-KG latency are separate from evidence
-collection. Initial API source-catalog loading also remains a cold-start cost:
+collection. A prebuilt toolchain snapshot (`REVEAL_BOX_TOOLCHAIN_SNAPSHOT`, see
+durable-workflow-runtime.md) can skip the per-job toolchain install. Initial API source-catalog loading also remains a cold-start cost:
 the deployment check took 61.6 seconds before the pinned catalogs were ready.
 The API now pays it in a startup thread rather than on the first request.
 The read benchmarks above apply after normal initialization. More Box RAM does

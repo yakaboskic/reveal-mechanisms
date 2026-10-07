@@ -95,6 +95,41 @@ took 1.020 seconds. The remote input checksum and bootstrap fingerprint matched,
 and the Box was deleted and verified through its status endpoint. No model calls
 or Redis commands were made.
 
+Every new Box still installs its toolchain (`apt-get update`, `python3-venv`, a
+venv with the pinned PyYAML, LinkML and rdflib, and the pinned Claude Code
+package); in QA the whole bootstrap step takes 21-24 seconds, most of it that
+install. `REVEAL_BOX_TOOLCHAIN_SNAPSHOT` can name a prebuilt Box snapshot that
+already holds it. Unset (the default), a job's Box is created exactly as before.
+The bootstrap script now writes `/reveal/toolchain.sha256`, a hash of its exact
+install recipe and Claude version, only after a complete install. A Box whose
+stamp, venv interpreter, `reveal-agent` user and `claude --version` all match
+skips the install (`toolchain=snapshot`, recorded on the prepared handle);
+anything else removes `/reveal/venv`, `/reveal/claude` and the stamp and installs
+cleanly (`toolchain=installed`), so a stale or partial snapshot never mixes with a
+new recipe and bumping `CLAUDE_VERSION` without a rebuild only costs the old
+install time. Creation is still one POST with the same labels, so the creation
+fence, recovery and label binding are unchanged. Only a snapshot POST refused
+with 400, 404, 410 or 422 (no Box was created) falls back to a fresh Box; any
+other failure reaches creation recovery as before. Nothing else moves earlier:
+the Box is still created at its create step, never in prepare or from a warm pool.
+
+`scripts/build_box_toolchain_snapshot.py` builds the snapshot. It creates one
+paid Box per run and has not been run against Upstash yet. Snapshots belong to
+one Box account, so build one with each environment's `UPSTASH_BOX_API_KEY` (QA
+and production differ), set the printed id as `REVEAL_BOX_TOOLCHAIN_SNAPSHOT` in
+that environment, and rebuild whenever `CLAUDE_VERSION` or a pinned package
+changes, and at least monthly for apt, PyPI and npm freshness. The builder runs
+the job bootstrap's own toolchain branch, never writes credentials, a bundle or a
+request, never changes the network policy and never runs the agent, `box_upload`
+or `box_remote`. Before snapshotting it requires `/reveal` to hold only `state`
+(empty, root-owned 0755), `venv`, `claude` and the stamp, no `/tmp/reveal-*` or
+credential files, a pristine `reveal-agent` home and the pinned Claude version,
+and it prints `pip freeze --all` and the npm lockfile hash. It keeps the builder
+Box unless `--delete-builder` is passed: confirm first that deleting a Box keeps
+its snapshots. `--dry-run` prints the stamp, name and script without calling
+Upstash. Measure create-to-prepared with and without the snapshot before relying
+on it: restoring a snapshot may add creation time of its own.
+
 Newly prepared Boxes upload completed output and evidence directly to the exact
 S3 bucket using short-lived presigned PUT URLs bound to object checksum and
 length. The API streams the uploaded objects to verify hashes, credential

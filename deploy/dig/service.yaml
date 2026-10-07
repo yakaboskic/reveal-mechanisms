@@ -81,6 +81,8 @@ env:
   REVEAL_MAX_REVIEW_STEPS: '2'
   REVEAL_WORKFLOW_STEP_TIMEOUT_SECONDS: '360'
   REVEAL_WORKFLOW_DELIVERY_TIMEOUT: 420s
+  # REVEAL_BOX_TOOLCHAIN_SNAPSHOT names a prebuilt Box toolchain snapshot. Snapshots belong to one Box
+  # account, so set it per environment from scripts/build_box_toolchain_snapshot.py; unset installs per job.
 qa:
   min_tasks: 1
   max_tasks: 1

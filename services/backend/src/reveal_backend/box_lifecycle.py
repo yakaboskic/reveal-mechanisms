@@ -7,7 +7,7 @@ from pathlib import PurePosixPath
 from .box_upload import MAX_TOTAL, capture_file_limit
 from .box_adapter import (BoxExecutionAdapter, BoxTransportError, BoxConfigurationError, required_environment,
     make_bundle, TERMINAL_STATUSES, CAPTURE_MARKER, capture_binding, atomic_capture_marker,
-    public_event_batches, verified_box_not_found)
+    public_event_batches, verified_box_not_found, create_box)
 
 
 class BoxLifecycle(BoxExecutionAdapter):
@@ -22,8 +22,8 @@ class BoxLifecycle(BoxExecutionAdapter):
     async def create_once(self, job_id, attempt):
         missing = required_environment(self.environ)
         if missing: raise BoxConfigurationError('Missing required environment: ' + ', '.join(missing))
-        box = await self.factory().create(runtime='node', api_key=self.environ['UPSTASH_BOX_API_KEY'],
-            labels=['reveal', 'job-' + hashlib.sha256(job_id.encode()).hexdigest()[:16], 'attempt-' + str(attempt)])
+        box = await create_box(self.factory(), self.environ,
+            ['reveal', 'job-' + hashlib.sha256(job_id.encode()).hexdigest()[:16], 'attempt-' + str(attempt)])
         try:
             return {'box_id': box.id, 'job_id': job_id, 'attempt': attempt,
                     'cursor': 0, 'phase': 'created', 'created_at': time.time(), 'timings': {}}

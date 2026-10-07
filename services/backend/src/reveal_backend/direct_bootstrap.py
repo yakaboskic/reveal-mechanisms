@@ -79,9 +79,17 @@ def download_ticket(storage, reference):
     return {'url':url, 'host':parsed.netloc}
 
 
+def toolchain(output):
+    """Whether the bootstrap reused a prebuilt toolchain snapshot or installed one."""
+    for line in str(output or '').splitlines():
+        if line.strip() in ('toolchain=snapshot', 'toolchain=installed'): return line.strip()[10:]
+    return None
+
+
 async def prepare_from_store(adapter, descriptor, handle, storage, *, research_access=None):
     validate_descriptor(descriptor, handle, storage)
     box = await adapter.connect(handle)
+    observed = {}
     try:
         marker = await adapter.command(box, "sudo -n sh -c 'if [ -f /reveal/state/bootstrap-ready ]; then cat /reveal/state/bootstrap-ready; fi'")
         fingerprint = descriptor['fingerprint']
@@ -103,13 +111,14 @@ async def prepare_from_store(adapter, descriptor, handle, storage, *, research_a
             # The input and harness bundle arrived directly from S3 above.
             script = adapter.bootstrap_script(descriptor['config']['claude_version'], unpack=False)
             await box.files.write(path='/tmp/reveal-bootstrap.sh', content=script)
-            await adapter.command(box, 'sh /tmp/reveal-bootstrap.sh')
+            source = toolchain(await adapter.command(box, 'sh /tmp/reveal-bootstrap.sh'))
+            if source: observed['toolchain'] = source
             context = descriptor['config'].get('research_context')
             if context:
                 await adapter.finish_prepare(box, fingerprint, research_context=context, research_access=research_access)
             else:
                 await adapter.finish_prepare(box, fingerprint)
-        return dict(handle, phase='prepared', capture_protocol='s3-v1',
+        return dict(handle, phase='prepared', capture_protocol='s3-v1', **observed,
             timings={**handle.get('timings', {}), 'prepared_at':time.time()})
     finally:
         from .workflow_execution import drain_on_cancel

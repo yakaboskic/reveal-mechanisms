@@ -27,6 +27,10 @@ REMOTE_PYTHON = '/reveal/venv/bin/python'
 REMOTE_MODULE = 'reveal_backend.box_remote'
 CAPTURE_MARKER = '.box-capture-complete.json'
 TERMINAL_STATUSES = ('succeeded', 'failed', 'cancelled', 'insufficient_evidence')
+TOOLCHAIN_FORMAT = 'reveal.box-toolchain/1'
+TOOLCHAIN_SNAPSHOT = 'REVEAL_BOX_TOOLCHAIN_SNAPSHOT'
+# A snapshot POST refused with one of these created no Box, so a fresh Box may replace it.
+SNAPSHOT_REFUSED = (400, 404, 410, 422)
 
 
 def dispatchable_capture(package):
@@ -138,6 +142,33 @@ def public_event_batches(events, cursor, stream_id, secrets):
         chunk.append(event)
     if chunk:
         yield chunk
+
+
+def toolchain_snapshot(environ):
+    """The configured prebuilt toolchain snapshot id, or None for today's fresh node Box."""
+    value = (environ.get(TOOLCHAIN_SNAPSHOT) or '').strip()
+    if value and not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}', value):
+        raise BoxConfigurationError('Invalid ' + TOOLCHAIN_SNAPSHOT)
+    return value or None
+
+
+async def create_box(factory, environ, labels):
+    """One Box creation: from the toolchain snapshot when one is configured, else a fresh node Box.
+
+    A fresh Box replaces a snapshot only when the snapshot POST itself was refused;
+    any other failure may have created a Box and must reach creation recovery.
+    """
+    options = {'api_key': environ['UPSTASH_BOX_API_KEY'], 'labels': labels}
+    snapshot = toolchain_snapshot(environ)
+    if snapshot:
+        try:
+            return await factory.from_snapshot(snapshot, **options)
+        except Exception as exc:
+            if getattr(exc, 'status_code', None) not in SNAPSHOT_REFUSED: raise
+            import logging
+            logging.getLogger(__name__).warning('Box toolchain snapshot was refused (%s); installing the toolchain',
+                                                getattr(exc, 'status_code', None))
+    return await factory.create(runtime='node', **options)
 
 
 def required_environment(environ=None):
@@ -336,20 +367,40 @@ class BoxExecutionAdapter:
         await self.finish_prepare(box, fingerprint, research_context=config.get('research_context'), research_access=request.research_access)
 
     @staticmethod
-    def bootstrap_script(claude_version, *, unpack=True):
+    def toolchain_script(claude_version):
+        """The pinned agent toolchain install; a prebuilt snapshot holds exactly its result."""
         if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', claude_version):
             raise BoxConfigurationError('Invalid frozen Claude runtime version')
-        return '''set -eu
-sudo mkdir -p /reveal/state
-''' + ('''sudo tar -xzf /tmp/reveal-bundle.tgz -C /reveal
-sudo mv /tmp/reveal-request.json /reveal/request.json
-''' if unpack else '') + '''id reveal-agent >/dev/null 2>&1 || sudo useradd --create-home --uid 1999 --shell /usr/sbin/nologin reveal-agent
+        return '''id reveal-agent >/dev/null 2>&1 || sudo useradd --create-home --uid 1999 --shell /usr/sbin/nologin reveal-agent
 sudo apt-get update -qq
 sudo apt-get install -y -qq python3-venv
 sudo python3 -m venv /reveal/venv
 sudo /reveal/venv/bin/pip -q install PyYAML==6.0.2 linkml==1.11.1 rdflib==7.6.0
 sudo mkdir -p /reveal/claude
-sudo npm install --prefix /reveal/claude --no-audit --no-fund @anthropic-ai/claude-code@''' + claude_version + '''
+sudo npm install --prefix /reveal/claude --no-audit --no-fund @anthropic-ai/claude-code@''' + claude_version + '\n'
+
+    @classmethod
+    def toolchain_stamp(cls, claude_version):
+        return hashlib.sha256((TOOLCHAIN_FORMAT + '\n' + cls.toolchain_script(claude_version)).encode()).hexdigest()
+
+    @classmethod
+    def bootstrap_script(cls, claude_version, *, unpack=True):
+        # The stamp is written only after a complete install with this exact recipe and version. A Box made
+        # from a matching snapshot skips the install; any other Box gets a clean full install, never a mix.
+        stamp = cls.toolchain_stamp(claude_version)
+        return '''set -eu
+sudo mkdir -p /reveal/state
+''' + ('''sudo tar -xzf /tmp/reveal-bundle.tgz -C /reveal
+sudo mv /tmp/reveal-request.json /reveal/request.json
+''' if unpack else '') + '''if [ "$(sudo cat /reveal/toolchain.sha256 2>/dev/null || true)" = "''' + stamp + '''" ] \\
+  && sudo test -x /reveal/venv/bin/python && id reveal-agent >/dev/null 2>&1 \\
+  && [ "$(sudo /reveal/claude/node_modules/.bin/claude --version 2>/dev/null | cut -d' ' -f1)" = "''' + claude_version + '''" ]; then
+echo toolchain=snapshot
+else
+sudo rm -rf /reveal/venv /reveal/claude /reveal/toolchain.sha256
+''' + cls.toolchain_script(claude_version) + '''printf '%s' ''' + stamp + ''' | sudo tee /reveal/toolchain.sha256 >/dev/null
+echo toolchain=installed
+fi
 sudo chmod 755 /reveal
 sudo chmod 755 /reveal/state
 sudo /reveal/claude/node_modules/.bin/claude --version
@@ -425,8 +476,8 @@ sudo /reveal/claude/node_modules/.bin/claude --version
                     terminal = True  # Complete local capture; only acknowledged cleanup remains.
                     return captured_result(request, handle, marker)
             else:
-                box = await factory.create(runtime='node', api_key=self.environ['UPSTASH_BOX_API_KEY'],
-                                           labels=['reveal', 'job-' + hashlib.sha256(request.job_id.encode()).hexdigest()[:16], 'attempt-' + str(request.attempt)])
+                box = await create_box(factory, self.environ,
+                                       ['reveal', 'job-' + hashlib.sha256(request.job_id.encode()).hexdigest()[:16], 'attempt-' + str(request.attempt)])
                 handle = {'box_id': box.id, 'job_id': request.job_id, 'attempt': request.attempt, 'cursor': 0,
                           'phase': 'created', 'created_at': time.time()}
                 await checkpoint(handle.copy())  # Persist before any paid model execution.
