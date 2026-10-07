@@ -14,6 +14,7 @@ import sqlite3
 import threading
 import time
 from uuid import uuid4
+from . import runtime_metrics as metrics
 from .mysql_database import application_session_unchanged
 from .mysql_pool import DatabaseBusy
 from .runtime_config import ROOT, mysql_connection, application_mysql_connection
@@ -68,8 +69,9 @@ class Transaction:
             failed = True
             raise
         finally:
-            from .runtime_metrics import observe
-            observe('database', sql.split()[0].upper(), (time.perf_counter()-started)*1000, failed)
+            name = sql.split()[0].upper()
+            if name == 'SELECT' and sql.endswith(' FOR UPDATE'): name = 'FENCE'
+            metrics.observe('database', name, (time.perf_counter()-started)*1000, failed)
         return cursor
     def _known(self, kind, identity):
         return self._rows.get((kind, identity), _MISS) if _exact(identity) else _MISS
@@ -270,9 +272,10 @@ class Repository:
                     tx.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ')
                 tx.execute('START TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY')
             yield tx
-            connection.commit()
+            with metrics.measure('database', 'COMMIT'): connection.commit()
         except BaseException:
-            try: connection.rollback()
+            try:
+                with metrics.measure('database', 'ROLLBACK'): connection.rollback()
             except Exception: pass  # Retain the original query/commit error.
             raise
         finally: connection.close()
@@ -294,9 +297,10 @@ class Repository:
                 Transaction.execute(tx, 'START TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY')
             yield tx
             # Ends the implicit read view; nothing can persist, and the lease settles for a clean release.
-            connection.rollback()
+            with metrics.measure('database', 'ROLLBACK'): connection.rollback()
         except BaseException:
-            try: connection.rollback()
+            try:
+                with metrics.measure('database', 'ROLLBACK'): connection.rollback()
             except Exception: pass
             raise
         finally: connection.close()
@@ -304,25 +308,30 @@ class Repository:
     def transaction(self):
         gate = None
         if not self.sqlite_path:
-            gate = writer_gate(self.table_prefix)
-            if not gate.acquire(timeout=min(30.0, max(0.0, float(os.getenv('REVEAL_MYSQL_POOL_WAIT_SECONDS', '5'))))):
-                raise DatabaseBusy('Application database writers are busy')
+            gate = writer_gate(self.table_prefix); started = time.perf_counter()
+            admitted = gate.acquire(timeout=min(30.0, max(0.0, float(os.getenv('REVEAL_MYSQL_POOL_WAIT_SECONDS', '5')))))
+            metrics.observe('database', 'WRITER_WAIT', (time.perf_counter()-started)*1000, not admitted)
+            if not admitted: raise DatabaseBusy('Application database writers are busy')
         pending = []
         try:
             connection = self.connect()
+            granted = None
             try:
                 tx = Transaction(connection, bool(self.sqlite_path), self.table_prefix)
                 if self.sqlite_path: connection.execute('BEGIN IMMEDIATE')
-                else: tx.execute(FENCE).fetchone()
+                else: tx.execute(FENCE).fetchone(); granted = time.perf_counter()
                 yield tx
                 from .workspace_events import prepare_commit
                 pending = prepare_commit(tx)
-                connection.commit()
+                with metrics.measure('database', 'COMMIT'): connection.commit()
             except BaseException:
-                try: connection.rollback()
+                try:
+                    with metrics.measure('database', 'ROLLBACK'): connection.rollback()
                 except Exception: pass
                 raise
-            finally: connection.close()
+            finally:
+                if granted is not None: metrics.observe('database', 'LOCK_HOLD', (time.perf_counter()-granted)*1000)
+                connection.close()
         finally:
             # Before publish_committed, which opens its own fenced transaction.
             if gate is not None: gate.release()

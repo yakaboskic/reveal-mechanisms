@@ -55,10 +55,11 @@ def session_neutral(sql):
 class Pool:
     """unchanged(connection) proves a clean lease reusable with no round trip; validate(connection) checks
     an entry idle longer than validate_after_seconds before handout. Idle time also counts host sleep (wall
-    clock), as the server's wait_timeout does; lifetimes are shortened by up to lifetime_jitter."""
+    clock), as the server's wait_timeout does; lifetimes are shortened by up to lifetime_jitter.
+    observer(name, ms, failed) receives ACQUIRE (queue wait only) and RESET_SKIPPED, never under the lock."""
     def __init__(self, factory, reset, *, unchanged=None, validate=None, maximum=4, wait_seconds=5, idle_seconds=60,
                  lifetime_seconds=300, lifetime_jitter=0.0, validate_after_seconds=60, clock=time.monotonic,
-                 wall=time.time, rand=random.random):
+                 wall=time.time, rand=random.random, observer=None):
         if maximum < 1 or min(wait_seconds, idle_seconds, lifetime_seconds, validate_after_seconds) <= 0 \
                 or not 0 <= lifetime_jitter < 1:
             raise ValueError('Pool bounds must be positive')
@@ -66,7 +67,7 @@ class Pool:
         self.maximum, self.wait_seconds = maximum, wait_seconds
         self.idle_seconds, self.lifetime_seconds = idle_seconds, lifetime_seconds
         self.lifetime_jitter, self.validate_after_seconds = lifetime_jitter, validate_after_seconds
-        self.clock, self.wall, self.rand = clock, wall, rand; self.pid = os.getpid()
+        self.clock, self.wall, self.rand, self.observer = clock, wall, rand, observer; self.pid = os.getpid()
         self.condition = threading.Condition(); self.idle = deque(); self.entries = set(); self.creating = 0
         self.closed = False
 
@@ -78,8 +79,13 @@ class Pool:
         self.condition = threading.Condition(); self.idle = deque(); self.entries = set(); self.creating = 0
         self.pid = os.getpid(); self.closed = False
 
+    def _emit(self, name, seconds, failed=False):
+        if self.observer is None: return
+        try: self.observer(name, seconds * 1000, failed)
+        except Exception: pass  # telemetry never changes a lease decision
+
     def acquire(self):
-        self._process(); deadline = self.clock() + self.wait_seconds
+        self._process(); started = self.clock(); deadline = started + self.wait_seconds
         while True:
             stale = []; selected = check = None; create = busy = False
             with self.condition:
@@ -104,8 +110,11 @@ class Pool:
                         if remaining <= 0: busy = True
                         else: self.condition.wait(remaining)
             for entry in stale: _close(entry.connection)
-            if busy: raise DatabaseBusy('Application database connection pool is busy')
-            if selected is not None: return Lease(self, selected)
+            waited = self.clock() - started  # queueing only: the factory and idle ping are timed by their callers
+            if busy:
+                self._emit('ACQUIRE', waited, True); raise DatabaseBusy('Application database connection pool is busy')
+            if selected is not None:
+                self._emit('ACQUIRE', waited); return Lease(self, selected)
             if check is not None:
                 try: self.validate(check.connection)
                 except BaseException as error:
@@ -118,7 +127,7 @@ class Pool:
                     if closed: self.entries.discard(check); self.condition.notify()
                 if closed:
                     _close(check.connection); raise RuntimeError('Connection pool is closed')
-                return Lease(self, check)
+                self._emit('ACQUIRE', waited); return Lease(self, check)
             if create:
                 try:
                     connection = self.factory(); stamp = self.clock()
@@ -132,7 +141,7 @@ class Pool:
                     if self.closed:
                         _close(connection); self.condition.notify(); raise RuntimeError('Connection pool is closed')
                     self.entries.add(entry); self.condition.notify()
-                return Lease(self, entry)
+                self._emit('ACQUIRE', waited); return Lease(self, entry)
 
     def release(self, entry, reusable, clean=False):
         if entry.pid != os.getpid():
@@ -142,7 +151,8 @@ class Pool:
             try:
                 try: skip = bool(clean and self.unchanged is not None and self.unchanged(entry.connection))
                 except Exception: skip = False
-                if not skip: self.reset(entry.connection)
+                if skip: self._emit('RESET_SKIPPED', 0)
+                else: self.reset(entry.connection)
             except BaseException as error:
                 reusable = False
                 if not isinstance(error, Exception): interruption = error

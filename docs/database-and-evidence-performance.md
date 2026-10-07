@@ -69,6 +69,19 @@ new workspace events and notification outbox rows are inserted without a
 lookup. Rows the transaction wrote itself are always read back from the
 database.
 
+Each API request logs one JSON line to stdout with the route template (never
+the raw path, query string, ids or parameters), status, duration, and its
+database cost: statements (including `COMMIT`, `ROLLBACK` and the fence),
+database milliseconds, pool and writer wait, global-lock wait, new connections
+and session resets. Set `REVEAL_ACCESS_LOG=0` to turn it off. The admin
+telemetry adds per-route means of the same fields and these database rows:
+`ACQUIRE` (pool queue wait), `WRITER_WAIT`, `CONNECT`, `PING`, `RESET`,
+`RESET_SKIPPED`, `FENCE` (lock wait plus one round trip), `COMMIT`,
+`ROLLBACK` and `LOCK_HOLD` (fence grant to commit). Statements on direct
+connections opened outside the pool are not counted; their connects are.
+`services/backend/tests/test_round_trip_budget.py` holds the round trips of the
+hottest routes; lower its budgets with each change that removes round trips.
+
 Scientific account reads batch account, publication and document-index records,
 then load the complete stored scientific document. This reduces data queries
 from seven to three while retaining provenance pagination and exact payload

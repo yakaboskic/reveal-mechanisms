@@ -66,16 +66,21 @@ async def publication_cache_policy(request: Request, call_next):
 @app.middleware('http')
 async def measure_request(request: Request, call_next):
     import time
-    from .runtime_metrics import observe
+    from .runtime_metrics import begin_request, end_request, log_request, observe
     started = time.perf_counter()
     status = 500
+    cost, token = begin_request()
     try:
         response = await call_next(request)
         status = response.status_code
         return response
     finally:
-        route = getattr(request.scope.get('route'), 'path', 'unmatched')
-        observe('http', request.method+' '+route, (time.perf_counter()-started)*1000, status >= 500)
+        # Route template only: raw paths carry ids. Database cost stops at response headers, like the timing.
+        route = request.method+' '+getattr(request.scope.get('route'), 'path', 'unmatched')
+        elapsed = (time.perf_counter()-started)*1000
+        end_request(token)
+        observe('http', route, elapsed, status >= 500, extra=cost)
+        log_request(route, status, elapsed, cost)
 
 def validate(value, name, gateway=False):
     schema = GATEWAY if gateway else CONTRACT

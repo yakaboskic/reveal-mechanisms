@@ -32,10 +32,12 @@ def setting(name, default=None):
     return os.environ.get(name, default)
 
 def mysql_connection(*, timeout_seconds=None, application_session=False):
+    """Every verified-TLS connect, pooled or direct, is timed as database/CONNECT."""
     from .mysql_database import connect
+    from .runtime_metrics import measure
     if not setting('REVEAL_MYSQL_PASSWORD'):
         raise RuntimeError('REVEAL_MYSQL_PASSWORD is required')
-    return connect(host=setting('REVEAL_MYSQL_HOST', 'aurora-giant-bioindex.cluster-cxrzznxifeib.us-east-1.rds.amazonaws.com'),
+    with measure('database', 'CONNECT'): return connect(host=setting('REVEAL_MYSQL_HOST', 'aurora-giant-bioindex.cluster-cxrzznxifeib.us-east-1.rds.amazonaws.com'),
         port=int(setting('REVEAL_MYSQL_PORT', '3306')), user=setting('REVEAL_MYSQL_USER', 'cyaka'),
         database=setting('REVEAL_MYSQL_DATABASE', 'cyaka_reveal_mechanisms'), ca_file=setting('REVEAL_MYSQL_CA_FILE') or None,
         **({'timeout_seconds': timeout_seconds} if timeout_seconds is not None else {}),
@@ -61,7 +63,7 @@ def application_mysql_connection():
     """Lease a bounded clean session, only for runtime Repository transactions."""
     from . import mysql_database as db
     from .mysql_pool import Pool
-    from .runtime_metrics import measure
+    from .runtime_metrics import measure, observe
     global _application_pool, _application_pool_key
     maximum = int(setting('REVEAL_MYSQL_POOL_SIZE', '10'))
     if maximum == 0: return mysql_connection()
@@ -87,15 +89,14 @@ def application_mysql_connection():
         if _application_pool is None or key != _application_pool_key:
             if _application_pool is not None: _application_pool.close()
             reset_session = db.reset_application_session if pipelined else db.reset_application_session_sequential
-            def factory():
-                with measure('database', 'CONNECT'): return mysql_connection(application_session=True)
+            def factory(): return mysql_connection(application_session=True)
             def reset(connection):
                 with measure('database', 'RESET'): reset_session(connection, database)
             def validate(connection):
                 with measure('database', 'PING'): db.validate_idle_session(connection, 3)
             _application_pool = Pool(factory, reset, unchanged=db.application_session_unchanged if clean_release else None,
                 validate=validate, maximum=maximum, wait_seconds=wait, idle_seconds=idle, lifetime_seconds=lifetime,
-                lifetime_jitter=0.1, validate_after_seconds=60)
+                lifetime_jitter=0.1, validate_after_seconds=60, observer=lambda name, ms, failed: observe('database', name, ms, failed))
             _application_pool_key = key
         pool = _application_pool
     return pool.acquire()
