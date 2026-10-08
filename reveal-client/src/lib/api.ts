@@ -25,6 +25,15 @@ export async function request<T>(path: string, options: { method?: string; body?
   return response.json();
 }
 export const backend = (path: string) => "/api/backend/v1/" + path;
+export type CfdeAssessment = {
+  id: string;
+  draft_id: string;
+  draft_version: number;
+  status: "preparing" | "assessing" | "succeeded" | "failed" | "interrupted";
+  result: { verdict: "yes" | "no" } | null;
+  error: { code: string; detail: string; retryable: boolean } | null;
+  stale: boolean;
+};
 export type FactorLoading = { id: string; label: string; loading: number; rank: number; gene_set_id?: string | null; library?: string | null; joint_loading?: number | null; marginal_loading?: number | null };
 export type CatalogGeneSet = { id: string; object?: { members?: unknown[] | null } | null };
 export type FactorLoadings = { items: FactorLoading[]; total: number; offset: number; limit: number; next_offset: number | null };
@@ -59,6 +68,10 @@ export const api = {
     if (!query.trim()) return (await request<Schema<"GapList">>(backend("knowledge-gaps?limit=12"), { signal })).items;
     return (await request<Schema<"GapSearchResults">>(backend("knowledge-gaps/search?mode=fuzzy&limit=12&q=" + encodeURIComponent(query)), { signal })).items.map(hit => hit.gap);
   },
+  createCfdeAssessment: (draftId: string, body: { draft_version: number; composer: Composer }, key: string) => request<CfdeAssessment>(backend("drafts/" + encodeURIComponent(draftId) + "/cfde-assessments"), {
+    method: "POST", key, body,
+  }),
+  cfdeAssessment: (draftId: string, assessmentId: string, signal?: AbortSignal) => request<CfdeAssessment>(backend("drafts/" + encodeURIComponent(draftId) + "/cfde-assessments/" + encodeURIComponent(assessmentId)), { signal }),
   suggest: (composer: Composer, signal?: AbortSignal) => request<Schema<"Suggestions">>(backend("mechanisms/suggest"), {
     method: "POST", signal, body: { source_gap: composer.source_gap, manual_eaggl_anchors: [], dismissed_source_ids: [],
       subquery: composer.mechanism_subquery, mode: "semantic", model: composer.model },

@@ -115,7 +115,7 @@ body:has(.gap-panel.has-results) main { position:relative; min-height:0; overflo
 .warning-panel .save-updates { padding:.62rem 1.05rem; font-size:15px; }
 .warning-panel label { margin-top:.95rem; text-align:left; }
 .warning-panel .actions { margin-top:.85rem; }
-.warning-panel .secondary,.warning-panel .confirm-delete { padding:.62rem 1.05rem; font-size:15px; }
+.warning-panel .secondary,.warning-panel .confirm-delete,.warning-panel .confirm-continue { padding:.62rem 1.05rem; font-size:15px; }
 .warning-panel .confirm-delete { background:white; border-color:#c24545; color:#c24545; }
 .warning-panel .confirm-delete:hover:not(:disabled) { background:#fff5f5; border-color:#c24545; color:#c24545; }
 .settings-panel { position:relative; width:min(100%,640px); max-height:min(88vh,760px); overflow:auto; background:white; border-radius:8px; padding:3.1rem 1.5rem 1.4rem; box-shadow:0 16px 48px rgba(20,22,30,.18); }
@@ -271,7 +271,9 @@ body:has(.gap-panel.has-results) main { position:relative; min-height:0; overflo
 .inspect-card.summary { flex:none; }
 .inspect-card.summary .inspect-toggle::after { content:none; }
 .inspect-card.open .inspect-body { flex:1 1 auto; min-height:0; overflow-y:auto; overscroll-behavior:contain; }
-.inspect-card.open .event-log { max-height:none; }
+.inspect-card.open .inspect-body:has(.event-log) { display:flex; flex-direction:column; overflow:hidden; padding:10px; }
+.inspect-card.open .inspect-body:has(.event-log) .event-log { flex:1 1 auto; min-height:0; max-height:none; margin:0; overflow-x:hidden; overflow-y:auto; overscroll-behavior:contain; }
+.inspect-body > .cfde-passed { flex:none; margin:0 0 15px; color:#1f7a4d; font-size:14px; font-weight:650; line-height:1.4; }
 .inspect-card-head { display:flex; flex-wrap:wrap; align-items:flex-start; }
 .inspect-toggle { display:flex; align-items:center; gap:.6rem; flex:1; min-width:0; text-align:left; background:white; color:var(--ink); border:0; border-radius:0; padding:.95rem 2.4rem .95rem 1.05rem; font-weight:650; }
 .inspect-toggle span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }

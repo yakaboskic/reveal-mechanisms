@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { version as clientVersion } from "../../package.json";
-import { api, ApiError, backend, errorMessage, request, type FactorLoading } from "../lib/api";
+import { api, ApiError, backend, errorMessage, request, type CfdeAssessment, type FactorLoading } from "../lib/api";
 import { followJob, followWorkspace } from "../lib/events";
 import { createMutationKeys } from "../lib/mutations";
 import { emptyComposer, terminal, withFactors, type AnalysisInput, type Composer, type Draft, type Factor, type Gap, type Job, type JobEvent, type Me, type Schema } from "../lib/types";
@@ -520,18 +520,37 @@ function JsonValue({ value, depth = 0 }: { value: unknown; depth?: number }) {
 function InspectCard({ title, open, summary = false, closable = true, closeLabel, badge, onOpen, onClose, children }: { title: string; open: boolean; summary?: boolean; closable?: boolean; closeLabel: string; badge?: ReactNode; onOpen: () => void; onClose: () => void; children: ReactNode }) {
   return <section className={"inspect-card" + (open ? " open" : summary ? " summary" : "")}><div className="inspect-card-head"><button type="button" className="inspect-toggle" aria-expanded={open || summary} onClick={onOpen}><span>{title}</span></button>{closable && <button type="button" className="inspect-close" aria-label={closeLabel} onClick={onClose}>×</button>}{open && badge && <div className="inspect-badge-row">{badge}</div>}</div>{(open || summary) && <div className="inspect-body">{children}</div>}</section>;
 }
-function ActivityRecord({ events, logRef }: { events: JobEvent[]; logRef: RefObject<HTMLDivElement | null> }) {
-  return <div className="event-log" ref={logRef} aria-label="Job activity events">{!events.length && <p className="empty">Loading saved activity…</p>}{events.map(event => <article className={"event " + event.event_type} key={event.id}><div className="event-header"><span>{event.detail?.tool_name || readable(event.event_type)}</span><time dateTime={event.occurred_at}>{new Date(event.occurred_at).toLocaleTimeString()}</time></div><p>{event.message}</p>{event.detail?.output_excerpt && <details><summary>Captured output</summary><pre>{event.detail.output_excerpt}</pre></details>}{event.detail?.artifact_sha256 && <a href={backend("artifacts/" + event.detail.artifact_sha256)} target="_blank" rel="noreferrer">Open captured artifact</a>}</article>)}</div>;
+function activityNote(message: string, eventType: JobEvent["event_type"] = "progress"): JobEvent {
+  return { id: crypto.randomUUID(), job_id: "cfde-assessment", occurred_at: new Date().toISOString(), event_type: eventType, status: "running", stage: "retrieving_cfde", message, result: null, detail: null };
 }
-function InspectColumn({ gap, factor, factorPending, result, activity, focus, gapNote, factorNote, onFocus, onCloseGap, onCloseFactor, onCloseResult, onCloseActivity }: {
-  gap: Gap | null; factor: Factor | null; factorPending: boolean; result: ResultInspect | null; activity: ReactNode; focus: "gap" | "factor" | "result" | "activity"; gapNote: string; factorNote: string;
+function isMessageDelta(event: JobEvent) {
+  return event.detail?.kind === "agent_message" && event.detail.message_delta === true;
+}
+function displayActivity(events: JobEvent[]) {
+  const shown: JobEvent[] = [];
+  for (const event of events) {
+    const previous = shown[shown.length - 1];
+    if (previous && isMessageDelta(previous) && isMessageDelta(event)) {
+      shown[shown.length - 1] = { ...previous, message: previous.message + event.message, occurred_at: event.occurred_at };
+      continue;
+    }
+    shown.push(event);
+  }
+  return shown;
+}
+function ActivityRecord({ events, logRef }: { events: JobEvent[]; logRef: RefObject<HTMLDivElement | null> }) {
+  const shown = displayActivity(events);
+  return <div className="event-log" ref={logRef} aria-label="Job activity events">{!shown.length && <p className="empty">Loading saved activity…</p>}{shown.map(event => <article className={"event " + event.event_type} key={event.id}><div className="event-header"><span>{event.detail?.tool_name || readable(event.event_type)}</span><time dateTime={event.occurred_at}>{new Date(event.occurred_at).toLocaleTimeString()}</time></div><p>{event.message}</p>{event.detail?.output_excerpt && <details><summary>Captured output</summary><pre>{event.detail.output_excerpt}</pre></details>}{event.detail?.artifact_sha256 && <a href={backend("artifacts/" + event.detail.artifact_sha256)} target="_blank" rel="noreferrer">Open captured artifact</a>}</article>)}</div>;
+}
+function InspectColumn({ gap, factor, factorPending, result, activity, cfdePassed, focus, gapNote, factorNote, onFocus, onCloseGap, onCloseFactor, onCloseResult, onCloseActivity }: {
+  gap: Gap | null; factor: Factor | null; factorPending: boolean; result: ResultInspect | null; activity: ReactNode; cfdePassed: boolean; focus: "gap" | "factor" | "result" | "activity"; gapNote: string; factorNote: string;
   onFocus: (focus: "gap" | "factor" | "result" | "activity") => void; onCloseGap: () => void; onCloseFactor: () => void; onCloseResult: () => void; onCloseActivity: () => void;
 }) {
   return <div className="inspect-frame">
     {gap && <InspectCard title={gap.object.text || gapTitle(gap)} open={focus === "gap"} closeLabel="Close gap inspection" badge={diseaseBubble(gap)} onOpen={() => onFocus("gap")} onClose={onCloseGap}><GapFacts gap={gap} />{gapNote && <p className="settings-note">{gapNote}</p>}</InspectCard>}
     {(factor || factorPending) && <InspectCard title={factor ? factorTitle(factor) : "Loading factor…"} open={focus === "factor"} closeLabel="Close factor inspection" onOpen={() => onFocus("factor")} onClose={onCloseFactor}>{factor ? <><FactorSummary factor={factor} /><FactorLoadings key={factor.source_id} sourceId={factor.source_id} /></> : <p className="settings-note">Loading the factor…</p>}{factorNote && <p className="settings-note">{factorNote}</p>}</InspectCard>}
     {result && <InspectCard title={result.title} open={focus === "result"} closeLabel="Close result inspection" onOpen={() => onFocus("result")} onClose={onCloseResult}><ResultInspectBody result={result} /></InspectCard>}
-    {activity && <InspectCard title="Activity" open={focus === "activity"} closeLabel="Close activity" onOpen={() => onFocus("activity")} onClose={onCloseActivity}>{activity}</InspectCard>}
+    {activity && <InspectCard title="Activity" open={focus === "activity"} closeLabel="Close activity" onOpen={() => onFocus("activity")} onClose={onCloseActivity}>{cfdePassed && <p className="cfde-passed">CFDE evidence assessment passed.</p>}{activity}</InspectCard>}
   </div>;
 }
 function setLocation(kind: "draft" | "job", id: string | null) {
@@ -575,6 +594,19 @@ function recallGapSearch(draftId: string, gapSourceId?: string | null) {
 function withSelectedGap(values: Gap[], selected: Gap | null) {
   if (!selected || values.some(item => item.source.source_id === selected.source.source_id)) return values;
   return [selected, ...values];
+}
+const CFDE_PASSED_KEY = "reveal-client-cfde-passed";
+function readCfdePassed() {
+  try {
+    const value = JSON.parse(localStorage.getItem(CFDE_PASSED_KEY) || "[]");
+    return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+  } catch { return []; }
+}
+function rememberCfdePassed(draftId: string) {
+  localStorage.setItem(CFDE_PASSED_KEY, JSON.stringify([...new Set([...readCfdePassed(), draftId])]));
+}
+function forgetCfdePassed(draftId: string) {
+  localStorage.setItem(CFDE_PASSED_KEY, JSON.stringify(readCfdePassed().filter(id => id !== draftId)));
 }
 const productApis: { method: string; path: string; detail: string }[] = [
   { method: "GET", path: "/api/session", detail: "Check whether this browser already has a workspace session." },
@@ -709,6 +741,8 @@ export default function Home() {
   const [draftPicker, setDraftPicker] = useState(false);
   const [deletingId, setDeletingId] = useState("");
   const [pendingDelete, setPendingDelete] = useState<Draft | null>(null);
+  const [cfdeGate, setCfdeGate] = useState<Draft | null>(null);
+  const [cfdePassed, setCfdePassed] = useState(false);
   const [inspectGap, setInspectGap] = useState<Gap | null>(null);
   const [inspectGapNote, setInspectGapNote] = useState("");
   const [inspectFactor, setInspectFactor] = useState<Factor | null>(null);
@@ -791,7 +825,7 @@ export default function Home() {
     try {
       const value = await api.draft(id);
       if (generation !== editorGeneration.current || owner !== identity.current) return;
-      setDraft(value); setComposer(value.composer); setName(value.name || ""); setSuggestion(null); setGap(null);
+      setDraft(value); setComposer(value.composer); setName(value.name || ""); setSuggestion(null); setGap(null); setCfdePassed(readCfdePassed().includes(id));
       setQuery(""); setGaps([]); setSearched(false); setGapListMode(null); searchedQuery.current = null;
       setLocation("draft", id); setNotice("Saved draft loaded."); setError(""); setWelcomeOpen(false);
       const suggestionController = new AbortController();
@@ -978,11 +1012,11 @@ export default function Home() {
     document.addEventListener("visibilitychange", onVisible);
     return () => { active = false; document.removeEventListener("visibilitychange", onVisible); };
   }, [publicationKey]);
-  useEffect(() => {
-    if (!job || terminal(job.status) || !activityLogOpen) return;
+  useLayoutEffect(() => {
+    if (!activityLogOpen) return;
     const node = activityLogRef.current;
     if (node) node.scrollTop = node.scrollHeight;
-  }, [activity, job?.id, job?.status, activityLogOpen]);
+  }, [activity, activityLogOpen]);
   useEffect(() => {
     if (!job || !terminal(job.status) || activityCollapsed.current === job.id) return;
     activityCollapsed.current = job.id;
@@ -1013,6 +1047,12 @@ export default function Home() {
     document.addEventListener("keydown", onKey);
     return () => { document.removeEventListener("mousedown", close); document.removeEventListener("keydown", onKey); };
   }, [sessionOpen, helpOpen]);
+  useEffect(() => {
+    if (!cfdeGate) return;
+    function onKey(event: KeyboardEvent) { if (event.key === "Escape") setCfdeGate(null); }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [cfdeGate]);
   useEffect(() => {
     if (!draftPicker) return;
     function onKey(event: KeyboardEvent) { if (event.key === "Escape") { if (pendingDelete) setPendingDelete(null); else setDraftPicker(false); } }
@@ -1239,12 +1279,56 @@ export default function Home() {
     finally { if (!options?.quiet) setBusy(""); }
   }
   saveRef.current = save;
+  function noteActivity(message: string, eventType: JobEvent["event_type"] = "progress") {
+    setActivity(items => [...items, activityNote(message, eventType)].slice(-1000));
+  }
+  async function assessCfdeSupport(saved: Draft) {
+    const created = await mutationKeys.current.run(["cfde-assessment", saved.id, saved.version, saved.composer], key => api.createCfdeAssessment(saved.id, { draft_version: saved.version, composer: saved.composer }, key));
+    let current: CfdeAssessment = created;
+    let shown = "";
+    const deadline = Date.now() + 120_000;
+    while (current.status === "preparing" || current.status === "assessing") {
+      const message = current.status === "preparing" ? "Preparing the CFDE assessment." : "Assessing CFDE support.";
+      if (message !== shown) { shown = message; noteActivity(message); }
+      if (Date.now() > deadline) throw new Error("The CFDE assessment did not finish. Start the investigation again to retry.");
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      current = await api.cfdeAssessment(saved.id, current.id);
+    }
+    if (current.status === "succeeded" && current.result && !current.stale) return current.result.verdict;
+    if (current.status === "failed" || current.status === "interrupted") throw new Error(current.error?.detail || "The CFDE assessment did not finish. Start the investigation again to retry.");
+    throw new Error("The CFDE assessment could not be used for the current draft. Start the investigation again to retry.");
+  }
   async function startInvestigation() {
     if (pending) { await beginAnalysis(); return; }
     if (!composer.source_gap || !composer.eaggl_anchors.length) return;
-    const next = { ...composer, selected_kgs: ["biomarkerkg", "prokn"] as Composer["selected_kgs"] };
-    const saved = await save(false, { composer: next, ...(draft ? {} : { name: investigationDraftName(query, gap) }) });
-    if (saved) await beginAnalysis(saved);
+    setCfdeGate(null);
+    setActivity([activityNote("Checking CFDE support for this investigation.")]);
+    setActivityLogOpen(true); setInspectFocus("activity");
+    setBusy("assess"); setError("");
+    let saved: Draft | null = null;
+    let verdict: "yes" | "no" | null = null;
+    try {
+      const next = { ...composer, selected_kgs: ["biomarkerkg", "prokn"] as Composer["selected_kgs"] };
+      saved = await save(false, { quiet: true, composer: next, ...(draft ? {} : { name: investigationDraftName(query, gap) }) });
+      if (!saved) { noteActivity("The draft could not be saved, so the CFDE assessment did not start.", "failure"); return; }
+      verdict = await assessCfdeSupport(saved);
+    } catch (error) {
+      const message = error instanceof Error && error.name === "Error" ? error.message : errorMessage(error);
+      noteActivity(message, "failure");
+      setError(message);
+      return;
+    } finally { setBusy(""); }
+    if (!saved || !verdict) return;
+    if (verdict === "no") {
+      noteActivity("No CFDE evidence was found for this investigation.", "warning");
+      setCfdePassed(false);
+      setCfdeGate(saved);
+      return;
+    }
+    rememberCfdePassed(saved.id);
+    setCfdePassed(true);
+    noteActivity("CFDE evidence can support this investigation.");
+    await beginAnalysis(saved);
   }
   async function beginAnalysis(saved?: Draft) {
     if (!principal) return;
@@ -1344,15 +1428,15 @@ export default function Home() {
     {job?.failure && <div className="notice error" role="alert"><div><strong>Research could not complete</strong><p>{job.failure.message}</p><span className="small">{job.failure.code}</span>{job.failure.code.startsWith("REVIEW_") && job.failure.retryable && <p><button className="secondary" onClick={retryReview} disabled={!!busy}>{busy === "review" ? "Requesting review…" : "Retry saved review"}</button></p>}</div></div>}
     {job?.status === "cancelled" && <p className="notice">This job was stopped. No successful result is implied.</p>}
     {job?.result && <ResultView job={job} onActions={setResultActions} />}
-    {job?.kind === "analysis" && <section className="paragraph-result"><h3>Cited claim</h3>{job.result?.kind === "analysis" && job.result.paragraph_job_ids.map(id => <ParagraphView key={id} progress={paragraphs[id]} />)}</section>}
+    {job?.kind === "analysis" && terminal(job.status) && <section className="paragraph-result"><h3>Cited claim</h3>{job.result?.kind === "analysis" && job.result.paragraph_job_ids.map(id => <ParagraphView key={id} progress={paragraphs[id]} />)}</section>}
   </>;
   const activeStep = step === "anchors" || step === "investigation" ? step : "gap";
   const analysisRunning = !!job && !terminal(job.status);
-  const lastActivity = activity.length ? activity[activity.length - 1] : null;
+  const lastActivity = displayActivity(activity).at(-1) ?? null;
   const analysisComplete = !!job && terminal(job.status);
-  const publicationLabel = publication === "public" ? "Published" : publication === "unknown" ? "Publication unavailable" : publication === null && publicationKey ? "Checking publication" : "Not published";
+  const publicationLabel = publication === "public" ? "Published" : "";
   const investigationRail = job && analysisRunning ? <span className="step-rail-facts"><span>Started {date(job.created_at)}</span><span className={"status " + job.status}>{readable(job.status)}</span>{lastActivity && <span>{lastActivity.message}</span>}</span>
-    : job && analysisComplete ? <span className="step-rail-line">Completed {date(job.completed_at || job.updated_at)} | {outcomeLabel(job.status)} | {publicationLabel}</span>
+    : job && analysisComplete ? <span className="step-rail-line">Completed {date(job.completed_at || job.updated_at)} | {outcomeLabel(job.status)}{publicationLabel ? ` | ${publicationLabel}` : ""}</span>
     : null;
   return <>
     <header className="site-header"><div className="brand"><div className="brand-logos"><img src="/brand/cfde-knowledge-center.svg" alt="CFDE Knowledge Center" /><span className="brand-rule" aria-hidden="true" /><img src="/brand/cfde-ecosystem.png" alt="Common Fund Data Ecosystem" /></div><span className="brand-rule" aria-hidden="true" /><div className="brand-copy"><h1><span className="brand-reveal">REVEAL</span><span className="brand-product">Close the gap</span></h1><p>Choose the gap. Ground the claim.</p></div></div>
@@ -1381,7 +1465,7 @@ export default function Home() {
             </div>
           </section>}
           {activeStep === "anchors" && <section className="step open">
-            <div className="step-heading-row"><div className="step-heading-copy"><h2 className="step-heading"><span className="step-number">2</span>Select mechanism anchors</h2><p className="step-guide">Choose genetic factors that may help explain the selected gap. At least one factor is required to start an investigation, and none is selected for you.{suggestion?.limitations.length ? ` ${suggestion.limitations.join(" ")}` : ""}</p></div>{(anchorChosen || pending) && !(startedDraftId && startedDraftId === draft?.id) && <button type="button" className="step-next" onClick={() => void startInvestigation()} disabled={!mutable || suggesting || (!pending && (!composer.source_gap || !composer.eaggl_anchors.length))}>{busy === "submit" ? "Submitting…" : busy === "save" ? "Saving draft…" : pending ? "Recover submission" : "Start investigation"}</button>}</div>
+            <div className="step-heading-row"><div className="step-heading-copy"><h2 className="step-heading"><span className="step-number">2</span>Select mechanism anchors</h2><p className="step-guide">Choose genetic factors that may help explain the selected gap. At least one factor is required to start an investigation, and none is selected for you.{suggestion?.limitations.length ? ` ${suggestion.limitations.join(" ")}` : ""}</p></div>{(anchorChosen || pending) && !(startedDraftId && startedDraftId === draft?.id) && <button type="button" className="step-next" onClick={() => void startInvestigation()} disabled={!mutable || suggesting || !!cfdeGate || (!pending && (!composer.source_gap || !composer.eaggl_anchors.length))}>{busy === "assess" ? "Checking CFDE support…" : busy === "submit" ? "Submitting…" : busy === "save" ? "Saving draft…" : pending ? "Recover submission" : "Start investigation"}</button>}</div>
             <div className="step-body">{!composer.source_gap ? <p className="empty">Select a question to find related genetic mechanisms.</p> : <>
                 {!!anchorIds.length && <FactorNetwork guide={anchorChosen ? undefined : "At least one factor has to be selected to initiate investigation."} gapLabel={gap?.object.text || (gap ? gapTitle(gap) : "Knowledge gap")} rows={anchorIds.map(sourceId => {
                   const factor = factors[sourceId], selected = composer.eaggl_anchors.some(value => value.reference.source_id === sourceId);
@@ -1396,17 +1480,18 @@ export default function Home() {
             </div>
           </section>}
           {activeStep === "investigation" && <section className="step open">
-            <div className="step-heading-row investigation-heading"><div className="step-heading-copy"><h2 className="step-heading"><span className="step-number">3</span>Investigation</h2>{analysisRunning && job && <div className="investigation-live"><p>Started {date(job.created_at)}</p><span className={"status " + job.status}>{readable(job.status)}</span>{lastActivity && <p className="investigation-last">{lastActivity.message}</p>}</div>}<p className="investigation-field">{gap ? <><strong>Knowledge gap:</strong> {gap.object.text || gapTitle(gap)}</> : <><strong>Knowledge gap:</strong> <span className="muted">Select a knowledge gap to investigate.</span></>}</p></div></div>
+            <div className="step-heading-row investigation-heading"><div className="step-heading-copy"><h2 className="step-heading"><span className="step-number">3</span>Investigation</h2><p className="investigation-field">{gap ? <><strong>Knowledge gap:</strong> {gap.object.text || gapTitle(gap)}</> : <><strong>Knowledge gap:</strong> <span className="muted">Select a knowledge gap to investigate.</span></>}</p></div></div>
             <div className="step-body">{investigationPanel}</div>
           </section>}
         </div>
-        {(inspectGap || inspectFactorId || inspectResult || activityLogOpen) && <InspectColumn gap={inspectGap} factor={inspectFactor} factorPending={!!inspectFactorId && !inspectFactor} result={inspectResult} activity={activityLogOpen ? <ActivityRecord events={activity} logRef={activityLogRef} /> : null} focus={inspectFocus === "activity" && activityLogOpen ? "activity" : inspectFocus === "result" && inspectResult ? "result" : inspectFocus === "factor" && inspectFactorId ? "factor" : inspectGap ? "gap" : inspectFactorId ? "factor" : inspectResult ? "result" : "activity"} gapNote={inspectGapNote} factorNote={inspectFactorNote} onFocus={setInspectFocus} onCloseGap={closeGapInspect} onCloseFactor={closeFactorInspect} onCloseResult={closeResultInspect} onCloseActivity={closeActivityInspect} />}
+        {(inspectGap || inspectFactorId || inspectResult || activityLogOpen) && <InspectColumn gap={inspectGap} factor={inspectFactor} factorPending={!!inspectFactorId && !inspectFactor} result={inspectResult} activity={activityLogOpen ? <ActivityRecord events={activity} logRef={activityLogRef} /> : null} cfdePassed={cfdePassed} focus={inspectFocus === "activity" && activityLogOpen ? "activity" : inspectFocus === "result" && inspectResult ? "result" : inspectFocus === "factor" && inspectFactorId ? "factor" : inspectGap ? "gap" : inspectFactorId ? "factor" : inspectResult ? "result" : "activity"} gapNote={inspectGapNote} factorNote={inspectFactorNote} onFocus={setInspectFocus} onCloseGap={closeGapInspect} onCloseFactor={closeFactorInspect} onCloseResult={closeResultInspect} onCloseActivity={closeActivityInspect} />}
         </div>
       </>}
     </main>
     {draftPicker && <SavedDrafts drafts={drafts} jobs={jobs} requests={draftRequests} gapLabels={gapLabels} factorLabels={factorLabels} ready={catalogReady} requestsReady={requestsReady} page={draftPage} deletingId={deletingId} onPage={setDraftPage} onOpen={chooseDraft} onDelete={setPendingDelete} onClose={() => { setPendingDelete(null); setDraftPicker(false); }} />}
     {settingsOpen && <SettingsPanel tab={settingsTab} openLastDraft={openLastDraft} onTab={setSettingsTab} onOpenLastDraft={value => { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ openLastDraft: value })); setOpenLastDraft(value); }} onClose={() => setSettingsOpen(false)} />}
     {pendingDelete && <div className="warning-stage"><section className="warning-panel" role="alertdialog" aria-modal="true" aria-labelledby="delete-draft-heading" aria-describedby="delete-draft-copy"><h2 id="delete-draft-heading">Delete this draft</h2><p id="delete-draft-copy">{`Delete "${pendingDelete.name || "Untitled draft"}"? A submitted investigation from this draft stays available.`}</p><div className="actions"><button type="button" className="secondary" autoFocus onClick={() => setPendingDelete(null)}>Cancel</button><button type="button" className="confirm-delete" disabled={!!deletingId} onClick={() => void removeDraft(pendingDelete)}>{deletingId ? "Deleting…" : "Delete"}</button></div></section></div>}
+    {cfdeGate && <div className="warning-stage"><section className="warning-panel" role="alertdialog" aria-modal="true" aria-labelledby="cfde-gate-heading" aria-describedby="cfde-gate-copy"><h2 id="cfde-gate-heading">No CFDE evidence</h2><p id="cfde-gate-copy">No CFDE evidence was found for this investigation. Continue with evidence from other sources?</p><div className="actions"><button type="button" className="secondary" autoFocus onClick={() => setCfdeGate(null)}>Cancel</button><button type="button" className="confirm-continue" onClick={() => { const saved = cfdeGate; forgetCfdePassed(saved.id); setCfdePassed(false); setCfdeGate(null); void beginAnalysis(saved); }}>Continue</button></div></section></div>}
   </>;
 }
 
