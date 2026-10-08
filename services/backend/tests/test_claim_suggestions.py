@@ -475,36 +475,51 @@ class ReportScriptTests(unittest.TestCase):
     def test_local_files_and_read_only_database_rows(self):
         from reveal_backend.repository import Repository
         structured = Account().factor_gene().gene_gene_set().gap(['factor-gene', 'gene-gene-set']).doc
+        structured['scientific_accounts'][0]['id'] = 'dapper:ScientificAccount.' + 'A' * 32
+        draft, retry, paragraph = deepcopy(structured), deepcopy(structured), deepcopy(structured)
+        draft['scientific_accounts'][0]['id'] = 'urn:reveal:tmp:account-1'
+        retry['activities'] = [{'id': 'dapper:Activity.' + 'R' * 32}]   # a retried attempt mints the same account again
+        paragraph.update(paragraphs=[{'id': 'dapper:Paragraph.' + 'P' * 32}], activities=[{'id': 'dapper:Activity.' + 'P' * 32}])
         legacy = Account().claim('kg', 'A KG statement.', kind='BIOLOGICAL_INTERPRETATION').doc
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            (root / 'job/attempt-1/output').mkdir(parents=True)
+            for folder in ('job/attempt-1/output/output', 'job/attempt-2', 'failed/attempt-1/output'): (root / folder).mkdir(parents=True)
             (root / 'job/attempt-1/accepted-1.json').write_bytes(canonical_json(structured))
-            (root / 'job/attempt-1/accepted-paragraph.json').write_bytes(canonical_json(structured))
-            (root / 'job/attempt-1/output/account-1.json').write_bytes(canonical_json(legacy))
-            (root / 'job/attempt-1/output/account-2.json').write_bytes(b'not json')
+            (root / 'job/attempt-1/output/output/account-1.json').write_bytes(canonical_json(draft))   # its minted copy is accepted-1
             (root / 'job/attempt-1/validation-1.json').write_bytes(canonical_json({'valid': True}))
+            (root / 'job/attempt-2/accepted-1.json').write_bytes(canonical_json(retry))
+            (root / 'paragraph/attempt-1').mkdir(parents=True)
+            (root / 'paragraph/attempt-1/accepted-paragraph.json').write_bytes(canonical_json(paragraph))
+            (root / 'failed/attempt-1/output/account-1.json').write_bytes(canonical_json(legacy))   # never accepted: the draft counts
+            (root / 'failed/attempt-1/output/account-2.json').write_bytes(b'not json')
             documents = list(self.script.local_documents([root], package()))
-            self.assertEqual(sorted(Path(source).name for source, _, _ in documents), ['accepted-1.json', 'account-1.json'])
+            self.assertEqual(sorted(str(Path(source).relative_to(root)) for source, _, _ in documents),
+                             ['failed/attempt-1/output/account-1.json', 'job/attempt-1/accepted-1.json', 'job/attempt-2/accepted-1.json'])
+            self.assertEqual([Path(source).name for source, _, _ in self.script.local_documents([root / 'job/attempt-1/output', root / 'job/attempt-1'])],
+                             ['accepted-1.json'])
+            self.assertEqual(list(self.script.local_documents([root / 'paragraph/attempt-1/accepted-paragraph.json'])), [])
             result = self.script.report(documents)
             total = result['total']
-            self.assertEqual((total['documents'], total['atomic'], total['synthesis']['coherent'], total['other']),
-                             (2, {'count': 2, 'conformant': 2}, 1, 1))
+            self.assertEqual([Path(row['source']).relative_to(root).parts[0] for row in result['documents']], ['failed', 'job'])
+            self.assertEqual((total['documents'], total['atomic'], total['synthesis'], total['other']),
+                             (2, {'count': 2, 'conformant': 2}, {'count': 1, 'coherent': 1, 'gap_relevance': 1}, 1))
             self.assertEqual(total['conformance_rate'], 1.0)
             self.assertIn('gene-gene set', self.script.render(result))
             repository = Repository(str(root / 'records.sqlite')); repository.migrate()
             with repository.transaction() as tx:
+                tx.put('scientific_document', 'x-not-an-account', 'owner', {'document': {'claims': []}})
+                tx.put('scientific_document', 'zz-paragraph', 'owner', {'document': paragraph})
                 tx.put('scientific_document', 'one', 'owner', {'document': structured}); tx.put('scientific_document', 'two', 'owner', {'document': legacy})
                 tx.put('account', 'unrelated', 'owner', {'document': legacy})
             rows = list(self.script.database_documents(repository, 5))
             self.assertEqual(sorted(source for source, _, _ in rows), ['scientific_document:one', 'scientific_document:two'])
-            self.assertEqual(self.script.report(rows + documents)['total']['documents'], 2)   # identical documents count once
+            self.assertEqual(self.script.report(rows)['total']['synthesis']['count'], 1)
+            self.assertEqual(self.script.report(rows + documents)['total']['documents'], 2)   # the same accounts count once across sources
             self.assertEqual(len(list(self.script.database_documents(repository, 1))), 1)
             with patch('sys.stdout') as stdout:
                 self.assertEqual(self.script.main([str(root), '--json']), 0)
             printed = json.loads(''.join(call.args[0] for call in stdout.write.call_args_list))
-            self.assertEqual(printed['total']['documents'], 2)
-
+            self.assertEqual((printed['total']['documents'], printed['total']['synthesis']['count']), (2, 1))
 
 if __name__ == '__main__':
     unittest.main()

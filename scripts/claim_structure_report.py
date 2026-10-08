@@ -2,9 +2,12 @@
 """Claim-structure baseline over accepted accounts and job outputs; read-only.
 
 Recomputes the advisory claim_suggestions summary for account documents: files, or directories searched for
-accepted-*.json and account-*.json/yaml (job outputs), and with --database the newest scientific_document
-records, read in one read-only transaction. Prints per-family counts and conformance, synthesis coherence and
-other Claims in total and per document; --json prints the rows. Nothing is written.
+accepted-*.json and account-*.json/yaml (job outputs; drafts under a directory holding accepted-N.json are
+skipped, since those are their minted copies), and with --database the newest scientific_document records, read
+in one read-only transaction. Paragraph documents (an account plus its research statement) are skipped, and each
+account counts once: by its minted ScientificAccount id, else by identical JSON. Prints per-family counts and
+conformance, synthesis coherence and other Claims in total and per document; --json prints the rows. Nothing is
+written.
 """
 import argparse
 import json
@@ -19,14 +22,27 @@ from reveal_backend.evidence_package import EvidenceBuildError, decode
 PATTERNS = ('accepted-[0-9]*.json', 'account-*.json', 'account-*.yaml', 'account-*.yml')
 
 
+def account_document(document):
+    """An account document; a paragraph document (the account plus its research statement) is not one."""
+    return isinstance(document, dict) and isinstance(document.get('scientific_accounts'), list) and not document.get('paragraphs')
+
+
+def account_key(document):
+    """Minted ScientificAccount ids are content digests, so equal ids are one account (retries, copies)."""
+    ids = sorted(str(account.get('id')) for account in document['scientific_accounts'] if isinstance(account, dict))
+    if ids and len(ids) == len(document['scientific_accounts']) and all(value.startswith('dapper:ScientificAccount.') for value in ids):
+        return 'account', tuple(ids)
+    return 'document', json.dumps(document, sort_keys=True)
+
+
 def local_documents(paths, package=None):
     """(source, document, package) for each readable account document; other JSON is skipped."""
-    for path in paths:
-        files = sorted({file for pattern in PATTERNS for file in path.rglob(pattern)}) if path.is_dir() else [path]
-        for file in files:
-            try: document = decode(file.read_bytes(), 'yaml' if file.suffix in ('.yaml', '.yml') else 'json')
-            except (OSError, ValueError, EvidenceBuildError): continue
-            if isinstance(document, dict) and isinstance(document.get('scientific_accounts'), list): yield str(file), document, package
+    files = {file for path in paths for file in ({file for pattern in PATTERNS for file in path.rglob(pattern)} if path.is_dir() else {path})}
+    accepted = {file.parent for file in files if file.name.startswith('accepted-')}
+    for file in sorted(file for file in files if file.name.startswith('accepted-') or not accepted.intersection(file.parents)):
+        try: document = decode(file.read_bytes(), 'yaml' if file.suffix in ('.yaml', '.yml') else 'json')
+        except (OSError, ValueError, EvidenceBuildError): continue
+        if account_document(document): yield str(file), document, package
 
 
 def database_documents(repository, limit):
@@ -36,15 +52,15 @@ def database_documents(repository, limit):
                                             'ORDER BY updated_at DESC, id LIMIT %s', (limit,)).fetchall()]
         rows = tx.get_many('scientific_document', ids)
     for identity in ids:
-        if identity in rows and isinstance(rows[identity]['data'].get('document'), dict):
-            yield 'scientific_document:' + identity, rows[identity]['data']['document'], None
+        document = rows[identity]['data'].get('document') if identity in rows else None
+        if account_document(document): yield 'scientific_document:' + identity, document, None
 
 
 def report(documents):
-    """Per-document summaries and their totals, one row per distinct document."""
+    """Per-document summaries and their totals, one row per distinct account."""
     rows, seen = [], set()
     for source, document, package in documents:
-        key = json.dumps(document, sort_keys=True)
+        key = account_key(document)
         if key in seen: continue
         seen.add(key)
         account = (document.get('scientific_accounts') or [{}])[0]
@@ -87,7 +103,7 @@ def main(argv=None):
     parser.add_argument('paths', nargs='*', type=Path, help='Account documents or directories (job artifacts)')
     parser.add_argument('--package', type=Path, help='Evidence package or validation context applied to local documents')
     parser.add_argument('--database', action='store_true', help='Also read scientific_document records (read-only)')
-    parser.add_argument('--limit', type=int, default=200, help='Newest database documents to read')
+    parser.add_argument('--limit', type=int, default=200, help='Newest scientific_document records to read')
     parser.add_argument('--json', action='store_true', help='Print the per-document rows and totals as JSON')
     args = parser.parse_args(argv)
     if not args.paths and not args.database: parser.error('Give account paths, --database, or both')
