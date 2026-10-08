@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { formatAdminDate as date, formatAdminJson } from "@/lib/admin-time";
+import { formatAdminDate as date, formatAdminDuration as duration, formatAdminJson } from "@/lib/admin-time";
 import { coalesceMessageDeltas } from "@/lib/activity";
 import type { Schema } from "@/lib/client";
 import type { AdminJob } from "@/lib/admin-job";
@@ -13,7 +13,6 @@ type Detail = {
   attempts_limited: boolean; diagnostics: Diagnostic[]; diagnostics_limited: boolean;
 };
 const terminal = new Set(["succeeded", "failed", "cancelled", "insufficient_evidence"]);
-const duration = (seconds: number | null) => seconds == null ? "—" : seconds < 60 ? `${seconds.toFixed(1)}s` : seconds < 3600 ? `${(seconds / 60).toFixed(1)}m` : `${(seconds / 3600).toFixed(1)}h`;
 const json = (value: unknown) => formatAdminJson(JSON.stringify(value, null, 2));
 
 export function AdminJobDetail({ jobId, auto, onClose }: { jobId: string; auto: boolean; onClose: () => void }) {

@@ -26,6 +26,8 @@ export function adminDate(value: unknown, field = ""): Date | null {
   return null;
 }
 
+export const formatAdminDuration = (seconds: number | null) => seconds == null ? "—" : seconds < 60 ? `${seconds.toFixed(1)}s` : seconds < 3600 ? `${(seconds / 60).toFixed(1)}m` : `${(seconds / 3600).toFixed(1)}h`;
+
 const formatters = new Map<string, Intl.DateTimeFormat>();
 export function formatAdminDate(value: unknown, timeZone?: string, field = ""): string {
   const date = adminDate(value, field);

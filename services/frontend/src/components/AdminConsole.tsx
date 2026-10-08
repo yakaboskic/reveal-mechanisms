@@ -5,7 +5,8 @@ import { useIdentity } from "./Session";
 import { AdminTableInspector } from "./AdminTableInspector";
 import { AdminJobDetail } from "./AdminJobDetail";
 import type { AdminJob as Job } from "@/lib/admin-job";
-import { formatAdminDate as date } from "@/lib/admin-time";
+import { formatAdminDate as date, formatAdminDuration as duration } from "@/lib/admin-time";
+import { AdminPerformance, type RuntimeMetrics } from "./AdminPerformance";
 
 type Snapshot = {
   generated_at: string; query_ms: number; database: string;
@@ -15,9 +16,8 @@ type Snapshot = {
   events: { id: string; job_id: string; occurred_at: string; event_type: string; status: string; stage: string }[];
   tables: { name: string; present: boolean; estimated_rows: number | null; bytes: number | null }[];
   imports: Record<string, string | number | null>[];
-  runtime: { pid: number; uptime_seconds: number; scope: string; rows: { category: string; name: string; count: number; errors: number; mean_ms: number; p95_ms: number }[] };
+  runtime: RuntimeMetrics;
 };
-const duration = (seconds: number | null) => seconds == null ? "—" : seconds < 60 ? `${seconds.toFixed(1)}s` : seconds < 3600 ? `${(seconds / 60).toFixed(1)}m` : `${(seconds / 3600).toFixed(1)}h`;
 const number = (value: number | null) => value == null ? "—" : value.toLocaleString();
 const terminal = new Set(["succeeded", "failed", "cancelled", "insufficient_evidence"]);
 function Status({ value }: { value: string }) { return <span className={`admin-status ${value === "failed" ? "bad" : value === "succeeded" || value === "ready" ? "good" : ""}`}>{value.replaceAll("_", " ")}</span>; }
@@ -97,7 +97,7 @@ export function AdminConsole({ bypass }: { bypass: boolean }) {
       {tab === "Activity" && <section><h2>Recent record changes</h2><p>Latest 100 currently stored records, ordered by last update. This is a snapshot, not a historical audit log; deleted records are not included.</p><Table headings={["Type", "Record", "Owner", "Version", "Updated"]}>{data.recent.map(r => <tr key={`${r.kind}-${r.id}`}><td>{r.kind}</td><td className="admin-mono">{r.id}</td><td className="admin-mono">{r.owner}</td><td>{r.version}</td><td>{date(r.updated_at)}</td></tr>)}</Table>
         <h2>Job event stream</h2><p>Latest 100 event envelopes. Scientific content, tool arguments and credentials are excluded.</p><Table headings={["Time", "Job", "Event", "State", "Stage"]}>{data.events.map(e => <tr key={`${e.job_id}-${e.id}`}><td>{date(e.occurred_at)}</td><td className="admin-mono">{e.job_id}</td><td>{e.event_type}</td><td><Status value={e.status} /></td><td>{e.stage}</td></tr>)}</Table>
       </section>}
-      {tab === "Performance" && <section><h2>API and database latency</h2><p>{data.runtime.scope}</p><p>Process {data.runtime.pid} · uptime {duration(data.runtime.uptime_seconds)}</p><Table headings={["Operation", "Requests", "Errors", "Mean", "Recent p95"]}>{data.runtime.rows.map(r => <tr key={`${r.category}-${r.name}`}><td><small>{r.category}</small>{r.name}</td><td>{number(r.count)}</td><td>{number(r.errors)}</td><td>{r.mean_ms} ms</td><td>{r.p95_ms} ms</td></tr>)}</Table></section>}
+      {tab === "Performance" && <AdminPerformance runtime={data.runtime} />}
     </>}
   </>;
 }
