@@ -1304,6 +1304,7 @@ export default function Home() {
     if (pending) { await beginAnalysis(); return; }
     if (!composer.source_gap || !composer.eaggl_anchors.length) return;
     setCfdeGate(null);
+    setCfdePassed(false);
     setActivity([activityNote("Checking CFDE support for this investigation.")]);
     setActivityLogOpen(true); setInspectFocus("activity");
     setBusy("assess"); setError("");
@@ -1329,6 +1330,7 @@ export default function Home() {
       return;
     }
     if (verdict === "no") {
+      forgetCfdePassed(saved.id);
       noteActivity("No CFDE evidence was found for this investigation.", "warning");
       setCfdePassed(false);
       setCfdeGate(saved);
