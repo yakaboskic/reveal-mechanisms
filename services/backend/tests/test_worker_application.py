@@ -11,7 +11,8 @@ from reveal_backend import jobs
 from reveal_backend.worker import Worker
 from reveal_backend.agent_execution import ExecutionResult
 from reveal_backend.auth import owned
-from reveal_backend.acceptance import validate_observations,replace_authored_attribution,validate_new_files,release_root
+from reveal_backend.acceptance import validate_observations,replace_authored_attribution,validate_new_files,release_root,LOCK
+from reveal_backend.dapper_release import verified_release
 from reveal_backend.evidence_package import sha256
 from reveal_backend.evidence_package import EvidenceBuildError
 from reveal_backend.citations import export
@@ -156,7 +157,7 @@ class SourceMetricTests(unittest.TestCase):
         doc['claim_scores'][0]['score_kind']='PROBABILITY'
         with self.assertRaises(EvidenceBuildError): validate_observations(doc,source)
 
-@unittest.skipUnless((TEST_RELEASE/'.git').exists(),'Trusted DAPPER checkout requires explicit one-time setup')
+@unittest.skipUnless(verified_release(TEST_RELEASE,LOCK),'No DAPPER checkout verifies against the release lock; see docs/local-development.md')
 class WorkerJourneyTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

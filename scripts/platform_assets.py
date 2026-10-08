@@ -9,7 +9,7 @@ import ssl
 import subprocess
 import tempfile
 
-from local_sources import ROOT, DISMECH, RDS_CA, clone_release, verify_release
+from local_sources import ROOT, DISMECH, RDS_CA, clone_release
 from local_deployment import prepare_dismech
 
 
@@ -45,18 +45,8 @@ def prepare(output, *, root=ROOT, dapper=None, dismech=None, ca=None):
         else:
             shutil.copyfile(ca, target)
         validate_ca(target)
-        lock_path = root / 'services/backend/agent-runtime/dapper-release.json'
-        lock = json.loads(lock_path.read_text())
-        if dapper is None:
-            release = clone_release(output / 'dapper', lock_path)
-        else:
-            verify_release(dapper, lock_path)
-            # Copy the pinned Git tree, never untracked files, local hooks or
-            # credential-bearing Git configuration from a developer checkout.
-            run('git', '-c', 'init.templateDir=', 'clone', '--quiet', '--no-local', '--no-hardlinks',
-                '--single-branch', '--branch', lock['tag'], '--depth', '1', '--', Path(dapper).resolve(), output / 'dapper')
-            run('git', '-C', output / 'dapper', 'remote', 'set-url', 'origin', lock['repository'])
-            release = verify_release(output / 'dapper', lock_path)
+        # A supplied checkout must verify; only its pinned Git tree is copied.
+        release = clone_release(output / 'dapper', root / 'services/backend/agent-runtime/dapper-release.json', dapper)
         index = root / 'data/dismech-gaps/2026-09-24'
         commit = json.loads((index / 'manifest.json').read_text())['source_commit']
         with tempfile.TemporaryDirectory(prefix='reveal-dismech-') as temporary:

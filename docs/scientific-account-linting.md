@@ -19,7 +19,9 @@ The repository helper exercises the trusted bootstrap without provisioning a hos
 
 New runtime snapshots, authoring kits and release clones pin DAPPER 0.2.0. Existing downloaded kits and snapshots remain immutable. Create a new local work/kit to obtain the new schema; do not copy changed instructions into a historical workspace. A frozen hosted kit with a different release lock is rejected instead of silently substituting its validator.
 
-For a host with an older configured checkout, create a separate verified checkout:
+For a host whose managed `.runtime/dapper` predates the current lock, run `.venv/bin/python scripts/local_sources.py`. It clones the locked tag beside the old checkout (from a verifying `.deployment-assets/dapper`, else from GitHub), verifies it, swaps it in and keeps the old checkout as `.runtime/dapper-<old tag>`. A failure leaves the old checkout in place. `dapper_release.ensure_release(destination, lock, source=None)` performs the same operation for any path.
+
+A custom `REVEAL_DAPPER_ROOT` is never replaced automatically. Create a separate verified checkout and point the setting at it:
 
 ```sh
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=services/backend/src .venv/bin/python - <<'PYTHON'
@@ -29,7 +31,9 @@ print(clone_release(Path('.runtime/dapper-0.2.0'), Path('services/backend/agent-
 PYTHON
 ```
 
-Set that host's `REVEAL_DAPPER_ROOT` to the new absolute path and rebuild/restart its configured local backend and workers. The container asset path stays `/app/.runtime/dapper`; new images must bundle the newly verified checkout. Existing explicitly configured old checkouts fail verification. No database reimport or ID reminting is required. Use a new destination if the example path already exists. This upgrade does not itself authorize deployment or a research run.
+To copy the pinned Git tree of a verifying local checkout instead of cloning from GitHub, pass it as `clone_release`'s third argument (`source`). Set `REVEAL_DAPPER_ROOT` to the new absolute path and rebuild/restart the local backend and workers. Compose mounts that path at `/app/.runtime/dapper`, and a running container keeps the directory it mounted. New images must bundle the newly verified checkout. Old checkouts fail verification, and `scripts/dev-up.sh` refuses to start on one. No database reimport or ID reminting is required. Use a new destination if the example path already exists. This upgrade does not itself authorize deployment or a research run.
+
+Tests that need the real release read `REVEAL_TEST_DAPPER_RELEASE`. It defaults to the first checkout that verifies among `REVEAL_DAPPER_ROOT`, `.runtime/dapper` and `.deployment-assets/dapper`; those tests skip when none does.
 
 ## Hosted and repository bootstrap
 

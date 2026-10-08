@@ -18,17 +18,25 @@ python3 -m venv .venv
 npm ci --prefix services/frontend
 ```
 
-Prepare the trusted DAPPER checkout once. For an existing older checkout, follow the [0.2.0 upgrade steps](scientific-account-linting.md#updating-an-existing-host-to-020) to create a separate directory and update its configured path. The existing release verifier checks repository, tag object, exact commit, file inventory and checksums. New remote agent attempts still make their own fresh verified clone.
+Prepare the trusted DAPPER checkout. `scripts/local_sources.py` (also run by `scripts/local_setup.py`) provisions `REVEAL_DAPPER_ROOT`, default `.runtime/dapper`, against the [release lock](../services/backend/agent-runtime/dapper-release.json). The release verifier checks repository, tag object, exact commit, file inventory and checksums. New remote agent attempts still make their own fresh verified clone.
+
+- A missing checkout is cloned from `.deployment-assets/dapper` when that checkout verifies (only its pinned Git tree is copied), otherwise from the locked GitHub repository.
+- A stale managed `.runtime/dapper`, for example one cloned under an older lock, is replaced. The new clone is verified beside it first, then swapped in, and the old checkout is kept as `.runtime/dapper-<old tag>`. A failed clone or verification leaves the existing checkout untouched. Restart running services afterwards: a running container keeps the directory it mounted.
+- A custom `REVEAL_DAPPER_ROOT` is never replaced. If it does not verify, the script stops and names it; unset it to use the managed path, or point it at a checkout that verifies ([upgrade steps](scientific-account-linting.md#updating-an-existing-host-to-020)).
+
+The same operation for the managed path alone, without fetching DisMech or the RDS CA:
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=services/backend/src .venv/bin/python - <<'PY'
 from pathlib import Path
-from reveal_backend.dapper_release import clone_release, verify_release
-root = Path('.runtime/dapper')
+from reveal_backend.dapper_release import ensure_release, verified_release
 lock = Path('services/backend/agent-runtime/dapper-release.json')
-print(verify_release(root, lock) if root.exists() else clone_release(root, lock))
+assets = Path('.deployment-assets/dapper')
+print(ensure_release(Path('.runtime/dapper'), lock, assets if verified_release(assets, lock) else None))
 PY
 ```
+
+Compose mounts `REVEAL_DAPPER_ROOT` (default `./.runtime/dapper`) read-only at `/app/.runtime/dapper`, and `scripts/dev-up.sh` refuses to start unless that checkout verifies.
 
 Database schema setup and source imports are explicit operations. Before applying additive migrations, save a schema backup and confirm the import manifests. Use the resumable importer only if this exact DisMech import is absent:
 

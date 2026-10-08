@@ -14,7 +14,7 @@ x-backend: &backend
     REVEAL_EXECUTION_MODE: ${REVEAL_EXECUTION_MODE:-box}
   volumes:
     - ./.runtime/artifacts:/app/.runtime/artifacts
-    - ./.runtime/dapper:/app/.runtime/dapper:ro
+    - ${REVEAL_DAPPER_ROOT:-./.runtime/dapper}:/app/.runtime/dapper:ro
     - ${REVEAL_DISMECH_SOURCE:-../dismech}:/app/dismech:ro
     - ${REVEAL_MYSQL_CA_FILE:?Set REVEAL_MYSQL_CA_FILE to the trusted Aurora CA bundle}:/app/runtime-ca.pem:ro
   extra_hosts:

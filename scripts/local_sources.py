@@ -10,7 +10,11 @@ from dotenv import dotenv_values
 from local_setup import ROOT, RDS_CA, DISMECH, run
 
 sys.path.insert(0, str(ROOT / 'services/backend/src'))
-from reveal_backend.dapper_release import clone_release, verify_release
+from reveal_backend.dapper_release import clone_release, ensure_release, verified_release, verify_release
+from reveal_backend.evidence_package import EvidenceBuildError
+
+MANAGED_DAPPER = ROOT / '.runtime/dapper'
+ASSET_DAPPER = ROOT / '.deployment-assets/dapper'
 
 
 def configured(env, key, default):
@@ -18,14 +22,29 @@ def configured(env, key, default):
     return path if path.is_absolute() else ROOT / path
 
 
+def provision_dapper(dapper, lock):
+    """Clone a missing checkout and upgrade a stale managed one; a custom REVEAL_DAPPER_ROOT must already verify."""
+    if dapper.exists() and dapper.resolve() != MANAGED_DAPPER.resolve():
+        try: return verify_release(dapper, lock)
+        except EvidenceBuildError as error:
+            raise RuntimeError(f'REVEAL_DAPPER_ROOT={dapper} is not the locked DAPPER release ({error}). Unset it to use '
+                               f'the managed {MANAGED_DAPPER}, which is upgraded automatically, or point it at a '
+                               'checkout that verifies; see docs/local-development.md.') from None
+    release = verified_release(dapper, lock)
+    if release is not None: return release
+    # The verified deployment asset avoids a network clone; only its pinned Git tree is copied.
+    source = ASSET_DAPPER if verified_release(ASSET_DAPPER, lock) else None
+    print(('Upgrading stale' if dapper.exists() else 'Fetching') + ' pinned DAPPER release...', flush=True)
+    release = ensure_release(dapper, lock, source)
+    if 'previous' in release:
+        print(f"Previous checkout kept at {release['previous']}; restart running services to mount the new one.", flush=True)
+    return release
+
+
 def main():
     env = dotenv_values(ROOT / '.env', interpolate=False)
-    dapper = configured(env, 'REVEAL_DAPPER_ROOT', '.runtime/dapper')
-    lock = ROOT / 'services/backend/agent-runtime/dapper-release.json'
-    if not dapper.exists():
-        print('Fetching pinned DAPPER release...', flush=True)
-        clone_release(dapper, lock)
-    else: verify_release(dapper, lock)
+    provision_dapper(configured(env, 'REVEAL_DAPPER_ROOT', '.runtime/dapper'),
+                     ROOT / 'services/backend/agent-runtime/dapper-release.json')
     dismech = configured(env, 'REVEAL_DISMECH_SOURCE', '.runtime/dismech')
     index = ROOT / 'data/dismech-gaps/2026-09-24'
     commit = json.loads((index / 'manifest.json').read_text())['source_commit']

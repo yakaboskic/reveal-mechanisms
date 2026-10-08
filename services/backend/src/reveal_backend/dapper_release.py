@@ -2,10 +2,12 @@
 from importlib.metadata import version
 import os
 from pathlib import Path
+import re
 import subprocess
+import tempfile
 import threading
 
-from .evidence_package import canonical_json, decode, require, sha256
+from .evidence_package import EvidenceBuildError, canonical_json, decode, require, sha256
 
 # Per process: the git inputs last verified for each checkout. File contents are rehashed on every call.
 _VERIFIED = {}
@@ -71,14 +73,53 @@ def verify_release(root, lock_path):
             'lock_sha256': sha256(lock_bytes), 'checked_files': len(lock['files'])}
 
 
-def clone_release(destination, lock_path):
+def verified_release(root, lock_path):
+    """verify_release's result, or None when root is absent or not the locked release."""
+    try: return verify_release(root, lock_path)
+    except (EvidenceBuildError, OSError): return None
+
+
+def clone_release(destination, lock_path, source=None):
+    """A fresh verified clone of the locked tag, from its repository or from a local checkout that verifies.
+
+    A local source contributes only the pinned Git tree: never untracked files,
+    hooks or credential-bearing Git configuration.
+    """
     destination = Path(destination).resolve(); lock = decode(Path(lock_path).read_bytes())
     require(not destination.exists(), 'Each agent start requires a fresh DAPPER clone; use a new workspace')
+    if source is not None: verify_release(source, lock_path)
     destination.parent.mkdir(parents=True, exist_ok=True)
-    result = subprocess.run(['git', 'clone', '--depth', '1', '--single-branch', '--branch', lock['tag'],
-                             '--', lock['repository'], str(destination)], capture_output=True, text=True, timeout=240)
+    origin = lock['repository'] if source is None else str(Path(source).resolve())
+    local = () if source is None else ('--quiet', '--no-local', '--no-hardlinks')
+    result = subprocess.run(['git', '-c', 'init.templateDir=', 'clone', *local, '--depth', '1', '--single-branch',
+                             '--branch', lock['tag'], '--', origin, str(destination)], capture_output=True, text=True, timeout=240)
     require(result.returncode == 0, f'DAPPER release clone failed: {result.stderr.strip()}')
+    if source is not None: git(destination, 'remote', 'set-url', 'origin', lock['repository'])
     return verify_release(destination, lock_path)
+
+
+def ensure_release(destination, lock_path, source=None):
+    """Verify destination, replacing a missing or stale checkout with a verified clone of the locked release.
+
+    The replacement is cloned and verified beside destination before the swap, so a
+    failure leaves the existing checkout untouched; that checkout is kept as <destination>-<old ref>.
+    """
+    destination = Path(destination).absolute()
+    if not os.path.lexists(destination): return clone_release(destination, lock_path, source)
+    release = verified_release(destination, lock_path)
+    if release is not None: return release
+    try: ref = git(destination, 'describe', '--tags', '--always') if (destination / '.git').is_dir() else 'unverified'
+    except EvidenceBuildError: ref = 'unverified'
+    ref = re.sub(r'[^A-Za-z0-9._-]+', '_', ref) or 'unverified'
+    backup, number = destination.with_name(f'{destination.name}-{ref}'), 1
+    while os.path.lexists(backup): number += 1; backup = destination.with_name(f'{destination.name}-{ref}.{number}')
+    with tempfile.TemporaryDirectory(prefix=f'.{destination.name}-', dir=destination.parent) as temporary:
+        staged = Path(temporary) / destination.name
+        clone_release(staged, lock_path, source)
+        destination.rename(backup)
+        try: staged.rename(destination)
+        except BaseException: backup.rename(destination); raise
+    return {**verify_release(destination, lock_path), 'previous': str(backup)}
 
 
 def prepare_agent_workspace(workspace, project_root, package_path, lock_path):

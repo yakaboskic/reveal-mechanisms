@@ -27,6 +27,7 @@ ROOT = Path(__file__).resolve().parents[1]
 RUNTIME = ROOT / '.runtime'
 STATE = RUNTIME / 'dev-stack.json'
 LOGS = RUNTIME / 'logs'
+SOURCE = ROOT / 'services/backend/src'
 PROJECT = 'reveal-' + hashlib.sha256(str(ROOT).encode()).hexdigest()[:10]
 
 
@@ -273,6 +274,24 @@ def wait_ready(url, seconds, description, *, guard=None):
                            f'Check logs, Aurora network access/TLS and one-time setup.')
 
 
+def verify_dapper(env):
+    """The checkout Compose mounts must be the locked release, verified by the project interpreter."""
+    root = Path(env.get('REVEAL_DAPPER_ROOT') or RUNTIME / 'dapper').expanduser()
+    if not root.is_absolute(): root = ROOT / root
+    python = ROOT / '.venv/bin/python'
+    program = ('import sys; sys.path.insert(0, sys.argv[1]); from reveal_backend.dapper_release import verify_release\n'
+               'try: verify_release(sys.argv[2], sys.argv[3])\nexcept ValueError as error: sys.exit(str(error))')
+    try:
+        result = subprocess.run([str(python if python.exists() else sys.executable), '-I', '-c', program, str(SOURCE),
+                                 str(root), str(ROOT / 'services/backend/agent-runtime/dapper-release.json')],
+                                cwd=ROOT, capture_output=True, text=True, timeout=120)
+    except (OSError, subprocess.TimeoutExpired): result = None
+    if result is None or result.returncode:
+        reason = (result.stderr.strip().splitlines() or ['verification failed'])[-1] if result else 'verification could not run'
+        raise StartupError(f'DAPPER checkout {root} is not the locked release ({reason}). Run .venv/bin/python '
+                           'scripts/local_sources.py to clone or upgrade the managed .runtime/dapper; see docs/local-development.md.')
+
+
 def preflight(env):
     if not (ROOT / '.env').exists():
         raise StartupError('Copy .env.example to .env and configure it; see docs/local-development.md.')
@@ -298,8 +317,7 @@ def preflight(env):
     ca = env.get('REVEAL_MYSQL_CA_FILE')
     if ca and not Path(ca).expanduser().is_file():
         raise StartupError('REVEAL_MYSQL_CA_FILE must point to a readable trusted RDS CA PEM file.')
-    if not (RUNTIME / 'dapper/schema/dapper.yaml').exists():
-        raise StartupError('Pinned DAPPER checkout missing. Run the one-time setup in docs/local-development.md.')
+    verify_dapper(env)
     source = Path(env.get('REVEAL_DISMECH_SOURCE', str(ROOT.parent / 'dismech'))).expanduser()
     if not source.is_absolute():
         source = ROOT / source

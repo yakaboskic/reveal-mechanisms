@@ -155,6 +155,26 @@ class StackLifecycleTests(unittest.TestCase):
         self.assertIn(('rm', '-f', 'api', 'worker'), calls)
         self.assertFalse(m.STATE.exists())
 
+    def test_startup_requires_the_mounted_dapper_checkout_to_verify(self):
+        origin, schema = self.root / 'origin', 'version: locked\n'
+        def git(root, *args): return subprocess.check_output(['git', '-C', str(root), *args], text=True).strip()
+        identity = ['-c', 'user.name=Test', '-c', 'user.email=test@example.invalid']
+        (origin / 'schema').mkdir(parents=True); (origin / 'schema/dapper.yaml').write_text(schema)
+        git(origin, 'init', '-q'); git(origin, 'add', 'schema'); git(origin, *identity, 'commit', '-qm', 'Release')
+        git(origin, *identity, 'tag', '-am', 'Release', 'r1')
+        subprocess.run(['git', 'clone', '--quiet', '--', str(origin), str(self.root / 'dapper')], check=True)
+        lock = self.root / 'services/backend/agent-runtime/dapper-release.json'; lock.parent.mkdir(parents=True)
+        lock.write_text(json.dumps({'lock_version': 'reveal.dapper-release/1', 'repository': str(origin), 'tag': 'r1',
+            'tag_object': git(origin, 'rev-parse', 'refs/tags/r1'), 'commit': git(origin, 'rev-parse', 'HEAD'),
+            'files': {'schema/dapper.yaml': m.hashlib.sha256(schema.encode()).hexdigest()}}))
+        m.verify_dapper({})
+        m.verify_dapper({'REVEAL_DAPPER_ROOT': 'dapper'})
+        (self.root / 'dapper/schema/dapper.yaml').write_text('version: edited\n')
+        with self.assertRaisesRegex(m.StartupError, r'dapper is not the locked release \(DAPPER schema checkout has local changes\).*local_sources.py'):
+            m.verify_dapper({})
+        with self.assertRaisesRegex(m.StartupError, 'missing is not the locked release'):
+            m.verify_dapper({'REVEAL_DAPPER_ROOT': str(self.root / 'missing')})
+
 
 if __name__ == '__main__':
     unittest.main()
