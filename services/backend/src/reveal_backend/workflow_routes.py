@@ -43,8 +43,72 @@ def client():
     return result
 
 
+def steps_per_run():
+    value = int(os.getenv('REVEAL_WORKFLOW_STEPS_PER_RUN', '6'))
+    if value < 1: raise ValueError('REVEAL_WORKFLOW_STEPS_PER_RUN must be positive')
+    return value
+
+
 def payload_for(intent):
-    return {key: intent[key] for key in ('job_id', 'namespace', 'generation')} | {'index': intent.get('index', 0)}
+    # Legacy intents use a fixed default; never change a replay's step order
+    # when a deployment changes the configured size of future runs.
+    return {key: intent[key] for key in ('job_id', 'namespace', 'generation')} | {
+        'index': intent.get('index', 0), 'steps_per_run': intent.get('steps_per_run', 6)}
+
+
+def queue_generation(tx, owner, execution):
+    identity = execution['job_id']; generation = execution['generation']
+    execution.update(fence=None, lease_until=None, step=None, run_id=None,
+                     disposition='ready', updated_at=now(), expected_at=state.after(180))
+    tx.put('execution', identity, owner, execution)
+    queue = tx.get('queue', identity)['data']; queue.update(token=None, lease_until=None)
+    tx.put('queue', identity, owner, queue)
+    intent = {'job_id': identity, 'namespace': execution['namespace'], 'generation': generation,
+        'index': execution['phase_index'], 'steps_per_run': steps_per_run(),
+        'dispatch_id': digest([identity, generation]), 'run_id': 'reveal-' + digest([identity, generation])[:40],
+        'attempts': 0, 'published_at': None, 'created_at': now(), 'next_attempt_at': now()}
+    tx.put('workflow_dispatch', identity, owner, intent)
+    return intent
+
+
+def continue_run(repository, payload, index):
+    """Fence a completed segment and commit its next dispatch exactly once."""
+    identity = digest(['workflow-handoff-v1', payload['namespace'], payload['job_id'], payload['generation'], index])
+    with repository.transaction() as tx:
+        prior = tx.get('workflow_handoff', identity)
+        if prior: return prior['data']['result']
+        row = tx.get('execution', payload['job_id'])
+        if not row: raise state.StaleExecution('Execution is unavailable')
+        execution = row['data']; state.check(execution, payload)
+        if execution['phase_index'] != index or execution['disposition'] != 'ready':
+            raise state.StaleExecution('Workflow continuation checkpoint changed')
+        if (execution.get('lease_until') or '') > now():
+            raise state.StepBusy('Workflow phase still owns its lease')
+        execution.update(generation=execution['generation'] + 1,
+                         handoffs=execution.get('handoffs', 0) + 1)
+        intent = queue_generation(tx, row['owner'], execution)
+        result = {'generation': intent['generation'], 'index': index}
+        tx.put('workflow_handoff', identity, row['owner'], {
+            'job_id': payload['job_id'], 'namespace': payload['namespace'],
+            'generation': payload['generation'], 'result': result, 'created_at': now()})
+        return result
+
+
+def segment_limit(context, payload):
+    if 'steps_per_run' in payload: return payload['steps_per_run']
+    # Upgrade legacy runs by first replaying every already-recorded phase.
+    # Otherwise their seventh phase would be mistaken for the new handoff.
+    # This reads only the authenticated, normalized history, never live state.
+    completed = sum(step.step_type == 'Run' and step.step_name.startswith('phase-') for step in context._steps)
+    return max(6, completed)
+
+
+async def continue_job(repository, payload, index):
+    result = await asyncio.to_thread(continue_run, repository, payload, index)
+    # The dispatch intent remains durable if publishing fails, including a
+    # process exit after this transaction but before this SDK step is saved.
+    await dispatch_job(repository, payload['job_id'])
+    return result
 
 
 async def trigger(intent, *, qstash=None):
@@ -192,22 +256,18 @@ def reconcile_stale(repository, limit=25):
             if execution.get('namespace') != jobs.namespace(): continue
             if (execution.get('lease_until') or '') > now() or execution.get('expected_at', '') > now(): continue
             if tx.get('workflow_dispatch', identity): continue
-            # Explicit generation fencing permits recovery without two owners.
-            # Effect intents/capture/review reservations survive unchanged.
-            recoveries = execution.get('recoveries', 0) + 1
-            if recoveries > 3:
-                execution.update(disposition='recovery_required', diagnostic='Managed recovery budget exhausted')
-                tx.put('execution', identity, row['owner'], execution); continue
-            generation = execution['generation'] + 1
-            execution.update(generation=generation, recoveries=recoveries, fence=None, lease_until=None, step=None,
-                             run_id=None, disposition='ready', updated_at=now(), expected_at=state.after(180))
-            tx.put('execution', identity, row['owner'], execution)
-            queue = tx.get('queue', identity)['data']; queue.update(token=None, lease_until=None)
-            tx.put('queue', identity, row['owner'], queue)
-            tx.put('workflow_dispatch', identity, row['owner'], {'job_id': identity, 'namespace': execution['namespace'],
-                'generation': generation, 'index': execution['phase_index'], 'dispatch_id': digest([identity, generation]),
-                'run_id': 'reveal-' + digest([identity, generation])[:40], 'attempts': 0, 'published_at': None,
-                'created_at': now(), 'next_attempt_at': now()})
+            # A missing scheduler delivery is not evidence that a phase failed.
+            # Only a retry explicitly recorded by the execution engine spends
+            # the failure budget; planned handoffs spend neither counter.
+            step_failure = execution.get('retry_cause') == 'step_failure'
+            recoveries = execution.get('recoveries', 0) + int(step_failure)
+            if step_failure and recoveries > int(os.getenv('REVEAL_WORKFLOW_MAX_RECOVERIES', '3')):
+                state.require_recovery(tx, row['owner'], execution, 'Managed recovery budget exhausted')
+                continue
+            execution.update(generation=execution['generation'] + 1, recoveries=recoveries,
+                delivery_recoveries=execution.get('delivery_recoveries', 0) + int(not step_failure),
+                retry_cause=None)
+            queue_generation(tx, row['owner'], execution)
             recovered += 1
     return recovered
 
@@ -229,8 +289,16 @@ def mount_workflow(app, repository):
             try: state.check(execution, payload)
             except state.StaleExecution: return
             if execution['disposition'] in ('complete', 'recovery_required'): return
-            # Never declare cleanup finished from a scheduler failure callback.
-            execution.update(disposition='retry', expected_at=now(), scheduler_failure_at=now())
+            # Late scheduler failures cannot revoke a live phase lease. The
+            # reconciler handles it after expiry and distinguishes deliveries
+            # from phase exceptions using the engine's durable retry cause.
+            execution.update(expected_at=now(), scheduler_failure_at=now(), scheduler_failure_status=status)
+            if (execution.get('lease_until') or '') <= now():
+                if (execution.get('retry_cause') == 'step_failure'
+                        and execution.get('recoveries', 0) >= int(os.getenv('REVEAL_WORKFLOW_MAX_RECOVERIES', '3'))):
+                    state.require_recovery(tx, row['owner'], execution, 'Managed recovery budget exhausted')
+                    return
+                execution['disposition'] = 'retry'
             tx.put('execution', payload['job_id'], row['owner'], execution)
 
     @Serve(app).post(PATH, qstash_client=client(), receiver=receiver, url=url, retries=5, failure_function=failure)
@@ -240,7 +308,7 @@ def mount_workflow(app, repository):
         payload = context.request_payload
         # Deterministic control flow: all mutable reads/effects live in steps.
         index = payload.get('index', 0)
-        for _ in range(5000):
+        for _ in range(segment_limit(context, payload)):
             current_index = index
             result = await context.run('phase-' + str(index), lambda: engine.step(payload, current_index))
             if result.get('cleanup_id'):
@@ -251,7 +319,7 @@ def mount_workflow(app, repository):
                 return
             index = result['index']
             if result.get('sleep'): await context.sleep('wait-' + str(index), result['sleep'])
-        raise RuntimeError('Workflow step limit reached; retain state for explicit recovery')
+        await context.run('continue-' + str(index), lambda: continue_job(repository, payload, index))
 
     async def authorized(request):
         body = (await request.body()).decode()

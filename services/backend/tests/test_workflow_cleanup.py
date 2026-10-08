@@ -82,7 +82,7 @@ class CleanupTests(unittest.IsolatedAsyncioTestCase):
             intent=tx.get('workflow_cleanup',cleanup['cleanup_id'])['data']
         self.assertEqual(intent['workspace'],rows['execution']['workspace'])
         self.assertEqual(intent['capture_sha256'],rows['queue']['review_capture']['capture_sha256'])
-        self.assertTrue(rows['execution']['capacity_reserved']); self.assertFalse(rows['execution']['cleanup_complete'])
+        self.assertFalse(rows['execution']['capacity_reserved']); self.assertFalse(rows['execution']['cleanup_complete'])
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp); self.store.restore(intent['workspace'],root)
             request,_=self.engine.request(rows['job'],rows['queue'],rows['execution'],root)
@@ -148,12 +148,12 @@ class CleanupTests(unittest.IsolatedAsyncioTestCase):
         with patch('reveal_backend.durable_review.call_one',side_effect=AssertionError('no paid review')):
             terminal=await self.engine.step(payload,result['index'])
         self.assertTrue(terminal['done']); self.assertEqual(self.rows(job)['job']['status'],'cancelled')
-        self.assertTrue(self.rows(job)['execution']['capacity_reserved'])
+        self.assertFalse(self.rows(job)['execution']['capacity_reserved'])
         self.adapter.delete_once.assert_not_awaited()
         await self.engine.cleanup(cleanup)
         self.assertFalse(self.rows(job)['execution']['capacity_reserved'])
 
-    async def test_terminal_review_retry_preserves_capacity_and_late_ack_does_not_reset_main_fence(self):
+    async def test_terminal_review_retry_preserves_cleanup_and_late_ack_does_not_reset_main_fence(self):
         job,payload,result,cleanup=await self.handed_off()
         _,execution,_=state.acquire(self.repo,payload,result['index']); token=execution['fence']
         state.save(self.repo,payload,token,validated_paths=['validated/stale.json'])
@@ -164,7 +164,7 @@ class CleanupTests(unittest.IsolatedAsyncioTestCase):
         current=self.rows(job); self.assertEqual(current['execution']['generation'],2)
         self.assertIsNone(current['execution']['validated_paths'])
         self.assertEqual(current['execution']['cleanup_id'],cleanup['cleanup_id'])
-        self.assertTrue(current['execution']['capacity_reserved']); self.assertFalse(current['execution']['cleanup_complete'])
+        self.assertFalse(current['execution']['capacity_reserved']); self.assertFalse(current['execution']['cleanup_complete'])
         _,active,_=state.acquire(self.repo,{**payload,'generation':2},0)
         await self.engine.cleanup(cleanup)
         after=self.rows(job)
@@ -174,7 +174,7 @@ class CleanupTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(after['queue']['review_source']['capture_sha256'],current['queue']['review_source']['capture_sha256'])
         await self.engine.cleanup(cleanup); self.assertEqual(self.adapter.delete_once.await_count,1)
 
-    async def test_cleanup_failure_survives_terminal_job_and_holds_capacity_until_ack(self):
+    async def test_cleanup_failure_survives_terminal_job_without_holding_active_capacity(self):
         job,payload,result,cleanup=await self.handed_off()
         with self.repo.transaction() as tx:
             current=tx.get('job',job['id'])['data']; current.update(status='failed',failure={'code':'VALIDATION_FAILED'})
@@ -187,7 +187,7 @@ class CleanupTests(unittest.IsolatedAsyncioTestCase):
             value=tx.get('execution',other['id'])['data']; value.update(phase='create',capacity_reserved=False)
             tx.put('execution',other['id'],'owner',value)
         _,active,_=state.acquire(self.repo,other_payload,0)
-        with patch.dict('os.environ',{'REVEAL_MAX_ACTIVE_BOXES':'1'}),self.assertRaises(state.StepBusy):
+        with patch.dict('os.environ',{'REVEAL_MAX_ACTIVE_BOXES':'1'}):
             state.reserve_box(self.repo,other_payload,active['fence'])
         self.adapter.delete_once.side_effect=lambda box:dict(box,phase='deleted')
         await self.engine.cleanup(cleanup)

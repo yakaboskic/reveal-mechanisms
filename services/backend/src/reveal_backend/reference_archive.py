@@ -76,7 +76,7 @@ KIND_ACTIONS: dict[str, str] = {
         'vote', 'vote_total',
         # Infrastructure: workers, durable workflow, vector bookkeeping and the reference pointers.
         'worker_control', 'runtime', 'probe_result', 'workflow_activity', 'workflow_cleanup', 'workflow_cleanup_completed',
-        'workflow_control', 'workflow_delivery', 'workflow_dispatch', 'workflow_recovery_audit', 'workflow_step',
+        'workflow_control', 'workflow_delivery', 'workflow_dispatch', 'workflow_handoff', 'workflow_recovery_audit', 'workflow_step',
         'vector_active', 'vector_archive', 'vector_dispatch', 'vector_failure', 'vector_import_request', 'vector_inventory',
         'vector_quality', 'reference_active', 'reference_control', ARCHIVE_RUN_KIND, 'reference_reload'), KEEP)}
 

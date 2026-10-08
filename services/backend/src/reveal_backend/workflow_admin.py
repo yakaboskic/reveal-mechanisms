@@ -20,7 +20,8 @@ def inspect_execution(repository, identity):
         if not row or row['data']['namespace'] != jobs.namespace(): raise ValueError('Execution not found in this environment')
         value=row['data']; job=tx.get('job',identity)['data']
     keys=('job_id','namespace','generation','phase','phase_index','disposition','created_at','updated_at','expected_at',
-          'capacity_reserved','creation_intent','launch_intent','capture_complete','cleanup_complete','review_attempt','recoveries','diagnostic')
+          'capacity_reserved','creation_intent','launch_intent','capture_complete','cleanup_complete','cleanup_id',
+          'cleanup_abandoned','failure_code','review_attempt','recoveries','delivery_recoveries','handoffs','diagnostic')
     return {**{key:value.get(key) for key in keys}, 'job_status':job['status'],
             'box_id':(value.get('box') or {}).get('box_id'), 'box_phase':(value.get('box') or {}).get('phase')}
 
@@ -32,8 +33,12 @@ def resume(repository, identity, expected_generation, *, recovered_box=None):
         if not row or row['data']['namespace'] != jobs.namespace(): raise ValueError('Execution not found in this environment')
         execution=row['data']
         if execution['generation'] != expected_generation: raise ValueError('Execution generation changed; inspect before recovery')
+        if execution.get('cleanup_abandoned'):
+            raise ValueError('Box cleanup owns this abandoned execution; retry cleanup rather than resuming its phases')
         if execution['disposition'] not in ('recovery_required','retry'): raise ValueError('Execution is not awaiting recovery')
         if (execution.get('lease_until') or '') > now(): raise ValueError('An active step still owns this execution')
+        previous={key:execution.get(key) for key in ('generation','phase','phase_index','disposition','diagnostic',
+            'failure_code','recovery_required_at','recovery_generation','recovery_phase','recovery_phase_index')}
         if execution.get('creation_intent') and not execution.get('box'):
             if not recovered_box: raise ValueError('Ambiguous Box creation requires a verified existing Box identity; automated creation is forbidden')
             execution['box']={'box_id':recovered_box,'job_id':identity,'attempt':execution['authoring_attempt'],
@@ -41,19 +46,29 @@ def resume(repository, identity, expected_generation, *, recovered_box=None):
             execution['phase']='bootstrap'
         elif recovered_box:
             if execution.get('box',{}).get('box_id') != recovered_box: raise ValueError('Cannot replace an assigned Box')
-        generation=execution['generation']+1
-        execution.update(generation=generation,run_id=None,recoveries=0,disposition='ready',diagnostic=None,
-            fence=None,lease_until=None,step=None,updated_at=now(),expected_at=state.after(180))
-        tx.put('execution',identity,row['owner'],execution)
-        queue=tx.get('queue',identity)['data']; queue.update(token=None,lease_until=None,remote_handle=execution.get('box'))
-        tx.put('queue',identity,row['owner'],queue)
-        tx.put('workflow_dispatch',identity,row['owner'],{'job_id':identity,'namespace':execution['namespace'],
-            'generation':generation,'index':execution['phase_index'],'dispatch_id':digest([identity,generation]),
-            'run_id':'reveal-'+digest([identity,generation])[:40],'attempts':0,'published_at':None,
-            'created_at':now(),'next_attempt_at':now()})
+        job=tx.get('job',identity)['data']
+        cleanup_only=bool(recovered_box and execution.get('recovery_required_at') and job['status'] in jobs.TERMINAL)
+        if cleanup_only:
+            execution.pop('recovery_required_at')
+            state.require_recovery(tx,row['owner'],execution,'Operator resolved ambiguous allocation',
+                failure_code=execution.get('failure_code','WORKFLOW_ALLOCATION_AMBIGUOUS'))
+            generation=execution['generation']
+        else:
+            from .workflow_routes import steps_per_run
+            generation=execution['generation']+1
+            execution.update(generation=generation,run_id=None,recoveries=0,disposition='ready',diagnostic=None,
+                fence=None,lease_until=None,step=None,updated_at=now(),expected_at=state.after(180))
+            tx.put('execution',identity,row['owner'],execution)
+            queue=tx.get('queue',identity)['data']; queue.update(token=None,lease_until=None,remote_handle=execution.get('box'))
+            tx.put('queue',identity,row['owner'],queue)
+            tx.put('workflow_dispatch',identity,row['owner'],{'job_id':identity,'namespace':execution['namespace'],
+                'generation':generation,'index':execution['phase_index'],'steps_per_run':steps_per_run(),
+                'dispatch_id':digest([identity,generation]),
+                'run_id':'reveal-'+digest([identity,generation])[:40],'attempts':0,'published_at':None,
+                'created_at':now(),'next_attempt_at':now()})
         tx.put('workflow_recovery_audit',digest([identity,generation]),row['owner'],{
             'job_id':identity,'previous_generation':expected_generation,'generation':generation,
-            'recovered_box_id':recovered_box,'operator_recovery_at':now()})
+            'recovered_box_id':recovered_box,'cleanup_only':cleanup_only,'previous_execution':previous,'operator_recovery_at':now()})
     return inspect_execution(repository,identity)
 
 
@@ -83,8 +98,9 @@ def main():
         with repository.read_transaction() as tx: attempt=tx.get('execution',args.job_id)['data']['authoring_attempt']
         asyncio.run(verify_box(args.job_id,attempt,args.box_id))
     result=resume(repository,args.job_id,args.expected_generation,recovered_box=args.box_id)
-    from .workflow_routes import dispatch_job
-    result['dispatch']=asyncio.run(dispatch_job(repository,args.job_id))
+    from .workflow_routes import dispatch_job, dispatch_cleanup
+    result['dispatch']=asyncio.run(dispatch_cleanup(repository,result['cleanup_id']) if result.get('cleanup_abandoned')
+                                   else dispatch_job(repository,args.job_id))
     print(json.dumps(result,indent=2))
 
 
