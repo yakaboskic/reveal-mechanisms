@@ -8,7 +8,7 @@ The app's reference data is the EAGGL factors and their gene loadings, the KPN t
   - local: `reveal_workflow_local_ref_*`
   - QA: `reveal_workflow_qa_ref_*`
   - prod: `reveal_ref_*`
-- **Vectors.** Each environment has fixed Upstash namespaces: `<env>-factors`, `<env>-contexts` (DisMech gap and mechanism texts), `<env>-gene-sets` and `<env>-collections`.
+- **Vectors.** Each environment has two fixed Upstash namespaces: `<env>-factors` (factor labels) and `<env>-contexts` (DisMech gap and mechanism texts). Gene sets and collections are not embedded.
 - **Current factors.** A factor anchor is current exactly when its factor id is in the environment's `ref_factors` table. Submitting, freezing or retrying with an unserved factor returns 409 `REFERENCE_GENERATION_SUPERSEDED`. An unserved factor's page returns 410 with its frozen snapshot from `archived_reference_factors`.
 - **Picking up a release.** The API watches the one-row `ref_release` table and swaps its catalog within about 5 seconds of a publish. Workers read the tables for each job.
 - **Query embeddings.** These use `EMBEDDING_SERVICE_URL` (currently `https://embedding-service-848707719401.us-east1.run.app`), with `EMBEDDING_MODEL` and `EMBEDDING_PROVIDER` from the environment.
@@ -26,15 +26,14 @@ The build reads only files and runs in about 10 minutes. Its output goes to `lap
 | `traits.jsonl.gz` | KPN traits (711) |
 | `factors.jsonl.gz` | factors (4,037): `factor_key`, `public_id`, `eaggl_factor_id`, `kpn_trait_id`, `factor_number`, `label`, `input_sha256`, `source_revision`, metadata |
 | `factor_genes.tsv.gz` | the nonzero EAGGL gene loadings (2,553,330) |
-| `collections.jsonl.gz`, `gene_sets.jsonl.gz` | the CFDE collections (133) and gene sets (44,399), each gene set with its exact DAPPER node, members included |
+| `collections.jsonl.gz`, `gene_sets.jsonl.gz` | the CFDE collections and gene sets (the 2026-10-05 DAPPER 0.2.0 release minus GaultonLab: 532 collections, 1,517,472 gene sets), each gene set with its exact DAPPER node (members included when the document inlines them) |
 | `projections.tsv.gz` | joint and marginal loadings with **per-library** ranks. A row is kept when either rank is at most 50 within its library (GTEx, HuBMAP, LIGER, LINCS_L1000, MoTrPAC). |
 | `trait_gene_sets.tsv.gz` | trait → CFDE gene-set betas from the LAP `betas_` stage: `pigean betas` (no outer Gibbs) on each trait's existing PIGEAN gene stats. It holds `beta_uncorrected`, joint `beta`, `avg_postp` and the rank within the library, for the gene sets PIGEAN analyzed (its marginal p < 0.01 prefilter). The manifest records the response (`log_bf` by default). |
-| `dapper_nodes.jsonl.gz`, `dapper_edges.tsv.gz` | the full DAPPER provenance graph from the collection documents: organizations, datasets, files, activities and embeddings, plus the `used`, `was_generated_by`, `was_derived_from` and `has_embedding` edges |
+| `dapper_nodes.jsonl.gz`, `dapper_edges.tsv.gz` | the DAPPER provenance graph from the collection documents: organizations, datasets, files, activities and collections, plus the `used`, `was_generated_by` and `was_derived_from` edges (the documents' gene-set embeddings are left out) |
 | `archived_factors.jsonl.gz` | a frozen snapshot of every factor in the release: its label, trait, metadata, top 50 genes and each library's top 10 gene sets |
-| `vectors/*.f32.npy` + `vectors/*.tsv` | factor-label, context, gene-set and collection vectors |
+| `vectors/*.f32.npy` + `vectors/*.tsv` | factor-label and DisMech context vectors |
 
 **Where the vectors come from:**
-- **Gene sets and collections:** the CFDE snapshot's float16 matrix, converted to float32.
 - **Factor labels and DisMech contexts:** the vector cache `lap/raw/reference_vector_cache.sqlite`, keyed by the sha256 of the text.
 - **Text not in the cache** (a new factor label, say) is embedded with `EMBEDDING_SERVICE_URL`. First, 8 cached texts are re-embedded; this must give a cosine of at least 0.999, or the build stops.
 
@@ -50,7 +49,7 @@ services/backend/.venv/bin/python -m reveal_backend.reference_release publish \
 First, every file is checked against the manifest. A partial copy, or a folder that a rebuild is replacing, is refused.
 
 Then, for each `--env` in the order given:
-1. Add the vectors each of the four namespaces lacks. The served tables don't name them yet, so the app is unaffected.
+1. Add the vectors each of the two namespaces lacks. The served tables don't name them yet, so the app is unaffected.
 2. Add the frozen snapshots of new or changed factors to `archived_reference_factors`. A snapshot is keyed by the factor's `source_revision`, so an unchanged factor adds no row. Its `generation_id` is the first release that published it.
 3. Load the `<prefix>_ref_*__new` tables, then swap all of them, `ref_release` included, with one `RENAME TABLE`.
    - The swap waits at most 5 seconds at a time for a long reader of the live tables, up to 12 times, so app queries never queue behind it for long.

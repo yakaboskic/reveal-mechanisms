@@ -3,7 +3,7 @@
 One index per environment (REVEAL_VECTOR_ENVIRONMENT): `<env>-factors` holds one vector per factor
 (id = factor key KPN.TRAIT:NNNNNNN::FactorN) and `<env>-contexts` one vector per exact DisMech
 context text (id = sha256 hex of its UTF-8 text). The reference release publisher fills them with
-the reference tables; `<env>-gene-sets` and `<env>-collections` are not read here.
+the reference tables.
 
 The provider supplies candidates; ids the served factor table does not hold are skipped. Exact
 cosines are evaluated from the fetched vectors of the selected factors, retaining each context's
@@ -32,8 +32,8 @@ MAX_CANDIDATES = 1000
 MAX_FETCH = 4096
 FETCH_BATCH = 128
 ENVIRONMENT_RE = re.compile(r'[a-z][a-z0-9_-]{0,24}')
-# Corpus kind -> namespace suffix of `<env>-<suffix>`.
-NAMESPACES = {'factors': 'factors', 'contexts': 'contexts', 'gene_sets': 'gene-sets', 'collections': 'collections'}
+# Corpus kind -> namespace suffix of `<env>-<suffix>` (the reference release publishes only these two).
+NAMESPACES = {'factors': 'factors', 'contexts': 'contexts'}
 
 
 class VectorUnavailable(RuntimeError):
@@ -57,7 +57,7 @@ def environment(name=None):
 
 
 def namespace(kind, environment_name=None):
-    """`<env>-factors`, `<env>-contexts`, `<env>-gene-sets` or `<env>-collections`."""
+    """`<env>-factors` or `<env>-contexts`."""
     return environment(environment_name) + '-' + NAMESPACES[kind]
 
 

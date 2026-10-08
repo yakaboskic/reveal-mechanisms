@@ -16,14 +16,12 @@ Credentials stay in backend secrets. Namespaces separate environments; credentia
 
 ## Namespaces
 
-Each environment has four fixed namespaces, filled by `python -m reveal_backend.reference_release publish`:
+Each environment has two fixed namespaces, filled by `python -m reveal_backend.reference_release publish`:
 
 | Namespace | Ids | Read by the app |
 |---|---|---|
 | `<env>-factors` | factor key `KPN.TRAIT:NNNNNNN::FactorN`, one vector of its label | yes: queried and fetched |
 | `<env>-contexts` | sha256 of the exact DisMech context text | yes: fetched |
-| `<env>-gene-sets` | DAPPER GeneSet id | no |
-| `<env>-collections` | collection id | no |
 
 Each vector's metadata carries its `vector_sha256`. A publish:
 - upserts every vector that is missing or changed;

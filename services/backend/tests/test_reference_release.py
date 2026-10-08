@@ -96,6 +96,11 @@ def collection_document(collection, members):
         'was_derived_from_edges': [{'subject': file, 'predicate': 'prov:wasDerivedFrom', 'object': f'dapper:Dataset.{label[:5].lower():d<32}'}],
         'embeddings': embeddings,
         'has_embedding_edges': [{'subject': item['embedding_of'], 'predicate': 'dapper:hasEmbedding', 'object': item['id']} for item in embeddings]}
+    if collection == COLL[1]:  # DAPPER 0.2.0 order: the collection follows its gene sets
+        document = {key: value for key, value in document.items() if key != 'gene_set_collections'} | {
+            'gene_set_collections': document['gene_set_collections']}
+        document = dict(sorted(document.items(), key=lambda item: list(document).index(item[0]) if item[0] != 'gene_set_collections'
+                               else list(document).index('gene_sets') + 0.5))
     return '# DAPPER geneset document\n' + yaml.safe_dump(document, sort_keys=False, width=1000)
 
 
@@ -142,13 +147,20 @@ def lap_project(root):
         rows = []
         for number in range(1, n + 1):
             ranked = ranks(number, trait)
+            in_library = {}  # the factor's global order restricted to each library
+            for kind in (0, 1):
+                counts = {}
+                for gene_set in sorted(SETS, key=lambda g: ranked[g][kind]):
+                    counts[LIBRARY[gene_set]] = counts.get(LIBRARY[gene_set], 0) + 1
+                    in_library[gene_set, kind] = counts[LIBRARY[gene_set]]
             for gene_set in sorted(SETS, key=lambda g: ranked[g][0]):  # LAP writes each factor by joint rank
                 joint, marginal = ranked[gene_set]
                 rows.append({'trait': trait, 'kpn_trait_id': kpn, 'factor_id': f'{trait}::Factor{number}', 'factor': f'Factor{number}',
                              'factor_label': 'x', 'gene_set_id': gene_set, 'collection_id': COLL[0] if gene_set in LIB_SETS else COLL[1],
                              'cfde_label': 'x', 'library': LIBRARY[gene_set], 'joint_loading': f'{(8 - joint) / 10:.4g}',
                              'marginal_loading': f'{(8 - marginal) / 1000:.4g}', 'joint_rank_in_factor': joint,
-                             'marginal_rank_in_factor': marginal, 'is_joint_top_factor': int(joint == 1)})
+                             'marginal_rank_in_factor': marginal, 'is_joint_top_factor': int(joint == 1),
+                             'joint_rank_in_library': in_library[gene_set, 0], 'marginal_rank_in_library': in_library[gene_set, 1]})
         tsv(project / 'traits' / trait / f'{trait}{rr.LONG_SUFFIX}', rr.LONG_COLUMNS, rows)
         gene_set_stats(project, trait, kpn, GENE_SET_STATS[trait])
     return project
@@ -161,17 +173,6 @@ def gene_set_stats(project, trait, kpn, items, response='log_bf'):
          'library': library, 'n_genes': 3, 'beta_uncorrected': uncorrected, 'beta': beta, 'avg_postp': postp, 'library_rank': rank,
          'response': response, 'p': '0.0004', 'sigma2': '7e-09'} for g, library, uncorrected, beta, postp, rank in items])
     return path
-
-
-def cfde_embeddings(root):
-    directory = root / 'cfde' / 'embeddings' / 'm-x'
-    directory.mkdir(parents=True)
-    nodes = [('GeneSetCollection', c) for c in COLL] + [('GeneSet', g) for g in reversed(SETS)] + [('GeneSet', 'dapper:GeneSet.' + 'z' * 32)]
-    np.save(directory / 'vectors.float16.npy', np.random.default_rng(7).normal(size=(len(nodes), DIMS)).astype(np.float16))
-    tsv(directory / 'rows.tsv', ('row', 'node_id', 'node_class', 'embedding_id', 'text_template', 'text'),
-        [{'row': i, 'node_id': node, 'node_class': cls, 'embedding_id': f'dapper:Embedding.{i}', 'text_template': 't', 'text': f'text {i} {node}'}
-         for i, (cls, node) in enumerate(nodes)])
-    return directory
 
 
 def text_vector(text):
@@ -203,12 +204,12 @@ def build_services(embed=no_embedding, environ=ENVIRON):
 @pytest.fixture
 def lap(tmp_path):
     project = lap_project(tmp_path)
-    return SimpleNamespace(project=project, long_files=rr.long_files_in(project / 'traits'), cfde=cfde_embeddings(tmp_path), cache=vector_cache(tmp_path),
+    return SimpleNamespace(project=project, long_files=rr.long_files_in(project / 'traits'), cache=vector_cache(tmp_path),
                            gene_set_stats=rr.gene_set_stats_files_in(project / 'traits'))
 
 
 def build(lap, out, services=None, **options):
-    return rr.build_release(services or build_services(), lap.project, lap.long_files, lap.cfde, lap.cache, out,
+    return rr.build_release(services or build_services(), lap.project, lap.long_files, lap.cache, out,
                             **{'gene_set_stats_files': lap.gene_set_stats, 'top_n': 2, 'workers': 1, 'runtime': RUNTIME, **options})
 
 
@@ -225,8 +226,8 @@ def test_build_writes_every_release_file_deterministically(lap, tmp_path):
     second = build(lap, tmp_path / 'two')
     assert first['release_id'] == second['release_id'] and re.fullmatch('[a-f0-9]{64}', first['release_id']) and first['reused'] is False
     counts = {key: value for key, value in first['counts'].items() if key != 'projections'}
-    assert counts == {'traits': 2, 'factors': 3, 'factor_genes': 8, 'collections': 2, 'gene_sets': 7, 'dapper_nodes': 18, 'dapper_edges': 16,
-                      'trait_gene_sets': 3, 'vectors': {'factors': 3, 'contexts': 3, 'gene_sets': 7, 'collections': 2}, 'archived_factors': 3}
+    assert counts == {'traits': 2, 'factors': 3, 'factor_genes': 8, 'collections': 2, 'gene_sets': 7, 'dapper_nodes': 9, 'dapper_edges': 7,
+                      'trait_gene_sets': 3, 'vectors': {'factors': 3, 'contexts': 3}, 'archived_factors': 3}
     release, other = tmp_path / 'one', tmp_path / 'two'
     for name in rr.DATA_FILES: assert (release / name).read_bytes() == (other / name).read_bytes(), name
     manifest = rr.open_release(release)
@@ -303,23 +304,23 @@ def test_source_revision_follows_label_and_loadings_only(lap, tmp_path):
     assert {key: value for key, value in changed.items() if key != f'{KPN_A}::Factor2'} == {key: value for key, value in base.items() if key != f'{KPN_A}::Factor2'}
 
 
-def test_dapper_nodes_and_edges_come_from_every_document_and_its_tail_sections(lap, tmp_path):
+def test_dapper_nodes_and_edges_come_from_every_document_without_embeddings(lap, tmp_path):
     build(lap, tmp_path / 'release')
     nodes = {row['id']: row for row in rows(tmp_path / 'release' / 'dapper_nodes.jsonl.gz')}
     classes = sorted(row['class_name'] for row in nodes.values())
-    assert classes.count('Organization') == 1 and classes.count('GeneSetCollection') == 2 and classes.count('Embedding') == 9
-    assert set(classes) == {'Organization', 'Dataset', 'File', 'Activity', 'GeneSetCollection', 'Embedding'}
+    assert classes.count('Organization') == 1 and classes.count('GeneSetCollection') == 2  # either section order
+    assert set(classes) == {'Organization', 'Dataset', 'File', 'Activity', 'GeneSetCollection'}  # gene sets are not embedded
     assert nodes[ORG['id']]['payload'] == ORG  # first document (collection_id order) wins
     assert 'members' not in nodes[COLL[0]]['payload'] and nodes[COLL[0]]['payload']['n_sets'] == 4
     edges = rows(tmp_path / 'release' / 'dapper_edges.tsv.gz', rr.EDGE_COLUMNS)
     keys = [(row['subject'], row['predicate'], row['object']) for row in edges]
-    assert keys == sorted(set(keys)) and len(edges) == 16
+    assert keys == sorted(set(keys)) and len(edges) == 7
     shared = [row for row in edges if row['subject'] == SHARED_EDGE['subject'] and row['object'] == SHARED_EDGE['object']]
     assert shared == [SHARED_EDGE]  # deduplicated across documents, edge_role kept
-    assert {row['predicate'] for row in edges} == {'prov:used', 'prov:wasGeneratedBy', 'prov:wasDerivedFrom', 'dapper:hasEmbedding'}
+    assert {row['predicate'] for row in edges} == {'prov:used', 'prov:wasGeneratedBy', 'prov:wasDerivedFrom'}
     assert all(row['edge_role'] == '' for row in edges if row['predicate'] != 'prov:used')
     manifest = rr.open_release(tmp_path / 'release')
-    assert manifest['dapper'] == {'nodes': 18, 'edges': 16, 'variants_skipped': 1}
+    assert manifest['dapper'] == {'nodes': 9, 'edges': 7, 'variants_skipped': 1}
 
 
 def test_read_collection_streams_gene_sets_and_parses_the_tail(tmp_path):
@@ -351,14 +352,8 @@ def test_vectors_reuse_the_cache_and_cfde_snapshot_without_embedding(lap, tmp_pa
     contexts = rows(directory / 'contexts.tsv', rr.VECTOR_COLUMNS)
     assert [row['id'] for row in contexts] == sorted(hashlib.sha256(text.encode()).hexdigest() for text in CONTEXTS)
     assert all(row['id'] == row['input_sha256'] for row in contexts)
-    source = np.load(lap.cfde / 'vectors.float16.npy')
-    texts = {row['node_id']: (int(row['row']), row['text']) for row in rr.read_tsv(lap.cfde / 'rows.tsv')}
-    gene_sets, vectors = rows(directory / 'gene_sets.tsv', rr.VECTOR_COLUMNS), np.load(directory / 'gene_sets.f32.npy')
-    assert [row['id'] for row in gene_sets] == sorted(SETS) and vectors.dtype == np.dtype('<f4')
-    for position, row in enumerate(gene_sets):
-        assert np.array_equal(vectors[position], source[texts[row['id']][0]].astype('<f4'))
-        assert row['input_sha256'] == hashlib.sha256(texts[row['id']][1].encode()).hexdigest()
-    assert [row['id'] for row in rows(directory / 'collections.tsv', rr.VECTOR_COLUMNS)] == sorted(COLL)
+    # Gene sets and collections are not embedded.
+    assert sorted(path.name for path in directory.iterdir()) == ['contexts.f32.npy', 'contexts.tsv', 'factors.f32.npy', 'factors.tsv']
     assert result['embedding']['cache_hits'] == 3 and result['embedding']['embedded'] == 0
 
 
@@ -506,18 +501,19 @@ def test_build_requires_the_dapper_runtime_before_doing_any_work(lap, tmp_path, 
     assert not (tmp_path / 'out').exists() and not list(tmp_path.glob('.out.build-*'))
 
 
-def test_tied_ranks_are_refused(tmp_path):
+def test_library_ranks_with_a_gap_are_refused(tmp_path):
     row = {'trait': 'T2D', 'kpn_trait_id': KPN_A, 'factor_id': 'T2D::Factor1', 'factor': 'Factor1', 'factor_label': 'x', 'collection_id': COLL[0],
-           'cfde_label': 'x', 'library': 'LIB', 'joint_loading': '0.5', 'marginal_loading': '0.1', 'is_joint_top_factor': 0}
+           'cfde_label': 'x', 'library': 'LIB', 'joint_loading': '0.5', 'marginal_loading': '0.1', 'is_joint_top_factor': 0,
+           'joint_rank_in_factor': 1, 'marginal_rank_in_factor': 1}
     path = tmp_path / f'T2D{rr.LONG_SUFFIX}'
-    tsv(path, rr.LONG_COLUMNS, [{**row, 'gene_set_id': SETS[0], 'joint_rank_in_factor': 1, 'marginal_rank_in_factor': 1},
-                                {**row, 'gene_set_id': SETS[1], 'joint_rank_in_factor': 1, 'marginal_rank_in_factor': 2}])
-    with pytest.raises(rr.Refused, match='T2D::Factor1 has tied ranks'): rr.long_file_ranks(path, 1)
+    tsv(path, rr.LONG_COLUMNS, [{**row, 'gene_set_id': SETS[0], 'joint_rank_in_library': 1, 'marginal_rank_in_library': 1},
+                                {**row, 'gene_set_id': SETS[1], 'joint_rank_in_library': 3, 'marginal_rank_in_library': 2}])
+    with pytest.raises(rr.Refused, match='T2D::Factor1 ranks in LIB are not 1..n'): rr.long_file_ranks(path, 3)
 
 
 def test_build_refuses_missing_long_files_and_unordered_factors(lap, tmp_path):
     with pytest.raises(rr.Refused, match='No long file for 1 traits'):
-        rr.build_release(build_services(), lap.project, lap.long_files[:1], lap.cfde, lap.cache, tmp_path / 'out',
+        rr.build_release(build_services(), lap.project, lap.long_files[:1], lap.cache, tmp_path / 'out',
                          gene_set_stats_files=lap.gene_set_stats, workers=1, runtime=RUNTIME)
     path = next(path for path in lap.long_files if path.name.startswith('T2D'))
     with gzip.open(path, 'rt') as stream: lines = stream.readlines()
@@ -653,7 +649,7 @@ def test_publish_fills_new_tables_swaps_them_in_one_rename_and_records_the_relea
     qa = result['environments'][0]
     assert qa['tables']['action'] == 'replaced' and qa['tables']['published_at'] == '2026-10-05T12:00:00.123456Z'
     assert qa['tables']['rows'] == {'traits': 2, 'factors': 3, 'factor_genes': 8, 'collections': 2, 'gene_sets': 7,
-                                    'projections': manifest['counts']['projections'], 'dapper_nodes': 18, 'dapper_edges': 16, 'trait_gene_sets': 3,
+                                    'projections': manifest['counts']['projections'], 'dapper_nodes': 9, 'dapper_edges': 7, 'trait_gene_sets': 3,
                                     'release': 1}
     statements = [event[1] for event in events if event[0] == 'sql']
     # Strict mode before the lock, the lock before any change; released at the end.
@@ -690,7 +686,7 @@ def test_publish_fills_new_tables_swaps_them_in_one_rename_and_records_the_relea
     assert 'SET SESSION lock_wait_timeout = 5' in statements[:statements.index('SELECT GET_LOCK(%s,%s)')]
     assert deletes == [('delete', 'qa-factors', ['KPN.TRAIT:0000001::Factor9'])]
     namespaces = services.index.namespaces
-    assert sorted(namespaces) == ['qa-collections', 'qa-contexts', 'qa-factors', 'qa-gene-sets']
+    assert sorted(namespaces) == ['qa-contexts', 'qa-factors']
     assert sorted(namespaces['qa-factors']) == sorted(rg.factor_key(k, f'Factor{n}') for t, k, n, label in FACTORS)
     metadata = namespaces['qa-factors'][f'{KPN_A}::Factor1']['metadata']
     vector = np.asarray(namespaces['qa-factors'][f'{KPN_A}::Factor1']['vector'], dtype='<f4')
@@ -699,8 +695,6 @@ def test_publish_fills_new_tables_swaps_them_in_one_rename_and_records_the_relea
     assert np.array_equal(vector, text_vector('Insulin secretion'))
     context = next(iter(namespaces['qa-contexts'].items()))
     assert context[1]['metadata'] == {'kind': 'context', 'input_sha256': context[0], 'vector_sha256': context[1]['metadata']['vector_sha256']}
-    assert set(namespaces['qa-gene-sets'][SETS[0]]['metadata']) == {'kind', 'collection_id', 'library', 'name', 'input_sha256', 'vector_sha256'}
-    assert namespaces['qa-collections'][COLL[1]]['metadata']['label'] == 'OTHER__p__HZ1'
     assert qa['vectors']['factors'] == {'namespace': 'qa-factors', 'vectors': 3, 'existing': 1, 'added': 3, 'changed': 0, 'updated': 0,
                                         'stale': 1, 'deleted': 1}
     stored = record(services, 'reveal_workflow_qa')
@@ -737,7 +731,7 @@ def test_publishing_a_new_release_replaces_every_table_and_prunes_old_vectors(la
     with gzip.open(matrix, 'wt') as stream: stream.write(text.replace('BMI::Factor1\t0.3', 'BMI::Factor1\t0.35'))
     second_release = build(lap, tmp_path / 'second')
     services.clock = lambda: datetime(2026, 10, 6, tzinfo=timezone.utc)
-    services.index.namespaces['qa-gene-sets']['dapper:GeneSet.' + 'q' * 32] = {'vector': [1.0] * DIMS, 'metadata': {'kind': 'gene_set'}}
+    services.index.namespaces['qa-contexts']['f' * 64] = {'vector': [1.0] * DIMS, 'metadata': {'kind': 'context'}}  # a retired context
     relabeled = f'{KPN_A}::Factor2'  # as if the served release had another vector for it
     services.index.namespaces['qa-factors'][relabeled]['metadata'] = dict(services.index.namespaces['qa-factors'][relabeled]['metadata'],
                                                                           vector_sha256='0' * 64)
@@ -753,7 +747,7 @@ def test_publishing_a_new_release_replaces_every_table_and_prunes_old_vectors(la
     changed = rg.public_id(KPN_B, 'Factor1')
     assert sorted((row['source_id'] == changed, row['generation_id']) for row in archived) == sorted(
         [(False, first['release_id'])] * 2 + [(True, first['release_id']), (True, second_release['release_id'])])
-    assert second['vectors']['gene_sets']['deleted'] == 1
+    assert second['vectors']['contexts']['deleted'] == 1
     # The changed vector is overwritten only once the tables hold the release (the served tables keep their vectors until the swap).
     assert (second['vectors']['factors']['added'], second['vectors']['factors']['changed'], second['vectors']['factors']['updated']) == (0, 1, 1)
     position = {id(event): i for i, event in enumerate(events)}
@@ -779,7 +773,7 @@ def test_publish_environments_in_order_with_their_own_prefix_lock_and_namespaces
     assert [item['env'] for item in result['environments']] == ['local', 'qa']
     assert [event[2][0] for event in sql_events(events, r'^SELECT GET_LOCK')] == ['reveal:publish:reveal_workflow_local', 'reveal:publish:reveal_workflow_qa']
     assert {'reveal_workflow_local_ref_release', 'reveal_workflow_qa_ref_release'} <= set(services.db.tables)
-    assert {'local-factors', 'local-gene-sets', 'qa-factors', 'qa-gene-sets'} <= set(services.index.namespaces)
+    assert set(services.index.namespaces) == {'local-factors', 'local-contexts', 'qa-factors', 'qa-contexts'}
     assert result['environments'][1]['archived_factors'] == {'rows': 3, 'inserted': 0}  # shared table, written once
     assert record(services, 'reveal_workflow_local')['data']['release_id'] == result['release_id']
     prod = publish_services(tmp_path, events)
@@ -930,7 +924,7 @@ def test_vector_client_uses_the_write_token_and_per_environment_overrides(monkey
 def test_cli_prints_one_json_object_and_exits_by_outcome(lap, tmp_path, capsys, monkeypatch):
     out = tmp_path / 'cli'
     argv = ['build', '--lap-project-dir', str(lap.project), '--long-files-from', str(lap.project / 'traits'),
-            '--gene-set-stats-from', str(lap.project / 'traits'), '--cfde-embeddings-dir', str(lap.cfde),
+            '--gene-set-stats-from', str(lap.project / 'traits'),
             '--vector-cache', str(lap.cache), '--out', str(out), '--top-n', '2', '--workers', '1']
     monkeypatch.setattr(rr, 'dapper_runtime', lambda: RUNTIME)
     assert rr.main(argv, build_services()) == 0

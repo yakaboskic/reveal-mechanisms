@@ -58,8 +58,8 @@ def fixture(*, many=False, stale=()):
 
 class RetrievalTests(unittest.TestCase):
     def test_namespaces_are_fixed_per_vector_environment(self):
-        self.assertEqual([namespace(kind, 'qa') for kind in ('factors', 'contexts', 'gene_sets', 'collections')],
-                         ['qa-factors', 'qa-contexts', 'qa-gene-sets', 'qa-collections'])
+        self.assertEqual([namespace(kind, 'qa') for kind in ('factors', 'contexts')], ['qa-factors', 'qa-contexts'])
+        with self.assertRaises(KeyError): namespace('gene_sets', 'qa')  # gene sets are not embedded
         with patch.dict('os.environ', {'REVEAL_VECTOR_ENVIRONMENT': 'prod'}):
             self.assertEqual(environment(), 'prod')
             index = UpstashFactorIndex(['a'], dimensions=2, release_id=RELEASE, client=Provider())

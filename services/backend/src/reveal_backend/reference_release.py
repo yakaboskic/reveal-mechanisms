@@ -3,10 +3,10 @@
 `python -m reveal_backend.reference_release <command>` prints one JSON object on stdout (progress goes to stderr)
 and exits non-zero on any failure:
 
-  build    LAP project outputs, the per-trait long files and gene-set betas, the CFDE snapshot vectors and the
-           vector cache -> one release folder, built beside --out and swapped into place (a folder already holding
-           the same release is reused untouched). Only factor labels missing from the cache are embedded, and only
-           after re-embedded cached texts reproduce their stored vectors.
+  build    LAP project outputs, the per-trait long files and gene-set betas and the vector cache -> one release
+           folder, built beside --out and swapped into place (a folder already holding the same release is reused
+           untouched). Only factor labels and DisMech contexts have vectors; factor labels missing from the cache are
+           embedded, and only after re-embedded cached texts reproduce their stored vectors.
   publish  every file checked against the manifest; then for each --env, in order: add the vectors its fixed
            Upstash namespaces lack, add new frozen factor snapshots to the shared archived_reference_factors,
            replace its <prefix>_ref_* tables with one RENAME, overwrite changed vectors and delete the ones the
@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import argparse
 from bisect import bisect_right
-from collections import Counter, defaultdict
+from collections import Counter, defaultdict, deque
 from concurrent.futures import Future, ProcessPoolExecutor, ThreadPoolExecutor
 from contextlib import contextmanager
 import csv
@@ -53,8 +53,9 @@ RECORD_KIND, RECORD_ID = 'reference_release', 'current'
 ENVIRONMENTS = {'local': 'reveal_workflow_local', 'qa': 'reveal_workflow_qa', 'prod': 'reveal'}
 # Each environment's REVEAL_NOTIFICATION_NAMESPACE (deploy/dig/service.yaml, scripts/durable_deployment.py).
 NOTIFICATION_NAMESPACES = {'local': 'reveal-workflow-local', 'qa': 'reveal-qa', 'prod': 'reveal-prod'}
-KINDS = ('factors', 'contexts', 'gene_sets', 'collections')
-VECTOR_KINDS = {'factors': 'factor', 'contexts': 'context', 'gene_sets': 'gene_set', 'collections': 'collection'}
+# Only factor labels and DisMech contexts are embedded: gene sets and collections are not (the app never reads them).
+KINDS = ('factors', 'contexts')
+VECTOR_KINDS = {'factors': 'factor', 'contexts': 'context'}
 DEFAULT_TOP_N = 50
 TOP_GENES, TOP_GENE_SETS = 50, 10  # archived snapshots: top genes by loading; top gene sets of each library by joint rank
 CALIBRATION_TEXTS, CALIBRATION_THRESHOLD = 8, 0.999
@@ -66,7 +67,8 @@ DUPLICATE_KEY = 1062  # the only MySQL warning INSERT IGNORE may raise here
 SWAP_LOCK_WAIT, SWAP_ATTEMPTS, LOCK_WAIT_TIMEOUT = 5, 12, 1205
 LONG_SUFFIX = '.cfde_projection.long.tsv.gz'
 LONG_COLUMNS = ['trait', 'kpn_trait_id', 'factor_id', 'factor', 'factor_label', 'gene_set_id', 'collection_id', 'cfde_label', 'library',
-                'joint_loading', 'marginal_loading', 'joint_rank_in_factor', 'marginal_rank_in_factor', 'is_joint_top_factor']
+                'joint_loading', 'marginal_loading', 'joint_rank_in_factor', 'marginal_rank_in_factor', 'is_joint_top_factor',
+                'joint_rank_in_library', 'marginal_rank_in_library']
 
 # Release folder. manifest.json `files` = {name: sha256} of DATA_FILES and release_id = digest({format, files});
 # archived_factors.jsonl.gz is written afterwards (it carries the release_id) and listed under `archive`.
@@ -84,7 +86,9 @@ TRAIT_GENE_SET_COLUMNS = ('kpn_trait_id', 'gene_set_id', 'library', 'beta_uncorr
 PROJECTION_COLUMNS = ('factor_key', 'gene_set_id', 'library', 'joint_loading', 'marginal_loading', 'joint_rank', 'marginal_rank', 'is_joint_top_factor')
 EDGE_COLUMNS = ('subject', 'predicate', 'object', 'edge_role')
 VECTOR_COLUMNS = ('row', 'id', 'input_sha256', 'vector_sha256')
-NODE_SECTIONS, TAIL_NODE_SECTIONS = ('organizations', 'datasets', 'files', 'activities', 'gene_set_collections'), ('embeddings',)
+# DAPPER node sections of a collection document (before or after its gene_sets list). Its `embeddings` and
+# `has_embedding_edges` are left out: the release embeds no gene set or collection.
+NODE_SECTIONS, SKIPPED_SECTIONS = ('organizations', 'datasets', 'files', 'activities', 'gene_set_collections'), ('embeddings', 'has_embedding_edges')
 # The vector cache (seeded by the migration script; build adds embedded factor labels). The same text may appear
 # once per kind (a factor label can equal a DisMech context); meta holds model, model_revision, provider, dimensions.
 CACHE_SCHEMA = ('CREATE TABLE IF NOT EXISTS vectors(input_sha256 TEXT NOT NULL, kind TEXT NOT NULL, text TEXT NOT NULL, '
@@ -548,15 +552,15 @@ def read_collection(path, *, limit=32 << 20):
     """One streaming pass over a DAPPER GeneSetCollection document: (header, {gene set id: canonical node}, tail).
 
     The header is everything before the top-level `gene_sets:` list. Each `- ` item of that list is parsed on its
-    own (the LINCS document is 167 MB); the list ends at the next top-level key, and the sections after it (edges,
-    embeddings) are parsed together.
+    own (a LINCS document is up to 167 MB); the list ends at the next top-level key, and the sections after it
+    (the collection in DAPPER 0.2.0 documents, edges, embeddings) are parsed together.
     """
     import yaml
     loader, name = getattr(yaml, 'CSafeLoader', yaml.SafeLoader), Path(path).name
     def load(lines, where):
         try: return _jsonable(yaml.load(''.join(lines), Loader=loader))
         except yaml.YAMLError as error: raise Refused(f'{name}: invalid YAML {where}') from error
-    head, size, seen, nodes, tail = [], 0, False, {}, []
+    head, size, nodes, tail = [], 0, {}, []
     def add(lines, start):
         items = load(lines, f'near line {start}')
         if not isinstance(items, list) or len(items) != 1 or not isinstance(items[0], dict) or not isinstance(items[0].get('id'), str):
@@ -568,12 +572,10 @@ def read_collection(path, *, limit=32 << 20):
         for line in stream:
             number += 1
             if line.startswith('gene_sets:'): break
-            seen = seen or line.startswith('gene_set_collections:')
             size += len(line)
             if size > limit: raise Refused(f'{name}: collection header exceeds {limit} bytes')
             head.append(line)
         else: raise Refused(f'{name}: no top-level gene_sets list')
-        if not seen: raise Refused(f'{name}: gene_set_collections must precede gene_sets')
         if line.split(':', 1)[1].strip() not in ('', '[]'): raise Refused(f'{name}: gene_sets must be a block list')
         item, start = [], number
         for line in stream:
@@ -588,47 +590,43 @@ def read_collection(path, *, limit=32 << 20):
         tail.extend(stream)
     header, rest = load(head, 'before gene_sets') or {}, load(tail, 'after gene_sets') or {}
     if not isinstance(header, dict) or not isinstance(rest, dict): raise Refused(f'{name}: expected top-level mappings')
-    collections = header.get('gene_set_collections') or []
+    collections = (header.get('gene_set_collections') or []) + (rest.get('gene_set_collections') or [])
     if len(collections) != 1 or not isinstance(collections[0], dict): raise Refused(f'{name}: expected exactly one GeneSetCollection')
     return {'header': header, 'document': {key: value for key, value in collections[0].items() if key != 'members'},
             'gene_sets': nodes, 'tail': rest, 'sha256': _sha256_file(path)}
 
 
 def long_file_ranks(path, top_n):
-    """Per-library ranks of one per-trait long file: [(factor_id, kpn_trait_id, rows)], rows (gene_set_id, library,
+    """The per-library top rows of one per-trait long file: [(factor_id, kpn_trait_id, rows)], rows (gene_set_id, library,
     joint_loading, marginal_loading, joint_rank, marginal_rank, is_joint_top_factor) in (library, joint_rank) order.
 
-    A factor's library joint (marginal) rank is the row's position when that library's rows are ordered by
-    joint_rank_in_factor (marginal_rank_in_factor); a row is kept when either library rank is <= top_n. LAP writes
-    each factor's rows together.
+    LAP (projection_workflow.py project-trait) ranks every gene set within its library over all the gene sets and writes
+    the library ranks; a row is kept when either is <= top_n, and the kept ranks of each library must run 1..n. LAP
+    writes each factor's rows together.
     """
-    name, result, seen = Path(path).name, [], set()
+    name, factors, seen = Path(path).name, [], set()
     factor = kpn = None; libraries = {}
-    joint_of, marginal_of = itemgetter(4), itemgetter(5)
-    def finish():
-        kept = []
-        for library in sorted(libraries):
-            items = libraries[library]
-            by_joint, by_marginal = sorted(items, key=joint_of), sorted(items, key=marginal_of)
-            joint, marginal = list(map(joint_of, by_joint)), list(map(marginal_of, by_marginal))
-            if len(set(joint)) < len(joint) or len(set(marginal)) < len(marginal): raise Refused(f'{name}: {factor} has tied ranks')
-            # A library rank is the count of the library's rows ranked at or above the row: bisect in the sorted ranks.
-            for row in sorted({id(row): row for row in by_joint[:top_n] + by_marginal[:top_n]}.values(), key=joint_of):
-                kept.append((row[0], library, row[2], row[3], bisect_right(joint, row[4]), bisect_right(marginal, row[5]), row[6].rstrip('\n')))
-        result.append((factor, kpn, kept))
     with _open_text(path) as stream:
         if stream.readline().rstrip('\n').split('\t') != LONG_COLUMNS: raise Refused(f'{name}: not a projection long file')
         for number, line in enumerate(stream, 2):
-            f = line.split('\t')
-            if len(f) != 14: raise Refused(f'{name}: malformed row {number}')
+            f = line.rstrip('\n').split('\t')
+            if len(f) != len(LONG_COLUMNS): raise Refused(f'{name}: malformed row {number}')
             if f[2] != factor:
-                if factor is not None: finish()
                 if f[2] in seen: raise Refused(f'{name}: the rows of {f[2]} are not contiguous')
-                factor, kpn, libraries = f[2], f[1], {}; seen.add(factor)
+                factor, kpn, libraries = f[2], f[1], {}; seen.add(factor); factors.append((factor, kpn, libraries))
             elif f[1] != kpn: raise Refused(f'{name}: {factor} has several KPN trait ids')
-            try: libraries.setdefault(f[8], []).append((f[5], f[8], f[9], f[10], int(f[11]), int(f[12]), f[13]))
+            try: libraries.setdefault(f[8], []).append((f[5], f[8], f[9], f[10], int(f[14]), int(f[15]), f[13]))
             except ValueError: raise Refused(f'{name}: invalid rank in row {number}') from None
-    if factor is not None: finish()
+    result = []
+    for factor, kpn, libraries in factors:
+        kept = []
+        for library in sorted(libraries):
+            rows = sorted((row for row in libraries[library] if row[4] <= top_n or row[5] <= top_n), key=itemgetter(4))
+            for position in (4, 5):
+                ranks = sorted(row[position] for row in rows if row[position] <= top_n)
+                if ranks != list(range(1, len(ranks) + 1)): raise Refused(f'{name}: {factor} ranks in {library} are not 1..n')
+            kept.extend(rows)
+        result.append((factor, kpn, kept))
     return result
 
 
@@ -692,52 +690,56 @@ def write_projections(path, futures, keys, index_rows, libraries):
     return count
 
 
-def collection_rows(lap, documents):
-    """collections and gene sets (+ the exact GeneSet nodes) from the parsed collection documents."""
-    indexed, collections, nodes = {}, [], {}
-    for row in lap['gene_sets']: indexed.setdefault(row['collection_id'], set()).add(row['gene_set_id'])
-    for collection_id, row in sorted(lap['index'].items()):
-        parsed = documents[collection_id]
-        header, document = parsed['header'], parsed['document']
-        count = lap['members'].get(collection_id, 0)
-        if document.get('id') != collection_id or document.get('n_sets', count) != count:
-            raise Refused(f"{row['label']}: document does not describe collection {collection_id}")
-        if set(parsed['gene_sets']) != indexed.get(collection_id, set()): raise Refused(f"{row['label']}: document gene sets differ from gene_set_index")
-        nodes.update(parsed['gene_sets'])
-        collections.append({'collection_id': collection_id, 'cfde_label': row['label'], 'library': row['library'], 'n_sets': count,
-                            'payload': {'collection': document, 'index': row, 'document_sha256': parsed['sha256'],
-                                        'provenance': {key: header.get(key) for key in ('prefixes', 'organizations', 'datasets', 'files', 'activities')}}})
-    gene_sets = ({**row, 'metadata': {**row['metadata'], 'dapper_gene_set': json.loads(nodes[row['gene_set_id']])}} for row in lap['gene_sets'])
-    return collections, gene_sets
+def write_collections(directory, lap, documents, submit, in_flight):
+    """collections.jsonl.gz and gene_sets.jsonl.gz (+ each exact GeneSet node) and the DAPPER graph, one collection
+    document at a time in collection_id order, with at most `in_flight` parsed documents in memory.
 
-
-def dapper_graph(documents):
-    """DAPPER nodes and edges of every collection document, first occurrence wins (collection_id order).
-
-    Nodes: organizations, datasets, files, activities, the collection (without members) and embeddings.
-    Edges: every top-level *_edges section after gene_sets. Returns (nodes, edges, variants skipped).
+    Graph nodes: organizations, datasets, files, activities and the collection (without members); edges: every
+    *_edges section. First occurrence wins; a later differing variant is counted. Returns
+    (collections, gene sets, nodes, edges, variants skipped).
     """
-    nodes, edges, variants = {}, {}, 0
-    for collection_id in sorted(documents):
-        parsed = documents[collection_id]
-        items = [(section, node) for section in NODE_SECTIONS for node in parsed['header'].get(section) or []]
-        items += [(section, node) for section in TAIL_NODE_SECTIONS for node in parsed['tail'].get(section) or []]
-        for section, node in items:
-            match = DAPPER_ID_RE.fullmatch(str(node.get('id') if isinstance(node, dict) else ''))
-            if not match: raise Refused(f'{collection_id}: {section} entry without a DAPPER id')
-            if section == 'gene_set_collections': node = {key: value for key, value in node.items() if key != 'members'}
-            if node['id'] in nodes: variants += nodes[node['id']]['payload'] != node; continue
-            nodes[node['id']] = {'id': node['id'], 'class_name': match[1], 'payload': node}
-        for section, entries in parsed['tail'].items():
-            if not section.endswith('_edges'): continue
-            for edge in entries or []:
-                values = [edge.get(key) if isinstance(edge, dict) else None for key in EDGE_COLUMNS]
-                if not all(isinstance(value, str) and value for value in values[:3]) or not isinstance(values[3], (str, type(None))):
-                    raise Refused(f'{collection_id}: malformed {section} entry')
-                key = tuple(values[:3])
-                if key in edges: variants += edges[key] != values[3]; continue
-                edges[key] = values[3]
-    return [nodes[key] for key in sorted(nodes)], [(*key, edges[key] or '') for key in sorted(edges)], variants
+    by_collection = {}
+    for row in lap['gene_sets']: by_collection.setdefault(row['collection_id'], []).append(row)
+    nodes, edges, variants, counts = {}, {}, 0, {'collections': 0, 'gene_sets': 0}
+    order = iter(sorted(documents))
+    pending = deque((identity, submit(read_collection, documents[identity])) for identity in islice(order, in_flight))
+    with _writer(directory / 'collections.jsonl.gz') as collections_out, _writer(directory / 'gene_sets.jsonl.gz') as gene_sets_out:
+        while pending:
+            collection_id, future = pending.popleft()
+            following = next(order, None)
+            if following: pending.append((following, submit(read_collection, documents[following])))
+            parsed, row = future.result(), lap['index'][collection_id]
+            header, document, count = parsed['header'], parsed['document'], lap['members'].get(collection_id, 0)
+            if document.get('id') != collection_id or document.get('n_sets', count) != count:
+                raise Refused(f"{row['label']}: document does not describe collection {collection_id}")
+            members = by_collection.get(collection_id, [])
+            if set(parsed['gene_sets']) != {member['gene_set_id'] for member in members}:
+                raise Refused(f"{row['label']}: document gene sets differ from gene_set_index")
+            collections_out.write(canonical({'collection_id': collection_id, 'cfde_label': row['label'], 'library': row['library'], 'n_sets': count,
+                'payload': {'collection': document, 'index': row, 'document_sha256': parsed['sha256'],
+                            'provenance': {key: header.get(key) for key in ('prefixes', 'organizations', 'datasets', 'files', 'activities')}}}) + '\n')
+            for member in members:
+                gene_sets_out.write(canonical({**member, 'metadata': {**member['metadata'], 'dapper_gene_set': json.loads(parsed['gene_sets'][member['gene_set_id']])}}) + '\n')
+            counts['collections'] += 1; counts['gene_sets'] += len(members)
+            sections = {**parsed['tail'], **{key: value for key, value in header.items() if key in NODE_SECTIONS}}
+            for section in NODE_SECTIONS:
+                for node in sections.get(section) or []:
+                    match = DAPPER_ID_RE.fullmatch(str(node.get('id') if isinstance(node, dict) else ''))
+                    if not match: raise Refused(f'{collection_id}: {section} entry without a DAPPER id')
+                    if section == 'gene_set_collections': node = {key: value for key, value in node.items() if key != 'members'}
+                    if node['id'] in nodes: variants += nodes[node['id']]['payload'] != node; continue
+                    nodes[node['id']] = {'id': node['id'], 'class_name': match[1], 'payload': node}
+            for section, entries in parsed['tail'].items():
+                if not section.endswith('_edges') or section in SKIPPED_SECTIONS: continue
+                for edge in entries or []:
+                    values = [edge.get(key) if isinstance(edge, dict) else None for key in EDGE_COLUMNS]
+                    if not all(isinstance(value, str) and value for value in values[:3]) or not isinstance(values[3], (str, type(None))):
+                        raise Refused(f'{collection_id}: malformed {section} entry')
+                    key = tuple(values[:3])
+                    if key in edges: variants += edges[key] != values[3]; continue
+                    edges[key] = values[3]
+            del parsed
+    return counts['collections'], counts['gene_sets'], [nodes[key] for key in sorted(nodes)], [(*key, edges[key] or '') for key in sorted(edges)], variants
 
 
 class VectorCache:
@@ -831,13 +833,12 @@ def write_vectors(directory, kind, ids, shas, matrix):
                                                                for row, (identity, sha) in enumerate(zip(ids, shas))))
 
 
-def build_vectors(services, directory, factors, gene_sets, collections, embeddings_dir, cache_path):
-    """vectors/<kind>.f32.npy (float32 LE) + <kind>.tsv: factor labels and contexts from the cache, gene sets and
-    collections from the CFDE snapshot matrix (upcast, no calibration). Returns (embedding, CFDE source) blocks."""
-    import numpy as np
+def build_vectors(services, directory, factors, cache_path):
+    """vectors/<kind>.f32.npy (float32 LE) + <kind>.tsv of the factor labels and the DisMech contexts, from the vector
+    cache; factor labels it lacks are embedded. Returns (embedding block, counts)."""
     cache = VectorCache(cache_path)
     try:
-        dimensions, model = cache.dimensions, cache.meta['model']
+        dimensions = cache.dimensions
         texts = {factor['input_sha256']: factor['label'].strip() for factor in factors}
         found = cache.lookup(texts)
         missing = sorted(set(texts) - set(found))
@@ -852,32 +853,7 @@ def build_vectors(services, directory, factors, gene_sets, collections, embeddin
         counts['contexts'] = write_vectors(directory, 'contexts', [sha for sha, _ in contexts], [sha for sha, _ in contexts],
                                            _matrix([vector for _, vector in contexts], len(contexts), dimensions))
     finally: cache.close()
-    source = Path(embeddings_dir)
-    matrix_path = next((path for path in (source / 'vectors.float16.npy', source / 'vectors.float32.npy') if path.is_file()), None)
-    if matrix_path is None or not (source / 'rows.tsv').is_file(): raise Refused(f'{source}: missing vectors.<dtype>.npy or rows.tsv')
-    matrix = np.load(matrix_path, mmap_mode='r', allow_pickle=False)
-    rows = read_tsv(source / 'rows.tsv', ('row', 'node_id', 'node_class', 'text_template', 'text'))
-    if matrix.ndim != 2 or matrix.shape[0] != len(rows) or any(int(row['row']) != position for position, row in enumerate(rows)):
-        raise Refused(f'{matrix_path.name} does not match rows.tsv')
-    if matrix.shape[1] != dimensions: raise Refused(f'The CFDE vectors have {matrix.shape[1]} dimensions, the vector cache {dimensions}')
-    matrix_sha = _sha256_file(matrix_path)
-    snapshot_manifest = source.parent.parent / 'MANIFEST.json'
-    if snapshot_manifest.is_file():
-        recorded = read_json(snapshot_manifest).get('embeddings') or {}
-        if recorded.get('model') not in (None, model) or recorded.get('matrix_sha256') not in (None, matrix_sha):
-            raise Refused('CFDE snapshot MANIFEST.json disagrees with the embedding matrix or the vector cache model')
-    by_node = {}
-    for row in rows: by_node.setdefault((row['node_class'], row['node_id']), []).append(row)
-    for kind, node_class, identities in (('gene_sets', 'GeneSet', [row['gene_set_id'] for row in gene_sets]),
-                                         ('collections', 'GeneSetCollection', sorted(collections))):
-        selected = []
-        for identity in identities:
-            found_rows = by_node.get((node_class, identity), [])
-            if len(found_rows) != 1: raise Refused(f'{identity}: {len(found_rows)} vectors in the CFDE snapshot (expected 1)')
-            selected.append(found_rows[0])
-        vectors = _matrix(np.asarray(matrix[[int(row['row']) for row in selected]], dtype='<f4'), len(selected), dimensions)
-        counts[kind] = write_vectors(directory, kind, identities, [hashlib.sha256(row['text'].encode()).hexdigest() for row in selected], vectors)
-    return embedding, counts, {'dir': str(source), 'matrix': matrix_path.name, 'matrix_sha256': matrix_sha, 'dtype': str(matrix.dtype)}
+    return embedding, counts
 
 
 def dapper_runtime():
@@ -979,7 +955,7 @@ def _replaceable(path):
     return isinstance(manifest, dict) and manifest.get('format') == RELEASE_FORMAT
 
 
-def build_release(services, project_dir, long_files, embeddings_dir, cache_path, out, *, gene_set_stats_files=(), kpn_release=None,
+def build_release(services, project_dir, long_files, cache_path, out, *, gene_set_stats_files=(), kpn_release=None,
                   top_n=DEFAULT_TOP_N, workers=1, runtime=None):
     """Write the release folder (module docstring) and swap it into `out`; reuse an identical release already there."""
     project_dir, out = Path(project_dir), Path(out)
@@ -1018,27 +994,21 @@ def build_release(services, project_dir, long_files, embeddings_dir, cache_path,
             factor['source_revision'] = digest({'label': factor['label'], 'kpn_trait_id': factor['kpn_trait_id'],
                                                 'factor': factor['metadata']['factor'], 'loadings_sha256': sums[factor['factor_key']]})
         progress('vectors')
-        embedding, counts['vectors'], cfde = build_vectors(services, temporary / 'vectors', factors, lap['gene_sets'], lap['index'], embeddings_dir, cache_path)
+        embedding, counts['vectors'] = build_vectors(services, temporary / 'vectors', factors, cache_path)
         counts['traits'] = write_jsonl(temporary / 'traits.jsonl.gz', lap['traits'])
         counts['factors'] = write_jsonl(temporary / 'factors.jsonl.gz', ({column: factor[column] for column in COLUMNS['factors']} for factor in factors))
-        progress(f'{len(lap["index"])} collection documents and {len(files)} long files on {workers} workers')
+        progress(f'{len(files)} long files on {workers} workers')
         libraries = {row['gene_set_id']: row['library'] for row in lap['gene_sets']}
-        with _tasks(workers) as submit:  # the largest documents first; long files in factor_key order
-            documents = {collection_id: submit(read_collection, documents[collection_id])
-                         for collection_id in sorted(documents, key=lambda identity: (-documents[identity].stat().st_size, identity))}
+        with _tasks(workers) as submit:  # long files in factor_key order
             counts['projections'] = write_projections(temporary / 'projections.tsv.gz', [
                 (kpn_of[path], submit(long_file_ranks, path, top_n)) for path in sorted(files, key=lambda path: kpn_of[path])],
                 lap['keys'], lap['index_rows'], libraries)
-            documents = {collection_id: future.result() for collection_id, future in documents.items()}
         progress(f'{len(gene_set_stats_files)} trait gene-set stats files')
         counts['trait_gene_sets'], gene_set_stats = write_trait_gene_sets(temporary / 'trait_gene_sets.tsv.gz', gene_set_stats_files,
                                                                           lap['kpn_map'], set(libraries))
-        progress('collections, gene sets and DAPPER provenance')
-        collections, gene_sets = collection_rows(lap, documents)
-        counts['collections'] = write_jsonl(temporary / 'collections.jsonl.gz', collections)
-        counts['gene_sets'] = write_jsonl(temporary / 'gene_sets.jsonl.gz', gene_sets)
-        nodes, edges, variants = dapper_graph(documents)
-        del documents, collections, gene_sets
+        progress(f'{len(documents)} collection documents, gene sets and DAPPER provenance on {workers} workers')
+        with _tasks(workers) as submit:
+            counts['collections'], counts['gene_sets'], nodes, edges, variants = write_collections(temporary, lap, documents, submit, workers + 1)
         counts['dapper_nodes'] = write_jsonl(temporary / 'dapper_nodes.jsonl.gz', nodes)
         counts['dapper_edges'] = write_tsv(temporary / 'dapper_edges.tsv.gz', EDGE_COLUMNS, edges)
         files_sha = {name: _sha256_file(temporary / name) for name in DATA_FILES}
@@ -1054,7 +1024,7 @@ def build_release(services, project_dir, long_files, embeddings_dir, cache_path,
                     'sources': {'lap_project': str(project_dir.resolve()), 'lap_stem': stem, 'pigean_commit': lap['pigean_commit'],
                                 'kpn_release': lap['kpn_release'], 'kpn_release_commit': lap['kpn_release_commit'],
                                 'cfde_snapshot': sorted({row['metadata']['cfde_snapshot'] for row in lap['gene_sets']}),
-                                'cfde_embeddings': cfde, 'long_files': len(files), 'vector_cache': str(Path(cache_path).resolve())}}
+                                'long_files': len(files), 'vector_cache': str(Path(cache_path).resolve())}}
         write_json(temporary / 'manifest.json', manifest)
         progress('written')
         result = {'release_id': release_id, 'out': str(out), 'counts': counts, 'embedding': embedding}
@@ -1251,11 +1221,6 @@ def release_vectors(release, kind):
     r = Path(release)
     if kind == 'factors':
         extra = {row['factor_key']: {key: row[key] for key in ('public_id', 'kpn_trait_id', 'label')} for row in read_jsonl(r / 'factors.jsonl.gz')}
-    elif kind == 'gene_sets':
-        extra = {row['gene_set_id']: {'collection_id': row['collection_id'], 'library': row['library'], 'name': row['gene_set_name']}
-                 for row in read_jsonl(r / 'gene_sets.jsonl.gz')}
-    elif kind == 'collections':
-        extra = {row['collection_id']: {'library': row['library'], 'label': row['cfde_label']} for row in read_jsonl(r / 'collections.jsonl.gz')}
     else: extra = None
     matrix = np.load(r / f'vectors/{kind}.f32.npy', mmap_mode='r', allow_pickle=False)
     rows = list(tsv_rows(r / f'vectors/{kind}.tsv', VECTOR_COLUMNS))
@@ -1412,7 +1377,6 @@ def parser():
     c.add_argument('--gene-set-stats-file', type=Path, action='extend', nargs='+', default=[],
                    help=f'A per-trait <trait>{GENE_SET_STATS_SUFFIX} of the LAP betas_ stage (repeatable)')
     c.add_argument('--gene-set-stats-from', type=Path, help=f'Directory searched recursively for *{GENE_SET_STATS_SUFFIX}')
-    c.add_argument('--cfde-embeddings-dir', type=Path, required=True, help='CFDE snapshot vectors.float16.npy + rows.tsv')
     c.add_argument('--vector-cache', type=Path, required=True, help='SQLite vector cache of factor labels and contexts')
     c.add_argument('--out', type=Path, required=True, help='Release folder (replaced unless it already holds this release)')
     c.add_argument('--kpn-release')
@@ -1430,7 +1394,7 @@ def run(services, args, result):
     if args.command == 'build':
         files = list(args.long_file) + (long_files_in(args.long_files_from) if args.long_files_from else [])
         stats = list(args.gene_set_stats_file) + (gene_set_stats_files_in(args.gene_set_stats_from) if args.gene_set_stats_from else [])
-        return build_release(services, args.lap_project_dir, files, args.cfde_embeddings_dir, args.vector_cache, args.out,
+        return build_release(services, args.lap_project_dir, files, args.vector_cache, args.out,
                              gene_set_stats_files=sorted(set(stats)), kpn_release=args.kpn_release, top_n=args.top_n, workers=args.workers)
     return publish_release(services, args.release, args.env, vectors=not args.skip_vectors, tables=not args.skip_tables,
                            results=result.setdefault('environments', []))
