@@ -21,13 +21,23 @@ environments. See
 | Trait ids | KPN trait registry **v0.0.2** from `dig-portal-data-models` | `versions/trait/v0.0.2/kpn_trait_registry.tsv`; tag commit `3cd554f` |
 | PIGEAN gene stats | All-trait export of the mouse_msigdb PIGEAN runs the factors came from (`/humgen/diabetes2/users/chase/projects/pigean/raw/all_traits/mouse_msigdb/gene_stats.tsv`, meta key `pigean_gene_stats_file`) | 18 GB; `phenotype, gene, combined, log_bf, prior` for 6,698 phenotypes, all 711 traits among them |
 
-**One projection per trait, in chunks.** Each trait's factors are projected jointly on their own: 711 runs.
-- eaggl densifies its genes × gene-sets matrix, so each trait runs over chunks of at most
-  `projection_chunk_gene_sets` (20,000) gene sets. That's 76 chunks of the 1,517,472.
-- A gene set's loadings depend only on its own column and the trait's factors, so chunking does not change them.
-- The chunks of a trait run one after another in one job, and a rerun skips the chunks already done.
-- The all-factor run of the 44,399-set release (one eaggl run over all 4,037 factors) is not feasible at this size and
-  is not part of the pipeline any more.
+**One projection per trait, from gene sets read once.** Each trait's factors are projected jointly on their own: 711
+runs.
+- `prep_pack_annotations_cmd` parses the 1.5M gene sets once into one binary 0/1 genes × gene-sets matrix
+  (`*.cfde_annotations.{indptr,indices}.npy`). Every trait's projection maps that matrix, so no trait re-reads the
+  GMTs.
+- The projection is eaggl's, computed by `scripts/projection_kernel.py`. eaggl rebuilds two dense genes × gene-sets
+  products at every update, and they take 98% of its time: 303 of 310 s for 5,000 gene sets of T2D. Both are fixed
+  linear maps, so the kernel forms them once. The same 5,000 gene sets take 0.1 s, and a whole trait about a minute
+  instead of ~3 h.
+- `prep_check_projection_cmd` runs the pinned eaggl itself on sample gene sets of every library, plus ones with
+  case-mapped genes, for `projection_check_traits` (T2D, 2hrG, Ap-LM). Every `%.4g` loading and top factor must be
+  identical, and the per-trait projections wait for it.
+- The gene sets are projected in chunks of `projection_chunk_gene_sets` (20,000; 76 chunks of the 1,517,472). Each
+  chunk is projected as one eaggl run on it would be: its own random start and stopping rule. A gene set's loadings
+  depend only on its own column and the trait's factors, up to that stopping tolerance.
+- The all-factor run of the 44,399-set release (one eaggl run over all 4,037 factors) is not part of the pipeline any
+  more.
 
 **How the two loadings are computed**
 - **Joint:** a fixed-W multiplicative-update NNLS of X ≈ W·Hᵀ (`eaggl/state.py:_project_H_with_fixed_W`).
@@ -74,22 +84,22 @@ raw/  out/  log/                    inputs / LAP outputs / run logs (git-ignored
 
 **LAP classes**
 
-- `project`: `eaggl_capped__cfde_2026_09_28`
-- `geneset_collection` (133): the instance name is the CFDE label
+- `project`: `eaggl_capped__cfde_2026_10_05`
+- `geneset_collection` (532): the instance name is the CFDE label
 - `trait` (711): the instance name is the EAGGL trait
 
 **Commands, by stage** (the prefix selects the stage with `--only-cmd`)
 
 | Stage | Commands |
 |---|---|
-| inputs | `prep_cfde_index_cmd` (the 9 libraries), `collection_index_cmd`, `prep_trait_kpn_map_cmd`, `prep_assemble_factors_cmd`, `prep_build_annotations_cmd`, `prep_chunk_annotations_cmd` |
-| per trait | `trait_factors_cmd`, `trait_project_cmd` (eaggl over every chunk, then merge and rank) |
+| inputs | `prep_cfde_index_cmd` (the 9 libraries), `collection_index_cmd`, `prep_trait_kpn_map_cmd`, `prep_assemble_factors_cmd`, `prep_build_annotations_cmd`, `prep_pack_annotations_cmd` (the gene sets, read once), `prep_check_projection_cmd` (the kernel against eaggl) |
+| per trait | `trait_factors_cmd`, `trait_project_cmd` (every chunk of the packed gene sets, then rank) |
 | collect | `collect_projections_cmd` (fan-in over all 711 traits) |
-| gene-set betas | `betas_index_cmd` (project) → `betas_trait_gene_stats_cmd`, `betas_trait_run_cmd` (pigean betas), `betas_trait_annotate_cmd` |
+| gene-set betas | `betas_index_cmd`, `betas_library_gmts_cmd` (project) → `betas_trait_gene_stats_cmd`, `betas_trait_run_cmd` and `betas_trait_run_large_cmd` (pigean betas, one fit per library), `betas_trait_annotate_cmd` |
 | audit portal | `portal_build_db_cmd` (fan-in over all 711 traits) → `portal_export_audit_cmd`, `portal_build_html_cmd` |
 | reference release | `release_build_cmd` (fan-in over all 711 traits; files only, publishing is by hand) |
 
-## Outputs (`out/projects/eaggl_capped__cfde_2026_09_28/`)
+## Outputs (`out/projects/eaggl_capped__cfde_2026_10_05/`)
 
 | file | contents |
 |---|---|
@@ -98,25 +108,30 @@ raw/  out/  log/                    inputs / LAP outputs / run logs (git-ignored
 | `*.trait_kpn_map.tsv` | `trait, kpn_trait_id, kpn_release, kpn_release_commit, gwas_source_category, phenotype_name, trait_group, legacy_trait_group, trait_type, n_factors` |
 | `traits/<trait>/<trait>.cfde_projection.long.tsv.gz` | **Main per-trait result.** For every gene set in some factor's per-library top 50 (joint or marginal), one row per factor: `trait, kpn_trait_id, factor_id, factor, factor_label, gene_set_id, collection_id, cfde_label, library, joint_loading, marginal_loading, joint_rank_in_factor, marginal_rank_in_factor, is_joint_top_factor, joint_rank_in_library, marginal_rank_in_library` (ranks over all 1.5M gene sets) |
 | `traits/<trait>/<trait>.cfde_projection.top.tsv.gz` | The rows within that factor's own per-library top 50, plus `gene_set_name` |
-| `*.cfde_annotations.chunks.tsv`, `annotation_chunks/` | The eaggl X input in chunks: `chunk, file, first_row, n_gene_sets, first_gene_set_id, last_gene_set_id, sha256` |
-| `traits/<trait>/<trait>.projection_qc.tsv` | `ids_equal_index`, `label_check_failures`, `k1_joint_marginal_max_absdiff`, `aligned_genes`, `seed`, `pigean_commit`, `qc_pass` |
+| `*.cfde_annotations.indptr.npy`, `*.cfde_annotations.indices.npy` | The packed gene sets (CSC over the EAGGL genes in the factor tables' column order): gene set j holds the gene rows `indices[indptr[j]:indptr[j+1]]` |
+| `*.cfde_annotations.chunks.tsv` | The projection chunks: `chunk, first_row, n_gene_sets, first_gene_set_id, last_gene_set_id, n_entries` |
+| `*.projection_check.tsv`, `projection_check/` | The kernel against the pinned eaggl, per checked trait: `n_gene_sets, n_case_mapped_gene_sets, n_values, joint_mismatches, marginal_mismatches, top_factor_mismatches, kernel_updates, eaggl_seconds, kernel_seconds, pigean_commit, check_pass` (eaggl's outputs and the sample GMT are kept in the directory) |
+| `traits/<trait>/<trait>.projection_qc.tsv` | `ids_equal_index`, `label_check_failures`, `k1_joint_marginal_max_absdiff`, `aligned_genes`, `seed`, `pigean_commit` (the checked eaggl), `qc_pass` |
 | `*.projection_manifest.tsv` / `*.top_gene_sets_per_factor.tsv.gz` | All 711 QC rows / all top rows |
-| `traits/<trait>/*.eaggl.*` | eaggl params (first chunk), the logs and warnings of every chunk. The per-chunk loadings are deleted once merged. |
+| `traits/<trait>/<trait>.projection.*` | Parameters, one log line per chunk (updates, last relative change) and warnings (chunks that stopped at 100 updates, as eaggl does) |
 | `traits/<trait>/<trait>.cfde_gene_set_stats.tsv.gz` | **Trait → gene-set betas.** The gene sets PIGEAN analyzed: `trait, kpn_trait_id, gene_set_id, collection_id, cfde_label, library, n_genes, beta_uncorrected, beta, avg_postp, library_rank, response, p, sigma2` |
-| `traits/<trait>/<trait>.pigean_gene_stats.tsv.gz`, `*.gene_set_stats.*` | The trait's slice of the gene stats; raw pigean output, params, log and warnings |
+| `traits/<trait>/<trait>.pigean_gene_stats.tsv.gz` | The trait's slice of the gene stats |
+| `traits/<trait>/<trait>.gene_set_stats.runs.tsv`, `*.gene_set_stats.large_runs.tsv`, `traits/<trait>/gene_set_stats/` | The trait's pigean fits, one per library: `library, status (fitted or no_gene_sets), n_gene_sets, gene_set_stats_file, params_file, log_file, warnings_file, response, pigean_commit, seconds`; the raw pigean outputs are `gene_set_stats/<library>.*` |
+| `*.library_gmts.tsv`, `library_gmts/` | One GMT per library for the betas: `library, file, n_gene_sets, sha256` |
 
 **About the loadings**
-- Loadings are eaggl's `%.4g` strings, kept unchanged.
-- eaggl sorts its rows by score, so always join on `gene_set_id`, never on row position.
+- Loadings are written as eaggl writes them (`%.4g`), and `prep_check_projection_cmd` requires them to equal eaggl's.
+- Always join on `gene_set_id`, never on row position.
 - The per-trait long file also stores the rank of each gene set within each factor.
 
 ## Running
 
 Paths are relative to this `lap/` directory. The pipeline runs on UGER; start the long stages from a tmux session.
-- Per-trait projections run eaggl chunk by chunk: a 20,000-gene-set chunk peaks at ~11 GB (16 GB requested), and a
-  40,000-gene-set chunk of T2D (K=13) took 11 min. A trait runs its 76 chunks one after another: ~7 h for K=13, ~3 h on
-  average, ~2,000 CPU-hours for all 711.
-- The gene-set betas read all 1.5M gene sets per trait (most of their time).
+- The pack reads the annotations GMT once (a few minutes). The check runs eaggl on ~2,000 gene sets for each of its
+  three traits (a few minutes each).
+- A per-trait projection maps the pack and projects its 76 chunks in about a minute (8 GB requested).
+- The gene-set betas fit each library separately: the 8 smaller libraries in about 1–2 minutes per trait (< 1 GB),
+  LINCS in its own job (`gene_set_stats_large_mem`); see [Gene-set betas](#gene-set-betas-betas_-stage).
 - The release build reads the 9 GB of collection documents one at a time (32 GB requested).
 
 ```bash
@@ -131,10 +146,11 @@ PYTHONPATH=/humgen/diabetes2/users/chase/packages/meta-sanity python3 -m meta_sa
 git clone --no-checkout /humgen/diabetes2/users/chase/packages/pigean raw/pigean_ca59661
 git -C raw/pigean_ca59661 checkout --detach ca59661644dc9ead429fc7e59050870ba49b26e8
 
-# 2. link inputs and create directories (only --init links meta files; done for eaggl_capped__cfde_2026_10_05)
+# 2. link inputs and create directories (only --init links meta files; done for eaggl_capped__cfde_2026_10_05,
+#    but rerun --mkdir for the projection_check/, library_gmts/ and traits/*/gene_set_stats/ directories)
 lap_run --init && lap_run --mkdir && lap_run --check
 
-# 3. inputs (never add --only here: the project-level fan-ins would shrink)
+# 3. inputs, the gene-set pack and the projection check (never add --only here: the project-level fan-ins would shrink)
 lap_run --only-cmd '^(prep_|collection_)' --bsub
 
 # 4. smoke test (3 traits), then every trait: projections, gene-set betas, collect
@@ -149,7 +165,6 @@ Publishing to the app is always a separate command run by hand ([Reference relea
 
 **Cluster behaviour**
 - `max_sge_batch=1` turns off UGER job arrays. LAP otherwise bundles every ready command into one array with `-tc 1000`, and `max_jobs` counts an array as a single job. With arrays off, `max_jobs=50` caps the running tasks; raise it (in the cfg) if the cluster gives you more.
-- A per-trait projection that is killed resumes from its finished chunks when LAP reruns it (`traits/<trait>/eaggl_chunks/`).
 
 
 **Tests**
@@ -243,7 +258,7 @@ The build takes ~11 min, ~8 of them reading the 711 long files, and peaks at ~0.
 
 ```bash
 env PYTHONPATH=scripts /humgen/diabetes2/users/chase/projects/pigean/.venv/bin/python -m factor_portal serve \
-    --db out/projects/eaggl_capped__cfde_2026_09_28/portal/eaggl_capped__cfde_2026_09_28.portal.sqlite --port 8766
+    --db out/projects/eaggl_capped__cfde_2026_10_05/portal/eaggl_capped__cfde_2026_10_05.portal.sqlite --port 8766
 ```
 
 From your laptop, run `ssh -L 8766:localhost:8766 <this host>` and open `http://localhost:8766/`. Alternatively, open
@@ -254,26 +269,44 @@ authentication, so keep it behind the tunnel. The database is opened immutable; 
 
 Every trait gets a PIGEAN score for every CFDE gene set **without rerunning PIGEAN**. Each trait's existing gene-level
 statistics go into `python -m pigean betas`: PIGEAN's gene-set stage on its own, which stops before the outer Gibbs
-loop. The gene sets are the same CFDE file the projection uses.
+loop. The gene sets are the CFDE gene sets the projection uses, **fitted one library at a time**.
+
+**Why per library.** A pigean fit learns one prior p and keeps at most 5,000 gene sets, so in one pooled fit LINCS
+(98.6% of the gene sets) crowds out the rest. For T2D:
+
+| | pooled (all 9 libraries) | per library |
+|---|---|---|
+| analyzed (`kept`) | 5,000: LINCS 3,937, RummaGEO 983, the other 7 libraries 80 | each library's own prefilter survivors |
+| learned p | 1.15e-5 | RummaGEO 1.25e-3; libraries with < 100 survivors keep the default 1e-3 |
+| nonzero `beta_uncorrected` | 163 (RummaGEO 24, GTEx 2) | RummaGEO 778, GTEx 14 of 14 |
+| run | 35 min, 58.5 GB peak | RummaGEO 30 s, GTEx 7 s (< 0.5 GB); LINCS alone dominates |
 
 1. `betas_index_cmd` (project, about 2 minutes) reads the 18 GB export once and records where each trait's rows are
    (they must be contiguous). It stores the export's size and mtime, and the next step refuses a changed export.
-2. `betas_trait_gene_stats_cmd` reads the trait's byte range: its `gene, combined, log_bf, prior` rows.
-3. `betas_trait_run_cmd` runs `pigean betas` with the pinned clone and the GWAS profile:
+2. `betas_library_gmts_cmd` (project) reads the annotations GMT once and writes one GMT per library
+   (`library_gmts/<library>.gmt.gz`, listed in `*.library_gmts.tsv` with their sha256).
+3. `betas_trait_gene_stats_cmd` reads the trait's byte range: its `gene, combined, log_bf, prior` rows.
+4. `betas_trait_run_cmd` and `betas_trait_run_large_cmd` run `pigean betas` once per library on that library's GMT,
+   with the pinned clone (checked first) and the GWAS profile:
    - gene locations (not OLS), the NCBI37.3 gene universe and the portal gene map;
    - the marginal p < 0.01 prefilter and the 5,000-gene-set cap;
    - `--deterministic --seed 1`.
 
-   It writes `beta_uncorrected` (marginal) and `beta` (joint, corrected for gene-set overlap without Gibbs) for every
-   gene set PIGEAN analyzes. T2D took about 1 minute and 0.6 GB.
-4. `betas_trait_annotate_cmd` keeps the analyzed gene sets (`filter_reason` `kept`; the prefiltered ones carry no
-   beta), attaches the KPN and collection ids, and ranks them by `beta_uncorrected` within their library. It refuses
-   another response, an unknown gene set or another pigean commit.
+   `betas_trait_run_large_cmd` fits `gene_set_stats_large_libraries` (LINCS_L1000) as its own job with
+   `gene_set_stats_large_mem`; `betas_trait_run_cmd` fits the other 8 libraries (about 1–2 minutes per trait). Each
+   writes `beta_uncorrected` (marginal) and `beta` (joint, corrected for gene-set overlap without Gibbs) for every gene
+   set PIGEAN analyzes into `traits/<trait>/gene_set_stats/<library>.*`, and a table of its runs. A rerun skips the
+   libraries already fitted with the same inputs. A library where no gene set survives pigean's filters is recorded
+   as `no_gene_sets`.
+5. `betas_trait_annotate_cmd` keeps the analyzed gene sets (`filter_reason` `kept`; the prefiltered ones carry no
+   beta), attaches the KPN and collection ids, ranks them by `beta_uncorrected` within their library, and records that
+   library's learned `p` and `sigma2`. It refuses a missing or repeated library, another response, a gene set outside
+   its run's library or another pigean commit.
 
 **Response** (`gene_set_stats_response`, default `log_bf`):
-- `log_bf`, the direct genetic support. This is a PIGEAN run on the CFDE gene sets minus the outer Gibbs loop. T2D
-  analyzes 1,197 gene sets.
-- `combined` adds the export's mouse_msigdb priors, which come from another gene-set library. T2D then analyzes 4,974.
+- `log_bf`, the direct genetic support. This is a PIGEAN run on the CFDE gene sets minus the outer Gibbs loop.
+- `combined` adds the export's mouse_msigdb priors, which come from another gene-set library. On the 2026-09-28
+  release T2D analyzed 4,974 gene sets with it, against 1,197 with `log_bf`.
 
 Only `log_bf` is the same across the export's libraries; `prior` and `combined` differ.
 
@@ -305,20 +338,20 @@ not embedded. Only factor labels missing from the cache are embedded, with `EMBE
 
 ```bash
 ../services/backend/.venv/bin/python -m reveal_backend.reference_release publish \
-    --release out/projects/eaggl_capped__cfde_2026_09_28/release/files --env local --env qa --env prod
+    --release out/projects/eaggl_capped__cfde_2026_10_05/release/files --env local --env qa --env prod
 ```
 
 For each environment it loads that environment's `<prefix>_ref_*` tables (`reveal_workflow_local`,
 `reveal_workflow_qa`, `reveal`), swaps them in with one `RENAME`, and syncs the fixed Upstash namespaces
-`<env>-factors`, `<env>-contexts`, `<env>-gene-sets` and `<env>-collections`. Running apps pick the new release up
+`<env>-factors` and `<env>-contexts`. Running apps pick the new release up
 within a few seconds. A re-run is safe, and publishing an earlier release folder rolls back.
 
 ## Environment and versions
 
-- **eaggl:** runs from a **pinned clone** of `packages/pigean` at `ca59661`: `raw/pigean_ca59661`, using its `src/` with the pigean project's venv (`/humgen/diabetes2/users/chase/projects/pigean/.venv`, Python 3.9).
-  - Before each eaggl run, `record-pigean-commit` checks that the clone is at `pigean_commit` and that `src/` is clean.
-  - The annotate, relabel and collect steps reject any other commit, so all 712 runs are guaranteed to use one code version.
-  - No branch has `scripts/run_eaggl_supplied_projection.sh`. The pipeline calls `python -m eaggl factor` with the same flags.
+- **eaggl and pigean:** run from a **pinned clone** of `packages/pigean` at `ca59661`: `raw/pigean_ca59661`, using its `src/` with the pigean project's venv (`/humgen/diabetes2/users/chase/projects/pigean/.venv`, Python 3.9), which also runs the helpers.
+  - `check-projection` (before any projection) and `record-pigean-commit` (before each pigean run) check that the clone is at `pigean_commit` and that `src/` is clean.
+  - The projection records the eaggl commit it was checked against, and the project, annotate, relabel and collect steps reject any other commit.
+  - No branch has `scripts/run_eaggl_supplied_projection.sh`. The check calls `python -m eaggl factor` with the flags of the per-trait runs.
 - **KPN:** trait ids come from `/humgen/diabetes/users/chase/packages/dig-portal-data-models` (`main`, fast-forwarded to include tag `v0.0.2`).
   - That release removed `versions/phenotype/v0.0.1`.
   - The pigean configs that still point there need to be repointed separately: `projects/pigean/config/{analyses,inferiority,validation}.meta.yaml` and their generated `.meta` files.

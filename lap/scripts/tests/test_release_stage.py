@@ -171,11 +171,25 @@ class ReleaseCfgTest(unittest.TestCase):
         self.assertEqual(sorted(flags - options), [])
 
 
+def expand(decl, text, seen=()):
+    """Resolve `$key` references the way config.pm expand_value does (meta keys stay as <key>)."""
+    def one(match):
+        key = match.group(2)
+        if key in META_KEYS:
+            return match.group(1) + "<" + key + ">"
+        if key not in decl or key in seen:
+            raise AssertionError("undefined or recursive key $%s" % key)
+        return match.group(1) + expand(decl, decl[key][1], seen + (key,))
+    return re.sub(r"(^|[^\\])\$([A-Za-z0-9_]+)", one, text)
+
+
 class BetasCfgTest(unittest.TestCase):
-    """The betas_ stage: `pigean betas` (no outer Gibbs) on each trait's existing PIGEAN gene stats."""
+    """The betas_ stage: `pigean betas` (no outer Gibbs) on each trait's existing PIGEAN gene stats, one fit per library."""
     COMMANDS = {"betas_index_cmd": (["short", "cmd"], "class_level project"),
                 "betas_trait_gene_stats_cmd": (["short", "cmd"], "class_level trait"),
+                "betas_library_gmts_cmd": (["short", "cmd"], "class_level project rusage_mod 8000"),
                 "betas_trait_run_cmd": (["cmd"], "class_level trait rusage_mod $gene_set_stats_mem"),
+                "betas_trait_run_large_cmd": (["cmd"], "class_level trait rusage_mod $gene_set_stats_large_mem"),
                 "betas_trait_annotate_cmd": (["short", "cmd"], "class_level trait")}
     PIGEAN_CLI = os.path.join(bm.LAP_DIR, "raw", "pigean_ca59661", "src", "pigean", "cli.py")
 
@@ -191,44 +205,97 @@ class BetasCfgTest(unittest.TestCase):
                 self.assertEqual((self.cmds[key][0], self.cmds[key][2]), (prefixes, postfix))
         self.assertIn(self.decl["gene_set_stats_response"][1], ("log_bf", "combined"))
         self.assertEqual(self.decl["pigean_profile"][1], "$pigean_repo_dir/config/profiles/gwas.default.json")
-        self.assertTrue(self.decl["pigean_cmd"][1].endswith("$python_cmd -B -m pigean"))
-        self.assertIn("PYTHONPATH=$pigean_repo_dir/src ", self.decl["pigean_cmd"][1])
+        self.assertNotIn("pigean_cmd", self.decl)  # pigean runs only through betas-trait
 
-    def test_pigean_runs_betas_mode_on_the_trait_gene_stats_and_never_gibbs(self):
-        value = self.cmds["betas_trait_run_cmd"][1]
-        self.assertTrue(value.startswith("$helper_cmd record-pigean-commit --repo-dir $pigean_repo_dir --expected-commit $pigean_commit "))
-        self.assertIn(" $pigean_cmd betas --config $pigean_profile ", value)
-        self.assertNotIn("gibbs", value)
-        for text in ("!{input:--X-in:annotations_gmt_file}", "!{input:--gene-stats-in:trait_gene_stats_file}",
-                     "--gene-stats-log-bf-col $gene_set_stats_response", "--retain-all-beta-uncorrected", "--deterministic",
-                     "!{output:--gene-set-stats-out:trait_gene_set_stats_raw_file}"):
-            self.assertIn(text, value)
-        self.assertIn("--response $gene_set_stats_response", self.cmds["betas_trait_annotate_cmd"][1])
+    def test_every_library_is_fitted_once_and_annotated_together(self):
+        small, large = self.cmds["betas_trait_run_cmd"][1], self.cmds["betas_trait_run_large_cmd"][1]
+        self.assertIn("--libraries $cfde_libraries --exclude-libraries $gene_set_stats_large_libraries ", small)
+        self.assertIn("--libraries $gene_set_stats_large_libraries ", large)
+        for value in (small, large):
+            self.assertIn("!{input:--gene-stats-file:trait_gene_stats_file}", value)
+            self.assertIn("!{input:--library-gmts-file:library_gmts_file}", value)
+            self.assertIn("--work-dir !{key::trait_gene_set_stats_dir} ", value)
+            self.assertIn("--repo-dir <base_dir>/raw/pigean_ca59661 --expected-pigean-commit %s " % self.decl["pigean_commit"][1],
+                          expand(self.decl, value))
+        annotate = self.cmds["betas_trait_annotate_cmd"][1]
+        for text in ("!{input:--runs-file:trait_gene_set_stats_runs_file}", "!{input:--runs-file:trait_gene_set_stats_large_runs_file}",
+                     "--libraries $cfde_libraries ", "--response $gene_set_stats_response ", "--expected-pigean-commit $pigean_commit "):
+            self.assertIn(text, annotate)
 
     def test_every_pigean_flag_exists_in_the_pinned_cli(self):
         if not os.path.isfile(self.PIGEAN_CLI):
             self.skipTest("pinned pigean clone missing: %s" % self.PIGEAN_CLI)
-        options = set(re.findall(r'add_option\("",\s*"(--[a-zA-Z0-9-]+)"', read(self.PIGEAN_CLI)))
-        value = self.cmds["betas_trait_run_cmd"][1]
-        flags = set(re.findall(r"(?<![\w-])--[a-zA-Z][a-zA-Z0-9-]*", value.split("$pigean_cmd betas", 1)[1]))
-        self.assertGreaterEqual(len(flags), 10)
-        self.assertEqual(sorted(flags - options), [])
-
-    def test_every_helper_flag_exists(self):
         import projection_workflow
-        sub = next(a for a in projection_workflow.build_parser()._actions if a.dest == "command")
-        commands = {"betas_index_cmd": "gene-stats-index", "betas_trait_gene_stats_cmd": "trait-gene-stats",
-                    "betas_trait_annotate_cmd": "annotate-gene-set-stats"}
-        for key, command in commands.items():
-            with self.subTest(cmd=key):
-                value = self.cmds[key][1]
-                self.assertTrue(value.startswith("$helper_cmd %s " % command), value[:60])
-                options = {o for a in sub.choices[command]._actions for o in a.option_strings}
-                self.assertEqual(sorted(set(re.findall(r"(?<![\w-])--[a-z][a-z0-9-]*", value)) - options), [])
+        options = set(re.findall(r'add_option\("",\s*"(--[a-zA-Z0-9-]+)"', read(self.PIGEAN_CLI)))
+        command = projection_workflow.pigean_betas_command("python", "profile.json", "x.gmt.gz", "stats.tsv", "log_bf", 1, "out")
+        self.assertEqual(command[2:6], ["-m", "pigean", "betas", "--config"])
+        self.assertNotIn("gibbs", command)
+        flags = {part for part in command if part.startswith("--")}
+        self.assertGreaterEqual(len(flags), 12)
+        self.assertEqual(sorted(flags - options), [])
 
     def test_the_release_build_takes_every_trait_gene_set_stats_file(self):
         self.assertIn("!{input:--gene-set-stats-file:trait_gene_set_stats_file}", self.cmds["release_build_cmd"][1])
         self.assertEqual(self.decl["trait_gene_set_stats_file"][1], "@trait.cfde_gene_set_stats.tsv.gz")
+
+
+class ProjectionCfgTest(unittest.TestCase):
+    """The projection: gene sets packed once, the kernel checked against eaggl, then one short job per trait."""
+    COMMANDS = {"prep_pack_annotations_cmd": (["short", "cmd"], "class_level project rusage_mod $pack_annotations_mem"),
+                "prep_check_projection_cmd": (["short", "cmd"], "class_level project rusage_mod $projection_check_mem"),
+                "trait_project_cmd": (["short", "cmd"], "class_level trait rusage_mod $trait_projection_mem")}
+
+    @classmethod
+    def setUpClass(cls):
+        cls.decl = cfg_declarations()
+        cls.cmds = {key: value for key, value in cls.decl.items() if "cmd" in value[0]}
+
+    def test_the_commands_and_their_levels(self):
+        for key, (prefixes, postfix) in self.COMMANDS.items():
+            with self.subTest(cmd=key):
+                self.assertEqual((self.cmds[key][0], self.cmds[key][2]), (prefixes, postfix))
+        self.assertNotIn("prep_chunk_annotations_cmd", self.cmds)
+
+    def test_traits_project_from_the_pack_after_the_check_and_never_run_eaggl(self):
+        value = self.cmds["trait_project_cmd"][1]
+        for text in ("!{input:--check-file:projection_check_file}", "!{input:--indptr-file:annotation_indptr_file}",
+                     "!{input:--indices-file:annotation_indices_file}", "!{input:--chunks-file:annotation_chunks_file}"):
+            self.assertIn(text, value)
+        self.assertNotRegex(value, r"-m eaggl|\$pigean_repo_dir|--python ")  # no eaggl runs per trait
+        self.assertNotIn("annotations_gmt_file", value)  # the GMT is read once, by the pack
+        for key in ("annotation_indptr_file", "annotation_indices_file", "annotation_chunks_file"):
+            self.assertIn("!{output:--output-%s:%s}" % ({"annotation_indptr_file": "indptr-file",
+                                                         "annotation_indices_file": "indices-file",
+                                                         "annotation_chunks_file": "file"}[key], key),
+                          self.cmds["prep_pack_annotations_cmd"][1])
+        check = self.cmds["prep_check_projection_cmd"][1]
+        self.assertIn("--repo-dir $pigean_repo_dir --expected-pigean-commit $pigean_commit ", check)
+        self.assertIn("!{output:--output-file:projection_check_file}", check)
+
+    def test_check_traits_are_pipeline_traits(self):
+        traits = set(re.findall(r"^(\S+) class trait$", read(META), re.M))
+        self.assertEqual(len(traits), 711)
+        checked = self.decl["projection_check_traits"][1].split(",")
+        self.assertTrue(checked and set(checked) <= traits, checked)
+        self.assertRegex(self.decl["projection_check_sample"][1], r"^[1-9][0-9]*$")
+
+    def test_every_helper_flag_exists(self):
+        import projection_workflow
+        sub = next(a for a in projection_workflow.build_parser()._actions if a.dest == "command")
+        checked = 0
+        for key, (_, value, _) in self.cmds.items():
+            for part in value.split("&&"):
+                part = part.strip()
+                if not part.startswith("$helper_cmd "):
+                    continue
+                command = part.split()[1]
+                with self.subTest(cmd=key, helper=command):
+                    self.assertIn(command, sub.choices)
+                    options = {o for a in sub.choices[command]._actions for o in a.option_strings}
+                    flags = set(re.findall(r"(?<![\w-])--[a-z][a-z0-9-]*", expand(self.decl, part)))
+                    self.assertEqual(sorted(flags - options), [])
+                    checked += 1
+        self.assertGreaterEqual(checked, 12)
 
 
 class GeneratedMetaTest(unittest.TestCase):

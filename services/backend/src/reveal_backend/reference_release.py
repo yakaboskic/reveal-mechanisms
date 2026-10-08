@@ -938,7 +938,8 @@ def write_trait_gene_sets(path, files, kpn_map, gene_set_ids):
                 raise Refused(f'{file.name}: library ranks are not 1..n in rank order')
     total = write_tsv(path, TRAIT_GENE_SET_COLUMNS, rows())
     return total, {'response': next(iter(responses), None), 'traits': len(by_kpn), 'traits_with_rows': len(counts),
-                   'source': 'pigean betas mode (no outer Gibbs) on each trait\'s PIGEAN gene stats; LAP betas_ stage'}
+                   'source': 'pigean betas mode (no outer Gibbs) on each trait\'s PIGEAN gene stats, one fit per CFDE library; '
+                             'LAP betas_ stage'}
 
 
 def long_files_in(directory):
