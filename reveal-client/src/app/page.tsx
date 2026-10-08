@@ -1282,7 +1282,7 @@ export default function Home() {
   function noteActivity(message: string, eventType: JobEvent["event_type"] = "progress") {
     setActivity(items => [...items, activityNote(message, eventType)].slice(-1000));
   }
-  async function assessCfdeSupport(saved: Draft) {
+  async function assessCfdeSupport(saved: Draft): Promise<"yes" | "no"> {
     const created = await mutationKeys.current.run(["cfde-assessment", saved.id, saved.version, saved.composer], key => api.createCfdeAssessment(saved.id, { draft_version: saved.version, composer: saved.composer }, key));
     let current: CfdeAssessment = created;
     let shown = "";
@@ -1294,9 +1294,11 @@ export default function Home() {
       await new Promise(resolve => setTimeout(resolve, 1000));
       current = await api.cfdeAssessment(saved.id, current.id);
     }
-    if (current.status === "succeeded" && current.result && !current.stale) return current.result.verdict;
+    if (current.draft_id !== saved.id || current.draft_version !== saved.version || current.stale !== false) throw new Error("The CFDE assessment does not match this draft. Start the investigation again to retry.");
     if (current.status === "failed" || current.status === "interrupted") throw new Error(current.error?.detail || "The CFDE assessment did not finish. Start the investigation again to retry.");
-    throw new Error("The CFDE assessment could not be used for the current draft. Start the investigation again to retry.");
+    const support = current.status === "succeeded" ? current.result?.probability_yes : undefined;
+    if (typeof support !== "number" || !Number.isFinite(support)) throw new Error("The CFDE assessment did not confirm support. The investigation was not started.");
+    return support >= 0.54 ? "yes" : "no";
   }
   async function startInvestigation() {
     if (pending) { await beginAnalysis(); return; }
@@ -1318,17 +1320,19 @@ export default function Home() {
       setError(message);
       return;
     } finally { setBusy(""); }
-    if (!saved || !verdict) return;
+    if (!saved) return;
+    if (verdict === "yes") {
+      rememberCfdePassed(saved.id);
+      setCfdePassed(true);
+      noteActivity("CFDE evidence can support this investigation.");
+      await beginAnalysis(saved);
+      return;
+    }
     if (verdict === "no") {
       noteActivity("No CFDE evidence was found for this investigation.", "warning");
       setCfdePassed(false);
       setCfdeGate(saved);
-      return;
     }
-    rememberCfdePassed(saved.id);
-    setCfdePassed(true);
-    noteActivity("CFDE evidence can support this investigation.");
-    await beginAnalysis(saved);
   }
   async function beginAnalysis(saved?: Draft) {
     if (!principal) return;
@@ -1428,7 +1432,7 @@ export default function Home() {
     {job?.failure && <div className="notice error" role="alert"><div><strong>Research could not complete</strong><p>{job.failure.message}</p><span className="small">{job.failure.code}</span>{job.failure.code.startsWith("REVIEW_") && job.failure.retryable && <p><button className="secondary" onClick={retryReview} disabled={!!busy}>{busy === "review" ? "Requesting review…" : "Retry saved review"}</button></p>}</div></div>}
     {job?.status === "cancelled" && <p className="notice">This job was stopped. No successful result is implied.</p>}
     {job?.result && <ResultView job={job} onActions={setResultActions} />}
-    {job?.kind === "analysis" && terminal(job.status) && <section className="paragraph-result"><h3>Cited claim</h3>{job.result?.kind === "analysis" && job.result.paragraph_job_ids.map(id => <ParagraphView key={id} progress={paragraphs[id]} />)}</section>}
+    {job?.kind === "analysis" && job.status === "succeeded" && <section className="paragraph-result"><h3>Cited claim</h3>{job.result?.kind === "analysis" && job.result.paragraph_job_ids.map(id => <ParagraphView key={id} progress={paragraphs[id]} />)}</section>}
   </>;
   const activeStep = step === "anchors" || step === "investigation" ? step : "gap";
   const analysisRunning = !!job && !terminal(job.status);

@@ -30,7 +30,7 @@ export type CfdeAssessment = {
   draft_id: string;
   draft_version: number;
   status: "preparing" | "assessing" | "succeeded" | "failed" | "interrupted";
-  result: { verdict: "yes" | "no" } | null;
+  result: { verdict: "yes" | "no"; probability_yes: number } | null;
   error: { code: string; detail: string; retryable: boolean } | null;
   stale: boolean;
 };
