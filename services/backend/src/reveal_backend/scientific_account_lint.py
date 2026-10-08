@@ -22,6 +22,7 @@ from reveal_backend.evidence_package import EvidenceBuildError, canonical_json, 
 from reveal_backend.source_validation import source_findings, ledger_sources, exact_document
 
 ACCEPTANCE_POLICY = 'reveal.scientific-account/2'
+MINTED = re.compile(r'dapper:[A-Za-z][A-Za-z0-9]*\.[A-Za-z0-9_-]{32}')
 
 
 class AccountValidationError(ValueError):
@@ -80,6 +81,20 @@ def cfde_source_files(package, package_path):
         captured = {value['dapper_file_id'] for value in sources.values()}
         result.update(set(context.get('cfde_source_ids', [])) & captured)
     return result
+
+
+def draft_id_collisions(identities):
+    """{unminted node id: longer node ids containing it}, shortest first.
+
+    DAPPER assign_ids counts any known id inside a hashable value as a reference
+    (`c in value`), so a synthesis claim-1 citing claim-10 cannot be minted.
+    """
+    ordered = sorted({i for i in identities if isinstance(i, str)}, key=lambda i: (len(i), i))
+    found = {}
+    for index, short in enumerate(ordered):
+        longer = [] if MINTED.fullmatch(short) else [other for other in ordered[index + 1:] if short in other]
+        if longer: found[short] = longer
+    return found
 
 
 def eligible_source_files(package, package_path, ledger_path=None):
@@ -218,6 +233,11 @@ def _lint(document_path, dapper_root, lock_path, package_path, mode, strict, led
         for identity, (_, node) in nodes.items():
             if identity in trusted and node != trusted[identity]:
                 error('trusted-input', identity, 'Saved input payload differs from the frozen evidence package')
+        for identity, longer in draft_id_collisions(nodes).items():
+            findings.append({'severity': 'error', 'check': 'draft-id-collision', 'where': identity,
+                'message': f'Node id is contained in {len(longer)} longer node id(s), first {longer[0]}; renumber this kind at one width '
+                           '(for example claim-01 to claim-30) so no node id contains another',
+                'why': 'Trusted DAPPER minting reads an id embedded in a longer id as a reference, so the draft can fail identity assembly with a reference cycle.'})
         for account in document.get('scientific_accounts', []) if isinstance(document.get('scientific_accounts'), list) else []:
             if not isinstance(account, dict):
                 continue

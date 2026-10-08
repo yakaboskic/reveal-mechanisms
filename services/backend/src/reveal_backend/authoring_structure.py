@@ -264,6 +264,7 @@ def _normalized_finding(finding):
                 'evidence-target': 'Set EvidenceItem.target_proposition to the owning Claim.proposition.',
                 'evidence-interpretation': 'Supply nonempty EvidenceItem.direction, context and explanation.',
                 'selected-gap': 'Reference the exact selected KnowledgeGap in ScientificAccount.question and preserve its trusted body.',
+                'draft-id-collision': 'Renumber this kind of draft id at one width (claim-01 to claim-30) so no node id contains another; trusted minting reads an embedded id as a reference and fails on the cycle.',
                 'account-synthesis': 'Supply a nonempty closing_remarks synthesis within the account limit.',
                 'shape': 'Use the pinned plural group arrays and object records.',
                 'scientific-content': 'Check target classes, distinct references, conclusion subsets and acyclic evidence links.',

@@ -207,13 +207,14 @@ def test_report_storage_limits_or_symlinks_never_change_accounts(tmp_path, monke
 
 
 def test_source_feedback_and_advisories_preserve_actionable_nonvalue_rules(tmp_path):
-    checks = ['evidence-snippet', 'source-metric-kind', 'source-file', 'evidence-target', 'evidence-interpretation']
+    checks = ['evidence-snippet', 'source-metric-kind', 'source-file', 'evidence-target', 'evidence-interpretation', 'draft-id-collision']
     report = {'valid': False, 'findings': [{'severity': 'error', 'check': check, 'where': 'evidence_items[0]',
         'message': 'PRIVATE_SOURCE_VALUE'} for check in checks],
         'advisories': [{'severity': 'advisory', 'check': 'cfde-grounding-missing',
             'where': 'scientific_accounts[0]', 'message': 'PRIVATE_SOURCE_VALUE'}]}
     response = structure.diagnostic_response(report, output=tmp_path, filename='account-1.json')['structuredContent']
     assert all('Inspect this location' not in f['message'] for f in response['findings'])
+    assert 'one width' in response['findings'][-1]['message'] and response['findings'][-1]['rule'] == 'draft-id-collision'
     assert 'supported independent evidence remains eligible' in response['advisories'][0]['message']
     stored = json.loads(Path(response['report']['path']).read_bytes())
     assert stored['advisory_count'] == 1 and len(stored['advisories']) == 1

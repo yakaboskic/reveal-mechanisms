@@ -361,7 +361,8 @@ class LintIntegrationTests(unittest.TestCase):
             evidence = {'id': f'urn:test:{name}:e', 'target_proposition': proposition['id'], 'direction': 'SUPPORTS',
                         'context': 'Captured gene-factor row /data/0.', 'explanation': 'Exact captured value.', 'was_derived_from': [source]}
             score = {'id': f'urn:test:{name}:s', 'metric': metric, 'score_kind': kind, 'value': value, 'interpretation': 'Exact captured value.'}
-            claim = {'id': 'urn:test:' + name, 'proposition': proposition['id'], 'statement': statement, 'direction': 'SUPPORTS', 'status': 'proposed',
+            # No draft ID may be contained in another: trusted minting reads an embedded ID as a reference.
+            claim = {'id': f'urn:test:{name}:c', 'proposition': proposition['id'], 'statement': statement, 'direction': 'SUPPORTS', 'status': 'proposed',
                      'has_evidence': [evidence['id']], 'has_score': [score['id']], 'was_generated_by': 'urn:test:activity', 'was_attributed_to': ['urn:test:person']}
             for group, node in (('propositions', proposition), ('evidence_items', evidence), ('claim_scores', score), ('claims', claim)):
                 draft.setdefault(group, []).append(node)
@@ -372,8 +373,8 @@ class LintIntegrationTests(unittest.TestCase):
              'Gene SHH is associated with CADinT2D in PIGEAN (combined 3.86).', 'combined', 'SCORE', 3.86)
         proposition = {'id': 'urn:test:gap:p', 'statement': 'SHH links Factor1 and CADinT2D to the selected gap.', 'proposition_kind': 'BIOLOGICAL_INTERPRETATION'}
         evidence = {'id': 'urn:test:gap:e', 'target_proposition': proposition['id'], 'direction': 'SUPPORTS', 'context': 'Both atomic SHH observations.',
-                    'explanation': 'One shared gene path.', 'source_claims': ['urn:test:factor-gene', 'urn:test:phenotype-gene']}
-        claim = {'id': 'urn:test:gap', 'proposition': proposition['id'], 'statement': 'Gap relevance.', 'direction': 'SUPPORTS', 'status': 'proposed',
+                    'explanation': 'One shared gene path.', 'source_claims': ['urn:test:factor-gene:c', 'urn:test:phenotype-gene:c']}
+        claim = {'id': 'urn:test:gap:c', 'proposition': proposition['id'], 'statement': 'Gap relevance.', 'direction': 'SUPPORTS', 'status': 'proposed',
                  'has_evidence': [evidence['id']], 'was_generated_by': 'urn:test:activity', 'was_attributed_to': ['urn:test:person']}
         draft['propositions'].append(proposition); draft['evidence_items'].append(evidence); draft['claims'].append(claim)
         draft['scientific_accounts'][0]['component_claims'].append(claim['id'])

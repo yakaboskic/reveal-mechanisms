@@ -18,6 +18,25 @@ ROOT=Path(__file__).resolve().parents[3]
 RELEASE=Path(os.environ.get('REVEAL_TEST_DAPPER_RELEASE', ROOT.parent/'dapper'))
 LOCK=ROOT/'services/backend/agent-runtime/dapper-release.json'
 
+def example_package(root,doc,bundle):
+    """The isolated validator package for a synthetic example document written under root."""
+    sources={}
+    for file in doc['files']:
+        raw=canonical_json(bundle['synthetic_sources'][file['filename']]);(root/file['filename']).write_bytes(raw)
+        sources[file['filename']]={'path':file['filename'],'sha256':sha256(raw),'size_bytes':len(raw),'format':'json','dapper_file_id':file['id']}
+    package={'package_version':'reveal.evidence-package/0.2-draft','dapper_pin':{'snapshot_sha256':json.loads(LOCK.read_bytes())['compatible_input_snapshots'][0]},
+        'selection':{'knowledge_gap_id':doc['knowledge_gaps'][0]['id']},
+        'dapper_context':{key:doc[key] for key in ('files','knowledge_gaps','gene_sets','mechanisms')},'source_artifacts':sources,
+        'pigean':{'model':'synthetic','mechanisms':{}},
+        'validation_context':{'format':'reveal.validation-context/1','eligible_source_ids':[f['id'] for f in doc['files']]}}
+    path=root/'evidence-package.json';path.write_bytes(canonical_json(package))
+    return path
+
+def exact_rewrite(value,mapping):
+    if isinstance(value,dict): return {key:exact_rewrite(child,mapping) for key,child in value.items()}
+    if isinstance(value,list): return [exact_rewrite(child,mapping) for child in value]
+    return mapping.get(value,value) if isinstance(value,str) else value
+
 class AuthoringContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -180,3 +199,34 @@ class AuthoringContractTests(unittest.TestCase):
                 self.assertTrue(final['valid'],final)
                 self.assertEqual(final['mode'],'final')
                 self.assertEqual(final['claim_structure']['conformance_rate'],1.0)
+
+    def test_draft_ids_embedded_in_longer_ids_fail_draft_lint_before_trusted_minting(self):
+        if self.release is None: self.skipTest('Set REVEAL_TEST_DAPPER_RELEASE to a checkout containing the locked release')
+        from reveal_backend import acceptance
+        from reveal_backend.evidence_package import EvidenceBuildError
+        bundle=json.loads((ROOT/'services/backend/agent-runtime/authoring-examples.json').read_bytes())
+        doc=bundle['documents'][0]; base=doc['claims'][0]['id'].rpartition(':')[0]+':'
+        synthesis=next(item for item in doc['evidence_items'] if item.get('source_claims'))
+        self.assertEqual(synthesis['id'],base+'evidence-6')
+        # Renumber the synthesis below an atomic Claim it cites, whose id then extends the synthesis id.
+        for (synthesis_number,atomic),cited in (((1,10),'claim-10'),((3,30),'claim-30')):
+            mapping={base+f'{kind}-{old}':base+f'{kind}-{new}' for kind in ('claim','evidence','proposition','score')
+                     for old,new in ((6,synthesis_number),(atomic//10,atomic))}
+            changed=exact_rewrite(doc,mapping)
+            cites={item['id']:item.get('source_claims',[]) for item in changed['evidence_items']}
+            self.assertIn(base+cited,cites[base+f'evidence-{synthesis_number}'])
+            with self.subTest(cited=cited),tempfile.TemporaryDirectory() as temp:
+                root=Path(temp);path=root/'account.json';path.write_bytes(canonical_json(changed))
+                package_path=example_package(root,changed,bundle)
+                result=lint_scientific_account(path,dapper_root=self.release,release_lock=LOCK,evidence_package=package_path,mode='draft')
+                self.assertFalse(result['valid'])
+                errors=[f for f in result['findings'] if f['severity']=='error']
+                self.assertEqual({f['check'] for f in errors},{'draft-id-collision'})
+                self.assertEqual({f['where'] for f in errors},{base+f'{kind}-{synthesis_number}' for kind in ('claim','evidence','proposition')})
+                claim=next(f for f in errors if f['where']==base+f'claim-{synthesis_number}')
+                self.assertIn(base+cited,claim['message']);self.assertIn('one width',claim['message'])
+                # Without the lint error the same draft would reach trusted minting and fail only there.
+                with patch.object(acceptance,'release_root',return_value=self.release), \
+                        self.assertRaisesRegex(EvidenceBuildError,'cycle in hashable references'):
+                    acceptance.assemble_account(path,package_path,root/'accepted.json',
+                        {'user_id':'example-owner','principal_kind':'anonymous'},{'id':'example-job'},1,'deterministic')

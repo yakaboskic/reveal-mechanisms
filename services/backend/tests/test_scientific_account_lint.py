@@ -12,7 +12,7 @@ from unittest.mock import patch
 import test_evidence_package as fixtures
 from reveal_backend.dapper_release import clone_release, prepare_agent_workspace, verify_release
 from reveal_backend.evidence_package import EvidenceBuildError, canonical_json, decode, sha256
-from reveal_backend.scientific_account_lint import AccountValidationError, cfde_source_files, lint_scientific_account, validate_scientific_account
+from reveal_backend.scientific_account_lint import AccountValidationError, cfde_source_files, draft_id_collisions, lint_scientific_account, validate_scientific_account
 from reveal_backend.runtime_config import CURRENT_DAPPER_SNAPSHOT
 
 ROOT = fixtures.ROOT
@@ -54,6 +54,24 @@ class ReferenceSourceLineageTests(unittest.TestCase):
             (root / 'loading').write_text('{}')
             with self.assertRaisesRegex(EvidenceBuildError, 'checksum changed'):
                 cfde_source_files(package, root / 'package.json')
+
+
+class DraftIdCollisionTests(unittest.TestCase):
+    def test_unminted_ids_inside_longer_node_ids_collide_like_dapper_references(self):
+        digest = 'A' * 31 + '-'
+        base = 'urn:reveal:local:w:d:'
+        ids = [base + 'claim-12', base + 'claim-1', base + 'claim-10', base + 'claim-2', base + 'evidence-01', base + 'evidence-10',
+               'dapper:GeneSet.' + digest, 'urn:x:gene-dapper:GeneSet.' + digest, 'urn:x:gap:claim', 'urn:x:gap', None, 7]
+        self.assertEqual(draft_id_collisions(ids), {'urn:x:gap': ['urn:x:gap:claim'],
+                                                    base + 'claim-1': [base + 'claim-10', base + 'claim-12']})
+        # One width per kind, minted ids and repeated ids never collide.
+        self.assertEqual(draft_id_collisions([base + f'claim-{n:02}' for n in range(1, 31)] + [base + 'claim-01']), {})
+        self.assertEqual(draft_id_collisions({'dapper:Claim.' + digest: 1, 'urn:x:about-dapper:Claim.' + digest: 2}), {})
+        for name in ('authoring-skeleton.json', 'authoring-examples.json'):
+            data = json.loads((ROOT / 'services/backend/agent-runtime' / name).read_bytes())
+            for document in data.get('documents', [data]):
+                self.assertEqual(draft_id_collisions(node['id'] for rows in document.values() if isinstance(rows, list)
+                                                     for node in rows if isinstance(node, dict) and 'id' in node), {})
 
 
 class ScientificAccountLintTests(unittest.TestCase):

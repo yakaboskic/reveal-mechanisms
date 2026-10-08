@@ -68,7 +68,7 @@ Rules for every atomic Claim:
 
 Synthesis Claims are `BIOLOGICAL_INTERPRETATION` Claims whose EvidenceItems cite atomic Claims with `source_claims` (no `was_derived_from` is needed). The cited atomic Claims should come from at least two families and form one connected path: the same gene, gene set, factor and trait across them. The synthesis subject must lie on that path.
 
-Number new draft IDs at one width once a kind reaches ten (for example `claim-01` … `claim-30`), or number atomic Claims before the syntheses that cite them. Trusted minting reads an ID embedded in a longer ID as a reference, so a synthesis `claim-1` citing `claim-10` cannot be minted.
+Number new draft IDs at one width once a kind reaches ten (for example `claim-01` … `claim-30`). Trusted minting reads an ID embedded in a longer ID as a reference, so a synthesis `claim-1` citing `claim-10` cannot be minted; lint reports every such ID as a `draft-id-collision` error.
 
 | Type | Proposition | Cites |
 |---|---|---|
