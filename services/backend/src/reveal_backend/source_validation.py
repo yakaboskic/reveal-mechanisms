@@ -152,7 +152,8 @@ def observation_findings(document, observed, *, exact_observed=None, authored_ex
                     'ClaimScore does not match the exact metric at its cited source row'))
             expected = {'factor_value': 'LOADING', 'loading': 'LOADING', 'joint_loading': 'LOADING',
                         'marginal_loading': 'LOADING', 'beta': 'EFFECT_ESTIMATE',
-                        'beta_uncorrected': 'EFFECT_ESTIMATE', 'combined': 'SCORE'}.get(metric) if isinstance(metric, str) else None
+                        'beta_uncorrected': 'EFFECT_ESTIMATE', 'combined': 'SCORE', 'log_bf': 'SCORE',
+                        'prior': 'SCORE'}.get(metric) if isinstance(metric, str) else None
             if expected and score.get('score_kind') != expected:
                 findings.append(finding('source-metric-kind', score.get('id', claim.get('id', 'claims')),
                     'Source metric was relabeled as a different mathematical quantity'))

@@ -28,6 +28,7 @@ from .box_research import HostedResearchClient, ResearchAccessError, validate_co
 from .dispatch_view import (FILE_INPUT_FILENAME, FILE_INPUT_FORMAT, research_authoring_requirements,
                             research_prompt, validate_file_input)
 from .evidence_files import INDEX_PATH, build_evidence_index
+from .evidence_package import declare_trusted_prefixes, trusted_prefixes
 from .evidence_reader import WorkspaceReader, read_artifact, READER_VERSION
 from .box_literature import LiteratureClient
 from .research_outcome import validate_insufficient_outcome
@@ -141,10 +142,11 @@ def setup(request):
             if request.get('research_context') != context:
                 raise ValueError('Research context differs from the frozen seed')
             runtime['research_context'] = context
-        from .dispatch_view import pinned_contract_sha256, pinned_skeleton_sha256
+        from .dispatch_view import pinned_claim_structure_sha256, pinned_contract_sha256, pinned_skeleton_sha256
         contract_sha256 = pinned_contract_sha256(frozen)
         prompt = research_prompt(request['selected_graphs'], request.get('validation_feedback', ()), progressive=progressive,
-                                 contract_sha256=contract_sha256, skeleton_sha256=pinned_skeleton_sha256(frozen))
+                                 contract_sha256=contract_sha256, skeleton_sha256=pinned_skeleton_sha256(frozen),
+                                 claim_structure_sha256=pinned_claim_structure_sha256(frozen))
         frozen_input = BASE / 'input' / FILE_INPUT_FILENAME
         if frozen_input.exists():
             manifest = json.loads(frozen_input.read_bytes())
@@ -415,6 +417,9 @@ def write_draft_tool(filename, document):
         deadline = min(deadline, runtime.get('execution_deadline_monotonic', deadline))
         timing.deadline = deadline
         timing.require_remaining(1)
+        # Server-declared seed prefixes (HGNC.SYMBOL, biolink) resolve authored triples without an authored prefix map.
+        seed = Path(runtime.get('evidence_package') or '')
+        if seed.is_file(): declare_trusted_prefixes(document, trusted_prefixes(json.loads(seed.read_bytes())))
         timing.phase('structure_preflight')
         from .authoring_structure import preflight_document, diagnostic_response
         timing.require_remaining(0.1)
@@ -454,6 +459,7 @@ def write_draft_tool(filename, document):
             for identity in missing:
                 group, node = trusted[identity]
                 document.setdefault(group, []).append(node)
+        declare_trusted_prefixes(document, trusted_prefixes(package))
         context = runtime.get('draft_attribution')
         if context:
             for group in ('persons', 'organizations', 'activities'):

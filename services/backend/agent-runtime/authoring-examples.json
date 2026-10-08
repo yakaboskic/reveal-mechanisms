@@ -1,1 +1,420 @@
-{"description":"Complete draft with three relationship families, typed source-result and narrative source-Claim synthesis. Synthetic attribution is only for standalone validation. Production assembly supplies trusted attribution. Never cite these objects as evidence.","documents":[{"activities":[{"command":"not executed","id":"dapper:Activity.Zi3nCdqS0AsWex3BQfMEDuo8nLN905iF","name":"Synthetic documentation example"}],"claim_scores":[{"id":"urn:reveal:local:synthetic-work:relationships:score-1","interpretation":"Exact stored synthetic model loading; not a probability or biological fold change.","metric":"loading","score_kind":"LOADING","value":0.125}],"claims":[{"direction":"SUPPORTS","has_evidence":["urn:reveal:local:synthetic-work:relationships:evidence-1"],"id":"urn:reveal:local:synthetic-work:relationships:claim-1","proposition":"urn:reveal:local:synthetic-work:relationships:proposition-1","statement":"Synthetic Gene X is a recorded member of the synthetic set.","status":"proposed","was_attributed_to":["dapper:Organization.teZZO9iDwu3xY-n3bjnZZwTqWKaKKEFd"],"was_generated_by":"dapper:Activity.Zi3nCdqS0AsWex3BQfMEDuo8nLN905iF"},{"direction":"SUPPORTS","has_evidence":["urn:reveal:local:synthetic-work:relationships:evidence-2"],"id":"urn:reveal:local:synthetic-work:relationships:claim-2","proposition":"urn:reveal:local:synthetic-work:relationships:proposition-2","statement":"Synthetic Gene X has a stored loading on the synthetic fitted mechanism.","status":"proposed","was_attributed_to":["dapper:Organization.teZZO9iDwu3xY-n3bjnZZwTqWKaKKEFd"],"was_generated_by":"dapper:Activity.Zi3nCdqS0AsWex3BQfMEDuo8nLN905iF"},{"direction":"SUPPORTS","has_evidence":["urn:reveal:local:synthetic-work:relationships:evidence-3"],"id":"urn:reveal:local:synthetic-work:relationships:claim-3","proposition":"urn:reveal:local:synthetic-work:relationships:proposition-3","statement":"The synthetic GeneSet has a stored joint loading on the synthetic fitted mechanism.","status":"proposed","was_attributed_to":["dapper:Organization.teZZO9iDwu3xY-n3bjnZZwTqWKaKKEFd"],"was_generated_by":"dapper:Activity.Zi3nCdqS0AsWex3BQfMEDuo8nLN905iF"},{"direction":"SUPPORTS","has_evidence":["urn:reveal:local:synthetic-work:relationships:evidence-4"],"has_score":["urn:reveal:local:synthetic-work:relationships:score-1"],"id":"urn:reveal:local:synthetic-work:relationships:claim-4","proposition":"urn:reveal:local:synthetic-work:relationships:proposition-4","statement":"The synthetic model reports a loading of 0.125 for Gene X.","status":"proposed","was_attributed_to":["dapper:Organization.teZZO9iDwu3xY-n3bjnZZwTqWKaKKEFd"],"was_generated_by":"dapper:Activity.Zi3nCdqS0AsWex3BQfMEDuo8nLN905iF"},{"direction":"SUPPORTS","has_evidence":["urn:reveal:local:synthetic-work:relationships:evidence-5"],"id":"urn:reveal:local:synthetic-work:relationships:claim-5","proposition":"urn:reveal:local:synthetic-work:relationships:proposition-5","statement":"The synthetic observations support separate membership and fitted-loading assessments.","status":"proposed","was_attributed_to":["dapper:Organization.teZZO9iDwu3xY-n3bjnZZwTqWKaKKEFd"],"was_generated_by":"dapper:Activity.Zi3nCdqS0AsWex3BQfMEDuo8nLN905iF"}],"evidence_items":[{"context":"Synthetic source /result/membership","direction":"SUPPORTS","explanation":"Synthetic example illustrates an exact, scoped source relationship, never an eligible research observation.","id":"urn:reveal:local:synthetic-work:relationships:evidence-1","target_proposition":"urn:reveal:local:synthetic-work:relationships:proposition-1","was_derived_from":["dapper:File.5ovaRgL0aqXZmm4ns1iDG0fDNHKt4Ukl","dapper:GeneSet.6HkS18HSC9is650Ck9eKoyDl4K4-KNF7"]},{"context":"Synthetic source /result/gene_loading","direction":"SUPPORTS","explanation":"Synthetic example illustrates an exact, scoped source relationship, never an eligible research observation.","id":"urn:reveal:local:synthetic-work:relationships:evidence-2","target_proposition":"urn:reveal:local:synthetic-work:relationships:proposition-2","was_derived_from":["dapper:File.5ovaRgL0aqXZmm4ns1iDG0fDNHKt4Ukl"]},{"context":"Synthetic source /result/set_loading","direction":"SUPPORTS","explanation":"Synthetic example illustrates an exact, scoped source relationship, never an eligible research observation.","id":"urn:reveal:local:synthetic-work:relationships:evidence-3","target_proposition":"urn:reveal:local:synthetic-work:relationships:proposition-3","was_derived_from":["dapper:File.5ovaRgL0aqXZmm4ns1iDG0fDNHKt4Ukl","dapper:GeneSet.6HkS18HSC9is650Ck9eKoyDl4K4-KNF7"]},{"context":"Synthetic source /result/gene_loading","direction":"SUPPORTS","explanation":"Synthetic example illustrates an exact, scoped source relationship, never an eligible research observation.","id":"urn:reveal:local:synthetic-work:relationships:evidence-4","target_proposition":"urn:reveal:local:synthetic-work:relationships:proposition-4","was_derived_from":["dapper:File.5ovaRgL0aqXZmm4ns1iDG0fDNHKt4Ukl"]},{"context":"Synthetic source reused source Claims; retain their original authorship and dependencies","direction":"SUPPORTS","explanation":"Synthetic example illustrates an exact, scoped source relationship, never an eligible research observation.","id":"urn:reveal:local:synthetic-work:relationships:evidence-5","source_claims":["urn:reveal:local:synthetic-work:relationships:claim-1","urn:reveal:local:synthetic-work:relationships:claim-2","urn:reveal:local:synthetic-work:relationships:claim-3"],"target_proposition":"urn:reveal:local:synthetic-work:relationships:proposition-5"}],"files":[{"description":"Synthetic instruction fixture; never eligible research evidence.","filename":"synthetic-example.json","id":"dapper:File.5ovaRgL0aqXZmm4ns1iDG0fDNHKt4Ukl","mime_type":"application/json","sha256":"8a58c63a4d88f6c0772173c04c0a45b534ff325b462ec7d1045fbb1573679874","size_in_bytes":480}],"gene_sets":[{"alternate_identifier":["urn:reveal:local:synthetic-work:relationships:gene-set"],"id":"dapper:GeneSet.6HkS18HSC9is650Ck9eKoyDl4K4-KNF7","member_type":"gene","members":["urn:example:gene:X"],"name":"Synthetic set","was_derived_from":["dapper:File.5ovaRgL0aqXZmm4ns1iDG0fDNHKt4Ukl"]}],"knowledge_gaps":[{"gap_description":"Synthetic missing knowledge for authoring examples.","gap_kind":"KNOWLEDGE_GAP","id":"dapper:KnowledgeGap._391dOOJOcvb-82gpRPLrv0nJ54whN7J","name":"Synthetic question","text":"How do the synthetic relationships fit together?"}],"mechanisms":[{"description":"Synthetic fit and model; no scientific observation.","id":"dapper:Mechanism.4tQqx_TltHhU9Yu3951_CbPtnpFoDBo8","name":"Synthetic fitted factor"}],"organizations":[{"id":"dapper:Organization.teZZO9iDwu3xY-n3bjnZZwTqWKaKKEFd","name":"Synthetic example author; no attribution to a real person"}],"prefixes":{"prov":"http://www.w3.org/ns/prov#"},"propositions":[{"id":"urn:reveal:local:synthetic-work:relationships:proposition-1","object_entity":"dapper:GeneSet.6HkS18HSC9is650Ck9eKoyDl4K4-KNF7","proposition_kind":"RESULT","relation":"urn:reveal:relation:member-of","scope":"Synthetic instructions only; model example-fit, no biological inference.","statement":"Synthetic Gene X is a recorded member of the synthetic set.","subject_entity":"urn:example:gene:X"},{"id":"urn:reveal:local:synthetic-work:relationships:proposition-2","object_entity":"dapper:Mechanism.4tQqx_TltHhU9Yu3951_CbPtnpFoDBo8","proposition_kind":"RESULT","relation":"urn:reveal:relation:has-loading-on","scope":"Synthetic instructions only; model example-fit, no biological inference.","statement":"Synthetic Gene X has a stored loading on the synthetic fitted mechanism.","subject_entity":"urn:example:gene:X"},{"id":"urn:reveal:local:synthetic-work:relationships:proposition-3","object_entity":"dapper:Mechanism.4tQqx_TltHhU9Yu3951_CbPtnpFoDBo8","proposition_kind":"RESULT","relation":"urn:reveal:relation:has-joint-loading-on","scope":"Synthetic instructions only; model example-fit, no biological inference.","statement":"The synthetic GeneSet has a stored joint loading on the synthetic fitted mechanism.","subject_entity":"dapper:GeneSet.6HkS18HSC9is650Ck9eKoyDl4K4-KNF7"},{"id":"urn:reveal:local:synthetic-work:relationships:proposition-4","proposition_kind":"RESULT","scope":"Synthetic instructions only; model example-fit, no biological inference.","statement":"The synthetic model reports a loading of 0.125 for Gene X."},{"id":"urn:reveal:local:synthetic-work:relationships:proposition-5","proposition_kind":"RESULT","scope":"Synthetic instructions only; model example-fit, no biological inference.","statement":"The synthetic observations support separate membership and fitted-loading assessments."}],"scientific_accounts":[{"closing_remarks":"The example illustrates structural evidence paths. Biological conclusions require actual captured support.","component_claims":["urn:reveal:local:synthetic-work:relationships:claim-1","urn:reveal:local:synthetic-work:relationships:claim-2","urn:reveal:local:synthetic-work:relationships:claim-3","urn:reveal:local:synthetic-work:relationships:claim-4","urn:reveal:local:synthetic-work:relationships:claim-5"],"conclusion_claims":["urn:reveal:local:synthetic-work:relationships:claim-5"],"context":"Synthetic authoring example; every observation is fictional and ineligible for research citation. Known GeneSet provenance reaches the synthetic catalog File; original experimental construction is unspecified.","id":"urn:reveal:local:synthetic-work:relationships:account-1","name":"Synthetic complete relationship examples","question":"dapper:KnowledgeGap._391dOOJOcvb-82gpRPLrv0nJ54whN7J","was_attributed_to":["dapper:Organization.teZZO9iDwu3xY-n3bjnZZwTqWKaKKEFd"],"was_generated_by":"dapper:Activity.Zi3nCdqS0AsWex3BQfMEDuo8nLN905iF"}],"used_edges":[{"object":"dapper:File.5ovaRgL0aqXZmm4ns1iDG0fDNHKt4Ukl","predicate":"prov:used","subject":"dapper:Activity.Zi3nCdqS0AsWex3BQfMEDuo8nLN905iF"}]}],"eligible_scientific_evidence":false,"format":"reveal.authoring-examples/2","synthetic":true,"synthetic_sources":{"synthetic-example.json":{"result":{"gene_loading":{"factor":"urn:reveal:local:synthetic-work:relationships:mechanism","gene":"urn:example:gene:X","loading":0.125},"membership":{"gene":"urn:example:gene:X","gene_set":"urn:reveal:local:synthetic-work:relationships:gene-set","member":true},"set_loading":{"factor":"urn:reveal:local:synthetic-work:relationships:mechanism","gene_set":"urn:reveal:local:synthetic-work:relationships:gene-set","joint_loading":0.25,"marginal_loading":0.375},"synthetic":true}}}}
+{
+  "description": "Complete draft with one atomic RESULT Claim per evidence family (factor-gene, phenotype-gene, gene-gene set, factor-gene set, gene set-trait), each with its exact ClaimScore and capture row, and one gap-relevance synthesis citing them through source_claims. Synthetic attribution is only for standalone validation. Production assembly supplies trusted attribution. Never cite these objects as evidence.",
+  "documents": [
+    {
+      "activities": [
+        {
+          "command": "not executed",
+          "id": "dapper:Activity.Zi3nCdqS0AsWex3BQfMEDuo8nLN905iF",
+          "name": "Synthetic documentation example"
+        }
+      ],
+      "claim_scores": [
+        {
+          "id": "urn:reveal:local:synthetic-work:relationships:score-1",
+          "interpretation": "Exact synthetic stored gene loading; a fitted weight, not a probability.",
+          "metric": "loading",
+          "score_kind": "LOADING",
+          "value": 0.125
+        },
+        {
+          "id": "urn:reveal:local:synthetic-work:relationships:score-2",
+          "interpretation": "Exact synthetic PIGEAN combined gene score; not a probability.",
+          "metric": "combined",
+          "score_kind": "SCORE",
+          "value": 2.5
+        },
+        {
+          "id": "urn:reveal:local:synthetic-work:relationships:score-3",
+          "interpretation": "Exact synthetic PIGEAN log Bayes factor; not a probability.",
+          "metric": "log_bf",
+          "score_kind": "SCORE",
+          "value": 1.25
+        },
+        {
+          "id": "urn:reveal:local:synthetic-work:relationships:score-4",
+          "interpretation": "Exact synthetic per-trait joint projection; a fitted weight, not a probability.",
+          "metric": "joint_loading",
+          "score_kind": "LOADING",
+          "value": 0.25
+        },
+        {
+          "id": "urn:reveal:local:synthetic-work:relationships:score-5",
+          "interpretation": "Exact synthetic PIGEAN uncorrected gene-set effect estimate.",
+          "metric": "beta_uncorrected",
+          "score_kind": "EFFECT_ESTIMATE",
+          "value": 0.75
+        }
+      ],
+      "claims": [
+        {
+          "direction": "SUPPORTS",
+          "has_evidence": [
+            "urn:reveal:local:synthetic-work:relationships:evidence-1"
+          ],
+          "id": "urn:reveal:local:synthetic-work:relationships:claim-1",
+          "proposition": "urn:reveal:local:synthetic-work:relationships:proposition-1",
+          "statement": "The synthetic loading capture records this observation; a loading is a fitted weight, not a probability.",
+          "status": "proposed",
+          "has_score": [
+            "urn:reveal:local:synthetic-work:relationships:score-1"
+          ],
+          "was_attributed_to": [
+            "dapper:Organization.teZZO9iDwu3xY-n3bjnZZwTqWKaKKEFd"
+          ],
+          "was_generated_by": "dapper:Activity.Zi3nCdqS0AsWex3BQfMEDuo8nLN905iF"
+        },
+        {
+          "direction": "SUPPORTS",
+          "has_evidence": [
+            "urn:reveal:local:synthetic-work:relationships:evidence-2"
+          ],
+          "id": "urn:reveal:local:synthetic-work:relationships:claim-2",
+          "proposition": "urn:reveal:local:synthetic-work:relationships:proposition-2",
+          "statement": "The synthetic PIGEAN capture records this association; the scores are not probabilities.",
+          "status": "proposed",
+          "has_score": [
+            "urn:reveal:local:synthetic-work:relationships:score-2",
+            "urn:reveal:local:synthetic-work:relationships:score-3"
+          ],
+          "was_attributed_to": [
+            "dapper:Organization.teZZO9iDwu3xY-n3bjnZZwTqWKaKKEFd"
+          ],
+          "was_generated_by": "dapper:Activity.Zi3nCdqS0AsWex3BQfMEDuo8nLN905iF"
+        },
+        {
+          "direction": "SUPPORTS",
+          "has_evidence": [
+            "urn:reveal:local:synthetic-work:relationships:evidence-3"
+          ],
+          "id": "urn:reveal:local:synthetic-work:relationships:claim-3",
+          "proposition": "urn:reveal:local:synthetic-work:relationships:proposition-3",
+          "statement": "The synthetic membership capture records this member of the trusted gene set.",
+          "status": "proposed",
+          "was_attributed_to": [
+            "dapper:Organization.teZZO9iDwu3xY-n3bjnZZwTqWKaKKEFd"
+          ],
+          "was_generated_by": "dapper:Activity.Zi3nCdqS0AsWex3BQfMEDuo8nLN905iF"
+        },
+        {
+          "direction": "SUPPORTS",
+          "has_evidence": [
+            "urn:reveal:local:synthetic-work:relationships:evidence-4"
+          ],
+          "id": "urn:reveal:local:synthetic-work:relationships:claim-4",
+          "proposition": "urn:reveal:local:synthetic-work:relationships:proposition-4",
+          "statement": "The synthetic projection capture records this joint loading; a projection is a fitted weight, not a phenotype association.",
+          "status": "proposed",
+          "has_score": [
+            "urn:reveal:local:synthetic-work:relationships:score-4"
+          ],
+          "was_attributed_to": [
+            "dapper:Organization.teZZO9iDwu3xY-n3bjnZZwTqWKaKKEFd"
+          ],
+          "was_generated_by": "dapper:Activity.Zi3nCdqS0AsWex3BQfMEDuo8nLN905iF"
+        },
+        {
+          "direction": "SUPPORTS",
+          "has_evidence": [
+            "urn:reveal:local:synthetic-work:relationships:evidence-5"
+          ],
+          "id": "urn:reveal:local:synthetic-work:relationships:claim-5",
+          "proposition": "urn:reveal:local:synthetic-work:relationships:proposition-5",
+          "statement": "The synthetic PIGEAN gene-set capture records this association; the effect is a model estimate, not a causal effect.",
+          "status": "proposed",
+          "has_score": [
+            "urn:reveal:local:synthetic-work:relationships:score-5"
+          ],
+          "was_attributed_to": [
+            "dapper:Organization.teZZO9iDwu3xY-n3bjnZZwTqWKaKKEFd"
+          ],
+          "was_generated_by": "dapper:Activity.Zi3nCdqS0AsWex3BQfMEDuo8nLN905iF"
+        },
+        {
+          "direction": "SUPPORTS",
+          "has_evidence": [
+            "urn:reveal:local:synthetic-work:relationships:evidence-6"
+          ],
+          "id": "urn:reveal:local:synthetic-work:relationships:claim-6",
+          "proposition": "urn:reveal:local:synthetic-work:relationships:proposition-6",
+          "statement": "The five synthetic atomic observations share one GENEX and SYNTHETIC_SET path; together they motivate a candidate gap connection, not a causal conclusion.",
+          "status": "proposed",
+          "was_attributed_to": [
+            "dapper:Organization.teZZO9iDwu3xY-n3bjnZZwTqWKaKKEFd"
+          ],
+          "was_generated_by": "dapper:Activity.Zi3nCdqS0AsWex3BQfMEDuo8nLN905iF"
+        }
+      ],
+      "evidence_items": [
+        {
+          "context": "Synthetic capture row `/result/factor_loadings/items/0`.",
+          "direction": "SUPPORTS",
+          "explanation": "Synthetic example: the exact captured row is this atomic observation, never an eligible research observation.",
+          "id": "urn:reveal:local:synthetic-work:relationships:evidence-1",
+          "snippet": "{\"gene_index\":1,\"loading\":0.125,\"symbol\":\"GENEX\"}",
+          "target_proposition": "urn:reveal:local:synthetic-work:relationships:proposition-1",
+          "was_derived_from": [
+            "dapper:File.5J16hCiouQP7PSpteDLdjiCFFEJVp4wt"
+          ]
+        },
+        {
+          "context": "Synthetic capture row `/result/gene_phenotype/items/0`.",
+          "direction": "SUPPORTS",
+          "explanation": "Synthetic example: the exact captured row is this atomic observation, never an eligible research observation.",
+          "id": "urn:reveal:local:synthetic-work:relationships:evidence-2",
+          "snippet": "{\"combined\":2.5,\"gene\":\"GENEX\",\"log_bf\":1.25,\"phenotype\":\"SYNTH\",\"prior\":-0.5}",
+          "target_proposition": "urn:reveal:local:synthetic-work:relationships:proposition-2",
+          "was_derived_from": [
+            "dapper:File.5J16hCiouQP7PSpteDLdjiCFFEJVp4wt"
+          ]
+        },
+        {
+          "context": "Synthetic capture row `/result/gene_set_members/items/0`.",
+          "direction": "SUPPORTS",
+          "explanation": "Synthetic example: the exact captured row is this atomic observation, never an eligible research observation.",
+          "id": "urn:reveal:local:synthetic-work:relationships:evidence-3",
+          "snippet": "{\"member\":\"HGNC.SYMBOL:GENEX\",\"source_pointer\":\"/members/0\"}",
+          "target_proposition": "urn:reveal:local:synthetic-work:relationships:proposition-3",
+          "was_derived_from": [
+            "dapper:File.5J16hCiouQP7PSpteDLdjiCFFEJVp4wt",
+            "dapper:GeneSet.d1btwk02U4K591iyqDFNX1PBO32W-qSP"
+          ]
+        },
+        {
+          "context": "Synthetic capture row `/result/gene_set_factors/items/0`.",
+          "direction": "SUPPORTS",
+          "explanation": "Synthetic example: the exact captured row is this atomic observation, never an eligible research observation.",
+          "id": "urn:reveal:local:synthetic-work:relationships:evidence-4",
+          "snippet": "{\"factor_id\":\"synthetic-factor-1\",\"joint_loading\":0.25,\"marginal_loading\":0.375}",
+          "target_proposition": "urn:reveal:local:synthetic-work:relationships:proposition-4",
+          "was_derived_from": [
+            "dapper:File.5J16hCiouQP7PSpteDLdjiCFFEJVp4wt",
+            "dapper:GeneSet.d1btwk02U4K591iyqDFNX1PBO32W-qSP"
+          ]
+        },
+        {
+          "context": "Synthetic capture row `/result/gene_set_phenotype/items/0`.",
+          "direction": "SUPPORTS",
+          "explanation": "Synthetic example: the exact captured row is this atomic observation, never an eligible research observation.",
+          "id": "urn:reveal:local:synthetic-work:relationships:evidence-5",
+          "snippet": "{\"beta\":0.5,\"beta_uncorrected\":0.75,\"gene_set\":\"SYNTHETIC_SET\",\"phenotype\":\"SYNTH\"}",
+          "target_proposition": "urn:reveal:local:synthetic-work:relationships:proposition-5",
+          "was_derived_from": [
+            "dapper:File.5J16hCiouQP7PSpteDLdjiCFFEJVp4wt",
+            "dapper:GeneSet.d1btwk02U4K591iyqDFNX1PBO32W-qSP"
+          ]
+        },
+        {
+          "context": "Synthetic atomic Claims on one GENEX, SYNTHETIC_SET, SyntheticFactor1 and SYNTH path.",
+          "direction": "SUPPORTS",
+          "explanation": "The cited atomic Claims connect the factor, gene, gene set and trait; the trait is the factor's own fitted trait, so the phenotype link is within the factor's fit rather than independent support.",
+          "id": "urn:reveal:local:synthetic-work:relationships:evidence-6",
+          "source_claims": [
+            "urn:reveal:local:synthetic-work:relationships:claim-1",
+            "urn:reveal:local:synthetic-work:relationships:claim-2",
+            "urn:reveal:local:synthetic-work:relationships:claim-3",
+            "urn:reveal:local:synthetic-work:relationships:claim-4",
+            "urn:reveal:local:synthetic-work:relationships:claim-5"
+          ],
+          "target_proposition": "urn:reveal:local:synthetic-work:relationships:proposition-6"
+        }
+      ],
+      "files": [
+        {
+          "id": "dapper:File.5J16hCiouQP7PSpteDLdjiCFFEJVp4wt",
+          "description": "Synthetic instruction fixture; never eligible research evidence.",
+          "filename": "synthetic-example.json",
+          "mime_type": "application/json",
+          "sha256": "994aeab5b31c11ccba0e2d8047bb60856639b83d95b60f172e9af30725f9673e",
+          "size_in_bytes": 539
+        }
+      ],
+      "gene_sets": [
+        {
+          "id": "dapper:GeneSet.d1btwk02U4K591iyqDFNX1PBO32W-qSP",
+          "alternate_identifier": [
+            "urn:reveal:local:synthetic-work:relationships:gene-set"
+          ],
+          "member_type": "gene",
+          "members": [
+            "HGNC.SYMBOL:GENEX"
+          ],
+          "name": "SYNTHETIC_SET",
+          "was_derived_from": [
+            "dapper:File.5J16hCiouQP7PSpteDLdjiCFFEJVp4wt"
+          ]
+        }
+      ],
+      "knowledge_gaps": [
+        {
+          "gap_description": "Synthetic missing knowledge for authoring examples.",
+          "gap_kind": "KNOWLEDGE_GAP",
+          "id": "dapper:KnowledgeGap._391dOOJOcvb-82gpRPLrv0nJ54whN7J",
+          "name": "Synthetic question",
+          "text": "How do the synthetic relationships fit together?"
+        }
+      ],
+      "mechanisms": [
+        {
+          "id": "dapper:Mechanism.eByku4SVK4zAQDjq694xKSs191wHTdYM",
+          "description": "Synthetic fit and model; KPN trait KPN.TRAIT:0000000 (SYNTH). No scientific observation.",
+          "name": "Synthetic fitted factor SyntheticFactor1"
+        }
+      ],
+      "organizations": [
+        {
+          "id": "dapper:Organization.teZZO9iDwu3xY-n3bjnZZwTqWKaKKEFd",
+          "name": "Synthetic example author; no attribution to a real person"
+        }
+      ],
+      "prefixes": {
+        "HGNC.SYMBOL": "https://identifiers.org/hgnc.symbol:",
+        "biolink": "https://w3id.org/biolink/vocab/"
+      },
+      "propositions": [
+        {
+          "id": "urn:reveal:local:synthetic-work:relationships:proposition-1",
+          "object_entity": "dapper:Mechanism.eByku4SVK4zAQDjq694xKSs191wHTdYM",
+          "proposition_kind": "RESULT",
+          "relation": "obo:RO_0002610",
+          "scope": "Synthetic instructions only; synthetic factor fit and trait, no biological inference.",
+          "statement": "Gene GENEX has loading 0.125 on synthetic factor SyntheticFactor1.",
+          "subject_entity": "HGNC.SYMBOL:GENEX"
+        },
+        {
+          "id": "urn:reveal:local:synthetic-work:relationships:proposition-2",
+          "object_entity": "KPN.TRAIT:0000000",
+          "proposition_kind": "RESULT",
+          "relation": "biolink:genetically_associated_with",
+          "scope": "Synthetic instructions only; synthetic factor fit and trait, no biological inference.",
+          "statement": "Gene GENEX is associated with synthetic trait SYNTH in PIGEAN (combined 2.5, log_bf 1.25).",
+          "subject_entity": "HGNC.SYMBOL:GENEX"
+        },
+        {
+          "id": "urn:reveal:local:synthetic-work:relationships:proposition-3",
+          "object_entity": "HGNC.SYMBOL:GENEX",
+          "proposition_kind": "RESULT",
+          "relation": "prov:hadMember",
+          "scope": "Synthetic instructions only; synthetic factor fit and trait, no biological inference.",
+          "statement": "Gene set SYNTHETIC_SET has member GENEX.",
+          "subject_entity": "dapper:GeneSet.d1btwk02U4K591iyqDFNX1PBO32W-qSP"
+        },
+        {
+          "id": "urn:reveal:local:synthetic-work:relationships:proposition-4",
+          "object_entity": "dapper:Mechanism.eByku4SVK4zAQDjq694xKSs191wHTdYM",
+          "proposition_kind": "RESULT",
+          "relation": "obo:RO_0002610",
+          "scope": "Synthetic instructions only; synthetic factor fit and trait, no biological inference.",
+          "statement": "Gene set SYNTHETIC_SET has joint loading 0.25 on synthetic factor SyntheticFactor1.",
+          "subject_entity": "dapper:GeneSet.d1btwk02U4K591iyqDFNX1PBO32W-qSP"
+        },
+        {
+          "id": "urn:reveal:local:synthetic-work:relationships:proposition-5",
+          "object_entity": "KPN.TRAIT:0000000",
+          "proposition_kind": "RESULT",
+          "relation": "obo:RO_0002610",
+          "scope": "Synthetic instructions only; synthetic factor fit and trait, no biological inference.",
+          "statement": "Gene set SYNTHETIC_SET is associated with synthetic trait SYNTH (beta_uncorrected 0.75).",
+          "subject_entity": "dapper:GeneSet.d1btwk02U4K591iyqDFNX1PBO32W-qSP"
+        },
+        {
+          "id": "urn:reveal:local:synthetic-work:relationships:proposition-6",
+          "object_entity": "dapper:KnowledgeGap._391dOOJOcvb-82gpRPLrv0nJ54whN7J",
+          "proposition_kind": "BIOLOGICAL_INTERPRETATION",
+          "relation": "urn:reveal:relation:candidate-gap-connection",
+          "scope": "Synthetic instructions only; synthetic factor fit and trait, no biological inference.",
+          "statement": "Gene GENEX and gene set SYNTHETIC_SET provide a candidate connection between synthetic factor SyntheticFactor1, synthetic trait SYNTH and the selected knowledge gap, within the factor's fit; the causal question remains unresolved.",
+          "subject_entity": "dapper:GeneSet.d1btwk02U4K591iyqDFNX1PBO32W-qSP"
+        }
+      ],
+      "scientific_accounts": [
+        {
+          "closing_remarks": "The synthetic path illustrates a candidate gap connection built from atomic observations. Biological conclusions require actual captured support.",
+          "component_claims": [
+            "urn:reveal:local:synthetic-work:relationships:claim-1",
+            "urn:reveal:local:synthetic-work:relationships:claim-2",
+            "urn:reveal:local:synthetic-work:relationships:claim-3",
+            "urn:reveal:local:synthetic-work:relationships:claim-4",
+            "urn:reveal:local:synthetic-work:relationships:claim-5",
+            "urn:reveal:local:synthetic-work:relationships:claim-6"
+          ],
+          "conclusion_claims": [
+            "urn:reveal:local:synthetic-work:relationships:claim-6"
+          ],
+          "context": "Synthetic authoring example; every observation is fictional and ineligible for research citation. Evidence need: observations linking the selected factor, its genes and gene sets, and its trait to the selected gap. One atomic Claim per evidence family, then one gap-relevance synthesis citing them. Known GeneSet provenance reaches the synthetic capture File; original experimental construction is unspecified.",
+          "id": "urn:reveal:local:synthetic-work:relationships:account-1",
+          "name": "Synthetic atomic and synthesis claim example",
+          "question": "dapper:KnowledgeGap._391dOOJOcvb-82gpRPLrv0nJ54whN7J",
+          "was_attributed_to": [
+            "dapper:Organization.teZZO9iDwu3xY-n3bjnZZwTqWKaKKEFd"
+          ],
+          "was_generated_by": "dapper:Activity.Zi3nCdqS0AsWex3BQfMEDuo8nLN905iF"
+        }
+      ],
+      "used_edges": [
+        {
+          "object": "dapper:File.5J16hCiouQP7PSpteDLdjiCFFEJVp4wt",
+          "predicate": "prov:used",
+          "subject": "dapper:Activity.Zi3nCdqS0AsWex3BQfMEDuo8nLN905iF"
+        }
+      ]
+    }
+  ],
+  "eligible_scientific_evidence": false,
+  "format": "reveal.authoring-examples/2",
+  "synthetic": true,
+  "synthetic_sources": {
+    "synthetic-example.json": {
+      "result": {
+        "factor_loadings": {
+          "items": [
+            {
+              "gene_index": 1,
+              "loading": 0.125,
+              "symbol": "GENEX"
+            }
+          ]
+        },
+        "gene_phenotype": {
+          "items": [
+            {
+              "combined": 2.5,
+              "gene": "GENEX",
+              "log_bf": 1.25,
+              "phenotype": "SYNTH",
+              "prior": -0.5
+            }
+          ]
+        },
+        "gene_set_members": {
+          "items": [
+            {
+              "member": "HGNC.SYMBOL:GENEX",
+              "source_pointer": "/members/0"
+            }
+          ]
+        },
+        "gene_set_factors": {
+          "items": [
+            {
+              "factor_id": "synthetic-factor-1",
+              "joint_loading": 0.25,
+              "marginal_loading": 0.375
+            }
+          ]
+        },
+        "gene_set_phenotype": {
+          "items": [
+            {
+              "beta": 0.5,
+              "beta_uncorrected": 0.75,
+              "gene_set": "SYNTHETIC_SET",
+              "phenotype": "SYNTH"
+            }
+          ]
+        }
+      },
+      "synthetic": true
+    }
+  }
+}

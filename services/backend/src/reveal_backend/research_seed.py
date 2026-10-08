@@ -7,6 +7,7 @@ from copy import deepcopy
 from pathlib import Path
 import re
 
+from .dispatch_view import CLAIM_STRUCTURE_PATH, KIT_V3
 from .evidence_package import BuiltPackage, PACKAGE_VERSION, canonical_json, decode, require, sha256
 from .reference_generation import generation_of_anchors
 from .research_data import capability_catalog as default_catalog
@@ -23,7 +24,8 @@ KIT_FILES = (
     'docs/dapper-integration.md',
     'docs/agent-evidence-integration.md',
     'services/backend/agent-skills/read-evidence-package/SKILL.md',
-    'services/backend/agent-runtime/dapper-release.json',
+    CLAIM_STRUCTURE_PATH,
+    'services/backend/agent-runtime/dapper-release.json',  # Last: the kit's release lock.
 )
 KIT_IMPLEMENTATION = (
     'services/backend/agent-runtime/authoring-schema-dependencies.json',
@@ -42,6 +44,8 @@ KIT_IMPLEMENTATION = (
 )
 PREFIXES = {'factor':'urn:cfde:factor:', 'gene':'urn:cfde:gene:', 'gene_set':'urn:cfde:gene_set:',
             'trait':'urn:cfde:trait:', 'cfde':'urn:cfde:record:'}
+# Server-declared prefixes of the recommended claim triples: captured gene symbols (as CFDE GeneSet members) and Biolink predicates.
+CLAIM_PREFIXES = {'HGNC.SYMBOL': 'https://identifiers.org/hgnc.symbol:', 'biolink': 'https://w3id.org/biolink/vocab/'}
 
 
 def validate_seed_shape(package, source_root=None):
@@ -112,8 +116,8 @@ def validate_seed_shape(package, source_root=None):
     require(isinstance(entries,list) and bool(entries) and kit.get('kit_sha256')==sha256(canonical_json(entries)), 'Research authoring kit manifest changed')
     require(all(isinstance(item,dict) and item.get('artifact_id') in sources
                 and item.get('sha256')==sources[item['artifact_id']]['sha256'] for item in entries), 'Research authoring kit source binding changed')
-    from .dispatch_view import pinned_skeleton_sha256
-    pinned_skeleton_sha256(package)
+    from .dispatch_view import pinned_claim_structure_sha256, pinned_skeleton_sha256
+    pinned_skeleton_sha256(package); pinned_claim_structure_sha256(package)
 
 
 def prepare_research_seed(frozen, binding, *, dapper, project_root, output=None,
@@ -135,7 +139,7 @@ def prepare_research_seed(frozen, binding, *, dapper, project_root, output=None,
     require(context.get('knowledge_gaps') == [binding['source_gap']['object']], 'Frozen request and gap binding differ')
     require(context['knowledge_gaps'][0]['id'] == frozen['question_id'], 'Frozen question identity changed')
     require(len(context.get('mechanisms', [])) == len(factor_ids), 'Frozen factor objects are missing')
-    prefixes = {**PREFIXES, **context.get('prefixes', {})}
+    prefixes = {**PREFIXES, **CLAIM_PREFIXES, **context.get('prefixes', {})}
     context['prefixes'] = prefixes
     dapper.validate(context)
     context.setdefault('files', [])
@@ -316,7 +320,7 @@ def prepare_research_seed(frozen, binding, *, dapper, project_root, output=None,
                 [next(item for item in implementation if item['path'] == SKELETON_PATH)],
             'required_question':frozen['question_id'],'max_accounts':max_accounts,
             'assembly_builder':{'version':SEED_VERSION,'source_sha256':sha256(Path(__file__).read_bytes())}},
-        'authoring_kit':{'version':'reveal.research-authoring-kit/2','files':kit+implementation,
+        'authoring_kit':{'version':KIT_V3,'files':kit+implementation,
             'kit_sha256':sha256(canonical_json(kit+implementation)),
             'release_lock_sha256':sha256((root/KIT_FILES[-1]).read_bytes()),'release_tag':lock['tag'],'release_commit':lock['commit']},
         'readiness':{'input_capture_complete':False,'seed_ready':True,'capture_blockers':['progressive_data_not_requested'],

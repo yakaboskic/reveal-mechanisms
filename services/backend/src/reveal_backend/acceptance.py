@@ -8,7 +8,7 @@ import sys
 from functools import lru_cache
 from .runtime_config import ROOT, CURRENT_DAPPER_SNAPSHOT, setting
 from .repository import digest, now
-from .evidence_package import canonical_json, decode, require, sha256
+from .evidence_package import canonical_json, declare_trusted_prefixes, decode, require, sha256, trusted_prefixes
 from .dapper_release import verify_release
 from . import dapper_helper
 from .scientific_account_lint import validate_scientific_account
@@ -162,8 +162,8 @@ print(json.dumps(fields))
     return decode(result.stdout.encode())
 
 
-def hydrate_inputs(document,trusted,edges=()):
-    """Hydrate exact schema-declared references, never IDs mentioned in prose."""
+def hydrate_inputs(document,trusted,edges=(),prefixes=None):
+    """Hydrate exact schema-declared references, never IDs mentioned in prose, and the trusted prefixes the document uses."""
     root=release_root(); release=verify_release(root,LOCK)
     fields=_reference_fields(str(root.resolve()),release['lock_sha256'],release.get('commit'))
     for _ in range(len(trusted)+1):
@@ -184,7 +184,7 @@ def hydrate_inputs(document,trusted,edges=()):
         if not missing: break
         for identity in missing:
             group,node=trusted[identity]; document.setdefault(group,[]).append(deepcopy(node))
-    return document
+    return declare_trusted_prefixes(document,prefixes) if prefixes else document
 
 
 def assemble_account(raw_path,package_path,output_path,attribution,job,attempt,execution,ledger_path=None):
@@ -199,7 +199,7 @@ def assemble_account(raw_path,package_path,output_path,attribution,job,attempt,e
                 if isinstance(node,dict) and node.get('id') in trusted: require(node==trusted[node['id']][1],'Agent altered a trusted input payload')
     retained_edges=[(group,edge) for group,rows in package['dapper_context'].items()
                     if group.endswith('_edges') and isinstance(rows,list) for edge in rows]
-    doc=hydrate_inputs(doc,trusted,retained_edges)
+    doc=hydrate_inputs(doc,trusted,retained_edges,trusted_prefixes(package))
     # Operational attribution comes from the frozen submitting principal and
     # actual worker, never an agent-authored Person or runtime declaration.
     actor_id='urn:reveal:actor:'+digest(['scientific-actor',attribution['user_id']])

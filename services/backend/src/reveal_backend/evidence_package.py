@@ -104,6 +104,30 @@ def ref(artifact, path=''):
     return {'artifact_id': artifact, 'pointer': path}
 
 
+def trusted_prefixes(package):
+    """A package's trusted CURIE prefixes: its declared map plus captured DAPPER-context prefixes."""
+    context = package.get('dapper_context') if isinstance(package.get('dapper_context'), dict) else {}
+    return {**(package.get('prefixes') or {}), **(context.get('prefixes') or {})}
+
+
+def declare_trusted_prefixes(document, prefixes):
+    """Declare each trusted prefix an identifier-like document value uses and the document does not; authored entries win."""
+    declared = document.get('prefixes', {})
+    if not isinstance(declared, dict): return document
+    used = set()
+    def visit(value):
+        if isinstance(value, dict):
+            for child in value.values(): visit(child)
+        elif isinstance(value, list):
+            for child in value: visit(child)
+        elif isinstance(value, str) and ':' in value and not any(c.isspace() for c in value):
+            name = value.split(':', 1)[0]
+            if name in prefixes and name not in declared: used.add(name)
+    visit({group: rows for group, rows in document.items() if group != 'prefixes'})
+    if used: document['prefixes'] = {**declared, **{name: prefixes[name] for name in sorted(used)}}
+    return document
+
+
 def frozen_semantic_association(metadata, factor, context_id, source_revision, text):
     """Project a measured pair only when its frozen run and exact source agree.
 

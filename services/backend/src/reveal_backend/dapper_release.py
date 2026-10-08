@@ -163,7 +163,13 @@ def prepare_agent_workspace(workspace, project_root, package_path, lock_path):
                      'services/backend/agent-skills/construct-scientific-account/SKILL.md',
                      'services/backend/agent-skills/read-evidence-package/SKILL.md',
                      'docs/evidence-package.md', 'docs/scientific-account-construction.md', 'docs/pigean-claim-model.md',
-                     'docs/dapper-integration.md', 'docs/agent-evidence-integration.md', 'docs/scientific-account-linting.md']
+                     'docs/dapper-integration.md', 'docs/agent-evidence-integration.md', 'docs/scientific-account-linting.md',
+                     'docs/evidence-claim-structure.md']
+    from .dispatch_view import CLAIM_STRUCTURE_PATH, KIT_V2, PINNED_KITS
+    kit = package.get('authoring_kit', {})
+    if kit.get('version') == KIT_V2:
+        # A v2 kit predates the claim-structure reference: install its exact frozen prose, without a newer document.
+        relative_files.remove(CLAIM_STRUCTURE_PATH)
     copied = {}
     for relative in relative_files:
         target = project / relative; target.parent.mkdir(parents=True, exist_ok=True)
@@ -178,8 +184,7 @@ def prepare_agent_workspace(workspace, project_root, package_path, lock_path):
         data = origin.read_bytes()
         require(sha256(data) == source['sha256'], f'Source artifact checksum mismatch: {relative}')
         target.parent.mkdir(parents=True, exist_ok=True); target.write_bytes(data)
-    kit = package.get('authoring_kit', {})
-    pinned = kit.get('version') == 'reveal.research-authoring-kit/2'
+    pinned = kit.get('version') in PINNED_KITS
     if pinned:
         entries = kit.get('files')
         require(isinstance(entries, list) and sha256(canonical_json(entries)) == kit.get('kit_sha256'),

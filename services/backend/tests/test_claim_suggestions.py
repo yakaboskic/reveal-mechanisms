@@ -5,6 +5,7 @@ Synthetic identifiers only; suggestions never change lint validity, errors or wa
 from copy import deepcopy
 import importlib.util
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -15,7 +16,7 @@ from unittest.mock import patch
 from reveal_backend import research_seed
 from reveal_backend.acceptance import claim_structure_record
 from reveal_backend.authoring_structure import _normalized_finding, diagnostic_response
-from reveal_backend.claim_suggestions import BIOLINK, GAP_RELATION, LEGACY, OBO, PROV, claim_structure, mentions
+from reveal_backend.claim_suggestions import BIOLINK, FAMILIES, GAP_RELATION, LEGACY, OBO, PROV, claim_structure, factor_traits, mentions
 from reveal_backend.evidence_package import canonical_json, decode
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -284,15 +285,27 @@ class SuggestionTests(unittest.TestCase):
         self.assertEqual(counted(result), {'gene_gene_set': 2, 'other': 10})
         self.assertEqual(checks(result) - {'claim-structure-summary', 'gap-relevance-missing', 'family-missing'},
                          {'atomic-result-kind', 'atomic-endpoints', 'atomic-predicate', 'atomic-capture'})
-        example = json.loads((ROOT / 'services/backend/agent-runtime/authoring-examples.json').read_bytes())['documents'][0]
-        result = claim_structure(example)
-        self.assertEqual(counted(result), {'factor_gene': 2, 'factor_gene_set': 1, 'gene_gene_set': 1, 'synthesis': 1})
-        self.assertIn('synthesis-path', checks(result))
-        for item in claim_structure(bubble)['suggestions'] + result['suggestions']:
+        for item in result['suggestions']:
             self.assertEqual(item['severity'], 'suggestion')
             normalized = _normalized_finding(item)
             self.assertEqual((normalized['message'], normalized['rule']), (item['message'], item['check']))
             self.assertEqual(normalized.get('repair'), item.get('repair'))
+
+
+    def test_shipped_examples_and_skeleton_follow_the_structure_exactly(self):
+        runtime = ROOT / 'services/backend/agent-runtime'
+        example = json.loads((runtime / 'authoring-examples.json').read_bytes())['documents'][0]
+        skeleton = json.loads((runtime / 'authoring-skeleton.json').read_bytes())
+        context = {'selection': {'knowledge_gap_id': example['knowledge_gaps'][0]['id']},
+                   'dapper_context': {group: example[group] for group in ('files', 'knowledge_gaps', 'gene_sets', 'mechanisms', 'prefixes')}}
+        for document, package in ((example, None), (example, context), (skeleton, None)):
+            result = claim_structure(document, package)
+            self.assertEqual(counted(result), {**dict.fromkeys(FAMILIES, 1), 'synthesis': 1})
+            self.assertEqual(result['summary']['conformance_rate'], 1.0)
+            self.assertEqual(result['summary']['synthesis'], {'count': 1, 'coherent': 1, 'gap_relevance': 1})
+            self.assertEqual(checks(result), {'claim-structure-summary'})
+        # The example factor's own trait is on the path, and the synthesis says so.
+        self.assertEqual(factor_traits(example, context['dapper_context'], context), {example['mechanisms'][0]['id']: '0000000'})
 
 
 class HostedDiagnosticsTests(unittest.TestCase):
@@ -424,6 +437,83 @@ class LintIntegrationTests(unittest.TestCase):
         retained = decode(Path(value['report']['path']).read_bytes())
         self.assertEqual(retained['claim_structure'], value['claim_structure'])
         self.assertIn('family-missing', {item['check'] for item in retained['advisories'] if item['severity'] == 'suggestion'})
+
+
+    def test_server_declared_prefixes_resolve_recommended_triples_through_draft_final_and_projection(self):
+        """biolink, obo:RO_0002610 and prov:hadMember triples with no authored prefix map: lint, accept, project."""
+        import shutil
+        from types import SimpleNamespace
+        from reveal_backend import acceptance, box_remote
+        from reveal_backend.box_mcp import Ledger
+        science = self.science; base = self.root / 'prefixes'
+        declared = deepcopy(science.package)
+        for prefixes in (declared['prefixes'], declared['dapper_context']['prefixes']): prefixes.update(research_seed.CLAIM_PREFIXES)
+        for artifact in declared['source_artifacts'].values():
+            target = base / 'package' / artifact['path']; target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(science.package_path.parent / artifact['path'], target)
+        package_path = base / 'package/evidence-package.json'; package_path.write_bytes(canonical_json(declared))
+        draft = deepcopy(science.draft); draft.pop('prefixes')
+        mechanism, source = draft['mechanisms'][0]['id'], draft['files'][0]['id']
+        gene_set = declared['dapper_context']['gene_sets'][0]['id']
+        for group in ('propositions', 'claims', 'evidence_items'): draft[group] = []
+        draft['claim_scores'] = []; draft['scientific_accounts'][0]['component_claims'] = []
+        def atom(name, triple, statement, scores=(), derived=(source,)):
+            proposition = {'id': f'urn:test:{name}:p', 'statement': statement, 'proposition_kind': 'RESULT',
+                           **dict(zip(('subject_entity', 'relation', 'object_entity'), triple))}
+            evidence = {'id': f'urn:test:{name}:e', 'target_proposition': proposition['id'], 'direction': 'SUPPORTS',
+                        'context': 'Captured gene-factor row /data/0.', 'explanation': 'Exact captured row.', 'was_derived_from': list(derived)}
+            # No draft ID may be a prefix of another: trusted minting reads an embedded ID as a reference.
+            claim = {'id': f'urn:test:{name}:c', 'proposition': proposition['id'], 'statement': statement, 'direction': 'SUPPORTS',
+                     'status': 'proposed', 'has_evidence': [evidence['id']], 'was_generated_by': 'urn:test:activity',
+                     'was_attributed_to': ['urn:test:person']}
+            for index, (metric, kind, value) in enumerate(scores):
+                draft['claim_scores'].append({'id': f'urn:test:{name}:s{index}', 'metric': metric, 'score_kind': kind, 'value': value,
+                                              'interpretation': 'Exact captured value.'})
+                claim.setdefault('has_score', []).append(f'urn:test:{name}:s{index}')
+            for group, node in (('propositions', proposition), ('evidence_items', evidence), ('claims', claim)): draft[group].append(node)
+            draft['scientific_accounts'][0]['component_claims'].append(claim['id'])
+        atom('phenotype-gene', ('HGNC.SYMBOL:SHH', 'biolink:genetically_associated_with', 'KPN.TRAIT:0000001'),
+             'Gene SHH is associated with CADinT2D in PIGEAN (combined 3.86).', [('combined', 'SCORE', 3.86), ('log_bf', 'SCORE', 2.14)])
+        atom('factor-gene', ('HGNC.SYMBOL:SHH', 'obo:RO_0002610', mechanism), 'Gene SHH has loading 0.5042 on factor Factor1.',
+             [('factor_value', 'LOADING', 0.5042)])
+        atom('gene-gene-set', (gene_set, 'prov:hadMember', 'HGNC.SYMBOL:SHH'), 'Gene set S has member SHH.', derived=(source, gene_set))
+        # Hosted draft path: the writer declares the server's prefixes before preflight and after hydration.
+        state, output = base / 'state', base / 'output'; state.mkdir(); output.mkdir()
+        lock = base / 'bundle/services/backend/agent-runtime/dapper-release.json'
+        lock.parent.mkdir(parents=True); lock.write_bytes(science.lock.read_bytes())
+        def write(filename, package):
+            (state / 'runtime.json').write_bytes(canonical_json({'dapper_root': str(science.release), 'evidence_package': str(package)}))
+            with patch.multiple(box_remote, BASE=base, STATE=state, OUTPUT=output, RESEARCH=None), \
+                    patch.object(box_remote.pwd, 'getpwnam', return_value=SimpleNamespace(pw_uid=os.getuid(), pw_gid=os.getgid())):
+                return box_remote.write_draft_tool(filename, deepcopy(draft))
+        # Without the server declaration (an older package), the authored CURIEs do not resolve.
+        self.assertTrue(write('account-2.json', science.package_path)['isError'])
+        self.assertFalse((output / 'account-2.json').exists())
+        result = write('account-1.json', package_path)
+        self.assertFalse(result.get('isError'), result)
+        written = decode((output / 'account-1.json').read_bytes())
+        self.assertEqual({name: written['prefixes'][name] for name in research_seed.CLAIM_PREFIXES}, research_seed.CLAIM_PREFIXES)
+        with patch.multiple(box_remote, BASE=base, STATE=state, OUTPUT=output):
+            feedback = box_remote.lint_tool('account-1.json', Ledger(state / 'ledger', 'prefix-job', 1))
+        self.assertFalse(feedback['isError'], feedback)
+        families = feedback['structuredContent']['claim_structure']['families']
+        self.assertEqual({name for name, value in families.items() if value['conformant']}, {'phenotype_gene', 'factor_gene', 'gene_gene_set'})
+        # Trusted acceptance of the raw authored draft (still without prefixes) and the final gate.
+        raw = base / 'raw.json'; raw.write_bytes(canonical_json(draft))
+        with patch.object(acceptance, 'release_root', return_value=science.release), patch.object(acceptance, 'LOCK', science.lock):
+            accepted, report = acceptance.assemble_account(raw, package_path, base / 'accepted.json',
+                {'user_id': 'prefix-owner', 'principal_kind': 'anonymous'}, {'id': 'prefix-job'}, 1, 'box')
+        self.assertTrue(report['valid'], report)
+        self.assertEqual((report['mode'], report['counts']['errors'], report['claim_structure']['atomic']), ('final', 0, {'count': 3, 'conformant': 3}))
+        self.assertEqual({name: accepted['prefixes'][name] for name in research_seed.CLAIM_PREFIXES}, research_seed.CLAIM_PREFIXES)
+        # The public projection expands every server-declared CURIE before dropping the prefix map.
+        expanded = {}
+        for claim in accepted['claims']:
+            projection, _ = acceptance.object_projection(accepted, claim['id'])
+            self.assertNotIn('prefixes', projection['document'])
+            for proposition in projection['document']['propositions']: expanded[proposition['relation']] = proposition
+        self.assertEqual(set(expanded), {BIOLINK + 'genetically_associated_with', OBO + 'RO_0002610', PROV + 'hadMember'})
+        self.assertEqual(expanded[BIOLINK + 'genetically_associated_with']['subject_entity'], 'https://identifiers.org/hgnc.symbol:SHH')
 
 
 class AcceptanceStorageTests(unittest.TestCase):

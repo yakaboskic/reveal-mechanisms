@@ -63,6 +63,18 @@ class SourceValidationTests(unittest.TestCase):
                 self.document['claim_scores'][0]['score_kind']='EFFECT_ESTIMATE'
                 self.assertIn('source-metric-kind',self.checks())
 
+    def test_pigean_gene_phenotype_scores_are_score_kinds(self):
+        row = {'gene': 'INS', 'phenotype': 'T2D', 'combined': 12.3, 'log_bf': 5.11, 'prior': 7.23}
+        self.sources = {'file': {'result': {'items': [row]}}}
+        self.document['evidence_items'][0].update(context='Captured /result/items/0.', snippet='')
+        for metric in ('combined', 'log_bf', 'prior'):
+            with self.subTest(metric=metric):
+                self.document['claim_scores'][0].update(metric=metric, value=row[metric], score_kind='SCORE')
+                self.assertEqual(self.checks(), set())
+                for kind in ('LOADING', 'EFFECT_ESTIMATE', 'PROBABILITY'):
+                    self.document['claim_scores'][0]['score_kind'] = kind
+                    self.assertIn('source-metric-kind', self.checks())
+
     def test_metric_fidelity_uses_exact_decimal_values_before_float_rounding(self):
         source = b'{"data":[{"loading":0.10000000000000000000009}]}'
         authored = b'{"claims":[{"id":"claim","has_evidence":["evidence"],"has_score":["score"]}],"claim_scores":[{"id":"score","metric":"loading","value":0.10000000000000000000009,"score_kind":"LOADING"}],"evidence_items":[{"id":"evidence","was_derived_from":["file"],"context":"/data/0"}]}'

@@ -5,7 +5,8 @@ import unittest
 from unittest.mock import patch
 
 from reveal_backend.dapper_release import prepare_agent_workspace
-from reveal_backend.dispatch_view import file_input_manifest, pinned_contract_sha256, pinned_skeleton_sha256, research_prompt, validate_file_input
+from reveal_backend.dispatch_view import (CLAIM_STRUCTURE_PATH, KIT_V2, KIT_V3, file_input_manifest, pinned_claim_structure_sha256,
+                                          pinned_contract_sha256, pinned_skeleton_sha256, research_prompt, validate_file_input)
 from reveal_backend.authoring_contract import SKELETON_PATH
 from reveal_backend.evidence_package import canonical_json, EvidenceBuildError, sha256
 from reveal_backend.research_seed import prepare_research_seed
@@ -26,6 +27,7 @@ class AuthoringPinTests(unittest.TestCase):
     def changed_runtime(self):
         original = Path.read_bytes
         changed = {ROOT/'docs/authoring-contract.md': b'A later deployment changed the scientific instructions.\n',
+            ROOT/CLAIM_STRUCTURE_PATH: b'A later deployment changed the claim structure.\n',
             ROOT/'services/backend/agent-skills/construct-scientific-account/SKILL.md': b'A later deployment skill.\n',
             ROOT/'services/backend/agent-runtime/authoring-schema-excerpt.yaml': b'changed: schema\n',
             ROOT/'services/backend/agent-runtime/authoring-skeleton.json': b'{"changed":true}\n',
@@ -38,9 +40,11 @@ class AuthoringPinTests(unittest.TestCase):
         contract = pinned_contract_sha256(self.built.package)
         with self.changed_runtime():
             self.assertEqual(file_input_manifest(raw), manifest)
-            prompt = research_prompt([], progressive=True, contract_sha256=contract, skeleton_sha256=pinned_skeleton_sha256(self.built.package))
+            prompt = research_prompt([], progressive=True, contract_sha256=contract, skeleton_sha256=pinned_skeleton_sha256(self.built.package),
+                                     claim_structure_sha256=pinned_claim_structure_sha256(self.built.package))
             validate_file_input(raw, manifest, prompt)
             self.assertIn(contract, prompt)
+            self.assertIn(pinned_claim_structure_sha256(self.built.package), prompt)
 
     def test_bootstrap_uses_exact_pinned_docs_skills_schema_and_examples(self):
         with self.changed_runtime(), patch('reveal_backend.dapper_release.clone_release', return_value={'commit':'isolated-fixture'}), \
@@ -118,6 +122,76 @@ class AuthoringPinTests(unittest.TestCase):
             prompt=research_prompt(['prokn'] if graph else [],progressive=progressive,
                 contract_sha256='f82a9c846c6f2681851ed9fa41f7845619d5a261dde88d46bf77460a6285c50c')
             self.assertEqual(sha256(prompt.encode()),expected)
+
+    def frozen_kit(self, version, *, drop_claim_structure):
+        """The built seed rewritten as an older (v2) or damaged frozen kit, published to its package path."""
+        package = self.built.package
+        if drop_claim_structure:
+            for entries in (package['authoring']['references'], package['authoring_kit']['files']):
+                entries[:] = [entry for entry in entries if entry['path'] != CLAIM_STRUCTURE_PATH]
+        package['authoring_kit'].update(version=version, kit_sha256=sha256(canonical_json(package['authoring_kit']['files'])))
+        self.package.write_bytes(canonical_json(package))
+        return package
+
+    def workspace(self, name):
+        with self.changed_runtime(), patch('reveal_backend.dapper_release.clone_release', return_value={'commit':'isolated-fixture'}), \
+                patch('reveal_backend.dapper_release.version', return_value='1.11.1'):
+            return Path(prepare_agent_workspace(self.root/name, ROOT, self.package, self.lock)['working_directory'])
+
+    def test_new_seed_pins_claim_structure_reference_prefixes_and_prompt(self):
+        from reveal_backend.research_seed import CLAIM_PREFIXES
+        package = self.built.package
+        self.assertEqual(package['authoring_kit']['version'], KIT_V3)
+        pin = pinned_claim_structure_sha256(package)
+        self.assertEqual(pin, sha256((ROOT/CLAIM_STRUCTURE_PATH).read_bytes()))
+        self.assertIn(CLAIM_STRUCTURE_PATH, [entry['path'] for entry in package['authoring']['references']])
+        for prefixes in (package['prefixes'], package['dapper_context']['prefixes']):
+            self.assertEqual({name: prefixes[name] for name in CLAIM_PREFIXES}, CLAIM_PREFIXES)
+        skeleton = pinned_skeleton_sha256(package)
+        for progressive in (False, True):
+            prompt = research_prompt([], progressive=progressive, skeleton_sha256=skeleton, claim_structure_sha256=pin)
+            self.assertIn(CLAIM_STRUCTURE_PATH + ' (SHA-256 ' + pin + ')', prompt)
+            self.assertIn('atomic RESULT Claim: a Proposition with subject_entity, relation and object_entity', prompt)
+            self.assertIn('through EvidenceItem.source_claims', prompt)
+            self.assertIn('has_score referencing claim_scores', prompt)
+            self.assertIn('put the exact locator in EvidenceItem.context', prompt)
+            self.assertIn('Soft targets, not quotas', prompt)
+            self.assertNotIn('separate source-result Claims are optional', prompt)
+            self.assertNotIn('a Claim per row', prompt)
+        work = self.workspace('v3-workspace')
+        source = package['source_artifacts'][next(entry['artifact_id'] for entry in package['authoring_kit']['files'] if entry['path'] == CLAIM_STRUCTURE_PATH)]
+        self.assertEqual((work/CLAIM_STRUCTURE_PATH).read_bytes(), self.built.files[source['path']])
+
+    def test_v2_kit_still_installs_without_the_reference_and_keeps_exact_prompt_bytes(self):
+        package = self.frozen_kit(KIT_V2, drop_claim_structure=True)
+        self.assertIsNone(pinned_claim_structure_sha256(package))
+        self.assertIsNotNone(pinned_skeleton_sha256(package))
+        work = self.workspace('v2-workspace')
+        self.assertFalse((work/CLAIM_STRUCTURE_PATH).exists())
+        self.assertTrue((work/'docs/authoring-contract.md').exists())
+        raw = self.package.read_bytes(); manifest = file_input_manifest(raw)
+        validate_file_input(raw, manifest, research_prompt([], progressive=True, contract_sha256=pinned_contract_sha256(package),
+                                                           skeleton_sha256=pinned_skeleton_sha256(package)))
+        # v2 prompts with a skeleton pin, as generated before the claim-structure guidance existed.
+        hashes={(False,False):'c878ac73c7f84c777cb2c0fdc6eb6aafd7a55ca5a0b6475fb4adcd74122ca972',
+                (False,True):'6d1ab17f1476a4d77942b335ebc7f6760b8ce10aa4f17b15e6e2c4fa42016f18',
+                (True,False):'df7bec02e93589293e79d1f06a027258daaed814fd3f7d02b374f3f131e7a727',
+                (True,True):'564af0d94267c0c7c876324af51ee480b2ac0c66c4d363a9482adbd9494a0912'}
+        for (progressive,graph),expected in hashes.items():
+            prompt=research_prompt(['prokn'] if graph else [],progressive=progressive,skeleton_sha256='e'*64,
+                contract_sha256='f82a9c846c6f2681851ed9fa41f7845619d5a261dde88d46bf77460a6285c50c')
+            self.assertEqual(sha256(prompt.encode()),expected)
+
+    def test_v3_kit_without_or_with_a_tampered_reference_fails_closed(self):
+        from copy import deepcopy
+        tampered = deepcopy(self.built.package)
+        entry = next(item for item in tampered['authoring_kit']['files'] if item['path'] == CLAIM_STRUCTURE_PATH)
+        tampered['source_artifacts'][entry['artifact_id']]['sha256'] = 'f'*64
+        with self.assertRaisesRegex(EvidenceBuildError, 'source differs'): pinned_claim_structure_sha256(tampered)
+        package = self.frozen_kit(KIT_V3, drop_claim_structure=True)
+        with self.assertRaisesRegex(EvidenceBuildError, 'absent or ambiguous'): pinned_claim_structure_sha256(package)
+        with self.assertRaisesRegex(EvidenceBuildError, 'missing required file: ' + CLAIM_STRUCTURE_PATH):
+            self.workspace('broken-workspace')
 
     def test_tampered_contract_source_binding_fails_closed(self):
         package = self.built.package

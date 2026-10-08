@@ -145,7 +145,15 @@ The claim can summarize additional evidence lines from other methods or knowledg
 
 ## 7. Represent this with current DAPPER
 
-For these small examples, use **one biological Proposition and one Claim assessing it**, with an EvidenceItem containing the observed result and its interpretation. Link the EvidenceItem directly to the retained DAPPER File through `was_derived_from`; put the exact named-artifact/row locator in `context` and a verbatim source excerpt in `snippet`. The original JSON retains the structured metric names and values. No extra source-result Proposition, Claim or ClaimScore is needed.
+**Atomic RESULT Claims plus synthesis (current structure).** Write each retrieved observation as its own atomic `RESULT` Claim, then express the biological interpretation as a synthesis Claim built on those atomic Claims. [Evidence claim structure](evidence-claim-structure.md) gives the triples, predicates, ClaimScores, statement templates and soft targets. Applied to the four templates:
+
+- Each observation becomes one atomic Claim. Its Proposition carries one subject–relation–object triple (for Template 1, gene → `obo:RO_0002610` → Mechanism; for Template 3, gene → `biolink:genetically_associated_with` → KPN trait). Its Claim carries a ClaimScore with the exact captured metric, value and kind (`LOADING` `loading`, `SCORE` `combined`, `EFFECT_ESTIMATE` `beta_uncorrected`, and so on). Its EvidenceItem derives from the captured File (plus the trusted GeneSet for set families), with the exact row locator in `context` and a verbatim `snippet`.
+- The biological Proposition of each template ("Gene G is involved in mechanism M relevant to trait T") becomes a `BIOLOGICAL_INTERPRETATION` synthesis Claim. Its EvidenceItem cites the atomic Claims through `source_claims` and explains how they bear on the interpretation; it repeats no value.
+- At least one synthesis connects the path to the selected KnowledgeGap (gap relevance). The ClaimScore `interpretation` keeps each metric's meaning: a loading is still not a confidence score for the biological target.
+
+Lint reports how closely an account follows this structure as advisory `claim_structure` suggestions; it never blocks on them.
+
+**Legacy single-Claim pattern.** Accounts written before the atomic structure, and agents running a historical authoring kit, use **one biological Proposition and one Claim assessing it**, with an EvidenceItem containing the observed result and its interpretation. The EvidenceItem links directly to the retained DAPPER File through `was_derived_from`, with the exact named-artifact/row locator in `context` and a verbatim source excerpt in `snippet`; the original JSON retains the structured metric names and values. This pattern remains valid and lint accepts it. The rest of this section and Appendix B describe it.
 
 ```text
 Biological Proposition ← assessed by Claim
@@ -163,7 +171,7 @@ Biological Proposition ← assessed by Claim
 - Several EvidenceItems can target the same Proposition. Several Claims can assess that Proposition differently. Reuse source records across different targets through separate interpreted EvidenceItems.
 - Resolve each EAGGL factor directly to its mechanism record. Factor/mechanism identity is part of the domain model; it does not require a supporting Proposition or Claim. Claims assess the gene, gene-set, process and regulatory relationships involving that mechanism.
 
-**Optional source-Claim pattern:** the agent may separately record a result as a `RESULT` Proposition and source Claim when that result merits its own durable citation, assessment, or typed ClaimScores. In that case, an EvidenceItem references it through `source_claims`. This is a modeling choice, not a required wrapper around every numeric observation. Artifact-based and source-Claim-based EvidenceItems can coexist in one assessment; neither duplicates the underlying observation. Appendix B deliberately uses the simpler artifact-based pattern for all four examples.
+**Source-Claim pattern:** in the legacy pattern a result could optionally be recorded as a `RESULT` Proposition and source Claim when it merited its own durable citation, assessment or typed ClaimScores, cited through `source_claims`. In the current structure that source Claim is the atomic Claim, written for every observation the account relies on. Artifact-based and source-Claim-based EvidenceItems can coexist in one assessment; neither duplicates the underlying observation. Appendix B deliberately uses the simpler legacy artifact-based pattern for all four examples.
 
 ### Template 1: pre-mint DAPPER fragment
 
@@ -319,7 +327,7 @@ Source: [gene-set-factor capture](../data/cfde/cad-in-t2d/pigean-gene-set-factor
 
 A complete multi-claim [ScientificAccount YAML packet](../design/data/cad-account/scientific-account.yaml) now instantiates this approach for the HTML design. See its [source boundaries and reproduction guide](../design/data/cad-account/README.md). The fragments below explain the four core templates individually; the full packet also includes explicitly illustrative gene-set membership and KG evidence.
 
-Each example below contains **one biological Proposition, one Claim, and one EvidenceItem**. The EvidenceItem retains the observation, explains its bearing on the Proposition, and points directly to the captured source File. The first two assess involvement in the EAGGL mechanism itself. The other two assess involvement in the trait's biology. None introduces a second Claim merely to restate the observed score.
+These examples use the legacy single-Claim pattern of §7; [Evidence claim structure](evidence-claim-structure.md) shows the same observations as atomic Claims with a synthesis. Each example below contains **one biological Proposition, one Claim, and one EvidenceItem**. The EvidenceItem retains the observation, explains its bearing on the Proposition, and points directly to the captured source File. The first two assess involvement in the EAGGL mechanism itself. The other two assess involvement in the trait's biology. None introduces a second Claim merely to restate the observed score.
 
 The numbers and row locators come from the captures in Appendix A. The biological Claim statements, `SUPPORTS` directions and evidence explanations are **illustrative authored assessments**, not fields returned by CFDE or output from an executed agent. They show the intended modeling without inventing a score threshold or probability. These are unminted design fragments: File, Activity, agent and imported GeneSet dependencies must be supplied before validation and minting.
 

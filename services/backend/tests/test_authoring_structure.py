@@ -32,18 +32,34 @@ def test_skeleton_defers_only_omitted_attribution_and_dependency_bodies(draft):
     before = canonical_json(draft)
     report = preflight(draft)
     assert report['valid'], report
-    assert report['counts'] == {'nodes': 4, 'errors': 0, 'warnings': 0}
+    # One account, six Claims (five atomic families and a gap-relevance synthesis), their Propositions and
+    # EvidenceItems, and five ClaimScores; the server-declared prefixes are the only non-node key.
+    assert report['counts'] == {'nodes': 24, 'errors': 0, 'warnings': 0}
     assert report['dapper_release']['tag'] == '0.2.0'
     assert report['document_sha256'] == hashlib.sha256(before).hexdigest()
     assert canonical_json(draft) == before
-    assert set(draft) == {'scientific_accounts', 'propositions', 'claims', 'evidence_items'}
+    assert set(draft) == {'prefixes', 'scientific_accounts', 'propositions', 'claims', 'evidence_items', 'claim_scores'}
+    assert draft['prefixes'] == {'HGNC.SYMBOL': 'https://identifiers.org/hgnc.symbol:', 'biolink': 'https://w3id.org/biolink/vocab/'}
+
+
+def test_skeleton_is_the_authored_part_of_the_complete_example(draft):
+    example = json.loads((ROOT / 'services/backend/agent-runtime/authoring-examples.json').read_bytes())['documents'][0]
+    for group in ('propositions', 'evidence_items', 'claim_scores'):
+        assert draft[group] == example[group]
+    for group in ('claims', 'scientific_accounts'):
+        assert draft[group] == [{k: v for k, v in node.items() if k not in ('was_attributed_to', 'was_generated_by')} for node in example[group]]
+    assert draft['prefixes'] == example['prefixes']
 
 
 def test_freeform_scores_source_claim_reuse_and_supplied_trusted_groups_remain_valid():
     bundle = json.loads((ROOT / 'services/backend/agent-runtime/authoring-examples.json').read_bytes())
     draft = bundle['documents'][0]
-    assert any('subject_entity' not in item for item in draft['propositions'])
-    assert any(item.get('source_claims') for item in draft['evidence_items'])
+    assert draft['claim_scores'] and any(item.get('source_claims') for item in draft['evidence_items'])
+    report = preflight(draft)
+    assert report['valid'], report
+    # A text-only (free-form) synthesis Proposition remains valid.
+    synthesis = next(item for item in draft['propositions'] if item['proposition_kind'] == 'BIOLOGICAL_INTERPRETATION')
+    for key in ('subject_entity', 'relation', 'object_entity'): synthesis.pop(key)
     report = preflight(draft)
     assert report['valid'], report
 
