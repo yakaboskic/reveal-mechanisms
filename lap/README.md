@@ -150,8 +150,9 @@ git -C raw/pigean_ca59661 checkout --detach ca59661644dc9ead429fc7e59050870ba49b
 #    but rerun --mkdir for the projection_check/, library_gmts/ and traits/*/gene_set_stats/ directories)
 lap_run --init && lap_run --mkdir && lap_run --check
 
-# 3. inputs, the gene-set pack and the projection check (never add --only here: the project-level fan-ins would shrink)
-lap_run --only-cmd '^(prep_|collection_)' --bsub
+# 3. inputs, the gene-set pack, the projection check and the project-level betas inputs (the gene-stats index and the
+#    library GMTs). Never add --only here: the project-level fan-ins would shrink.
+lap_run --only-cmd '^(prep_|collection_|betas_index_cmd|betas_library_gmts_cmd)' --bsub
 
 # 4. smoke test (3 traits), then every trait: projections, gene-set betas, collect
 lap_run --only '^(2hrG|T2D|Ap-LM)$' --only-cmd '^(trait_|betas_)' --bsub
