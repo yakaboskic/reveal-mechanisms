@@ -11,7 +11,7 @@ import socket
 import time
 from .agent_execution import ExecutionRequest, MAX_EMIT_BATCH_EVENTS, MAX_EMIT_BATCH_BYTES, emit_batch_size
 from .auth import Problem, owned
-from .acceptance import assemble_account, object_envelope, object_projection, with_citations, release_root, LOCK, mint, prewarm, validate_paragraph_document
+from .acceptance import assemble_account, claim_structure_record, object_envelope, object_projection, with_citations, release_root, LOCK, mint, prewarm, validate_paragraph_document
 from .evidence_package import DapperRuntime, canonical_json, decode, require, sha256
 from .evidence_schema import validate_package_shape, load_generated_schema
 from .evidence_collector import collect_package
@@ -646,7 +646,7 @@ class Worker:
                         # A job that finishes after its reference generation was superseded is born archived.
                         stamp=creation_stamp(tx,owner,job['research_request_id'],gap=stamp_gap(frozen['composer'].get('source_gap'),frozen.get('question_id')),scientific_document=doc,
                             analysis={'job_id':job['id'],'request_id':job['research_request_id'],'evidence_package_sha256':evidence_sha256,'account_id':identity})
-                        writes.put('account',digest([owner,identity]),owner,stamped('account',{'result':envelope,'summary':deepcopy(summary)},stamp))
+                        writes.put('account',digest([owner,identity]),owner,stamped('account',{'result':envelope,'summary':deepcopy(summary),**claim_structure_record(report)},stamp))
                         writes.put('account_membership',digest([owner,identity]),owner,stamped('account_membership',{'account_id':identity,'summary':summary},stamp))
                     writes.put('scientific_document',digest([owner,document_sha]),owner,{'sha256':document_sha,'document':doc,'job_id':job['id'],'observed_at':now(),
                         'citation_metadata':metadata,'artifact_access':snapshot})

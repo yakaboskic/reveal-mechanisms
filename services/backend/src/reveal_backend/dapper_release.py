@@ -159,6 +159,7 @@ def prepare_agent_workspace(workspace, project_root, package_path, lock_path):
                      'services/backend/src/reveal_backend/scientific_account_lint.py',
                      'services/backend/src/reveal_backend/source_validation.py',
                      'services/backend/src/reveal_backend/relationship_provenance.py',
+                     'services/backend/src/reveal_backend/claim_suggestions.py',
                      'services/backend/agent-skills/construct-scientific-account/SKILL.md',
                      'services/backend/agent-skills/read-evidence-package/SKILL.md',
                      'docs/evidence-package.md', 'docs/scientific-account-construction.md', 'docs/pigean-claim-model.md',

@@ -198,7 +198,7 @@ def _lint(document_path, dapper_root, lock_path, package_path, mode, strict, led
         frozen = Path(directory) / 'account.json'; frozen.write_bytes(canonical_json(document))
         upstream = lint(frozen, vocabulary, sv, validator, profile_name='scientific-account')
     findings = [asdict(f) for f in upstream.findings]
-    advisories = []
+    advisories, structure = [], None
     def error(check, where, message):
         findings.append({'severity': 'error', 'check': check, 'where': where, 'message': message, 'why': ''})
     package_hash = None
@@ -281,6 +281,13 @@ def _lint(document_path, dapper_root, lock_path, package_path, mode, strict, led
             authored_exact=exact_document(raw, 'yaml' if Path(document_path).suffix in ('.yaml', '.yml') else 'json')))
         from reveal_backend.relationship_provenance import relationship_advisories
         advisories.extend(relationship_advisories(document, package, package_path))
+        # Advisory claim-structure suggestions never change validity, errors or warnings, even if they fail.
+        try:
+            from reveal_backend.claim_suggestions import claim_structure
+            suggested = claim_structure(document, package)
+            structure = suggested['summary']; advisories.extend(suggested['suggestions'])
+        except Exception as exc:
+            structure = {'format': 'reveal.claim-structure/1', 'unavailable': type(exc).__name__}
         if mode == 'final':
             for identity, (cls, _) in nodes.items():
                 if cls in ('ScientificAccount', 'Claim', 'Proposition', 'EvidenceItem', 'KnowledgeGap') and not identity.startswith('dapper:' + cls + '.'):
@@ -291,7 +298,8 @@ def _lint(document_path, dapper_root, lock_path, package_path, mode, strict, led
             'valid': errors == 0 and (not strict or warnings == 0), 'strict': strict,
             'document_sha256': sha256(raw), 'evidence_package_sha256': package_hash,
             'dapper_release': release, 'counts': {**upstream.counts, 'errors': errors, 'warnings': warnings},
-            'findings': findings, 'advisories': advisories, 'acceptance_policy': ACCEPTANCE_POLICY,
+            'findings': findings, 'advisories': advisories, **({'claim_structure': structure} if structure else {}),
+            'acceptance_policy': ACCEPTANCE_POLICY,
             'scientific_grounding_evaluated': False,
             'remaining_acceptance_checks': ['trusted attribution and job ownership',
                                            'external-evidence ledger and tool policy']}

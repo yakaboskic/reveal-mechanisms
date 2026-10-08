@@ -37,6 +37,7 @@ KIT_IMPLEMENTATION = (
     'services/backend/src/reveal_backend/scientific_account_lint.py',
     'services/backend/src/reveal_backend/source_validation.py',
     'services/backend/src/reveal_backend/relationship_provenance.py',
+    'services/backend/src/reveal_backend/claim_suggestions.py',
     'docs/scientific-account-linting.md',
 )
 PREFIXES = {'factor':'urn:cfde:factor:', 'gene':'urn:cfde:gene:', 'gene_set':'urn:cfde:gene_set:',

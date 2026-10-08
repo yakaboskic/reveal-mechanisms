@@ -241,6 +241,12 @@ def assemble_account(raw_path,package_path,output_path,attribution,job,attempt,e
     return document,report
 
 
+def claim_structure_record(report):
+    """The accepted account record's copy of its lint report's advisory claim-structure summary (none when absent)."""
+    value=report.get('claim_structure') if isinstance(report,dict) else None
+    return {'claim_structure':deepcopy(value)} if isinstance(value,dict) else {}
+
+
 def object_envelope(document,identity,metadata,artifact_access=None,*,max_depth=5,max_nodes=250,offset=0,continuation=None):
     return with_citations(object_projection(document,identity,artifact_access,max_depth=max_depth,max_nodes=max_nodes,
         offset=offset,continuation=continuation),metadata)

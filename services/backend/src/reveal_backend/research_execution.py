@@ -446,7 +446,7 @@ def validate_submission(service, operation):
 
 
 def commit_accounts(service, tx, operation, prepared):
-    from .acceptance import object_envelope, object_projection
+    from .acceptance import claim_structure_record, object_envelope, object_projection
     from .citations import register
     from .scientific_reuse import record_dependencies
     from .scientific_writes import AcceptanceWrites, acceptance_keys
@@ -487,7 +487,8 @@ def commit_accounts(service, tx, operation, prepared):
             stamp = creation_stamp(tx, owner, frozen['id'], gap=stamp_gap(frozen['composer'].get('source_gap'), frozen.get('question_id')),
                 scientific_document=doc, analysis={'job_id': work_id, 'request_id': frozen['id'],
                     'evidence_package_sha256': prepared['evidence_manifest_sha256'], 'account_id': identity})
-            writes.put('account', digest([owner, identity]), owner, stamped('account', {'result': envelope, 'summary': deepcopy(summary)}, stamp))
+            writes.put('account', digest([owner, identity]), owner, stamped('account', {'result': envelope, 'summary': deepcopy(summary),
+                **claim_structure_record(accepted.get('report'))}, stamp))
             writes.put('account_membership', digest([owner, identity]), owner, stamped('account_membership', {'account_id': identity, 'summary': summary}, stamp))
         document_sha = accepted['storage']['sha256']
         writes.put('scientific_document', digest([owner, document_sha]), owner, {'sha256': document_sha, 'document': doc,

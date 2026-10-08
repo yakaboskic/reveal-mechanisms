@@ -54,7 +54,8 @@ class ProgressiveAcceptanceTests(unittest.TestCase):
         strict = lint_scientific_account(self.root/'accepted.json', dapper_root=self.science.release,
             release_lock=self.science.lock, evidence_package=package_path, mode='final', strict=True)
         self.assertTrue(strict['valid'], strict)
-        self.assertEqual([item['check'] for item in strict['advisories']], ['cfde-grounding-missing'])
+        # Claim-structure suggestions are separate optional advice (test_claim_suggestions.py).
+        self.assertEqual([item['check'] for item in strict['advisories'] if item['severity'] != 'suggestion'], ['cfde-grounding-missing'])
         self.assertNotIn('cfde-grounding-missing', {item['check'] for item in strict['findings']})
         original = imported['dapper_context']['activities'][0]
         self.assertIn(original, document['activities'])
@@ -151,7 +152,7 @@ class ProgressiveAcceptanceTests(unittest.TestCase):
         with patch.object(acceptance,'release_root',return_value=self.science.release), patch.object(acceptance,'LOCK',self.science.lock):
             _,report=acceptance.assemble_account(source,package_path,self.root/'accepted.json',
                 {'user_id':'owner','principal_kind':'anonymous'},{'id':'derived-work'},1,'local')
-        self.assertEqual(report['advisories'],[])
+        self.assertEqual([item for item in report['advisories'] if item['severity']!='suggestion'],[])
 
     def test_csv_json_rows_keep_exact_numeric_locators(self):
         extraction = user_inputs.parse_document(b'gene,beta\nABC,0.125\nDEF,-0.25\n','result.csv')

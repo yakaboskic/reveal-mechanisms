@@ -228,6 +228,9 @@ def _normalized_finding(finding):
     where = finding.get('where', '')
     rule = finding.get('rule')
     details = {}
+    if finding.get('severity') == 'suggestion':  # claim_suggestions emits value-free templates and claim ids only
+        return {'severity': 'suggestion', 'check': check, 'where': where, 'rule': check, 'message': finding.get('message', ''),
+                **{key: finding[key] for key in ('repair', 'family', 'claims', 'count') if key in finding}}
     if rule:  # The structure checker already emits value-free diagnostics.
         message = finding['message']
         details = {key: finding[key] for key in ('expected', 'fields') if key in finding}
@@ -288,7 +291,7 @@ def diagnostic_response(report, *, output, filename, capture_roots=()):
     findings = [_normalized_finding(f) for f in report.get('findings', [])]
     advisories = [_normalized_finding(f) for f in report.get('advisories', [])]
     normalized = {key: report[key] for key in ('valid', 'operational_error', 'mode', 'profile',
-        'document_sha256', 'evidence_package_sha256', 'dapper_release', 'counts', 'deferred') if key in report}
+        'document_sha256', 'evidence_package_sha256', 'dapper_release', 'counts', 'deferred', 'claim_structure') if key in report}
     normalized.update(format=REPORT_FORMAT, source_report_format=report.get('report_version', report.get('format')),
         message_format='Normalized field/rule diagnostics; original rendered values are intentionally omitted.',
         findings=findings, finding_count=len(findings), findings_complete=True,
@@ -351,6 +354,7 @@ def diagnostic_response(report, *, output, filename, capture_roots=()):
         'groups': [{'severity': severity, 'check': check, 'rule': rule, 'count': count}
                    for (severity, check, rule), count in counts.items()]}
     if report.get('operational_error'): summary['operational_error'] = True
+    if 'claim_structure' in report: summary['claim_structure'] = report['claim_structure']
     for finding in findings:
         candidate = {**summary, 'findings': [*summary['findings'], finding]}
         if len(canonical_json(candidate)) > MAX_PREVIEW_BYTES: break

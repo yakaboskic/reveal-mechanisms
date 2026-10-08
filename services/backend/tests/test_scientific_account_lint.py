@@ -426,7 +426,7 @@ p.write_text(json.dumps(doc))
                               '--evidence-package', runtime['evidence_package'], '--mode', 'final'], capture_output=True, text=True)
         self.assertEqual(run.returncode, 0, run.stderr + run.stdout)
         self.assertTrue(decode(run.stdout.encode())['valid'])
-        for module in ('scientific_account_lint.py', 'source_validation.py'):
+        for module in ('scientific_account_lint.py', 'source_validation.py', 'claim_suggestions.py'):
             relative = Path('services/backend/src/reveal_backend') / module
             self.assertEqual((workspace / 'reveal' / relative).read_bytes(), (ROOT / relative).read_bytes())
         skill = (workspace / 'reveal/.claude/skills/construct-scientific-account/SKILL.md').read_text()
