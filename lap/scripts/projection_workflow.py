@@ -138,9 +138,13 @@ def gmt_fields(line):
     return line.rstrip("\n").rstrip("\r").split("\t")
 
 
-def eaggl_genes(line):
-    """The genes eaggl reads from a GMT line (whitespace split, everything after column 1)."""
-    return set(line.split()[1:])
+def gmt_genes(fields):
+    """The member genes of a GMT row's tab fields: columns 3 on (empty fields skipped).
+
+    DAPPER 0.2.0 GMTs fill the description column (2) with free text. eaggl and pigean split GMT lines on any
+    whitespace and take every token after the id as a gene (a `gene:weight` token as a weighted gene), so the
+    annotations GMT they read is written with that column blank."""
+    return [gene for gene in fields[2:] if gene]
 
 
 def parse_loading(value, where):
@@ -282,13 +286,15 @@ def cmd_collection_index(args):
         check(GENE_SET_ID_RE.match(gene_set_id), "Malformed gene-set id %r in %s" % (gene_set_id, where))
         check(gene_set_id not in seen, "Duplicate gene-set id %s in %s" % (gene_set_id, where))
         seen.add(gene_set_id)
-        check(len(id_fields) >= 3 and id_fields[1] == "", "%s must have an empty description column" % where)
-        check(id_fields[1:] == name_fields[1:], "Gene columns differ between the id and name GMTs at %s" % where)
-        genes = eaggl_genes(id_line)
+        check(len(id_fields) >= 3, "%s has no gene columns" % where)
+        check(id_fields[2:] == name_fields[2:], "Gene columns differ between the id and name GMTs at %s" % where)
+        genes = gmt_genes(id_fields)
         check(genes, "%s has no genes" % where)
+        odd = [gene for gene in genes if ":" in gene or gene != "".join(gene.split())]
+        check(not odd, "%s has gene tokens eaggl and pigean would misread (whitespace or ':'): %s" % (where, odd[:5]))
         rows.append({"gene_set_id": gene_set_id, "gene_set_name": name_fields[0], "collection_id": args.collection_id,
                      "cfde_label": args.label, "library": args.library, "gmt_row": row_number,
-                     "n_genes": len(genes)})
+                     "n_genes": len(set(genes))})
     write_tsv(args.output_file, COLLECTION_GENE_SET_COLUMNS, rows)
     print("%s: %d gene sets in %s" % (args.label, len(rows), args.collection_id))
 
@@ -308,7 +314,10 @@ def read_gene_list(path):
 
 def cmd_build_annotations(args):
     """Concatenate the collections' id GMTs into eaggl's X input and index every gene set. Two streaming passes over
-    the GMTs (case-only gene map, then index rows), so memory holds one row per gene set, never their genes."""
+    the GMTs (case-only gene map, then index rows), so memory holds one row per gene set, never their genes.
+
+    Each output line is the gene set's id, a blank description and its genes in GMT order: the collections' GMTs carry
+    free-text descriptions that eaggl and pigean would otherwise read as genes."""
     index_rows = OrderedDict((r["label"], r) for r in read_tsv(args.cfde_index_file))
     universe = set(read_gene_list(args.eaggl_genes_file))
 
@@ -343,7 +352,8 @@ def cmd_build_annotations(args):
             with open_text(gmt_by_label[label][0]) as fh:
                 for line in fh:
                     if line.strip():
-                        yield label, line.split(None, 1)[0], eaggl_genes(line)
+                        fields = gmt_fields(line)
+                        yield label, fields[0], gmt_genes(fields)
 
     # Pass 1, case-only gene map: a CFDE symbol absent from EAGGL whose upper-case form is an EAGGL gene.
     upper_to_eaggl = {}
@@ -351,7 +361,7 @@ def cmd_build_annotations(args):
         upper_to_eaggl.setdefault(gene.upper(), set()).add(gene)
     case_map, outside = {}, set()
     for _, _, genes in memberships():
-        for gene in genes:
+        for gene in set(genes):
             if gene not in universe and gene not in case_map and gene not in outside:
                 targets = upper_to_eaggl.get(gene.upper(), set())
                 if len(targets) == 1:
@@ -363,9 +373,11 @@ def cmd_build_annotations(args):
     library_stats = defaultdict(lambda: {"collections": set(), "sets": 0, "genes": set(), "entries": 0,
                                          "entries_in_universe": 0, "universe_sizes": []})
     written = 0
-    with open_text(args.output_gene_set_index_file, "w") as index_fh:
+    with open_text(args.output_gene_set_index_file, "w") as index_fh, open_text(args.output_gmt_file, "w") as gmt_fh:
         index_fh.write(tsv_line(GENE_SET_INDEX_COLUMNS))
-        for label, gene_set_id, genes in memberships():
+        for label, gene_set_id, member_list in memberships():
+            gmt_fh.write("\t".join([gene_set_id, ""] + member_list) + "\n")
+            genes = set(member_list)
             mapped = {case_map.get(g, g) for g in genes}
             in_universe = len(mapped & universe)
             check(in_universe >= 1, "%s (%s) shares no gene with the EAGGL factors and would be dropped by eaggl"
@@ -387,11 +399,6 @@ def cmd_build_annotations(args):
                 stats["entries_in_universe"] += entries_in_universe
                 stats["universe_sizes"].append(in_universe)
 
-    with DeterministicGzipWriter(args.output_gmt_file) as out:
-        for label in sorted(gmt_by_label):
-            with open(gmt_by_label[label][0], "rb") as fh:
-                data = fh.read()
-            out.write(data if data.endswith(b"\n") else data + b"\n")
     with open(args.output_gene_map_file, "w") as fh:
         for gene in sorted(case_map):
             fh.write("%s\t%s\n" % (gene, case_map[gene]))
@@ -685,9 +692,12 @@ def cmd_pack_annotations(args):
         for line in fh:
             if not line.strip():
                 continue
-            gene_set_id = line.split(None, 1)[0]
+            fields = gmt_fields(line)
+            gene_set_id = fields[0]
             check(position < len(ids) and gene_set_id == ids[position],
                   "The annotations GMT and the gene-set index disagree at gene set %d (%s)" % (position + 1, gene_set_id))
+            check(len(fields) >= 3 and fields[1] == "" and line.split()[1:] == fields[2:],
+                  "%s: the annotations GMT must have a blank description and whitespace-free genes" % gene_set_id)
             rows = gmt_gene_rows(line, gene_row, gene_map)
             check(rows, "%s shares no gene with the EAGGL factors" % gene_set_id)
             indices.extend(rows)

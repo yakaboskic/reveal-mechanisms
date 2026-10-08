@@ -67,7 +67,7 @@ Every id is carried through unchanged. The pipeline refuses to run if any link b
 | `trait::FactorN` (EAGGL factor) | `factor_ids.tsv` | eaggl names factors by position (`Factor1..K`). Each factor file's row order is recorded in a factor index and mapped back; eaggl's own `label` column is checked against that mapping. |
 | `KPN.TRAIT:*` | KPN registry `legacy_phenotype_id` = EAGGL trait (exact, unique; 711/711: 546 `KPN`, 165 `rare_v2`) | Stored in `trait_kpn_map.tsv`, in the trait meta prop, and in the factor index. Also written to every long, top and QC file and to the manifest. The registry must be byte-identical to the release tag. |
 
-Only letter case is harmonised: 141 CFDE symbols such as `C10orf71` map to EAGGL's `C10ORF71` through `--gene-map-in`. The GMTs themselves stay byte-identical, and gene aliases are not remapped.
+Only letter case is harmonised: CFDE symbols such as `C10orf71` map to EAGGL's `C10ORF71` through `--gene-map-in`, and gene aliases are not remapped. The annotations GMT keeps every gene set's id and genes in GMT order but blanks the description column. DAPPER 0.2.0 fills that column with free text ("LINCS L1000 chemical perturbation Characteristic Direction signature", "na"), and eaggl and pigean split GMT lines on any whitespace, so they would read those words as genes. `collection-index` also refuses gene tokens that eaggl and pigean would misread (whitespace or `:`).
 
 ## Layout
 

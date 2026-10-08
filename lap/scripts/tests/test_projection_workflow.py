@@ -54,6 +54,9 @@ COLLECTIONS = [
 ]
 
 
+DESCRIPTION = "%s signature, E5 and F6 up"
+
+
 def write(path, text):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w") as fh:
@@ -112,8 +115,11 @@ class Fixture:
         for label, library, collection_id, sets in COLLECTIONS:
             index.append([library, "tissue", "M1", "", "", label, collection_id, len(sets)])
             d = self.p("cfde", label)
-            write(os.path.join(d, "genesets.dapper-ids.gmt"), tsv([[i, ""] + genes for i, _, genes in sets]))
-            write(os.path.join(d, "genesets.gmt"), tsv([[name, ""] + genes for _, name, genes in sets]))
+            # DAPPER 0.2.0 fills the description column with free text; these name EAGGL genes, which must not
+            # become members.
+            write(os.path.join(d, "genesets.dapper-ids.gmt"),
+                  tsv([[i, DESCRIPTION % library] + genes for i, _, genes in sets]))
+            write(os.path.join(d, "genesets.gmt"), tsv([[name, "Gene set %s: A1 knockdown" % name] + genes for _, name, genes in sets]))
             write(os.path.join(d, "GeneSetCollection.%s.yaml" % collection_id.split(".", 1)[1]), "id: x\n")
         write(self.p("cfde", "index.tsv"), tsv(index))
 
@@ -243,6 +249,22 @@ class CollectionIndexTest(unittest.TestCase):
         rows = read_rows(self.fx.p("out", label + ".gene_sets.tsv"))
         self.assertEqual([(r["gene_set_id"], r["gene_set_name"], r["collection_id"], r["n_genes"]) for r in rows],
                          [(i, name, collection_id, str(len(genes))) for i, name, genes in sets])
+
+    def test_descriptions_are_not_genes_and_may_differ_between_the_gmts(self):
+        label, library, collection_id, sets = COLLECTIONS[1]
+        self.assertEqual(run(self.fx.collection_args(label, library, collection_id))[0], 0)
+        rows = read_rows(self.fx.p("out", label + ".gene_sets.tsv"))
+        self.assertEqual([r["n_genes"] for r in rows], [str(len(genes)) for _, _, genes in sets])  # ID_B2 has only F6
+
+    def test_gene_tokens_eaggl_would_misread_fail(self):
+        label, library, collection_id, sets = COLLECTIONS[0]
+        d = self.fx.p("cfde", label)
+        for genes in (["A1", "B2:0.5"], ["A1", "B2 C"]):
+            write(os.path.join(d, "genesets.dapper-ids.gmt"), tsv([[sets[0][0], "x"] + genes, [sets[1][0], "x", "D4"]]))
+            write(os.path.join(d, "genesets.gmt"), tsv([[sets[0][1], "y"] + genes, [sets[1][1], "y", "D4"]]))
+            code, err = run(self.fx.collection_args(label, library, collection_id))
+            self.assertEqual(code, 1)
+            self.assertIn("would misread", err)
 
     def test_gene_mismatch_between_gmts_fails(self):
         label, library, collection_id, _ = COLLECTIONS[0]
@@ -396,8 +418,9 @@ class EndToEndTest(unittest.TestCase):
 
     def test_annotations_concatenate_the_id_gmts_and_fix_case_only(self):
         with gzip.open(self.fx.p("out", "annotations.gmt.gz"), "rt") as fh:
-            ids = [line.split("\t")[0] for line in fh]
-        self.assertEqual(ids, [i for c in COLLECTIONS for i, _, _ in c[3]])
+            rows = [line.rstrip("\n").split("\t") for line in fh]
+        # Each gene set's id, a blank description (the source GMTs' text is dropped) and its genes in GMT order.
+        self.assertEqual(rows, [[i, ""] + genes for c in COLLECTIONS for i, _, genes in c[3]])
         with open(self.fx.p("out", "case.gene.map")) as fh:
             self.assertEqual(fh.read(), "C10orf71\tC10ORF71\n")
         index = read_rows(self.fx.p("out", "gene_set_index.tsv.gz"))
@@ -504,6 +527,21 @@ class EndToEndTest(unittest.TestCase):
         columns = [[GENES[g] for g in indices[indptr[j]:indptr[j + 1]]] for j in range(4)]
         # NOTAGENE is not an EAGGL gene; C10orf71 reaches C10ORF71 through the case map; rows are sorted.
         self.assertEqual(columns, [["A1", "B2"], ["C10ORF71", "D4"], ["B2", "D4", "E5"], ["F6"]])
+
+    def test_pack_refuses_a_gmt_with_a_description(self):
+        p = self.fx.p
+        with gzip.open(p("out", "annotations.gmt.gz"), "rt") as fh:
+            lines = fh.readlines()
+        first = lines[0].split("\t")
+        lines[0] = "\t".join([first[0], "a description"] + first[2:])
+        os.makedirs(p("out", "described"))
+        with gzip.open(p("out", "described", "annotations.gmt.gz"), "wt") as fh:
+            fh.writelines(lines)
+        args = self.pack_args(p("out", "described", "pack"), 3)
+        args[args.index("--annotations-gmt-file") + 1] = p("out", "described", "annotations.gmt.gz")
+        code, err = run(args)
+        self.assertEqual(code, 1)
+        self.assertIn("must have a blank description", err)
 
     def test_check_projection_compares_every_value_with_eaggl(self):
         rows = read_rows(self.fx.p("out", "check.tsv"))
