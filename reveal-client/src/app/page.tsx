@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { version as clientVersion } from "../../package.json";
 import { api, ApiError, backend, errorMessage, request, type FactorLoading } from "../lib/api";
 import { followJob, followWorkspace } from "../lib/events";
@@ -10,6 +10,13 @@ import { emptyComposer, terminal, withFactors, type AnalysisInput, type Composer
 type PendingSubmission = { body: AnalysisInput; key: string };
 type ParagraphProgress = { job?: Job; text?: string; error?: string };
 const readable = (value: string) => value.replaceAll("_", " ");
+function outcomeLabel(status: string) {
+  if (status === "succeeded") return "Success";
+  if (status === "failed") return "Failed";
+  if (status === "cancelled") return "Cancelled";
+  if (status === "insufficient_evidence") return "Insufficient evidence";
+  return readable(status);
+}
 const date = (value: string) => new Date(value).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 const setupStages = new Set(["queued", "freezing_inputs", "retrieving_cfde", "preparing_evidence", "starting_agent"]);
 function analysisHasStarted(job: Job) {
@@ -359,16 +366,44 @@ function FactorLoadings({ sourceId }: { sourceId: string }) {
     {current ? <LoadingTable key={`${tab}|${geneQuery}|${geneMin}|${jointMin}|${marginalMin}`} rows={current} kind={tab} empty={empty} /> : !note && <p className="settings-note">Loading…</p>}
   </div>;
 }
+function jsonLabel(key: string) {
+  const words = key.replaceAll("_", " ");
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+function JsonValue({ value, depth = 0 }: { value: unknown; depth?: number }) {
+  if (value == null) return <span className="json-empty">None</span>;
+  if (typeof value === "string") return /^https?:\/\//.test(value) ? <a href={value} target="_blank" rel="noreferrer">{value}</a> : <span>{value}</span>;
+  if (typeof value === "number" || typeof value === "boolean") return <span>{String(value)}</span>;
+  if (Array.isArray(value)) {
+    if (!value.length) return <span className="json-empty">None</span>;
+    return <ol className="json-list">{value.map((item, index) => <li key={index}><JsonValue value={item} depth={depth + 1} /></li>)}</ol>;
+  }
+  if (typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>);
+    if (!entries.length) return <span className="json-empty">None</span>;
+    return <dl className="json-view">{entries.map(([key, item]) => {
+      const nested = item != null && typeof item === "object";
+      const count = Array.isArray(item) ? item.length : nested ? Object.keys(item as object).length : 0;
+      return <div className="json-row" key={key}><dt>{jsonLabel(key)}{Array.isArray(item) ? ` (${count})` : ""}</dt><dd>{nested ? <details className="json-fold" open={depth === 0}><summary>{Array.isArray(item) ? `${count} item${count === 1 ? "" : "s"}` : `${count} field${count === 1 ? "" : "s"}`}</summary><JsonValue value={item} depth={depth + 1} /></details> : <JsonValue value={item} depth={depth + 1} />}</dd></div>;
+    })}</dl>;
+  }
+  return <span>{String(value)}</span>;
+}
 function InspectCard({ title, open, summary = false, closable = true, closeLabel, badge, onOpen, onClose, children }: { title: string; open: boolean; summary?: boolean; closable?: boolean; closeLabel: string; badge?: ReactNode; onOpen: () => void; onClose: () => void; children: ReactNode }) {
   return <section className={"inspect-card" + (open ? " open" : summary ? " summary" : "")}><div className="inspect-card-head"><button type="button" className="inspect-toggle" aria-expanded={open || summary} onClick={onOpen}><span>{title}</span></button>{closable && <button type="button" className="inspect-close" aria-label={closeLabel} onClick={onClose}>×</button>}{open && badge && <div className="inspect-badge-row">{badge}</div>}</div>{(open || summary) && <div className="inspect-body">{children}</div>}</section>;
 }
-function InspectColumn({ gap, factor, factorPending, focus, gapNote, factorNote, onFocus, onCloseGap, onCloseFactor }: {
-  gap: Gap | null; factor: Factor | null; factorPending: boolean; focus: "gap" | "factor"; gapNote: string; factorNote: string;
-  onFocus: (focus: "gap" | "factor") => void; onCloseGap: () => void; onCloseFactor: () => void;
+function ActivityRecord({ events, logRef }: { events: JobEvent[]; logRef: RefObject<HTMLDivElement | null> }) {
+  return <div className="event-log" ref={logRef} aria-label="Job activity events">{!events.length && <p className="empty">Loading saved activity…</p>}{events.map(event => <article className={"event " + event.event_type} key={event.id}><div className="event-header"><span>{event.detail?.tool_name || readable(event.event_type)}</span><time dateTime={event.occurred_at}>{new Date(event.occurred_at).toLocaleTimeString()}</time></div><p>{event.message}</p>{event.detail?.output_excerpt && <details><summary>Captured output</summary><pre>{event.detail.output_excerpt}</pre></details>}{event.detail?.artifact_sha256 && <a href={backend("artifacts/" + event.detail.artifact_sha256)} target="_blank" rel="noreferrer">Open captured artifact</a>}</article>)}</div>;
+}
+function InspectColumn({ gap, factor, factorPending, result, activity, focus, gapNote, factorNote, onFocus, onCloseGap, onCloseFactor, onCloseResult, onCloseActivity }: {
+  gap: Gap | null; factor: Factor | null; factorPending: boolean; result: ResultInspect | null; activity: ReactNode; focus: "gap" | "factor" | "result" | "activity"; gapNote: string; factorNote: string;
+  onFocus: (focus: "gap" | "factor" | "result" | "activity") => void; onCloseGap: () => void; onCloseFactor: () => void; onCloseResult: () => void; onCloseActivity: () => void;
 }) {
   return <div className="inspect-frame">
     {gap && <InspectCard title={gap.object.text || gapTitle(gap)} open={focus === "gap"} closeLabel="Close gap inspection" badge={diseaseBubble(gap)} onOpen={() => onFocus("gap")} onClose={onCloseGap}><GapFacts gap={gap} />{gapNote && <p className="settings-note">{gapNote}</p>}</InspectCard>}
     {(factor || factorPending) && <InspectCard title={factor ? factorTitle(factor) : "Loading factor…"} open={focus === "factor"} closeLabel="Close factor inspection" onOpen={() => onFocus("factor")} onClose={onCloseFactor}>{factor ? <><FactorSummary factor={factor} /><FactorLoadings key={factor.source_id} sourceId={factor.source_id} /></> : <p className="settings-note">Loading the factor…</p>}{factorNote && <p className="settings-note">{factorNote}</p>}</InspectCard>}
+    {result && <InspectCard title={result.title} open={focus === "result"} closeLabel="Close result inspection" onOpen={() => onFocus("result")} onClose={onCloseResult}><div className="result-links">{result.links.map(link => <a key={link.href + link.label} href={link.href} target="_blank" rel="noreferrer">{link.label}</a>)}</div><JsonValue value={result.data} /></InspectCard>}
+    {activity && <InspectCard title="Activity" open={focus === "activity"} closeLabel="Close activity" onOpen={() => onFocus("activity")} onClose={onCloseActivity}>{activity}</InspectCard>}
   </div>;
 }
 function setLocation(kind: "draft" | "job", id: string | null) {
@@ -454,7 +489,7 @@ function SavedDrafts({ drafts, jobs, requests, gapLabels, factorLabels, ready, r
           const linked = requests.filter(request => request.source_draft_id === draft.id).sort((a, b) => b.submitted_at.localeCompare(a.submitted_at));
           const investigations = linked.flatMap(request => {
             const matches = jobs.filter(job => job.research_request_id === request.id);
-            return matches.length ? matches.map(job => `${job.kind === "analysis" ? "Analysis" : "Research paragraph"} — ${readable(job.status)} — ${date(job.created_at)}`) : [`Analysis — ${date(request.submitted_at)}`];
+            return matches.length ? matches.map(job => `${job.kind === "analysis" ? "Analysis" : "Cited claim"} — ${readable(job.status)} — ${date(job.created_at)}`) : [`Analysis — ${date(request.submitted_at)}`];
           });
           return <tr key={draft.id}>
             <td>{draft.name || "Untitled draft"} ({date(draft.updated_at)})</td>
@@ -501,6 +536,7 @@ export default function Home() {
   const [factorMisses, setFactorMisses] = useState<Record<string, true>>({});
   const [job, setJob] = useState<Job | null>(null);
   const [paragraphs, setParagraphs] = useState<Record<string, ParagraphProgress>>({});
+  const [publication, setPublication] = useState<"public" | "private" | "unknown" | null>(null);
   const [startedDraftId, setStartedDraftId] = useState<string | null>(null);
   const [activity, setActivity] = useState<JobEvent[]>([]);
   const [activityDetail, setActivityDetail] = useState(true);
@@ -521,7 +557,9 @@ export default function Home() {
   const [inspectFactor, setInspectFactor] = useState<Factor | null>(null);
   const [inspectFactorId, setInspectFactorId] = useState<string | null>(null);
   const [inspectFactorNote, setInspectFactorNote] = useState("");
-  const [inspectFocus, setInspectFocus] = useState<"gap" | "factor">("gap");
+  const [inspectFocus, setInspectFocus] = useState<"gap" | "factor" | "result" | "activity">("gap");
+  const [inspectResult, setInspectResult] = useState<ResultInspect | null>(null);
+  const [resultActions, setResultActions] = useState<ResultAction[]>([]);
   const factorInspectId = useRef("");
   const [draftPage, setDraftPage] = useState(0);
   const [gapLabels, setGapLabels] = useState<Record<string, string>>({});
@@ -544,6 +582,7 @@ export default function Home() {
   const submittedJob = useRef<string | null>(null);
   const activityPinned = useRef<string | null>(null);
   const activityCollapsed = useRef<string | null>(null);
+  const activityLogRef = useRef<HTMLDivElement>(null);
   const submittedDraft = useRef<string | null>(null);
   const completionSaved = useRef(new Set<string>());
   const saveRef = useRef<(asNew?: boolean, options?: { name?: string; quiet?: boolean; updateOnly?: boolean; draftId?: string; composer?: Composer }) => Promise<Draft | null>>(async () => null);
@@ -622,7 +661,7 @@ export default function Home() {
       setStartedDraftId(id); submittedDraft.current = id; submittedJob.current = linked.id;
       const finished = terminal(linked.status);
       if (finished) activityCollapsed.current = linked.id;
-      setActivityDetail(true); setActivityLogOpen(!finished); setStep("investigation"); setActivityOpen(true);
+      setActivityDetail(true); setActivityLogOpen(!finished); if (!finished) setInspectFocus("activity"); setStep("investigation"); setActivityOpen(true);
       await openJob(linked.id);
     } catch (error) { if (generation === editorGeneration.current && owner === identity.current) setError(errorMessage(error)); }
   }, [openJob]);
@@ -737,6 +776,36 @@ export default function Home() {
     for (const id of ids) void load(id);
     return () => { active = false; for (const timer of timers.values()) clearTimeout(timer); };
   }, [paragraphKey]);
+  const publicationKey = job && terminal(job.status)
+    ? job.result?.kind === "analysis" && job.result.account_ids[0] ? "account:" + job.result.account_ids[0]
+      : job.result?.kind === "analysis_outcome" ? "outcome:" + job.result.outcome_id : ""
+    : "";
+  useEffect(() => {
+    if (!publicationKey) { setPublication(null); return; }
+    let active = true;
+    setPublication(null);
+    const path = publicationKey.startsWith("outcome:")
+      ? "analysis-outcomes/" + encodeURIComponent(publicationKey.slice("outcome:".length)) + "/publication"
+      : "accounts/" + encodeURIComponent(publicationKey.slice("account:".length));
+    function load() {
+      void request<{ visibility?: string; publication?: { visibility?: string } }>(backend(path))
+        .then(record => {
+          if (!active) return;
+          const visibility = record.publication?.visibility || record.visibility;
+          setPublication(visibility === "public" ? "public" : "private");
+        })
+        .catch(() => { if (active) setPublication("unknown"); });
+    }
+    load();
+    function onVisible() { if (document.visibilityState === "visible") load(); }
+    document.addEventListener("visibilitychange", onVisible);
+    return () => { active = false; document.removeEventListener("visibilitychange", onVisible); };
+  }, [publicationKey]);
+  useEffect(() => {
+    if (!job || terminal(job.status) || !activityLogOpen) return;
+    const node = activityLogRef.current;
+    if (node) node.scrollTop = node.scrollHeight;
+  }, [activity, job?.id, job?.status, activityLogOpen]);
   useEffect(() => {
     if (!job || !terminal(job.status) || activityCollapsed.current === job.id) return;
     activityCollapsed.current = job.id;
@@ -999,7 +1068,7 @@ export default function Home() {
     try {
       const value = await api.submit(intent.body, intent.key);
       sessionStorage.removeItem("reveal-submit:" + principal.user_id); setPending(null);
-      submittedJob.current = value.id; submittedDraft.current = intent.body.draft_id; setStartedDraftId(intent.body.draft_id); activityPinned.current = null; activityCollapsed.current = null; currentJob.current = value; setJob(value); setActivity([]); setLocation("job", value.id); setActivityDetail(true); setActivityLogOpen(true); setStep("investigation"); setActivityOpen(true); setNotice("Analysis submitted. Live activity will appear alongside your draft."); await refresh();
+      submittedJob.current = value.id; submittedDraft.current = intent.body.draft_id; setStartedDraftId(intent.body.draft_id); activityPinned.current = null; activityCollapsed.current = null; currentJob.current = value; setJob(value); setActivity([]); setLocation("job", value.id); setActivityDetail(true); setActivityLogOpen(true); setInspectFocus("activity"); setStep("investigation"); setActivityOpen(true); setNotice("Analysis submitted. Live activity will appear alongside your draft."); await refresh();
     } catch (error) {
       // A later refusal cannot disprove an earlier committed request whose response was lost.
       setError(errorMessage(error));
@@ -1040,28 +1109,64 @@ export default function Home() {
   function closeGapInspect() {
     setInspectGap(null); setInspectGapNote("");
     if (inspectFactorId) setInspectFocus("factor");
+    else if (inspectResult) setInspectFocus("result");
+    else if (activityLogOpen) setInspectFocus("activity");
   }
   function closeFactorInspect() {
     factorInspectId.current = ""; setInspectFactorId(null); setInspectFactor(null); setInspectFactorNote("");
     if (inspectGap) setInspectFocus("gap");
+    else if (inspectResult) setInspectFocus("result");
+    else if (activityLogOpen) setInspectFocus("activity");
+  }
+  function openResultInspect(value: ResultInspect) {
+    setInspectResult(value); setInspectFocus("result");
+  }
+  function closeResultInspect() {
+    setInspectResult(null);
+    if (inspectFactorId) setInspectFocus("factor");
+    else if (inspectGap) setInspectFocus("gap");
+    else if (activityLogOpen) setInspectFocus("activity");
+  }
+  function openActivityInspect() {
+    setActivityLogOpen(true); setInspectFocus("activity");
+  }
+  function closeActivityInspect() {
+    setActivityLogOpen(false);
+    if (inspectResult) setInspectFocus("result");
+    else if (inspectFactorId) setInspectFocus("factor");
+    else if (inspectGap) setInspectFocus("gap");
   }
   const maxGapAccounts = Math.max(0, ...gaps.map(item => item.scientific_accounts?.count ?? 0));
   const inWorkspace = Boolean(principal) && !welcomeOpen;
   const errorNotice = error ? <div className="notice error" role="alert"><span>{error}</span><button className="quiet" onClick={() => setError("")} aria-label="Dismiss error">Dismiss</button></div> : null;
   const paragraphWriting = Object.values(paragraphs).some(item => item.job && !terminal(item.job.status));
-  const factorBubbles = () => composer.eaggl_anchors.map(anchor => { const factor = factors[anchor.reference.source_id]; const title = factor ? factorTitle(factor) : anchor.reference.source_id; return <span className="factor-bubble" key={anchor.reference.source_id}>{title}</span>; });
+  const factorBubbles = (limit?: number) => {
+    const shown = limit == null ? composer.eaggl_anchors : composer.eaggl_anchors.slice(0, limit);
+    const extra = composer.eaggl_anchors.length - shown.length;
+    const bubbles = shown.map(anchor => { const factor = factors[anchor.reference.source_id]; const title = factor ? factorTitle(factor) : anchor.reference.source_id; return <span className="factor-bubble" key={anchor.reference.source_id}>{title}</span>; });
+    if (!extra) return bubbles;
+    return <>{bubbles}<span className="factor-more">+ {extra} {extra === 1 ? "factor" : "factors"}</span></>;
+  };
+  const factorList = composer.eaggl_anchors.map(anchor => { const factor = factors[anchor.reference.source_id]; return factor ? factorTitle(factor) : anchor.reference.source_id; }).join(", ");
   const investigationPanel = <>
-    {gap ? <p className="investigation-gap">{gap.object.text || gapTitle(gap)}</p> : <p className="investigation-gap muted">Select a knowledge gap to investigate.</p>}
-    {!!composer.eaggl_anchors.length && <div className="investigation-factors">{factorBubbles()}</div>}
-    {job && <div className="activity-status-row"><p>Started {date(job.created_at)}</p>{job.completed_at && <p>Completed {date(job.completed_at)}</p>}<span className={"status " + job.status}>{readable(job.status)}</span>{paragraphWriting && <span className="status running">Writing the paragraph</span>}{!terminal(job.status) && <button className="danger small" onClick={cancel} disabled={!!busy || job.status === "cancel_requested"}>{job.status === "cancel_requested" ? "Stopping…" : "Stop"}</button>}</div>}
+    {!!factorList && <p className="investigation-field"><strong>Factors:</strong> {factorList}</p>}
+    {job && <div className="activity-status-row"><strong>Status:</strong><p>Started {date(job.created_at)}</p>{job.completed_at && <p>Completed {date(job.completed_at)}</p>}<span className={"status " + job.status}>{readable(job.status)}</span>{paragraphWriting && <span className="status running">Writing the cited claim</span>}{!terminal(job.status) && <button className="danger small" onClick={cancel} disabled={!!busy || job.status === "cancel_requested"}>{job.status === "cancel_requested" ? "Stopping…" : "Stop"}</button>}{resultActions.map(action => <span className="status-link-item" key={action.key}><span className="status-rule" aria-hidden="true">|</span><button type="button" className="status-link" onClick={() => openResultInspect(action.inspect)}>{action.label}</button></span>)}<span className="status-link-item"><span className="status-rule" aria-hidden="true">|</span><button type="button" className="status-link" onClick={openActivityInspect}>Activity</button></span></div>}
     {!!job?.warnings.length && <div className="notice"><ul>{job.warnings.map(value => <li key={value}>{value}</li>)}</ul></div>}
     {job?.failure && <div className="notice error" role="alert"><div><strong>Research could not complete</strong><p>{job.failure.message}</p><span className="small">{job.failure.code}</span>{job.failure.code.startsWith("REVIEW_") && job.failure.retryable && <p><button className="secondary" onClick={retryReview} disabled={!!busy}>{busy === "review" ? "Requesting review…" : "Retry saved review"}</button></p>}</div></div>}
     {job?.status === "cancelled" && <p className="notice">This job was stopped. No successful result is implied.</p>}
-    {job?.result && <ResultView job={job} paragraphs={paragraphs} />}
-    {job && <div className="activity-fold"><button type="button" aria-expanded={activityLogOpen} onClick={() => setActivityLogOpen(open => !open)}>Activity</button>{activityLogOpen && <div className="event-log" aria-label="Job activity events">{!activity.length && <p className="empty">Loading saved activity…</p>}{activity.map(event => <article className={"event " + event.event_type} key={event.id}><div className="event-header"><span>{event.detail?.tool_name || readable(event.event_type)}</span><time dateTime={event.occurred_at}>{new Date(event.occurred_at).toLocaleTimeString()}</time></div><p>{event.message}</p>{event.detail?.output_excerpt && <details><summary>Captured output</summary><pre>{event.detail.output_excerpt}</pre></details>}{event.detail?.artifact_sha256 && <a href={backend("artifacts/" + event.detail.artifact_sha256)} target="_blank" rel="noreferrer">Open captured artifact</a>}</article>)}</div>}</div>}
-    {job && <details className="record-details"><summary>Job record and evidence</summary><p className="small">Job ID: {job.id}</p><div className="result-links"><a href={backend("jobs/" + job.id)} target="_blank" rel="noreferrer">Job JSON</a><a href={backend("jobs/" + job.id + "/evidence-package")} target="_blank" rel="noreferrer">Frozen evidence package</a></div><pre>{JSON.stringify(job, null, 2)}</pre></details>}
+    {job?.result && <ResultView job={job} onActions={setResultActions} />}
+    {job?.kind === "analysis" && <section className="paragraph-result"><h3>Cited claim</h3>{job.result?.kind === "analysis" && job.result.paragraph_job_ids.map(id => <ParagraphView key={id} progress={paragraphs[id]} />)}</section>}
   </>;
   const activeStep = step === "anchors" || step === "investigation" ? step : "gap";
+  const analysisRunning = !!job && !terminal(job.status);
+  const lastActivity = activity.length ? activity[activity.length - 1] : null;
+  const paragraphReady = job?.result?.kind === "analysis" && job.result.paragraph_job_ids.some(id => !!paragraphs[id]?.text);
+  const publishHref = job?.result?.kind === "analysis" && job.result.account_ids[0] ? QA_SITE + "/accounts/" + encodeURIComponent(job.result.account_ids[0]) : "";
+  const analysisComplete = !!job && terminal(job.status);
+  const publicationLabel = publication === "public" ? "Published" : publication === "unknown" ? "Publication unavailable" : publication === null && publicationKey ? "Checking publication" : "Not published";
+  const investigationRail = job && analysisRunning ? <span className="step-rail-facts"><span>Started {date(job.created_at)}</span><span className={"status " + job.status}>{readable(job.status)}</span>{lastActivity && <span>{lastActivity.message}</span>}</span>
+    : job && analysisComplete ? <span className="step-rail-line">Completed {date(job.completed_at || job.updated_at)} | {outcomeLabel(job.status)} | {publicationLabel}</span>
+    : null;
   return <>
     <header className="site-header"><div className="brand"><div className="brand-logos"><img src="/brand/cfde-knowledge-center.svg" alt="CFDE Knowledge Center" /><span className="brand-rule" aria-hidden="true" /><img src="/brand/cfde-ecosystem.png" alt="Common Fund Data Ecosystem" /></div><span className="brand-rule" aria-hidden="true" /><div className="brand-copy"><h1><span className="brand-reveal">REVEAL</span><span className="brand-product">client</span></h1><p>Scientific questions, evidence, and live research</p></div></div>
       <div className="connection">
@@ -1074,11 +1179,11 @@ export default function Home() {
         {principal ? <span className="connection-status" role="status">Workspace connected</span> : <button onClick={() => void connect()} disabled={checking || busy === "connect"}>{checking || busy === "connect" ? "Connecting…" : "Connect workspace"}</button>}
         <button type="button" className="settings-button" aria-label="Settings" aria-expanded={settingsOpen} onClick={() => { setSessionOpen(false); setHelpOpen(false); setSettingsTab("settings"); setSettingsOpen(true); }}><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.48.48 0 0 0-.48-.41h-3.84a.48.48 0 0 0-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 0 0-.59.22L2.74 8.87a.48.48 0 0 0 .12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32a.49.49 0 0 0-.12-.61l-2.03-1.58zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z" /></svg></button>
       </div></header>
-    {inWorkspace && <div className="workspace-bar"><div className="step-rail" role="tablist" aria-label="Investigation steps"><button type="button" role="tab" aria-selected={activeStep === "gap"} className={"step-rail-card" + (activeStep === "gap" ? " active" : "")} onClick={() => setStep("gap")}><span className="step-rail-title"><span className="step-number">1</span>Choose a knowledge gap</span>{activeStep !== "gap" && gap && <span className="step-rail-summary">{gap.object.text || gapTitle(gap)}</span>}</button><button type="button" role="tab" aria-selected={activeStep === "anchors"} className={"step-rail-card" + (activeStep === "anchors" ? " active" : "") + (gapChosen ? "" : " inactive")} disabled={!gapChosen && activeStep !== "anchors"} onClick={() => { if (gapChosen) setStep("anchors"); }}><span className="step-rail-title"><span className="step-number">2</span>Select mechanism anchors</span>{activeStep !== "anchors" && anchorChosen && <span className="step-rail-summary bubbles">{factorBubbles()}</span>}</button><button type="button" role="tab" aria-selected={activeStep === "investigation"} className={"step-rail-card" + (activeStep === "investigation" ? " active" : "") + (job ? "" : " inactive")} disabled={!job && activeStep !== "investigation"} onClick={() => { if (job) setStep("investigation"); }}><span className="step-rail-title"><span className="step-number">3</span>Investigation</span>{activeStep !== "investigation" && job && <span className="step-rail-summary">{paragraphWriting ? "Writing the paragraph" : readable(job.status)}</span>}</button></div>{errorNotice}</div>}
+    {inWorkspace && <div className="workspace-bar"><div className="step-rail" role="tablist" aria-label="Investigation steps"><button type="button" role="tab" aria-selected={activeStep === "gap"} className={"step-rail-card" + (activeStep === "gap" ? " active" : "")} onClick={() => setStep("gap")}><span className="step-rail-title"><span className="step-number">1</span>Choose a knowledge gap</span>{gap && <span className="step-rail-summary">{gap.object.text || gapTitle(gap)}</span>}</button><button type="button" role="tab" aria-selected={activeStep === "anchors"} className={"step-rail-card" + (activeStep === "anchors" ? " active" : "") + (gapChosen ? "" : " inactive")} disabled={!gapChosen && activeStep !== "anchors"} onClick={() => { if (gapChosen) setStep("anchors"); }}><span className="step-rail-title"><span className="step-number">2</span>Select mechanism anchors</span>{anchorChosen && <span className="step-rail-summary bubbles">{factorBubbles(2)}</span>}</button><button type="button" role="tab" aria-selected={activeStep === "investigation"} className={"step-rail-card" + (activeStep === "investigation" ? " active" : "") + (job ? "" : " inactive")} disabled={!job && activeStep !== "investigation"} onClick={() => { if (job) setStep("investigation"); }}><span className="step-rail-title"><span className="step-number">3</span>Investigation</span>{investigationRail}</button></div>{errorNotice}</div>}
     <main className={inWorkspace ? "workspace" : undefined}>
       {!inWorkspace && errorNotice}
       {(!principal || (welcomeOpen && panelView === "menu")) ? <section className="welcome"><div className="welcome-lead"><h2>Choose the gap. Ground the claim.</h2><svg className="welcome-mark" viewBox="0 0 132 18" aria-hidden="true"><line x1="16" y1="9" x2="116" y2="9" stroke="#a7a9ad" strokeWidth="1.7" /><circle cx="9" cy="9" r="6.1" fill="#fff" stroke="#e07b39" strokeWidth="1.8" /><circle cx="123" cy="9" r="7" fill="#e07b39" /></svg><div className="welcome-choices"><button type="button" onClick={startSearch} disabled={!principal || checking || busy === "connect"}>Search knowledge gaps</button><button type="button" onClick={() => void browseTrending()} disabled={!principal || checking || busy === "connect" || searching}>Trending knowledge gaps</button></div></div><img className="welcome-flow" src="/workflow.svg" alt="From a DisMech knowledge gap to the claims library. Select a gap. Find CFDE EAGGL factors that match the DisMech mechanisms attached to that gap, then select factors. Initiating an investigation collects CFDE evidence for those factors and drafts a report. A scientific account then claims the report for the claims library." /><div className="welcome-cards"><a className="welcome-card" href="#learn-reveal-client" onClick={event => event.preventDefault()}><svg viewBox="0 0 72 56" aria-hidden="true"><path d="M36 12v32M14 16c7 5 15 5 22-2 7 7 15 7 22 2v28c-7 5-15 5-22-2-7 7-15 7-22 2V16z" /></svg><strong>Learn REVEAL client</strong><span>A guide to the workspace, from a knowledge gap to a grounded claim.</span></a><a className="welcome-card" href="#quick-start-demo" onClick={event => event.preventDefault()}><svg viewBox="0 0 72 56" aria-hidden="true"><rect x="14" y="12" width="44" height="32" rx="3" /><path className="card-icon-fill" d="M33 22l12 6-12 6z" /></svg><strong>Watch quick start demo</strong><span>A short walkthrough of connecting and starting an investigation.</span></a></div></section> : welcomeOpen ? <div className="welcome-panel-stage"><section className="welcome-panel" role="dialog" aria-modal="true" aria-labelledby="welcome-heading"><button type="button" className="panel-back" aria-label="Back to welcome" onClick={() => { if (panelView === "copy") setName(keptName.current); else { setName(""); setNotice(""); } setPanelView("menu"); }}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22.9 12H6M11 6l-6 6 6 6" /></svg></button><div className="draft-start"><h2 id="welcome-heading">{panelView === "copy" ? "Save as a new draft" : "Start a draft"}</h2><label htmlFor="draft-name">Draft name</label><input id="draft-name" value={name} maxLength={120} onChange={event => setName(event.target.value)} disabled={!mutable} placeholder="Name this investigation" autoFocus />{notice && <p className="notice" role="status">{notice}</p>}<div className="actions"><button onClick={() => save(panelView === "copy")} disabled={!mutable || !name.trim() || (panelView !== "copy" && !dirty)}>{busy === "save" ? "Saving…" : "Save draft"}</button></div></div></section></div> : <>
-        <div className={inspectGap || inspectFactorId ? "workspace-frames" : "workspace-frames steps-only"}>
+        <div className={inspectGap || inspectFactorId || inspectResult || activityLogOpen ? "workspace-frames" : "workspace-frames steps-only"}>
         <div className="steps">
           {activeStep === "gap" && <section className="step open">
             <h2 className="step-heading"><span className="step-number">1</span>Choose a knowledge gap</h2>
@@ -1089,8 +1194,7 @@ export default function Home() {
             </div>
           </section>}
           {activeStep === "anchors" && <section className="step open">
-            <h2 className="step-heading"><span className="step-number">2</span>Select mechanism anchors</h2>
-            <p className="step-guide">Choose genetic factors that may help explain the selected gap. At least one factor is required to start an investigation, and none is selected for you.{suggestion?.limitations.length ? ` ${suggestion.limitations.join(" ")}` : ""}</p>
+            <div className="step-heading-row"><div className="step-heading-copy"><h2 className="step-heading"><span className="step-number">2</span>Select mechanism anchors</h2><p className="step-guide">Choose genetic factors that may help explain the selected gap. At least one factor is required to start an investigation, and none is selected for you.{suggestion?.limitations.length ? ` ${suggestion.limitations.join(" ")}` : ""}</p></div>{(anchorChosen || pending) && (startedDraftId && startedDraftId === draft?.id ? <p className="investigation-started">Investigation started</p> : <button type="button" className="step-next" onClick={() => void startInvestigation()} disabled={!mutable || suggesting || (!pending && (!composer.source_gap || !composer.eaggl_anchors.length))}>{busy === "submit" ? "Submitting…" : busy === "save" ? "Saving draft…" : pending ? "Recover submission" : "Start investigation"}</button>)}</div>
             <div className="step-body">{!composer.source_gap ? <p className="empty">Select a question to find related genetic mechanisms.</p> : <>
                 {!!anchorIds.length && <FactorNetwork guide={anchorChosen ? undefined : "At least one factor has to be selected to initiate investigation."} gapLabel={gap?.object.text || (gap ? gapTitle(gap) : "Knowledge gap")} rows={anchorIds.map(sourceId => {
                   const factor = factors[sourceId], selected = composer.eaggl_anchors.some(value => value.reference.source_id === sourceId);
@@ -1100,19 +1204,16 @@ export default function Home() {
                   return { sourceId, title, subtitle: factor?.cfde_anchor.subtitle || "", mechanisms: matchedMechanisms(gap, suggested?.matched_context_ids || []), cosine, selected, selectDisabled: !mutable || (!selected && composer.eaggl_anchors.length >= 10), onToggle: () => setComposer(current => selected ? { ...current, eaggl_anchors: current.eaggl_anchors.filter(value => value.reference.source_id !== sourceId) } : factor && suggestion ? withFactors(current, [factor], suggestion.suggestion_id) : current), onInspect: factor ? () => void openFactorInspect(sourceId) : null };
                 })} />}
                 {!suggestedIds.length && (suggesting ? <p role="status" className="loading">Finding relevant mechanisms…</p> : <button type="button" className="quiet suggestion-refresh" disabled={!mutable} onClick={() => void suggest(composer, false)}>Show suggestions</button>)}
-                {(anchorChosen || pending) && <>
-                  {pending && <div className="notice"><span>A submission needs confirmation. Recover it with the original request key before starting another.</span><button className="quiet small" onClick={discardSubmission} disabled={!!busy}>Discard recovery</button></div>}
-                  {startedDraftId && startedDraftId === draft?.id ? <p className="investigation-started">Investigation started</p> : <button type="button" className="step-next" onClick={() => void startInvestigation()} disabled={!mutable || suggesting || (!pending && (!composer.source_gap || !composer.eaggl_anchors.length))}>{busy === "submit" ? "Submitting…" : busy === "save" ? "Saving draft…" : pending ? "Recover submission" : "Start investigation"}</button>}
-                </>}
+                {pending && <div className="notice"><span>A submission needs confirmation. Recover it with the original request key before starting another.</span><button className="quiet small" onClick={discardSubmission} disabled={!!busy}>Discard recovery</button></div>}
               </>}
             </div>
           </section>}
           {activeStep === "investigation" && <section className="step open">
-            <h2 className="step-heading"><span className="step-number">3</span>Investigation</h2>
+            <div className={"step-heading-row investigation-heading" + (paragraphReady && publishHref ? " with-publish" : "")}><div className="step-heading-copy"><h2 className="step-heading"><span className="step-number">3</span>Investigation</h2>{analysisRunning && job && <div className="investigation-live"><p>Started {date(job.created_at)}</p><span className={"status " + job.status}>{readable(job.status)}</span>{lastActivity && <p className="investigation-last">{lastActivity.message}</p>}</div>}<p className="investigation-field">{gap ? <><strong>Knowledge gap:</strong> {gap.object.text || gapTitle(gap)}</> : <><strong>Knowledge gap:</strong> <span className="muted">Select a knowledge gap to investigate.</span></>}</p></div>{paragraphReady && publishHref && <a className="publish-report" href={publishHref} target="_blank" rel="noreferrer">Publish account</a>}</div>
             <div className="step-body">{investigationPanel}</div>
           </section>}
         </div>
-        {(inspectGap || inspectFactorId) && <InspectColumn gap={inspectGap} factor={inspectFactor} factorPending={!!inspectFactorId && !inspectFactor} focus={inspectGap && inspectFactorId ? (inspectFocus === "factor" ? "factor" : "gap") : inspectGap ? "gap" : "factor"} gapNote={inspectGapNote} factorNote={inspectFactorNote} onFocus={setInspectFocus} onCloseGap={closeGapInspect} onCloseFactor={closeFactorInspect} />}
+        {(inspectGap || inspectFactorId || inspectResult || activityLogOpen) && <InspectColumn gap={inspectGap} factor={inspectFactor} factorPending={!!inspectFactorId && !inspectFactor} result={inspectResult} activity={activityLogOpen ? <ActivityRecord events={activity} logRef={activityLogRef} /> : null} focus={inspectFocus === "activity" && activityLogOpen ? "activity" : inspectFocus === "result" && inspectResult ? "result" : inspectFocus === "factor" && inspectFactorId ? "factor" : inspectGap ? "gap" : inspectFactorId ? "factor" : inspectResult ? "result" : "activity"} gapNote={inspectGapNote} factorNote={inspectFactorNote} onFocus={setInspectFocus} onCloseGap={closeGapInspect} onCloseFactor={closeFactorInspect} onCloseResult={closeResultInspect} onCloseActivity={closeActivityInspect} />}
         </div>
       </>}
     </main>
@@ -1123,6 +1224,8 @@ export default function Home() {
 }
 
 const QA_SITE = "https://reveal-mechanisms-qa.vercel.app";
+type ResultInspect = { title: string; data: unknown; links: { href: string; label: string }[] };
+type ResultAction = { key: string; label: string; inspect: ResultInspect };
 type ResultRecord = { path: string; title: string; publishHref?: string; data?: Record<string, unknown>; error?: string };
 function textValue(value: unknown): string { return typeof value === "string" ? value : ""; }
 function paragraphText(data: Record<string, unknown>) {
@@ -1134,22 +1237,22 @@ function ParagraphView({ progress }: { progress?: ParagraphProgress }) {
   const writing = !!paragraphJob && !terminal(paragraphJob.status);
   const text = progress?.text || "";
   if (!writing && !text && !progress?.error && !paragraphJob?.failure && paragraphJob?.status !== "cancelled") return null;
-  return <section className="paragraph-result">
-    {writing && <p className="paragraph-status" role="status">Writing the paragraph…</p>}
+  return <>
+    {writing && <p className="paragraph-status" role="status">Writing the cited claim…</p>}
     {progress?.error && <p role="alert" className="error-text">{progress.error}</p>}
     {paragraphJob?.failure && <p role="alert" className="error-text">{paragraphJob.failure.message}</p>}
-    {paragraphJob?.status === "cancelled" && <p className="paragraph-status">Paragraph writing was stopped.</p>}
-    {text && <><h3>Paragraph</h3><p className="research-text">{text}</p></>}
-  </section>;
+    {paragraphJob?.status === "cancelled" && <p className="paragraph-status">Cited claim writing was stopped.</p>}
+    {text && <p className="research-text">{text}</p>}
+  </>;
 }
-function ResultView({ job, paragraphs }: { job: Job; paragraphs: Record<string, ParagraphProgress> }) {
+function ResultView({ job, onActions }: { job: Job; onActions: (actions: ResultAction[]) => void }) {
   const [records, setRecords] = useState<ResultRecord[]>([]);
   const result = job.result;
   useEffect(() => {
     if (!result) return;
     let active = true;
     const paths = result.kind === "analysis" ? result.account_ids.map(id => ({ path: "accounts/" + encodeURIComponent(id), title: "Scientific account", publishHref: QA_SITE + "/accounts/" + encodeURIComponent(id) }))
-      : result.kind === "paragraph" ? [{ path: "paragraphs/" + encodeURIComponent(result.paragraph_id), title: "Research paragraph" }]
+      : result.kind === "paragraph" ? [{ path: "paragraphs/" + encodeURIComponent(result.paragraph_id), title: "Cited claim" }]
       : [{ path: "analysis-outcomes/" + encodeURIComponent(result.outcome_id), title: "Insufficient evidence" }];
     setRecords(paths);
     void Promise.all(paths.map(async record => {
@@ -1158,25 +1261,35 @@ function ResultView({ job, paragraphs }: { job: Job; paragraphs: Record<string, 
     })).then(values => { if (active) setRecords(values); });
     return () => { active = false; };
   }, [job.id, JSON.stringify(result)]);
+  const actions = useMemo(() => {
+    if (!result) return [];
+    const items: ResultAction[] = [];
+    records.forEach((record, index) => {
+      if (!record.data) return;
+      const document = record.data.document as Record<string, Record<string, unknown>[]> | undefined;
+      const object = document?.scientific_accounts?.[0];
+      const artifacts = (record.data.artifacts || []) as Schema<"ArtifactAccess">[];
+      items.push({ key: "inspect-" + record.path, label: "Inspect result", inspect: { title: textValue(object?.name) || record.title, data: record.data, links: [{ href: backend(record.path), label: "Open saved JSON" }, ...(result.kind === "paragraph" ? [{ href: backend("paragraphs/" + encodeURIComponent(result.paragraph_id) + "/export?format=markdown"), label: "Export cited claim Markdown" }] : []), ...artifacts.filter(artifact => artifact.availability === "available" && /^[a-f0-9]{64}$/.test(artifact.file.sha256 || "")).map(artifact => ({ href: backend("artifacts/" + artifact.file.sha256), label: artifact.file.filename || artifact.file.name || "Evidence artifact" }))] } });
+      if (index === records.findIndex(item => item.data)) items.push({ key: "job-record", label: "Job record and evidence", inspect: { title: "Job record and evidence", data: job, links: [{ href: backend("jobs/" + job.id), label: "Job JSON" }, { href: backend("jobs/" + job.id + "/evidence-package"), label: "Frozen evidence package" }] } });
+    });
+    return items;
+  }, [records, job, result]);
+  useEffect(() => { onActions(actions); }, [actions, onActions]);
+  useEffect(() => () => onActions([]), [onActions]);
   if (!result) return null;
-  return <section className="results"><h3>{result.kind === "analysis_outcome" ? "Investigation outcome" : "Saved results"}</h3>
+  return <section className="results"><h3>{result.kind === "analysis_outcome" ? "Investigation outcome" : "Scientific account"}</h3>
     {records.map(record => {
       const document = record.data?.document as Record<string, Record<string, unknown>[]> | undefined;
       const object = document?.scientific_accounts?.[0];
       const paragraphs = document?.paragraphs || [];
-      const artifacts = (record.data?.artifacts || []) as Schema<"ArtifactAccess">[];
       return <article className="result-record" key={record.path}><h4>{textValue(object?.name) || record.title}</h4>{record.error ? <p role="alert" className="error-text">{record.error} <a href={backend(record.path)} target="_blank" rel="noreferrer">Open result</a></p> : !record.data ? <p className="muted">Loading saved result…</p> : <>
         {result.kind === "analysis_outcome" && <><p>{textValue(record.data.summary)}</p><p>{textValue(record.data.reason)}</p>
           {([['missing_evidence', 'Missing evidence'], ['limitations', 'Limitations'], ['next_steps', 'Possible next steps']] as const).map(([field, title]) => Array.isArray(record.data![field]) && (record.data![field] as unknown[]).length > 0 ? <div className="outcome-section" key={field}><strong>{title}</strong><ul>{(record.data![field] as unknown[]).map((value, index) => <li key={index}>{textValue(value)}</li>)}</ul></div> : null)}
           {textValue(record.data.scope_note) && <p className="scope-note">{textValue(record.data.scope_note)}</p>}
         </>}
         {object?.closing_remarks && <p>{textValue(object.closing_remarks)}</p>}
-        {record.publishHref && <a className="publish-report" href={record.publishHref} target="_blank" rel="noreferrer">Publish</a>}
         {paragraphs.map((paragraph, index) => <p className="research-text" key={textValue(paragraph.id) || index}>{textValue(paragraph.text)}</p>)}
-        <div className="result-links"><a href={backend(record.path)} target="_blank" rel="noreferrer">Open saved JSON</a>{result.kind === "paragraph" && <a href={backend("paragraphs/" + encodeURIComponent(result.paragraph_id) + "/export?format=markdown")} target="_blank" rel="noreferrer">Export paragraph Markdown</a>}{artifacts.filter(artifact => artifact.availability === "available" && /^[a-f0-9]{64}$/.test(artifact.file.sha256 || "")).map(artifact => <a key={artifact.file.id} href={backend("artifacts/" + artifact.file.sha256)} target="_blank" rel="noreferrer">{artifact.file.filename || artifact.file.name || "Evidence artifact"}</a>)}</div>
-        <details><summary>Inspect result</summary><pre>{JSON.stringify(record.data, null, 2)}</pre></details>
       </>}</article>;
     })}
-    {result.kind === "analysis" && result.paragraph_job_ids.map(id => <ParagraphView key={id} progress={paragraphs[id]} />)}
   </section>;
 }
