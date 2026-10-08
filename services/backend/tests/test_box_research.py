@@ -14,7 +14,7 @@ from mcp import types
 from mcp.server.lowlevel import Server
 
 from reveal_backend.agent_execution import ExecutionRequest
-from reveal_backend.box_research import HostedResearchClient, ResearchAccessError, canonical, network_policy, validate_access, validate_hosted_context
+from reveal_backend.box_research import ALLOWED_TOOLS, HostedResearchClient, ResearchAccessError, canonical, network_policy, validate_access, validate_hosted_context
 from reveal_backend.box_mcp import Ledger, ScopedTools
 from reveal_backend.dispatch_view import research_prompt, file_input_manifest
 from reveal_backend.evidence_package import canonical_json
@@ -140,6 +140,23 @@ def test_hosted_catalog_selects_private_variant_and_hides_remote_oauth(hosted):
     assert called['research_request_id'] == CONTEXT['research_request_id']
     assert called['idempotency_key'].startswith('hosted-')
     assert 'reference_generation_id' not in called
+
+
+def test_gene_gene_sets_is_registered_on_every_research_surface(hosted):
+    from reveal_backend import research_public, research_tools
+    from reveal_backend.public_tool_activity import ARGUMENTS, DURABLE_TOOLS
+    research, state, _ = hosted
+    name = 'get_gene_gene_sets'
+    for tools in (research_tools.private_definitions(), research_public.definitions(), research_tools.definitions(), research.definitions()):
+        tool = next(item for item in tools if item['name'] == name)
+        assert 'stored membership contains the gene' in tool['description'] and 'factor_id' in tool['description']
+    hosted_tool = next(item for item in research.definitions() if item['name'] == name)
+    assert set(hosted_tool['inputSchema']['properties']['arguments']['properties']) == {'gene', 'factor_id', 'limit', 'cursor'}
+    assert name in ALLOWED_TOOLS and ARGUMENTS[name] == ('arguments',) and name in DURABLE_TOOLS
+    research.call(name, {'arguments': {'gene': 'INS', 'factor_id': 'factor'}})
+    called = next(args for tool, args in state['calls'] if tool == name)
+    assert called['arguments'] == {'gene': 'INS', 'factor_id': 'factor'}
+    assert called['research_request_id'] == CONTEXT['research_request_id']
 
 
 def test_failed_operation_is_tool_error_without_an_evidence_receipt(hosted):

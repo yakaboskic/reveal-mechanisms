@@ -50,15 +50,15 @@ def private_definitions():
     add('describe_data_operation', 'Inspect arguments, metrics and coverage of a registered operation.', {**REQUEST, 'operation_id': STRING}, ['research_request_id', 'operation_id'])
     add('query_data', 'Capture a bounded query using an explicit operation ID; poll get_operation for its authoritative receipt. No automatic external fallback.',
         {**REQUEST, 'operation_id': STRING, 'arguments': OBJECT, 'idempotency_key': KEY}, ['research_request_id', 'operation_id', 'arguments', 'idempotency_key'], True)
-    from .research_data import OPERATIONS, SmallModelBioIndex
+    from .research_data import DESCRIPTIONS, OPERATIONS, SmallModelBioIndex
     for name, fields in OPERATIONS.items():
         props = {key: STRING for key in fields}
         props.update(limit={'type': 'integer', 'minimum': 1, 'maximum': 500}, cursor=STRING)
-        add(name, 'Query loaded reference data using the pinned generation. Capture returns an operation ID; inspect its receipt and coverage before citing.',
+        add(name, 'Query loaded reference data using the pinned generation. Capture returns an operation ID; inspect its receipt and coverage before citing.' + DESCRIPTIONS.get(name, ''),
             {**REQUEST, 'arguments': schema(props, []), 'idempotency_key': KEY}, ['research_request_id', 'arguments', 'idempotency_key'], True)
     for name in SmallModelBioIndex.INDEXES:
-        add(name, 'Explicit gated BioIndex phenotype observation, fixed model small and sigma 2. Pass only phenotype_id in arguments, then inspect returned gene or GeneSet rows. Availability is separate from imported app data; this call does not verify deployment access.',
-            {**REQUEST, 'arguments': SmallModelBioIndex.arguments_schema(), 'idempotency_key': KEY}, ['research_request_id', 'arguments', 'idempotency_key'], True)
+        add(name, 'Explicit gated BioIndex phenotype observation, fixed model small and sigma 2. ' + SmallModelBioIndex.NOTES[name] + ' Availability is separate from imported app data; this call does not verify deployment access. An unavailable source is an outage, not an absence.',
+            {**REQUEST, 'arguments': SmallModelBioIndex.arguments_schema(name), 'idempotency_key': KEY}, ['research_request_id', 'arguments', 'idempotency_key'], True)
     for name in ('find_propositions', 'find_claims', 'find_scientific_accounts'):
         add(name, 'Search owner-accepted and currently public science. Exact matches and lexical candidates are distinct; inspect scope before reuse.',
             {**REQUEST, 'query': {'type': 'string', 'maxLength': 1000}, 'filters': OBJECT,
@@ -225,7 +225,7 @@ def data_capabilities(service, authorization, name, arguments):
     catalog['phenotype_source']=SmallModelBioIndex.descriptor()
     if name=='describe_data_operation':
         if arguments['operation_id'] in SmallModelBioIndex.INDEXES:
-            return {**SmallModelBioIndex.descriptor(),'name':arguments['operation_id']}
+            return {**SmallModelBioIndex.descriptor(operation=arguments['operation_id']),'name':arguments['operation_id']}
         found=next((item for item in catalog['operations'] if item['name']==arguments['operation_id']),None)
         if found is None: raise Problem(404,'OPERATION_UNAVAILABLE','Unknown operation for this source registry.')
         return {**found,'generation':catalog['generation']}

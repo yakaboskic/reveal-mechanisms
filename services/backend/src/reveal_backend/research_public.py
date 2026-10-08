@@ -17,7 +17,7 @@ from jsonschema import Draft202012Validator
 from .auth import Problem, owned
 from .evidence_package import canonical_json, sha256
 from .repository import digest, now, uid
-from .research_data import OPERATIONS, READER_VERSION, CAPTURE_FORMAT, ReferenceQueryService, SmallModelBioIndex
+from .research_data import DESCRIPTIONS, OPERATIONS, READER_VERSION, CAPTURE_FORMAT, ReferenceQueryService, SmallModelBioIndex, phenotype_gate
 from .research_work import idempotent, public_base, valid_principal
 from .runtime_config import reference_mysql_connection, setting
 from . import user_inputs, research_graphs
@@ -51,11 +51,11 @@ def definitions():
     for name, fields in OPERATIONS.items():
         arguments = {key: {'type': 'string', 'maxLength': 250} for key in fields}
         arguments.update(limit={'type': 'integer', 'minimum': 1, 'maximum': 500}, cursor=text)
-        add(name, 'Read loaded data from the exact generation. The response includes coverage and a retained capture; authenticate to attach it to research.',
+        add(name, 'Read loaded data from the exact generation. The response includes coverage and a retained capture; authenticate to attach it to research.' + DESCRIPTIONS.get(name, ''),
             {**GENERATION, 'arguments': _object(arguments)}, ('reference_generation_id', 'arguments'))
     for name in SmallModelBioIndex.INDEXES:
-        add(name, 'Explicit gated BioIndex observation, literal model small and sigma 2; distinct from loaded data. Pass only phenotype_id in arguments, then inspect returned gene or GeneSet rows. No deployment verification is triggered by this read.',
-            {**GENERATION, 'arguments': SmallModelBioIndex.arguments_schema()}, ('reference_generation_id', 'arguments'))
+        add(name, 'Explicit gated BioIndex observation, literal model small and sigma 2; distinct from loaded data. ' + SmallModelBioIndex.NOTES[name] + ' No deployment verification is triggered by this read. An unavailable source is an outage, not an absence.',
+            {**GENERATION, 'arguments': SmallModelBioIndex.arguments_schema(name)}, ('reference_generation_id', 'arguments'))
     add('list_knowledge_graphs', 'List the connected public knowledge graphs and their bounded read operations. External observations have their own capture time and source version, independent of imported CFDE generations.', {}, ())
     for name, operation in research_graphs.OPERATIONS.items():
         tools.append({'name': name, 'description': operation['description'] +
@@ -209,7 +209,7 @@ def _capture(service, generation, operation, arguments):
         raise Problem(422, 'INVALID_QUERY', 'Unknown public reference operation.')
     if not isinstance(arguments, dict) or len(canonical_json(arguments)) > 16_000:
         raise Problem(422, 'INVALID_QUERY', 'Use bounded public query arguments.')
-    gate = setting('REVEAL_SMALL_PHENOTYPE_VERIFIED', 'false').lower() == 'true'
+    gate = phenotype_gate()
     if graph_query:
         if generation is not None:
             raise Problem(422, 'INVALID_QUERY', 'External knowledge graphs do not use imported reference generations.')
@@ -234,7 +234,9 @@ def _capture(service, generation, operation, arguments):
         # The phenotype exception retains the existing frozen-generation binding,
         # while its scientific source explicitly remains external.
         _catalog(service, generation)
-        reader = SmallModelBioIndex(verified=gate) if operation in SmallModelBioIndex.INDEXES else _reader(service)
+        reader = _reader(service)
+        if operation in SmallModelBioIndex.INDEXES:
+            reader = SmallModelBioIndex(verified=gate, traits=getattr(reader, 'phenotype_trait', None))
     try:
         captured = reader.query(operation, arguments, generation_id=generation)
     except Problem:
@@ -310,7 +312,7 @@ def public_dispatch(service, name, arguments, *, rate_key=None):
             return catalog
         operation = arguments['operation_id']
         if operation in SmallModelBioIndex.INDEXES:
-            return {**SmallModelBioIndex.descriptor(), 'name': operation}
+            return {**SmallModelBioIndex.descriptor(operation=operation), 'name': operation}
         found = next((item for item in catalog['operations'] if item['name'] == operation), None)
         if found is None:
             raise Problem(404, 'OPERATION_UNAVAILABLE', 'Unknown operation for this public reference generation.')

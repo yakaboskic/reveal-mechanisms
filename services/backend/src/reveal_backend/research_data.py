@@ -33,6 +33,7 @@ OPERATIONS = {
     'search_factors': {'q'}, 'get_factor': {'factor_id'},
     'get_factor_loadings': {'factor_id', 'kind', 'metric', 'q'},
     'search_genes': {'q'}, 'resolve_gene': {'gene', 'taxon', 'mapping_revision'}, 'get_gene_factors': {'gene'},
+    'get_gene_gene_sets': {'gene', 'factor_id'},
     'search_gene_sets': {'q'}, 'get_gene_set': {'gene_set_id'},
     'get_gene_set_members': {'gene_set_id'}, 'get_gene_set_factors': {'gene_set_id'},
     'search_traits': {'q'}, 'get_trait': {'trait_id'},
@@ -45,6 +46,14 @@ METRICS = {
     'joint_rank': 'Rank in source per-trait joint projections, before retained-subset filtering.',
     'marginal_rank': 'Rank in source per-trait marginal projections, before retained-subset filtering.',
 }
+# Operation-specific notes appended to the shared loaded-data tool descriptions.
+DESCRIPTIONS = {
+    'get_gene_gene_sets': ' Lists CFDE gene sets whose stored membership contains the gene (symbol matched without case; member and'
+        ' source_pointer give the exact stored identifier). With factor_id, only that factor\'s retained per-trait projections, with their'
+        ' joint and marginal loadings.',
+}
+MEMBERSHIP_COVERAGE = ('Exact stored CFDE gene-set membership of this generation, matched on the gene symbol without case; member is the'
+    ' stored identifier at source_pointer in the GeneSet definition. Read the trusted GeneSet with get_gene_set before citing membership.')
 
 
 KPN_FACTOR_COLUMNS = ('factor_key', 'public_id', 'eaggl_factor_id', 'kpn_trait_id', 'label', 'source_revision', 'metadata', 'factor_index')
@@ -310,6 +319,22 @@ class ReferenceQueryService:
             return capability_catalog(public)
         finally: connection.close()
 
+    def phenotype_trait(self, generation_id, phenotype):
+        """The pinned KPN trait whose kpn_trait_id or legacy (BioIndex) phenotype id is phenotype, or None."""
+        connection = self.connection_factory()
+        try:
+            if self._generation(connection, generation_id)['model'] != KPN_MODEL: return None
+            columns = ('kpn_trait_id', 'legacy_phenotype_id', 'phenotype_name', 'gwas_source_category')
+            select = 'SELECT ' + ','.join(columns) + ' FROM kpn_traits WHERE generation_id=%s AND '
+            rows = self._rows(connection, select + 'kpn_trait_id=%s UNION ' + select + 'legacy_phenotype_id=%s',
+                              [generation_id, phenotype, generation_id, phenotype], columns)
+            if len(rows) > 1: raise Problem(409, 'AMBIGUOUS_IDENTITY', 'The phenotype identifier is ambiguous in the pinned generation.')
+            return rows[0] if rows else None
+        finally:
+            try: connection.rollback()
+            except AttributeError: pass
+            finally: connection.close()
+
     def _cursor(self, binding, position=None, value=None):
         if not self.cursor_secret:
             raise Problem(503, 'SOURCE_NOT_READY', 'A durable cursor signing secret is required for research pagination.')
@@ -471,6 +496,41 @@ class ReferenceQueryService:
                 ' ON f.import_id=l.import_id AND f.factor_index=l.factor_index WHERE g.import_id=%s AND g.symbol=%s',
                 [imp,gene], ('factor_id','trait','label','loading'), ['eaggl_genes','eaggl_gene_loadings','eaggl_factors'],
                 GENE_COVERAGE, 'l.loading DESC,f.factor_index,g.gene_index')
+        if op == 'get_gene_gene_sets':
+            if not kpn: return missing('This model stores ranked gene-set links, not CFDE definitions with exact membership.')
+            gene = _text(a.get('gene'), 'gene')
+            symbol = gene[12:] if gene[:12].upper() == 'HGNC.SYMBOL:' else gene
+            if not symbol or any(c in symbol for c in ':"\\'):
+                raise Problem(422, 'INVALID_QUERY', 'Use a gene symbol or an HGNC.SYMBOL CURIE.')
+            # Portable prefilter on the stored members' JSON text (a member string ending in :<symbol>), checked exactly below.
+            members = "JSON_EXTRACT(s.metadata,'$.dapper_gene_set.members')"
+            pattern = '%' + (':' + symbol + '"').lower().replace('!', '!!').replace('%', '!%').replace('_', '!_') + '%'
+            columns, select = ('gene_set_id', 'name', 'library', 'n_genes'), 'SELECT s.gene_set_id,s.gene_set_name,s.library,s.n_genes,'
+            scope = {}
+            if 'factor_id' in a:
+                item = factor(a['factor_id'])
+                if not item: return missing()
+                projection = SET_COLUMNS[3:]
+                columns += projection
+                sql = (select + ''.join('p.' + column + ',' for column in projection) + members + ' FROM factor_gene_set_projections p'
+                       ' JOIN cfde_gene_sets s ON s.generation_id=p.generation_id AND s.gene_set_id=p.gene_set_id'
+                       ' WHERE p.generation_id=%s AND p.scope=%s AND p.factor_key=%s AND ')
+                params, involved = [gen, 'per_trait', item['factor_key']], ['factor_gene_set_projections', 'cfde_gene_sets']
+                coverage, order = MEMBERSHIP_COVERAGE + ' ' + SET_COVERAGE, SET_ORDER
+                scope = {'factor': {'factor_id': item['public_id'], 'factor_key': item['factor_key'], 'label': item['label']}}
+            else:
+                sql = select + members + ' FROM cfde_gene_sets s WHERE s.generation_id=%s AND '
+                params, involved, coverage, order = [gen], ['cfde_gene_sets'], MEMBERSHIP_COVERAGE, 's.n_genes,s.gene_set_id'
+            result, tables = page(sql + 'LOWER(' + members + ") LIKE %s ESCAPE '!'", [*params, pattern],
+                                  (*columns, 'members'), involved, coverage, order)
+            found = []
+            for row in result['items']:
+                stored = _json(row.pop('members')) or []
+                index = next((i for i, member in enumerate(stored) if isinstance(member, str)
+                              and member.rsplit(':', 1)[-1].lower() == symbol.lower()), None)
+                if index is not None: found.append({**row, 'member': stored[index], 'source_pointer': '/members/' + str(index)})
+            result.update(items=found, gene=symbol, _more=len(result['items']) > limit, **scope)
+            return result, tables
         if op in ('search_traits','get_trait'):
             if not kpn: return missing('This imported model has factor trait labels but no KPN trait catalog.')
             columns = ('kpn_trait_id','legacy_phenotype_id','phenotype_name','trait_group','trait_type','description','metadata')
@@ -538,24 +598,31 @@ class ReferenceQueryService:
         raise Problem(422,'INVALID_QUERY','Unknown imported reference operation.')
 
 
+def phenotype_gate():
+    """The deployment gate for the BioIndex small-model readers (REVEAL_SMALL_PHENOTYPE_VERIFIED)."""
+    from .runtime_config import setting
+    return setting('REVEAL_SMALL_PHENOTYPE_VERIFIED', 'false').lower() == 'true'
+
+
 def capability_catalog(generation=None, *, phenotype_verified=None):
     from .gene_identity import crosswalk_capability
-    if phenotype_verified is None:
-        from .runtime_config import setting
-        phenotype_verified = setting('REVEAL_SMALL_PHENOTYPE_VERIFIED', 'false').lower() == 'true'
+    if phenotype_verified is None: phenotype_verified = phenotype_gate()
     model=(generation or {}).get('model')
     operations=[]
     for name,fields in OPERATIONS.items():
         availability='supported' if model in (KPN_MODEL,LEGACY_MODEL) else 'not_supported_for_model' if model else 'requires_generation_metadata'
         reason=None
-        if model==LEGACY_MODEL and name in ('search_traits','get_trait','get_gene_set_factors'):
+        if model==LEGACY_MODEL and name in ('search_traits','get_trait','get_gene_set_factors','get_gene_gene_sets'):
             availability='not_stored'
             reason=('This model stores factor trait labels, not a KPN trait catalog.' if name in ('search_traits','get_trait')
-                    else 'This model stores ranked factor-to-gene-set links, not numeric gene-set projections.')
+                    else 'This model stores ranked factor-to-gene-set links, not numeric gene-set projections.' if name=='get_gene_set_factors'
+                    else 'This model stores ranked gene-set links, not CFDE definitions with exact membership.')
         descriptor={'name':name,'arguments':sorted(fields | PAGE_FIELDS),'availability':availability}
         if reason: descriptor['reason']=reason
         if name=='get_factor_loadings':
             descriptor['semantics']={'gene':GENE_COVERAGE,'gene_set':SET_COVERAGE if model==KPN_MODEL else LEGACY_COVERAGE if model==LEGACY_MODEL else 'requires_generation_metadata'}
+        if name=='get_gene_gene_sets':
+            descriptor['semantics']={'membership':MEMBERSHIP_COVERAGE,'factor_id':SET_COVERAGE}
         operations.append(descriptor)
     return {'version':READER_VERSION,'source_mode':'imported_reference',
         'generation':deepcopy(generation),'operations':operations,
@@ -571,83 +638,193 @@ class _NoRedirect(HTTPRedirectHandler):
     def redirect_request(self, *args, **kwargs): return None
 
 
+class _OverBudget(ValueError):
+    """An upstream page larger than the remaining byte budget: a bound, not a scope violation."""
+
+
+GENE_SYMBOL = r'(?:HGNC\.SYMBOL:)?[A-Za-z0-9][A-Za-z0-9._@-]{0,63}'
+# kpn_traits.gwas_source_category -> the pigean-gene trait_group key; other categories are refused.
+TRAIT_GROUPS = {'KPN': 'portal', 'rare_v2': 'rare_v2'}
+KPN_TRAIT = re.compile(r'KPN\.TRAIT:\d{7}')
+
+
 class SmallModelBioIndex:
     """The only external reference exception. Never follows redirects/fallbacks."""
     HOST = 'https://bioindex.hugeamp.org'
-    VERSION = 'reveal.bioindex-small-phenotype/1'
+    VERSION = 'reveal.bioindex-small-phenotype/2'
+    # The host's CDN answers HTTP 403 to urllib's default Python-urllib agent.
+    USER_AGENT = 'REVEAL-BioIndexSmallPhenotype/2'
     INDEXES = {'get_pigean_gene_phenotype':'pigean-gene-phenotype',
                'get_pigean_gene_set_phenotype':'pigean-gene-set-phenotype'}
+    GENE_INDEX = 'pigean-gene'
+    SIGNATURES = {'pigean-gene-phenotype':['phenotype','sigma','gene_set_size'],
+                  'pigean-gene-set-phenotype':['phenotype','sigma','gene_set_size'],
+                  'pigean-gene':['trait_group','gene','sigma','gene_set_size']}
+    DEFAULT_LIMIT, MAX_LIMIT, MAX_GENES, MAX_RETRY_AFTER = 100, 500, 5, 2
+    NOTES = {'get_pigean_gene_phenotype': 'Pass phenotype_id (a BioIndex phenotype such as T2D, or a pinned KPN.TRAIT id) for its top'
+                 ' PIGEAN gene rows; genes for each gene\'s phenotype rows across the KPN trait groups; or both for that phenotype\'s row'
+                 ' per gene. limit caps rows per upstream query (default 100).',
+             'get_pigean_gene_set_phenotype': 'Pass phenotype_id and an optional limit (default 100), then inspect returned GeneSet rows.'}
 
-    @staticmethod
-    def arguments_schema():
-        """One advertised contract for the two fixed phenotype readers."""
-        return {'type': 'object', 'properties': {'phenotype_id': {
-            'type': 'string', 'minLength': 1, 'maxLength': 200,
+    @classmethod
+    def arguments_schema(cls, operation='get_pigean_gene_phenotype'):
+        """One advertised contract per fixed phenotype reader."""
+        properties = {'phenotype_id': {'type': 'string', 'minLength': 1, 'maxLength': 200,
             'pattern': r'^(?=.*\S)[^,\x00-\x1f]+(?![\s\S])',
-            'description': 'Exact phenotype identifier. Inspect returned gene or GeneSet rows after capture.'}},
-            'required': ['phenotype_id'], 'additionalProperties': False}
+            'description': 'Exact BioIndex phenotype (for example T2D) or a KPN.TRAIT identifier of the pinned generation.'},
+            'limit': {'type': 'integer', 'minimum': 1, 'maximum': cls.MAX_LIMIT,
+                'description': f'Rows per upstream query, default {cls.DEFAULT_LIMIT}; a capped result is reported as partial.'}}
+        schema = {'type': 'object', 'properties': properties, 'required': ['phenotype_id'], 'additionalProperties': False}
+        if operation == 'get_pigean_gene_phenotype':
+            properties['genes'] = {'type': 'array', 'minItems': 1, 'maxItems': cls.MAX_GENES, 'uniqueItems': True,
+                'items': {'type': 'string', 'pattern': '^' + GENE_SYMBOL + r'(?![\s\S])'},
+                'description': 'Per-gene mode (pigean-gene). With phenotype_id, only that phenotype\'s row for each gene; without it, each gene\'s phenotypes.'}
+            schema.update(required=[], anyOf=[{'required': ['phenotype_id']}, {'required': ['genes']}])
+        return schema
 
-    def __init__(self, *, fetch=None, verified=False, max_bytes=2_000_000, max_pages=3, max_rows=5000, timeout=15, clock=None):
+    def __init__(self, *, fetch=None, verified=False, traits=None, max_bytes=3_000_000, max_pages=3, timeout=20, page_timeout=10,
+                 retries=2, sleep=None, clock=None):
         self.fetch = fetch or self._fetch
         self.verified = verified
-        self.max_bytes, self.max_pages, self.max_rows, self.timeout = max_bytes,max_pages,max_rows,timeout
+        # traits(generation_id, phenotype) -> the pinned kpn_traits row, for KPN.TRAIT ids and the per-gene trait group.
+        self.traits = traits
+        self.max_bytes, self.max_pages, self.timeout, self.page_timeout = max_bytes, max_pages, timeout, page_timeout
+        self.retries, self.sleep = retries, sleep or time.sleep
         self.clock = clock or (lambda:datetime.now(timezone.utc).isoformat())
 
     @classmethod
-    def descriptor(cls, *, verified=None):
-        if verified is None:
-            from .runtime_config import setting
-            verified = setting('REVEAL_SMALL_PHENOTYPE_VERIFIED', 'false').lower() == 'true'
-        return {'host':cls.HOST,'model':'small','sigma':2,'signature':['phenotype','sigma','gene_set_size'],
-                'adapter_version':cls.VERSION,'operations':cls.INDEXES,'arguments':cls.arguments_schema(),
+    def descriptor(cls, *, verified=None, operation=None):
+        if verified is None: verified = phenotype_gate()
+        return {'host':cls.HOST,'model':'small','sigma':2,'signature':cls.SIGNATURES['pigean-gene-phenotype'],
+                'gene_index':cls.GENE_INDEX,'gene_signature':cls.SIGNATURES[cls.GENE_INDEX],'trait_groups':dict(TRAIT_GROUPS),
+                'adapter_version':cls.VERSION,'operations':cls.INDEXES,
+                'arguments':cls.arguments_schema(operation) if operation else {name:cls.arguments_schema(name) for name in cls.INDEXES},
+                'limits':{'default_rows':cls.DEFAULT_LIMIT,'max_rows':cls.MAX_LIMIT,'max_genes':cls.MAX_GENES},
                 'availability':'supported' if verified else 'requires_verified_deployment_access',
                 'deployment_verified':bool(verified), 'coverage':'not_queried',
-                'availability_note':'Deployment capability does not establish source coverage or a successful scientific query.',
+                'availability_note':'Deployment capability does not establish source coverage or a successful scientific query. An unavailable source is an outage, never an absence.',
                 'source_mode':'bioindex_small_phenotype'}
 
     @staticmethod
     def _fetch(url, max_bytes, timeout):
-        with build_opener(_NoRedirect()).open(Request(url, headers={'Accept':'application/json'}),timeout=timeout) as response:
+        headers = {'Accept':'application/json','User-Agent':SmallModelBioIndex.USER_AGENT}
+        with build_opener(_NoRedirect()).open(Request(url, headers=headers),timeout=timeout) as response:
             data = response.read(max_bytes+1)
-        if len(data)>max_bytes: raise ValueError('Source response exceeds byte budget')
+        if len(data)>max_bytes: raise _OverBudget('Source response exceeds byte budget')
         return data
+
+    def _wait(self, error, attempt, deadline):
+        """Seconds to wait before retrying error (429, 5xx, timeout or reset), or None when it is final."""
+        if attempt >= self.retries: return None
+        wait = 0.5 * 2 ** attempt
+        if isinstance(error, HTTPError):
+            if error.code != 429 and error.code < 500: return None
+            headers = getattr(error, 'headers', None)
+            after = headers.get('Retry-After') if headers is not None else None
+            if after is not None:
+                try: wait = float(after)
+                except ValueError: return None
+                if not 0 <= wait <= self.MAX_RETRY_AFTER: return None
+        elif not isinstance(error.reason if isinstance(error, URLError) else error, (TimeoutError, ConnectionError)):
+            return None
+        return wait if time.monotonic() + wait < deadline else None
+
+    def _get(self, url, budget, deadline):
+        """One upstream page within the per-page timeout, retried within the query deadline."""
+        attempt = 0
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0: raise TimeoutError('Query latency budget exhausted')
+            try:
+                return self.fetch(url, budget, min(self.page_timeout, remaining))
+            except OSError as error:   # HTTPError, URLError, timeouts and resets
+                wait = self._wait(error, attempt, deadline)
+                if wait is None:
+                    error.reveal_attempts = attempt + 1
+                    raise
+            self.sleep(wait); attempt += 1
 
     def verify(self):
         """Administrative metadata probe; never exposed as an agent operation."""
-        catalog = decode(self.fetch(self.HOST+'/api/bio/indexes',self.max_bytes,self.timeout))
-        for index in self.INDEXES.values():
-            if not any(row.get('index')==index and row.get('query',{}).get('keys')==['phenotype','sigma','gene_set_size'] for row in catalog.get('data',[])):
-                raise Problem(503,'SOURCE_UNAVAILABLE','The small-model deployment query signature has not been verified.')
-            keys = decode(self.fetch(self.HOST+'/api/bio/keys/'+index+'/3?columns=gene_set_size',self.max_bytes,self.timeout))
-            if ['small'] not in keys.get('keys',[]): raise Problem(503,'SOURCE_UNAVAILABLE','The deployment does not advertise literal small.')
+        deadline = time.monotonic() + self.timeout
+        get = lambda path: decode(self._get(self.HOST + path, self.max_bytes, deadline))
+        catalog = get('/api/bio/indexes')
+        if not all(any(row.get('index')==index and row.get('query',{}).get('keys')==keys for row in catalog.get('data',[]))
+                   for index, keys in self.SIGNATURES.items()):
+            raise Problem(503,'SOURCE_UNAVAILABLE','The small-model deployment query signature has not been verified.')
+        for index, keys in self.SIGNATURES.items():
+            # The keys route takes the index's own key count: 3 for the phenotype indexes, 4 for pigean-gene.
+            if ['small'] not in get('/api/bio/keys/'+index+'/'+str(len(keys))+'?columns=gene_set_size').get('keys',[]):
+                raise Problem(503,'SOURCE_UNAVAILABLE','The deployment does not advertise literal small.')
+        groups = get('/api/bio/keys/'+self.GENE_INDEX+'/'+str(len(self.SIGNATURES[self.GENE_INDEX]))+'?columns=trait_group').get('keys',[])
+        if any([group] not in groups for group in TRAIT_GROUPS.values()):
+            raise Problem(503,'SOURCE_UNAVAILABLE','The deployment does not advertise every mapped trait group.')
         self.verified=True
         return catalog
 
     def query(self, operation, arguments, *, generation_id=None):
-        if operation not in self.INDEXES or not isinstance(arguments,dict) or set(arguments)-{'phenotype_id'}:
-            raise Problem(422,'INVALID_QUERY','Only the two fixed small-model phenotype operations are permitted.')
-        phenotype=_text(arguments.get('phenotype_id'),'phenotype_id',200)
-        if ',' in phenotype: raise Problem(422,'INVALID_QUERY','A phenotype identifier cannot add positional query keys.')
-        index=self.INDEXES[operation]
+        allowed = set(self.arguments_schema(operation)['properties']) if operation in self.INDEXES else set()
+        if not allowed or not isinstance(arguments,dict) or set(arguments)-allowed:
+            raise Problem(422,'INVALID_QUERY','Only the fixed small-model phenotype operations and their arguments are permitted.')
+        phenotype, genes, limit = arguments.get('phenotype_id'), arguments.get('genes'), arguments.get('limit', self.DEFAULT_LIMIT)
+        if phenotype is not None:
+            phenotype=_text(phenotype,'phenotype_id',200)
+            if ',' in phenotype: raise Problem(422,'INVALID_QUERY','A phenotype identifier cannot add positional query keys.')
+        if type(limit) is not int or not 1 <= limit <= self.MAX_LIMIT:
+            raise Problem(422,'INVALID_QUERY',f'Use a limit between 1 and {self.MAX_LIMIT}.')
+        if genes is not None:
+            if (not isinstance(genes,list) or not 1 <= len(genes) <= self.MAX_GENES
+                    or any(not isinstance(gene,str) or not re.fullmatch(GENE_SYMBOL,gene) for gene in genes)):
+                raise Problem(422,'INVALID_QUERY',f'Use one to {self.MAX_GENES} gene symbols.')
+            genes=[gene.rsplit(':',1)[-1] for gene in genes]
+            if len({gene.upper() for gene in genes})!=len(genes): raise Problem(422,'INVALID_QUERY','Gene symbols repeat.')
+        elif phenotype is None: raise Problem(422,'INVALID_QUERY','Pass phenotype_id, genes or both.')
+        index=self.GENE_INDEX if genes else self.INDEXES[operation]
         source={'origin':self.HOST+'/api/bio/query/'+index,'host':self.HOST,'index':index,'model':'small','sigma':2,
                 'phenotype':phenotype,'adapter_version':self.VERSION,'observed_at':self.clock(),
                 'upstream_release':None,'generation_id':None,
-                'bounds':{'bytes':self.max_bytes,'pages':self.max_pages,'rows':self.max_rows,'seconds':self.timeout}}
+                'bounds':{'bytes':self.max_bytes,'pages':self.max_pages,'rows':limit,'seconds':self.timeout,
+                          'page_seconds':self.page_timeout,'retries':self.retries}}
         result={'items':[],'status':'source_unavailable','import_coverage':'Separate small-model observation; not part of the imported reference generation.',
-                'snapshot_consistency':'not_guaranteed','returned_rows':0,'truncated':False,'next_cursor':None}
-        pages={}; page_meta=[]; reason=None
-        if not self.verified: reason='Deployment access and the three-key small-model signature have not been verified.'
+                'snapshot_consistency':'not_guaranteed','returned_rows':0,'truncated':False,'next_cursor':None,'limit':limit}
+        pages={}; page_meta=[]; reason=None; queries=[]
+        if not self.verified: reason='Deployment access and the small-model index signatures have not been verified.'
         else:
-            # This is an explicit result cap, never advertised as upstream page
-            # size or complete retrieval. Unread byte progress remains partial.
-            url=source['origin']+'?'+urlencode({'q':phenotype+',2,small','limit':self.max_rows})
-            started=time.monotonic(); seen=set(); consumed=0
-            try:
-                for number in range(self.max_pages):
-                    remaining=self.timeout-(time.monotonic()-started)
-                    if remaining<=0: raise TimeoutError('Query latency budget exhausted')
-                    raw=self.fetch(url,self.max_bytes-consumed,max(0.1,remaining))
-                    if not isinstance(raw,bytes) or len(raw)>self.max_bytes-consumed: raise ValueError('Source response exceeds byte budget')
+            trait=self.traits(generation_id,phenotype) if phenotype is not None and self.traits and generation_id else None
+            if phenotype is not None and not trait and (genes or KPN_TRAIT.fullmatch(phenotype)):
+                raise Problem(422,'INVALID_QUERY','Per-gene lookups and KPN.TRAIT identifiers need a phenotype in the pinned generation\'s KPN trait catalog.')
+            if trait:
+                group=TRAIT_GROUPS.get(trait['gwas_source_category'])
+                if genes and not group:
+                    raise Problem(422,'INVALID_QUERY','No BioIndex trait group is registered for source category '+str(trait['gwas_source_category'])+'.')
+                phenotype=source['phenotype']=trait['legacy_phenotype_id']
+                source['trait']={**trait,'trait_group':group,'reference_generation_id':generation_id}
+            if genes:
+                groups=[TRAIT_GROUPS[trait['gwas_source_category']]] if phenotype is not None else sorted(set(TRAIT_GROUPS.values()))
+                source.update(genes=genes,trait_groups=groups)
+                requests=[(gene,group,[group,gene,'2','small']) for gene in genes for group in groups]
+            else: requests=[(None,None,[phenotype,'2','small'])]
+            deadline=time.monotonic()+self.timeout; consumed=0; truncated=False
+
+            def check(row,gene,group):
+                if not isinstance(row,dict): raise ValueError('Invalid source row')
+                if row.get('gene_set_size','small')!='small' or str(row.get('sigma',2)) not in ('2','2.0'):
+                    raise ValueError('Source model or sigma escaped query scope')
+                if gene is None:
+                    if row.get('phenotype',phenotype)!=phenotype: raise ValueError('Source phenotype escaped query scope')
+                elif str(row.get('gene',gene)).upper()!=gene.upper() or row.get('trait_group',group)!=group:
+                    raise ValueError('Source gene or trait group escaped query scope')
+
+            def read(keys,upstream_limit,gene,group):
+                # Bounded pages of one positional query. This is an explicit result cap, never advertised as upstream page
+                # size or complete retrieval; unread byte progress remains partial.
+                nonlocal consumed
+                url=source['origin']+'?'+urlencode({'q':','.join(keys),**({'limit':upstream_limit} if upstream_limit else {})})
+                rows=[]; seen=set(); partial=True
+                for _ in range(self.max_pages):
+                    if consumed>=self.max_bytes: raise _OverBudget('Source byte budget exhausted')
+                    raw=self._get(url,self.max_bytes-consumed,deadline)
+                    if not isinstance(raw,bytes) or len(raw)>self.max_bytes-consumed: raise _OverBudget('Source response exceeds byte budget')
                     page=decode(raw)
                     if not isinstance(page,dict): raise ValueError('Invalid BioIndex response envelope')
                     data=page.get('data')
@@ -656,41 +833,61 @@ class SmallModelBioIndex:
                     query_keys = page.get('q')
                     if query_keys is not None:
                         if isinstance(query_keys,str): query_keys=query_keys.split(',')
-                        if not isinstance(query_keys,list) or [str(v) for v in query_keys] != [phenotype,'2','small']:
+                        if not isinstance(query_keys,list) or [str(v) for v in query_keys] != keys:
                             raise ValueError('Source positional query escaped its pinned scope')
-                    for row in data:
-                        if not isinstance(row,dict): raise ValueError('Invalid source row')
-                        if row.get('gene_set_size','small')!='small' or str(row.get('sigma',2)) not in ('2','2.0'):
-                            raise ValueError('Source model or sigma escaped query scope')
-                        if row.get('phenotype',phenotype)!=phenotype: raise ValueError('Source phenotype escaped query scope')
-                    pages['page-'+str(number)+'.json']=raw; consumed+=len(raw)
-                    available=self.max_rows-len(result['items'])
-                    result['items'].extend(data[:available])
+                    for row in data: check(row,gene,group)
+                    pages['page-'+str(len(pages))+'.json']=raw; consumed+=len(raw)
+                    rows.extend(data)
                     progress=page.get('progress') or {}
                     if not isinstance(progress,dict): raise ValueError('Invalid source progress')
                     continuation=page.get('continuation')
                     finished = (type(progress.get('bytes_read')) is int and type(progress.get('bytes_total')) is int
                                 and 0 <= progress['bytes_read'] == progress['bytes_total'])
-                    partial=len(data)>available or bool(continuation) or not finished
+                    partial=bool(continuation) or not finished
                     page_meta.append({'sha256':sha256(raw),'size_bytes':len(raw),'rows':len(data),'progress':progress,
-                                      'restricted':page.get('restricted'),'page':page.get('page')})
-                    result.update(status='partial' if partial else 'complete' if result['items'] else 'empty',truncated=partial)
-                    if not continuation or len(result['items'])>=self.max_rows or consumed>=self.max_bytes: break
+                                      'restricted':page.get('restricted'),'page':page.get('page'),'q':keys})
+                    if not continuation or (upstream_limit and len(rows)>=upstream_limit): break
                     if not isinstance(continuation,str) or len(continuation)>10000 or continuation in seen:
                         raise ValueError('Invalid or repeated upstream continuation')
                     seen.add(continuation)
                     url=self.HOST+'/api/bio/cont?'+urlencode({'token':continuation})
-            except (HTTPError,URLError,TimeoutError,OSError) as error:
+                return rows,partial
+
+            try:
+                for gene,group,keys in requests:
+                    entry={'gene':gene,'trait_group':group,'status':'unavailable','returned_rows':0}
+                    if gene: queries.append(entry)
+                    # One phenotype's row per gene needs that gene's whole exposure; otherwise the upstream limit applies.
+                    rows,partial=read(keys,None if gene and phenotype is not None else limit,gene,group)
+                    if gene and phenotype is not None: rows=[row for row in rows if row.get('phenotype')==phenotype]
+                    if len(rows)>limit: rows,partial=rows[:limit],True
+                    result['items'].extend(rows); truncated=truncated or partial
+                    entry.update(status='partial' if partial else 'complete',returned_rows=len(rows))
+                result.update(status='partial' if truncated else 'complete' if result['items'] else 'empty',truncated=truncated)
+            except (OSError,_OverBudget) as error:
                 result.update(status='partial' if result['items'] else 'source_unavailable',truncated=bool(result['items']))
-                reason='The configured small-model source was unavailable ('+type(error).__name__+').'
+                if isinstance(error,_OverBudget): reason=str(error)+'; unread rows were not observed.'
+                else:
+                    attempts=getattr(error,'reveal_attempts',1)
+                    reason=('The configured small-model source was unavailable ('+('HTTP '+str(error.code) if isinstance(error,HTTPError)
+                            else type(error).__name__)+(f' after {attempts} attempts' if attempts>1 else '')+
+                            '). This is an outage, not evidence of absence.')
             except (ValueError,TypeError,KeyError) as error:
                 # A scope mismatch invalidates the whole query; earlier valid
                 # pages stay diagnostic only and cannot become eligible evidence.
                 result.update(items=[],status='source_unavailable',truncated=False)
+                for entry in queries: entry.update(status='unavailable',returned_rows=0)
                 reason=str(error)
         if reason: result['reason']=reason
+        if genes:
+            done={(entry['gene'],entry['trait_group']) for entry in queries}
+            queries+=[{'gene':gene,'trait_group':group,'status':'not_queried','returned_rows':0}
+                      for gene in genes for group in (source.get('trait_groups') or []) if (gene,group) not in done]
+            result['queries']=queries
+            result['absence_note']=('A complete per-gene query without a row for the phenotype is an upstream absence, not a biological'
+                                    ' negative; partial, unavailable and not_queried genes were not fully observed.')
         result.update(returned_rows=len(result['items']),pages=page_meta,
                       coverage='Complete only for returned source exposure; restricted rows and upstream filtering may remain.')
         raw=canonical_json({'format':CAPTURE_FORMAT,'source_mode':'bioindex_small_phenotype','source':source,
-                            'operation':operation,'arguments':{'phenotype_id':phenotype},'result':result})
+                            'operation':operation,'arguments':deepcopy(arguments),'result':result})
         return QueryCapture(result,raw,'bioindex_small_phenotype',source,pages)

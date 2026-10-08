@@ -121,7 +121,7 @@ def capture_query(service, operation, *, finalize=None):
     """One read before the query and one fence after it: artifacts, receipt and (with finalize) the
     operation's result commit together, re-authorized under the lease."""
     from .acceptance import public_runtime
-    from .research_data import ReferenceQueryService, SmallModelBioIndex
+    from .research_data import ReferenceQueryService, SmallModelBioIndex, phenotype_gate
     args = operation['arguments']; owner = operation['owner_user_id']; identity = operation['id']
     with measure('research_query', 'context_read'), service.repo.read_transaction() as tx:
         authority = authorize_commit(tx, operation, extra=(('evidence_receipt', identity),))
@@ -139,7 +139,7 @@ def capture_query(service, operation, *, finalize=None):
         cursor_secret=setting('REVEAL_RESEARCH_CURSOR_SECRET', setting('REVEAL_GATEWAY_SECRET', '')))
     name = args['operation_id']
     if name in SmallModelBioIndex.INDEXES:
-        query_service = SmallModelBioIndex(verified=setting('REVEAL_SMALL_PHENOTYPE_VERIFIED', 'false').lower() == 'true')
+        query_service = SmallModelBioIndex(verified=phenotype_gate(), traits=getattr(query_service, 'phenotype_trait', None))
     from .research_graphs import OPERATIONS as GRAPH_OPERATIONS, GraphQueryService
     with measure('research_query', 'source'):
         if name in GRAPH_OPERATIONS:

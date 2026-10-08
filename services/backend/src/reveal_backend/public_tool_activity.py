@@ -46,7 +46,7 @@ ARGUMENTS = {
 # identities and proxy-supplied credentials/idempotency keys stay private.
 for _name in (
         'search_factors', 'get_factor', 'get_factor_loadings', 'search_genes', 'resolve_gene',
-        'get_gene_factors', 'search_gene_sets', 'get_gene_set', 'get_gene_set_members',
+        'get_gene_factors', 'get_gene_gene_sets', 'search_gene_sets', 'get_gene_set', 'get_gene_set_members',
         'get_gene_set_factors', 'search_traits', 'get_trait', 'get_connections', 'get_imported_graph',
         'get_pigean_gene_phenotype', 'get_pigean_gene_set_phenotype'):
     ARGUMENTS[_name] = ('arguments',)

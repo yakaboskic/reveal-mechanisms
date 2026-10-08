@@ -27,9 +27,20 @@ Hosted Boxes must reach that backend over public HTTPS. To run a hosted agent ag
 
 ## Evidence and reuse
 
-Public loaded-data operations require an exact retained `reference_generation_id`; the downloaded helper supplies it. They never fall back to a newer import or an external reference service. Authenticated queries use the work's pinned generation. Only `get_pigean_gene_phenotype` and `get_pigean_gene_set_phenotype` may use BioIndex, fixed to `bioindex.hugeamp.org`, model `small`, sigma `2`, and the `phenotype,2,small` signature. Other model/index/host overrides are rejected.
+Public loaded-data operations require an exact retained `reference_generation_id`; the downloaded helper supplies it. They never fall back to a newer import or an external reference service. Authenticated queries use the work's pinned generation. `get_gene_gene_sets` lists the CFDE gene sets whose stored membership contains a gene, matched on the symbol without case. Each row gives the exact stored `member` and its `source_pointer` in the GeneSet. With `factor_id`, it reads only that factor's retained per-trait projections, with their joint and marginal loadings. Read the trusted GeneSet with `get_gene_set` before citing membership.
 
-Those two external operations remain unavailable until deployment access and index signatures are verified. The original development check returned HTTP 403. Do not set `REVEAL_SMALL_PHENOTYPE_VERIFIED=true` merely to bypass that result. Unavailable responses cannot support claims, and source verification is not triggered by an agent query.
+Only `get_pigean_gene_phenotype` and `get_pigean_gene_set_phenotype` may use BioIndex. Both are fixed to `bioindex.hugeamp.org`, model `small` and sigma `2`. Other model, index and host overrides are rejected.
+
+- **Phenotype mode.** Pass `phenotype_id` to read `pigean-gene-phenotype` (or `pigean-gene-set-phenotype`) with the `phenotype,2,small` signature. Use a BioIndex phenotype such as `T2D` or a `KPN.TRAIT` identifier of the pinned generation.
+- **Row limit.** `limit` caps rows per upstream query: default 100, maximum 500. A capped result is `partial`, so a per-phenotype read no longer pulls the whole multi-megabyte phenotype.
+- **Per-gene mode.** `get_pigean_gene_phenotype` also takes `genes` (one to five symbols) and reads `pigean-gene` with the `trait_group,gene,2,small` signature.
+  - With `phenotype_id`, the trait group comes from the trait's `kpn_traits.gwas_source_category` (`KPN` → `portal`, `rare_v2` → `rare_v2`); other categories are refused. Each gene's whole exposure is read and only that phenotype's row is kept.
+  - Without `phenotype_id`, each gene is read in every mapped trait group, under the row limit.
+  - `result.queries` reports each gene as `complete`, `partial`, `unavailable` or `not_queried`.
+
+Each page has a 10-second timeout, and a query has 20 seconds in all. HTTP 429 and 5xx responses, timeouts and resets are retried twice. A `Retry-After` of up to 2 seconds is honoured; a longer one ends the query. An outage is reported as `source_unavailable` (or `partial`, keeping the rows already read) with a reason. It is never an absence. Unavailable responses cannot support claims.
+
+`REVEAL_SMALL_PHENOTYPE_VERIFIED=true` enables these reads; deployments set it after `SmallModelBioIndex().verify()` passes against the live host. `verify()` checks each index's key signature, literal `small` and the mapped trait groups. The earlier HTTP 403 came from the host's CDN refusing urllib's default `Python-urllib` agent; requests now name their own agent. An agent query never triggers source verification.
 
 Anonymous reference results include portable, exact server-retained captures with an explicit `expires_at`, by default seven days. `get_public_capture` replays them without another scientific query. Its artifact URLs serve only verified public reference bytes, never private seed inputs, user uploads or reuse closures. After sign-in, `attach_public_captures` verifies and attaches one to ten selected captures to a ready work item with the **same frozen generation**. It preserves the original source bytes and metadata, including separately identified small-model observations, without re-querying a source. Already attached evidence remains retained after public capture expiry. Unattached expired captures fail explicitly; downloaded bytes or caller-supplied hashes do not bypass that rule.
 

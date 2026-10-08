@@ -71,6 +71,8 @@ env:
   REVEAL_AGENT_MAX_TURNS: '100'
   REVEAL_RETRIEVAL_BACKEND: upstash
   REVEAL_VECTOR_ENVIRONMENT: prod
+  # BioIndex small-model phenotype readers; SmallModelBioIndex().verify() passed against the live host.
+  REVEAL_SMALL_PHENOTYPE_VERIFIED: 'true'
   REVEAL_NOTIFICATION_NAMESPACE: reveal-prod
   QSTASH_URL: https://qstash-us-east-1.upstash.io
   REVEAL_WORKFLOW_URL: https://api-prod.hugeampkpnbi.org/api/reveal/internal/workflows/research-v1

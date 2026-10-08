@@ -8,7 +8,7 @@ import sqlite3
 import tempfile
 import tarfile
 import unittest
-from urllib.error import HTTPError
+from urllib.error import HTTPError,URLError
 from urllib.parse import parse_qs,urlparse
 
 from reveal_backend.auth import Problem
@@ -60,7 +60,7 @@ CREATE TABLE eaggl_gene_loadings(import_id TEXT,factor_index INTEGER,gene_index 
 CREATE TABLE cfde_gene_sets(generation_id TEXT,gene_set_id TEXT,collection_id TEXT,gene_set_name TEXT,library TEXT,n_genes INTEGER,n_genes_in_eaggl_universe INTEGER,metadata TEXT);
 CREATE TABLE cfde_gene_set_collections(generation_id TEXT,collection_id TEXT,payload TEXT);
 CREATE TABLE factor_gene_set_projections(generation_id TEXT,scope TEXT,factor_key TEXT,gene_set_id TEXT,joint_loading REAL,marginal_loading REAL,joint_loading_text TEXT,marginal_loading_text TEXT,joint_rank INTEGER,marginal_rank INTEGER,is_joint_top_factor INTEGER);
-CREATE TABLE kpn_traits(generation_id TEXT,kpn_trait_id TEXT,legacy_phenotype_id TEXT,phenotype_name TEXT,trait_group TEXT,trait_type TEXT,description TEXT,metadata TEXT);
+CREATE TABLE kpn_traits(generation_id TEXT,kpn_trait_id TEXT,legacy_phenotype_id TEXT,phenotype_name TEXT,trait_group TEXT,trait_type TEXT,description TEXT,metadata TEXT,gwas_source_category TEXT);
 CREATE TABLE eaggl_graph_nodes(import_id TEXT,node_index INTEGER,node_id TEXT,factor_index INTEGER,payload TEXT);
 CREATE TABLE eaggl_graph_edges(import_id TEXT,parent_index INTEGER,child_index INTEGER);
 CREATE TABLE eaggl_cfde_factor_links(run_id TEXT,factor_index INTEGER,cfde_node_id TEXT,payload TEXT);
@@ -81,7 +81,7 @@ CREATE TABLE dapper_objects(id TEXT,payload TEXT);
             c.execute('INSERT INTO cfde_gene_sets VALUES(?,?,?,?,?,?,?,?)',(GEN,SET,'collection','stored set','GO',2,2,json.dumps({'dapper_gene_set':node})))
             c.execute('INSERT INTO cfde_gene_set_collections VALUES(?,?,?)',(GEN,'collection',json.dumps({'provenance':{'prefixes':{'HGNC.SYMBOL':'https://identifiers.org/hgnc.symbol:'}}})))
             c.execute('INSERT INTO factor_gene_set_projections VALUES(?,?,?,?,?,?,?,?,?,?,?)',(GEN,'per_trait',KEY,SET,.4,.2,'0.4','0.2',1,1250,1))
-            c.execute('INSERT INTO kpn_traits VALUES(?,?,?,?,?,?,?,?)',(GEN,'KPN.TRAIT:0000398','T2D','type 2 diabetes','kpn','phenotype','description','{}'))
+            c.execute('INSERT INTO kpn_traits VALUES(?,?,?,?,?,?,?,?,?)',(GEN,'KPN.TRAIT:0000398','T2D','type 2 diabetes','kpn','phenotype','description','{}','KPN'))
             c.execute('INSERT INTO eaggl_graph_nodes VALUES(?,?,?,?,?)',(IMP,1,'T2D::Factor1',1,'{"kind":"factor"}'))
             c.execute('INSERT INTO eaggl_graph_nodes VALUES(?,?,?,?,?)',(IMP,2,'child',None,'{"kind":"factor_set"}'))
             c.execute('INSERT INTO eaggl_graph_edges VALUES(?,?,?)',(IMP,1,2))
@@ -140,6 +140,51 @@ CREATE TABLE dapper_objects(id TEXT,payload TEXT);
         self.assertEqual(self.query('resolve_gene',{'gene':'absent'}).result['status'],'empty')
         with self.assertRaises(Problem): self.query('query_sql',{'sql':'SELECT 1'})
         with self.assertRaises(Problem): self.query('search_genes',{'model':'small'})
+
+    def test_gene_gene_sets_match_exact_stored_membership_with_optional_factor_projection(self):
+        other,third='dapper:GeneSet.'+'e'*32,'dapper:GeneSet.'+'f'*32
+        with sqlite3.connect(self.path) as c:
+            # LIKE wildcards in a symbol stay literal; a longer symbol ending in the query never matches.
+            c.execute('INSERT INTO cfde_gene_sets VALUES(?,?,?,?,?,?,?,?)',(GEN,other,'collection','wildcard set','GO',2,2,
+                json.dumps({'dapper_gene_set':{'id':other,'members':['HGNC.SYMBOL:GENEXA','HGNC.SYMBOL:PGENE_A']}})))
+            c.execute('INSERT INTO cfde_gene_sets VALUES(?,?,?,?,?,?,?,?)',(GEN,third,'collection','larger set','GO',3,3,
+                json.dumps({'dapper_gene_set':{'id':third,'members':['HGNC.SYMBOL:X','HGNC.SYMBOL:gene_a','HGNC.SYMBOL:Y']}})))
+        found=self.query('get_gene_gene_sets',{'gene':'GENE_A'})
+        self.assertEqual([(x['gene_set_id'],x['member'],x['source_pointer'],x['n_genes']) for x in found.result['items']],
+                         [(SET,'HGNC.SYMBOL:GENE_A','/members/0',2),(third,'HGNC.SYMBOL:gene_a','/members/1',3)])
+        self.assertEqual((found.result['status'],found.result['gene']),('complete','GENE_A'))
+        self.assertIn('get_gene_set',found.result['import_coverage'])
+        self.assertEqual(found.source['tables'],['reference_generations','cfde_gene_sets'])
+        self.assertEqual(self.query('get_gene_gene_sets',{'gene':'HGNC.SYMBOL:gene_b'}).result['items'][0]['source_pointer'],'/members/1')
+        self.assertEqual(self.query('get_gene_gene_sets',{'gene':'GENE%'}).result['status'],'empty')
+        first=self.query('get_gene_gene_sets',{'gene':'GENE_A','limit':1})
+        self.assertEqual((first.result['status'],[x['gene_set_id'] for x in first.result['items']]),('partial',[SET]))
+        second=self.query('get_gene_gene_sets',{'gene':'GENE_A','limit':1,'cursor':first.result['next_cursor']})
+        self.assertEqual([x['gene_set_id'] for x in second.result['items']],[third])
+        # A factor restricts to its retained projections and carries their exact loadings.
+        scoped=self.query('get_gene_gene_sets',{'gene':'gene_a','factor_id':FACTOR})
+        self.assertEqual(len(scoped.result['items']),1)
+        row=scoped.result['items'][0]
+        self.assertEqual((row['gene_set_id'],row['joint_loading'],row['marginal_loading'],row['joint_loading_text'],row['marginal_rank'],row['source_pointer']),
+                         (SET,.4,.2,'0.4',1250,'/members/0'))
+        self.assertEqual(scoped.result['factor'],{'factor_id':FACTOR,'factor_key':KEY,'label':'retained'})
+        self.assertIn('factor_gene_set_projections',scoped.source['tables'])
+        self.assertIn('top 50',scoped.result['import_coverage'])
+        self.assertEqual(self.query('get_gene_gene_sets',{'gene':'GENE_A','factor_id':'absent'}).result['status'],'not_stored')
+        for bad in ('urn:x:GENE_A','GENE"A'):
+            with self.assertRaises(Problem): self.query('get_gene_gene_sets',{'gene':bad})
+        context=scoped.materialize(SeedTests.runtime())
+        self.assertTrue(context['eligible_source_ids'])
+        self.assertNotIn('gene_sets',context['dapper_context'])  # membership rows never mint a GeneSet
+        semantics=next(item for item in self.service.catalog(GEN)['operations'] if item['name']=='get_gene_gene_sets')['semantics']
+        self.assertEqual(semantics['factor_id'],scoped.result['import_coverage'].split(' Read the trusted GeneSet with get_gene_set before citing membership. ')[1])
+
+    def test_phenotype_trait_resolves_kpn_or_bioindex_identifiers(self):
+        expected={'kpn_trait_id':'KPN.TRAIT:0000398','legacy_phenotype_id':'T2D','phenotype_name':'type 2 diabetes','gwas_source_category':'KPN'}
+        self.assertEqual(self.service.phenotype_trait(GEN,'KPN.TRAIT:0000398'),expected)
+        self.assertEqual(self.service.phenotype_trait(GEN,'T2D'),expected)
+        self.assertIsNone(self.service.phenotype_trait(GEN,'BMI'))
+        with self.assertRaises(Problem): self.service.phenotype_trait('f'*64,'T2D')
 
     def test_kpn_factor_lookup_uses_unique_keys_and_matches_the_exact_text_join(self):
         from reveal_backend import research_data
@@ -244,6 +289,7 @@ CREATE TABLE dapper_objects(id TEXT,payload TEXT);
         self.assertIn('does not store numeric',ranked.result['import_coverage'])
         self.assertEqual(self.query('get_gene_set_members',{'gene_set_id':SET},legacy).result['items'][0]['member'],'HGNC.SYMBOL:GENE_A')
         self.assertEqual(self.query('get_gene_set_factors',{'gene_set_id':SET},legacy).result['status'],'not_stored')
+        self.assertEqual(self.query('get_gene_gene_sets',{'gene':'GENE_A'},legacy).result['status'],'not_stored')
         catalog=self.service.catalog(legacy)
         self.assertEqual(catalog['generation']['model'],'cfde-inc-v2')
         self.assertEqual(catalog['generation']['legacy_mapping_run_id'],mapping)
@@ -251,6 +297,7 @@ CREATE TABLE dapper_objects(id TEXT,payload TEXT);
         availability={operation['name']:operation['availability'] for operation in catalog['operations']}
         self.assertEqual(availability['get_factor_loadings'],'supported')
         self.assertEqual(availability['get_gene_set_factors'],'not_stored')
+        self.assertEqual(availability['get_gene_gene_sets'],'not_stored')
         self.assertEqual(availability['get_trait'],'not_stored')
         self.assertEqual(catalog['coverage']['gene_set_projections'],'not_stored')
 
@@ -297,14 +344,26 @@ CREATE TABLE dapper_objects(id TEXT,payload TEXT);
 
 
 class SmallModelTests(unittest.TestCase):
+    TRAIT={'kpn_trait_id':'KPN.TRAIT:0000398','legacy_phenotype_id':'T2D','phenotype_name':'type 2 diabetes','gwas_source_category':'KPN'}
+
     def adapter(self,pages,**kwargs):
-        self.calls=[]
+        self.calls=[]; self.slept=[]
         def fetch(url,max_bytes,timeout):
             self.calls.append((url,max_bytes,timeout))
             value=pages.pop(0)
             if isinstance(value,Exception): raise value
             return value if isinstance(value,bytes) else canonical_json(value)
+        kwargs.setdefault('sleep',self.slept.append)
         return SmallModelBioIndex(fetch=fetch,verified=True,clock=lambda:'2026-10-05T00:00:00Z',**kwargs)
+
+    def traits(self,generation,phenotype):
+        self.assertEqual(generation,GEN)
+        return dict(self.TRAIT) if phenotype in ('T2D','KPN.TRAIT:0000398') else None
+
+    def gene_page(self,gene,group='portal',phenotypes=('BMI','T2D'),**kwargs):
+        return {'index':'pigean-gene','q':[group,gene,'2','small'],'continuation':None,'progress':{'bytes_read':10,'bytes_total':10},
+                'data':[{'phenotype':p,'gene':gene.upper(),'trait_group':group,'gene_set_size':'small','sigma':2,'combined':1.5,'log_bf':.5,'prior':1.0}
+                        for p in phenotypes],**kwargs}
 
     def page(self,**kwargs):
         return {'index':'pigean-gene-phenotype','data':[{'gene':'INS','phenotype':'T2D','gene_set_size':'small','sigma':2,'combined':2.3}],
@@ -341,6 +400,129 @@ class SmallModelTests(unittest.TestCase):
         self.assertEqual(denied.result['status'],'source_unavailable'); self.assertEqual(len(self.calls),1)
         too_big=self.adapter([b' '*101],max_bytes=100).query('get_pigean_gene_phenotype',{'phenotype_id':'T2D'})
         self.assertEqual(too_big.result['status'],'source_unavailable')
+
+    def test_limit_is_forwarded_and_a_capped_result_stays_partial(self):
+        adapter=self.adapter([self.page()])
+        default=adapter.query('get_pigean_gene_phenotype',{'phenotype_id':'T2D'})
+        self.assertEqual(parse_qs(urlparse(self.calls[0][0]).query)['limit'],['100'])
+        self.assertEqual((default.result['limit'],default.source['bounds']['rows']),(100,100))
+        capped=self.adapter([self.page(index='pigean-gene-set-phenotype',progress={'bytes_read':10,'bytes_total':6_500_000})]).query('get_pigean_gene_set_phenotype',
+            {'phenotype_id':'T2D','limit':2})
+        self.assertEqual(parse_qs(urlparse(self.calls[0][0]).query)['limit'],['2'])
+        self.assertEqual((capped.result['status'],capped.result['truncated']),('partial',True))
+        over=self.adapter([self.page(data=[dict(self.page()['data'][0]) for _ in range(3)])]).query('get_pigean_gene_phenotype',{'phenotype_id':'T2D','limit':2})
+        self.assertEqual((over.result['returned_rows'],over.result['status']),(2,'partial'))
+        for bad in ({'phenotype_id':'T2D','limit':0},{'phenotype_id':'T2D','limit':501},{'phenotype_id':'T2D','limit':True},
+                    {'phenotype_id':'T2D','genes':['INS']} ,{}):
+            with self.subTest(bad=bad),self.assertRaises(Problem):
+                self.adapter([]).query('get_pigean_gene_set_phenotype' if 'genes' in bad else 'get_pigean_gene_phenotype',bad)
+
+    def test_per_gene_mode_reads_one_phenotype_row_per_gene_in_its_trait_group(self):
+        adapter=self.adapter([self.gene_page('INS'),self.gene_page('gck',phenotypes=('BMI',))],traits=self.traits)
+        capture=adapter.query('get_pigean_gene_phenotype',{'phenotype_id':'KPN.TRAIT:0000398','genes':['HGNC.SYMBOL:INS','gck']},generation_id=GEN)
+        self.assertEqual([parse_qs(urlparse(url).query) for url,_,_ in self.calls],[{'q':['portal,INS,2,small']},{'q':['portal,gck,2,small']}])
+        self.assertTrue(all('/pigean-gene?' in url for url,_,_ in self.calls))
+        self.assertEqual([(row['gene'],row['phenotype']) for row in capture.result['items']],[('INS','T2D')])
+        self.assertEqual(capture.result['queries'],[{'gene':'INS','trait_group':'portal','status':'complete','returned_rows':1},
+                                                    {'gene':'gck','trait_group':'portal','status':'complete','returned_rows':0}])
+        self.assertEqual(capture.result['status'],'complete')
+        self.assertIn('not a biological negative',capture.result['absence_note'])
+        self.assertEqual((capture.source['index'],capture.source['phenotype'],capture.source['genes'],capture.source['trait_groups']),
+                         ('pigean-gene','T2D',['INS','gck'],['portal']))
+        self.assertEqual(capture.source['trait'],{**self.TRAIT,'trait_group':'portal','reference_generation_id':GEN})
+        self.assertIsNone(capture.source['generation_id'])
+        self.assertEqual(sorted(capture.extra_files),['page-0.json','page-1.json'])
+        self.assertTrue(capture.materialize(SeedTests.runtime())['eligible_source_ids'])
+        # Without a phenotype, each gene is read in every mapped trait group under the row limit.
+        alone=self.adapter([self.gene_page('INS'),self.gene_page('INS','rare_v2',phenotypes=('Rare_diabetes',))]).query(
+            'get_pigean_gene_phenotype',{'genes':['INS'],'limit':5})
+        self.assertEqual([parse_qs(urlparse(url).query) for url,_,_ in self.calls],
+                         [{'q':['portal,INS,2,small'],'limit':['5']},{'q':['rare_v2,INS,2,small'],'limit':['5']}])
+        self.assertEqual([row['phenotype'] for row in alone.result['items']],['BMI','T2D','Rare_diabetes'])
+        self.assertIsNone(alone.source['phenotype'])
+        # A per-KPN-trait phenotype resolves to its BioIndex identifier in phenotype mode as well.
+        resolved=self.adapter([self.page()],traits=self.traits).query('get_pigean_gene_phenotype',{'phenotype_id':'KPN.TRAIT:0000398'},generation_id=GEN)
+        self.assertEqual(parse_qs(urlparse(self.calls[0][0]).query)['q'],['T2D,2,small'])
+        self.assertEqual(resolved.source['trait']['kpn_trait_id'],'KPN.TRAIT:0000398')
+        plain=self.adapter([self.page(data=[{'phenotype':'BMI','gene_set_size':'small','sigma':2}])],traits=self.traits).query(
+            'get_pigean_gene_phenotype',{'phenotype_id':'BMI'},generation_id=GEN)
+        self.assertEqual((plain.result['status'],plain.source.get('trait')),('complete',None))
+
+    def test_per_gene_mode_refuses_unknown_trait_groups_and_scope_escapes(self):
+        for arguments,traits in (({'phenotype_id':'BMI','genes':['INS']},self.traits),({'phenotype_id':'KPN.TRAIT:0000001'},self.traits),
+                                 ({'phenotype_id':'T2D','genes':['INS']},None),
+                                 ({'phenotype_id':'T2D','genes':['INS']},lambda g,p:{**self.TRAIT,'gwas_source_category':'gcat'})):
+            with self.subTest(arguments=arguments),self.assertRaises(Problem) as error:
+                self.adapter([]).query('get_pigean_gene_phenotype',arguments,generation_id=GEN) if traits is None else \
+                    self.adapter([],traits=traits).query('get_pigean_gene_phenotype',arguments,generation_id=GEN)
+            self.assertEqual(error.exception.code,'INVALID_QUERY'); self.assertEqual(self.calls,[])
+        for name,page in (('gene',{**self.gene_page('GCK'),'data':self.gene_page('INS')['data']}),
+                          ('trait group',{**self.gene_page('GCK'),'data':self.gene_page('GCK','rare_v2')['data']}),
+                          ('query keys',self.gene_page('GCK',q=['portal','GCK','2','large']))):
+            with self.subTest(escape=name):
+                escaped=self.adapter([self.gene_page('INS',phenotypes=('T2D',)),page],traits=self.traits).query(
+                    'get_pigean_gene_phenotype',{'phenotype_id':'T2D','genes':['INS','GCK']},generation_id=GEN)
+                self.assertEqual((escaped.result['status'],escaped.result['items']),('source_unavailable',[]))
+                self.assertEqual({entry['status'] for entry in escaped.result['queries']},{'unavailable'})
+
+    def test_transient_failures_retry_within_bounds_and_outages_are_never_absence(self):
+        retry_after=lambda value: HTTPError('https://bioindex.hugeamp.org',429,'Too Many',{'Retry-After':value},None)
+        unavailable=lambda: HTTPError('https://bioindex.hugeamp.org',503,'Unavailable',None,None)
+        recovered=self.adapter([unavailable(),retry_after('1'),self.page()]).query('get_pigean_gene_phenotype',{'phenotype_id':'T2D'})
+        self.assertEqual((recovered.result['status'],len(self.calls),self.slept),('complete',3,[.5,1.0]))
+        timed=self.adapter([TimeoutError('timed out'),URLError(TimeoutError('timed out')),self.page()]).query('get_pigean_gene_phenotype',{'phenotype_id':'T2D'})
+        self.assertEqual((timed.result['status'],len(self.calls)),('complete',3))
+        self.assertTrue(all(timeout<=10 for _,_,timeout in self.calls))
+        down=self.adapter([unavailable(),unavailable(),unavailable()]).query('get_pigean_gene_phenotype',{'phenotype_id':'T2D'})
+        self.assertEqual((down.result['status'],down.result['items'],len(self.calls)),('source_unavailable',[],3))
+        self.assertIn('HTTP 503 after 3 attempts',down.result['reason']); self.assertIn('not evidence of absence',down.result['reason'])
+        self.assertEqual(down.materialize(SeedTests.runtime())['eligible_source_ids'],[])
+        for failure in (retry_after('30'),retry_after('Wed, 21 Oct 2015 07:28:00 GMT'),URLError('Name or service not known')):
+            with self.subTest(failure=failure):
+                final=self.adapter([failure]).query('get_pigean_gene_phenotype',{'phenotype_id':'T2D'})
+                self.assertEqual((final.result['status'],len(self.calls),self.slept),('source_unavailable',1,[]))
+        # An outage after earlier genes keeps their rows, marks the gene unavailable and the rest not queried.
+        partial=self.adapter([self.gene_page('INS'),unavailable(),unavailable(),unavailable()],traits=self.traits).query(
+            'get_pigean_gene_phenotype',{'phenotype_id':'T2D','genes':['INS','GCK','PDX1']},generation_id=GEN)
+        self.assertEqual((partial.result['status'],partial.result['truncated'],len(partial.result['items'])),('partial',True,1))
+        self.assertEqual([(entry['gene'],entry['status']) for entry in partial.result['queries']],
+                         [('INS','complete'),('GCK','unavailable'),('PDX1','not_queried')])
+        self.assertIn('outage',partial.result['reason'])
+        budget=self.adapter([self.gene_page('INS'),self.gene_page('GCK')],traits=self.traits,max_bytes=len(canonical_json(self.gene_page('INS')))+5).query(
+            'get_pigean_gene_phenotype',{'phenotype_id':'T2D','genes':['INS','GCK']},generation_id=GEN)
+        self.assertEqual((budget.result['status'],[entry['status'] for entry in budget.result['queries']]),('partial',['complete','unavailable']))
+        self.assertIn('not observed',budget.result['reason'])
+
+    def test_live_fetch_names_its_agent_and_never_follows_redirects(self):
+        from unittest.mock import patch
+        from reveal_backend import research_data
+        seen=[]
+        class Opener:
+            def __init__(self,body): self.body=body
+            def open(self,request,timeout): seen.append((request,timeout)); return io.BytesIO(self.body)
+        with patch.object(research_data,'build_opener',return_value=Opener(b'{"data":[]}')) as build:
+            self.assertEqual(SmallModelBioIndex._fetch(SmallModelBioIndex.HOST+'/api/bio/indexes',100,10),b'{"data":[]}')
+        request,timeout=seen[0]
+        # The host's CDN refuses urllib's default Python-urllib agent with HTTP 403.
+        self.assertEqual((request.get_header('User-agent'),request.get_header('Accept'),timeout),
+                         (SmallModelBioIndex.USER_AGENT,'application/json',10))
+        self.assertNotIn('urllib',SmallModelBioIndex.USER_AGENT.lower())
+        self.assertIsInstance(build.call_args.args[0],research_data._NoRedirect)
+        with patch.object(research_data,'build_opener',return_value=Opener(b' '*101)),self.assertRaises(ValueError):
+            SmallModelBioIndex._fetch(SmallModelBioIndex.HOST+'/api/bio/indexes',100,10)
+
+    def test_verify_uses_each_index_key_count_and_the_mapped_trait_groups(self):
+        catalog={'data':[{'index':index,'query':{'keys':keys}} for index,keys in SmallModelBioIndex.SIGNATURES.items()]}
+        small={'keys':[['large'],['small']]}; groups={'keys':[['portal'],['rare_v2'],['hpo']]}
+        adapter=self.adapter([catalog,small,small,small,groups]); adapter.verified=False
+        adapter.verify()
+        self.assertTrue(adapter.verified)
+        self.assertEqual([urlparse(url).path for url,_,_ in self.calls],['/api/bio/indexes','/api/bio/keys/pigean-gene-phenotype/3',
+            '/api/bio/keys/pigean-gene-set-phenotype/3','/api/bio/keys/pigean-gene/4','/api/bio/keys/pigean-gene/4'])
+        self.assertEqual(parse_qs(urlparse(self.calls[-1][0]).query),{'columns':['trait_group']})
+        for pages in ([{'data':catalog['data'][:2]}],[catalog,small,small,small,{'keys':[['portal']]}],[catalog,{'keys':[['large']]}]):
+            with self.subTest(pages=len(pages)),self.assertRaises(Problem):
+                self.adapter(pages).verify()
 
     def test_unverified_deployment_performs_no_scientific_request(self):
         def reject(*args): raise AssertionError('unexpected source call')
