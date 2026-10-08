@@ -2,12 +2,13 @@
 """Claim-structure baseline over accepted accounts and job outputs; read-only.
 
 Recomputes the advisory claim_suggestions summary for account documents: files, or directories searched for
-accepted-*.json and account-*.json/yaml (job outputs; drafts under a directory holding accepted-N.json are
-skipped, since those are their minted copies), and with --database the newest scientific_document records, read
-in one read-only transaction. Paragraph documents (an account plus its research statement) are skipped, and each
-account counts once: by its minted ScientificAccount id, else by identical JSON. Prints per-family counts and
-conformance, synthesis coherence and other Claims in total and per document; --json prints the rows. Nothing is
-written.
+accepted-*.json, account-*.json/yaml and scientific-account*.json/yaml (job outputs and fixtures; drafts under a
+directory holding accepted-N.json are skipped, since those are their minted copies), and with --database the
+newest scientific_document records of each --prefix (default REVEAL_APPLICATION_TABLE_PREFIX), each prefix read in
+one read-only transaction. Database rows are scored without package context. Paragraph documents (an account plus
+its research statement) are skipped, and each account counts once across files and prefixes: by its minted
+ScientificAccount id, else by identical JSON. Prints per-family counts and conformance, synthesis coherence and
+other Claims in total and per document; --json prints the rows. Nothing is written.
 """
 import argparse
 import json
@@ -19,7 +20,8 @@ sys.path.insert(0, str(ROOT / 'services/backend/src'))
 from reveal_backend.claim_suggestions import FAMILIES, claim_structure
 from reveal_backend.evidence_package import EvidenceBuildError, decode
 
-PATTERNS = ('accepted-[0-9]*.json', 'account-*.json', 'account-*.yaml', 'account-*.yml')
+PATTERNS = ('accepted-[0-9]*.json', 'account-*.json', 'account-*.yaml', 'account-*.yml',
+            'scientific-account*.json', 'scientific-account*.yaml')
 
 
 def account_document(document):
@@ -46,14 +48,15 @@ def local_documents(paths, package=None):
 
 
 def database_documents(repository, limit):
-    """The newest scientific_document records: ids first, then payloads by id (no sort over JSON payloads)."""
+    """The newest scientific_document records under the repository's table prefix: ids first, then payloads by id
+    (no sort over JSON payloads). Sources are tagged <prefix>/scientific_document:<id>."""
     with repository.read_transaction() as tx:
         ids = [row[0] for row in tx.execute("SELECT id FROM reveal_records WHERE kind='scientific_document' "
                                             'ORDER BY updated_at DESC, id LIMIT %s', (limit,)).fetchall()]
         rows = tx.get_many('scientific_document', ids)
     for identity in ids:
         document = rows[identity]['data'].get('document') if identity in rows else None
-        if account_document(document): yield 'scientific_document:' + identity, document, None
+        if account_document(document): yield f'{repository.table_prefix}/scientific_document:{identity}', document, None
 
 
 def report(documents):
@@ -65,8 +68,9 @@ def report(documents):
         seen.add(key)
         account = (document.get('scientific_accounts') or [{}])[0]
         rows.append({'source': source, 'account_id': account.get('id') if isinstance(account, dict) else None,
-                     'summary': claim_structure(document, package)['summary']})
-    total = {'documents': len(rows), 'families': {family: {'count': 0, 'conformant': 0} for family in FAMILIES},
+                     'package': package is not None, 'summary': claim_structure(document, package)['summary']})
+    total = {'documents': len(rows), 'without_package': sum(not row['package'] for row in rows),
+             'families': {family: {'count': 0, 'conformant': 0} for family in FAMILIES},
              'synthesis': {'count': 0, 'coherent': 0, 'gap_relevance': 0}, 'other': 0, 'issues': {}}
     for row in rows:
         summary = row['summary']
@@ -91,6 +95,9 @@ def render(result):
     synthesis = total['synthesis']
     lines.append(f"synthesis {synthesis['count']} (coherent {synthesis['coherent']}, gap relevance {synthesis['gap_relevance']}); other {total['other']}")
     if total['issues']: lines.append('suggestions: ' + ', '.join(f'{check} {count}' for check, count in sorted(total['issues'].items())))
+    if total['without_package']:
+        lines.append(f"{total['without_package']} documents scored without package context (database rows always are), so trusted "
+                     'Claims count as authored and the gap is taken from the account question')
     for row in result['documents']:
         summary = row['summary']
         lines.append(f"- {row['source']}: atomic {summary['atomic']['conformant']}/{summary['atomic']['count']}, synthesis "
@@ -103,16 +110,21 @@ def main(argv=None):
     parser.add_argument('paths', nargs='*', type=Path, help='Account documents or directories (job artifacts)')
     parser.add_argument('--package', type=Path, help='Evidence package or validation context applied to local documents')
     parser.add_argument('--database', action='store_true', help='Also read scientific_document records (read-only)')
-    parser.add_argument('--limit', type=int, default=200, help='Newest scientific_document records to read')
+    parser.add_argument('--prefix', action='append', default=[], help='Application table prefix to read; repeatable, implies --database '
+                        '(default REVEAL_APPLICATION_TABLE_PREFIX)')
+    parser.add_argument('--limit', type=int, default=200, help='Newest scientific_document records to read per prefix')
     parser.add_argument('--json', action='store_true', help='Print the per-document rows and totals as JSON')
     args = parser.parse_args(argv)
+    args.database = args.database or bool(args.prefix)
     if not args.paths and not args.database: parser.error('Give account paths, --database, or both')
     documents = list(local_documents(args.paths, decode(args.package.read_bytes()) if args.package else None))
     if args.database:
         from dotenv import load_dotenv
         from reveal_backend.repository import Repository
         load_dotenv(ROOT / '.env')
-        documents += database_documents(Repository(), args.limit)
+        try: repositories = [Repository(table_prefix=prefix) for prefix in dict.fromkeys(args.prefix or [None])]
+        except ValueError as error: parser.error(f'--prefix: {error}')
+        for repository in repositories: documents += database_documents(repository, args.limit)
     result = report(documents)
     print(json.dumps(result, indent=2, ensure_ascii=False) if args.json else render(result))
     return 0

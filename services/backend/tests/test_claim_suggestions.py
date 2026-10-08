@@ -596,14 +596,15 @@ class ReportScriptTests(unittest.TestCase):
                              (2, {'count': 2, 'conformant': 2}, {'count': 1, 'coherent': 1, 'gap_relevance': 1}, 1))
             self.assertEqual(total['conformance_rate'], 1.0)
             self.assertIn('gene-gene set', self.script.render(result))
-            repository = Repository(str(root / 'records.sqlite')); repository.migrate()
+            self.assertNotIn('without package context', self.script.render(result))
+            repository = Repository(str(root / 'records.sqlite'), table_prefix='reveal'); repository.migrate()
             with repository.transaction() as tx:
                 tx.put('scientific_document', 'x-not-an-account', 'owner', {'document': {'claims': []}})
                 tx.put('scientific_document', 'zz-paragraph', 'owner', {'document': paragraph})
                 tx.put('scientific_document', 'one', 'owner', {'document': structured}); tx.put('scientific_document', 'two', 'owner', {'document': legacy})
                 tx.put('account', 'unrelated', 'owner', {'document': legacy})
             rows = list(self.script.database_documents(repository, 5))
-            self.assertEqual(sorted(source for source, _, _ in rows), ['scientific_document:one', 'scientific_document:two'])
+            self.assertEqual(sorted(source for source, _, _ in rows), ['reveal/scientific_document:one', 'reveal/scientific_document:two'])
             self.assertEqual(self.script.report(rows)['total']['synthesis']['count'], 1)
             self.assertEqual(self.script.report(rows + documents)['total']['documents'], 2)   # the same accounts count once across sources
             self.assertEqual(len(list(self.script.database_documents(repository, 1))), 1)
@@ -611,6 +612,50 @@ class ReportScriptTests(unittest.TestCase):
                 self.assertEqual(self.script.main([str(root), '--json']), 0)
             printed = json.loads(''.join(call.args[0] for call in stdout.write.call_args_list))
             self.assertEqual((printed['total']['documents'], printed['total']['synthesis']['count']), (2, 1))
+
+    def test_table_prefixes_count_shared_accounts_once_and_fixture_files_are_found(self):
+        from reveal_backend.repository import Repository
+        shared = Account().factor_gene().gene_gene_set().gap(['factor-gene', 'gene-gene-set']).doc
+        shared['scientific_accounts'][0]['id'] = 'dapper:ScientificAccount.' + 'S' * 32
+        own = Account().claim('kg', 'A KG statement.', kind='BIOLOGICAL_INTERPRETATION').doc
+        own['scientific_accounts'][0]['id'] = 'dapper:ScientificAccount.' + 'Q' * 32
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); database = str(root / 'records.sqlite')
+            for prefix, documents in (('reveal_workflow_local', {'local-1': shared}), ('reveal_workflow_qa', {'qa-1': shared, 'qa-2': own})):
+                repository = Repository(database, table_prefix=prefix); repository.migrate()
+                with repository.transaction() as tx:
+                    for identity, document in documents.items(): tx.put('scientific_document', identity, 'owner', {'document': document})
+            rows = [row for prefix in ('reveal_workflow_local', 'reveal_workflow_qa')
+                    for row in self.script.database_documents(Repository(database, table_prefix=prefix), 10)]
+            self.assertEqual(sorted(source for source, _, _ in rows), ['reveal_workflow_local/scientific_document:local-1',
+                                                                      'reveal_workflow_qa/scientific_document:qa-1', 'reveal_workflow_qa/scientific_document:qa-2'])
+            result = self.script.report(rows)
+            self.assertEqual([row['source'] for row in result['documents']],
+                             ['reveal_workflow_local/scientific_document:local-1', 'reveal_workflow_qa/scientific_document:qa-2'])
+            self.assertEqual((result['total']['documents'], result['total']['without_package'], result['total']['atomic']['count']), (2, 2, 2))
+            self.assertIn('2 documents scored without package context (database rows always are), so trusted Claims count as authored '
+                          'and the gap is taken from the account question', self.script.render(result).splitlines())
+            opened = []
+            def sqlite_repository(table_prefix=None):
+                opened.append(table_prefix); return Repository(database, table_prefix=table_prefix)
+            with patch('dotenv.load_dotenv') as load_dotenv, patch('reveal_backend.repository.Repository', sqlite_repository), patch('sys.stdout') as stdout:
+                self.assertEqual(self.script.main(['--prefix', 'reveal_workflow_local', '--prefix', 'reveal_workflow_qa',
+                                                   '--prefix', 'reveal_workflow_local', '--json']), 0)
+            load_dotenv.assert_called_once_with(ROOT / '.env')
+            self.assertEqual(opened, ['reveal_workflow_local', 'reveal_workflow_qa'])   # --prefix implies --database; repeats read once
+            printed = json.loads(''.join(call.args[0] for call in stdout.write.call_args_list))
+            self.assertEqual([row['source'] for row in printed['documents']], [row['source'] for row in result['documents']])
+            with patch('dotenv.load_dotenv'), patch('sys.stderr'), self.assertRaises(SystemExit):
+                self.script.main(['--prefix', 'other_records'])
+            (root / 'fixture').mkdir()
+            (root / 'fixture/scientific-account.json').write_bytes(canonical_json(own))
+            (root / 'fixture/scientific-account.yaml').write_bytes(canonical_json(own))   # JSON is YAML; the same account counts once
+            (root / 'fixture/account-envelope.json').write_bytes(canonical_json({'document': own}))   # not an account document
+            found = list(self.script.local_documents([root / 'fixture']))
+            self.assertEqual(sorted(Path(source).name for source, _, _ in found), ['scientific-account.json', 'scientific-account.yaml'])
+            self.assertEqual(self.script.report(found)['total']['documents'], 1)
+        bubble = ROOT / 'data/fixtures/bubble-account-v1'
+        self.assertEqual([source for source, _, _ in self.script.local_documents([bubble])], [str(bubble / 'scientific-account.json')])
 
 if __name__ == '__main__':
     unittest.main()
