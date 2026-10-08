@@ -50,10 +50,12 @@ def create(tx, job, queue):
         execution.update(cleanup_id=source['cleanup_id'], capture_sha256=source['capture_sha256'])
     queue['attempt'] = execution['authoring_attempt']
     tx.put('execution', job['id'], job['owner_user_id'], execution)
+    from .workflow_routes import steps_per_run
     tx.put('workflow_dispatch', job['id'], job['owner_user_id'], {
         'job_id': job['id'], 'namespace': execution['namespace'], 'generation': execution['generation'],
         'dispatch_id': queue['dispatch_id'], 'run_id': 'reveal-' + digest([job['id'], execution['generation']])[:40],
         'published_at': None, 'attempts': 0, 'created_at': now(), 'next_attempt_at': now(),
+        'steps_per_run': steps_per_run(),
     })
     return execution
 
@@ -93,10 +95,13 @@ def cleanup_record(tx, identity):
 
 def cleanup_matches(value, execution):
     box = execution.get('box') or {}
-    return (value.get('namespace') == execution['namespace'] and value.get('job_id') == execution['job_id']
-            and value.get('authoring_attempt') == execution['authoring_attempt']
-            and value.get('box_id') == box.get('box_id')
-            and value.get('capture_sha256') == execution.get('capture_sha256')
+    same_box = (value.get('namespace') == execution['namespace'] and value.get('job_id') == execution['job_id']
+                and value.get('authoring_attempt') == execution['authoring_attempt']
+                and value.get('box_id') == box.get('box_id'))
+    if value.get('abandoned'):
+        return (same_box and bool(execution.get('cleanup_abandoned'))
+                and value.get('recovery_generation') == execution.get('recovery_generation'))
+    return (same_box and value.get('capture_sha256') == execution.get('capture_sha256')
             and bool(value.get('workspace')) and bool(execution.get('capture_complete')))
 
 
@@ -133,6 +138,73 @@ def enqueue_cleanup(tx, owner, execution, workspace, handle, capture_sha256):
     else:
         tx.put('workflow_cleanup', identity, owner, value)
     return identity
+
+
+def require_recovery(tx, owner, execution, reason, *, failure_code='WORKFLOW_RECOVERY_EXHAUSTED', token=None):
+    """Fence failed work and transfer its known Box to durable cleanup."""
+    from . import jobs
+    if (execution.get('disposition') == 'recovery_required' and execution.get('recovery_required_at')):
+        return execution
+    if (execution.get('lease_until') or '') > now() and (token is None or execution.get('fence') != token):
+        raise StepBusy('An active phase still owns this Box')
+    identity = execution['job_id']; box = execution.get('box') or {}
+    row = tx.get('job', identity)
+    cancelled = bool(execution.get('cancel_requested') or row and row['data']['status'] in ('cancel_requested', 'cancelled'))
+    if execution.get('creation_intent') and not box:
+        failure_code = 'WORKFLOW_ALLOCATION_AMBIGUOUS'
+    execution.update(cancel_requested=cancelled, failure_code='WORKFLOW_CANCELLED' if cancelled else failure_code)
+    execution.update(recovery_generation=execution['generation'], recovery_phase=execution['phase'],
+        recovery_phase_index=execution['phase_index'], recovery_required_at=now(),
+        generation=execution['generation'] + 1, previous_run_id=execution.get('run_id'),
+        fence=None, lease_until=None, step=None, disposition='recovery_required',
+        diagnostic=reason, updated_at=now())
+    if box.get('box_id') and box.get('phase') != 'deleted':
+        cleanup_id = digest(['box-cleanup-v1', execution['namespace'], identity,
+                             execution['authoring_attempt'], box['box_id']])
+        existing = cleanup_record(tx, cleanup_id)
+        if existing:
+            # A completed capture already transferred ownership. Never replace
+            # its checksum, workspace, lease or deletion acknowledgment.
+            execution['cleanup_id'] = cleanup_id
+            if not cleanup_matches(existing['data'], execution):
+                raise StaleExecution('Recovery cleanup binding changed')
+        else:
+            value = {'cleanup_id': cleanup_id, 'namespace': execution['namespace'], 'job_id': identity,
+                'authoring_attempt': execution['authoring_attempt'], 'box_id': box['box_id'], 'box': box,
+                'workspace': execution.get('workspace'), 'capture_sha256': execution.get('capture_sha256'),
+                'abandoned': True, 'reason': reason, 'recovery_generation': execution['recovery_generation'],
+                'cancel_before_delete': bool(execution.get('launch_intent') or box.get('phase') == 'running'),
+                'created_at': now(), 'next_attempt_at': now(), 'lease_until': None, 'token': None,
+                'attempts': 0, 'dispatch_generation': 0, 'status': 'pending'}
+            tx.put('workflow_cleanup', cleanup_id, owner, value)
+            execution.update(cleanup_id=cleanup_id, cleanup_abandoned=True)
+        if not has_cleanup_handoff(tx, execution):
+            raise StaleExecution('Recovery cannot release an unowned Box')
+        execution['capacity_reserved'] = False
+    elif box.get('phase') == 'deleted' or not execution.get('creation_intent'):
+        execution.update(capacity_reserved=False, cleanup_complete=True)
+    # An allocation with no known Box identity remains reserved. An operator
+    # must locate it before deletion; neither retry nor failure may create twice.
+    tx.put('execution', identity, owner, execution)
+    queue_row = tx.get('queue', identity)
+    if queue_row:
+        queue = queue_row['data']; queue.update(token=None, lease_until=None)
+        tx.put('queue', identity, queue_row['owner'], queue)
+    tx.remove('workflow_dispatch', identity)
+    tx.remove('workflow_control', identity)
+    if row and row['data']['status'] not in jobs.TERMINAL:
+        job = row['data']; job['owner_user_id'] = row['owner']
+        message = (('Stopped by the workspace owner; runtime cleanup is queued.' if execution.get('cleanup_id') else
+                    'Stopped by the workspace owner; operator cleanup is required for an unknown allocation.' if execution.get('capacity_reserved') else
+                    'Stopped by the workspace owner.') if cancelled else
+                   'The workflow could not continue. Runtime cleanup is queued and saved checkpoints are preserved.'
+                   if execution.get('cleanup_id') else
+                   'The workflow could not continue. Saved checkpoints are preserved; operator recovery may be required.')
+        job.update(status='cancelled' if cancelled else 'failed', result=None, completed_at=now(),
+            failure={'code': 'WORKFLOW_CANCELLED' if cancelled else failure_code, 'message': message, 'retryable': False})
+        jobs.update_paragraph_state(tx, job)
+        jobs.event(tx, job, 'failure', message)
+    return execution
 
 
 def cleanup_owned(tx, payload):
@@ -256,7 +328,7 @@ def complete(repository, payload, token, *, next_phase, sleep=0, done=False, **u
         tx.put('workflow_step', state['step'], owner, {'job_id': payload['job_id'], 'generation': payload['generation'],
             'phase': state['phase'], 'index': state['phase_index'], 'result': result, 'completed_at': now()})
         state.update(updates, phase=next_phase, phase_index=result['index'], fence=None, lease_until=None,
-            step=None, updated_at=now(), expected_at=after(sleep + 120), disposition='complete' if done else 'ready')
+            step=None, updated_at=now(), expected_at=after(sleep + 120), retry_cause=None, disposition='complete' if done else 'ready')
         tx.put('execution', payload['job_id'], owner, state)
         queue = tx.get('queue', payload['job_id'])['data']; queue.update(token=None, lease_until=None)
         tx.put('queue', payload['job_id'], owner, queue)
@@ -266,8 +338,12 @@ def complete(repository, payload, token, *, next_phase, sleep=0, done=False, **u
 def release(repository, payload, token, *, recovery=False, reason=None):
     with repository.transaction() as tx:
         owner, state = owned(tx, payload, token)
+        if recovery:
+            return require_recovery(tx, owner, state, reason or 'Workflow phase requires recovery',
+                failure_code='WORKFLOW_ALLOCATION_AMBIGUOUS' if state.get('creation_intent') and not state.get('box')
+                else 'WORKFLOW_STEP_FAILED', token=token)
         state.update(fence=None, lease_until=None, updated_at=now(), expected_at=after(60),
-            disposition='recovery_required' if recovery else 'retry', diagnostic=reason)
+            disposition='retry', retry_cause='step_failure', diagnostic=reason)
         tx.put('execution', payload['job_id'], owner, state)
         queue=tx.get('queue', payload['job_id'])['data']; queue.update(token=None, lease_until=None)
         tx.put('queue', payload['job_id'], owner, queue)
@@ -277,16 +353,9 @@ def reserve_box(repository, payload, token):
     with repository.transaction() as tx:
         owner, state = owned(tx, payload, token)
         if state.get('capacity_reserved'): return state
-        maximum = int(os.getenv('REVEAL_MAX_ACTIVE_BOXES', '2'))
+        maximum = int(os.getenv('REVEAL_MAX_ACTIVE_BOXES', '25'))
         if maximum < 1: raise ValueError('REVEAL_MAX_ACTIVE_BOXES must be positive')
-        pending_cleanup = [r for r in tx.list('workflow_cleanup') if r['data']['namespace'] == state['namespace']]
-        active = len(pending_cleanup)
-        active += sum(bool(r['data'].get('capacity_reserved')) and not has_cleanup_handoff(tx, r['data'])
-                      for r in tx.list('execution') if r['data']['namespace'] == state['namespace'])
-        # Include legacy assignments through a deliberate migration overlap.
-        active += sum(bool(r['data'].get('remote_handle')) and r['data']['remote_handle'].get('phase') != 'deleted'
-                      for r in tx.list('queue') if r['data'].get('transport') != 'workflow'
-                      and r['data'].get('namespace', 'reveal') == state['namespace'])
+        active = tx.active_box_count(state['namespace'])
         if active >= maximum: raise StepBusy('Active Box capacity is reserved')
         state.update(capacity_reserved=True, creation_intent=uid(), updated_at=now())
         tx.put('execution', payload['job_id'], owner, state)

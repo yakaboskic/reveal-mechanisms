@@ -95,6 +95,29 @@ class Transaction:
         rows.sort(key=lambda row: row[4], reverse=True)
         return [{'id': r[0], 'owner': r[1], 'version': r[2], 'data': json.loads(r[3])}
                 for r in rows]
+    def active_box_count(self, namespace):
+        """Count live reservations under the write fence without loading JSON rows."""
+        def value(alias, field):
+            expr = "JSON_EXTRACT(" + alias + ".payload,'$." + field + "')"
+            return "CAST(" + expr + " AS TEXT)" if self.sqlite else "NULLIF(JSON_UNQUOTE(" + expr + "),'null')"
+        def yes(alias, field): return value(alias, field) + " IN ('true','1')"
+        same = ' AND '.join(value('c', field) + '=' + value('e', target) for field, target in (
+            ('namespace', 'namespace'), ('job_id', 'job_id'), ('authoring_attempt', 'authoring_attempt'), ('box_id', 'box.box_id')))
+        captured = ("COALESCE(" + value('c', 'abandoned') + ",'false') NOT IN ('true','1') AND "
+                    + yes('e', 'capture_complete') + ' AND ' + value('c', 'capture_sha256') + '=' + value('e', 'capture_sha256')
+                    + ' AND ' + value('c', 'workspace') + " IS NOT NULL AND " + value('c', 'workspace') + " NOT IN ('','{}','false')")
+        abandoned = (yes('c', 'abandoned') + ' AND ' + yes('e', 'cleanup_abandoned')
+                     + ' AND ' + value('c', 'recovery_generation') + '=' + value('e', 'recovery_generation'))
+        sql = ("SELECT SUM(active) FROM (SELECT COUNT(*) AS active FROM reveal_records e WHERE e.kind='execution' AND "
+            + value('e', 'namespace') + '=%s AND ' + yes('e', 'capacity_reserved')
+            + " AND NOT EXISTS (SELECT 1 FROM reveal_records c WHERE c.kind IN ('workflow_cleanup','workflow_cleanup_completed')"
+            + ' AND c.id=' + value('e', 'cleanup_id') + ' AND ' + same + ' AND ((' + captured + ') OR (' + abandoned + ')))'
+            + " UNION ALL SELECT COUNT(*) AS active FROM reveal_records q WHERE q.kind='queue' AND COALESCE("
+            + value('q', 'namespace') + ",'reveal')=%s AND COALESCE(" + value('q', 'transport') + ",'')<>'workflow'"
+            + ' AND ' + value('q', 'remote_handle.box_id') + ' IS NOT NULL AND COALESCE('
+            + value('q', 'remote_handle.phase') + ",'')<>'deleted') reservations")
+        return int(self.execute(sql, (namespace, namespace)).fetchone()[0])
+
     def put(self, kind, identity, owner, data, expected=None):
         old = self.get(kind, identity)
         if expected is not None and (old is None or old['version'] != expected): raise Conflict('Version conflict')

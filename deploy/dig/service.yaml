@@ -93,7 +93,13 @@ qa:
     NEXTAUTH_URL: https://reveal-mechanisms-qa.vercel.app
     EMBEDDING_SERVICE_URL: https://embedding-service-848707719401.us-east1.run.app
     REVEAL_QUERY_EMBEDDING_SERVICE_URL: https://embedding-service-848707719401.us-east1.run.app
-    REVEAL_MAX_ACTIVE_JOBS: '10'
+    # Five users can author five jobs each; preparation/capture remain bounded.
+    REVEAL_MAX_ACTIVE_JOBS: '5'
+    REVEAL_MAX_ACTIVE_BOXES: '25'
+    REVEAL_MAX_RUNNING_JOBS: '25'
+    REVEAL_WORKFLOW_STEPS_PER_RUN: '6'
+    REVEAL_WORKFLOW_OBSERVE_INTERVAL_SECONDS: '10'
+    REVEAL_AGENT_TIMEOUT_SECONDS: '1800'
     REVEAL_JOB_NAMESPACE: reveal-workflow-qa
     REVEAL_VECTOR_ENVIRONMENT: qa
     REVEAL_NOTIFICATION_NAMESPACE: reveal-qa
