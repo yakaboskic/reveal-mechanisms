@@ -12,6 +12,7 @@
 !key web_out_dir http://internal.broadinstitute.org/~cyakabos/reveal-lap
 !key default_umask 002
 !key cfde_embeddings_dir /humgen/diabetes/users/chase/data/dig-s3/gene_sets/cfde/2026-09-28/embeddings/pritamdeka-BioBERT-mnli-snli-scinli-scitail-mednli-stsb
+!key pigean_gene_stats_file /humgen/diabetes2/users/chase/projects/pigean/raw/all_traits/mouse_msigdb/gene_stats.tsv
 
 eaggl_capped__cfde_2026_09_28 class project
 eaggl_capped__cfde_2026_09_28 loading_variant capped

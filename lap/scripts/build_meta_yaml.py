@@ -40,6 +40,9 @@ KEYS = [
     ("web_out_dir", "http://internal.broadinstitute.org/~cyakabos/reveal-lap"),
     ("default_umask", "002"),
 ]
+# The all-trait PIGEAN gene stats (phenotype, gene, combined, log_bf, prior) of the mouse_msigdb run the EAGGL factors
+# came from: the betas_ stage regresses each trait's rows on the CFDE gene sets without rerunning PIGEAN.
+PIGEAN_GENE_STATS_FILE = "/humgen/diabetes2/users/chase/projects/pigean/raw/all_traits/mouse_msigdb/gene_stats.tsv"
 
 
 def resolve(value, keys):
@@ -73,6 +76,8 @@ def main(argv=None):
     parser.add_argument("--loading-variant", default="capped", choices=["capped", "uncapped"])
     parser.add_argument("--kpn-release", default="v0.0.2")
     parser.add_argument("--cfde-embedding-model", help="Directory under <cfde_dir>/embeddings (default: the only one)")
+    parser.add_argument("--pigean-gene-stats-file", default=PIGEAN_GENE_STATS_FILE,
+                        help="All-trait PIGEAN gene stats for the gene-set betas (default: the mouse_msigdb export)")
     parser.add_argument("--output-file", default=os.path.join(LAP_DIR, "config", "cfde_projection.meta.yaml"))
     args = parser.parse_args(argv)
 
@@ -112,7 +117,9 @@ def main(argv=None):
     traits = list(traits_in_order(factor_ids))
     kpn = map_traits_to_kpn(traits, load_kpn_registry(resolve(kpn_registry, keys)))
 
-    release_keys = [("cfde_embeddings_dir", "${cfde_dir}/embeddings/" + find_cfde_embeddings(cfde_dir, args.cfde_embedding_model))]
+    check(os.path.isfile(args.pigean_gene_stats_file), "Missing PIGEAN gene stats %s" % args.pigean_gene_stats_file)
+    release_keys = [("cfde_embeddings_dir", "${cfde_dir}/embeddings/" + find_cfde_embeddings(cfde_dir, args.cfde_embedding_model)),
+                    ("pigean_gene_stats_file", os.path.abspath(args.pigean_gene_stats_file))]
 
     names = [args.project] + [c[0] for c in collections] + traits
     check(len(set(names)) == len(names), "Instance names collide across classes")

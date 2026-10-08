@@ -442,5 +442,89 @@ class EndToEndTest(unittest.TestCase):
         self.assertIn("KPN id for Solo disagrees", err)
 
 
+class GeneSetBetasTest(unittest.TestCase):
+    """betas_ stage helpers: index the all-trait PIGEAN gene stats, slice one trait, annotate `pigean betas` output."""
+
+    PIGEAN_COLUMNS = ["Gene_Set", "label", "filter_reason", "N", "scale", "beta", "beta_uncorrected", "avg_postp", "p_used",
+                      "sigma2_used"]
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.p = lambda *parts: os.path.join(self.tmp.name, *parts)
+        # Other is not a pipeline trait; it may appear anywhere, even split.
+        self.stats = write(self.p("gene_stats.tsv"), tsv(
+            [("phenotype", "gene", "combined", "log_bf", "prior"), ("Other", "A1", "1", "1", "0"),
+             ("T-one", "A1", "2.5", "2", "0.5"), ("T-one", "B2", "1.2", "1", "0.2"), ("Solo", "D4", "0.4", "0.3", "0.1"),
+             ("Other", "B2", "1", "1", "0")]))
+        self.kpn_map = write(self.p("trait_kpn_map.tsv"), tsv(
+            [pw.TRAIT_KPN_COLUMNS] + [(t, k, "v0.0.2", "c", "x", t, "g", "lg", "tt", "1") for t, k in KPN_IDS.items()]))
+        self.index_rows = [(i, "set %s" % i[-1], c[2], c[0], c[1], "", "", "", "", "1", "3", "2", "2026-09-28")
+                           for c in COLLECTIONS for i, _, _ in c[3]]
+        self.gene_set_index = write(self.p("gene_set_index.tsv"), tsv([pw.GENE_SET_INDEX_COLUMNS] + self.index_rows))
+        self.commit = write(self.p("commit.txt"), FAKE_COMMIT + "\n")
+
+    def index(self, *extra):
+        return run(["gene-stats-index", "--gene-stats-file", self.stats, "--trait-kpn-map-file", self.kpn_map,
+                    "--output-file", self.p("index.tsv")] + list(extra))
+
+    def test_index_and_slice_give_each_trait_its_own_rows(self):
+        self.assertEqual(self.index()[0], 0)
+        self.assertEqual([(r["trait"], r["rows"]) for r in read_rows(self.p("index.tsv"))], [("Solo", "1"), ("T-one", "2")])
+        code, err = run(["trait-gene-stats", "--gene-stats-file", self.stats, "--index-file", self.p("index.tsv"),
+                         "--trait", "T-one", "--output-file", self.p("T-one.tsv.gz")])
+        self.assertEqual((code, err), (0, ""))
+        with gzip.open(self.p("T-one.tsv.gz"), "rt") as fh:
+            self.assertEqual(fh.read(), "phenotype\tgene\tcombined\tlog_bf\tprior\nT-one\tA1\t2.5\t2\t0.5\nT-one\tB2\t1.2\t1\t0.2\n")
+
+    def test_index_refuses_split_or_missing_traits(self):
+        write(self.stats, tsv([("phenotype", "gene", "log_bf"), ("T-one", "A1", "2"), ("Solo", "D4", "1"), ("T-one", "B2", "1")]))
+        code, err = self.index()
+        self.assertEqual(code, 1)
+        self.assertIn("The rows of T-one", err)
+        write(self.stats, tsv([("phenotype", "gene", "log_bf"), ("T-one", "A1", "2")]))
+        code, err = self.index()
+        self.assertEqual(code, 1)
+        self.assertIn("1 traits have no gene stats", err)
+
+    def test_slice_refuses_an_export_changed_since_indexing(self):
+        self.assertEqual(self.index()[0], 0)
+        with open(self.stats, "a") as fh:
+            fh.write("Late\tA1\t1\t1\t0\n")
+        code, err = run(["trait-gene-stats", "--gene-stats-file", self.stats, "--index-file", self.p("index.tsv"),
+                         "--trait", "Solo", "--output-file", self.p("Solo.tsv.gz")])
+        self.assertEqual(code, 1)
+        self.assertIn("changed since it was indexed", err)
+
+    def annotate(self, rows, response="log_bf", used="log_bf", trait="T-one"):
+        write(self.p("stats.tsv"), tsv([self.PIGEAN_COLUMNS] + rows))
+        write(self.p("params.tsv"), tsv([("Parameter", "Version", "Value"), ("option_gene_stats_log_bf_col", "1", used),
+                                         ("p", "1", "0.0004"), ("sigma2", "1", "7e-09")]))
+        return run(["annotate-gene-set-stats", "--stats-file", self.p("stats.tsv"), "--params-file", self.p("params.tsv"),
+                    "--gene-set-index-file", self.gene_set_index, "--trait-kpn-map-file", self.kpn_map, "--trait", trait,
+                    "--kpn-trait-id", KPN_IDS[trait], "--response", response, "--pigean-commit-file", self.commit,
+                    "--expected-pigean-commit", FAKE_COMMIT, "--output-file", self.p("out.tsv.gz")])
+
+    def test_annotate_keeps_analyzed_gene_sets_ranked_within_their_library(self):
+        row = lambda i, reason, uncorrected: (i, "x.gmt", reason, "3", "0.1", "0.05", uncorrected, "0.5", "0.0004", "7e-07")
+        code, err = self.annotate([row(ID_A1, "kept", "0.2"), row(ID_A2, "kept", "0.9"), row(ID_B1, "kept", "0.1"),
+                                   row(ID_B2, "prefilter_p_value", "0")])
+        self.assertEqual((code, err), (0, ""))
+        rows = read_rows(self.p("out.tsv.gz"))
+        self.assertEqual([(r["gene_set_id"], r["library"], r["library_rank"], r["beta_uncorrected"]) for r in rows],
+                         [(ID_A2, "LIBA", "1", "0.9"), (ID_A1, "LIBA", "2", "0.2"), (ID_B1, "LIBB", "1", "0.1")])
+        self.assertEqual({(r["kpn_trait_id"], r["collection_id"], r["response"], r["p"], r["sigma2"]) for r in rows if r["library"] == "LIBB"},
+                         {(KPN_IDS["T-one"], COLLECTIONS[1][2], "log_bf", "0.0004", "7e-09")})
+
+    def test_annotate_refuses_another_response_or_an_unknown_gene_set(self):
+        row = (ID_A1, "x.gmt", "kept", "3", "0.1", "0.05", "0.2", "0.5", "0.0004", "7e-07")
+        code, err = self.annotate([row], response="log_bf", used="combined")
+        self.assertEqual(code, 1)
+        self.assertIn("pigean regressed on combined, expected log_bf", err)
+        code, err = self.annotate([("dapper:GeneSet." + "z" * 32,) + row[1:]])
+        self.assertEqual(code, 1)
+        self.assertIn("Unknown gene set", err)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -755,6 +755,125 @@ def pearson(pairs):
 
 
 # -------------------------------------------------------------------------------------------------
+# Trait -> CFDE gene-set betas: `python -m pigean betas` (no outer Gibbs) on each trait's existing PIGEAN
+# gene stats. Those come from one all-trait export, indexed once and sliced per trait by byte range.
+
+GENE_STATS_INDEX_COLUMNS = ["trait", "byte_offset", "byte_length", "rows", "source_size", "source_mtime_ns"]
+PIGEAN_GENE_SET_STATS_COLUMNS = {"Gene_Set", "filter_reason", "N", "beta", "beta_uncorrected", "avg_postp"}
+GENE_SET_STATS_COLUMNS = ["trait", "kpn_trait_id", "gene_set_id", "collection_id", "cfde_label", "library", "n_genes",
+                          "beta_uncorrected", "beta", "avg_postp", "library_rank", "response", "p", "sigma2"]
+
+
+def source_identity(path):
+    stat = os.stat(path)
+    return str(stat.st_size), str(stat.st_mtime_ns)
+
+
+def cmd_gene_stats_index(args):
+    """Where each pipeline trait's rows are in the all-trait gene stats (one pass; a trait's rows must be contiguous)."""
+    wanted = set(read_trait_kpn_map(args.trait_kpn_map_file))
+    identity = source_identity(args.gene_stats_file)
+    found, runs = {}, Counter()
+    def close(phenotype, start, end, rows):
+        name = phenotype.decode("utf-8")
+        runs[name] += 1
+        if name in wanted:
+            check(runs[name] == 1, "The rows of %s in %s are not contiguous" % (name, args.gene_stats_file))
+            found[name] = (start, end - start, rows)
+    with open(args.gene_stats_file, "rb") as fh:
+        header = fh.readline().decode("utf-8").rstrip("\n").split("\t")
+        check(header[:2] == ["phenotype", "gene"] and "log_bf" in header,
+              "%s must start with phenotype, gene and have log_bf: %s" % (args.gene_stats_file, header))
+        offset = start = fh.tell()
+        phenotype, prefix, rows = None, None, 0
+        for line in fh:
+            if prefix is None or not line.startswith(prefix):
+                if phenotype is not None:
+                    close(phenotype, start, offset, rows)
+                phenotype = line[:line.find(b"\t")]
+                prefix, start, rows = phenotype + b"\t", offset, 0
+            rows += 1
+            offset += len(line)
+        if phenotype is not None:
+            close(phenotype, start, offset, rows)
+    check(source_identity(args.gene_stats_file) == identity, "%s changed while it was indexed" % args.gene_stats_file)
+    missing = sorted(wanted - set(found))
+    check(not missing, "%d traits have no gene stats in %s: %s" % (len(missing), args.gene_stats_file, missing[:20]))
+    write_tsv(args.output_file, GENE_STATS_INDEX_COLUMNS, [
+        {"trait": trait, "byte_offset": found[trait][0], "byte_length": found[trait][1], "rows": found[trait][2],
+         "source_size": identity[0], "source_mtime_ns": identity[1]} for trait in sorted(found)])
+    print("%d traits indexed of %d phenotypes in %s" % (len(found), len(runs), args.gene_stats_file))
+
+
+def cmd_trait_gene_stats(args):
+    """One trait's rows of the all-trait gene stats, read by byte range (the export must be unchanged since indexing)."""
+    entries = [r for r in read_tsv(args.index_file) if r["trait"] == args.trait]
+    check(len(entries) == 1, "Trait %s is not in %s" % (args.trait, args.index_file))
+    entry = entries[0]
+    check(source_identity(args.gene_stats_file) == (entry["source_size"], entry["source_mtime_ns"]),
+          "%s changed since it was indexed: rebuild %s" % (args.gene_stats_file, args.index_file))
+    with open(args.gene_stats_file, "rb") as fh:
+        header = fh.readline()
+        fh.seek(int(entry["byte_offset"]))
+        lines = fh.read(int(entry["byte_length"])).splitlines(keepends=True)
+    prefix = (args.trait + "\t").encode("utf-8")
+    check(len(lines) == int(entry["rows"]) and all(line.startswith(prefix) for line in lines),
+          "The indexed rows of %s do not match %s" % (args.trait, args.gene_stats_file))
+    genes = [line.split(b"\t", 2)[1] for line in lines]
+    check(len(set(genes)) == len(genes), "Duplicate genes in the gene stats of %s" % args.trait)
+    if lines and not lines[-1].endswith(b"\n"):
+        lines[-1] += b"\n"
+    with DeterministicGzipWriter(args.output_file) as out:
+        out.write(header)
+        out.writelines(lines)
+    print("%s: %d genes" % (args.trait, len(lines)))
+
+
+def cmd_annotate_gene_set_stats(args):
+    """Validate one trait's `pigean betas` gene-set stats and keep the gene sets PIGEAN analyzed (filter_reason kept;
+    the prefiltered ones carry no beta), ranked by beta_uncorrected within their library."""
+    kpn = read_trait_kpn_map(args.trait_kpn_map_file)
+    check(args.trait in kpn and kpn[args.trait]["kpn_trait_id"] == args.kpn_trait_id,
+          "KPN id for %s disagrees: meta %s, map %s" % (args.trait, args.kpn_trait_id, kpn.get(args.trait, {}).get("kpn_trait_id")))
+    gene_sets = read_gene_set_index(args.gene_set_index_file)
+    params = read_params(args.params_file)
+    used = params.get("option_gene_stats_log_bf_col", [NA])[-1]
+    check(used == args.response, "pigean regressed on %s, expected %s" % (used, args.response))
+    learned = {name: params.get(name, [NA])[-1] for name in ("p", "sigma2")}
+    read_pigean_commit(args.pigean_commit_file, args.expected_pigean_commit)
+    rows, seen, reasons = [], set(), Counter()
+    with open_text(args.stats_file) as fh:
+        reader = csv.DictReader(fh, delimiter="\t", quoting=csv.QUOTE_NONE)
+        missing = PIGEAN_GENE_SET_STATS_COLUMNS - set(reader.fieldnames or [])
+        check(not missing, "%s lacks the pigean columns %s" % (args.stats_file, sorted(missing)))
+        for r in reader:
+            gene_set_id = r["Gene_Set"]
+            check(gene_set_id in gene_sets, "Unknown gene set %s in %s" % (gene_set_id, args.stats_file))
+            check(gene_set_id not in seen, "Duplicate gene set %s in %s" % (gene_set_id, args.stats_file))
+            seen.add(gene_set_id)
+            reasons[r["filter_reason"]] += 1
+            if r["filter_reason"] != "kept":
+                continue
+            for name in ("beta_uncorrected", "beta", "avg_postp"):
+                check(math.isfinite(float(r[name])), "Non-finite %s for %s" % (name, gene_set_id))
+            gene_set = gene_sets[gene_set_id]
+            rows.append({"trait": args.trait, "kpn_trait_id": args.kpn_trait_id, "gene_set_id": gene_set_id,
+                         "collection_id": gene_set["collection_id"], "cfde_label": gene_set["cfde_label"],
+                         "library": gene_set["library"], "n_genes": r["N"], "beta_uncorrected": r["beta_uncorrected"],
+                         "beta": r["beta"], "avg_postp": r["avg_postp"], "response": args.response, **learned})
+    by_library = defaultdict(list)
+    for row in rows:
+        by_library[row["library"]].append(row)
+    for items in by_library.values():
+        items.sort(key=lambda row: (-float(row["beta_uncorrected"]), row["gene_set_id"]))
+        for rank, row in enumerate(items, 1):
+            row["library_rank"] = rank
+    rows.sort(key=lambda row: (row["library"], row["library_rank"]))
+    write_tsv(args.output_file, GENE_SET_STATS_COLUMNS, rows)
+    print("%s: %d of %d gene sets analyzed by PIGEAN (%s)" % (args.trait, len(rows), len(seen), dict(sorted(reasons.items()))))
+
+
+# -------------------------------------------------------------------------------------------------
 
 
 def build_parser():
@@ -821,6 +940,22 @@ def build_parser():
     for name in ("trait-kpn-map-file", "expected-pigean-commit", "output-manifest-file", "output-top-file"):
         p.add_argument("--" + name, required=True)
     p.set_defaults(func=cmd_collect)
+
+    p = sub.add_parser("gene-stats-index", help="Index each trait's rows in the all-trait PIGEAN gene stats")
+    for name in ("gene-stats-file", "trait-kpn-map-file", "output-file"):
+        p.add_argument("--" + name, required=True)
+    p.set_defaults(func=cmd_gene_stats_index)
+
+    p = sub.add_parser("trait-gene-stats", help="Write one trait's PIGEAN gene stats from the indexed export")
+    for name in ("gene-stats-file", "index-file", "trait", "output-file"):
+        p.add_argument("--" + name, required=True)
+    p.set_defaults(func=cmd_trait_gene_stats)
+
+    p = sub.add_parser("annotate-gene-set-stats", help="Validate and rank one trait's pigean betas gene-set stats")
+    for name in ("stats-file", "params-file", "gene-set-index-file", "trait-kpn-map-file", "trait", "kpn-trait-id",
+                 "response", "pigean-commit-file", "expected-pigean-commit", "output-file"):
+        p.add_argument("--" + name, required=True)
+    p.set_defaults(func=cmd_annotate_gene_set_stats)
 
     p = sub.add_parser("compare-global", help="Compare per-trait and all-factor projections (manual check)")
     p.add_argument("--trait-long-file", action="append", required=True)

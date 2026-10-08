@@ -23,8 +23,8 @@ CFG = os.path.join(bm.LAP_DIR, "config", "cfde_projection.cfg")
 META_YAML = os.path.join(bm.LAP_DIR, "config", "cfde_projection.meta.yaml")
 META = os.path.join(bm.LAP_DIR, "config", "cfde_projection.meta")
 LAP_COMMON_CFG = "/humgen/diabetes/users/chase/lap/trunk/config/common.cfg"
-META_KEYS = {"reveal_repo_dir", "cfde_embeddings_dir", "base_dir", "unix_out_dir", "log_dir", "raw_dir", "eaggl_share_dir",
-             "cfde_snapshot", "cfde_dir", "kpn_dir", "lap_home", "web_out_dir", "default_umask"}
+META_KEYS = {"reveal_repo_dir", "cfde_embeddings_dir", "pigean_gene_stats_file", "base_dir", "unix_out_dir", "log_dir", "raw_dir",
+             "eaggl_share_dir", "cfde_snapshot", "cfde_dir", "kpn_dir", "lap_home", "web_out_dir", "default_umask"}
 BACKEND_PYTHON = os.path.join(bm.REPO_DIR, "services", "backend", ".venv", "bin", "python")
 COMMAND = "$reveal_python -B -m reveal_backend.reference_release build "
 
@@ -200,6 +200,66 @@ class ReleaseCfgTest(unittest.TestCase):
         flags = set(re.findall(r"(?<![\w-])--[a-z][a-z0-9-]*", self.expand(self.value[len(COMMAND):])))
         self.assertGreaterEqual(len(flags), 8)
         self.assertEqual(sorted(flags - options), [])
+
+
+class BetasCfgTest(unittest.TestCase):
+    """The betas_ stage: `pigean betas` (no outer Gibbs) on each trait's existing PIGEAN gene stats."""
+    COMMANDS = {"betas_index_cmd": (["short", "cmd"], "class_level project"),
+                "betas_trait_gene_stats_cmd": (["short", "cmd"], "class_level trait"),
+                "betas_trait_run_cmd": (["cmd"], "class_level trait rusage_mod $gene_set_stats_mem"),
+                "betas_trait_annotate_cmd": (["short", "cmd"], "class_level trait")}
+    PIGEAN_CLI = os.path.join(bm.LAP_DIR, "raw", "pigean_ca59661", "src", "pigean", "cli.py")
+
+    @classmethod
+    def setUpClass(cls):
+        cls.decl = cfg_declarations()
+        cls.cmds = {key: value for key, value in cls.decl.items() if "cmd" in value[0]}
+
+    def test_the_stage_and_its_levels(self):
+        self.assertEqual(sorted(key for key in self.cmds if key.startswith("betas_")), sorted(self.COMMANDS))
+        for key, (prefixes, postfix) in self.COMMANDS.items():
+            with self.subTest(cmd=key):
+                self.assertEqual((self.cmds[key][0], self.cmds[key][2]), (prefixes, postfix))
+        self.assertIn(self.decl["gene_set_stats_response"][1], ("log_bf", "combined"))
+        self.assertEqual(self.decl["pigean_profile"][1], "$pigean_repo_dir/config/profiles/gwas.default.json")
+        self.assertTrue(self.decl["pigean_cmd"][1].endswith("$python_cmd -B -m pigean"))
+        self.assertIn("PYTHONPATH=$pigean_repo_dir/src ", self.decl["pigean_cmd"][1])
+
+    def test_pigean_runs_betas_mode_on_the_trait_gene_stats_and_never_gibbs(self):
+        value = self.cmds["betas_trait_run_cmd"][1]
+        self.assertTrue(value.startswith("$helper_cmd record-pigean-commit --repo-dir $pigean_repo_dir --expected-commit $pigean_commit "))
+        self.assertIn(" $pigean_cmd betas --config $pigean_profile ", value)
+        self.assertNotIn("gibbs", value)
+        for text in ("!{input:--X-in:annotations_gmt_file}", "!{input:--gene-stats-in:trait_gene_stats_file}",
+                     "--gene-stats-log-bf-col $gene_set_stats_response", "--retain-all-beta-uncorrected", "--deterministic",
+                     "!{output:--gene-set-stats-out:trait_gene_set_stats_raw_file}"):
+            self.assertIn(text, value)
+        self.assertIn("--response $gene_set_stats_response", self.cmds["betas_trait_annotate_cmd"][1])
+
+    def test_every_pigean_flag_exists_in_the_pinned_cli(self):
+        if not os.path.isfile(self.PIGEAN_CLI):
+            self.skipTest("pinned pigean clone missing: %s" % self.PIGEAN_CLI)
+        options = set(re.findall(r'add_option\("",\s*"(--[a-zA-Z0-9-]+)"', read(self.PIGEAN_CLI)))
+        value = self.cmds["betas_trait_run_cmd"][1]
+        flags = set(re.findall(r"(?<![\w-])--[a-zA-Z][a-zA-Z0-9-]*", value.split("$pigean_cmd betas", 1)[1]))
+        self.assertGreaterEqual(len(flags), 10)
+        self.assertEqual(sorted(flags - options), [])
+
+    def test_every_helper_flag_exists(self):
+        import projection_workflow
+        sub = next(a for a in projection_workflow.build_parser()._actions if a.dest == "command")
+        commands = {"betas_index_cmd": "gene-stats-index", "betas_trait_gene_stats_cmd": "trait-gene-stats",
+                    "betas_trait_annotate_cmd": "annotate-gene-set-stats"}
+        for key, command in commands.items():
+            with self.subTest(cmd=key):
+                value = self.cmds[key][1]
+                self.assertTrue(value.startswith("$helper_cmd %s " % command), value[:60])
+                options = {o for a in sub.choices[command]._actions for o in a.option_strings}
+                self.assertEqual(sorted(set(re.findall(r"(?<![\w-])--[a-z][a-z0-9-]*", value)) - options), [])
+
+    def test_the_release_build_takes_every_trait_gene_set_stats_file(self):
+        self.assertIn("!{input:--gene-set-stats-file:trait_gene_set_stats_file}", self.cmds["release_build_cmd"][1])
+        self.assertEqual(self.decl["trait_gene_set_stats_file"][1], "@trait.cfde_gene_set_stats.tsv.gz")
 
 
 class GeneratedMetaTest(unittest.TestCase):

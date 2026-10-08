@@ -16,6 +16,7 @@ keys:
   web_out_dir: "http://internal.broadinstitute.org/~cyakabos/reveal-lap"
   default_umask: "002"
   cfde_embeddings_dir: "${cfde_dir}/embeddings/pritamdeka-BioBERT-mnli-snli-scinli-scitail-mednli-stsb"
+  pigean_gene_stats_file: "/humgen/diabetes2/users/chase/projects/pigean/raw/all_traits/mouse_msigdb/gene_stats.tsv"
 
 classes:
   "eaggl_capped__cfde_2026_09_28":

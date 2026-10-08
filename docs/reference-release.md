@@ -28,6 +28,7 @@ The build reads only files and runs in about 10 minutes. Its output goes to `lap
 | `factor_genes.tsv.gz` | the nonzero EAGGL gene loadings (2,553,330) |
 | `collections.jsonl.gz`, `gene_sets.jsonl.gz` | the CFDE collections (133) and gene sets (44,399), each gene set with its exact DAPPER node, members included |
 | `projections.tsv.gz` | joint and marginal loadings with **per-library** ranks. A row is kept when either rank is at most 50 within its library (GTEx, HuBMAP, LIGER, LINCS_L1000, MoTrPAC). |
+| `trait_gene_sets.tsv.gz` | trait → CFDE gene-set betas from the LAP `betas_` stage: `pigean betas` (no outer Gibbs) on each trait's existing PIGEAN gene stats. It holds `beta_uncorrected`, joint `beta`, `avg_postp` and the rank within the library, for the gene sets PIGEAN analyzed (its marginal p < 0.01 prefilter). The manifest records the response (`log_bf` by default). |
 | `dapper_nodes.jsonl.gz`, `dapper_edges.tsv.gz` | the full DAPPER provenance graph from the collection documents: organizations, datasets, files, activities and embeddings, plus the `used`, `was_generated_by`, `was_derived_from` and `has_embedding` edges |
 | `archived_factors.jsonl.gz` | a frozen snapshot of every factor in the release: its label, trait, metadata, top 50 genes and each library's top 10 gene sets |
 | `vectors/*.f32.npy` + `vectors/*.tsv` | factor-label, context, gene-set and collection vectors |

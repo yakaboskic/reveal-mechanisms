@@ -4,6 +4,9 @@ This LAP pipeline projects every CFDE gene set onto the EAGGL mechanism factors.
 supplied-factor projection in `packages/pigean`: `python -m eaggl factor --factor-gene-clusters-in …`.
 For each (factor, gene set) pair it writes a **joint** and a **marginal** loading.
 
+Its `betas_` stage scores every trait against every CFDE gene set from the trait's existing PIGEAN gene stats, with
+`python -m pigean betas` (no PIGEAN rerun, no outer Gibbs). See [Gene-set betas](#gene-set-betas-betas_-stage).
+
 Its `release_` stage then writes one **reference release** folder (factors, gene sets, projections, provenance and
 vectors), which one command publishes to the app's environments. See
 [Reference release](#reference-release-release_-stage) and `../docs/reference-release.md`.
@@ -15,6 +18,7 @@ vectors), which one command publishes to the app's environments. See
 | CFDE gene sets | DAPPER mirror of `s3://dig-gene-set-filtered/`, snapshot `2026-09-28` (`/humgen/diabetes/users/chase/data/dig-s3/gene_sets/cfde/2026-09-28`) | 133 GMTs, 44,399 gene sets. LINCS_L1000 has 43,527 of them; GTEx, HuBMAP, LIGER and MoTrPAC together have 872. |
 | EAGGL factors | Capped loadings of the legacy 711-trait atlas (`raw/EAGGL_capped_union_graph_share/data`, unzipped from the share) | 4,037 factors × 18,477 genes |
 | Trait ids | KPN trait registry **v0.0.2** from `dig-portal-data-models` | `versions/trait/v0.0.2/kpn_trait_registry.tsv`; tag commit `3cd554f` |
+| PIGEAN gene stats | All-trait export of the mouse_msigdb PIGEAN runs the factors came from (`/humgen/diabetes2/users/chase/projects/pigean/raw/all_traits/mouse_msigdb/gene_stats.tsv`, meta key `pigean_gene_stats_file`) | 18 GB; `phenotype, gene, combined, log_bf, prior` for 6,698 phenotypes, all 711 traits among them |
 
 **Two projections are run.**
 - **Per trait:** each trait's factors are projected jointly on their own. This is 711 eaggl runs.
@@ -74,6 +78,7 @@ raw/  out/  log/                    inputs / LAP outputs / run logs (git-ignored
 | per trait | `trait_factors_cmd`, `trait_project_cmd` (eaggl), `trait_annotate_cmd` |
 | all factors | `global_project_cmd` (eaggl), `global_relabel_cmd` |
 | collect | `collect_projections_cmd` (fan-in over all 711 traits) |
+| gene-set betas | `betas_index_cmd` (project) → `betas_trait_gene_stats_cmd`, `betas_trait_run_cmd` (pigean betas), `betas_trait_annotate_cmd` |
 | audit portal | `portal_build_db_cmd` (fan-in over all 711 traits) → `portal_export_audit_cmd`, `portal_build_html_cmd` |
 | reference release | `release_build_cmd` (fan-in over all 711 traits; files only, publishing is by hand) |
 
@@ -90,6 +95,8 @@ raw/  out/  log/                    inputs / LAP outputs / run logs (git-ignored
 | `*.projection_manifest.tsv` / `*.top_gene_sets_per_factor.tsv.gz` | All 711 QC rows / all top rows |
 | `*.all_factors.{joint,marginal}.by_factor_id.tsv.gz` | All-factor run: `gene_set_id, collection_id, cfde_label, library, top_factor_id`, then one column per `factor_id` |
 | `traits/<trait>/*.eaggl.*`, `*.all_factors.*.eaggl.*` | Raw eaggl outputs, params, logs and warnings |
+| `traits/<trait>/<trait>.cfde_gene_set_stats.tsv.gz` | **Trait → gene-set betas.** The gene sets PIGEAN analyzed: `trait, kpn_trait_id, gene_set_id, collection_id, cfde_label, library, n_genes, beta_uncorrected, beta, avg_postp, library_rank, response, p, sigma2` |
+| `traits/<trait>/<trait>.pigean_gene_stats.tsv.gz`, `*.gene_set_stats.*` | The trait's slice of the gene stats; raw pigean output, params, log and warnings |
 
 **About the loadings**
 - Loadings are eaggl's `%.4g` strings, kept unchanged.
@@ -124,6 +131,7 @@ lap_run --only-cmd '^(prep_|collection_)' --bsub
 #    Full run: per-trait + all-factor projections, relabel, collect. Takes >24 h because of the
 #    all-factor job, so start it detached from the terminal.
 lap_run --only '^(2hrG|T2D|Ap-LM)$' --only-cmd '^trait_' --bsub
+lap_run --only-cmd '^betas_index_cmd$' && lap_run --only '^(2hrG|T2D|Ap-LM)$' --only-cmd '^betas_' --bsub
 nohup setsid perl /humgen/diabetes/users/chase/lap/trunk/bin/run.pl --meta config/cfde_projection.meta --bsub \
     > log/run_full.$(date +%Y%m%d_%H%M%S).txt 2>&1 < /dev/null &
 ```
@@ -244,6 +252,36 @@ From your laptop, run `ssh -L 8766:localhost:8766 <this host>` and open `http://
 the static `*.portal.html`: it calls the same URL. The server binds to 127.0.0.1 and is read-only. It has no
 authentication, so keep it behind the tunnel. The database is opened immutable; restart the server after a rebuild.
 
+## Gene-set betas (`betas_` stage)
+
+Every trait gets a PIGEAN score for every CFDE gene set **without rerunning PIGEAN**. Each trait's existing gene-level
+statistics go into `python -m pigean betas`: PIGEAN's gene-set stage on its own, which stops before the outer Gibbs
+loop. The gene sets are the same CFDE file the projection uses.
+
+1. `betas_index_cmd` (project, about 2 minutes) reads the 18 GB export once and records where each trait's rows are
+   (they must be contiguous). It stores the export's size and mtime, and the next step refuses a changed export.
+2. `betas_trait_gene_stats_cmd` reads the trait's byte range: its `gene, combined, log_bf, prior` rows.
+3. `betas_trait_run_cmd` runs `pigean betas` with the pinned clone and the GWAS profile:
+   - gene locations (not OLS), the NCBI37.3 gene universe and the portal gene map;
+   - the marginal p < 0.01 prefilter and the 5,000-gene-set cap;
+   - `--deterministic --seed 1`.
+
+   It writes `beta_uncorrected` (marginal) and `beta` (joint, corrected for gene-set overlap without Gibbs) for every
+   gene set PIGEAN analyzes. T2D took about 1 minute and 0.6 GB.
+4. `betas_trait_annotate_cmd` keeps the analyzed gene sets (`filter_reason` `kept`; the prefiltered ones carry no
+   beta), attaches the KPN and collection ids, and ranks them by `beta_uncorrected` within their library. It refuses
+   another response, an unknown gene set or another pigean commit.
+
+**Response** (`gene_set_stats_response`, default `log_bf`):
+- `log_bf`, the direct genetic support. This is a PIGEAN run on the CFDE gene sets minus the outer Gibbs loop. T2D
+  analyzes 1,197 gene sets.
+- `combined` adds the export's mouse_msigdb priors, which come from another gene-set library. T2D then analyzes 4,974.
+
+Only `log_bf` is the same across the export's libraries; `prior` and `combined` differ.
+
+The release build reads every `<trait>.cfde_gene_set_stats.tsv.gz` into `trait_gene_sets.tsv.gz`, published as
+`<prefix>_ref_trait_gene_sets`.
+
 ## Reference release (`release_` stage)
 
 The app's reference data is published as one release folder: traits, factors and their gene loadings, CFDE
@@ -259,7 +297,7 @@ traits, so never run it under `--only`:
 lap_run --only-cmd '^release_build_cmd$'
 ```
 
-It reads the LAP outputs, the per-trait long files (for the per-library ranks), the collection YAMLs, the CFDE
+It reads the LAP outputs, the per-trait long files (for the per-library ranks), the per-trait gene-set betas, the collection YAMLs, the CFDE
 snapshot vectors (`$cfde_embeddings_dir`) and the vector cache `raw/reference_vector_cache.sqlite` (factor-label and
 DisMech context vectors keyed by the sha256 of their text, seeded once from Aurora with
 `../scripts/reference_migration.py export-vectors`). Only text missing from the cache is embedded, with

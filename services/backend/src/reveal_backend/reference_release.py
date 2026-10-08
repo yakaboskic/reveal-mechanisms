@@ -3,14 +3,15 @@
 `python -m reveal_backend.reference_release <command>` prints one JSON object on stdout (progress goes to stderr)
 and exits non-zero on any failure:
 
-  build    LAP project outputs, the per-trait long files, the CFDE snapshot vectors and the vector cache -> one
-           release folder, built beside --out and swapped into place (a folder already holding the same release
-           is reused untouched). Only factor labels missing from the cache are embedded, and only after re-embedded
-           cached texts reproduce their stored vectors.
-  publish  for each --env, in order: upsert changed vectors into its fixed Upstash namespaces, replace its
-           <prefix>_ref_* tables with one RENAME, add the frozen factor snapshots to the shared
-           archived_reference_factors, delete vectors the release no longer has and record the release in
-           <prefix>_records. Re-running a published release changes nothing.
+  build    LAP project outputs, the per-trait long files and gene-set betas, the CFDE snapshot vectors and the
+           vector cache -> one release folder, built beside --out and swapped into place (a folder already holding
+           the same release is reused untouched). Only factor labels missing from the cache are embedded, and only
+           after re-embedded cached texts reproduce their stored vectors.
+  publish  every file checked against the manifest; then for each --env, in order: add the vectors its fixed
+           Upstash namespaces lack, add new frozen factor snapshots to the shared archived_reference_factors,
+           replace its <prefix>_ref_* tables with one RENAME, overwrite changed vectors and delete the ones the
+           release no longer has, and record the release in <prefix>_records. Re-running a published release
+           changes nothing; re-running a failed publish finishes it.
 
 Secrets are read only from the environment (the repository .env via python-dotenv) and are never printed.
 """
@@ -18,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 from bisect import bisect_right
+from collections import Counter, defaultdict
 from concurrent.futures import Future, ProcessPoolExecutor, ThreadPoolExecutor
 from contextlib import contextmanager
 import csv
@@ -70,9 +72,15 @@ LONG_COLUMNS = ['trait', 'kpn_trait_id', 'factor_id', 'factor', 'factor_label', 
 # archived_factors.jsonl.gz is written afterwards (it carries the release_id) and listed under `archive`.
 VECTOR_FILES = tuple(f'vectors/{kind}.{suffix}' for kind in KINDS for suffix in ('f32.npy', 'tsv'))
 DATA_FILES = ('traits.jsonl.gz', 'factors.jsonl.gz', 'factor_genes.tsv.gz', 'collections.jsonl.gz', 'gene_sets.jsonl.gz',
-              'projections.tsv.gz', 'dapper_nodes.jsonl.gz', 'dapper_edges.tsv.gz') + VECTOR_FILES
+              'projections.tsv.gz', 'trait_gene_sets.tsv.gz', 'dapper_nodes.jsonl.gz', 'dapper_edges.tsv.gz') + VECTOR_FILES
 ARCHIVE_FILE = 'archived_factors.jsonl.gz'
 FACTOR_GENE_COLUMNS = ('factor_key', 'gene', 'loading')
+# Trait -> CFDE gene-set betas: the LAP betas_ stage's per-trait files (projection_workflow.py annotate-gene-set-stats:
+# `pigean betas` on the trait's existing PIGEAN gene stats, no outer Gibbs) and the release's trait_gene_sets.tsv.gz.
+GENE_SET_STATS_SUFFIX = '.cfde_gene_set_stats.tsv.gz'
+LAP_GENE_SET_STATS_COLUMNS = ('trait', 'kpn_trait_id', 'gene_set_id', 'collection_id', 'cfde_label', 'library', 'n_genes',
+                              'beta_uncorrected', 'beta', 'avg_postp', 'library_rank', 'response', 'p', 'sigma2')
+TRAIT_GENE_SET_COLUMNS = ('kpn_trait_id', 'gene_set_id', 'library', 'beta_uncorrected', 'beta', 'avg_postp', 'library_rank')
 PROJECTION_COLUMNS = ('factor_key', 'gene_set_id', 'library', 'joint_loading', 'marginal_loading', 'joint_rank', 'marginal_rank', 'is_joint_top_factor')
 EDGE_COLUMNS = ('subject', 'predicate', 'object', 'edge_role')
 VECTOR_COLUMNS = ('row', 'id', 'input_sha256', 'vector_sha256')
@@ -96,6 +104,7 @@ COLUMNS = {
                     'joint_rank', 'marginal_rank', 'is_joint_top_factor'),
     'dapper_nodes': ('id', 'class_name', 'payload'),
     'dapper_edges': EDGE_COLUMNS,
+    'trait_gene_sets': TRAIT_GENE_SET_COLUMNS,
     'release': ('release_id', 'published_at', 'manifest')}
 TABLES = tuple(COLUMNS)
 JSON_COLUMNS = frozenset({'metadata', 'payload', 'manifest'})
@@ -191,6 +200,19 @@ CREATE TABLE reveal_ref_dapper_edges{suffix} (
   edge_role VARCHAR(64) NULL,
   PRIMARY KEY (subject, predicate, object),
   INDEX ref_dapper_edge_object (object)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+
+CREATE TABLE reveal_ref_trait_gene_sets{suffix} (
+  kpn_trait_id VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  gene_set_id VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  library VARCHAR(64) NOT NULL,
+  beta_uncorrected DOUBLE NOT NULL,
+  beta DOUBLE NOT NULL,
+  avg_postp DOUBLE NOT NULL,
+  library_rank INT UNSIGNED NOT NULL,
+  PRIMARY KEY (kpn_trait_id, gene_set_id),
+  INDEX ref_trait_gene_set (gene_set_id),
+  INDEX ref_trait_gene_set_library (kpn_trait_id, library, library_rank)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
 
 CREATE TABLE reveal_ref_release{suffix} (
@@ -904,6 +926,45 @@ def release_identity(files):
     return digest({'format': RELEASE_FORMAT, 'files': files})
 
 
+def gene_set_stats_files_in(directory):
+    directory = Path(directory)
+    return sorted(path for path in directory.rglob('*' + GENE_SET_STATS_SUFFIX)
+                  if not any(part.startswith('.') for part in path.relative_to(directory).parts))
+
+
+def write_trait_gene_sets(path, files, kpn_map, gene_set_ids):
+    """trait_gene_sets.tsv.gz from the per-trait `<trait>.cfde_gene_set_stats.tsv.gz` files, in KPN trait order: one file per
+    trait (no gene set PIGEAN analyzed is a header-only file), one response, known gene sets, library ranks 1..n.
+    Returns (rows, the manifest block)."""
+    by_kpn = {}
+    for file in map(Path, files):
+        if not file.name.endswith(GENE_SET_STATS_SUFFIX): raise Refused(f'{file.name}: not a <trait>{GENE_SET_STATS_SUFFIX} file')
+        trait = file.name[:-len(GENE_SET_STATS_SUFFIX)]
+        if trait not in kpn_map: raise Refused(f'{file.name}: unknown trait {trait}')
+        if kpn_map[trait]['kpn_trait_id'] in by_kpn: raise Refused(f'{file.name}: repeated trait {trait}')
+        by_kpn[kpn_map[trait]['kpn_trait_id']] = (trait, file)
+    absent = sorted(set(kpn_map) - {trait for trait, _ in by_kpn.values()})
+    if absent: raise Refused(f'No gene-set stats for {len(absent)} traits, e.g. {absent[:5]}')
+    responses, counts = set(), Counter()
+    def rows():
+        for kpn in sorted(by_kpn):
+            trait, file = by_kpn[kpn]
+            seen, ranks = set(), defaultdict(list)
+            for row in tsv_rows(file, LAP_GENE_SET_STATS_COLUMNS):
+                if (row['trait'], row['kpn_trait_id']) != (trait, kpn): raise Refused(f'{file.name}: a row of another trait')
+                if row['gene_set_id'] not in gene_set_ids or row['gene_set_id'] in seen:
+                    raise Refused(f"{file.name}: unknown or repeated gene set {row['gene_set_id']}")
+                seen.add(row['gene_set_id']); ranks[row['library']].append(int(row['library_rank'])); responses.add(row['response'])
+                if len(responses) > 1: raise Refused(f'The gene-set stats mix the responses {sorted(responses)}')
+                counts[kpn] += 1
+                yield tuple(row[column] for column in TRAIT_GENE_SET_COLUMNS)
+            if any(values != list(range(1, len(values) + 1)) for values in ranks.values()):
+                raise Refused(f'{file.name}: library ranks are not 1..n in rank order')
+    total = write_tsv(path, TRAIT_GENE_SET_COLUMNS, rows())
+    return total, {'response': next(iter(responses), None), 'traits': len(by_kpn), 'traits_with_rows': len(counts),
+                   'source': 'pigean betas mode (no outer Gibbs) on each trait\'s PIGEAN gene stats; LAP betas_ stage'}
+
+
 def long_files_in(directory):
     directory = Path(directory)
     return sorted(path for path in directory.rglob('*' + LONG_SUFFIX) if not any(part.startswith('.') for part in path.relative_to(directory).parts))
@@ -918,8 +979,8 @@ def _replaceable(path):
     return isinstance(manifest, dict) and manifest.get('format') == RELEASE_FORMAT
 
 
-def build_release(services, project_dir, long_files, embeddings_dir, cache_path, out, *, kpn_release=None, top_n=DEFAULT_TOP_N,
-                  workers=1, runtime=None):
+def build_release(services, project_dir, long_files, embeddings_dir, cache_path, out, *, gene_set_stats_files=(), kpn_release=None,
+                  top_n=DEFAULT_TOP_N, workers=1, runtime=None):
     """Write the release folder (module docstring) and swap it into `out`; reuse an identical release already there."""
     project_dir, out = Path(project_dir), Path(out)
     if top_n < 1 or workers < 1: raise Refused('--top-n and --workers must be positive')
@@ -929,6 +990,7 @@ def build_release(services, project_dir, long_files, embeddings_dir, cache_path,
     by_kpn = {trait['kpn_trait_id']: trait for trait in lap['traits']}
     files, kpn_of = sorted(set(map(Path, long_files))), {}
     if not files: raise Refused('Pass the per-trait long files (--long-file or --long-files-from)')
+    if not gene_set_stats_files: raise Refused('Pass the per-trait gene-set stats (--gene-set-stats-file or --gene-set-stats-from)')
     for path in files:
         trait = _long_file_trait(path)
         if trait not in lap['kpn_map'] or lap['kpn_map'][trait]['kpn_trait_id'] in kpn_of.values(): raise Refused(f'{path}: unknown or repeated trait {trait}')
@@ -968,6 +1030,9 @@ def build_release(services, project_dir, long_files, embeddings_dir, cache_path,
                 (kpn_of[path], submit(long_file_ranks, path, top_n)) for path in sorted(files, key=lambda path: kpn_of[path])],
                 lap['keys'], lap['index_rows'], libraries)
             documents = {collection_id: future.result() for collection_id, future in documents.items()}
+        progress(f'{len(gene_set_stats_files)} trait gene-set stats files')
+        counts['trait_gene_sets'], gene_set_stats = write_trait_gene_sets(temporary / 'trait_gene_sets.tsv.gz', gene_set_stats_files,
+                                                                          lap['kpn_map'], set(libraries))
         progress('collections, gene sets and DAPPER provenance')
         collections, gene_sets = collection_rows(lap, documents)
         counts['collections'] = write_jsonl(temporary / 'collections.jsonl.gz', collections)
@@ -985,7 +1050,7 @@ def build_release(services, project_dir, long_files, embeddings_dir, cache_path,
                     'counts': counts, 'top_n': top_n, 'embedding': embedding,
                     'archive': {'file': ARCHIVE_FILE, 'sha256': _sha256_file(temporary / ARCHIVE_FILE), 'top_genes': TOP_GENES,
                                 'top_gene_sets_per_library': TOP_GENE_SETS, 'mechanism_ids': bool(runtime)},
-                    'dapper': {'nodes': len(nodes), 'edges': len(edges), 'variants_skipped': variants},
+                    'dapper': {'nodes': len(nodes), 'edges': len(edges), 'variants_skipped': variants}, 'gene_set_stats': gene_set_stats,
                     'sources': {'lap_project': str(project_dir.resolve()), 'lap_stem': stem, 'pigean_commit': lap['pigean_commit'],
                                 'kpn_release': lap['kpn_release'], 'kpn_release_commit': lap['kpn_release_commit'],
                                 'cfde_snapshot': sorted({row['metadata']['cfde_snapshot'] for row in lap['gene_sets']}),
@@ -1114,6 +1179,9 @@ def table_rows(release, manifest, published_at):
             ('projections', projections, 5000), ('dapper_nodes', jsonl('dapper_nodes.jsonl.gz', 'dapper_nodes'), 500),
             ('dapper_edges', lambda: ((row['subject'], row['predicate'], row['object'], row['edge_role'] or None)
                                       for row in tsv_rows(r / 'dapper_edges.tsv.gz', EDGE_COLUMNS)), 5000),
+            ('trait_gene_sets', lambda: ((row['kpn_trait_id'], row['gene_set_id'], row['library'], float(row['beta_uncorrected']),
+                                          float(row['beta']), float(row['avg_postp']), int(row['library_rank']))
+                                         for row in tsv_rows(r / 'trait_gene_sets.tsv.gz', TRAIT_GENE_SET_COLUMNS)), 5000),
             ('release', lambda: [(manifest['release_id'], stamp, canonical(manifest))], 1)]
 
 
@@ -1341,6 +1409,9 @@ def parser():
     c.add_argument('--lap-project-dir', type=Path, required=True)
     c.add_argument('--long-file', type=Path, action='extend', nargs='+', default=[], help='A per-trait <trait>.cfde_projection.long.tsv.gz (repeatable)')
     c.add_argument('--long-files-from', type=Path, help='Directory searched recursively for *.cfde_projection.long.tsv.gz')
+    c.add_argument('--gene-set-stats-file', type=Path, action='extend', nargs='+', default=[],
+                   help=f'A per-trait <trait>{GENE_SET_STATS_SUFFIX} of the LAP betas_ stage (repeatable)')
+    c.add_argument('--gene-set-stats-from', type=Path, help=f'Directory searched recursively for *{GENE_SET_STATS_SUFFIX}')
     c.add_argument('--cfde-embeddings-dir', type=Path, required=True, help='CFDE snapshot vectors.float16.npy + rows.tsv')
     c.add_argument('--vector-cache', type=Path, required=True, help='SQLite vector cache of factor labels and contexts')
     c.add_argument('--out', type=Path, required=True, help='Release folder (replaced unless it already holds this release)')
@@ -1358,8 +1429,9 @@ def parser():
 def run(services, args, result):
     if args.command == 'build':
         files = list(args.long_file) + (long_files_in(args.long_files_from) if args.long_files_from else [])
+        stats = list(args.gene_set_stats_file) + (gene_set_stats_files_in(args.gene_set_stats_from) if args.gene_set_stats_from else [])
         return build_release(services, args.lap_project_dir, files, args.cfde_embeddings_dir, args.vector_cache, args.out,
-                             kpn_release=args.kpn_release, top_n=args.top_n, workers=args.workers)
+                             gene_set_stats_files=sorted(set(stats)), kpn_release=args.kpn_release, top_n=args.top_n, workers=args.workers)
     return publish_release(services, args.release, args.env, vectors=not args.skip_vectors, tables=not args.skip_tables,
                            results=result.setdefault('environments', []))
 

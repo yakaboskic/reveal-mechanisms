@@ -38,6 +38,10 @@ FACTORS = [('T2D', KPN_A, 1, 'Insulin secretion '), ('T2D', KPN_A, 2, 'Beta cell
 LOADINGS = {'T2D::Factor1': ['0.5', '0', '1.2e-05', '0.0', '0.25'], 'T2D::Factor2': ['0', '0.75', '0', '0.1', '0'],
             'BMI::Factor1': ['0.3', '0.3', '0', '0.9', '0']}
 CONTEXTS = ['ctx one', 'ctx two', 'Beta cell']  # a context may share a factor label's text
+# The LAP betas_ stage's per-trait gene-set betas: (gene set, library, beta_uncorrected, beta, avg_postp, library rank).
+# BMI's PIGEAN run analyzed no gene set: a header-only file.
+GENE_SET_STATS = {'T2D': [(LIB_SETS[0], 'LIB', '0.9', '0.8', '0.95', 1), (LIB_SETS[2], 'LIB', '0.2', '0.1', '0.3', 2),
+                          (OTHER_SETS[1], 'OTHER', '0.05', '0.04', '0.06', 1)], 'BMI': []}
 ORG = {'id': 'dapper:Organization.' + 'o' * 32, 'name': 'Broad Institute'}
 SHARED_EDGE = {'subject': 'dapper:Activity.' + 'a' * 32, 'predicate': 'prov:used', 'object': 'dapper:File.' + 'f' * 32, 'edge_role': 'data_input'}
 MODEL, DIMS = 'm/x', 8
@@ -146,7 +150,17 @@ def lap_project(root):
                              'marginal_loading': f'{(8 - marginal) / 1000:.4g}', 'joint_rank_in_factor': joint,
                              'marginal_rank_in_factor': marginal, 'is_joint_top_factor': int(joint == 1)})
         tsv(project / 'traits' / trait / f'{trait}{rr.LONG_SUFFIX}', rr.LONG_COLUMNS, rows)
+        gene_set_stats(project, trait, kpn, GENE_SET_STATS[trait])
     return project
+
+
+def gene_set_stats(project, trait, kpn, items, response='log_bf'):
+    path = project / 'traits' / trait / f'{trait}{rr.GENE_SET_STATS_SUFFIX}'
+    tsv(path, rr.LAP_GENE_SET_STATS_COLUMNS, [
+        {'trait': trait, 'kpn_trait_id': kpn, 'gene_set_id': g, 'collection_id': COLL[0] if g in LIB_SETS else COLL[1], 'cfde_label': 'x',
+         'library': library, 'n_genes': 3, 'beta_uncorrected': uncorrected, 'beta': beta, 'avg_postp': postp, 'library_rank': rank,
+         'response': response, 'p': '0.0004', 'sigma2': '7e-09'} for g, library, uncorrected, beta, postp, rank in items])
+    return path
 
 
 def cfde_embeddings(root):
@@ -189,12 +203,13 @@ def build_services(embed=no_embedding, environ=ENVIRON):
 @pytest.fixture
 def lap(tmp_path):
     project = lap_project(tmp_path)
-    return SimpleNamespace(project=project, long_files=rr.long_files_in(project / 'traits'), cfde=cfde_embeddings(tmp_path), cache=vector_cache(tmp_path))
+    return SimpleNamespace(project=project, long_files=rr.long_files_in(project / 'traits'), cfde=cfde_embeddings(tmp_path), cache=vector_cache(tmp_path),
+                           gene_set_stats=rr.gene_set_stats_files_in(project / 'traits'))
 
 
 def build(lap, out, services=None, **options):
     return rr.build_release(services or build_services(), lap.project, lap.long_files, lap.cfde, lap.cache, out,
-                            **{'top_n': 2, 'workers': 1, 'runtime': RUNTIME, **options})
+                            **{'gene_set_stats_files': lap.gene_set_stats, 'top_n': 2, 'workers': 1, 'runtime': RUNTIME, **options})
 
 
 def rows(path, columns=None):
@@ -211,7 +226,7 @@ def test_build_writes_every_release_file_deterministically(lap, tmp_path):
     assert first['release_id'] == second['release_id'] and re.fullmatch('[a-f0-9]{64}', first['release_id']) and first['reused'] is False
     counts = {key: value for key, value in first['counts'].items() if key != 'projections'}
     assert counts == {'traits': 2, 'factors': 3, 'factor_genes': 8, 'collections': 2, 'gene_sets': 7, 'dapper_nodes': 18, 'dapper_edges': 16,
-                      'vectors': {'factors': 3, 'contexts': 3, 'gene_sets': 7, 'collections': 2}, 'archived_factors': 3}
+                      'trait_gene_sets': 3, 'vectors': {'factors': 3, 'contexts': 3, 'gene_sets': 7, 'collections': 2}, 'archived_factors': 3}
     release, other = tmp_path / 'one', tmp_path / 'two'
     for name in rr.DATA_FILES: assert (release / name).read_bytes() == (other / name).read_bytes(), name
     manifest = rr.open_release(release)
@@ -440,6 +455,27 @@ def test_archived_snapshots_keep_each_librarys_top_gene_sets(lap, tmp_path, monk
         assert [(g['library'], g['rank']) for g in row['snapshot']['top_gene_sets']] == [(library, 1) for library in libraries]
 
 
+def test_trait_gene_set_betas_are_released_per_trait_in_library_rank_order(lap, tmp_path):
+    build(lap, tmp_path / 'release')
+    manifest = rr.open_release(tmp_path / 'release')
+    assert manifest['gene_set_stats']['response'] == 'log_bf' and (manifest['gene_set_stats']['traits'], manifest['gene_set_stats']['traits_with_rows']) == (2, 1)
+    assert [tuple(row.values()) for row in rows(tmp_path / 'release' / 'trait_gene_sets.tsv.gz', rr.TRAIT_GENE_SET_COLUMNS)] == [
+        (KPN_A, LIB_SETS[0], 'LIB', '0.9', '0.8', '0.95', '1'), (KPN_A, LIB_SETS[2], 'LIB', '0.2', '0.1', '0.3', '2'),
+        (KPN_A, OTHER_SETS[1], 'OTHER', '0.05', '0.04', '0.06', '1')]
+
+
+@pytest.mark.parametrize('trait, items, response, message', [
+    ('T2D', [('dapper:GeneSet.' + 'z' * 31 + '1', 'LIB', '0.9', '0.8', '0.9', 1)], 'log_bf', 'unknown or repeated gene set'),
+    ('T2D', [(LIB_SETS[0], 'LIB', '0.9', '0.8', '0.9', 1), (LIB_SETS[0], 'LIB', '0.8', '0.8', '0.9', 2)], 'log_bf', 'unknown or repeated gene set'),
+    ('T2D', [(LIB_SETS[0], 'LIB', '0.9', '0.8', '0.9', 2)], 'log_bf', 'library ranks are not 1..n'),
+    ('BMI', [(LIB_SETS[0], 'LIB', '0.9', '0.8', '0.9', 1)], 'combined', 'mix the responses')])
+def test_gene_set_stats_that_do_not_hold_are_refused(lap, tmp_path, trait, items, response, message):
+    gene_set_stats(lap.project, trait, dict((t, k) for t, k, *_ in TRAITS)[trait], items, response)
+    with pytest.raises(rr.Refused, match=message): build(lap, tmp_path / 'release')
+    with pytest.raises(rr.Refused, match='No gene-set stats for 1 traits'): build(lap, tmp_path / 'release', gene_set_stats_files=lap.gene_set_stats[:1])
+    with pytest.raises(rr.Refused, match='Pass the per-trait gene-set stats'): build(lap, tmp_path / 'release', gene_set_stats_files=[])
+
+
 def test_out_folder_is_swapped_only_when_the_release_changes(lap, tmp_path):
     out = tmp_path / 'release' / 'files'
     out.mkdir(parents=True)  # LAP creates the folder before the command runs
@@ -481,7 +517,8 @@ def test_tied_ranks_are_refused(tmp_path):
 
 def test_build_refuses_missing_long_files_and_unordered_factors(lap, tmp_path):
     with pytest.raises(rr.Refused, match='No long file for 1 traits'):
-        rr.build_release(build_services(), lap.project, lap.long_files[:1], lap.cfde, lap.cache, tmp_path / 'out', workers=1, runtime=RUNTIME)
+        rr.build_release(build_services(), lap.project, lap.long_files[:1], lap.cfde, lap.cache, tmp_path / 'out',
+                         gene_set_stats_files=lap.gene_set_stats, workers=1, runtime=RUNTIME)
     path = next(path for path in lap.long_files if path.name.startswith('T2D'))
     with gzip.open(path, 'rt') as stream: lines = stream.readlines()
     with gzip.open(path, 'wt') as stream: stream.writelines(lines[:2] + lines[9:10] + lines[2:9] + lines[10:])
@@ -616,7 +653,8 @@ def test_publish_fills_new_tables_swaps_them_in_one_rename_and_records_the_relea
     qa = result['environments'][0]
     assert qa['tables']['action'] == 'replaced' and qa['tables']['published_at'] == '2026-10-05T12:00:00.123456Z'
     assert qa['tables']['rows'] == {'traits': 2, 'factors': 3, 'factor_genes': 8, 'collections': 2, 'gene_sets': 7,
-                                    'projections': manifest['counts']['projections'], 'dapper_nodes': 18, 'dapper_edges': 16, 'release': 1}
+                                    'projections': manifest['counts']['projections'], 'dapper_nodes': 18, 'dapper_edges': 16, 'trait_gene_sets': 3,
+                                    'release': 1}
     statements = [event[1] for event in events if event[0] == 'sql']
     # Strict mode before the lock, the lock before any change; released at the end.
     assert statements.index(rr.STRICT_MODE) < statements.index('SELECT GET_LOCK(%s,%s)')
@@ -891,7 +929,8 @@ def test_vector_client_uses_the_write_token_and_per_environment_overrides(monkey
 
 def test_cli_prints_one_json_object_and_exits_by_outcome(lap, tmp_path, capsys, monkeypatch):
     out = tmp_path / 'cli'
-    argv = ['build', '--lap-project-dir', str(lap.project), '--long-files-from', str(lap.project / 'traits'), '--cfde-embeddings-dir', str(lap.cfde),
+    argv = ['build', '--lap-project-dir', str(lap.project), '--long-files-from', str(lap.project / 'traits'),
+            '--gene-set-stats-from', str(lap.project / 'traits'), '--cfde-embeddings-dir', str(lap.cfde),
             '--vector-cache', str(lap.cache), '--out', str(out), '--top-n', '2', '--workers', '1']
     monkeypatch.setattr(rr, 'dapper_runtime', lambda: RUNTIME)
     assert rr.main(argv, build_services()) == 0

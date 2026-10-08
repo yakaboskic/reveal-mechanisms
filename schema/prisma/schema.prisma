@@ -768,6 +768,22 @@ model RefProjection {
   @@map("reveal_ref_projections")
 }
 
+// Trait -> CFDE gene-set betas (pigean betas mode on each trait's PIGEAN gene stats; no outer Gibbs).
+model RefTraitGeneSet {
+  kpn_trait_id     String @db.VarChar(32)
+  gene_set_id      String @db.VarChar(64)
+  library          String @db.VarChar(64)
+  beta_uncorrected Float  @db.Double
+  beta             Float  @db.Double
+  avg_postp        Float  @db.Double
+  library_rank     Int    @db.UnsignedInt
+
+  @@id([kpn_trait_id, gene_set_id])
+  @@index([gene_set_id], map: "ref_trait_gene_set")
+  @@index([kpn_trait_id, library, library_rank], map: "ref_trait_gene_set_library")
+  @@map("reveal_ref_trait_gene_sets")
+}
+
 // The DAPPER provenance graph of the CFDE collections.
 model RefDapperNode {
   id         String @id @db.VarChar(128)
