@@ -131,7 +131,8 @@ Paths are relative to this `lap/` directory. The pipeline runs on UGER; start th
   three traits (a few minutes each).
 - A per-trait projection maps the pack and projects its 76 chunks in about a minute (8 GB requested).
 - The gene-set betas fit each library separately: the 8 smaller libraries in about 1–2 minutes per trait (< 1 GB),
-  LINCS in its own job (`gene_set_stats_large_mem`); see [Gene-set betas](#gene-set-betas-betas_-stage).
+  LINCS in its own job (`gene_set_stats_large_mem`, 64 GB): T2D took 35 min and peaked at 56 GB, so all 711 traits
+  are a few hundred CPU-hours; see [Gene-set betas](#gene-set-betas-betas_-stage).
 - The release build reads the 9 GB of collection documents one at a time (32 GB requested).
 
 ```bash
@@ -280,7 +281,7 @@ loop. The gene sets are the CFDE gene sets the projection uses, **fitted one lib
 | analyzed (`kept`) | 5,000: LINCS 3,937, RummaGEO 983, the other 7 libraries 80 | each library's own prefilter survivors |
 | learned p | 1.15e-5 | RummaGEO 1.25e-3; libraries with < 100 survivors keep the default 1e-3 |
 | nonzero `beta_uncorrected` | 163 (RummaGEO 24, GTEx 2) | RummaGEO 778, GTEx 14 of 14 |
-| run | 35 min, 58.5 GB peak | RummaGEO 30 s, GTEx 7 s (< 0.5 GB); LINCS alone dominates |
+| run | 35 min, 58.5 GB peak | RummaGEO 30 s, GTEx 7 s (< 0.5 GB); LINCS alone 35 min, 56 GB peak |
 
 1. `betas_index_cmd` (project, about 2 minutes) reads the 18 GB export once and records where each trait's rows are
    (they must be contiguous). It stores the export's size and mtime, and the next step refuses a changed export.
