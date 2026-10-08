@@ -358,7 +358,7 @@ class WorkflowBudget(unittest.IsolatedAsyncioTestCase):
 
     async def test_idle_reconciliation_is_one_snapshot_off_the_fence(self):
         self.new()   # a job awaiting delivery is the dispatcher's, not a recovery candidate
-        with count_round_trips() as budget: self.assertEqual(sweep(self.repo), (0, False))
+        with count_round_trips() as budget: self.assertEqual(sweep(self.repo), (0, False, []))
         print('\nreconcile sweep', budget)
         self.assertEqual((budget.leases, budget.unleased, budget.connects, budget.locked_trips()), ([['read', 2]], 0, 0, 0), budget)
         self.assertLessEqual(budget.trips(), BUDGET['reconcile_idle'], budget)

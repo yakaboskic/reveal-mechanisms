@@ -7,6 +7,7 @@ no local task.
 import asyncio
 from contextlib import nullcontext
 from copy import deepcopy
+import errno
 import json
 import os
 from pathlib import Path
@@ -152,6 +153,54 @@ def transient_database(error):
     return isinstance(error, (pymysql.err.OperationalError, pymysql.err.InterfaceError))
 
 
+# Local filesystem errors that repeat on every attempt: a missing or misplaced path is the phase's own failure.
+_DETERMINISTIC_OS_ERRORS = (FileNotFoundError, FileExistsError, IsADirectoryError, NotADirectoryError, PermissionError)
+_DETERMINISTIC_ERRNOS = frozenset((errno.EINVAL, errno.ENAMETOOLONG, errno.ELOOP))
+_THROTTLED_CODES = frozenset(('SlowDown', 'Throttling', 'ThrottlingException', 'RequestTimeout', 'RequestLimitExceeded',
+                              'InternalError', 'ServiceUnavailable', 'TooManyRequestsException'))
+
+
+def _retryable_status(status):
+    return isinstance(status, int) and (status in (408, 425, 429) or status >= 500)
+
+
+def _infrastructure(error):
+    # DatabaseBusy and FenceBusy are TimeoutErrors; ConnectionError covers resets, refusals and broken pipes.
+    if isinstance(error, (TimeoutError, ConnectionError)): return True
+    if isinstance(error, OSError):   # DNS, TLS, unreachable hosts, a full scratch disk, descriptor exhaustion
+        return not isinstance(error, _DETERMINISTIC_OS_ERRORS) and error.errno not in _DETERMINISTIC_ERRNOS
+    if transient_database(error): return True
+    if isinstance(error, httpx.TransportError):   # an unsupported URL or a request this side malformed repeats
+        return not isinstance(error, (httpx.UnsupportedProtocol, httpx.LocalProtocolError))
+    try: from botocore import exceptions as aws
+    except ImportError: aws = None
+    if aws and isinstance(error, (aws.ConnectionError, aws.HTTPClientError, aws.IncompleteReadError)): return True
+    if aws and isinstance(error, aws.ClientError):
+        response = error.response or {}
+        return (_retryable_status(response.get('ResponseMetadata', {}).get('HTTPStatusCode'))
+                or response.get('Error', {}).get('Code') in _THROTTLED_CODES)
+    try: from upstash_box.errors import BoxError
+    except ImportError: return False
+    return isinstance(error, BoxError) and _retryable_status(error.status_code)
+
+
+def infrastructure_error(error):
+    """Whether a retried failure is owed to unavailable infrastructure rather than to the phase's own work.
+
+    Infrastructure is a busy, lost or deadlocked database session, an expired network or lock wait, a connection,
+    DNS or TLS failure, a throttled or failing provider (HTTP 408, 425, 429 or 5xx) or exhausted host resources.
+    StorageUnavailable and BoxTransportError wrap both kinds, so they are classified by the errors they were
+    explicitly raised from: a size limit, unsafe path, checksum or binding mismatch, rejected credential material,
+    an inconsistent remote cursor or a remote command that did not complete has no such cause and stays the
+    phase's own failure. Implicit exception context is not followed: it can name an unrelated handled error."""
+    seen = set()
+    while error is not None and id(error) not in seen:
+        seen.add(id(error))
+        if _infrastructure(error): return True
+        error = error.__cause__
+    return False
+
+
 class WorkflowExecution:
     def __init__(self, repository=None, *, storage=None, adapter=None):
         self.repository = repository or Repository()
@@ -288,7 +337,7 @@ class WorkflowExecution:
     async def step(self, payload, index):
         job, queue, execution, replay = await run_sync(state.acquire_step, self.repository, payload, index)
         if replay is not None: return replay
-        token = execution['fence']
+        token = execution['fence']; deadline = None
         try:
             if execution.pop('deferred'):
                 return await run_sync(state.complete, self.repository, payload, token, next_phase=execution['phase'], sleep=10)
@@ -302,7 +351,7 @@ class WorkflowExecution:
                 root = Path(temporary) if temporary is not None else None
                 workspace_ready = False
                 try:
-                    async with asyncio.timeout(int(setting('REVEAL_WORKFLOW_STEP_TIMEOUT_SECONDS', '360'))):
+                    async with asyncio.timeout(int(setting('REVEAL_WORKFLOW_STEP_TIMEOUT_SECONDS', '360'))) as deadline:
                         if execution['phase'] == 'validate':
                             await run_sync(self.activity, payload, token, 'stage',
                                 {'stage':'collecting_output','message':capture_message(execution, restoring=True)})
@@ -316,6 +365,7 @@ class WorkflowExecution:
                         BoxTransportError, StorageUnavailable, TimeoutError, OSError):
                     raise
                 except Exception as exc:
+                    if transient_database(exc): raise   # the session rolled back; retried, never a scientific outcome
                     # An incomplete restore must never replace the saved source
                     # workspace with the partial contents of this scratch dir.
                     await run_sync(self.retain_failure, payload, token, root if workspace_ready else None,
@@ -335,10 +385,13 @@ class WorkflowExecution:
             raise
         except state.StaleExecution:
             raise
-        except (BoxTransportError, StorageUnavailable, TimeoutError, OSError):
-            await run_sync(state.release, self.repository, payload, token, reason='Transient external operation; retry the same phase')
+        except (BoxTransportError, StorageUnavailable, TimeoutError, OSError) as exc:
+            await self.retry_phase(payload, token, exc, deadline)
             raise
         except Exception as exc:
+            if transient_database(exc):
+                await self.retry_phase(payload, token, exc, deadline)
+                raise
             from .scientific_grounding import ScientificReviewUnavailable
             from .scientific_account_lint import AccountValidationError
             from .job_failures import review_failure
@@ -356,6 +409,16 @@ class WorkflowExecution:
                 raise
             await run_sync(jobs.finish, self.repository, payload['job_id'], token, 'failed', failure=failure)
             return await run_sync(state.complete, self.repository, payload, token, next_phase='complete', done=True)
+
+    async def retry_phase(self, payload, token, exc, deadline):
+        """Release the fence so the same phase retries, recording whether the retry spends the recovery budget.
+
+        Only the phase's own failure does: its step deadline expired, or the error has no infrastructure cause.
+        A busy or lost database session, a lost observation commit, a storage or Box transport outage and a
+        network timeout retry as delivery-class work (delivery_recoveries), however often they recur."""
+        own = (deadline is not None and deadline.expired()) or not infrastructure_error(exc)
+        await run_sync(state.release, self.repository, payload, token, cause='step_failure' if own else 'infrastructure',
+            reason=('Phase failed' if own else 'Transient infrastructure') + ' (' + type(exc).__name__ + '); retry the same phase')
 
     async def operate(self, payload, token, job, execution, root, queue=None):
         """queue, when given, is the step's own snapshot from acquire (observe); otherwise the rows are read again."""

@@ -358,7 +358,14 @@ def complete(repository, payload, token, *, next_phase, sleep=0, done=False, obs
         return result
 
 
-def release(repository, payload, token, *, recovery=False, reason=None):
+RETRY_CAUSES = ('step_failure', 'infrastructure')
+
+
+def release(repository, payload, token, *, recovery=False, reason=None, cause='step_failure'):
+    """Release the fence for a retry of the same phase. cause is 'step_failure' when the phase itself failed (it
+    spends REVEAL_WORKFLOW_MAX_RECOVERIES) or 'infrastructure' when a dependency was unavailable (a delivery-class
+    retry, counted in delivery_recoveries)."""
+    if cause not in RETRY_CAUSES: raise ValueError('Unknown workflow retry cause')
     with repository.transaction() as tx:
         owner, state = owned(tx, payload, token)
         if recovery:
@@ -366,7 +373,7 @@ def release(repository, payload, token, *, recovery=False, reason=None):
                 failure_code='WORKFLOW_ALLOCATION_AMBIGUOUS' if state.get('creation_intent') and not state.get('box')
                 else 'WORKFLOW_STEP_FAILED', token=token)
         state.update(fence=None, lease_until=None, updated_at=now(), expected_at=after(60),
-            disposition='retry', retry_cause='step_failure', diagnostic=reason)
+            disposition='retry', retry_cause=cause, diagnostic=reason)
         tx.put('execution', payload['job_id'], owner, state)
         queue=tx.get('queue', payload['job_id'])['data']; queue.update(token=None, lease_until=None)
         tx.put('queue', payload['job_id'], owner, queue)

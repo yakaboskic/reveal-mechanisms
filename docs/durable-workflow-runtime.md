@@ -236,6 +236,31 @@ existing workspace and does not claim that final capture succeeded. Observe
 pending cleanup separately, because provider concurrency can temporarily exceed the execution reservation
 count while deletion catches up.
 
+A phase that raises a retryable error records why it is retried (`retry_cause`).
+Only its own failures are `step_failure` and spend the budget: an expired step
+deadline, or an error with no infrastructure cause, such as a size limit, an
+unsafe path, a checksum or binding mismatch, rejected credential material, an
+inconsistent remote cursor, a remote command that did not complete, a rejected
+provider request (HTTP 4xx other than 408/425/429) or a missing local file.
+Infrastructure is `infrastructure` and counts in `delivery_recoveries` however
+often it recurs: `DatabaseBusy`/`FenceBusy`, a lost or deadlocked session (which
+now retries the phase instead of failing the job), a lost observation commit,
+network timeouts, connection/DNS/TLS errors, a full scratch disk, and S3 or Box
+throttling or 5xx responses. `StorageUnavailable` and `BoxTransportError` are
+classified by the errors they were explicitly raised from. Operator `resume`
+resets `retry_cause`, the scheduler-failure fields and any sweep hold together
+with the budget, keeping the previous values in the recovery audit.
+
+Reconciliation decides each stale execution in its own transaction. A busy,
+lost or failing database still defers or fails the whole tick. Any other
+failure belongs to that row alone, for example `Recovery cleanup binding
+changed` when an existing cleanup intent no longer matches the execution: the
+row's transaction rolls back, so its reservation, Box, cleanup obligation, job
+and disposition are unchanged. The row is logged, listed in the reconcile
+response's `needs_operator`, marked `sweep_hold` (shown by `workflow_admin
+inspect`) and left out of the sweep for 15 minutes, after which it is decided
+again; the other rows continue.
+
 ### Concurrency settings
 
 These limits apply to separate resources; raising the Box cap does not require
@@ -296,6 +321,18 @@ session-reset commands. Cold connection setup is separate. An
 authorized read-only execution of this count against QA Aurora returned two
 reserved Boxes in 139 ms; this single WAN measurement confirms compatibility,
 not server-side lock hold time or concurrent load capacity.
+
+Read-only `EXPLAIN ANALYZE` on Aurora (October 9, 2026; QA 30 executions, 30
+queue rows, 22 cleanup receipts; local 25/25/13) showed the single `NOT EXISTS`
+over both cleanup kinds as a hash antijoin that range-scanned and hashed every
+cleanup receipt on each reservation, whether or not any execution was
+reserved. One `NOT EXISTS` per cleanup kind, comparing the id in the column's
+own `ascii_bin` collation, is a single-row primary-key lookup per reserved
+execution instead (optimizer cost 374 to 80 on QA and 213 to 70 locally; median
+server time 0.39 to 0.23 ms and 0.30 to 0.19 ms). Each execution and queue row
+of the prefix is still read once through the `(kind, id)` primary-key prefix:
+their reservation fields live in JSON, and avoiding that read needs an index or
+the planned archive of completed records, both outside this no-DDL change.
 
 ### Backend and provider headroom
 

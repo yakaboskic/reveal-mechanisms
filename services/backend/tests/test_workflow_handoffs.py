@@ -249,6 +249,21 @@ class WorkflowHandoffTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.execution(job), execution)
         with self.repo.read_transaction() as tx: self.assertEqual(len(tx.list('workflow_cleanup')), cleanup_count)
 
+    async def test_failure_callback_keeps_exhausted_budget_recoverable_after_infrastructure_retries(self):
+        job, payload = self.seed()
+        with self.repo.transaction() as tx:
+            row = tx.get('execution', job['id']); row['data'].update(recoveries=3, retry_cause='infrastructure', disposition='retry')
+            tx.put('execution', job['id'], row['owner'], row['data'])
+            tx.remove('workflow_dispatch', job['id'])
+        await self.fail_callback(payload)
+        execution = self.execution(job)
+        self.assertEqual((execution['disposition'], execution['recoveries']), ('retry', 3))
+        self.assertTrue(execution['capacity_reserved'])
+        self.assertEqual(routes.reconcile_stale(self.repo), 1)
+        execution = self.execution(job)
+        self.assertEqual((execution['recoveries'], execution['delivery_recoveries'], execution['disposition']), (3, 1, 'ready'))
+        with self.repo.read_transaction() as tx: self.assertNotEqual(tx.get('job', job['id'])['data']['status'], 'failed')
+
     async def test_scheduler_failure_callback_preserves_live_lease_and_failure_budget(self):
         job, payload = self.seed()
         _, execution, _ = state.acquire(self.repo, payload, 0)

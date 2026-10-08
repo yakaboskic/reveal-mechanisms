@@ -13,6 +13,9 @@ import os
 from . import jobs, workflow_state as state
 from .repository import Repository, digest, now
 
+# Why the previous attempt was retried or held: reset with the recovery budget when an operator resumes.
+RETRY_MARKERS = ('retry_cause', 'scheduler_failure_at', 'scheduler_failure_status', 'sweep_hold')
+
 
 def inspect_execution(repository, identity):
     with repository.read_transaction() as tx:
@@ -21,7 +24,8 @@ def inspect_execution(repository, identity):
         value=row['data']; job=tx.get('job',identity)['data']
     keys=('job_id','namespace','generation','phase','phase_index','disposition','created_at','updated_at','expected_at',
           'capacity_reserved','creation_intent','launch_intent','capture_complete','cleanup_complete','cleanup_id',
-          'cleanup_abandoned','failure_code','review_attempt','recoveries','delivery_recoveries','handoffs','diagnostic')
+          'cleanup_abandoned','failure_code','review_attempt','recoveries','delivery_recoveries','handoffs','diagnostic',
+          'retry_cause','scheduler_failure_at','scheduler_failure_status','sweep_hold')
     return {**{key:value.get(key) for key in keys}, 'job_status':job['status'],
             'box_id':(value.get('box') or {}).get('box_id'), 'box_phase':(value.get('box') or {}).get('phase')}
 
@@ -38,7 +42,8 @@ def resume(repository, identity, expected_generation, *, recovered_box=None):
         if execution['disposition'] not in ('recovery_required','retry'): raise ValueError('Execution is not awaiting recovery')
         if (execution.get('lease_until') or '') > now(): raise ValueError('An active step still owns this execution')
         previous={key:execution.get(key) for key in ('generation','phase','phase_index','disposition','diagnostic',
-            'failure_code','recovery_required_at','recovery_generation','recovery_phase','recovery_phase_index')}
+            'failure_code','recovery_required_at','recovery_generation','recovery_phase','recovery_phase_index',
+            'recoveries',*RETRY_MARKERS)}
         if execution.get('creation_intent') and not execution.get('box'):
             if not recovered_box: raise ValueError('Ambiguous Box creation requires a verified existing Box identity; automated creation is forbidden')
             execution['box']={'box_id':recovered_box,'job_id':identity,'attempt':execution['authoring_attempt'],
@@ -56,8 +61,11 @@ def resume(repository, identity, expected_generation, *, recovered_box=None):
         else:
             from .workflow_routes import steps_per_run
             generation=execution['generation']+1
+            # A fresh budget forgets why the last attempt was retried (kept in the audit's previous_execution):
+            # a stale cause would make the next delivery stall spend the new budget as a step failure.
             execution.update(generation=generation,run_id=None,recoveries=0,disposition='ready',diagnostic=None,
-                fence=None,lease_until=None,step=None,updated_at=now(),expected_at=state.after(180))
+                fence=None,lease_until=None,step=None,updated_at=now(),expected_at=state.after(180),
+                **dict.fromkeys(RETRY_MARKERS))
             tx.put('execution',identity,row['owner'],execution)
             queue=tx.get('queue',identity)['data']; queue.update(token=None,lease_until=None,remote_handle=execution.get('box'))
             tx.put('queue',identity,row['owner'],queue)

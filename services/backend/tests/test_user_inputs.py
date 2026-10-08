@@ -78,7 +78,7 @@ def test_draft_listing_is_a_pure_read_and_reconciliation_expires_editors(client)
     assert listed.status_code==200 and [d['id'] for d in listed.json()['items']]==[kept['id']]
     with client.repo.read_transaction() as tx: assert tx.get('draft',expired['id'])   # the listing deleted nothing
     assert client.client.get('/v1/drafts/'+expired['id'],headers=client.headers(owner)).status_code==410
-    assert sweep(client.repo)==(0,False)
+    assert sweep(client.repo)==(0,False,[])
     assert client.client.get('/v1/drafts/'+expired['id'],headers=client.headers(owner)).status_code==404
     with client.repo.read_transaction() as tx:
         assert tx.get('draft',kept['id']) and tx.get('exploration','visit')['data']['draft_id'] is None

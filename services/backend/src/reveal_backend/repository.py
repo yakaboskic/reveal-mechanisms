@@ -245,11 +245,18 @@ class Transaction:
         return [{'id': r[0], 'owner': r[1], 'version': r[2], 'data': json.loads(r[3])}
                 for r in rows]
     def active_box_count(self, namespace):
-        """Count live reservations under the write fence without loading JSON rows."""
+        """Count live reservations under the write fence in one statement, without loading JSON rows.
+
+        Each execution and queue row of this prefix is still read once on the server, through the (kind, id)
+        primary-key prefix: the reservation flag lives in JSON and no DDL adds an index for it. A reservation's
+        cleanup handoff is a single-row primary-key lookup per cleanup kind, so cleanup receipts, which grow with
+        every finished job, are never scanned (one NOT EXISTS over both kinds made Aurora hash-join all of them).
+        On Aurora the key is compared in the id column's own ascii_bin collation."""
         def value(alias, field):
             expr = "JSON_EXTRACT(" + alias + ".payload,'$." + field + "')"
             return "CAST(" + expr + " AS TEXT)" if self.sqlite else "NULLIF(JSON_UNQUOTE(" + expr + "),'null')"
         def yes(alias, field): return value(alias, field) + " IN ('true','1')"
+        key = value('e', 'cleanup_id') if self.sqlite else "CONVERT(" + value('e', 'cleanup_id') + " USING ascii) COLLATE ascii_bin"
         same = ' AND '.join(value('c', field) + '=' + value('e', target) for field, target in (
             ('namespace', 'namespace'), ('job_id', 'job_id'), ('authoring_attempt', 'authoring_attempt'), ('box_id', 'box.box_id')))
         captured = ("COALESCE(" + value('c', 'abandoned') + ",'false') NOT IN ('true','1') AND "
@@ -257,10 +264,12 @@ class Transaction:
                     + ' AND ' + value('c', 'workspace') + " IS NOT NULL AND " + value('c', 'workspace') + " NOT IN ('','{}','false')")
         abandoned = (yes('c', 'abandoned') + ' AND ' + yes('e', 'cleanup_abandoned')
                      + ' AND ' + value('c', 'recovery_generation') + '=' + value('e', 'recovery_generation'))
+        handoff = ' AND '.join("NOT EXISTS (SELECT 1 FROM reveal_records c WHERE c.kind='" + kind + "' AND c.id=" + key
+                               + ' AND ' + same + ' AND ((' + captured + ') OR (' + abandoned + ')))'
+                               for kind in ('workflow_cleanup', 'workflow_cleanup_completed'))
+        # The reservation flag first: it is false for nearly every historical execution.
         sql = ("SELECT SUM(active) FROM (SELECT COUNT(*) AS active FROM reveal_records e WHERE e.kind='execution' AND "
-            + value('e', 'namespace') + '=%s AND ' + yes('e', 'capacity_reserved')
-            + " AND NOT EXISTS (SELECT 1 FROM reveal_records c WHERE c.kind IN ('workflow_cleanup','workflow_cleanup_completed')"
-            + ' AND c.id=' + value('e', 'cleanup_id') + ' AND ' + same + ' AND ((' + captured + ') OR (' + abandoned + ')))'
+            + yes('e', 'capacity_reserved') + ' AND ' + value('e', 'namespace') + '=%s AND ' + handoff
             + " UNION ALL SELECT COUNT(*) AS active FROM reveal_records q WHERE q.kind='queue' AND COALESCE("
             + value('q', 'namespace') + ",'reveal')=%s AND COALESCE(" + value('q', 'transport') + ",'')<>'workflow'"
             + ' AND ' + value('q', 'remote_handle.box_id') + ' IS NOT NULL AND COALESCE('

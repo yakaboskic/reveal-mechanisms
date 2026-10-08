@@ -5,8 +5,8 @@ import os
 from unittest.mock import AsyncMock, Mock, patch
 import unittest
 
-from reveal_backend import app as api, jobs, workflow_routes
-from reveal_backend.repository import DatabaseBusy, FenceBusy
+from reveal_backend import app as api, jobs, workflow_routes, workflow_state as state
+from reveal_backend.repository import DatabaseBusy, FenceBusy, Transaction, digest
 from reveal_backend.workflow_routes import dispatch_job, mount_workflow, reconcile_stale, sweep
 from round_trips import count_round_trips
 import test_durable_workflow as durable
@@ -29,6 +29,20 @@ class SweepTests(unittest.TestCase):
         self.change('execution', job['id'], lease_until=PAST, expected_at=PAST)
         return job, payload
 
+    def conflicting(self):
+        """An exhausted execution whose Box already has a cleanup intent bound to a different capture."""
+        job, payload = self.stale()
+        box = {'box_id': 'box-' + job['id'], 'job_id': job['id'], 'attempt': 1, 'phase': 'running', 'cursor': 4}
+        self.change('execution', job['id'], recoveries=3, retry_cause='step_failure', disposition='retry',
+                    capacity_reserved=True, creation_intent='allocation', box=box)
+        identity = digest(['box-cleanup-v1', 'test', job['id'], 1, box['box_id']])
+        with self.repo.transaction() as tx:
+            tx.put('workflow_cleanup', identity, 'owner', {'cleanup_id': identity, 'namespace': 'test', 'job_id': job['id'],
+                'authoring_attempt': 1, 'box_id': box['box_id'], 'box': box, 'workspace': {'sha256': 'other'},
+                'capture_sha256': 'b' * 64, 'status': 'pending', 'attempts': 0, 'dispatch_generation': 0,
+                'next_attempt_at': '2999-01-01T00:00:00Z', 'lease_until': None, 'token': None})
+        return job, identity
+
     def expired_editor(self, owner='owner'):
         with self.repo.transaction() as tx:
             tx.put('draft', 'editor', owner, {'id': 'editor', 'lifecycle': 'temporary', 'expires_at': PAST, 'composer': {}})
@@ -45,25 +59,25 @@ class SweepTests(unittest.TestCase):
             tx.put('draft', 'saved', 'owner', {'id': 'saved', 'composer': {}})   # legacy: no lifecycle, no expiry
             tx.put('upload', 'live', 'owner', {'id': 'live', 'expires_at': '2999-01-01T00:00:00Z'})
         with patch.object(self.repo, 'transaction', side_effect=AssertionError('took the write fence')):
-            self.assertEqual(sweep(self.repo), (0, False))
+            self.assertEqual(sweep(self.repo), (0, False, []))
         self.change('execution', queued['id'], expected_at=PAST)
         with patch.object(self.repo, 'transaction', side_effect=AssertionError('took the write fence')):
-            self.assertEqual(sweep(self.repo), (0, False))
+            self.assertEqual(sweep(self.repo), (0, False, []))
 
     def test_stale_executions_and_expired_editors_are_decided_under_the_fence(self):
         job, payload = self.stale(); self.expired_editor()
-        self.assertEqual(sweep(self.repo), (1, False))
+        self.assertEqual(sweep(self.repo), (1, False, []))
         self.assertEqual(self.execution({**payload, 'generation': 2})['generation'], 2)
         with self.repo.read_transaction() as tx:
             self.assertIsNone(tx.get('draft', 'editor'))
             self.assertIsNotNone(tx.get('workflow_dispatch', job['id']))
         with patch.object(self.repo, 'transaction', side_effect=AssertionError('nothing left to fence')):
-            self.assertEqual(sweep(self.repo), (0, False))   # the new dispatch excludes it from the probe
+            self.assertEqual(sweep(self.repo), (0, False, []))   # the new dispatch excludes it from the probe
 
     def test_a_held_fence_defers_to_the_next_tick_without_waiting(self):
         job, _ = self.stale(); self.expired_editor()
         with patch.object(self.repo, 'transaction', side_effect=FenceBusy('held')) as fenced:
-            self.assertEqual(sweep(self.repo), (0, True))
+            self.assertEqual(sweep(self.repo), (0, True, []))
         self.assertTrue(fenced.call_args_list and all(call.kwargs == {'nowait': True} for call in fenced.call_args_list))
         self.assertEqual(self.execution({'job_id': job['id']})['generation'], 1)
         with self.repo.read_transaction() as tx: self.assertIsNotNone(tx.get('draft', 'editor'))
@@ -83,9 +97,63 @@ class SweepTests(unittest.TestCase):
             self.repo.transaction = original
             return original(*args, **kwargs)
         self.repo.transaction = renew_first
-        self.assertEqual(sweep(self.repo), (0, False))
+        self.assertEqual(sweep(self.repo), (0, False, []))
         with self.repo.read_transaction() as tx: self.assertIsNotNone(tx.get('draft', 'editor'))
         self.assertEqual(self.execution({'job_id': job['id']})['generation'], 1)
+
+    def test_an_undecidable_row_is_held_for_an_operator_while_the_rest_recover(self):
+        held_job, cleanup_id = self.conflicting()
+        other, payload = self.stale()
+        with self.assertLogs('reveal.workflow', 'ERROR') as logs:
+            recovered, deferred, held = sweep(self.repo)
+        self.assertEqual((recovered, deferred), (1, False))
+        self.assertEqual([(entry['job_id'], entry['error'], entry['detail']) for entry in held],
+                         [(held_job['id'], 'StaleExecution', 'Recovery cleanup binding changed')])
+        self.assertTrue(any(held_job['id'] in line for line in logs.output), logs.output)
+        self.assertEqual(self.execution({**payload, 'generation': 2})['generation'], 2)
+        # Nothing was released or abandoned: the reservation, Box, budget, cause, job and cleanup intent are unchanged.
+        execution = self.execution({'job_id': held_job['id']})
+        self.assertEqual((execution['generation'], execution['disposition'], execution['recoveries'], execution['retry_cause']),
+                         (1, 'retry', 3, 'step_failure'))
+        self.assertTrue(execution['capacity_reserved']); self.assertNotIn('cleanup_abandoned', execution)
+        self.assertEqual((execution['sweep_hold']['error'], execution['expected_at']), ('StaleExecution', held[0]['held_until']))
+        with self.repo.read_transaction() as tx:
+            self.assertEqual(tx.get('job', held_job['id'])['data']['status'], 'queued')
+            self.assertEqual(tx.get('workflow_cleanup', cleanup_id)['data']['capture_sha256'], 'b' * 64)
+            self.assertEqual(tx.active_box_count('test'), 1)   # still counted against Box capacity
+        # Held rows leave the probe until their hold ends, so they cannot occupy every tick's page.
+        with patch.object(self.repo, 'transaction', side_effect=AssertionError('a held row was decided again')):
+            self.assertEqual(sweep(self.repo), (0, False, []))
+        # After the hold, once an operator repairs the binding, the sweep decides it normally.
+        with self.repo.transaction() as tx: tx.remove('workflow_cleanup', cleanup_id)
+        self.change('execution', held_job['id'], expected_at=PAST)
+        self.assertEqual(sweep(self.repo), (0, False, []))
+        execution = self.execution({'job_id': held_job['id']})
+        self.assertEqual(execution['disposition'], 'recovery_required'); self.assertNotIn('sweep_hold', execution)
+        self.assertFalse(execution['capacity_reserved'])
+        with self.repo.read_transaction() as tx:
+            self.assertTrue(state.has_cleanup_handoff(tx, execution))
+            self.assertEqual(tx.get('job', held_job['id'])['data']['status'], 'failed')
+
+    def test_a_failed_hold_is_still_reported_and_retried_next_tick(self):
+        held_job, _ = self.conflicting()
+        with patch.object(workflow_routes, 'hold_stale', side_effect=ValueError('cannot hold')), \
+                self.assertLogs('reveal.workflow', 'ERROR'):
+            recovered, deferred, held = sweep(self.repo)
+        self.assertEqual((recovered, deferred, [entry['job_id'] for entry in held]), (0, False, [held_job['id']]))
+        self.assertIsNone(held[0]['held_until'])
+        self.assertNotIn('sweep_hold', self.execution({'job_id': held_job['id']}))
+        self.assertEqual(sweep(self.repo)[2][0]['job_id'], held_job['id'])   # still a candidate, decided again
+
+    def test_a_database_failure_still_fails_the_whole_tick(self):
+        import pymysql
+        job, _ = self.stale(); put = Transaction.put
+        def lost(tx, kind, *args, **kwargs):
+            if kind == 'workflow_dispatch': raise pymysql.err.OperationalError(2013, 'Lost connection to MySQL server during query')
+            return put(tx, kind, *args, **kwargs)
+        with patch.object(Transaction, 'put', lost), self.assertRaises(pymysql.err.OperationalError): sweep(self.repo)
+        execution = self.execution({'job_id': job['id']})
+        self.assertEqual(execution['generation'], 1); self.assertNotIn('sweep_hold', execution)
 
 
 class ReconcileRouteTests(unittest.IsolatedAsyncioTestCase):
@@ -110,8 +178,16 @@ class ReconcileRouteTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(self.repo, 'transaction', side_effect=FenceBusy('held')):
             response = await self.post()
         self.assertEqual((response.status_code, response.json()['status'], response.json()['recovered']), (200, 'deferred', 0))
+    async def test_an_undecidable_row_never_fails_the_tick(self):
+        held_job, _ = SweepTests.conflicting(self)
+        with self.assertLogs('reveal.workflow', 'ERROR'):
+            response = await self.post()
+        self.assertEqual((response.status_code, response.json()['status']), (200, 'ok'), response.text)
+        self.assertEqual([entry['job_id'] for entry in response.json()['needs_operator']], [held_job['id']])
+
     new = durable.WorkflowTests.new
     change = SweepTests.change
+    stale = SweepTests.stale
 
 
 class FakeQStash:

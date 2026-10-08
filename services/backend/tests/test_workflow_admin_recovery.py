@@ -27,6 +27,36 @@ class WorkflowAdminRecoveryTests(unittest.TestCase):
             self.assertEqual(before['cleanup_id'], 'durable-cleanup')
             self.assertTrue(before['cleanup_abandoned'])
 
+    def test_resume_resets_the_retry_cause_with_the_budget(self):
+        from reveal_backend.workflow_routes import reconcile_stale
+        with tempfile.TemporaryDirectory() as directory, patch.dict('os.environ', {
+                'REVEAL_JOB_TRANSPORT': 'workflow', 'REVEAL_JOB_NAMESPACE': 'admin-recovery-test',
+                'REVEAL_WORKFLOW_MAX_RECOVERIES': '3'}):
+            repository = Repository(Path(directory) / 'db.sqlite'); repository.migrate()
+            with repository.transaction() as tx:
+                job = jobs.enqueue(tx, 'owner', 'analysis', request_id='request')
+                execution = tx.get('execution', job['id'])['data']
+                execution.update(disposition='retry', retry_cause='step_failure', recoveries=3, expected_at='',
+                    scheduler_failure_at='2026-10-08T18:00:00Z', scheduler_failure_status=500,
+                    sweep_hold={'error': 'StaleExecution', 'detail': 'Recovery cleanup binding changed'})
+                tx.put('execution', job['id'], 'owner', execution)
+                tx.remove('workflow_dispatch', job['id'])
+            result = resume(repository, job['id'], execution['generation'])
+            self.assertEqual((result['recoveries'], result['retry_cause'], result['scheduler_failure_at'],
+                              result['scheduler_failure_status'], result['sweep_hold']), (0, None, None, None, None))
+            with repository.read_transaction() as tx:
+                audit = tx.get('workflow_recovery_audit', digest([job['id'], result['generation']]))['data']['previous_execution']
+            self.assertEqual((audit['retry_cause'], audit['recoveries'], audit['scheduler_failure_status']), ('step_failure', 3, 500))
+            self.assertEqual(audit['sweep_hold']['error'], 'StaleExecution')
+            # The resumed run is never delivered: a delivery stall, which must not spend the fresh budget.
+            with repository.transaction() as tx:
+                tx.remove('workflow_dispatch', job['id'])
+                row = tx.get('execution', job['id']); row['data']['expected_at'] = ''
+                tx.put('execution', job['id'], row['owner'], row['data'])
+            self.assertEqual(reconcile_stale(repository), 1)
+            after = inspect_execution(repository, job['id'])
+            self.assertEqual((after['recoveries'], after['delivery_recoveries'], after['disposition']), (0, 1, 'ready'))
+
     def test_resolved_terminal_allocation_transfers_to_cleanup_without_restarting_agent(self):
         from reveal_backend import workflow_state as state
         for cancelled in (False, True):

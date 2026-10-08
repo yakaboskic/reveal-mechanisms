@@ -12,7 +12,7 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 from . import jobs, workflow_state as state
 from .repository import DatabaseBusy, FenceBusy, now, digest
-from .workflow_execution import WorkflowExecution
+from .workflow_execution import WorkflowExecution, infrastructure_error
 
 PATH = '/internal/workflows/research-v1'
 CONTROL_PATH = '/internal/workflows/control-v1'
@@ -267,16 +267,26 @@ async def dispatch_job(repository, job_id, *, control=True):
     return await dispatch_pending(repository, limit=1, job_id=job_id, control=control)
 
 
+# A stale execution whose recovery cannot be decided waits this long before the sweep decides it again.
+SWEEP_HOLD_SECONDS = 900
+
+
 def sweep(repository, limit=25):
-    """Expire research inputs and re-fence stale executions; returns (recovered, deferred).
+    """Expire research inputs and re-fence stale executions; returns (recovered, deferred, held).
 
     One read snapshot finds the candidates: expired editors and uploads by id only, and executions whose lease
     and expected time have both passed (a superset of what the in-lock checks accept, so nothing due is missed).
     The write fence is taken only when there is a candidate, never waiting behind another writer: a held fence
     defers that work to the next tick. Every candidate is re-read and decided again under the fence.
+
+    Each execution is decided in its own transaction. A busy, lost or failing database still defers or fails the
+    whole tick. Any other failure concerns that row alone (a cleanup binding that changed, a malformed record):
+    its transaction rolled back, so its reservation, Box, cleanup obligation, job and disposition are exactly as
+    they were. It is logged, reported in held for an operator, and backed off for SWEEP_HOLD_SECONDS, after which
+    the sweep decides it again; the other rows continue.
     """
     from .user_inputs import cleanup, cleanup_candidates
-    recovered, deferred = 0, False
+    recovered, deferred, held = 0, False, []
     # Completed records move to an archive kind at completion in a future compaction migration;
     # SQL JSON filtering keeps terminal and in-progress records from starving stale work now.
     with repository.read_transaction() as tx:
@@ -292,7 +302,11 @@ def sweep(repository, limit=25):
         try:
             with repository.transaction(nowait=True) as tx: cleanup(tx, candidates=candidates)
         except FenceBusy: deferred = True
+    if rows:
+        # Configuration errors fail the tick; they must not be mistaken for one row's failure.
+        budget = int(os.getenv('REVEAL_WORKFLOW_MAX_RECOVERIES', '3')); steps_per_run()
     for (identity,) in rows:
+        generation = None
         try:
             with repository.transaction(nowait=True) as tx:
                 row = tx.get('execution', identity)
@@ -301,6 +315,7 @@ def sweep(repository, limit=25):
                 if execution.get('namespace') != jobs.namespace(): continue
                 if (execution.get('lease_until') or '') > now() or execution.get('expected_at', '') > now(): continue
                 if tx.get('workflow_dispatch', identity): continue
+                generation = execution['generation']; execution.pop('sweep_hold', None)
                 # Explicit generation fencing permits recovery without two owners.
                 # Effect intents/capture/review reservations survive unchanged.
                 # A missing scheduler delivery is not evidence that a phase failed.
@@ -308,7 +323,7 @@ def sweep(repository, limit=25):
                 # the failure budget; planned handoffs spend neither counter.
                 step_failure = execution.get('retry_cause') == 'step_failure'
                 recoveries = execution.get('recoveries', 0) + int(step_failure)
-                if step_failure and recoveries > int(os.getenv('REVEAL_WORKFLOW_MAX_RECOVERIES', '3')):
+                if step_failure and recoveries > budget:
                     # Fails the job and hands any known Box to durable cleanup in this same fenced transaction.
                     state.require_recovery(tx, row['owner'], execution, 'Managed recovery budget exhausted')
                     continue
@@ -319,7 +334,44 @@ def sweep(repository, limit=25):
                 recovered += 1
         except FenceBusy:
             deferred = True; break
-    return recovered, deferred
+        except state.StepBusy:
+            continue   # a phase took the lease after the probe; the next tick decides it
+        except Exception as exc:
+            if infrastructure_error(exc): raise   # nothing of this row was written; the tick fails or defers
+            detail = str(exc)[:200] if isinstance(exc, state.StaleExecution) else None
+            log.error('Reconciliation cannot recover execution %s (%s%s); operator inspection required',
+                      identity, type(exc).__name__, ': ' + detail if detail else '')
+            entry = {'job_id': identity, 'error': type(exc).__name__, 'detail': detail, 'held_until': None}
+            held.append(entry)
+            try: entry['held_until'] = hold_stale(repository, identity, generation, entry)
+            except FenceBusy:
+                deferred = True; break
+            except Exception as hold_error:
+                if infrastructure_error(hold_error): raise
+                log.error('Reconciliation could not back off execution %s (%s); it is decided again next tick',
+                          identity, type(hold_error).__name__)
+    return recovered, deferred, held
+
+
+def hold_stale(repository, identity, generation, entry):
+    """Back an undecidable stale execution off the sweep and record why, for workflow_admin inspect.
+
+    Only its expected time and a sweep_hold marker change. Its reservation, Box, cleanup obligation, job and
+    disposition stay as they were, so nothing is released or abandoned; the sweep (or an operator) decides it
+    again after the hold. A row that changed since the failed attempt is left for the next tick instead."""
+    if generation is None: return None
+    with repository.transaction(nowait=True) as tx:
+        row = tx.get('execution', identity)
+        if not row or row['data'].get('generation') != generation: return None
+        execution = row['data']
+        if ((execution.get('lease_until') or '') > now() or execution.get('expected_at', '') > now()
+                or execution.get('disposition') in ('complete', 'recovery_required') or tx.get('workflow_dispatch', identity)):
+            return None
+        until = state.after(SWEEP_HOLD_SECONDS)
+        execution.update(expected_at=until, updated_at=now(), sweep_hold={
+            'at': now(), 'until': until, 'error': entry['error'], 'detail': entry['detail']})
+        tx.put('execution', identity, row['owner'], execution)
+        return until
 
 
 def reconcile_stale(repository, limit=25):
@@ -403,7 +455,7 @@ def mount_workflow(app, repository):
         if payload is None: return JSONResponse({'error': 'Invalid workflow signature'}, status_code=401)
         # A busy database is not a failed tick: answer 200 so the scheduler does not retry; the next tick resumes.
         try:
-            recovered, deferred = await asyncio.to_thread(sweep, repository)
+            recovered, deferred, held = await asyncio.to_thread(sweep, repository)
             delivery = await dispatch_pending(repository)
             cleanup = await dispatch_cleanup(repository)
             from .vector_workflow import dispatch_pending as dispatch_vectors
@@ -413,8 +465,9 @@ def mount_workflow(app, repository):
         except DatabaseBusy:
             log.warning('Reconciliation deferred: the application database is busy')
             return {'status': 'deferred'}
+        # A held row never fails the tick: it is reported here, logged, and decided again after its hold.
         return {'status': 'deferred' if deferred else 'ok', 'recovered': recovered, **delivery, 'cleanup':cleanup,
-                'vector_delivery': vector_delivery, 'notifications': notifications}
+                'vector_delivery': vector_delivery, 'notifications': notifications, 'needs_operator': held}
 
     @app.post(CLEANUP_PATH, include_in_schema=False)
     async def cleanup(request: Request):
