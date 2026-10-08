@@ -33,7 +33,9 @@ FAMILY_CHECKS = {'atomic-result-kind', 'atomic-triple', 'atomic-orientation', 'a
 def package(biolink=True, traits=True):
     mechanism = {'id': FACTOR, 'name': 'T2D mechanism Factor8'}
     if traits: mechanism['description'] = 'EAGGL mechanism factor:kpn:0000398:eaggl-capped-v1:Factor8. KPN trait KPN.TRAIT:0000398 (T2D). Source label: x.'
+    # A verified BioIndex deployment, so family hints may name the phenotype readers.
     return {'selection': {'knowledge_gap_id': GAP}, 'source_artifacts': {'capture': {'dapper_file_id': FILE}},
+            'capabilities': {'small_model_phenotype': {'availability': 'supported', 'deployment_verified': True}},
             'dapper_context': {'knowledge_gaps': [{'id': GAP}], 'mechanisms': [mechanism], 'files': [{'id': FILE}],
                                'gene_sets': [{'id': SET, 'members': [C10, INS]}],
                                'prefixes': {'HGNC.SYMBOL': 'https://identifiers.org/hgnc.symbol:', **({'biolink': BIOLINK} if biolink else {})}}}
@@ -199,6 +201,19 @@ class SuggestionTests(unittest.TestCase):
         self.assertFalse(mentions('no value', True))
         self.assertFalse(mentions('an overflowing 1e400 and 9' * 3, 0.25))
 
+    def test_zero_valued_scores_are_stated_by_any_zero(self):
+        for statement in ('Gene set S has joint loading 0 on factor Factor8.', 'Gene set S has joint loading 0.0 on factor Factor8.',
+                          'Gene set S has joint loading 0.000 on factor Factor8.', 'Gene set S has joint loading -0 on factor Factor8.'):
+            for value in (0, 0.0, -0.0):
+                with self.subTest(statement=statement, value=value):
+                    self.assertTrue(mentions(statement, value))
+                    self.assertEqual(self.atom_checks(statement=statement, scores=[('joint_loading', 'LOADING', value)]), set())
+        for statement in ('Gene set S has joint loading 0.01 on factor Factor8.', 'Gene set S has a joint loading on Factor0 for KPN.TRAIT:0000398.'):
+            with self.subTest(statement=statement):
+                self.assertFalse(mentions(statement, 0.0))
+                self.assertEqual(self.atom_checks(statement=statement, scores=[('joint_loading', 'LOADING', 0.0)]), {'atomic-value-in-statement'})
+        self.assertFalse(mentions('loading 0 on Factor8', 0.25))
+
     def test_synthesis_paths_fold_gene_symbols_and_reject_disconnected_atoms(self):
         result = Account().factor_gene(gene=C10_UPPER).gene_gene_set(gene=C10).phenotype_gene(gene=C10).gap(
             ['factor-gene', 'gene-gene-set', 'phenotype-gene']).structure()
@@ -264,6 +279,61 @@ class SuggestionTests(unittest.TestCase):
         for declared, expected in ((True, 'relation biolink:genetically_associated_with'), (False, 'relation ' + BIOLINK + 'genetically_associated_with')):
             result = Account().phenotype_gene(name='atom', triple=(C10, LEGACY + 'associated-with', TRAIT)).structure(package(biolink=declared))
             self.assertIn(expected, next(item for item in result['suggestions'] if item['check'] == 'atomic-predicate')['repair'])
+
+    def test_family_hints_name_only_tools_the_package_capabilities_serve(self):
+        from reveal_backend.reference_generation import KPN_MODEL, LEGACY_MODEL
+        from reveal_backend.research_data import capability_catalog
+        account = Account().factor_gene()
+
+        def hinted(capabilities=(), use_package=True):
+            context = package()
+            if capabilities is None: context.pop('capabilities')
+            elif capabilities != (): context['capabilities'] = capabilities
+            result = account.structure(context, use_package=use_package)
+            hints = [item for item in result['suggestions'] if item['check'] == 'family-missing']
+            return result, hints[0] if hints else None
+
+        everything, _ = hinted(use_package=False)
+        all_tools = ('phenotype-gene via get_pigean_gene_phenotype', 'get_gene_set_factors', 'get_gene_gene_sets',
+                     'gene set-trait via get_pigean_gene_set_phenotype')
+        for label, (capabilities, use_package) in {'no package': ((), False), 'verified fixture': ((), True),
+                                                   'verified KPN catalog': (capability_catalog({'model': KPN_MODEL}, phenotype_verified=True), True)}.items():
+            with self.subTest(label):
+                _, hint = hinted(capabilities, use_package)
+                self.assertEqual(hint['message'], 'No atomic Claims for: phenotype-gene, factor-gene set, gene-gene set, gene set-trait.')
+                for tool in all_tools: self.assertIn(tool, hint['repair'])
+        # Local default: REVEAL_SMALL_PHENOTYPE_VERIFIED unset, so the seed's catalog reports the phenotype readers unavailable.
+        local = capability_catalog({'model': KPN_MODEL}, phenotype_verified=False)
+        self.assertFalse(local['small_model_phenotype']['deployment_verified'])
+        for label, capabilities in {'unverified KPN catalog': local, 'no catalog (fail-closed)': None,
+                                    'catalog without the phenotype descriptor': {'operations': local['operations']}}.items():
+            with self.subTest(label):
+                result, hint = hinted(capabilities)
+                self.assertEqual(hint['message'], 'No atomic Claims for: factor-gene set, gene-gene set.')
+                self.assertEqual(hint['repair'], 'When relevant to the gap, consider factor-gene set via get_factor_loadings (kind gene_set) or '
+                                 'get_gene_set_factors; gene-gene set via get_gene_gene_sets (then get_gene_set) or get_gene_set_members (with get_gene_set).')
+                self.assertNotIn('get_pigean', json.dumps(result))
+        # A legacy generation stores neither gene-gene-set lookups nor numeric gene-set projections.
+        legacy = capability_catalog({'model': LEGACY_MODEL}, phenotype_verified=True)
+        self.assertEqual({item['name']: item['availability'] for item in legacy['operations'] if item['name'] in ('get_gene_gene_sets', 'get_gene_set_factors')},
+                         dict.fromkeys(('get_gene_gene_sets', 'get_gene_set_factors'), 'not_stored'))
+        result, hint = hinted(legacy)
+        self.assertEqual(hint['message'], 'No atomic Claims for: phenotype-gene, gene-gene set, gene set-trait.')
+        self.assertIn('gene-gene set via get_gene_set_members (with get_gene_set);', hint['repair'])
+        self.assertNotIn('get_gene_gene_sets', hint['repair']); self.assertNotIn('get_gene_set_factors', hint['repair'])
+        unsupported = deepcopy(local)
+        for item in unsupported['operations']:
+            if item['name'] in ('get_gene_gene_sets', 'get_gene_set_factors', 'get_factor_loadings'): item['availability'] = 'not_supported_for_model'
+        self.assertEqual(hinted(unsupported)[1]['message'], 'No atomic Claims for: gene-gene set.')
+        # No generation metadata: no reader serves any missing family, so there is no hint at all.
+        result, hint = hinted(capability_catalog(None, phenotype_verified=False))
+        self.assertIsNone(hint)
+        self.assertNotIn('family-missing', result['summary']['issues'])
+        # Hints never change the counts.
+        for capabilities in ((), local, legacy, None, unsupported):
+            summary = hinted(capabilities)[0]['summary']
+            self.assertEqual({key: value for key, value in summary.items() if key != 'issues'},
+                             {key: value for key, value in everything['summary'].items() if key != 'issues'})
 
     def test_trusted_claims_are_cited_but_not_counted_and_malformed_input_is_tolerated(self):
         account = Account().factor_gene().gene_gene_set().gap(['factor-gene', 'gene-gene-set'])

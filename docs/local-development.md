@@ -10,6 +10,8 @@ The local stack runs Next.js on the host, the FastAPI API and worker in Docker C
 
 Install Docker Desktop with Compose, Node.js 22 or newer, npm, Python 3.10 or newer, and Git. Start Docker Desktop. Copy `.env.example` to `.env` and configure the database, embedding, gateway/session, and Box/Anthropic values. `.env` is ignored; restrict it with `chmod 600 .env`. Secrets must never use a `NEXT_PUBLIC_` prefix.
 
+An existing `.env` must set `REVEAL_SMALL_PHENOTYPE_VERIFIED=true`, as `.env.example` does, to enable the BioIndex phenotype readers `get_pigean_gene_phenotype` and `get_pigean_gene_set_phenotype` locally; the code default `false` reports them unavailable. Reload the stack after changing it, as described below.
+
 Install dependencies from the repository root:
 
 ```bash

@@ -28,18 +28,23 @@ PREDICATES = {
     'genetic': ('biolink:genetically_associated_with', BIOLINK + 'genetically_associated_with', {LEGACY + 'genetically-associated-with'}),
     'involved': ('obo:RO_0002331', OBO + 'RO_0002331', {'RO:0002331', LEGACY + 'involved-in'}),
 }
-# family: subject kind, predicate group, object kind, accepted metrics, score kind, label, retrieval tools
+SET_LOADINGS = 'get_factor_loadings (kind gene_set)'
+# family: subject kind, predicate group, object kind, accepted metrics, score kind, label, retrieval routes (any one serves;
+# a route needs every get_* tool it names)
 FAMILIES = {
     'factor_gene': ('gene', 'correlated', 'factor', ('loading', 'factor_value'), 'LOADING', 'factor-gene',
-                    'get_factor_loadings or get_gene_factors'),
+                    ('get_factor_loadings', 'get_gene_factors')),
     'phenotype_gene': ('gene', 'genetic', 'trait', ('combined', 'log_bf', 'prior'), 'SCORE', 'phenotype-gene',
-                       'get_pigean_gene_phenotype'),
+                       ('get_pigean_gene_phenotype',)),
     'factor_gene_set': ('gene_set', 'correlated', 'factor', ('joint_loading', 'marginal_loading', 'factor_value'), 'LOADING',
-                        'factor-gene set', 'get_factor_loadings with kind gene_set, or get_gene_set_factors'),
-    'gene_gene_set': ('gene_set', 'member', 'gene', (), None, 'gene-gene set', 'get_gene_gene_sets, then get_gene_set and get_gene_set_members'),
+                        'factor-gene set', (SET_LOADINGS, 'get_gene_set_factors')),
+    'gene_gene_set': ('gene_set', 'member', 'gene', (), None, 'gene-gene set',
+                      ('get_gene_gene_sets (then get_gene_set)', 'get_gene_set_members (with get_gene_set)')),
     'gene_set_trait': ('gene_set', 'correlated', 'trait', ('beta_uncorrected', 'beta'), 'EFFECT_ESTIMATE', 'gene set-trait',
-                       'get_pigean_gene_set_phenotype'),
+                       ('get_pigean_gene_set_phenotype',)),
 }
+PHENOTYPE_TOOLS = ('get_pigean_gene_phenotype', 'get_pigean_gene_set_phenotype')
+TOOL = re.compile(r'\bget_\w+')
 TEMPLATES = {'factor_gene': 'Gene G has loading L on factor F.', 'phenotype_gene': 'Gene G is associated with P in PIGEAN (combined C).',
              'factor_gene_set': 'Gene set S has joint loading L on factor F.', 'gene_gene_set': 'Gene set S has member G.',
              'gene_set_trait': 'Gene set S is associated with P (beta_uncorrected B).'}
@@ -139,10 +144,11 @@ def significant(token):
 
 
 def mentions(statement, value):
-    """The statement states value (sign aside), exactly or rounded to at least three significant digits (within 1%)."""
+    """The statement states value (sign aside), exactly or rounded to at least three significant digits (within 1%); zero as any zero token."""
     if isinstance(value, bool) or not isinstance(value, (int, float)): return False
     try: value = abs(float(value))
     except OverflowError: return False
+    if value == 0: return any(float(token) == 0 for token in NUMBER.findall(statement))
     wanted = min(3, len(significant(repr(value)).rstrip('0')) or 1)
     for token in NUMBER.findall(statement):
         mantissa, _, exponent = token.lower().partition('e')
@@ -150,6 +156,24 @@ def mentions(statement, value):
         tolerance = 0.5 * 10.0 ** scale + 1e-12 * max(1, value)
         if len(significant(token)) >= wanted and abs(abs(float(token)) - value) <= min(tolerance, 0.01 * value + 1e-12): return True
     return False
+
+
+def unavailable(package):
+    """Tools and routes the package's capability catalog does not advertise as supported; none without a package.
+
+    The BioIndex phenotype readers are a fail-closed deployment exception, available only when small_model_phenotype is
+    supported; an imported reader is unavailable when its listed operation is not (not_stored, model unsupported).
+    """
+    if not package: return set()
+    capabilities = package.get('capabilities') if isinstance(package.get('capabilities'), dict) else {}
+    phenotype = capabilities.get('small_model_phenotype')
+    blocked = set() if isinstance(phenotype, dict) and phenotype.get('availability') == 'supported' else set(PHENOTYPE_TOOLS)
+    blocked |= {operation['name'] for operation in records(capabilities, 'operations')
+                if isinstance(operation.get('name'), str) and operation.get('availability') != 'supported'}
+    coverage = capabilities.get('coverage')
+    # Legacy generations store ranked gene-set links, not numeric projections.
+    if isinstance(coverage, dict) and coverage.get('gene_set_projections') == 'not_stored': blocked.add(SET_LOADINGS)
+    return blocked
 
 
 def factor_traits(document, context, package):
@@ -298,8 +322,12 @@ def claim_structure(document, package=None):
         for check in issues: grouped.setdefault((check, family), []).append(claim['id'])
     atomic_count = sum(value['count'] for value in counts.values()); conformant = sum(value['conformant'] for value in counts.values())
     if atomic_count and not synthesis['gap_relevance']: grouped[('gap-relevance-missing', None)] = []
-    missing = [family for family in FAMILIES if not counts[family]['count']]
-    if authored and missing: grouped[('family-missing', None)] = []
+    blocked = unavailable(package)
+    # Families without Claims, each with the routes its package can serve; a family no available tool serves is not hinted.
+    hints = {family: [route for route in FAMILIES[family][6] if route not in blocked and not blocked & set(TOOL.findall(route))]
+             for family in FAMILIES if not counts[family]['count']}
+    hints = {family: routes for family, routes in hints.items() if routes}
+    if authored and hints: grouped[('family-missing', None)] = []
     structured = atomic_count + synthesis['count']
     summary = {'format': FORMAT, 'claims': len(authored), 'families': counts, 'atomic': {'count': atomic_count, 'conformant': conformant},
                'synthesis': synthesis, 'other': len(authored) - structured,
@@ -318,8 +346,8 @@ def claim_structure(document, package=None):
         values = {'triple': triple_text(family), 'predicate': predicate(spec[1]), 'metrics': ' or '.join(spec[3]), 'kind': spec[4],
                   'label': spec[5][0].upper() + spec[5][1:], 'template': TEMPLATES[family],
                   'sets': ' and the trusted GeneSet' if spec[0] == 'gene_set' else ''} if spec else {
-                  'families': ', '.join(FAMILIES[name][5] for name in missing),
-                  'tools': '; '.join(f'{FAMILIES[name][5]} via {FAMILIES[name][6]}' for name in missing)}
+                  'families': ', '.join(FAMILIES[name][5] for name in hints),
+                  'tools': '; '.join(f"{FAMILIES[name][5]} via {' or '.join(routes)}" for name, routes in hints.items())}
         message, repair = (part.format(**values) for part in MESSAGES[check])
         item = {'severity': 'suggestion', 'check': check, 'where': ids[0] if ids else where, 'message': message, 'repair': repair, 'why': WHY}
         if family: item['family'] = family
