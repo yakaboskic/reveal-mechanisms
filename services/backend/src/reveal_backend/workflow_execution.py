@@ -403,7 +403,7 @@ class WorkflowExecution:
             if box['phase'] == 'running': return {'next_phase': 'observe', 'sleep': 5}
             frozen = self.bootstrap_config(job, execution, queue['dispatch_input']) if queue.get('dispatch_input', {}).get('bootstrap') else None
             await run_sync(state.save, self.repository, payload, token, launch_intent=True,
-                                    deadline=time.time() + (frozen['timeout_seconds'] if frozen else int(setting('REVEAL_AGENT_TIMEOUT_SECONDS', '900'))) + 420)
+                                    deadline=time.time() + (frozen['timeout_seconds'] if frozen else int(setting('REVEAL_AGENT_TIMEOUT_SECONDS', '1800'))) + 420)
             handle = await adapter.launch_once(box)
             await run_sync(self.observe_commit, payload, token, handle, [])
             return {'next_phase': 'observe', 'sleep': 5}
@@ -514,7 +514,7 @@ class WorkflowExecution:
         if frozen: require(tuple(frozen['selected_graphs']) == selected, 'Frozen bootstrap graph selection differs from input')
         request = ExecutionRequest(job_id=job['id'], attempt=attempt, kind='research' if job['kind'] == 'analysis' else 'paragraph',
             input_path=path, output_dir=root/f'attempt-{attempt}'/'output', selected_graphs=selected,
-            timeout_seconds=frozen['timeout_seconds'] if frozen else int(setting('REVEAL_AGENT_TIMEOUT_SECONDS', '900')),
+            timeout_seconds=frozen['timeout_seconds'] if frozen else int(setting('REVEAL_AGENT_TIMEOUT_SECONDS', '1800')),
             max_budget_usd=frozen['max_budget_usd'] if frozen else float(setting('REVEAL_AGENT_MAX_BUDGET_USD', '3')),
             max_turns=frozen['max_turns'] if frozen else int(setting('REVEAL_AGENT_MAX_TURNS', '100')),
             validation_feedback=tuple(frozen['validation_feedback']) if frozen else (), remote_handle=execution.get('box'))

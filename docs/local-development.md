@@ -79,7 +79,7 @@ REVEAL_EXECUTION_MODE=deterministic ./scripts/dev-up.sh
 
 This exercises the actual application database and queue with the deterministic adapter. Its output is labeled as development execution and must not be reported as a live scientific result. Stop the stack before switching execution modes. Box mode requires both Box and Anthropic credentials.
 
-Authoring defaults to 100 turns (`REVEAL_AGENT_MAX_TURNS`), with the existing independent $3 cost cap and 900-second deadline. Configure a lower turn cap explicitly if needed. Changing environment limits requires recreating the worker container, not just restarting it. A turn-limit exit stays an operational failure with retained diagnostics; it never becomes an insufficient-evidence finding. Retrying starts a new attempt, and does not resume the completed failed provider session.
+Authoring defaults to 100 turns (`REVEAL_AGENT_MAX_TURNS`), with the existing independent $3 cost cap and 1,800-second (30-minute) deadline. Configure a lower turn cap explicitly if needed. Changing environment limits requires recreating the worker container, not just restarting it. A turn-limit exit stays an operational failure with retained diagnostics; it never becomes an insufficient-evidence finding. Retrying starts a new attempt, and does not resume the completed failed provider session.
 
 The root `.env` controls the authoring spending limit. For demos, for example:
 

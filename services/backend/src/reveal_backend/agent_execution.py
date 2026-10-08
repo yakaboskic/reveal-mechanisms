@@ -37,7 +37,7 @@ class ExecutionRequest:
     input_path: Path
     output_dir: Path
     selected_graphs: tuple[str, ...] = ()
-    timeout_seconds: int = 900
+    timeout_seconds: int = 1800
     max_budget_usd: float = 3.0
     max_turns: int = 100
     remote_handle: dict | None = None

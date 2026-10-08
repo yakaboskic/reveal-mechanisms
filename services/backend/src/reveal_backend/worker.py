@@ -438,7 +438,7 @@ class Worker:
                 from .research_hosted import access
                 research_access = await asyncio.to_thread(access, self.repository, job, queue['attempt'])
             request=ExecutionRequest(job_id=job['id'],attempt=execution_attempt,kind='research' if job['kind']=='analysis' else 'paragraph',input_path=input_path,
-                output_dir=root/f'attempt-{execution_attempt}'/'output',selected_graphs=selected,timeout_seconds=int(setting('REVEAL_AGENT_TIMEOUT_SECONDS','900')),
+                output_dir=root/f'attempt-{execution_attempt}'/'output',selected_graphs=selected,timeout_seconds=int(setting('REVEAL_AGENT_TIMEOUT_SECONDS','1800')),
                 max_budget_usd=float(setting('REVEAL_AGENT_MAX_BUDGET_USD','3')),max_turns=int(setting('REVEAL_AGENT_MAX_TURNS','100')),remote_handle=queue.get('remote_handle'),research_access=research_access)
             if review_source:
                 phase='scientific_validation'

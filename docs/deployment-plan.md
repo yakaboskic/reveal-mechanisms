@@ -228,7 +228,7 @@ Generated API types already live in the frontend source. The normal build does n
 - `REVEAL_ENVIRONMENT=production`, `REVEAL_EXECUTION_MODE=box`. The production runtime setting keeps development-only execution disabled; it does not introduce a second environment.
 - DAPPER/DisMech source locations, mapping run ID, and any selected DisMech embedding run ID.
 - Box/Anthropic/embedding credentials and the working model/service settings, scoped to the services needing them.
-- Explicit time, turn, authoring/review cost, and admission limits. Current defaults include 900 seconds and a $3 authoring cap per job; paragraph work and scientific review add separate usage. These are not a total per-submission price guarantee.
+- Explicit time, turn, authoring/review cost, and admission limits. Current defaults include 1,800 seconds (30 minutes) and a $3 authoring cap per job; paragraph work and scientific review add separate usage. These are not a total per-submission price guarantee.
 - `REVEAL_MAX_ACTIVE_JOBS` (per-principal nonterminal admission limit), `REVEAL_ANONYMOUS_ANALYSES_PER_DAY`, `REVEAL_ANONYMOUS_PROVISIONS_PER_HOUR`; keep database pools bounded, currently four connections per process by default. Budget the sum across API, dispatcher, and all worker processes, plus other database users and connections outside that pool.
 
 **New configuration to implement**
