@@ -158,8 +158,9 @@ The capture transaction also records a durable `workflow_cleanup` obligation.
 Signed `/internal/workflows/cleanup-v1` deliveries delete the recorded Box
 independently of the main workflow's generation or terminal state. Validation
 can proceed after verified capture. Deletion is idempotent, failed deliveries
-remain recoverable, and the allocation stays counted against remote capacity
-until deletion or a confirmed provider 404 is acknowledged. No Redis reads or
+remain recoverable, and a matching durable handoff releases the main execution
+reservation. The cleanup record owns the Box until deletion or a confirmed
+provider 404 is acknowledged; a released reservation alone is not deletion. No Redis reads or
 in-process background task are needed to keep cleanup alive.
 
 Account and paragraph acceptance use deterministic validation, with no second AI
@@ -191,6 +192,216 @@ an end-to-end job speedup; the report is
 Progress now distinguishes completed authoring from ongoing collection: the
 authoring completion notice no longer inherits a growing forward timer, and
 validation is announced before restoring its saved evidence.
+
+## Bounded workflow runs and capacity (October 8, 2026)
+
+`REVEAL_WORKFLOW_STEPS_PER_RUN` defaults to six phase steps. Each segment uses
+at most six `phase-N` steps and six durable `wait-N` sleeps before handing off
+through the existing dispatch outbox. The segment size is frozen into its
+dispatch payload, so changing the environment does not change replay ordering.
+The handoff increments generation and fences the parent, preserves the global
+phase index, Box handle, observation cursor, deadline and authoring attempt, and
+uses a deterministic child run ID. Dispatch retries publish the same identity.
+Handoffs increment their own counter; they do not spend the recovery budget.
+
+The pinned Python Workflow 2.0.0 SDK advertises the LazyFetch feature, but its
+request parser still expects the inline history and has no supported history
+fetch path. The pinned QStash 3.4.0 client adds no usable lazy-history control.
+The fix therefore bounds history by starting a fresh run; retain the signed SDK
+replay tests when upgrading. See the [Python SDK source](https://github.com/upstash/workflow-py)
+and [Workflow serve options](https://upstash.com/docs/workflow/basics/serve).
+The signed SDK regression drives 204 continuous phases through 34 fresh runs:
+maximum simulated callback body size falls from 198,183 bytes without handoff
+to 6,574 bytes with six-phase segments (below the 16 KiB test threshold). This
+is measured SDK wire-history simulation, not a live nginx measurement. The
+ingress body limit must still accommodate the bounded history; its separate
+administrator repair is not replaced by the application bound.
+
+A stale delivery with no failed application step records `delivery_recoveries`
+and can resume without exhausting `REVEAL_WORKFLOW_MAX_RECOVERIES` (default
+three). Genuine step failures consume that budget. Once genuine step failures
+exhaust it, reconciliation or the workflow failure callback transfers known
+Boxes to an independent cleanup obligation. A delivery-only failure callback
+remains recoverable instead. The execution reservation is released only after
+the cleanup handoff is recorded atomically. The job becomes failed, or cancelled
+if cancellation was pending, with a specific failure code; checkpoint and recovery audit fields remain.
+An allocation whose creation response was lost and whose Box identity is unknown
+stays reserved for explicit reconciliation: inventing a second allocation or a
+cleanup receipt would leak the first Box. After locating it, an operator can
+supply `workflow_admin resume --box-id … --expected-generation N`; verified
+Box labels bind it to this job/attempt, and a newly terminal recovery routes
+directly to abandonment cleanup instead of restarting authoring. Abandonment
+records why uncaptured work was stopped, cancels/deletes the Box, preserves the
+existing workspace and does not claim that final capture succeeded. Observe
+pending cleanup separately, because provider concurrency can temporarily exceed the execution reservation
+count while deletion catches up.
+
+### Concurrency settings
+
+These limits apply to separate resources; raising the Box cap does not require
+raising scratch or validation concurrency. QA has room for 25 authoring Boxes
+across users, with five unfinished jobs per user. Additional accepted work can
+wait for allocation. No global limit of 25 queued job records is imposed.
+Production keeps its explicit two-Box setting.
+
+| Control | Code default | QA setting | Scope |
+| --- | --- | --- | --- |
+| `REVEAL_MAX_ACTIVE_BOXES` | 25 | 25 | Reserved allocations in this job namespace; matching durable cleanup handoffs and deleted Boxes are excluded. |
+| `REVEAL_MAX_ACTIVE_JOBS` | 2 | 5 | Unfinished jobs per user, including queued jobs and review retries. |
+| `REVEAL_MAX_RUNNING_JOBS` | 2 for Redis, 0 for database | 25 | Legacy queue leases only; Workflow consumers bypass this limiter. Zero means unlimited legacy leases. |
+| `REVEAL_MAX_SCRATCH_STEPS` | 2 | 2 | Concurrent file-based phases, across replicas. |
+| `REVEAL_MAX_PREPARATION_STEPS` | 2 | 2 | Preparation/bootstrap phase leases. |
+| `REVEAL_MAX_CAPTURE_STEPS` | 2 | 2 | Capture phase leases, including direct capture. |
+| `REVEAL_MAX_REVIEW_STEPS` | 2 | 2 | Deterministic validation/commit phase leases; retained legacy setting name. |
+| `REVEAL_MYSQL_POOL_SIZE` | 10 | 10 | Pooled sessions per process; allowed 1–32, half of them (rounded down) for pooled reference reads. Zero bypasses the bounded pool and is unsuitable for this load. |
+| `REVEAL_MYSQL_POOL_WAIT_SECONDS` | 5 | 5 | Bounded connection wait; allowed greater than zero through 30 seconds. |
+| `REVEAL_WORKFLOW_MAX_RECOVERIES` | 3 | 3 | Genuine step failures an execution may retry before it fails and hands its Box to cleanup; delivery stalls and handoffs do not count. |
+| `REVEAL_WORKFLOW_OBSERVE_INTERVAL_SECONDS` | 5 | 10 | Durable sleep between Box observations. |
+| `REVEAL_WORKFLOW_STEPS_PER_RUN` | 6 | 6 | Phase steps before a fresh run; positive integer, frozen per dispatch. |
+| `REVEAL_AGENT_TIMEOUT_SECONDS` | 1800 | 1800 | Agent runtime budget; frozen with each prepared input; the service-wide setting in `deploy/dig/service.yaml` is also 1800. |
+| `REVEAL_AGENT_MAX_BUDGET_USD` / `REVEAL_AGENT_MAX_TURNS` | 3 / 100 | 3 / 100 | Per-agent spending target / turn bound, frozen at preparation. |
+
+All listed environment controls are read by the runtime. QA leaves the pool
+settings at their defaults. DIG task count remains `min_tasks=max_tasks=1`; the
+backend runs one Uvicorn process (`python -m reveal_backend.serve`). That
+process leases clean pooled sessions, and a process-local writer gate admits at
+most two fenced transactions per table prefix to a pooled session at once (one
+holding the fence, one queued on it). Further writers wait in the process for at
+most the 15-second session lock wait and then get the retryable busy 503
+(`DatabaseBusy`); reconciliation takes the fence with `NOWAIT` and defers its work
+to the next tick instead. Aurora still serializes application writes through one
+`FOR UPDATE` fence; more processes or connections do not increase that fence's
+throughput.
+
+Additional fanout limits are within an operation, not active-job admission:
+S3 snapshots and restores keep `REVEAL_S3_TRANSFER_CONCURRENCY` objects in
+flight (default 16) and direct-capture verification uses four workers;
+evidence collection accepts `max_parallel_requests` between one and four;
+Box MCP evidence reads accept `max_parallel_reads` between one and four (default
+two). These memory/IO bounds are independent of the Box cap, and their
+enclosing phase leases bound backend fanout. Anonymous users also have
+`REVEAL_ANONYMOUS_ANALYSES_PER_DAY=5` by default, independently of concurrency.
+
+Allocation uses a narrow database count under the existing transaction fence,
+scoped to the namespace and excluding valid cleanup handoffs. It does not load
+all historical execution and cleanup JSON into Python and requires no Aurora
+DDL. `CapacityBudget` in `tests/test_round_trip_budget.py` (budget
+`reserve_box`) covers 500 completed executions and cleanup receipts: three
+statements under the fence (the owned execution read, the single `SUM(active)`
+count and the execution update, whose pre-read the transaction's identity map
+skips), or five round trips with the fence and `COMMIT`; a clean pooled session
+returns to the pool with no reset command. Before this merged with the
+pooled-session work it was four statements and nine round trips, three of them
+session-reset commands. Cold connection setup is separate. An
+authorized read-only execution of this count against QA Aurora returned two
+reserved Boxes in 139 ms; this single WAN measurement confirms compatibility,
+not server-side lock hold time or concurrent load capacity.
+
+### Backend and provider headroom
+
+At five seconds, 25 observing jobs request about five Box inspections/second.
+Each observation is two fenced write transactions: acquire, then the completion
+that commits the Box cursor, deduplicated events and step result together (11
+round trips, 13 with events). It decides on acquire's snapshot, with no separate
+context read: about 10 serialized writes/second before other traffic. The
+six-phase handoff adds roughly two callbacks per segment to the usual phase/sleep
+pair: approximately 11.7 Workflow callbacks/second, plus reconcile once/minute,
+starts, cleanup and retries. Each handoff is one more fenced transaction with
+one batched read (budget `workflow_handoff`, 7 round trips) plus its dispatch
+acknowledgment. QA's ten-second interval halves those steady rates to 2.5
+inspections, 5 writes and 5.8 callbacks/second.
+This adds at most about five seconds to normal completion detection compared
+with the old setting; cancellation control deliveries remain independent.
+
+For 50% write-fence utilization at ten seconds, average lock hold time needs to
+stay below about 100 ms (1 / (2 × 5)). Handoffs (about 0.4/second for 25 jobs at
+ten seconds, two fenced writes each), event bursts and UI writes need additional
+allowance. Measure database and callback tail latency, connection
+waits, dispatch age, pending cleanup and provider 429s during the first QA ramp.
+The 25-job SQLite/WAL test completes create/bootstrap/launch, three observations,
+capture, cancellation and independent cleanup with a fake Box adapter, without
+external calls. All 25 allocations coexist before any can proceed; final
+reservations and fences are released, and duplicate cleanup reuses the receipt.
+Three local runs of the merged code took 1.8–2.0 seconds with 821–881 write
+transactions (1,052 before the merge, when each observation committed its cursor
+in a transaction of its own) and a maximum SQLite lock acquisition wait of
+114–349 ms (test limits: five-second busy timeout, 30-second total deadline). Durable waits are scaled and staggered in the test.
+This proves local coordination with WAL, not rollback-journal behavior, Aurora
+latency or a 25-agent cloud qualification. Retain one task/process and two scratch
+leases until the shared database measurements justify increasing capacity.
+Do not hold a callback open to poll repeatedly: doing so would consume ingress
+and QStash concurrency while awaiting remote work.
+
+External limits were checked against official sources on October 8, 2026:
+
+- **Box:** the public Free plan allows 10 concurrent Boxes; Pay as You Go lists
+  a default soft quota of 1,000, with increases by request. Therefore 25 requires
+  paid/custom capacity. QA's actual Box subscription/quota was not available
+  from the read-only inspection and must be confirmed in the account. The
+  Claude Code agent uses our Anthropic key; Upstash's built-in LLM allowance is
+  not its token budget. [Box pricing](https://upstash.com/pricing/box).
+- **QStash:** Free lists 1,000 messages/day and global parallelism 10; Pay as You
+  Go lists unlimited daily messages and global parallelism 100. QA's authenticated
+  read-only `/v2/globalParallelism` returned **100**, which confirms its current
+  parallelism, not its billing plan. Publish/batch delivery APIs have no stated
+  requests-per-second cap; overflow queues behind global parallelism. The separate
+  queue parallelism limit (10 on paid standard plans) does not govern our batch
+  publishes. Every delivery attempt, including retries, is billable; observability
+  APIs have separate rate limits. At 5.8 callbacks/second, continuous occupancy
+  is approximately 504,000 deliveries/day before extra traffic, well above Free.
+  [QStash pricing and limits](https://upstash.com/pricing/qstash),
+  [global parallelism API](https://upstash.com/docs/workflow/rest/flow-control/global-parallelism).
+- **Anthropic:** the pinned `claude-sonnet-4-6` costs $3 per million uncached
+  input tokens and $15 per million output tokens; cache reads are $0.30 per
+  million (cache writes have separate prices). A worked example of 100,000
+  uncached input + 10,000 output tokens costs $0.45 per agent, or $11.25 for 25.
+  The configured $3 agent budgets total $75 for 25 fresh runs, excluding Box,
+  storage and delivery charges; they are client-side per-run targets, not an
+  organization-wide spend reservation. [Sonnet 4.6 pricing](https://platform.claude.com/docs/en/models/sonnet-4-6/overview).
+  Public Start-tier Sonnet 4.x limits are currently 1,000 RPM, 2 million input
+  tokens/minute and 400,000 output tokens/minute; shared organization/workspace
+  limits, acceleration limits and spend caps can be lower. A simultaneous first
+  100,000-token request from each agent is 2.5 million input tokens and would
+  exceed that example tier. Cache-read tokens do not consume Sonnet ITPM.
+  QA's actual tier, workspace limits and other workloads are unverified; inspect
+  the console/read-only Rate Limits API and ramp gradually before paid load.
+  [Anthropic rate limits](https://platform.claude.com/docs/en/api/rate-limits).
+
+### Verification of this repair
+
+After merging with the pooled-session and round-trip work, the full backend
+suite completed with 2,352 passed, 10 skipped and 1,123 passing subtests in
+952.57 seconds. Its only failure was the pre-existing
+`test_worker_collection.py::WorkerCollectionTests::test_failed_agent_notice_has_no_forward_timer_or_terminal_job_claim`.
+The round-trip budgets (`reserve_box` 5, `workflow_handoff` 7, `observe_tick` 11,
+`reconcile_idle` 4), signed 204-phase replay (6,574-byte maximum callback body),
+recovery/cleanup races and the 25-job test passed. Before the merge, the branch
+alone completed with 2,023 passed, 10 skipped and 674 subtests.
+
+In an isolated worktree, set `REVEAL_DAPPER_ROOT` and
+`REVEAL_TEST_DAPPER_RELEASE` to an existing checkout of the pinned DAPPER release.
+The ignored `.runtime/dapper` dependency is not copied into Git worktrees; without
+it, citation, fixture and research integration tests fail on missing files.
+The run above used that dependency read-only and made no QA writes.
+
+### QA recovery remains an operator action
+
+Read-only inspection found jobs `04cc4e03-4e2a-49df-9856-3ffbf7ed64d0` and
+`6831e472-679d-49f9-9100-69d078d7cbb3` at generation four, phase index 37,
+`recovery_required`, three recoveries, reserved capacity and no cleanup handoff.
+The provider still reported Boxes `legal-tuna-25525` and `infinite-teal-30261`
+as existing and idle. The first job has pending cancellation; the second has
+passed its deadline. This implementation and test work makes no QA writes.
+
+Use `workflow_admin inspect` to re-read each generation, then obtain explicit
+user approval before
+`workflow_admin resume --job-id … --expected-generation N` against QA. Process
+cancellation or deadline expiry, preserve capture when available, and let the
+independent cleanup consumer delete the recorded Box. Verify the authoritative
+job outcome, `capacity_reserved=false`, the completed cleanup receipt and a
+provider deletion/404 for both Boxes. Resume dispatches QStash and changes QA
+records; do not infer authorization from the read-only inspection. Deploy the
+fixed image and QA configuration before attempting the 25-job load ramp.
 
 ## Local pilot
 
@@ -314,8 +525,8 @@ in-progress workflow job.
 
 After deploying independent cleanup, rollback must either drain all pending
 `workflow_cleanup` obligations or retain the signed cleanup consumer and its
-reconciliation dispatch. A terminal scientific job does not prove its Box has
-been deleted or release an outstanding cleanup reservation.
+reconciliation dispatch. A terminal scientific job or released execution reservation does not prove its
+Box has been deleted. Inspect pending cleanup records and provider status too.
 
 ## Verification status
 

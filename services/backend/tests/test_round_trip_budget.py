@@ -6,17 +6,19 @@ new count in the same commit. Never raise an entry or relax a lease-kind asserti
 that becomes a write costs the same trips but holds the global write fence.
 """
 import os
+from pathlib import Path
+import tempfile
 import threading
 import unittest
 from unittest.mock import AsyncMock, Mock, patch
 
 from round_trips import END, OPEN, RELEASE, count_round_trips
-from reveal_backend import redis_notifications, workspace_events
+from reveal_backend import jobs, redis_notifications, workflow_state, workspace_events
 from reveal_backend.mysql_database import application_session_unchanged, reset_application_session
 from reveal_backend.mysql_pool import Pool
 from reveal_backend.repository import Repository, Transaction
 from reveal_backend.research_work import ResearchWorkService, deadline
-from reveal_backend.workflow_routes import dispatch_job, sweep
+from reveal_backend.workflow_routes import continue_run, dispatch_job, sweep
 import test_cfde_assessment as cfde
 from test_cfde_assessment import case  # noqa: F401 (pytest fixture)
 import test_account_discovery as account_discovery
@@ -32,7 +34,8 @@ import test_research_polling as research_polling
 
 BUDGET = {'local_work_poll': 5, 'me': 2, 'provision': 7, 'readyz': 2, 'draft_patch': 8, 'mcp_get_operation': 5, 'job_create': 8, 'draft_create': 7, 'account_acceptance': 12,
           'mcp_query_enqueue': 13, 'query_operation': 17, 'workspace_list': 4, 'workspace_detail': 4,
-          'reconcile_idle': 4, 'job_dispatch': 11, 'observe_tick': 11, 'observe_tick_events': 13, 'gap_list': 5, 'gap_search': 5, 'gap_detail': 5,
+          'reconcile_idle': 4, 'job_dispatch': 11, 'observe_tick': 11, 'observe_tick_events': 13, 'reserve_box': 5, 'workflow_handoff': 7,
+          'gap_list': 5, 'gap_search': 5, 'gap_detail': 5,
           'citation_render': 5, 'readyz_monitored': 0, 'readiness_tick': 2, 'suggest': 2,
           'cfde_start': 8, 'cfde_start_locked': 4, 'cfde_reuse_locked': 3, 'cfde_poll': 3, 'cfde_worker': 17}
 
@@ -367,6 +370,49 @@ class WorkflowBudget(unittest.IsolatedAsyncioTestCase):
         print('\njob dispatch', budget)
         self.assertEqual((budget.kinds(), budget.leases[0], budget.unleased, budget.connects), (['read', 'write'], ['read', 1], 0, 0), budget)
         self.assertLessEqual(budget.trips(), BUDGET['job_dispatch'], budget)
+
+
+    async def test_segment_handoff_is_one_batched_read_under_one_fence(self):
+        # Every REVEAL_WORKFLOW_STEPS_PER_RUN phases per job: fence the parent run and queue its successor.
+        job, payload = self.new()
+        with self.repo.transaction() as tx: tx.remove('workflow_dispatch', job['id'])   # its delivery was acknowledged
+        with patch.object(workspace_events, 'publish_committed'), count_round_trips() as budget:
+            self.assertEqual(continue_run(self.repo, payload, 0), {'generation': payload['generation'] + 1, 'index': 0})
+        print('\nworkflow handoff', budget)
+        self.assertEqual((budget.kinds(), budget.unleased, budget.connects), (['write'], 0, 0), budget)
+        self.assertLessEqual(budget.trips(), BUDGET['workflow_handoff'], budget)
+
+
+class CapacityBudget(unittest.TestCase):
+    """Capacity reservations keep one fenced transaction and a constant SQL budget, whatever the history."""
+    def test_reserve_does_not_fetch_historical_execution_or_cleanup_payloads(self):
+        with tempfile.TemporaryDirectory() as temp, patch.dict('os.environ', {
+                'REVEAL_JOB_TRANSPORT': 'workflow', 'REVEAL_JOB_NAMESPACE': 'budget-test'}):
+            repo = Repository(Path(temp)/'db.sqlite'); repo.migrate()
+            with repo.transaction() as tx:
+                job = jobs.enqueue(tx, 'owner', 'paragraph', account_id='account')
+                value = tx.get('execution', job['id'])['data']; value['phase'] = 'create'
+                tx.put('execution', job['id'], 'owner', value)
+                for index in range(500):
+                    tx.put('execution', 'historical-'+str(index), 'owner', {
+                        'namespace': 'budget-test', 'capacity_reserved': False, 'private_history': 'x'*4000})
+                    tx.put('workflow_cleanup_completed', 'historical-'+str(index), 'owner', {
+                        'namespace': 'budget-test', 'private_history': 'x'*4000})
+            payload = {'job_id': job['id'], 'namespace': 'budget-test', 'generation': 1}
+            _, active, _ = workflow_state.acquire(repo, payload, 0)
+            statements = []
+            with patch.object(Transaction, 'list', side_effect=AssertionError('Capacity must not fetch full-kind JSON history')), \
+                    count_round_trips() as budget:
+                counted = Transaction.execute
+                def execute(tx, sql, params=()):
+                    statements.append(sql); return counted(tx, sql, params)
+                with patch.object(Transaction, 'execute', execute):
+                    self.assertTrue(workflow_state.reserve_box(repo, payload, active['fence'])['capacity_reserved'])
+        print('\nreserve box', budget)
+        self.assertEqual((budget.kinds(), budget.unleased, budget.connects), (['write'], 0, 0), budget)
+        self.assertLessEqual(budget.trips(), BUDGET['reserve_box'], budget)
+        self.assertEqual(sum('SUM(active)' in sql for sql in statements), 1, statements)   # one count, never a page of rows
+        self.assertFalse(any('ORDER BY' in sql for sql in statements), statements)
 
 
 def test_cfde_assessment_admission_is_one_snapshot_then_one_short_fence(case):

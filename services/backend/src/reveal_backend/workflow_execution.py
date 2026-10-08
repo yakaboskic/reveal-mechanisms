@@ -22,7 +22,7 @@ import httpx
 from . import jobs, workflow_state as state
 from .agent_execution import ExecutionRequest
 from .artifact_store import store as artifact_store, StorageUnavailable
-from .box_adapter import CAPTURE_MARKER, atomic_capture_marker, read_capture_marker, captured_result, BoxTransportError
+from .box_adapter import CAPTURE_MARKER, atomic_capture_marker, read_capture_marker, captured_result, BoxTransportError, verified_box_not_found
 from .box_lifecycle import BoxLifecycle
 from .evidence_package import EvidenceBuildError, canonical_json, decode, require, sha256
 from .repository import Repository, now, digest
@@ -55,6 +55,12 @@ async def drain_on_cancel(awaitable):
 
 async def run_sync(function, *args, **kwargs):
     return await drain_on_cancel(asyncio.to_thread(function, *args, **kwargs))
+
+
+def observe_interval():
+    seconds = int(setting('REVEAL_WORKFLOW_OBSERVE_INTERVAL_SECONDS', '5'))
+    if seconds < 1: raise ValueError('Workflow observe interval must be positive')
+    return seconds
 
 
 def capture_message(execution, *, restoring=False):
@@ -192,7 +198,7 @@ class WorkflowExecution:
             execution.update(updates, workspace=reference, updated_at=now())
             if cleanup_capture:
                 identity = state.enqueue_cleanup(tx, owner, execution, reference, updates['box'], cleanup_capture)
-                execution.update(cleanup_id=identity, capture_sha256=cleanup_capture)
+                execution.update(cleanup_id=identity, capture_sha256=cleanup_capture, capacity_reserved=False)
                 if updates.get('review_capture'):
                     updates['review_capture'] = {**updates['review_capture'], 'cleanup_id': identity}
                     execution['review_capture'] = updates['review_capture']
@@ -400,18 +406,18 @@ class WorkflowExecution:
             await run_sync(jobs.finish, self.repository, job['id'], token, 'cancelled')
             return {'next_phase': 'complete', 'done': True}
         if phase == 'launch':
-            if box['phase'] == 'running': return {'next_phase': 'observe', 'sleep': 5}
+            if box['phase'] == 'running': return {'next_phase': 'observe', 'sleep': observe_interval()}
             frozen = self.bootstrap_config(job, execution, queue['dispatch_input']) if queue.get('dispatch_input', {}).get('bootstrap') else None
             await run_sync(state.save, self.repository, payload, token, launch_intent=True,
                                     deadline=time.time() + (frozen['timeout_seconds'] if frozen else int(setting('REVEAL_AGENT_TIMEOUT_SECONDS', '1800'))) + 420)
             handle = await adapter.launch_once(box)
             await run_sync(self.observe_commit, payload, token, handle, [])
-            return {'next_phase': 'observe', 'sleep': 5}
+            return {'next_phase': 'observe', 'sleep': observe_interval()}
         if phase == 'observe':
             if time.time() > execution.get('deadline', float('inf')): await adapter.cancel_once(box)
             handle, events, terminal = await adapter.inspect_once(box)
             # The cursor and events commit with the step's completion: one fenced transaction per tick.
-            return {'next_phase': 'capture' if terminal else 'observe', 'sleep': 0 if terminal else 5,
+            return {'next_phase': 'capture' if terminal else 'observe', 'sleep': 0 if terminal else observe_interval(),
                     'observation': Observation(payload, handle, events)}
         if phase == 'capture' and box.get('capture_protocol') == 's3-v1':
             if execution.get('capture_complete'):
@@ -651,7 +657,13 @@ class WorkflowExecution:
         if intent['status'] == 'deleted': return {'deleted': True}
         try:
             async with asyncio.timeout(90):
-                handle = await self.box_adapter({}).delete_once(intent['box'])
+                adapter = self.box_adapter({})
+                if intent.get('cancel_before_delete'):
+                    try: await adapter.cancel_once(intent['box'])
+                    except Exception as exc:
+                        # A prior deletion may have succeeded before its DB ack.
+                        if not verified_box_not_found(exc): raise
+                handle = await adapter.delete_once(intent['box'])
             await run_sync(state.finish_cleanup, self.repository, payload, intent['token'], handle)
         except Exception as exc:
             await run_sync(state.finish_cleanup, self.repository, payload, intent['token'], error=type(exc).__name__)

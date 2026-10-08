@@ -254,5 +254,6 @@ class BootstrapWorkflowTests(unittest.IsolatedAsyncioTestCase):
                 rows = self.rows(payload)
                 self.assertEqual(rows['execution']['box']['box_id'], 'assigned-box')
                 self.assertEqual(rows['execution']['disposition'], 'recovery_required')
-                self.assertTrue(rows['execution']['capacity_reserved'])
+                self.assertFalse(rows['execution']['capacity_reserved'])
+                self.assertTrue(rows['execution']['cleanup_id'])
                 self.adapter.launch_once.assert_not_awaited()
