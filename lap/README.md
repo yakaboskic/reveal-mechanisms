@@ -7,34 +7,42 @@ For each (factor, gene set) pair it writes a **joint** and a **marginal** loadin
 Its `betas_` stage scores every trait against every CFDE gene set from the trait's existing PIGEAN gene stats, with
 `python -m pigean betas` (no PIGEAN rerun, no outer Gibbs). See [Gene-set betas](#gene-set-betas-betas_-stage).
 
-Its `release_` stage then writes one **reference release** folder (factors, gene sets, projections, provenance and
-vectors), which one command publishes to the app's environments. See
+Its `release_` stage then writes one **reference release** folder (factors, gene sets, projections, provenance and the
+factor-label and DisMech context vectors; gene sets are not embedded), which one command publishes to the app's
+environments. See
 [Reference release](#reference-release-release_-stage) and `../docs/reference-release.md`.
 
 **Inputs**
 
 | Input | What | Size |
 |---|---|---|
-| CFDE gene sets | DAPPER mirror of `s3://dig-gene-set-filtered/`, snapshot `2026-09-28` (`/humgen/diabetes/users/chase/data/dig-s3/gene_sets/cfde/2026-09-28`) | 133 GMTs, 44,399 gene sets. LINCS_L1000 has 43,527 of them; GTEx, HuBMAP, LIGER and MoTrPAC together have 872. |
+| CFDE gene sets | The DAPPER 0.2.0 release `s3://dig-gene-set-data/v2.0_dapper-0.2.0-a1/`, annotated snapshot `2026-10-05` (`/humgen/diabetes/users/chase/data/dig-s3/gene_sets/cfde/2026-10-05`) minus GaultonLab (`build_meta_yaml.py --exclude-library`; the meta key `cfde_libraries` lists the 9 kept) | 532 GMTs, 1,517,472 gene sets: LINCS_L1000 1,496,889; RummaGEO 10,332; GlyGen 6,875; IDG 1,240; GTEx 781; IMPC 536; HuBMAP 358; MetabolomicsWorkbench 295; MoTrPAC 166 |
 | EAGGL factors | Capped loadings of the legacy 711-trait atlas (`raw/EAGGL_capped_union_graph_share/data`, unzipped from the share) | 4,037 factors × 18,477 genes |
 | Trait ids | KPN trait registry **v0.0.2** from `dig-portal-data-models` | `versions/trait/v0.0.2/kpn_trait_registry.tsv`; tag commit `3cd554f` |
 | PIGEAN gene stats | All-trait export of the mouse_msigdb PIGEAN runs the factors came from (`/humgen/diabetes2/users/chase/projects/pigean/raw/all_traits/mouse_msigdb/gene_stats.tsv`, meta key `pigean_gene_stats_file`) | 18 GB; `phenotype, gene, combined, log_bf, prior` for 6,698 phenotypes, all 711 traits among them |
 
-**Two projections are run.**
-- **Per trait:** each trait's factors are projected jointly on their own. This is 711 eaggl runs.
-- **All factors:** one eaggl run over all 4,037 factors, as the method's author described it ("assemble all of your factors").
+**One projection per trait, in chunks.** Each trait's factors are projected jointly on their own: 711 runs.
+- eaggl densifies its genes × gene-sets matrix, so each trait runs over chunks of at most
+  `projection_chunk_gene_sets` (20,000) gene sets. That's 76 chunks of the 1,517,472.
+- A gene set's loadings depend only on its own column and the trait's factors, so chunking does not change them.
+- The chunks of a trait run one after another in one job, and a rerun skips the chunks already done.
+- The all-factor run of the 44,399-set release (one eaggl run over all 4,037 factors) is not feasible at this size and
+  is not part of the pipeline any more.
 
 **How the two loadings are computed**
 - **Joint:** a fixed-W multiplicative-update NNLS of X ≈ W·Hᵀ (`eaggl/state.py:_project_H_with_fixed_W`).
   - H is clipped to [0, 1]. The run starts from a random H (seeded, `--seed 1`) and does at most 100 iterations.
-  - The factors in a run compete to explain each gene set. Per-trait and all-factor joint loadings are therefore different quantities.
-  - Gene sets are solved independently, so every run projects all 44,399 of them.
-- **Marginal:** `clip(xᵀw / wᵀw, 0, 1)` per factor. It is identical in both designs.
+  - The trait's factors compete to explain each gene set.
+- **Marginal:** `clip(xᵀw / wᵀw, 0, 1)` per factor.
 - A trait with a single factor (127 traits) gets joint = marginal exactly. Every such trait is checked for this.
-- **Convergence limit:** eaggl stops the joint update at 100 iterations or when the relative change falls below 1e-4. Neither limit is a CLI option.
-  - The per-trait runs (K ≤ 15) meet the tolerance.
-  - The all-factor run (K = 4,037) is expected to hit the 100-iteration cap first. The code review estimated the relative change at ~4.6e-4 at iteration 100. Its joint loadings are therefore a truncated, seed-dependent solve.
-  - Its marginal loadings are exact.
+- **Convergence limit:** eaggl stops the joint update at 100 iterations or when the relative change falls below 1e-4.
+  Neither limit is a CLI option. The per-trait runs (K ≤ 15) meet the tolerance.
+
+**Ranks and what is kept.** After the chunks, every factor ranks all 1.5M gene sets (ordinal, highest loading first,
+ties by gene-set id): `*_rank_in_factor` over all of them, `*_rank_in_library` within the gene set's library. Writing
+every (factor, gene set) row would be ~6 billion rows, so the per-trait long file keeps the gene sets that are in some
+factor's per-library top `top_n_gene_sets` (50), joint or marginal, with that gene set's row for every factor of the
+trait.
 
 **Caveat when interpreting the loadings.** Loadings are not normalised for gene-set size, so very large gene sets score high on many factors. An example is MoTrPAC `t60-adrenal_Consensus_up`, which has 4,050 genes. Use `n_genes_in_eaggl_universe` in the gene-set index when interpreting results.
 
@@ -74,9 +82,8 @@ raw/  out/  log/                    inputs / LAP outputs / run logs (git-ignored
 
 | Stage | Commands |
 |---|---|
-| inputs | `collection_index_cmd`, `prep_trait_kpn_map_cmd`, `prep_assemble_factors_cmd`, `prep_build_annotations_cmd` |
-| per trait | `trait_factors_cmd`, `trait_project_cmd` (eaggl), `trait_annotate_cmd` |
-| all factors | `global_project_cmd` (eaggl), `global_relabel_cmd` |
+| inputs | `prep_cfde_index_cmd` (the 9 libraries), `collection_index_cmd`, `prep_trait_kpn_map_cmd`, `prep_assemble_factors_cmd`, `prep_build_annotations_cmd`, `prep_chunk_annotations_cmd` |
+| per trait | `trait_factors_cmd`, `trait_project_cmd` (eaggl over every chunk, then merge and rank) |
 | collect | `collect_projections_cmd` (fan-in over all 711 traits) |
 | gene-set betas | `betas_index_cmd` (project) → `betas_trait_gene_stats_cmd`, `betas_trait_run_cmd` (pigean betas), `betas_trait_annotate_cmd` |
 | audit portal | `portal_build_db_cmd` (fan-in over all 711 traits) → `portal_export_audit_cmd`, `portal_build_html_cmd` |
@@ -89,12 +96,12 @@ raw/  out/  log/                    inputs / LAP outputs / run logs (git-ignored
 | `*.gene_set_index.tsv.gz` | `gene_set_id, gene_set_name, collection_id, cfde_label, library, partition, model, comparison, program, gmt_row, n_genes, n_genes_in_eaggl_universe, cfde_snapshot` |
 | `*.factor_index.tsv` | `global_eaggl_column, factor_id, trait, kpn_trait_id, factor, factor_number, factor_label, n_nonzero_loadings, loading_l2, loading_variant` |
 | `*.trait_kpn_map.tsv` | `trait, kpn_trait_id, kpn_release, kpn_release_commit, gwas_source_category, phenotype_name, trait_group, legacy_trait_group, trait_type, n_factors` |
-| `traits/<trait>/<trait>.cfde_projection.long.tsv.gz` | **Main per-trait result.** One row per (factor, gene set), with no threshold: `trait, kpn_trait_id, factor_id, factor, factor_label, gene_set_id, collection_id, cfde_label, library, joint_loading, marginal_loading, joint_rank_in_factor, marginal_rank_in_factor, is_joint_top_factor` |
-| `traits/<trait>/<trait>.cfde_projection.top.tsv.gz` | Rows where either rank is ≤ 50, plus `gene_set_name` |
+| `traits/<trait>/<trait>.cfde_projection.long.tsv.gz` | **Main per-trait result.** For every gene set in some factor's per-library top 50 (joint or marginal), one row per factor: `trait, kpn_trait_id, factor_id, factor, factor_label, gene_set_id, collection_id, cfde_label, library, joint_loading, marginal_loading, joint_rank_in_factor, marginal_rank_in_factor, is_joint_top_factor, joint_rank_in_library, marginal_rank_in_library` (ranks over all 1.5M gene sets) |
+| `traits/<trait>/<trait>.cfde_projection.top.tsv.gz` | The rows within that factor's own per-library top 50, plus `gene_set_name` |
+| `*.cfde_annotations.chunks.tsv`, `annotation_chunks/` | The eaggl X input in chunks: `chunk, file, first_row, n_gene_sets, first_gene_set_id, last_gene_set_id, sha256` |
 | `traits/<trait>/<trait>.projection_qc.tsv` | `ids_equal_index`, `label_check_failures`, `k1_joint_marginal_max_absdiff`, `aligned_genes`, `seed`, `pigean_commit`, `qc_pass` |
 | `*.projection_manifest.tsv` / `*.top_gene_sets_per_factor.tsv.gz` | All 711 QC rows / all top rows |
-| `*.all_factors.{joint,marginal}.by_factor_id.tsv.gz` | All-factor run: `gene_set_id, collection_id, cfde_label, library, top_factor_id`, then one column per `factor_id` |
-| `traits/<trait>/*.eaggl.*`, `*.all_factors.*.eaggl.*` | Raw eaggl outputs, params, logs and warnings |
+| `traits/<trait>/*.eaggl.*` | eaggl params (first chunk), the logs and warnings of every chunk. The per-chunk loadings are deleted once merged. |
 | `traits/<trait>/<trait>.cfde_gene_set_stats.tsv.gz` | **Trait → gene-set betas.** The gene sets PIGEAN analyzed: `trait, kpn_trait_id, gene_set_id, collection_id, cfde_label, library, n_genes, beta_uncorrected, beta, avg_postp, library_rank, response, p, sigma2` |
 | `traits/<trait>/<trait>.pigean_gene_stats.tsv.gz`, `*.gene_set_stats.*` | The trait's slice of the gene stats; raw pigean output, params, log and warnings |
 
@@ -105,14 +112,17 @@ raw/  out/  log/                    inputs / LAP outputs / run logs (git-ignored
 
 ## Running
 
-Paths are relative to this `lap/` directory. The pipeline runs on UGER.
-- Each per-trait eaggl run densifies the 18,477 × 44,399 gene-set matrix, which needs about 30 GB.
-- The all-factor run needs about 50 GB and 12–30 h on one slot.
+Paths are relative to this `lap/` directory. The pipeline runs on UGER; start the long stages from a tmux session.
+- Per-trait projections run eaggl chunk by chunk: a 20,000-gene-set chunk peaks at ~11 GB (16 GB requested), and a
+  40,000-gene-set chunk of T2D (K=13) took 11 min. A trait runs its 76 chunks one after another: ~7 h for K=13, ~3 h on
+  average, ~2,000 CPU-hours for all 711.
+- The gene-set betas read all 1.5M gene sets per trait (most of their time).
+- The release build reads the 9 GB of collection documents one at a time (32 GB requested).
 
 ```bash
 alias lap_run='perl /humgen/diabetes/users/chase/lap/trunk/bin/run.pl --meta config/cfde_projection.meta'
 
-# 0. regenerate the meta (after changing inputs or the generator)
+# 0. regenerate the meta (after changing inputs or the generator; already done for eaggl_capped__cfde_2026_10_05)
 python3 scripts/build_meta_yaml.py
 PYTHONPATH=/humgen/diabetes2/users/chase/packages/meta-sanity python3 -m meta_sanity.generate_meta \
     config/cfde_projection.meta.yaml config/cfde_projection.meta
@@ -121,27 +131,25 @@ PYTHONPATH=/humgen/diabetes2/users/chase/packages/meta-sanity python3 -m meta_sa
 git clone --no-checkout /humgen/diabetes2/users/chase/packages/pigean raw/pigean_ca59661
 git -C raw/pigean_ca59661 checkout --detach ca59661644dc9ead429fc7e59050870ba49b26e8
 
-# 2. link inputs and create directories (only --init links meta files)
+# 2. link inputs and create directories (only --init links meta files; done for eaggl_capped__cfde_2026_10_05)
 lap_run --init && lap_run --mkdir && lap_run --check
 
 # 3. inputs (never add --only here: the project-level fan-ins would shrink)
 lap_run --only-cmd '^(prep_|collection_)' --bsub
 
-# 4. smoke test, then everything
-#    Full run: per-trait + all-factor projections, relabel, collect. Takes >24 h because of the
-#    all-factor job, so start it detached from the terminal.
-lap_run --only '^(2hrG|T2D|Ap-LM)$' --only-cmd '^trait_' --bsub
-lap_run --only-cmd '^betas_index_cmd$' && lap_run --only '^(2hrG|T2D|Ap-LM)$' --only-cmd '^betas_' --bsub
-nohup setsid perl /humgen/diabetes/users/chase/lap/trunk/bin/run.pl --meta config/cfde_projection.meta --bsub \
-    > log/run_full.$(date +%Y%m%d_%H%M%S).txt 2>&1 < /dev/null &
+# 4. smoke test (3 traits), then every trait: projections, gene-set betas, collect
+lap_run --only '^(2hrG|T2D|Ap-LM)$' --only-cmd '^(trait_|betas_)' --bsub
+lap_run --only-cmd '^(trait_|betas_|collect_)' --bsub
+
+# 5. the release build (a cluster job; files only)
+lap_run --only-cmd '^release_build_cmd$' --bsub
 ```
 
-A full run ends with the release build, which only writes files. Publishing to the app is always a separate
-command run by hand ([Reference release](#reference-release-release_-stage)).
+Publishing to the app is always a separate command run by hand ([Reference release](#reference-release-release_-stage)).
 
 **Cluster behaviour**
-- `max_sge_batch=1` turns off UGER job arrays. LAP otherwise bundles every ready command into one array with `-tc 1000`, and `max_jobs` counts an array as a single job. With arrays off, `max_jobs=50` caps the running tasks.
-- **Measured resources:** per-trait eaggl runs peak at 25.0 GB `maxvmem` whatever K, taking 37 s (K=1) to ~12 min (K=13). Annotation takes ~16 s and 250 MB.
+- `max_sge_batch=1` turns off UGER job arrays. LAP otherwise bundles every ready command into one array with `-tc 1000`, and `max_jobs` counts an array as a single job. With arrays off, `max_jobs=50` caps the running tasks; raise it (in the cfg) if the cluster gives you more.
+- A per-trait projection that is killed resumes from its finished chunks when LAP reruns it (`traits/<trait>/eaggl_chunks/`).
 
 
 **Tests**
@@ -153,16 +161,6 @@ command run by hand ([Reference release](#reference-release-release_-stage)).
 The backend venv runs them too (`../services/backend/.venv/bin/python`). `test_release_stage.py` also checks that
 every flag `release_build_cmd` passes exists in the backend CLI (it builds the CLI's parser with the backend venv;
 nothing connects anywhere).
-
-**Checking the all-factor run against the per-trait runs.** The marginal loadings must match exactly. The joint loadings are summarised by their correlation.
-
-```bash
-/humgen/diabetes2/users/chase/projects/pigean/.venv/bin/python -B scripts/projection_workflow.py compare-global \
-    --trait-long-file out/projects/eaggl_capped__cfde_2026_09_28/traits/T2D/T2D.cfde_projection.long.tsv.gz \
-    --global-joint-file out/projects/eaggl_capped__cfde_2026_09_28/eaggl_capped__cfde_2026_09_28.all_factors.joint.by_factor_id.tsv.gz \
-    --global-marginal-file out/projects/eaggl_capped__cfde_2026_09_28/eaggl_capped__cfde_2026_09_28.all_factors.marginal.by_factor_id.tsv.gz \
-    --output-file compare_global.tsv
-```
 
 **LAP operating notes**
 - Write `\$` in cfg commands wherever the shell needs a literal `$`.
@@ -289,19 +287,19 @@ collections and gene sets, per-library top projections, DAPPER provenance (nodes
 snapshots and the vectors. Design, file formats and the one-time migration from the old reload:
 [../docs/reference-release.md](../docs/reference-release.md).
 
-**Build** (`release_build_cmd`, a project-level `local cmd`; files only, about 10 minutes). It writes
+**Build** (`release_build_cmd`, a project-level cluster job with 32 GB; files only). It writes
 `out/projects/<project>/release/files/` and the JSON result `<project>.release.json`. It is a fan-in over all 711
 traits, so never run it under `--only`:
 
 ```bash
-lap_run --only-cmd '^release_build_cmd$'
+lap_run --only-cmd '^release_build_cmd$' --bsub
 ```
 
-It reads the LAP outputs, the per-trait long files (for the per-library ranks), the per-trait gene-set betas, the collection YAMLs, the CFDE
-snapshot vectors (`$cfde_embeddings_dir`) and the vector cache `raw/reference_vector_cache.sqlite` (factor-label and
-DisMech context vectors keyed by the sha256 of their text, seeded once from Aurora with
-`../scripts/reference_migration.py export-vectors`). Only text missing from the cache is embedded, with
-`EMBEDDING_SERVICE_URL` from the repository `.env`.
+It reads the LAP outputs, the per-trait long files (per-library ranks), the per-trait gene-set betas, the collection
+YAMLs and the vector cache `raw/reference_vector_cache.sqlite` (factor-label and DisMech context vectors keyed by the
+sha256 of their text, seeded once from Aurora with `../scripts/reference_migration.py export-vectors`). Gene sets are
+not embedded. Only factor labels missing from the cache are embedded, with `EMBEDDING_SERVICE_URL` from the repository
+`.env`.
 
 **Publish** (by hand, from this host; about 5 minutes per environment):
 

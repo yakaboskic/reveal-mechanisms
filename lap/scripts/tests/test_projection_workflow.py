@@ -282,21 +282,25 @@ class EndToEndTest(unittest.TestCase):
                        "--trait-kpn-map-file", p("out", "trait_kpn_map.tsv"), "--loading-variant", "capped",
                        "--output-file", p("out", "all_factors.tsv.gz"),
                        "--output-factor-index-file", p("out", "factor_index.tsv")])
+        # A clean checkout standing in for the pinned pigean clone (project-trait checks it like record-pigean-commit).
+        cls.repo = p("pigean")
+        write(os.path.join(cls.repo, "src", "eaggl", "x.py"), "x = 1\n")
+        subprocess.run(["git", "init", "-q", cls.repo], check=True)
+        git(cls.repo, "add", "-A")
+        git(cls.repo, "commit", "-qm", "c")
+        cls.head = subprocess.run(["git", "-C", cls.repo, "rev-parse", "HEAD"], stdout=subprocess.PIPE,
+                                  universal_newlines=True).stdout.strip()
+        # Chunks of 3: the 4 gene sets are projected as 3 + 1.
+        cls.check_run(["chunk-annotations", "--annotations-gmt-file", p("out", "annotations.gmt.gz"),
+                       "--gene-set-index-file", p("out", "gene_set_index.tsv.gz"), "--chunk-size", "3",
+                       "--output-dir", p("out", "chunks"), "--output-file", p("out", "chunks.tsv")])
         for trait in KPN_IDS:
             d = lambda name: p("out", trait, name)
             os.makedirs(p("out", trait))
             cls.check_run(["trait-factors", "--all-factors-file", p("out", "all_factors.tsv.gz"),
                            "--factor-index-file", p("out", "factor_index.tsv"), "--trait", trait,
                            "--output-file", d("factors.tsv.gz"), "--output-factor-index-file", d("factor_index.tsv")])
-            cls.run_eaggl(d("factors.tsv.gz"), d(""))
-            cls.check_run(["annotate-projection", "--joint-file", d("joint.tsv.gz"), "--marginal-file", d("marginal.tsv.gz"),
-                           "--trait-factors-file", d("factors.tsv.gz"), "--trait-factor-index-file", d("factor_index.tsv"),
-                           "--gene-set-index-file", p("out", "gene_set_index.tsv.gz"),
-                           "--trait-kpn-map-file", p("out", "trait_kpn_map.tsv"), "--trait", trait,
-                           "--kpn-trait-id", KPN_IDS[trait], "--params-file", d("params.tsv"),
-                           "--pigean-commit-file", d("commit.txt"), "--expected-pigean-commit", FAKE_COMMIT,
-                           "--loading-variant", "capped", "--seed", "1", "--top-n", "2", "--output-long-file", d("long.tsv.gz"), "--output-top-file", d("top.tsv.gz"),
-                           "--output-qc-file", d("qc.tsv")])
+            cls.check_run(cls.project_args(trait, p("out", "chunks.tsv"), d))
         os.makedirs(p("out", "global"))
         cls.run_eaggl(p("out", "all_factors.tsv.gz"), p("out", "global", ""))
         g = lambda name: p("out", "global", name)
@@ -308,7 +312,7 @@ class EndToEndTest(unittest.TestCase):
                        "--output-marginal-file", g("marginal.by_factor_id.tsv.gz"), "--output-qc-file", g("qc.tsv")])
         cls.check_run(["collect"] + sum((["--qc-file", p("out", t, "qc.tsv"), "--top-file", p("out", t, "top.tsv.gz")]
                                          for t in KPN_IDS), [])
-                      + ["--trait-kpn-map-file", p("out", "trait_kpn_map.tsv"), "--expected-pigean-commit", FAKE_COMMIT,
+                      + ["--trait-kpn-map-file", p("out", "trait_kpn_map.tsv"), "--expected-pigean-commit", cls.head,
                          "--output-manifest-file", p("out", "manifest.tsv"), "--output-top-file", p("out", "top.tsv.gz")])
         cls.check_run(["compare-global"] + sum((["--trait-long-file", p("out", t, "long.tsv.gz")] for t in KPN_IDS), [])
                       + ["--global-joint-file", g("joint.by_factor_id.tsv.gz"),
@@ -317,6 +321,20 @@ class EndToEndTest(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.tmp.cleanup()
+
+    @classmethod
+    def project_args(cls, trait, chunks_file, d, kpn_trait_id=None):
+        """The flags of trait_project_cmd in cfde_projection.cfg."""
+        p = cls.fx.p
+        return ["project-trait", "--python", sys.executable, "--pigean-src", PIGEAN_SRC, "--repo-dir", cls.repo,
+                "--expected-pigean-commit", cls.head, "--chunks-file", chunks_file, "--trait-factors-file", d("factors.tsv.gz"),
+                "--trait-factor-index-file", d("factor_index.tsv"), "--gene-map-file", p("out", "case.gene.map"),
+                "--gene-set-index-file", p("out", "gene_set_index.tsv.gz"), "--trait-kpn-map-file", p("out", "trait_kpn_map.tsv"),
+                "--trait", trait, "--kpn-trait-id", kpn_trait_id or KPN_IDS[trait], "--loading-variant", "capped",
+                "--seed", "1", "--top-n", "2", "--work-dir", d("eaggl_chunks"), "--output-long-file", d("long.tsv.gz"),
+                "--output-top-file", d("top.tsv.gz"), "--output-qc-file", d("qc.tsv"), "--output-commit-file", d("commit.txt"),
+                "--output-params-file", d("params.tsv"), "--output-warnings-file", d("warnings.txt"),
+                "--output-log-file", d("eaggl.log")]
 
     @staticmethod
     def check_run(argv):
@@ -417,7 +435,7 @@ class EndToEndTest(unittest.TestCase):
         self.assertEqual([(r["trait"], r["kpn_trait_id"], r["aligned_genes"], r["qc_pass"]) for r in manifest],
                          [("Solo", KPN_IDS["Solo"], str(len(GENES)), "True"), ("T-one", KPN_IDS["T-one"], str(len(GENES)), "True")])
         top = read_rows(self.fx.p("out", "top.tsv.gz"))
-        self.assertTrue(all(int(r["joint_rank_in_factor"]) <= 2 or int(r["marginal_rank_in_factor"]) <= 2 for r in top))
+        self.assertTrue(all(int(r["joint_rank_in_library"]) <= 2 or int(r["marginal_rank_in_library"]) <= 2 for r in top))
         self.assertIn("set a one", {r["gene_set_name"] for r in top})
 
     def test_global_projection_relabelled_and_marginal_matches_per_trait(self):
@@ -428,18 +446,45 @@ class EndToEndTest(unittest.TestCase):
         compare = read_rows(self.fx.p("out", "global", "compare.tsv"))
         self.assertEqual({r["trait"]: r["marginal_equal"] for r in compare}, {"T-one": "True", "Solo": "True"})
 
-    def test_annotate_rejects_a_wrong_kpn_id(self):
-        p, d = self.fx.p, lambda name: self.fx.p("out", "Solo", name)
-        code, err = run(["annotate-projection", "--joint-file", d("joint.tsv.gz"), "--marginal-file", d("marginal.tsv.gz"),
-                         "--trait-factors-file", d("factors.tsv.gz"), "--trait-factor-index-file", d("factor_index.tsv"),
-                         "--gene-set-index-file", p("out", "gene_set_index.tsv.gz"),
-                         "--trait-kpn-map-file", p("out", "trait_kpn_map.tsv"), "--trait", "Solo",
-                         "--kpn-trait-id", KPN_IDS["T-one"], "--params-file", d("params.tsv"),
-                         "--pigean-commit-file", d("commit.txt"), "--expected-pigean-commit", FAKE_COMMIT,
-                         "--loading-variant", "capped", "--seed", "1", "--output-long-file", p("out", "x.tsv.gz"), "--output-top-file", p("out", "y.tsv.gz"),
-                         "--output-qc-file", p("out", "z.tsv")])
+    def test_project_trait_rejects_a_wrong_kpn_id(self):
+        p = self.fx.p
+        d = lambda name: p("out", "Solo", name) if name in ("factors.tsv.gz", "factor_index.tsv") else p("out", "wrong-kpn", name)
+        code, err = run(self.project_args("Solo", p("out", "chunks.tsv"), d, KPN_IDS["T-one"]))
         self.assertEqual(code, 1)
         self.assertIn("KPN id for Solo disagrees", err)
+        self.assertFalse(os.path.exists(p("out", "wrong-kpn")))  # refused before any chunk ran
+
+    def test_chunks_cover_the_index_in_order(self):
+        rows = read_rows(self.fx.p("out", "chunks.tsv"))
+        self.assertEqual([(r["chunk"], r["first_row"], r["n_gene_sets"]) for r in rows], [("chunk_00001", "0", "3"), ("chunk_00002", "3", "1")])
+        self.assertEqual([r["first_gene_set_id"] for r in rows], [ID_A1, ID_B2])
+
+    def test_chunked_projection_equals_one_chunk_and_resumes(self):
+        p = self.fx.p
+        os.makedirs(p("out", "single", "T-one"))
+        self.check_run(["chunk-annotations", "--annotations-gmt-file", p("out", "annotations.gmt.gz"),
+                        "--gene-set-index-file", p("out", "gene_set_index.tsv.gz"), "--chunk-size", "100",
+                        "--output-dir", p("out", "single", "chunks"), "--output-file", p("out", "single", "chunks.tsv")])
+        d = lambda name: p("out", "single", "T-one", name) if name not in ("factors.tsv.gz", "factor_index.tsv") else p("out", "T-one", name)
+        args = self.project_args("T-one", p("out", "single", "chunks.tsv"), d) + ["--keep-work-dir"]
+        self.check_run(args)
+        chunked = {(r["factor_id"], r["gene_set_id"]): r for r in self.long_rows("T-one")}
+        single = {(r["factor_id"], r["gene_set_id"]): r for r in read_rows(d("long.tsv.gz"))}
+        self.assertEqual(set(chunked), set(single))
+        for key, row in single.items():
+            self.assertEqual(row["marginal_loading"], chunked[key]["marginal_loading"])
+            self.assertAlmostEqual(float(row["joint_loading"]), float(chunked[key]["joint_loading"]), delta=1e-3)
+        # The work directory was kept: a rerun reuses the finished chunk.
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(pw.main(args), 0)
+        self.assertIn("(0 run now)", out.getvalue())
+
+    def test_library_ranks_restrict_the_factor_order_to_the_library(self):
+        for row in self.long_rows("T-one"):
+            library = [r for r in self.long_rows("T-one") if r["factor_id"] == row["factor_id"] and r["library"] == row["library"]]
+            expected = 1 + sum(1 for r in library if int(r["joint_rank_in_factor"]) < int(row["joint_rank_in_factor"]))
+            self.assertEqual(int(row["joint_rank_in_library"]), expected)
 
 
 class GeneSetBetasTest(unittest.TestCase):

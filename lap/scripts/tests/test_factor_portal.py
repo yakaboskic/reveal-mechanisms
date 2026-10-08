@@ -89,8 +89,11 @@ def projection_rows():
         for factor_id, label, _ in factors:
             for kind in (0, 1):
                 order = sorted(GENE_SETS, key=lambda g: (-values[factor_id, g[0]][kind], g[0]))
+                counts = {}
                 for rank, g in enumerate(order, 1):
                     values[factor_id, g[0], kind] = rank
+                    counts[COLLECTIONS[g[2]][1]] = counts.get(COLLECTIONS[g[2]][1], 0) + 1
+                    values[factor_id, g[0], kind, "library"] = counts[COLLECTIONS[g[2]][1]]
             for gs_id, name, coll, _ in GENE_SETS:
                 joint, marg = values[factor_id, gs_id]
                 rows.append({"trait": trait, "kpn_trait_id": TRAITS[trait][0], "factor_id": factor_id,
@@ -99,7 +102,9 @@ def projection_rows():
                              "library": COLLECTIONS[coll][1], "joint_loading": g4(joint), "marginal_loading": g4(marg),
                              "joint_rank_in_factor": values[factor_id, gs_id, 0],
                              "marginal_rank_in_factor": values[factor_id, gs_id, 1],
-                             "is_joint_top_factor": int(best[gs_id] == factor_id)})
+                             "is_joint_top_factor": int(best[gs_id] == factor_id),
+                             "joint_rank_in_library": values[factor_id, gs_id, 0, "library"],
+                             "marginal_rank_in_library": values[factor_id, gs_id, 1, "library"]})
     return rows
 
 

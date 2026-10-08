@@ -17,13 +17,12 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import build_meta_yaml as bm  # noqa: E402
-from projection_workflow import WorkflowError  # noqa: E402
 
 CFG = os.path.join(bm.LAP_DIR, "config", "cfde_projection.cfg")
 META_YAML = os.path.join(bm.LAP_DIR, "config", "cfde_projection.meta.yaml")
 META = os.path.join(bm.LAP_DIR, "config", "cfde_projection.meta")
 LAP_COMMON_CFG = "/humgen/diabetes/users/chase/lap/trunk/config/common.cfg"
-META_KEYS = {"reveal_repo_dir", "cfde_embeddings_dir", "pigean_gene_stats_file", "base_dir", "unix_out_dir", "log_dir", "raw_dir",
+META_KEYS = {"reveal_repo_dir", "cfde_libraries", "pigean_gene_stats_file", "base_dir", "unix_out_dir", "log_dir", "raw_dir",
              "eaggl_share_dir", "cfde_snapshot", "cfde_dir", "kpn_dir", "lap_home", "web_out_dir", "default_umask"}
 BACKEND_PYTHON = os.path.join(bm.REPO_DIR, "services", "backend", ".venv", "bin", "python")
 COMMAND = "$reveal_python -B -m reveal_backend.reference_release build "
@@ -79,36 +78,6 @@ def write(path, text):
     return path
 
 
-class FindCfdeEmbeddingsTest(unittest.TestCase):
-    def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(self.tmp.cleanup)
-        self.root = self.tmp.name
-
-    def model(self, name, vectors="vectors.float16.npy"):
-        write(os.path.join(self.root, "embeddings", name, "rows.tsv"), "row\n")
-        if vectors:
-            write(os.path.join(self.root, "embeddings", name, vectors), "")
-
-    def test_single_model_is_found(self):
-        self.model("org-Model")
-        self.assertEqual(bm.find_cfde_embeddings(self.root), "org-Model")
-
-    def test_several_models_need_a_choice(self):
-        self.model("a-model")
-        self.model("b-model", "vectors.float32.npy")
-        with self.assertRaises(WorkflowError):
-            bm.find_cfde_embeddings(self.root)
-        self.assertEqual(bm.find_cfde_embeddings(self.root, "b-model"), "b-model")
-
-    def test_missing_vectors_fail(self):
-        self.model("a-model", vectors=None)
-        with self.assertRaises(WorkflowError):
-            bm.find_cfde_embeddings(self.root, "a-model")
-        with self.assertRaises(WorkflowError):
-            bm.find_cfde_embeddings(os.path.join(self.root, "nowhere"))
-
-
 class ReleaseCfgTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -129,7 +98,7 @@ class ReleaseCfgTest(unittest.TestCase):
 
     def test_release_build_is_the_only_release_command_and_runs_once_per_project(self):
         prefixes, _, postfix = self.cmds["release_build_cmd"]
-        self.assertEqual((prefixes, postfix), (["local", "cmd"], "class_level project"))
+        self.assertEqual((prefixes, postfix), (["cmd"], "class_level project rusage_mod $release_build_mem"))
         self.assertEqual(sorted(key for key in self.cmds if key.startswith("release_")), ["release_build_cmd"])
         self.assertEqual(sorted(key for key in self.cmds if key.startswith("db_")), [])  # the reload stage is gone
         self.assertNotRegex(read(CFG), r"\breload_target\b")
@@ -177,7 +146,7 @@ class ReleaseCfgTest(unittest.TestCase):
         self.assertIn("--out !{key::release_files_dir} ", self.value)
         self.assertEqual(self.decl["reference_vector_cache"][1], "$base_dir/raw/reference_vector_cache.sqlite")
         self.assertRegex(self.decl["release_build_workers"][1], r"^[1-9][0-9]*$")
-        for key in ("cfde_embeddings_dir", "reference_vector_cache", "top_n_gene_sets", "release_build_workers"):
+        for key in ("reference_vector_cache", "top_n_gene_sets", "release_build_workers"):
             self.assertIn("$" + key + " ", self.value)
 
     def test_command_text_has_no_unsubstituted_instance_placeholders(self):
@@ -268,7 +237,8 @@ class GeneratedMetaTest(unittest.TestCase):
     def test_meta_carries_the_release_keys(self):
         meta = read(META)
         self.assertIn("!key reveal_repo_dir %s\n" % bm.REPO_DIR, meta)
-        self.assertRegex(meta, r"\n!key cfde_embeddings_dir \S+/embeddings/\S+\n")
+        self.assertRegex(meta, r"\n!key cfde_libraries [A-Za-z0-9_,]+\n")
+        self.assertNotIn("GaultonLab", re.search(r"\n!key cfde_libraries (\S+)\n", meta).group(1))
         self.assertEqual(set(re.findall(r"^!key (\S+)", meta, re.M)), META_KEYS)
 
     def test_no_reload_targets_remain(self):

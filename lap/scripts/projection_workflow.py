@@ -16,8 +16,10 @@ Standard library only; runs on Python 3.9.
 """
 
 import argparse
+from array import array
 import csv
 import gzip
+import hashlib
 import io
 import math
 import os
@@ -242,6 +244,21 @@ COLLECTION_GENE_SET_COLUMNS = ["gene_set_id", "gene_set_name", "collection_id", 
                                "gmt_row", "n_genes"]
 
 
+def cmd_cfde_index(args):
+    """The release's rows of the snapshot's CFDE index: the collections of --libraries, in snapshot order."""
+    wanted = [library for library in args.libraries.split(",") if library]
+    check(wanted and len(set(wanted)) == len(wanted), "--libraries must list distinct libraries: %r" % args.libraries)
+    with open_text(args.index_file) as fh:
+        reader = csv.DictReader(fh, delimiter="\t", quoting=csv.QUOTE_NONE)
+        columns, rows = list(reader.fieldnames or []), list(reader)
+    check("library" in columns and "label" in columns, "%s is not a CFDE index" % args.index_file)
+    missing = sorted(set(wanted) - {row["library"] for row in rows})
+    check(not missing, "Libraries %s are not in %s" % (missing, args.index_file))
+    kept = [row for row in rows if row["library"] in set(wanted)]
+    write_tsv(args.output_file, columns, kept)
+    print("%d of %d collections kept from %d libraries" % (len(kept), len(rows), len(wanted)))
+
+
 def cmd_collection_index(args):
     check(args.collection_id.startswith(COLLECTION_ID_PREFIX), "Malformed collection id %r" % args.collection_id)
     expected_yaml = "GeneSetCollection.%s.yaml" % args.collection_id[len(COLLECTION_ID_PREFIX):]
@@ -288,16 +305,19 @@ def read_gene_list(path):
 
 
 def cmd_build_annotations(args):
+    """Concatenate the collections' id GMTs into eaggl's X input and index every gene set. Two streaming passes over
+    the GMTs (case-only gene map, then index rows), so memory holds one row per gene set, never their genes."""
     index_rows = OrderedDict((r["label"], r) for r in read_tsv(args.cfde_index_file))
     universe = set(read_gene_list(args.eaggl_genes_file))
 
-    gene_sets = OrderedDict()
+    gene_sets = {}  # gene_set_id -> (label, gene_set_name, collection_id, gmt_row, n_genes)
     for path in args.collection_gene_sets_file:
         for row in read_tsv(path):
             check(row["gene_set_id"] not in gene_sets, "Gene-set id %s appears in more than one collection"
                   % row["gene_set_id"])
-            gene_sets[row["gene_set_id"]] = row
-    labels = {row["cfde_label"] for row in gene_sets.values()}
+            gene_sets[row["gene_set_id"]] = (row["cfde_label"], row["gene_set_name"], row["collection_id"], row["gmt_row"],
+                                             row["n_genes"])
+    labels = {value[0] for value in gene_sets.values()}
     check(labels == set(index_rows), "Collections present (%d) differ from the CFDE index (%d); missing: %s"
           % (len(labels), len(index_rows), sorted(set(index_rows) - labels)[:10]))
 
@@ -307,66 +327,69 @@ def cmd_build_annotations(args):
         with open_text(path) as fh:
             ids = [line.split(None, 1)[0] for line in fh if line.strip()]
         check(ids and ids[0] in gene_sets, "%s does not match any collection index" % path)
-        label = gene_sets[ids[0]]["cfde_label"]
+        label = gene_sets[ids[0]][0]
         check(label not in gmt_by_label, "Two GMTs for collection %s" % label)
-        check(all(gene_sets.get(i, {}).get("cfde_label") == label for i in ids),
-              "%s mixes gene sets from several collections" % path)
+        check(all(gene_sets.get(i, ("",))[0] == label for i in ids), "%s mixes gene sets from several collections" % path)
         check(len(ids) == int(index_rows[label]["n_sets"]), "%s has %d gene sets; the CFDE index says %s"
               % (label, len(ids), index_rows[label]["n_sets"]))
-        gmt_by_label[label] = (path, ids)
+        gmt_by_label[label] = (path, len(ids))
     check(set(gmt_by_label) == set(index_rows), "Missing GMTs for %s" % sorted(set(index_rows) - set(gmt_by_label))[:10])
-    check(sum(len(ids) for _, ids in gmt_by_label.values()) == len(gene_sets),
-          "GMT gene-set count differs from the collection indexes")
+    check(sum(n for _, n in gmt_by_label.values()) == len(gene_sets), "GMT gene-set count differs from the collection indexes")
 
-    # Case-only gene map: a CFDE symbol absent from EAGGL whose upper-case form is an EAGGL gene.
+    def memberships():
+        for label in sorted(gmt_by_label):
+            with open_text(gmt_by_label[label][0]) as fh:
+                for line in fh:
+                    if line.strip():
+                        yield label, line.split(None, 1)[0], eaggl_genes(line)
+
+    # Pass 1, case-only gene map: a CFDE symbol absent from EAGGL whose upper-case form is an EAGGL gene.
     upper_to_eaggl = {}
     for gene in universe:
         upper_to_eaggl.setdefault(gene.upper(), set()).add(gene)
-    case_map = {}
-    membership = []  # (label, gene_set_id, genes)
-    for label in sorted(gmt_by_label):
-        path, _ = gmt_by_label[label]
-        with open_text(path) as fh:
-            for line in fh:
-                if line.strip():
-                    membership.append((label, line.split(None, 1)[0], eaggl_genes(line)))
-    for _, _, genes in membership:
+    case_map, outside = {}, set()
+    for _, _, genes in memberships():
         for gene in genes:
-            if gene not in universe and gene not in case_map:
+            if gene not in universe and gene not in case_map and gene not in outside:
                 targets = upper_to_eaggl.get(gene.upper(), set())
                 if len(targets) == 1:
                     case_map[gene] = next(iter(targets))
+                else:
+                    outside.add(gene)
 
-    index_out = []
+    # Pass 2, the gene-set index and the per-library overlap statistics.
     library_stats = defaultdict(lambda: {"collections": set(), "sets": 0, "genes": set(), "entries": 0,
                                          "entries_in_universe": 0, "universe_sizes": []})
-    for label, gene_set_id, genes in membership:
-        mapped = {case_map.get(g, g) for g in genes}
-        in_universe = len(mapped & universe)
-        check(in_universe >= 1, "%s (%s) shares no gene with the EAGGL factors and would be dropped by eaggl"
-              % (gene_set_id, label))
-        row, cfde = gene_sets[gene_set_id], index_rows[label]
-        check(row["collection_id"] == cfde["collection_id"], "Collection id for %s differs from the CFDE index" % label)
-        index_out.append({"gene_set_id": gene_set_id, "gene_set_name": row["gene_set_name"],
-                          "collection_id": row["collection_id"], "cfde_label": label, "library": cfde["library"],
-                          "partition": cfde["partition"], "model": cfde["model"], "comparison": cfde["comparison"],
-                          "program": cfde["program"], "gmt_row": row["gmt_row"], "n_genes": row["n_genes"],
-                          "n_genes_in_eaggl_universe": in_universe, "cfde_snapshot": args.cfde_snapshot})
-        for key in (cfde["library"], "ALL"):
-            stats = library_stats[key]
-            stats["collections"].add(label)
-            stats["sets"] += 1
-            stats["genes"] |= genes
-            stats["entries"] += len(genes)
-            stats["entries_in_universe"] += sum(1 for g in genes if case_map.get(g, g) in universe)
-            stats["universe_sizes"].append(in_universe)
+    written = 0
+    with open_text(args.output_gene_set_index_file, "w") as index_fh:
+        index_fh.write(tsv_line(GENE_SET_INDEX_COLUMNS))
+        for label, gene_set_id, genes in memberships():
+            mapped = {case_map.get(g, g) for g in genes}
+            in_universe = len(mapped & universe)
+            check(in_universe >= 1, "%s (%s) shares no gene with the EAGGL factors and would be dropped by eaggl"
+                  % (gene_set_id, label))
+            _, name, collection_id, gmt_row, n_genes = gene_sets[gene_set_id]
+            cfde = index_rows[label]
+            check(collection_id == cfde["collection_id"], "Collection id for %s differs from the CFDE index" % label)
+            index_fh.write(tsv_line([gene_set_id, name, collection_id, label, cfde["library"], cfde["partition"],
+                                     cfde["model"], cfde["comparison"], cfde["program"], gmt_row, n_genes, in_universe,
+                                     args.cfde_snapshot]))
+            written += 1
+            entries_in_universe = sum(1 for g in genes if case_map.get(g, g) in universe)
+            for key in (cfde["library"], "ALL"):
+                stats = library_stats[key]
+                stats["collections"].add(label)
+                stats["sets"] += 1
+                stats["genes"] |= genes
+                stats["entries"] += len(genes)
+                stats["entries_in_universe"] += entries_in_universe
+                stats["universe_sizes"].append(in_universe)
 
     with DeterministicGzipWriter(args.output_gmt_file) as out:
         for label in sorted(gmt_by_label):
             with open(gmt_by_label[label][0], "rb") as fh:
                 data = fh.read()
             out.write(data if data.endswith(b"\n") else data + b"\n")
-    write_tsv(args.output_gene_set_index_file, GENE_SET_INDEX_COLUMNS, index_out)
     with open(args.output_gene_map_file, "w") as fh:
         for gene in sorted(case_map):
             fh.write("%s\t%s\n" % (gene, case_map[gene]))
@@ -386,7 +409,7 @@ def cmd_build_annotations(args):
                        "min_set_genes_in_universe": sizes[0], "median_set_genes_in_universe": sizes[len(sizes) // 2]})
     write_tsv(args.output_overlap_report_file, list(report[0].keys()), report)
     print("Wrote %d gene sets from %d collections; %d case-only gene map entries"
-          % (len(index_out), len(gmt_by_label), len(case_map)))
+          % (written, len(gmt_by_label), len(case_map)))
 
 
 def read_gene_set_index(path):
@@ -557,25 +580,128 @@ def read_projection(path, column_to_factor_id, gene_set_ids):
     return result, label_failures
 
 
+# Ranks are 1-based ordinal (highest loading first, ties by gene-set id): within the factor over every gene set, and
+# within the gene set's library (the same order restricted to the library).
 LONG_COLUMNS = ["trait", "kpn_trait_id", "factor_id", "factor", "factor_label", "gene_set_id", "collection_id",
                 "cfde_label", "library", "joint_loading", "marginal_loading", "joint_rank_in_factor",
-                "marginal_rank_in_factor", "is_joint_top_factor"]
+                "marginal_rank_in_factor", "is_joint_top_factor", "joint_rank_in_library", "marginal_rank_in_library"]
 TOP_COLUMNS = LONG_COLUMNS[:6] + ["gene_set_name"] + LONG_COLUMNS[6:]
 QC_COLUMNS = ["trait", "kpn_trait_id", "kpn_release", "n_factors", "n_gene_sets_index", "n_gene_sets_joint",
               "n_gene_sets_marginal", "ids_equal_index", "label_check_failures", "k1_joint_marginal_max_absdiff",
               "aligned_genes", "seed", "loading_variant", "pigean_commit", "qc_pass"]
 
 
-def ranks(values):
-    """1-based ordinal rank, highest loading first; ties broken by gene-set id for determinism."""
-    order = sorted(range(len(values)), key=lambda i: (-values[i][0], values[i][1]))
-    result = [0] * len(values)
+CHUNK_COLUMNS = ["chunk", "file", "first_row", "n_gene_sets", "first_gene_set_id", "last_gene_set_id", "sha256"]
+CHUNK_FILE_RE = re.compile(r"^chunk_\d{5}\.gmt\.gz$")
+CHUNK_OUTPUTS = (".joint.tsv.gz", ".marginal.tsv.gz", ".params.tsv", ".warnings.txt", ".log")
+
+
+def sha256_file(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for block in iter(lambda: fh.read(1 << 20), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def gene_set_index_rows(path):
+    """Gene-set index rows in index order, streamed (the index can hold millions of gene sets)."""
+    with open_text(path) as fh:
+        reader = csv.reader(fh, delimiter="\t", quoting=csv.QUOTE_NONE)
+        check(next(reader, None) == GENE_SET_INDEX_COLUMNS, "Unexpected columns in %s" % path)
+        for row in reader:
+            check(len(row) == len(GENE_SET_INDEX_COLUMNS), "Malformed row in %s" % path)
+            yield dict(zip(GENE_SET_INDEX_COLUMNS, row))
+
+
+def cmd_chunk_annotations(args):
+    """Split eaggl's X input into GMTs of at most --chunk-size gene sets, in gene-set index order, and list them.
+
+    eaggl densifies its genes x gene-sets matrix, so a chunk bounds its memory. Each gene set's joint and marginal
+    loadings depend only on its own column and the factors, so projecting chunks gives the same loadings.
+    """
+    check(args.chunk_size >= 1, "--chunk-size must be positive")
+    ids = [row["gene_set_id"] for row in gene_set_index_rows(args.gene_set_index_file)]
+    os.makedirs(args.output_dir, exist_ok=True)
+    for name in os.listdir(args.output_dir):
+        if CHUNK_FILE_RE.match(name):
+            os.unlink(os.path.join(args.output_dir, name))
+    rows, lines, position = [], [], 0
+
+    def flush():
+        path = os.path.join(args.output_dir, "chunk_%05d.gmt.gz" % (len(rows) + 1))
+        with DeterministicGzipWriter(path) as out:
+            out.writelines(lines)
+        first = position - len(lines)
+        rows.append({"chunk": "chunk_%05d" % (len(rows) + 1), "file": os.path.abspath(path), "first_row": first,
+                     "n_gene_sets": len(lines), "first_gene_set_id": ids[first], "last_gene_set_id": ids[position - 1],
+                     "sha256": sha256_file(path)})
+        del lines[:]
+
+    with gzip.open(args.annotations_gmt_file, "rb") as fh:
+        for line in fh:
+            if not line.strip():
+                continue
+            gene_set_id = line.split(None, 1)[0].decode("utf-8")
+            check(position < len(ids) and gene_set_id == ids[position],
+                  "The annotations GMT and the gene-set index disagree at gene set %d (%s)" % (position + 1, gene_set_id))
+            lines.append(line if line.endswith(b"\n") else line + b"\n")
+            position += 1
+            if len(lines) == args.chunk_size:
+                flush()
+    if lines:
+        flush()
+    check(position == len(ids), "The annotations GMT has %d gene sets; the index has %d" % (position, len(ids)))
+    write_tsv(args.output_file, CHUNK_COLUMNS, rows)
+    print("%d gene sets in %d chunks of at most %d" % (position, len(rows), args.chunk_size))
+
+
+def run_eaggl_chunk(args, chunk_file, prefix):
+    """The eaggl factor flags of the per-trait projection, on one chunk; outputs are renamed into place on success."""
+    tmp = prefix + ".tmp"
+    env = dict(os.environ, PYTHONPATH=args.pigean_src, PYTHONDONTWRITEBYTECODE="1", OMP_NUM_THREADS="1",
+               OPENBLAS_NUM_THREADS="1", MKL_NUM_THREADS="1")
+    command = [args.python, "-B", "-m", "eaggl", "factor", "--factor-gene-clusters-in", args.trait_factors_file,
+               "--factor-gene-clusters-layout", "factors-by-genes", "--X-in", chunk_file, "--gene-map-in", args.gene_map_file,
+               "--gene-set-projection-mode", "both", "--gene-set-clusters-out", tmp + ".joint.tsv.gz",
+               "--gene-set-clusters-marginal-out", tmp + ".marginal.tsv.gz", "--factor-output-scope", "all",
+               "--cluster-row-min-max-loading", "0", "--seed", str(args.seed), "--hide-progress", "--hide-opts",
+               "--params-out", tmp + ".params.tsv", "--warnings-file", tmp + ".warnings.txt", "--log-file", tmp + ".log"]
+    proc = subprocess.run(command, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+    check(proc.returncode == 0, "eaggl failed on %s:\n%s" % (chunk_file, proc.stdout[-3000:]))
+    for suffix in CHUNK_OUTPUTS:
+        if os.path.exists(tmp + suffix):
+            os.replace(tmp + suffix, prefix + suffix)
+        else:
+            check(suffix == ".warnings.txt", "eaggl wrote no %s for %s" % (suffix, chunk_file))
+            open(prefix + suffix, "w").close()
+
+
+def library_ranks(values, ids, libraries, n_libraries):
+    """(rank in factor, rank in library) arrays: ordinal, highest value first, ties by gene-set id."""
+    order = sorted(range(len(values)), key=lambda i: (-values[i], ids[i]))
+    in_factor, in_library, counts = array("i", bytes(4 * len(values))), array("i", bytes(4 * len(values))), [0] * n_libraries
     for rank, i in enumerate(order, 1):
-        result[i] = rank
-    return result
+        in_factor[i] = rank
+        counts[libraries[i]] += 1
+        in_library[i] = counts[libraries[i]]
+    return in_factor, in_library
 
 
-def cmd_annotate_projection(args):
+def cmd_project_trait(args):
+    """Project every CFDE gene set onto one trait's factors, chunk by chunk, and merge the chunks.
+
+    Chunks are resumable: a chunk whose outputs and fingerprint (chunk, factors and gene map checksums, seed, pigean
+    commit) are in --work-dir is not rerun. After the merge, every factor gets ordinal ranks over all gene sets and
+    within each library. The long file then holds every factor's row for each gene set that is among the --top-n of
+    some factor in its library (joint or marginal); the top file holds the rows within that factor's own top --top-n.
+    The work directory is removed once the outputs are written.
+    """
+    head = git_output(args.repo_dir, "rev-parse", "HEAD")
+    check(head == args.expected_pigean_commit, "pigean checkout %s is at %s, expected %s" % (args.repo_dir, head, args.expected_pigean_commit))
+    status = subprocess.run(["git", "--no-optional-locks", "-C", args.repo_dir, "status", "--porcelain", "--untracked-files=all",
+                             "--", "src"], check=True, stdout=subprocess.PIPE, universal_newlines=True).stdout
+    check(not status.strip(), "pigean checkout %s has local changes under src/:\n%s" % (args.repo_dir, status))
     factors = read_factor_index(args.trait_factor_index_file, TRAIT_FACTOR_INDEX_COLUMNS)
     check(all(f["trait"] == args.trait for f in factors), "Factor index is not for trait %s" % args.trait)
     kpn = read_trait_kpn_map(args.trait_kpn_map_file)
@@ -583,55 +709,121 @@ def cmd_annotate_projection(args):
     check(kpn[args.trait]["kpn_trait_id"] == args.kpn_trait_id == factors[0]["kpn_trait_id"],
           "KPN id for %s disagrees: meta %s, map %s, factor index %s"
           % (args.trait, args.kpn_trait_id, kpn[args.trait]["kpn_trait_id"], factors[0]["kpn_trait_id"]))
-    gene_sets = read_gene_set_index(args.gene_set_index_file)
-    column_to_factor_id = OrderedDict((f["local_eaggl_column"], f["factor_id"]) for f in factors)
-
-    joint, joint_label_failures = read_projection(args.joint_file, column_to_factor_id, gene_sets)
-    marginal, marginal_label_failures = read_projection(args.marginal_file, column_to_factor_id, gene_sets)
-    label_failures = joint_label_failures + marginal_label_failures
-    check(label_failures == 0, "%d eaggl labels do not match the factor order for %s" % (label_failures, args.trait))
-
     with open_text(args.trait_factors_file) as fh:
         n_genes = len(fh.readline().rstrip("\n").split("\t")) - 1
-    params = read_params(args.params_file)
-    aligned = params.get("factor_projection_only_gene_set_aligned_genes", [NA])[-1]
-    check(aligned == str(n_genes), "eaggl aligned %s genes; the factor file has %d" % (aligned, n_genes))
-    check(params.get("gene_set_projection_mode", [NA])[-1] == "both", "eaggl did not run in both mode")
+    column_to_factor_id = OrderedDict((f["local_eaggl_column"], f["factor_id"]) for f in factors)
+    factor_position = {f["factor_id"]: k for k, f in enumerate(factors)}
+    K = len(factors)
 
-    k1_diff = NA
-    if len(factors) == 1:  # one factor: the joint update reduces exactly to the marginal formula
-        k1_diff = max(abs(float(joint[g][1][0]) - float(marginal[g][1][0])) for g in gene_sets)
-        check(k1_diff <= LOADING_ROUNDING_TOL, "K=1 joint and marginal loadings differ by %.3g for %s"
-              % (k1_diff, args.trait))
-        k1_diff = "%.3g" % k1_diff
+    ids, libraries, collections, labels, names, library_names = [], array("i"), [], [], [], {}
+    for row in gene_set_index_rows(args.gene_set_index_file):
+        ids.append(row["gene_set_id"])
+        libraries.append(library_names.setdefault(row["library"], len(library_names)))
+        collections.append(row["collection_id"]); labels.append(row["cfde_label"]); names.append(row["gene_set_name"])
+    library_of = {v: k for k, v in library_names.items()}
+    n = len(ids)
+    joint = [array("d", bytes(8 * n)) for _ in range(K)]
+    marginal = [array("d", bytes(8 * n)) for _ in range(K)]
+    top_factor, seen = array("i", [-1]) * n, bytearray(n)
 
-    ids = list(gene_sets)
+    chunks = read_tsv(args.chunks_file)
+    check(chunks and list(chunks[0].keys()) == CHUNK_COLUMNS, "Unexpected columns in %s" % args.chunks_file)
+    check(sum(int(c["n_gene_sets"]) for c in chunks) == n, "The chunks do not cover the gene-set index")
+    os.makedirs(args.work_dir, exist_ok=True)
+    fingerprint_base = "%s %s %s %s" % (sha256_file(args.trait_factors_file), sha256_file(args.gene_map_file), args.seed, head)
+    label_failures, k1_diff, rerun, params, warnings, logs = 0, 0.0, 0, None, [], []
+    for chunk in chunks:
+        first, size = int(chunk["first_row"]), int(chunk["n_gene_sets"])
+        chunk_ids = ids[first:first + size]
+        check(chunk_ids and (chunk_ids[0], chunk_ids[-1]) == (chunk["first_gene_set_id"], chunk["last_gene_set_id"]),
+              "%s does not match the gene-set index" % chunk["chunk"])
+        prefix = os.path.join(args.work_dir, chunk["chunk"])
+        fingerprint = "%s %s\n" % (chunk["sha256"], fingerprint_base)
+        done = prefix + ".done"
+        if not (os.path.exists(done) and open(done).read() == fingerprint
+                and all(os.path.exists(prefix + suffix) for suffix in CHUNK_OUTPUTS)):
+            check(sha256_file(chunk["file"]) == chunk["sha256"], "%s changed since it was listed" % chunk["file"])
+            run_eaggl_chunk(args, chunk["file"], prefix)
+            with open(done, "w") as fh:
+                fh.write(fingerprint)
+            rerun += 1
+        joint_rows, joint_failures = read_projection(prefix + ".joint.tsv.gz", column_to_factor_id, chunk_ids)
+        marginal_rows, marginal_failures = read_projection(prefix + ".marginal.tsv.gz", column_to_factor_id, chunk_ids)
+        label_failures += joint_failures + marginal_failures
+        chunk_params = read_params(prefix + ".params.tsv")
+        aligned = chunk_params.get("factor_projection_only_gene_set_aligned_genes", [NA])[-1]
+        check(aligned == str(n_genes), "eaggl aligned %s genes in %s; the factor file has %d" % (aligned, chunk["chunk"], n_genes))
+        check(chunk_params.get("gene_set_projection_mode", [NA])[-1] == "both", "eaggl did not run in both mode")
+        params = params or prefix + ".params.tsv"
+        positions = {gene_set_id: first + j for j, gene_set_id in enumerate(chunk_ids)}
+        for rows_, target in ((joint_rows, joint), (marginal_rows, marginal)):
+            for gene_set_id, (cluster_id, values) in rows_.items():
+                i = positions[gene_set_id]
+                for k, value in enumerate(values):
+                    number = float(value)
+                    check("%.4g" % number == value, "Loading %r of %s is not a %%.4g string" % (value, gene_set_id))
+                    target[k][i] = number
+                if target is joint:
+                    top_factor[i] = factor_position[cluster_id] if cluster_id else -1
+                    seen[i] = 1
+        if K == 1:
+            k1_diff = max([k1_diff] + [abs(joint[0][i] - marginal[0][i]) for i in range(first, first + size)])
+        with open(prefix + ".warnings.txt") as fh:
+            warnings.extend(line for line in fh if line.strip())
+        logs.append(prefix + ".log")
+    check(all(seen), "%d gene sets have no projection" % (n - sum(seen)))
+    check(label_failures == 0, "%d eaggl labels do not match the factor order for %s" % (label_failures, args.trait))
+    check(K != 1 or k1_diff <= LOADING_ROUNDING_TOL, "K=1 joint and marginal loadings differ by %.3g for %s" % (k1_diff, args.trait))
+
+    ranked, union = [], set()
+    for k in range(K):
+        joint_factor, joint_library = library_ranks(joint[k], ids, libraries, len(library_names))
+        marginal_factor, marginal_library = library_ranks(marginal[k], ids, libraries, len(library_names))
+        union.update(i for i in range(n) if joint_library[i] <= args.top_n or marginal_library[i] <= args.top_n)
+        ranked.append((joint_factor, joint_library, marginal_factor, marginal_library))
     with open_text(args.output_long_file, "w") as long_fh, open_text(args.output_top_file, "w") as top_fh:
         long_fh.write(tsv_line(LONG_COLUMNS))
         top_fh.write(tsv_line(TOP_COLUMNS))
         for k, factor in enumerate(factors):
-            joint_rank = ranks([(float(joint[g][1][k]), g) for g in ids])
-            marginal_rank = ranks([(float(marginal[g][1][k]), g) for g in ids])
-            for i in sorted(range(len(ids)), key=lambda i: joint_rank[i]):
-                gene_set = gene_sets[ids[i]]
+            joint_factor, joint_library, marginal_factor, marginal_library = ranked[k]
+            for i in sorted(union, key=lambda i: (library_of[libraries[i]], joint_library[i])):
                 row = {"trait": args.trait, "kpn_trait_id": args.kpn_trait_id, "factor_id": factor["factor_id"],
                        "factor": factor["factor"], "factor_label": factor["factor_label"], "gene_set_id": ids[i],
-                       "gene_set_name": gene_set["gene_set_name"], "collection_id": gene_set["collection_id"],
-                       "cfde_label": gene_set["cfde_label"], "library": gene_set["library"],
-                       "joint_loading": joint[ids[i]][1][k], "marginal_loading": marginal[ids[i]][1][k],
-                       "joint_rank_in_factor": joint_rank[i], "marginal_rank_in_factor": marginal_rank[i],
-                       "is_joint_top_factor": int(joint[ids[i]][0] == factor["factor_id"])}
+                       "gene_set_name": names[i], "collection_id": collections[i], "cfde_label": labels[i],
+                       "library": library_of[libraries[i]], "joint_loading": "%.4g" % joint[k][i],
+                       "marginal_loading": "%.4g" % marginal[k][i], "joint_rank_in_factor": joint_factor[i],
+                       "marginal_rank_in_factor": marginal_factor[i], "is_joint_top_factor": int(top_factor[i] == k),
+                       "joint_rank_in_library": joint_library[i], "marginal_rank_in_library": marginal_library[i]}
                 long_fh.write(tsv_line(row[c] for c in LONG_COLUMNS))
-                if joint_rank[i] <= args.top_n or marginal_rank[i] <= args.top_n:
+                if joint_library[i] <= args.top_n or marginal_library[i] <= args.top_n:
                     top_fh.write(tsv_line(row[c] for c in TOP_COLUMNS))
-    pigean_commit = read_pigean_commit(args.pigean_commit_file, args.expected_pigean_commit)
     qc = {"trait": args.trait, "kpn_trait_id": args.kpn_trait_id, "kpn_release": kpn[args.trait]["kpn_release"],
-          "n_factors": len(factors), "n_gene_sets_index": len(gene_sets), "n_gene_sets_joint": len(joint),
-          "n_gene_sets_marginal": len(marginal), "ids_equal_index": True, "label_check_failures": label_failures,
-          "k1_joint_marginal_max_absdiff": k1_diff, "aligned_genes": aligned, "seed": args.seed,
-          "loading_variant": args.loading_variant, "pigean_commit": pigean_commit, "qc_pass": True}
+          "n_factors": K, "n_gene_sets_index": n, "n_gene_sets_joint": sum(seen), "n_gene_sets_marginal": sum(seen),
+          "ids_equal_index": True, "label_check_failures": label_failures,
+          "k1_joint_marginal_max_absdiff": "%.3g" % k1_diff if K == 1 else NA, "aligned_genes": n_genes, "seed": args.seed,
+          "loading_variant": args.loading_variant, "pigean_commit": head, "qc_pass": True}
     write_tsv(args.output_qc_file, QC_COLUMNS, [qc])
-    print("%s: %d factors x %d gene sets annotated" % (args.trait, len(factors), len(gene_sets)))
+    with open(args.output_commit_file, "w") as fh:
+        fh.write(head + "\n")
+    with open(params) as src, open(args.output_params_file, "w") as dst:
+        dst.write(src.read())
+    with open(args.output_warnings_file, "w") as fh:
+        fh.writelines(sorted(set(warnings)))
+    with open(args.output_log_file, "w") as out:
+        for path in logs:
+            out.write("== %s\n" % os.path.basename(path)[:-len(".log")])
+            with open(path) as fh:
+                out.write(fh.read())
+    if not args.keep_work_dir:
+        for chunk in chunks:
+            for suffix in CHUNK_OUTPUTS + (".done",):
+                path = os.path.join(args.work_dir, chunk["chunk"] + suffix)
+                if os.path.exists(path):
+                    os.unlink(path)
+        if not os.listdir(args.work_dir):
+            os.rmdir(args.work_dir)
+    print("%s: %d factors x %d gene sets in %d chunks (%d run now); %d gene sets in the long file"
+          % (args.trait, K, n, len(chunks), rerun, len(union)))
 
 
 def cmd_relabel_global(args):
@@ -887,6 +1079,11 @@ def build_parser():
     p.add_argument("--output-file", required=True)
     p.set_defaults(func=cmd_trait_kpn_map)
 
+    p = sub.add_parser("cfde-index", help="Keep the release's libraries of the snapshot's CFDE index")
+    for name in ("libraries", "index-file", "output-file"):
+        p.add_argument("--" + name, required=True)
+    p.set_defaults(func=cmd_cfde_index)
+
     p = sub.add_parser("collection-index", help="Validate one CFDE collection and index its gene sets")
     for name in ("label", "collection-id", "library", "gmt-file", "names-gmt-file", "collection-yaml-file",
                  "output-file"):
@@ -918,14 +1115,22 @@ def build_parser():
         p.add_argument("--" + name, required=True)
     p.set_defaults(func=cmd_record_pigean_commit)
 
-    p = sub.add_parser("annotate-projection", help="Relabel and QC one trait's eaggl projections")
-    for name in ("joint-file", "marginal-file", "trait-factors-file", "trait-factor-index-file",
-                 "gene-set-index-file", "trait-kpn-map-file", "trait", "kpn-trait-id", "params-file",
-                 "pigean-commit-file", "expected-pigean-commit", "loading-variant", "seed", "output-long-file",
-                 "output-top-file", "output-qc-file"):
+    p = sub.add_parser("chunk-annotations", help="Split eaggl's gene-set input into chunks of at most --chunk-size")
+    for name in ("annotations-gmt-file", "gene-set-index-file", "output-dir", "output-file"):
         p.add_argument("--" + name, required=True)
+    p.add_argument("--chunk-size", type=int, required=True)
+    p.set_defaults(func=cmd_chunk_annotations)
+
+    p = sub.add_parser("project-trait", help="Project one trait chunk by chunk with eaggl and rank the merged loadings")
+    for name in ("python", "pigean-src", "repo-dir", "expected-pigean-commit", "chunks-file", "trait-factors-file",
+                 "trait-factor-index-file", "gene-map-file", "gene-set-index-file", "trait-kpn-map-file", "trait",
+                 "kpn-trait-id", "loading-variant", "work-dir", "output-long-file", "output-top-file", "output-qc-file",
+                 "output-commit-file", "output-params-file", "output-warnings-file", "output-log-file"):
+        p.add_argument("--" + name, required=True)
+    p.add_argument("--seed", type=int, required=True)
     p.add_argument("--top-n", type=int, default=50)
-    p.set_defaults(func=cmd_annotate_projection)
+    p.add_argument("--keep-work-dir", action="store_true", help="Keep the per-chunk eaggl outputs")
+    p.set_defaults(func=cmd_project_trait)
 
     p = sub.add_parser("relabel-global", help="Relabel the all-factor eaggl projections with factor ids")
     for name in ("joint-file", "marginal-file", "all-factors-file", "factor-index-file", "gene-set-index-file",
