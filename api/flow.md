@@ -502,4 +502,4 @@ Automatically request an advisory prediction once the selected gap and mechanism
 
 Requests/responses are taken from the existing validated OpenAPI exchange library. The CADinT2D analysis/paragraph sequence is internally linked. The CAD source-selected gap now frames the request and account. The evidence package is a separate captured input; the authored account is not its validated agent output. Semantic scores and agent outputs remain illustrative fixtures.
 
-The mapping covers 87 operations and all 109 exchanges. OpenAPI SHA-256: `1cb922ecfb7cdd18a9137447daeb6361c542bd5670204f76b4614b1d6d092495`. No endpoints or payloads were changed to build this diagram.
+The mapping covers 87 operations and all 109 exchanges. OpenAPI SHA-256: `8a9f82f46402238221805d4d74ca8ec0af737c5d1a6e50d0d9056ad07236bd51`. No endpoints or payloads were changed to build this diagram.

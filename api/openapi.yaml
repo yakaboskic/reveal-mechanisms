@@ -23634,13 +23634,16 @@ paths:
         and no-store, with Vary: Authorization. Examples are synthetic contract fixtures;
         no model or scientific source was queried. Read only this owner/draft-bound
         assessment. Polling makes no remote calls and never starts or retries preparation,
-        model work or research. No result after failure is replaced by a no verdict.
-        Pending work past its deadline is reported as interrupted; completed results
-        remain readable. Shared work is projected through this owner receipt: created_at
-        is this receipt creation, updated_at remains the original forecast update,
-        and expires_at remains its operation deadline. An unavailable assessment returns
-        404; inspect stale input pins before displaying a saved prediction for the
-        current editor. '
+        model work or research. With wait=N (1-20 seconds) a pending, current receipt
+        is long-polled: the response is read again and returned once its status changes,
+        its deadline passes or N seconds elapse, whichever comes first, so clients
+        need not poll every two seconds. No result after failure is replaced by a
+        no verdict. Pending work past its deadline is reported as interrupted; completed
+        results remain readable. Shared work is projected through this owner receipt:
+        created_at is this receipt creation, updated_at remains the original forecast
+        update, and expires_at remains its operation deadline. An unavailable assessment
+        returns 404; inspect stale input pins before displaying a saved prediction
+        for the current editor. '
       parameters:
       - name: draft_id
         in: path
@@ -23656,6 +23659,16 @@ paths:
         schema: *id096
         example: bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb
         description: ''
+      - name: wait
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          maximum: 20
+          default: 0
+        example: 10
+        description: Seconds to long-poll a pending receipt; 0 answers at once.
       responses:
         '200':
           description: Successful response.
@@ -23912,7 +23925,7 @@ paths:
       x-codeSamples:
       - lang: Shell
         label: request
-        source: 'curl -X GET https://api.reveal.example.org/v1/drafts/22222222-2222-4222-8222-222222222222/cfde-assessments/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb
+        source: 'curl -X GET ''https://api.reveal.example.org/v1/drafts/22222222-2222-4222-8222-222222222222/cfde-assessments/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb?wait=10''
           -H ''Authorization: Bearer <api-key-or-gateway-assertion>'' -H ''Accept:
           application/json'''
 components:

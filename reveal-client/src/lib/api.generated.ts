@@ -1528,7 +1528,7 @@ export interface paths {
         };
         /**
          * Read a CFDE support assessment
-         * @description Requires a valid existing registered or anonymous workspace principal that owns the draft. An administrator science-read key cannot authorize this operation. This advisory prediction never launches research or creates scientific records and is not a prerequisite for local or hosted research. CFDE grounding remains encouraged, not mandatory. Predictions must not be cited as evidence or used as scientific validation. All response and error bodies are private and no-store, with Vary: Authorization. Examples are synthetic contract fixtures; no model or scientific source was queried. Read only this owner/draft-bound assessment. Polling makes no remote calls and never starts or retries preparation, model work or research. No result after failure is replaced by a no verdict. Pending work past its deadline is reported as interrupted; completed results remain readable. Shared work is projected through this owner receipt: created_at is this receipt creation, updated_at remains the original forecast update, and expires_at remains its operation deadline. An unavailable assessment returns 404; inspect stale input pins before displaying a saved prediction for the current editor.
+         * @description Requires a valid existing registered or anonymous workspace principal that owns the draft. An administrator science-read key cannot authorize this operation. This advisory prediction never launches research or creates scientific records and is not a prerequisite for local or hosted research. CFDE grounding remains encouraged, not mandatory. Predictions must not be cited as evidence or used as scientific validation. All response and error bodies are private and no-store, with Vary: Authorization. Examples are synthetic contract fixtures; no model or scientific source was queried. Read only this owner/draft-bound assessment. Polling makes no remote calls and never starts or retries preparation, model work or research. With wait=N (1-20 seconds) a pending, current receipt is long-polled: the response is read again and returned once its status changes, its deadline passes or N seconds elapse, whichever comes first, so clients need not poll every two seconds. No result after failure is replaced by a no verdict. Pending work past its deadline is reported as interrupted; completed results remain readable. Shared work is projected through this owner receipt: created_at is this receipt creation, updated_at remains the original forecast update, and expires_at remains its operation deadline. An unavailable assessment returns 404; inspect stale input pins before displaying a saved prediction for the current editor.
          */
         get: operations["getCfdeAssessment"];
         put?: never;
@@ -15250,7 +15250,13 @@ export interface operations {
     };
     getCfdeAssessment: {
         parameters: {
-            query?: never;
+            query?: {
+                /**
+                 * @description Seconds to long-poll a pending receipt; 0 answers at once.
+                 * @example 10
+                 */
+                wait?: number;
+            };
             header?: never;
             path: {
                 /** @example 22222222-2222-4222-8222-222222222222 */

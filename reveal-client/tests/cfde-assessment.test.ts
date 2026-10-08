@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ASSESSMENT_WAIT_SECONDS, AssessmentAutoCheck, AssessmentController, AssessmentRequestError, assessmentApi, assessmentBinding, assessmentReady, assessmentResult, assessmentSupportLabel, idleAssessment, readAssessment, visibleAssessment, type AssessmentState, type CfdeAssessment } from "../src/lib/cfde-assessment";
@@ -309,6 +309,15 @@ test("the loading ring is decorative, indeterminate, and stops animating for red
   const css = readFileSync(new URL("../src/components/cfde-assessment.css", import.meta.url), "utf8");
   assert.match(css, /\.cfde-estimate-ring\.is-assessing\{animation:cfde-assessing-spin /);
   assert.match(css, /@media\(prefers-reduced-motion:reduce\)\{\.cfde-estimate-ring\.is-assessing\{animation:none\}\}/);
+});
+
+test("status long-polls stay within the contract's documented wait parameter", () => {
+  // reveal-client ships its own copy of the contract; services/frontend reads the repository's.
+  const contract = ["../openapi.json", "../../../api/openapi.json"].map(path => new URL(path, import.meta.url)).find(existsSync)!;
+  const read = JSON.parse(readFileSync(contract, "utf8")).paths["/v1/drafts/{draft_id}/cfde-assessments/{assessment_id}"].get;
+  const wait = read.parameters.find((parameter: { name: string }) => parameter.name === "wait");
+  assert.deepEqual({ in: wait.in, required: wait.required, schema: wait.schema }, { in: "query", required: false, schema: { type: "integer", minimum: 0, maximum: 20, default: 0 } });
+  assert.ok(Number.isInteger(ASSESSMENT_WAIT_SECONDS) && ASSESSMENT_WAIT_SECONDS > wait.schema.minimum && ASSESSMENT_WAIT_SECONDS <= wait.schema.maximum);
 });
 
 test("wire requests stay on the same-origin gateway, send exact inputs and have independent GET polling", async () => {

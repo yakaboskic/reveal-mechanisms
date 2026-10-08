@@ -1,4 +1,5 @@
 /** Advisory draft assessment. This client never starts a research job. */
+import type { operations } from "./api.generated";
 export type AssessmentDraft = { id: string; version: number };
 export type AssessmentComposer = { source_gap: unknown; eaggl_anchors: readonly unknown[]; [field: string]: unknown };
 export type CfdeAssessment = {
@@ -102,6 +103,8 @@ export function readAssessment(value: unknown): CfdeAssessment {
 }
 /** Seconds a status read may wait for a change; the 30 s request timeout stays above it. */
 export const ASSESSMENT_WAIT_SECONDS = 15;
+/** The status read's documented query (getCfdeAssessment). */
+type AssessmentQuery = Required<NonNullable<operations["getCfdeAssessment"]["parameters"]["query"]>>;
 async function request(path: string, signal: AbortSignal, body?: { draft_version: number; composer: AssessmentComposer }, key?: string): Promise<CfdeAssessment> {
   const response = await fetch("/api/backend/v1/drafts/" + path, {
     method: body ? "POST" : "GET", credentials: "same-origin", cache: "no-store",
@@ -118,7 +121,8 @@ async function request(path: string, signal: AbortSignal, body?: { draft_version
 export const assessmentApi = {
   start: (draft: AssessmentDraft, composer: AssessmentComposer, key: string, signal: AbortSignal) => request(encodeURIComponent(draft.id) + "/cfde-assessments", signal, { draft_version: draft.version, composer }, key),
   /** wait > 0 long-polls: a pending receipt answers when its status changes, its deadline passes or wait seconds elapse. */
-  get: (draftId: string, id: string, signal: AbortSignal, wait = 0) => request(encodeURIComponent(draftId) + "/cfde-assessments/" + encodeURIComponent(id) + (wait ? "?wait=" + wait : ""), signal),
+  get: (draftId: string, id: string, signal: AbortSignal, wait: AssessmentQuery["wait"] = 0) => request(encodeURIComponent(draftId) + "/cfde-assessments/" + encodeURIComponent(id)
+    + (wait ? "?" + new URLSearchParams({ wait: String(wait) } satisfies Record<keyof AssessmentQuery, string>) : ""), signal),
 };
 function wait(ms: number, signal: AbortSignal) {
   return new Promise<void>((resolve, reject) => {

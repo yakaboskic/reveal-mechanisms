@@ -21315,12 +21315,14 @@
     "method": "GET",
     "path_template": "/v1/drafts/{draft_id}/cfde-assessments/{assessment_id}",
     "request": {
-      "url": "https://api.reveal.example.org/v1/drafts/22222222-2222-4222-8222-222222222222/cfde-assessments/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      "url": "https://api.reveal.example.org/v1/drafts/22222222-2222-4222-8222-222222222222/cfde-assessments/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb?wait=10",
       "path": {
         "draft_id": "22222222-2222-4222-8222-222222222222",
         "assessment_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
       },
-      "query": {},
+      "query": {
+        "wait": 10
+      },
       "headers": {
         "Authorization": "Bearer <api-key-or-gateway-assertion>",
         "Accept": "application/json"
@@ -21545,7 +21547,7 @@
         }
       }
     },
-    "curl": "curl -X GET https://api.reveal.example.org/v1/drafts/22222222-2222-4222-8222-222222222222/cfde-assessments/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
+    "curl": "curl -X GET 'https://api.reveal.example.org/v1/drafts/22222222-2222-4222-8222-222222222222/cfde-assessments/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb?wait=10' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
   },
   {
     "operation_id": "getJob",
