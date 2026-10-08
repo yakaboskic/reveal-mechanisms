@@ -167,7 +167,7 @@ body:has(.gap-panel.has-results) main { position:relative; min-height:0; overflo
 .step-heading-copy { flex:1; min-width:0; }
 .step-heading-row .step-heading { padding:0; }
 .step-heading-row .step-guide { padding:.2rem 0 0 calc(24px + .15rem); }
-.step-heading-row .step-next,.step-heading-row .investigation-started,.step-heading-row .publish-report { flex:none; margin:0; }
+.step-heading-row .step-next,.step-heading-row .publish-report { flex:none; margin:0; }
 .step-heading-row.investigation-heading { display:block; }
 .step-heading-row.investigation-heading.with-publish { display:flex; align-items:flex-start; gap:50px; }
 .investigation-heading .investigation-field { margin:.45rem 0 .15rem; }
@@ -419,7 +419,6 @@ a.disease-bubble:hover { text-decoration:underline; }
 .anchor-mechanisms { display:grid; gap:.3rem; margin:0; padding:0; list-style:none; }
 .step-next { display:block; width:max-content; max-width:100%; margin:.85rem 0 0; background:var(--orange); color:white; border-color:var(--orange); font-size:13px; font-weight:700; line-height:1.3; white-space:nowrap; animation:step-next-flash 2.8s ease-in-out infinite; }
 .step-next:hover:not(:disabled) { background:var(--orange-dark); color:white; border-color:var(--orange-dark); }
-.investigation-started { margin:.85rem 0 0; color:var(--ink); font-size:13px; font-weight:700; line-height:1.3; }
 @keyframes step-next-flash { 0%, 100% { opacity:1; } 50% { opacity:.5; } }
 @media (prefers-reduced-motion: reduce) { .step-next { animation:none; } }
 fieldset { border:0; padding:0; margin:0 0 .75rem; }
