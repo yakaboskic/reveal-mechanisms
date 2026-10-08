@@ -76,9 +76,9 @@ function matchedMechanisms(gap: Gap | null, ids: string[]) {
 }
 type FactorNetRow = { sourceId: string; title: string; subtitle: string; mechanisms: { id: string; label: string }[]; cosine: number | null; selected: boolean; selectDisabled: boolean; onToggle: () => void; onInspect: (() => void) | null };
 function edgePaint(value: number | null) {
-  if (value == null || !Number.isFinite(value)) return { stroke: "#b7b9be", width: 1.5 };
+  if (value == null || !Number.isFinite(value)) return { stroke: "#b7b9be", width: 1 };
   const clamped = Math.max(-1, Math.min(1, value));
-  if (clamped === 0) return { stroke: "#b7b9be", width: 1.5 };
+  if (clamped === 0) return { stroke: "#b7b9be", width: 1 };
   return { stroke: clamped < 0 ? "#f3ccc8" : "#c5daf0", width: 1.25 + Math.abs(clamped) * 5 };
 }
 function curvePath(x1: number, y1: number, x2: number, y2: number) {
@@ -109,7 +109,7 @@ function FactorNetwork({ gapLabel, rows, guide }: { gapLabel: string; rows: Fact
       for (const item of mechanisms) {
         const from = point("gap", "right");
         const to = point("mech:" + item.id, "left");
-        if (from && to) next.push({ x1: from.x, y1: from.y, x2: to.x, y2: to.y, stroke: "#b7b9be", width: 1.6, key: "gap-" + item.id, curve: false, label: "" });
+        if (from && to) next.push({ x1: from.x, y1: from.y, x2: to.x, y2: to.y, stroke: "#b7b9be", width: 1, key: "gap-" + item.id, curve: true, label: "" });
       }
       for (const row of rows) {
         const paint = edgePaint(row.cosine);
@@ -135,7 +135,7 @@ function FactorNetwork({ gapLabel, rows, guide }: { gapLabel: string; rows: Fact
       {graph.links.map(link => link.label ? <span className="net-edge-score" key={link.key} style={{ left: (link.x1 + link.x2) / 2, top: (link.y1 + link.y2) / 2 }}>{link.label}</span> : null)}
       <div className="factor-net-col"><h3>Knowledge gap</h3><article className="net-gap" data-net-id="gap" title={gapLabel}><span>{gapLabel}</span></article></div>
       <div className="factor-net-col factor-net-mechanisms"><h3>DisMech mechanism</h3>{mechanisms.map(item => <article className="net-mechanism" data-net-id={"mech:" + item.id} key={item.id}>{item.label}</article>)}</div>
-      <div className="factor-net-col factor-net-factors"><h3>EAGGL factor</h3>{rows.map(row => <article className={"net-factor" + (row.selected ? " selected" : "")} data-net-id={"factor:" + row.sourceId} key={row.sourceId}>
+      <div className="factor-net-col factor-net-factors"><h3><span className="factor-net-brand">CFDE REVEAL KG</span> mechanism factors</h3>{rows.map(row => <article className={"net-factor" + (row.selected ? " selected" : "")} data-net-id={"factor:" + row.sourceId} key={row.sourceId}>
         <div className="net-factor-row"><input type="checkbox" checked={row.selected} disabled={row.selectDisabled} aria-label={"Select " + row.title} onChange={row.onToggle} /><div className="net-factor-copy"><strong>{row.title}</strong>{row.subtitle && <small>{row.subtitle}</small>}{row.onInspect && <button type="button" className="gap-bubble inspect" onClick={row.onInspect}>Inspect factor</button>}</div></div>
       </article>)}</div>
     </div>
@@ -156,6 +156,134 @@ function evidenceHref(reference: string): string | null {
 function textField(item: Record<string, unknown>, key: string) {
   const value = item[key];
   return typeof value === "string" && value.trim() ? value.trim() : "";
+}
+function recordList(value: unknown) {
+  return Array.isArray(value) ? value.filter(isRecord) : [];
+}
+function idList(value: unknown) {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item.length > 0) : [];
+}
+function directionPaint(direction: string) {
+  if (direction === "SUPPORTS") return { stroke: "#c5daf0", width: 4 };
+  if (direction === "DISPUTES") return { stroke: "#f3ccc8", width: 4 };
+  return { stroke: "#b7b9be", width: 1 };
+}
+type AccountNode = { id: string; label: string; title: string; source: string };
+function graphSource(source: string) {
+  const value = source.toLowerCase();
+  if (value.includes("biomarker")) return "BiomarkerKG";
+  if (value.includes("prokn")) return "ProKN";
+  if (value.includes("cfde") || value.includes("eaggl") || value.includes("pigean")) return "CFDE";
+  return source;
+}
+type AccountEdge = { from: string; to: string; tone: "support" | "dispute" | "plain"; curve: boolean; key: string };
+function accountGraph(data: unknown) {
+  if (!isRecord(data) || !isRecord(data.document)) return null;
+  const document = data.document;
+  const account = recordList(document.scientific_accounts)[0];
+  if (!account) return null;
+  const byId = (items: Record<string, unknown>[]) => new Map(items.flatMap(item => { const id = textField(item, "id"); return id ? [[id, item] as const] : []; }));
+  const gaps = byId(recordList(document.knowledge_gaps));
+  const claims = byId(recordList(document.claims));
+  const evidence = byId(recordList(document.evidence_items));
+  const files = byId([...recordList(document.files), ...recordList(document.c2m2_files)]);
+  const gapId = textField(account, "question");
+  const gapRecord = gaps.get(gapId);
+  const gap = gapId ? { id: "gap", label: textField(gapRecord || {}, "text") || textField(gapRecord || {}, "name") || "Knowledge gap", title: textField(gapRecord || {}, "text") || gapId, source: "" } : null;
+  const claimNodes: AccountNode[] = [];
+  const evidenceNodes: AccountNode[] = [];
+  const graphNodes: AccountNode[] = [];
+  const fileNodes: AccountNode[] = [];
+  const edges: AccountEdge[] = [];
+  const seenEvidence = new Set<string>();
+  const seenGraphs = new Set<string>();
+  const seenFiles = new Set<string>();
+  for (const claimId of idList(account.component_claims)) {
+    const claim = claims.get(claimId);
+    if (!claim) continue;
+    claimNodes.push({ id: "claim:" + claimId, label: textField(claim, "statement") || textField(claim, "name") || "Claim", title: textField(claim, "statement") || claimId, source: "" });
+    if (gap) edges.push({ from: "gap", to: "claim:" + claimId, tone: "plain", curve: true, key: "gap-" + claimId });
+    for (const evidenceId of idList(claim.has_evidence)) {
+      const item = evidence.get(evidenceId);
+      if (!item) continue;
+      if (!seenEvidence.has(evidenceId)) {
+        seenEvidence.add(evidenceId);
+        const source = textField(item, "evidence_source");
+        const label = textField(item, "snippet") || source || textField(item, "name") || "Evidence";
+        evidenceNodes.push({ id: "evidence:" + evidenceId, label, title: textField(item, "explanation") || source || textField(item, "snippet") || evidenceId, source: "" });
+        if (source) {
+          const name = graphSource(source);
+          const graphId = "graph:" + name;
+          if (!seenGraphs.has(graphId)) {
+            seenGraphs.add(graphId);
+            graphNodes.push({ id: graphId, label: name, title: source, source: "" });
+          }
+          edges.push({ from: "evidence:" + evidenceId, to: graphId, tone: "plain", curve: true, key: evidenceId + "-" + graphId });
+        }
+      }
+      const direction = textField(item, "direction") || textField(claim, "direction");
+      edges.push({ from: "claim:" + claimId, to: "evidence:" + evidenceId, tone: direction === "SUPPORTS" ? "support" : direction === "DISPUTES" ? "dispute" : "plain", curve: true, key: claimId + "-" + evidenceId });
+      for (const fileId of idList(item.was_derived_from)) {
+        const file = files.get(fileId);
+        if (!seenFiles.has(fileId)) {
+          seenFiles.add(fileId);
+          fileNodes.push({ id: "file:" + fileId, label: file ? textField(file, "filename") || textField(file, "name") || "Source" : "Source", title: file ? textField(file, "description") || textField(file, "filename") || fileId : fileId, source: "" });
+        }
+        edges.push({ from: "evidence:" + evidenceId, to: "file:" + fileId, tone: "plain", curve: true, key: evidenceId + "-" + fileId });
+      }
+    }
+  }
+  if (!gap && !claimNodes.length) return null;
+  return { gap, claims: claimNodes, evidence: evidenceNodes, files: [...graphNodes, ...fileNodes], edges };
+}
+function AccountGraph({ data }: { data: unknown }) {
+  const model = useMemo(() => accountGraph(data), [data]);
+  const root = useRef<HTMLDivElement>(null);
+  const [drawn, setDrawn] = useState<{ width: number; height: number; links: { x1: number; y1: number; x2: number; y2: number; stroke: string; width: number; key: string; curve: boolean }[] }>({ width: 0, height: 0, links: [] });
+  const layoutKey = model ? [model.gap?.id || "", ...model.claims.map(item => item.id), ...model.evidence.map(item => item.id), ...model.files.map(item => item.id), ...model.edges.map(item => item.key)].join("|") : "";
+  useLayoutEffect(() => {
+    const rootEl = root.current;
+    if (!rootEl || !model) return;
+    const draw = () => {
+      const origin = rootEl.getBoundingClientRect();
+      const point = (id: string, side: "left" | "right") => {
+        const el = rootEl.querySelector(`[data-net-id="${CSS.escape(id)}"]`);
+        if (!(el instanceof HTMLElement)) return null;
+        const box = el.getBoundingClientRect();
+        return { x: (side === "left" ? box.left : box.right) - origin.left, y: box.top - origin.top + box.height / 2 };
+      };
+      const links = model.edges.flatMap(edge => {
+        const from = point(edge.from, "right");
+        const to = point(edge.to, "left");
+        if (!from || !to) return [];
+        const paint = edge.tone === "plain" ? { stroke: "#b7b9be", width: 1 } : directionPaint(edge.tone === "support" ? "SUPPORTS" : "DISPUTES");
+        return [{ x1: from.x, y1: from.y, x2: to.x, y2: to.y, ...paint, key: edge.key, curve: edge.curve }];
+      });
+      setDrawn({ width: origin.width, height: origin.height, links });
+    };
+    draw();
+    const observer = new ResizeObserver(draw);
+    observer.observe(rootEl);
+    return () => observer.disconnect();
+  }, [layoutKey, model]);
+  if (!model) return <p className="settings-note">This record has no scientific account graph.</p>;
+  const column = (title: string, nodes: AccountNode[], className = "") => <div className={"account-net-col " + className}><h3>{title}</h3>{nodes.map(node => <article className="account-node" data-net-id={node.id} title={node.title} key={node.id}><span>{node.label}</span>{node.source && <small>{node.source}</small>}</article>)}</div>;
+  return <figure className="account-net-figure">
+    <figcaption className="account-net-legend"><span className="account-swatch support" />Supports<span className="account-swatch dispute" />Disputes<span className="account-swatch plain" />Other</figcaption>
+    <div className="account-net-scroll"><div className="account-net" ref={root}>
+      <svg className="factor-net-edges" width={drawn.width} height={drawn.height} aria-hidden="true">{drawn.links.map(link => link.curve ? <path key={link.key} d={curvePath(link.x1, link.y1, link.x2, link.y2)} fill="none" stroke={link.stroke} strokeWidth={link.width} strokeLinecap="round" /> : <line key={link.key} x1={link.x1} y1={link.y1} x2={link.x2} y2={link.y2} stroke={link.stroke} strokeWidth={link.width} strokeLinecap="round" />)}</svg>
+      {model.gap ? column("Knowledge gap", [model.gap]) : <div className="account-net-col" />}
+      {column("Claim", model.claims, "account-net-pad-right")}
+      {column("Evidence", model.evidence, "account-net-pad")}
+      {column("Source", model.files, "account-net-pad-left")}
+    </div></div>
+  </figure>;
+}
+function ResultInspectBody({ result }: { result: ResultInspect }) {
+  return <>
+    <div className="result-links">{result.links.map(link => <a key={link.href + link.label} href={link.href} target="_blank" rel="noreferrer">{link.label}</a>)}</div>
+    <JsonValue value={result.data} />
+  </>;
 }
 function gapSnippets(gap: Gap) {
   const raw = isRecord(gap.source_detail?.raw) ? gap.source_detail.raw : {};
@@ -402,7 +530,7 @@ function InspectColumn({ gap, factor, factorPending, result, activity, focus, ga
   return <div className="inspect-frame">
     {gap && <InspectCard title={gap.object.text || gapTitle(gap)} open={focus === "gap"} closeLabel="Close gap inspection" badge={diseaseBubble(gap)} onOpen={() => onFocus("gap")} onClose={onCloseGap}><GapFacts gap={gap} />{gapNote && <p className="settings-note">{gapNote}</p>}</InspectCard>}
     {(factor || factorPending) && <InspectCard title={factor ? factorTitle(factor) : "Loading factor…"} open={focus === "factor"} closeLabel="Close factor inspection" onOpen={() => onFocus("factor")} onClose={onCloseFactor}>{factor ? <><FactorSummary factor={factor} /><FactorLoadings key={factor.source_id} sourceId={factor.source_id} /></> : <p className="settings-note">Loading the factor…</p>}{factorNote && <p className="settings-note">{factorNote}</p>}</InspectCard>}
-    {result && <InspectCard title={result.title} open={focus === "result"} closeLabel="Close result inspection" onOpen={() => onFocus("result")} onClose={onCloseResult}><div className="result-links">{result.links.map(link => <a key={link.href + link.label} href={link.href} target="_blank" rel="noreferrer">{link.label}</a>)}</div><JsonValue value={result.data} /></InspectCard>}
+    {result && <InspectCard title={result.title} open={focus === "result"} closeLabel="Close result inspection" onOpen={() => onFocus("result")} onClose={onCloseResult}><ResultInspectBody result={result} /></InspectCard>}
     {activity && <InspectCard title="Activity" open={focus === "activity"} closeLabel="Close activity" onOpen={() => onFocus("activity")} onClose={onCloseActivity}>{activity}</InspectCard>}
   </div>;
 }
@@ -464,7 +592,7 @@ function SettingsPanel({ tab, openLastDraft, onTab, onOpenLastDraft, onClose }: 
         <ul className="settings-api-list">{productApis.map(item => <li key={item.method + item.path}><code>{item.method} {item.path}</code><p>{item.detail}</p></li>)}</ul>
       </div>}
       {tab === "information" && <div className="settings-body" role="tabpanel" id="settings-panel-information" aria-labelledby="settings-tab-information">
-        <dl className="settings-facts"><dt>Product</dt><dd>REVEAL client</dd><dt>Client version</dt><dd>{clientVersion}</dd><dt>API</dt><dd>REVEAL Mechanisms API</dd><dt>API version</dt><dd>{API_VERSION}</dd><dt>Description</dt><dd>Scientific questions, evidence, and live research.</dd></dl>
+        <dl className="settings-facts"><dt>Product</dt><dd>REVEAL Close the gap</dd><dt>Client version</dt><dd>{clientVersion}</dd><dt>API</dt><dd>REVEAL Mechanisms API</dd><dt>API version</dt><dd>{API_VERSION}</dd><dt>Description</dt><dd>Choose the gap. Ground the claim.</dd></dl>
         <p className="settings-note">The client reaches the API through the workspace gateway. Requests are signed on the server.</p>
       </div>}
     </section>
@@ -1160,21 +1288,19 @@ export default function Home() {
   const activeStep = step === "anchors" || step === "investigation" ? step : "gap";
   const analysisRunning = !!job && !terminal(job.status);
   const lastActivity = activity.length ? activity[activity.length - 1] : null;
-  const paragraphReady = job?.result?.kind === "analysis" && job.result.paragraph_job_ids.some(id => !!paragraphs[id]?.text);
-  const publishHref = job?.result?.kind === "analysis" && job.result.account_ids[0] ? QA_SITE + "/accounts/" + encodeURIComponent(job.result.account_ids[0]) : "";
   const analysisComplete = !!job && terminal(job.status);
   const publicationLabel = publication === "public" ? "Published" : publication === "unknown" ? "Publication unavailable" : publication === null && publicationKey ? "Checking publication" : "Not published";
   const investigationRail = job && analysisRunning ? <span className="step-rail-facts"><span>Started {date(job.created_at)}</span><span className={"status " + job.status}>{readable(job.status)}</span>{lastActivity && <span>{lastActivity.message}</span>}</span>
     : job && analysisComplete ? <span className="step-rail-line">Completed {date(job.completed_at || job.updated_at)} | {outcomeLabel(job.status)} | {publicationLabel}</span>
     : null;
   return <>
-    <header className="site-header"><div className="brand"><div className="brand-logos"><img src="/brand/cfde-knowledge-center.svg" alt="CFDE Knowledge Center" /><span className="brand-rule" aria-hidden="true" /><img src="/brand/cfde-ecosystem.png" alt="Common Fund Data Ecosystem" /></div><span className="brand-rule" aria-hidden="true" /><div className="brand-copy"><h1><span className="brand-reveal">REVEAL</span><span className="brand-product">client</span></h1><p>Scientific questions, evidence, and live research</p></div></div>
+    <header className="site-header"><div className="brand"><div className="brand-logos"><img src="/brand/cfde-knowledge-center.svg" alt="CFDE Knowledge Center" /><span className="brand-rule" aria-hidden="true" /><img src="/brand/cfde-ecosystem.png" alt="Common Fund Data Ecosystem" /></div><span className="brand-rule" aria-hidden="true" /><div className="brand-copy"><h1><span className="brand-reveal">REVEAL</span><span className="brand-product">Close the gap</span></h1><p>Choose the gap. Ground the claim.</p></div></div>
       <div className="connection">
         {principal && <div className="session-menu" ref={sessionMenu}><button className="secondary" aria-expanded={sessionOpen} aria-haspopup="menu" aria-controls="session-menu" onClick={() => { setHelpOpen(false); setSessionOpen(open => !open); }}>Session</button>
           {sessionOpen && <div id="session-menu" className="session-menu-list" role="menu"><button role="menuitem" onClick={startSession}>Start session</button><button role="menuitem" onClick={showDrafts} disabled={!drafts.length}>Saved drafts</button><button role="menuitem" onClick={() => { setSessionOpen(false); void browseTrending(); }}>Trending gaps</button></div>}
         </div>}
         {principal && <div className="session-menu" ref={helpMenu}><button className="secondary" aria-expanded={helpOpen} aria-haspopup="menu" aria-controls="help-menu" onClick={() => { setSessionOpen(false); setHelpOpen(open => !open); }}>Help</button>
-          {helpOpen && <div id="help-menu" className="session-menu-list" role="menu"><button role="menuitem" onClick={() => setHelpOpen(false)}>Learn REVEAL client</button><button role="menuitem" onClick={() => setHelpOpen(false)}>Quick start tutorial</button></div>}
+          {helpOpen && <div id="help-menu" className="session-menu-list" role="menu"><button role="menuitem" onClick={() => setHelpOpen(false)}>Learn REVEAL Close the gap</button><button role="menuitem" onClick={() => setHelpOpen(false)}>Quick start tutorial</button></div>}
         </div>}
         {principal ? <span className="connection-status" role="status">Workspace connected</span> : <button onClick={() => void connect()} disabled={checking || busy === "connect"}>{checking || busy === "connect" ? "Connecting…" : "Connect workspace"}</button>}
         <button type="button" className="settings-button" aria-label="Settings" aria-expanded={settingsOpen} onClick={() => { setSessionOpen(false); setHelpOpen(false); setSettingsTab("settings"); setSettingsOpen(true); }}><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.48.48 0 0 0-.48-.41h-3.84a.48.48 0 0 0-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 0 0-.59.22L2.74 8.87a.48.48 0 0 0 .12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32a.49.49 0 0 0-.12-.61l-2.03-1.58zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z" /></svg></button>
@@ -1182,7 +1308,7 @@ export default function Home() {
     {inWorkspace && <div className="workspace-bar"><div className="step-rail" role="tablist" aria-label="Investigation steps"><button type="button" role="tab" aria-selected={activeStep === "gap"} className={"step-rail-card" + (activeStep === "gap" ? " active" : "")} onClick={() => setStep("gap")}><span className="step-rail-title"><span className="step-number">1</span>Choose a knowledge gap</span>{gap && <span className="step-rail-summary">{gap.object.text || gapTitle(gap)}</span>}</button><button type="button" role="tab" aria-selected={activeStep === "anchors"} className={"step-rail-card" + (activeStep === "anchors" ? " active" : "") + (gapChosen ? "" : " inactive")} disabled={!gapChosen && activeStep !== "anchors"} onClick={() => { if (gapChosen) setStep("anchors"); }}><span className="step-rail-title"><span className="step-number">2</span>Select mechanism anchors</span>{anchorChosen && <span className="step-rail-summary bubbles">{factorBubbles(2)}</span>}</button><button type="button" role="tab" aria-selected={activeStep === "investigation"} className={"step-rail-card" + (activeStep === "investigation" ? " active" : "") + (job ? "" : " inactive")} disabled={!job && activeStep !== "investigation"} onClick={() => { if (job) setStep("investigation"); }}><span className="step-rail-title"><span className="step-number">3</span>Investigation</span>{investigationRail}</button></div>{errorNotice}</div>}
     <main className={inWorkspace ? "workspace" : undefined}>
       {!inWorkspace && errorNotice}
-      {(!principal || (welcomeOpen && panelView === "menu")) ? <section className="welcome"><div className="welcome-lead"><h2>Choose the gap. Ground the claim.</h2><svg className="welcome-mark" viewBox="0 0 132 18" aria-hidden="true"><line x1="16" y1="9" x2="116" y2="9" stroke="#a7a9ad" strokeWidth="1.7" /><circle cx="9" cy="9" r="6.1" fill="#fff" stroke="#e07b39" strokeWidth="1.8" /><circle cx="123" cy="9" r="7" fill="#e07b39" /></svg><div className="welcome-choices"><button type="button" onClick={startSearch} disabled={!principal || checking || busy === "connect"}>Search knowledge gaps</button><button type="button" onClick={() => void browseTrending()} disabled={!principal || checking || busy === "connect" || searching}>Trending knowledge gaps</button></div></div><img className="welcome-flow" src="/workflow.svg" alt="From a DisMech knowledge gap to the claims library. Select a gap. Find CFDE EAGGL factors that match the DisMech mechanisms attached to that gap, then select factors. Initiating an investigation collects CFDE evidence for those factors and drafts a report. A scientific account then claims the report for the claims library." /><div className="welcome-cards"><a className="welcome-card" href="#learn-reveal-client" onClick={event => event.preventDefault()}><svg viewBox="0 0 72 56" aria-hidden="true"><path d="M36 12v32M14 16c7 5 15 5 22-2 7 7 15 7 22 2v28c-7 5-15 5-22-2-7 7-15 7-22 2V16z" /></svg><strong>Learn REVEAL client</strong><span>A guide to the workspace, from a knowledge gap to a grounded claim.</span></a><a className="welcome-card" href="#quick-start-demo" onClick={event => event.preventDefault()}><svg viewBox="0 0 72 56" aria-hidden="true"><rect x="14" y="12" width="44" height="32" rx="3" /><path className="card-icon-fill" d="M33 22l12 6-12 6z" /></svg><strong>Watch quick start demo</strong><span>A short walkthrough of connecting and starting an investigation.</span></a></div></section> : welcomeOpen ? <div className="welcome-panel-stage"><section className="welcome-panel" role="dialog" aria-modal="true" aria-labelledby="welcome-heading"><button type="button" className="panel-back" aria-label="Back to welcome" onClick={() => { if (panelView === "copy") setName(keptName.current); else { setName(""); setNotice(""); } setPanelView("menu"); }}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22.9 12H6M11 6l-6 6 6 6" /></svg></button><div className="draft-start"><h2 id="welcome-heading">{panelView === "copy" ? "Save as a new draft" : "Start a draft"}</h2><label htmlFor="draft-name">Draft name</label><input id="draft-name" value={name} maxLength={120} onChange={event => setName(event.target.value)} disabled={!mutable} placeholder="Name this investigation" autoFocus />{notice && <p className="notice" role="status">{notice}</p>}<div className="actions"><button onClick={() => save(panelView === "copy")} disabled={!mutable || !name.trim() || (panelView !== "copy" && !dirty)}>{busy === "save" ? "Saving…" : "Save draft"}</button></div></div></section></div> : <>
+      {(!principal || (welcomeOpen && panelView === "menu")) ? <section className="welcome"><div className="welcome-lead"><h2>Choose the gap. Ground the claim.</h2><svg className="welcome-mark" viewBox="0 0 132 18" aria-hidden="true"><line x1="16" y1="9" x2="116" y2="9" stroke="#a7a9ad" strokeWidth="1.7" /><circle cx="9" cy="9" r="6.1" fill="#fff" stroke="#e07b39" strokeWidth="1.8" /><circle cx="123" cy="9" r="7" fill="#e07b39" /></svg><div className="welcome-choices"><button type="button" onClick={startSearch} disabled={!principal || checking || busy === "connect"}>Search knowledge gaps</button><button type="button" onClick={() => void browseTrending()} disabled={!principal || checking || busy === "connect" || searching}>Trending knowledge gaps</button></div></div><img className="welcome-flow" src="/workflow.svg" alt="Choose the gap. Ground the claim. Search or browse trending DisMech knowledge gaps and select one. The system suggests CFDE REVEAL KG mechanism factors matched to that gap's DisMech mechanisms, and you select them. Starting the investigation collects BiomarkerKG and ProKN evidence and writes a scientific account and cited claim." /><div className="welcome-cards"><a className="welcome-card" href="#learn-reveal-client" onClick={event => event.preventDefault()}><svg viewBox="0 0 72 56" aria-hidden="true"><path d="M36 12v32M14 16c7 5 15 5 22-2 7 7 15 7 22 2v28c-7 5-15 5-22-2-7 7-15 7-22 2V16z" /></svg><strong>Learn REVEAL Close the gap</strong><span>A guide to the workspace, from a knowledge gap to a grounded claim.</span></a><a className="welcome-card" href="#quick-start-demo" onClick={event => event.preventDefault()}><svg viewBox="0 0 72 56" aria-hidden="true"><rect x="14" y="12" width="44" height="32" rx="3" /><path className="card-icon-fill" d="M33 22l12 6-12 6z" /></svg><strong>Watch quick start demo</strong><span>A short walkthrough of connecting and starting an investigation.</span></a></div></section> : welcomeOpen ? <div className="welcome-panel-stage"><section className="welcome-panel" role="dialog" aria-modal="true" aria-labelledby="welcome-heading"><button type="button" className="panel-back" aria-label="Back to welcome" onClick={() => { if (panelView === "copy") setName(keptName.current); else { setName(""); setNotice(""); } setPanelView("menu"); }}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22.9 12H6M11 6l-6 6 6 6" /></svg></button><div className="draft-start"><h2 id="welcome-heading">{panelView === "copy" ? "Save as a new draft" : "Start a draft"}</h2><label htmlFor="draft-name">Draft name</label><input id="draft-name" value={name} maxLength={120} onChange={event => setName(event.target.value)} disabled={!mutable} placeholder="Name this investigation" autoFocus />{notice && <p className="notice" role="status">{notice}</p>}<div className="actions"><button onClick={() => save(panelView === "copy")} disabled={!mutable || !name.trim() || (panelView !== "copy" && !dirty)}>{busy === "save" ? "Saving…" : "Save draft"}</button></div></div></section></div> : <>
         <div className={inspectGap || inspectFactorId || inspectResult || activityLogOpen ? "workspace-frames" : "workspace-frames steps-only"}>
         <div className="steps">
           {activeStep === "gap" && <section className="step open">
@@ -1209,7 +1335,7 @@ export default function Home() {
             </div>
           </section>}
           {activeStep === "investigation" && <section className="step open">
-            <div className={"step-heading-row investigation-heading" + (paragraphReady && publishHref ? " with-publish" : "")}><div className="step-heading-copy"><h2 className="step-heading"><span className="step-number">3</span>Investigation</h2>{analysisRunning && job && <div className="investigation-live"><p>Started {date(job.created_at)}</p><span className={"status " + job.status}>{readable(job.status)}</span>{lastActivity && <p className="investigation-last">{lastActivity.message}</p>}</div>}<p className="investigation-field">{gap ? <><strong>Knowledge gap:</strong> {gap.object.text || gapTitle(gap)}</> : <><strong>Knowledge gap:</strong> <span className="muted">Select a knowledge gap to investigate.</span></>}</p></div>{paragraphReady && publishHref && <a className="publish-report" href={publishHref} target="_blank" rel="noreferrer">Publish account</a>}</div>
+            <div className="step-heading-row investigation-heading"><div className="step-heading-copy"><h2 className="step-heading"><span className="step-number">3</span>Investigation</h2>{analysisRunning && job && <div className="investigation-live"><p>Started {date(job.created_at)}</p><span className={"status " + job.status}>{readable(job.status)}</span>{lastActivity && <p className="investigation-last">{lastActivity.message}</p>}</div>}<p className="investigation-field">{gap ? <><strong>Knowledge gap:</strong> {gap.object.text || gapTitle(gap)}</> : <><strong>Knowledge gap:</strong> <span className="muted">Select a knowledge gap to investigate.</span></>}</p></div></div>
             <div className="step-body">{investigationPanel}</div>
           </section>}
         </div>
@@ -1277,7 +1403,7 @@ function ResultView({ job, onActions }: { job: Job; onActions: (actions: ResultA
   useEffect(() => { onActions(actions); }, [actions, onActions]);
   useEffect(() => () => onActions([]), [onActions]);
   if (!result) return null;
-  return <section className="results"><h3>{result.kind === "analysis_outcome" ? "Investigation outcome" : "Scientific account"}</h3>
+  return <section className="results">{result.kind === "analysis" && records.map(record => record.data ? <AccountGraph data={record.data} key={record.path} /> : null)}<h3>{result.kind === "analysis_outcome" ? "Investigation outcome" : "Scientific account"}</h3>
     {records.map(record => {
       const document = record.data?.document as Record<string, Record<string, unknown>[]> | undefined;
       const object = document?.scientific_accounts?.[0];
