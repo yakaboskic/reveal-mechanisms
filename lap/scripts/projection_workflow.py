@@ -1450,6 +1450,427 @@ def cmd_betas_collect(args):
 
 
 # -------------------------------------------------------------------------------------------------
+# Factor-trait links: eaggl's trait linkage and factor-PheWAS of every factor against every PIGEAN phenotype
+
+LINKAGE_PHENOTYPE_COLUMNS = ["phenotype", "kpn_trait_id", "kpn_match", "gwas_source_category", "phenotype_name",
+                             "is_anchor", "n_genes", "n_genes_kept"]
+
+
+def kpn_phenotype_matcher(registry_rows):
+    """A function phenotype -> (KPN registry row or None, the registry column it matched or "none"): legacy_phenotype_id
+    (the anchors' rule), else pigean_id. A phenotype matching several rows of that column is refused."""
+    check("pigean_id" in registry_rows[0], "The KPN registry has no pigean_id column")
+    hits = {column: defaultdict(list) for column in ("legacy_phenotype_id", "pigean_id")}
+    for row in registry_rows:
+        for column, by_name in hits.items():
+            if row[column]:
+                by_name[row[column]].append(row)
+
+    def match(phenotype):
+        for column, by_name in hits.items():
+            rows = by_name.get(phenotype, [])
+            check(len(rows) <= 1, "%s matches several KPN %s rows: %s" % (phenotype, column, [r["portal_id"] for r in rows]))
+            if rows:
+                return rows[0], column
+        return None, "none"
+    return match
+
+
+def case_target(universe):
+    """A memoized function symbol -> the EAGGL gene it names: itself if it is one, else the one EAGGL gene with its
+    upper-case form (e.g. C10orf71 -> C10ORF71), else None."""
+    upper = defaultdict(set)
+    for gene in universe:
+        upper[gene.upper()].add(gene)
+    memo = {}
+
+    def target(symbol):
+        if symbol not in memo:
+            hits = upper.get(symbol.upper(), ())
+            memo[symbol] = symbol if symbol in universe else next(iter(hits)) if len(hits) == 1 else None
+        return memo[symbol]
+    target.memo = memo
+    return target
+
+
+def one_row_per_gene(rows, target):
+    """[(symbol, row)] of one phenotype -> the rows to keep: one per EAGGL gene, its exact spelling when listed, else the
+    first case variant (PIGEAN lists some genes under both spellings, e.g. a rare disease's C9ORF72 with its direct
+    support and C9orf72 with a prior only). Rows naming no EAGGL gene are kept. Returns (kept rows, dropped count)."""
+    exact = {symbol for symbol, _ in rows if target(symbol) == symbol}
+    kept, taken, dropped = [], set(), 0
+    for symbol, row in rows:
+        gene = target(symbol)
+        if gene is not None and gene != symbol:
+            if gene in exact or gene in taken:
+                dropped += 1
+                continue
+            taken.add(gene)
+        kept.append(row)
+    return kept, dropped
+
+
+def cmd_linkage_phenotype_stats(args):
+    """The rows of the all-trait PIGEAN gene stats that eaggl's trait linkage reads, in one pass: combined above
+    --min-combined (its --trait-linkage-threshold) and combined, log_bf and prior all numbers (eaggl's reader skips a
+    row with any other value, e.g. the export's prior-only genes with log_bf NA). Also every phenotype with its KPN id
+    and the case-only map of the export's gene symbols onto the EAGGL genes (eaggl's --gene-map-in).
+
+    eaggl reads only these rows of the export (0.5% of it), and with nothing left to filter its factor-PheWAS reuses them
+    instead of re-reading the whole file once per 300 phenotypes. The factor-PheWAS hits are the rows above the same
+    cutoff, so both statistics are what eaggl computes from the whole export, except that its re-read would count the
+    rows its first read skipped (log_bf NA) as hits. A phenotype keeps one row per EAGGL gene (one_row_per_gene), so the
+    map never gives eaggl two values for a gene.
+    """
+    check(math.isfinite(args.min_combined), "--min-combined must be finite")
+    anchors = read_trait_kpn_map(args.trait_kpn_map_file)
+    match_kpn = kpn_phenotype_matcher(load_kpn_registry(args.registry_file))
+    universe = set(read_gene_list(args.genes_file))
+    target = case_target(universe)
+    identity = source_identity(args.gene_stats_file)
+    phenotypes, kept_rows, total, dropped, unreadable = OrderedDict(), 0, 0, 0, 0
+    with open(args.gene_stats_file, "rb") as fh, open(args.output_file, "wb") as out:
+        header_line = fh.readline()
+        header = header_line.decode("utf-8").rstrip("\n").split("\t")
+        check(header[:2] == ["phenotype", "gene"] and {"combined", "log_bf", "prior"} <= set(header),
+              "%s must start with phenotype, gene and have combined, log_bf and prior: %s" % (args.gene_stats_file, header))
+        n_tabs = len(header) - 1
+        value_cols = [header.index(name) for name in ("combined", "log_bf", "prior")]
+        combined_col, split_at = value_cols[0], max(value_cols) + 1
+        out.write(header_line)
+        current, counts, buffered = None, None, []
+
+        def flush():
+            nonlocal kept_rows, dropped
+            kept, n_dropped = one_row_per_gene(buffered, target)
+            out.writelines(kept)
+            counts[1] += len(kept)
+            kept_rows += len(kept)
+            dropped += n_dropped
+            buffered.clear()
+        for line in fh:
+            check(line.count(b"\t") == n_tabs and line.endswith(b"\n"), "Malformed row %d of %s: %r"
+                  % (total + 2, args.gene_stats_file, line[:200]))
+            total += 1
+            fields = line.split(b"\t", split_at)
+            symbol = fields[1].decode("utf-8")
+            target(symbol)  # every symbol of the export, for the gene map
+            if fields[0] != current:
+                if current is not None:
+                    flush()
+                current = fields[0]
+                name = current.decode("utf-8")
+                check(name not in phenotypes, "The rows of %s in %s are not contiguous" % (name, args.gene_stats_file))
+                counts = phenotypes[name] = [0, 0]
+            counts[0] += 1
+            try:
+                combined = float(fields[combined_col])
+            except ValueError:
+                continue
+            if combined > args.min_combined:
+                try:
+                    for col in value_cols[1:]:
+                        float(fields[col])
+                except ValueError:
+                    unreadable += 1
+                    continue
+                buffered.append((symbol, line))
+        if current is not None:
+            flush()
+    check(source_identity(args.gene_stats_file) == identity, "%s changed while it was read" % args.gene_stats_file)
+    missing = sorted(set(anchors) - set(phenotypes))
+    check(not missing, "%d traits have no gene stats in %s: %s" % (len(missing), args.gene_stats_file, missing[:20]))
+    rows = []
+    for name, (n_genes, n_kept) in phenotypes.items():
+        registry_row, column = match_kpn(name)
+        if name in anchors:
+            check(column == "legacy_phenotype_id" and registry_row["portal_id"] == anchors[name]["kpn_trait_id"],
+                  "The KPN id of %s disagrees with the trait map" % name)
+        rows.append({"phenotype": name, "kpn_trait_id": registry_row["portal_id"] if registry_row else NA,
+                     "kpn_match": column, "gwas_source_category": registry_row["gwas_source_category"] if registry_row else NA,
+                     "phenotype_name": registry_row["phenotype_name"] if registry_row else NA,
+                     "is_anchor": name in anchors, "n_genes": n_genes, "n_genes_kept": n_kept})
+    write_tsv(args.output_phenotypes_file, LINKAGE_PHENOTYPE_COLUMNS, rows)
+    gene_map = {symbol: gene for symbol, gene in target.memo.items() if gene is not None and gene != symbol}
+    with open(args.output_gene_map_file, "w") as fh:  # eaggl's format: two columns, no header
+        for symbol in sorted(gene_map):
+            fh.write("%s\t%s\n" % (symbol, gene_map[symbol]))
+    exact = sum(1 for symbol, gene in target.memo.items() if gene == symbol)
+    matched = Counter(r["kpn_match"] for r in rows)
+    print("Kept %d of %d rows (combined > %g; %d more skipped as eaggl does, log_bf or prior not a number) for %d "
+          "phenotypes (%d anchors; KPN ids: %s); %d of %d EAGGL genes in the export, %d symbols mapped by case (%d rows "
+          "dropped for a gene's other spelling)" % (kept_rows, total, args.min_combined, unreadable, len(rows), len(anchors),
+                                                    dict(sorted(matched.items())), exact, len(universe), len(gene_map),
+                                                    dropped))
+
+
+def read_linkage_phenotypes(path):
+    rows = read_columns(path, LINKAGE_PHENOTYPE_COLUMNS)
+    check(rows, "%s lists no phenotypes" % path)
+    return OrderedDict((r["phenotype"], r) for r in rows)
+
+
+# eaggl's trait-factor links (--trait-factor-links-out) and factor-PheWAS (--factor-phewas-stats-out) columns we keep
+EAGGL_LINK_COLUMNS = ["trait", "factor", "is_anchor", "nnls_loading", "cosine_loading"]
+EAGGL_PHEWAS_COLUMNS = ["Factor", "Pheno", "mode", "anchor_covariate", "threshold_cutoff", "se_type", "beta", "P",
+                        "P_onesided", "Z", "SE"]
+LINKAGE_COLUMNS = ["trait", "kpn_trait_id", "factor_id", "factor_label", "phenotype", "phenotype_kpn_trait_id",
+                   "phenotype_name", "is_own_trait", "is_atlas_trait", "nnls_loading", "cosine_loading", "phewas_beta",
+                   "phewas_se", "phewas_z", "phewas_p", "phewas_p_onesided"]
+LINKAGE_QC_COLUMNS = ["trait", "kpn_trait_id", "n_factors", "n_phenotypes", "n_rows", "n_genes", "n_genes_with_stats",
+                      "min_combined", "phewas_mode", "anchor_covariate", "se_type", "pigean_commit", "eaggl_seconds"]
+
+
+def write_factors_wide_from_long(path, genes, factor_ids, long_file):
+    """eaggl's factors-by-genes layout from a trait's long factor file: its loading text where listed, 0 elsewhere."""
+    column = {factor_id: k for k, factor_id in enumerate(factor_ids)}
+    gene_row = {gene: i for i, gene in enumerate(genes)}
+    values = [["0"] * len(genes) for _ in factor_ids]
+    with open_text(long_file) as fh:
+        reader = csv.reader(fh, delimiter="\t", quoting=csv.QUOTE_NONE)
+        check(next(reader, None) == TRAIT_FACTOR_COLUMNS, "Unexpected columns in %s" % long_file)
+        for factor_id, gene, value in reader:
+            check(factor_id in column and gene in gene_row, "Unknown factor %s or gene %s in %s" % (factor_id, gene, long_file))
+            values[column[factor_id]][gene_row[gene]] = value
+    write_factors_wide(path, genes, list(zip(factor_ids, values)))
+
+
+def eaggl_linkage_command(python, factors_file, phewas_file, gene_stats_file, gene_map_file, min_combined, seed, prefix):
+    """`python -m eaggl factor` in projection-only mode: the trait linkage of every phenotype of phewas_file onto the
+    supplied factors, and the factor-PheWAS adjusted for the anchor's direct support (log_bf of gene_stats_file).
+    Phenotype rows count as hits, and enter the linkage, above min_combined. gene_map_file renames the stats' gene
+    symbols onto the factors' (both inputs)."""
+    stats_columns = ["--gene-stats-id-col", "gene", "--gene-stats-log-bf-col", "log_bf", "--gene-stats-combined-col",
+                     "combined", "--gene-stats-prior-col", "prior"]
+    return [python, "-B", "-m", "eaggl", "factor", "--factor-gene-clusters-in", factors_file,
+            "--factor-gene-clusters-layout", "factors-by-genes", "--gene-map-in", gene_map_file,
+            "--gene-phewas-stats-in", phewas_file] + [x.replace("--gene-stats", "--gene-phewas-stats") for x in stats_columns] + [
+            "--gene-phewas-stats-pheno-col", "phenotype", "--trait-linkage-threshold", repr(min_combined),
+            "--gene-stats-in", gene_stats_file] + stats_columns + [
+            "--trait-factor-links-out", prefix + ".trait_factor_links.tsv",
+            "--run-factor-phewas", "--factor-phewas-thresholded-combined-cutoff", repr(min_combined),
+            "--factor-phewas-stats-out", prefix + ".factor_phewas_stats.tsv",
+            "--seed", str(seed), "--hide-progress", "--hide-opts", "--params-out", prefix + ".params.tsv",
+            "--warnings-file", prefix + ".warnings.txt", "--log-file", prefix + ".log"]
+
+
+def read_eaggl_table(path, columns, key_columns, factor_columns):
+    """{(phenotype, FactorN): {column: text}} of an eaggl output, refusing missing columns, unknown factors and repeats."""
+    check(os.path.exists(path), "eaggl wrote no %s" % path)
+    result = {}
+    with open_text(path) as fh:
+        reader = csv.DictReader(fh, delimiter="\t", quoting=csv.QUOTE_NONE)
+        missing = set(columns) - set(reader.fieldnames or [])
+        check(not missing, "%s lacks the columns %s" % (path, sorted(missing)))
+        for row in reader:
+            pheno, factor = row[key_columns[0]], row[key_columns[1]]
+            check(factor in factor_columns, "Unknown factor %s in %s" % (factor, path))
+            check((pheno, factor) not in result, "Repeated %s/%s in %s" % (pheno, factor, path))
+            result[(pheno, factor)] = row
+    return result
+
+
+def p_value_key(text):
+    value = float(text)
+    return value if math.isfinite(value) else 1.0
+
+
+def cmd_linkage_trait(args):
+    """Every factor of one trait linked to every PIGEAN phenotype, by the pinned eaggl (projection-only).
+
+    The trait linkage projects each phenotype's support (combined, as a probability) onto the trait's factors with the
+    fixed-W NNLS of the gene-set projection (nnls_loading; descriptive). The factor-PheWAS regresses each phenotype's
+    hits (combined > --min-combined) on one factor's gene loadings plus the anchor trait's direct support (log_bf), with
+    robust (HC3) standard errors: is the phenotype enriched in the factor beyond the anchor's own genes? eaggl's files
+    stay in --work-dir; the output joins them per factor and phenotype with the factor ids and the phenotypes' KPN ids.
+    """
+    kpn = read_trait_kpn_map(args.trait_kpn_map_file)
+    check(args.trait in kpn and kpn[args.trait]["kpn_trait_id"] == args.kpn_trait_id,
+          "KPN id for %s disagrees: meta %s, map %s" % (args.trait, args.kpn_trait_id, kpn.get(args.trait, {}).get("kpn_trait_id")))
+    head = check_pigean_clone(args.repo_dir, args.expected_pigean_commit)
+    phenotypes = read_linkage_phenotypes(args.phenotypes_file)
+    check(args.trait in phenotypes, "%s is not a phenotype of %s" % (args.trait, args.phenotypes_file))
+    local = read_factor_index(args.trait_factor_index_file, TRAIT_FACTOR_INDEX_COLUMNS)
+    check(all(r["trait"] == args.trait for r in local), "%s lists another trait's factors" % args.trait_factor_index_file)
+    check([r["local_eaggl_column"] for r in local] == ["Factor%d" % k for k in range(1, len(local) + 1)],
+          "%s is not in Factor1..K order" % args.trait_factor_index_file)
+    by_column = OrderedDict((r["local_eaggl_column"], r) for r in local)
+
+    os.makedirs(args.work_dir, exist_ok=True)
+    prefix = os.path.join(args.work_dir, args.trait)
+    factors_file = prefix + ".factors_by_genes.tsv"
+    genes = read_gene_list(args.genes_file)
+    write_factors_wide_from_long(factors_file, genes, [r["factor_id"] for r in local], args.trait_factors_file)
+    # The anchor's gene stats on the factor genes only (one row each, as linkage-phenotype-stats keeps them): eaggl adds
+    # any other gene of --gene-stats-in to its genes, and its trait linkage then refuses the factor basis. A factor gene
+    # without stats gets eaggl's fill (the mean log_bf).
+    gene_map, universe = read_gene_map(args.gene_map_file), set(genes)
+    target = lambda symbol: symbol if symbol in universe else gene_map.get(symbol)
+    stats_file, listed = prefix + ".gene_stats.tsv", []
+    with open_text(args.gene_stats_file) as fh:
+        header = fh.readline()
+        check(header.rstrip("\n").split("\t")[:2] == ["phenotype", "gene"], "Unexpected columns in %s" % args.gene_stats_file)
+        for line in fh:
+            fields = line.split("\t", 2)
+            check(fields[0] == args.trait, "%s holds rows of %s" % (args.gene_stats_file, fields[0]))
+            if target(fields[1]) is not None:
+                listed.append((fields[1], line))
+    kept, _ = one_row_per_gene(listed, target)
+    covered = [target(line.split("\t", 2)[1]) for line in kept]
+    check(len(set(covered)) == len(covered), "%s lists a gene twice" % args.gene_stats_file)
+    with open_text(stats_file, "w") as out:
+        out.write(header)
+        out.writelines(kept)
+    outputs = [prefix + suffix for suffix in (".trait_factor_links.tsv", ".factor_phewas_stats.tsv", ".params.tsv")]
+    for path in outputs:
+        if os.path.exists(path):
+            os.unlink(path)
+    env = dict(os.environ, PYTHONPATH=args.pigean_src, PYTHONDONTWRITEBYTECODE="1", OMP_NUM_THREADS="1",
+               OPENBLAS_NUM_THREADS="1", MKL_NUM_THREADS="1")
+    started = time.time()
+    proc = subprocess.run(eaggl_linkage_command(args.python, factors_file, args.phewas_stats_file, stats_file,
+                                                args.gene_map_file, args.min_combined, args.seed, prefix),
+                          env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+    seconds = time.time() - started
+    check(proc.returncode == 0, "eaggl failed for %s:\n%s" % (args.trait, proc.stdout[-3000:]))
+
+    links = read_eaggl_table(outputs[0], EAGGL_LINK_COLUMNS, ("trait", "factor"), by_column)
+    phewas = read_eaggl_table(outputs[1], EAGGL_PHEWAS_COLUMNS, ("Pheno", "Factor"), by_column)
+    check(set(links) == set(phewas), "eaggl's trait links and factor-PheWAS cover different phenotypes for %s (%d vs %d rows)"
+          % (args.trait, len(links), len(phewas)))
+    names = sorted({pheno for pheno, _ in links})
+    unknown = [pheno for pheno in names if pheno not in phenotypes]
+    check(not unknown, "eaggl linked phenotypes missing from %s: %s" % (args.phenotypes_file, unknown[:10]))
+    check(len(links) == len(names) * len(local), "eaggl linked %d rows, expected %d phenotypes x %d factors"
+          % (len(links), len(names), len(local)))
+    settings = {(r["mode"], r["anchor_covariate"], r["se_type"], float(r["threshold_cutoff"])) for r in phewas.values()}
+    check(len(settings) == 1, "Several factor-PheWAS models in %s: %s" % (outputs[1], sorted(settings)))
+    mode, anchor_covariate, se_type, cutoff = settings.pop()
+    check(cutoff == float("%.3g" % args.min_combined), "eaggl used the hit cutoff %g, expected %g" % (cutoff, args.min_combined))
+
+    rows = []
+    for column, factor in by_column.items():
+        factor_rows = []
+        for pheno in names:
+            link, stats, info = links[(pheno, column)], phewas[(pheno, column)], phenotypes[pheno]
+            factor_rows.append({"trait": args.trait, "kpn_trait_id": args.kpn_trait_id, "factor_id": factor["factor_id"],
+                                "factor_label": factor["factor_label"], "phenotype": pheno,
+                                "phenotype_kpn_trait_id": info["kpn_trait_id"], "phenotype_name": info["phenotype_name"],
+                                "is_own_trait": pheno == args.trait, "is_atlas_trait": info["is_anchor"] == "True",
+                                "nnls_loading": link["nnls_loading"], "cosine_loading": link["cosine_loading"],
+                                "phewas_beta": stats["beta"], "phewas_se": stats["SE"], "phewas_z": stats["Z"],
+                                "phewas_p": stats["P"], "phewas_p_onesided": stats["P_onesided"]})
+        factor_rows.sort(key=lambda r: (p_value_key(r["phewas_p_onesided"]), r["phenotype"]))
+        rows.extend(factor_rows)
+    write_tsv(args.output_file, LINKAGE_COLUMNS, rows)
+    write_tsv(args.output_qc_file, LINKAGE_QC_COLUMNS, [{
+        "trait": args.trait, "kpn_trait_id": args.kpn_trait_id, "n_factors": len(local), "n_phenotypes": len(names),
+        "n_rows": len(rows), "n_genes": len(genes), "n_genes_with_stats": len(covered),
+        "min_combined": "%g" % args.min_combined, "phewas_mode": mode,
+        "anchor_covariate": anchor_covariate, "se_type": se_type, "pigean_commit": head, "eaggl_seconds": "%.0f" % seconds}])
+    print("%s: %d factors x %d phenotypes linked in %.0f s (%s, anchor covariate %s)"
+          % (args.trait, len(local), len(names), seconds, mode, anchor_covariate))
+
+
+FACTOR_LINK_COLUMNS = ["trait", "kpn_trait_id", "factor_id", "factor_label", "phenotype", "phenotype_kpn_trait_id",
+                       "phenotype_name", "is_own_trait", "is_atlas_trait", "nnls_loading", "phewas_beta",
+                       "phewas_p_onesided", "phewas_q"]
+FACTOR_LINK_SUMMARY_COLUMNS = ["trait", "kpn_trait_id", "factor_id", "factor_label", "n_phenotypes", "n_linked",
+                               "n_linked_kpn_traits", "n_linked_atlas_traits", "own_trait_q", "top_linked"]
+TOP_LINKED = 5
+
+
+def bh_q_values(p_values):
+    """Benjamini-Hochberg q-values (a non-finite p counts as 1)."""
+    import numpy as np
+    p = np.where(np.isfinite(p_values), p_values, 1.0)
+    order = np.argsort(p, kind="mergesort")
+    ranked = p[order] * len(p) / np.arange(1, len(p) + 1)
+    q = np.empty(len(p))
+    q[order] = np.minimum(np.minimum.accumulate(ranked[::-1])[::-1], 1.0)
+    return q
+
+
+def cmd_linkage_collect(args):
+    """Every trait's factor-phenotype links in one table: the factor-PheWAS one-sided p-values of all traits get
+    Benjamini-Hochberg q-values together, and a factor is linked to the phenotypes with q <= --max-q. Also one summary
+    row per factor and the per-trait QC. Every trait of the KPN map must be present, at the pinned commit, with one
+    factor-PheWAS model."""
+    import numpy as np
+    check(0 < args.max_q <= 1, "--max-q must be in (0, 1]")
+    kpn = read_trait_kpn_map(args.trait_kpn_map_file)
+    qc = OrderedDict()
+    for path in args.qc_file:
+        for row in read_columns(path, LINKAGE_QC_COLUMNS):
+            check(row["trait"] not in qc, "Two QC rows for %s" % row["trait"])
+            qc[row["trait"]] = row
+    check(set(qc) == set(kpn), "QC covers %d traits; the project has %d (missing: %s)"
+          % (len(qc), len(kpn), sorted(set(kpn) - set(qc))[:10]))
+    for trait, row in qc.items():
+        check(row["pigean_commit"] == args.expected_pigean_commit, "%s ran at pigean %s, expected %s"
+              % (trait, row["pigean_commit"], args.expected_pigean_commit))
+        check(row["kpn_trait_id"] == kpn[trait]["kpn_trait_id"], "KPN id of %s disagrees with the map" % trait)
+    models = {(r["min_combined"], r["phewas_mode"], r["anchor_covariate"], r["se_type"]) for r in qc.values()}
+    check(len(models) == 1, "The traits ran different factor-PheWAS models: %s" % sorted(models))
+
+    files = {}
+    for path in args.links_file:
+        with open_text(path) as fh:
+            check(fh.readline().rstrip("\n").split("\t") == LINKAGE_COLUMNS, "Unexpected columns in %s" % path)
+            first = fh.readline().split("\t", 1)[0]
+        check(first in qc and first not in files, "%s holds no rows or a repeated trait (%r)" % (path, first))
+        files[first] = path
+    check(set(files) == set(qc), "Links cover %d traits; the QC %d" % (len(files), len(qc)))
+    order = sorted(files)
+
+    def rows_of(trait):
+        with open_text(files[trait]) as fh:
+            for row in csv.DictReader(fh, delimiter="\t", quoting=csv.QUOTE_NONE):
+                check(row["trait"] == trait, "%s holds rows of %s" % (files[trait], row["trait"]))
+                yield row
+
+    p_values = array("d")
+    for trait in order:
+        before = len(p_values)
+        p_values.extend(p_value_key(row["phewas_p_onesided"]) for row in rows_of(trait))
+        check(len(p_values) - before == int(qc[trait]["n_rows"]), "%s has %d rows; its QC says %s"
+              % (files[trait], len(p_values) - before, qc[trait]["n_rows"]))
+    q_values = bh_q_values(np.frombuffer(p_values, dtype=float))
+
+    summary, position, n_links = [], 0, 0
+    with open_text(args.output_file, "w") as out:
+        out.write(tsv_line(FACTOR_LINK_COLUMNS))
+        for trait in order:
+            factors = OrderedDict()
+            for row in rows_of(trait):
+                q = float(q_values[position])
+                position += 1
+                factor = factors.setdefault(row["factor_id"], {"row": row, "n": 0, "linked": [], "own_q": NA})
+                factor["n"] += 1
+                if row["is_own_trait"] == "True":
+                    factor["own_q"] = "%.3g" % q
+                if q <= args.max_q:
+                    row["phewas_q"] = "%.3g" % q
+                    out.write(tsv_line(row[c] for c in FACTOR_LINK_COLUMNS))
+                    factor["linked"].append(row)
+                    n_links += 1
+            for factor_id, factor in factors.items():
+                linked = factor["linked"]
+                others = [r for r in linked if r["is_own_trait"] != "True"]
+                summary.append({
+                    "trait": trait, "kpn_trait_id": factor["row"]["kpn_trait_id"], "factor_id": factor_id,
+                    "factor_label": factor["row"]["factor_label"], "n_phenotypes": factor["n"], "n_linked": len(linked),
+                    "n_linked_kpn_traits": len({r["phenotype_kpn_trait_id"] for r in others if r["phenotype_kpn_trait_id"] != NA}),
+                    "n_linked_atlas_traits": sum(r["is_atlas_trait"] == "True" for r in others), "own_trait_q": factor["own_q"],
+                    "top_linked": "; ".join(r["phenotype_name"] if r["phenotype_name"] != NA else r["phenotype"]
+                                            for r in others[:TOP_LINKED])})
+    write_tsv(args.output_summary_file, FACTOR_LINK_SUMMARY_COLUMNS, summary)
+    write_tsv(args.output_manifest_file, LINKAGE_QC_COLUMNS, [qc[trait] for trait in order])
+    print("%d links (q <= %g) of %d factor-phenotype tests; %d of %d factors linked to another KPN trait"
+          % (n_links, args.max_q, len(q_values), sum(1 for r in summary if r["n_linked_kpn_traits"]), len(summary)))
+
+
+# -------------------------------------------------------------------------------------------------
 
 
 def build_parser():
@@ -1571,6 +1992,31 @@ def build_parser():
         p.add_argument("--" + name, required=True)
     p.add_argument("--exclude-libraries", default="")
     p.set_defaults(func=cmd_betas_collect)
+
+    p = sub.add_parser("linkage-phenotype-stats", help="Keep the PIGEAN gene stats rows eaggl's trait linkage reads")
+    for name in ("gene-stats-file", "registry-file", "trait-kpn-map-file", "genes-file", "output-file",
+                 "output-phenotypes-file", "output-gene-map-file"):
+        p.add_argument("--" + name, required=True)
+    p.add_argument("--min-combined", type=float, required=True)
+    p.set_defaults(func=cmd_linkage_phenotype_stats)
+
+    p = sub.add_parser("linkage-trait", help="Link one trait's factors to every PIGEAN phenotype with eaggl")
+    for name in ("python", "pigean-src", "repo-dir", "expected-pigean-commit", "phewas-stats-file", "phenotypes-file",
+                 "gene-map-file", "gene-stats-file", "genes-file", "trait-factors-file", "trait-factor-index-file",
+                 "trait-kpn-map-file", "trait", "kpn-trait-id", "work-dir", "output-file", "output-qc-file"):
+        p.add_argument("--" + name, required=True)
+    p.add_argument("--min-combined", type=float, required=True)
+    p.add_argument("--seed", type=int, required=True)
+    p.set_defaults(func=cmd_linkage_trait)
+
+    p = sub.add_parser("linkage-collect", help="Every trait's factor-phenotype links, with q-values over all traits")
+    p.add_argument("--links-file", action="append", required=True)
+    p.add_argument("--qc-file", action="append", required=True)
+    for name in ("trait-kpn-map-file", "expected-pigean-commit", "output-file", "output-summary-file",
+                 "output-manifest-file"):
+        p.add_argument("--" + name, required=True)
+    p.add_argument("--max-q", type=float, required=True)
+    p.set_defaults(func=cmd_linkage_collect)
 
     p = sub.add_parser("compare-global", help="Compare per-trait and all-factor projections (manual check)")
     p.add_argument("--trait-long-file", action="append", required=True)

@@ -1,8 +1,8 @@
 # CFDE gene-set projection onto EAGGL factors (LAP)
 
-This LAP pipeline projects every CFDE gene set onto the EAGGL mechanism factors and scores every trait against the gene
-sets. It runs in four stages, each a prefix of its LAP commands (`--only-cmd`), and every intermediate is a plain-text
-table you can open in the LAP web view:
+This LAP pipeline projects every CFDE gene set onto the EAGGL mechanism factors, scores every trait against the gene
+sets, and links every factor to every PIGEAN phenotype. It runs in five stages, each a prefix of its LAP commands
+(`--only-cmd`), and every intermediate is a plain-text table you can open in the LAP web view:
 
 | Stage | What it does | Per trait you can open |
 |---|---|---|
@@ -10,6 +10,7 @@ table you can open in the LAP web view:
 | 2. `factors_` | KPN trait ids, all factors in eaggl's layout, and each trait's factors | `<trait>.factors.tsv` (factor_id, gene, loading), `<trait>.factor_index.tsv` |
 | 3. `projection_` | Checks the projection against the pinned eaggl, projects each trait, collects the QC | `<trait>.projection.tsv`, `<trait>.projection_top.tsv`, `<trait>.projection_qc.tsv`, `<trait>.projection.log` |
 | 4. `betas_` | Slices each trait's PIGEAN gene stats and fits `python -m pigean betas` once per library (all but LINCS), then collects | `<trait>.gene_stats.tsv`, `<trait>.betas_runs.tsv`, `<trait>.betas_all.tsv`, `<trait>.betas.tsv` |
+| 5. `linkage_` | Links every factor to every PIGEAN phenotype (6,698, not only the trait it was fitted on) with eaggl's trait linkage and factor-PheWAS, then q-values over all traits | `<trait>.factor_links.tsv`, `<trait>.factor_links_qc.tsv` |
 
 Then `portal_` (the audit portal) and `release_` (one **reference release** folder, which one command publishes to the
 app's environments; see [Reference release](#reference-release-release_-stage) and `../docs/reference-release.md`).
@@ -98,6 +99,7 @@ raw/  out/  log/                    inputs / LAP outputs / run logs (git-ignored
 | 2. factors | `factors_kpn_map_cmd`, `factors_assemble_cmd` → `factors_trait_cmd` (per trait) |
 | 3. projection | `projection_check_cmd` (the kernel against eaggl) → `projection_trait_cmd` (per trait) → `projection_collect_cmd` (fan-in over all 711 traits) |
 | 4. gene-set betas | `betas_gene_stats_index_cmd` → `betas_trait_gene_stats_cmd`, `betas_trait_cmd` (per trait: a pigean fit per library, then ranked) → `betas_collect_cmd` (fan-in) |
+| 5. factor-trait links | `linkage_phenotype_stats_cmd` (one pass over the export) → `linkage_trait_cmd` (per trait: one eaggl run; needs the betas stage's `<trait>.gene_stats.tsv`) → `linkage_collect_cmd` (fan-in) |
 | optional | `lincs_trait_betas_cmd` (per trait: the LINCS fit) |
 | audit portal | `portal_build_db_cmd` (fan-in over all 711 traits) → `portal_export_audit_cmd`, `portal_build_html_cmd` |
 | reference release | `release_build_cmd` (fan-in over all 711 traits; files only, publishing is by hand) |
@@ -128,6 +130,10 @@ Everything is plain text except the linked source loadings and the `.npy` pack.
 | `traits/<trait>/<trait>.betas.tsv` | **Trait → gene-set betas.** The gene sets PIGEAN analyzed: `trait, kpn_trait_id, gene_set_id, collection_id, cfde_label, library, n_genes, beta_uncorrected, beta, avg_postp, library_rank, response, p, sigma2` |
 | `*.betas_manifest.tsv` | Every trait × library fit: `trait, kpn_trait_id, library, status, n_gene_sets, n_kept, n_nonzero_beta_uncorrected, p, sigma2, seconds` |
 | `traits/<trait>/<trait>.lincs_betas_runs.tsv`, `<trait>.lincs_betas.tsv` | Optional: the LINCS fit and its ranked betas |
+| `*.linkage_gene_phewas_stats.tsv`, `*.linkage_phenotypes.tsv`, `*.pigean_to_eaggl_case.gene.map` | The export's rows eaggl links (`combined` > 1, one per gene and phenotype); every phenotype: `phenotype, kpn_trait_id, kpn_match (legacy_phenotype_id, pigean_id or none), gwas_source_category, phenotype_name, is_anchor, n_genes, n_genes_kept`; the case-only gene map |
+| `traits/<trait>/<trait>.factor_links.tsv` | **Factor → every phenotype.** One row per factor and phenotype: `trait, kpn_trait_id, factor_id, factor_label, phenotype, phenotype_kpn_trait_id, phenotype_name, is_own_trait, is_atlas_trait, nnls_loading, cosine_loading, phewas_beta, phewas_se, phewas_z, phewas_p, phewas_p_onesided` (each factor's rows by one-sided p); eaggl's own files are in `linkage/` |
+| `traits/<trait>/<trait>.factor_links_qc.tsv`, `*.linkage_manifest.tsv` | `n_factors, n_phenotypes, n_rows, n_genes, n_genes_with_stats` (factor genes with anchor stats), the factor-PheWAS model, `pigean_commit, eaggl_seconds`; all traits |
+| `*.factor_links.tsv`, `*.factor_links_summary.tsv` | The links with q ≤ `linkage_max_q` (0.05; Benjamini-Hochberg over every factor-phenotype test of every trait), with `phewas_q`; per factor: `n_phenotypes, n_linked, n_linked_kpn_traits, n_linked_atlas_traits` (other phenotypes), `own_trait_q, top_linked` |
 
 **About the loadings**
 - Loadings are written as eaggl writes them (`%.4g`), and `projection_check_cmd` requires them to equal eaggl's.
@@ -141,6 +147,8 @@ Paths are relative to this `lap/` directory. The pipeline runs on UGER; start it
   trait then maps the pack and projects its 76 chunks in about a minute (8 GB requested).
 - **Betas:** each trait's 8 library fits take a minute or two and under 1 GB. The optional LINCS fit takes ~30 min
   (24 GB requested), almost all of it reading the 1.5M signatures.
+- **Links:** after the betas (each trait reads its `<trait>.gene_stats.tsv`). The filter reads the 18 GB export once
+  (about 10 min, 40 MB). Each trait's eaggl run then takes a few minutes and up to ~4 GB (8 GB requested).
 - **Release:** the build reads the 9 GB of collection documents one at a time (32 GB requested).
 
 ```bash
@@ -162,6 +170,7 @@ lap_run --init && lap_run --mkdir && lap_run --check
 lap_run --only-cmd '^(genesets_|factors_)' --bsub
 lap_run --only-cmd '^projection_' --bsub
 lap_run --only-cmd '^betas_' --bsub
+lap_run --only-cmd '^linkage_' --bsub
 lap_run --only-cmd '^(portal_|release_)' --bsub
 
 # or everything but the optional LINCS betas in one run
@@ -333,6 +342,59 @@ Only `log_bf` is the same across the export's libraries; `prior` and `combined` 
 
 The release build reads every `<trait>.betas.tsv` into `trait_gene_sets.tsv.gz`, published as
 `<prefix>_ref_trait_gene_sets`.
+
+## Factor-trait links (`linkage_` stage)
+
+Each factor is fitted on one trait, its anchor, and until this stage it was linked to that trait alone. This stage
+links every factor to **every phenotype of the PIGEAN export**: the 711 traits and 5,987 more (2,531 GWAS Catalog,
+1,413 rare diseases and 2,043 portal traits), 6,178 of them with a KPN trait id. It uses the pinned eaggl's own
+projection-only modes, run once per trait on the trait's factors:
+
+- **Trait linkage** (`--trait-factor-links-out`), eaggl's primary annotation layer. Each phenotype's `combined` support
+  becomes a probability (background prior 0.05) and is projected onto the trait's factors with the fixed-W NNLS of the
+  gene-set projection: `nnls_loading` (and `cosine_loading`, its share of the phenotype's loadings). It is
+  descriptive, with no p-value.
+- **Factor-PheWAS** (`--run-factor-phewas`, default `marginal_anchor_adjusted_binary`). For each factor and phenotype,
+  an OLS of the phenotype's hits (genes with `combined` > 1) on the factor's gene loadings, adjusted for the anchor
+  trait's direct support (its `log_bf`), with robust (HC3) standard errors. It asks whether the phenotype is enriched
+  in the factor beyond the anchor's own genes: `phewas_beta, phewas_se, phewas_z, phewas_p, phewas_p_onesided`.
+
+1. `linkage_phenotype_stats_cmd` (project; 11 minutes, 50 MB) reads the 18 GB export once and keeps the rows eaggl
+   reads: `combined` > `linkage_min_combined` (1, eaggl's `--trait-linkage-threshold` and hit cutoff), with `combined`,
+   `log_bf` and `prior` all numbers. eaggl's reader skips any other row (47,649 such rows above the cutoff); the
+   export's prior-only genes have `log_bf` NA. That keeps 1,382,780 of 283,667,679 rows (74 MB). It also lists every
+   phenotype with its KPN id (`legacy_phenotype_id` as for the anchors, else the registry's `pigean_id`).
+   - **Why a filtered file.** eaggl keeps only these rows anyway (0.5% of the export). When its read has dropped rows,
+     its factor-PheWAS re-reads the whole file once per 300 phenotypes: about 24 passes over 18 GB per trait. Given
+     only these rows, it reuses what it read.
+   - **The same results.** For T2D on 150 traits, eaggl given every row of those traits (and re-reading them) and
+     eaggl given the filtered rows wrote byte-identical trait links and factor-PheWAS statistics. That holds once the
+     rows eaggl's first read skips are left out; its re-read would count those prior-only rows as hits.
+   - **Gene symbols.** The export spells 235 EAGGL genes in another case (`C10orf105` for `C10ORF105`). A case-only gene
+     map (`--gene-map-in`, as for the CFDE gene sets) renames them. Some rare-disease phenotypes list both spellings,
+     the upper-case one with the disease's direct support; a phenotype keeps one row per gene, the exact spelling first.
+     72 factor genes (older symbols such as `AARS`) are not in the export.
+2. `linkage_trait_cmd` (per trait; needs the betas stage's `<trait>.gene_stats.tsv`) runs eaggl on the trait's
+   factors (rebuilt in eaggl's layout from `<trait>.factors.tsv`). It passes the filtered rows, and the trait's own
+   gene stats on the factor genes for the anchor adjustment; eaggl would add any other gene and then refuse the factor
+   basis. A factor gene without stats gets eaggl's fill, the mean `log_bf`. It writes `<trait>.factor_links.tsv`: one
+   row per factor and phenotype, with the factor id and label, the phenotype's KPN id and name, `is_own_trait` and
+   `is_atlas_trait`. Each factor's rows are sorted by one-sided p, and eaggl's own files are kept in `linkage/`. T2D (13
+   factors × 6,697 phenotypes) took 258 s at a 3.8 GB peak, mostly the dense 18,477 × 6,697 trait linkage.
+3. `linkage_collect_cmd` (fan-in) gives every factor-phenotype test of every trait a Benjamini-Hochberg q-value (one
+   pass of p-values, one of rows). It writes the links with q ≤ `linkage_max_q` (0.05) and one summary row per factor:
+   - `n_linked`;
+   - `n_linked_kpn_traits` and `n_linked_atlas_traits` (other phenotypes);
+   - `own_trait_q`: the anchor itself, tested beyond its own direct support;
+   - `top_linked`.
+
+**How many.** For T2D alone (the collect run on T2D's file), q ≤ 0.05 keeps 14,617 of 87,061 tests. Each factor
+links to 464-1,910 phenotypes, 2,344 in all, which are 2,306 KPN traits besides T2D. A factor's strongest links are
+related traits; for example "Lipid Metabolism Regulation" links to polyunsaturated fatty acids and "Behavioral Response
+Mechanisms" to chronotype. A stricter q or an `nnls_loading` floor gives shorter lists; every test stays in the
+per-trait files.
+
+Neither the release build nor the portal reads these files yet.
 
 ## Reference release (`release_` stage)
 

@@ -969,5 +969,262 @@ class BetasPerLibraryTest(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("Runs cover 1 traits; the project has 2", err)
 
+
+FAKE_EAGGL = '''"""Stands in for `python -m eaggl factor` in projection-only mode: every phenotype of --gene-phewas-stats-in is linked
+to every factor of --factor-gene-clusters-in, and later phenotypes get smaller p-values (10^-(row), over the factor)."""
+import os, sys
+args = sys.argv[2:]
+value = lambda flag: args[args.index(flag) + 1]
+with open(os.environ["FAKE_EAGGL_CALLS"], "a") as fh:
+    fh.write(" ".join(args) + "\\n")
+if os.environ.get("FAKE_EAGGL_CRASH"):
+    sys.stderr.write("Killed\\n")
+    sys.exit(137)
+with open(value("--factor-gene-clusters-in")) as fh:
+    n_factors = sum(1 for line in fh) - 1
+phenos = []
+with open(value("--gene-phewas-stats-in")) as fh:
+    header = fh.readline().rstrip("\\n").split("\\t")
+    for line in fh:
+        pheno = line.split("\\t")[header.index(value("--gene-phewas-stats-pheno-col"))]
+        if pheno not in phenos:
+            phenos.append(pheno)
+cutoff = float(value("--factor-phewas-thresholded-combined-cutoff"))
+with open(value("--trait-factor-links-out"), "w") as out:
+    out.write("trait\\tfactor\\tis_anchor\\tnnls_loading\\tcosine_loading\\teuclidean_distance\\n")
+    for i, pheno in enumerate(phenos):
+        for k in range(n_factors):
+            out.write("%s\\tFactor%d\\t0\\t%g\\t0.5\\t1\\n" % (pheno, k + 1, 0.1 * (i + 1)))
+with open(value("--factor-phewas-stats-out"), "w") as out:
+    out.write("Factor\\tLabel\\tPheno\\tanalysis\\tmode\\tmodel_name\\tfactor_model_scope\\toutcome_surface\\t"
+              "anchor_covariate\\tthreshold_cutoff\\tse_type\\tbeta\\tP\\tP_onesided\\tZ\\tSE\\n")
+    for k in range(n_factors):
+        for i, pheno in enumerate(phenos):
+            if pheno == os.environ.get("FAKE_EAGGL_DROP"):
+                continue
+            p = 10.0 ** -(i + 1) / (k + 1)
+            out.write("Factor%d\\tlabel\\t%s\\tm\\tmarginal_anchor_adjusted_binary\\tm\\tmarginal_one_factor\\t"
+                      "binary_thresholded\\tdirect\\t%.3g\\trobust\\t0.2\\t%.3g\\t%.3g\\t3\\t0.05\\n" % (k + 1, pheno, cutoff, 2 * p, p))
+for flag in ("--params-out", "--log-file", "--warnings-file"):
+    open(value(flag), "w").close()
+'''
+
+
+class FactorTraitLinkageTest(unittest.TestCase):
+    """linkage-phenotype-stats (one pass over the export), linkage-trait (eaggl per trait, with a fake eaggl) and
+    linkage-collect (q-values over all traits)."""
+
+    # (phenotype, gene, combined): T-one and Solo are the anchors, Other a KPN trait by legacy id, rare_v2_7 one by the
+    # registry's pigean_id, gcat_none no KPN trait. Rows at or below combined 1 (and NA) are not linked. C10orf71, e5 and
+    # d4 spell EAGGL genes in another case: Solo's e5 stands in for its unlinked E5, Other's d4 loses to its own D4.
+    # gcat_none's A1 has no log_bf (a prior-only gene), and eaggl's reader skips such a row.
+    EXPORT = [("T-one", "A1", "2.5"), ("T-one", "B2", "1"), ("T-one", "C10orf71", "1.2"),
+              ("Solo", "D4", "3"), ("Solo", "E5", "NA"), ("Solo", "e5", "2"),
+              ("Other", "A1", "0.4"), ("Other", "D4", "1.01"), ("Other", "d4", "5"),
+              ("rare_v2_7", "B2", "4"),
+              ("gcat_none", "F6", "1.5"), ("gcat_none", "E5", "-2"), ("gcat_none", "A1", "3", "NA")]
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        p = self.p = lambda *parts: os.path.join(self.tmp.name, *parts)
+        self.write_export(self.EXPORT)
+        header = ["portal_id", "gwas_source_category", "legacy_phenotype_id", "phenotype_name", "legacy_trait_group",
+                  "trait_group", "trait_type", "pigean_id"]
+        registry = [(KPN_IDS["T-one"], "KPN", "T-one", "Trait one", "G", "g", "phenotype", ""),
+                    (KPN_IDS["Solo"], "KPN", "Solo", "Solo trait", "G", "g", "phenotype", ""),
+                    ("KPN.TRAIT:0000003", "KPN", "Other", "Other trait", "G", "g", "phenotype", ""),
+                    ("KPN.TRAIT:0000007", "rare_v2", "Seven_syndrome_Orphanet_7", "Seven syndrome", "R", "r", "rare_disease",
+                     "rare_v2_7")]
+        write(p("registry.tsv"), tsv([header] + registry))
+        write(p("trait_kpn_map.tsv"), tsv([pw.TRAIT_KPN_COLUMNS] + [(t, k, "v0.0.2", "c", "x", t, "g", "lg", "tt", "1")
+                                                                    for t, k in KPN_IDS.items()]))
+        write(p("genes.tsv"), tsv([["gene"]] + [[g] for g in GENES]))
+        for trait in KPN_IDS:
+            factors = [(f, vals) for f, vals in LOADINGS if f.startswith(trait + "::")]
+            write(p(trait, "factors.tsv"), tsv([pw.TRAIT_FACTOR_COLUMNS] + [(f, g, repr(v)) for f, vals in factors
+                                                                           for g, v in zip(GENES, vals) if v]))
+            write(p(trait, "factor_index.tsv"), tsv([pw.TRAIT_FACTOR_INDEX_COLUMNS] + [
+                ("Factor%d" % k, f, trait, KPN_IDS[trait], f.split("::")[1], f[-1], LABELS[f], "Factor9%d" % k)
+                for k, (f, _) in enumerate(factors, 1)]))
+            write(p(trait, "gene_stats.tsv"), tsv([("phenotype", "gene", "combined", "log_bf", "prior")]
+                                                  + [(trait, {"C10ORF71": "C10orf71"}.get(g, g), "1", "0.5", "0.5")
+                                                     for g in GENES] + [(trait, "NOTAFACTORGENE", "3", "2", "1")]))
+        write(p("src", "eaggl", "__init__.py"), "")
+        write(p("src", "eaggl", "__main__.py"), FAKE_EAGGL)
+        self.repo = p("clone")
+        write(os.path.join(self.repo, "src", "eaggl", "x.py"), "x = 1\n")
+        subprocess.run(["git", "init", "-q", self.repo], check=True)
+        git(self.repo, "add", "-A")
+        git(self.repo, "commit", "-qm", "c")
+        self.head = subprocess.run(["git", "-C", self.repo, "rev-parse", "HEAD"], stdout=subprocess.PIPE,
+                                   universal_newlines=True).stdout.strip()
+        os.environ["FAKE_EAGGL_CALLS"] = p("calls.txt")
+        for variable in ("FAKE_EAGGL_CALLS", "FAKE_EAGGL_CRASH", "FAKE_EAGGL_DROP"):
+            self.addCleanup(os.environ.pop, variable, None)
+
+    def write_export(self, rows):
+        write(self.p("export.tsv"), tsv([("phenotype", "gene", "combined", "log_bf", "prior")]
+                                        + [(row[0], row[1], row[2], row[3] if len(row) > 3 else "0.1", "0.2") for row in rows]))
+
+    def phenotype_stats(self):
+        p = self.p
+        return run(["linkage-phenotype-stats", "--gene-stats-file", p("export.tsv"), "--registry-file", p("registry.tsv"),
+                    "--trait-kpn-map-file", p("trait_kpn_map.tsv"), "--genes-file", p("genes.tsv"), "--min-combined", "1",
+                    "--output-file", p("phewas.tsv"), "--output-phenotypes-file", p("phenotypes.tsv"),
+                    "--output-gene-map-file", p("case.map")])
+
+    def link(self, trait):
+        p = self.p
+        return run(["linkage-trait", "--python", sys.executable, "--pigean-src", p("src"), "--repo-dir", self.repo,
+                    "--expected-pigean-commit", self.head, "--phewas-stats-file", p("phewas.tsv"),
+                    "--phenotypes-file", p("phenotypes.tsv"), "--gene-map-file", p("case.map"),
+                    "--gene-stats-file", p(trait, "gene_stats.tsv"),
+                    "--genes-file", p("genes.tsv"), "--trait-factors-file", p(trait, "factors.tsv"),
+                    "--trait-factor-index-file", p(trait, "factor_index.tsv"), "--trait-kpn-map-file", p("trait_kpn_map.tsv"),
+                    "--trait", trait, "--kpn-trait-id", KPN_IDS[trait], "--min-combined", "1", "--seed", "1",
+                    "--work-dir", p(trait, "linkage"), "--output-file", p(trait, "links.tsv"),
+                    "--output-qc-file", p(trait, "qc.tsv")])
+
+    def collect(self, traits, max_q="0.05"):
+        p = self.p
+        files = sum((["--links-file", p(t, "links.tsv"), "--qc-file", p(t, "qc.tsv")] for t in traits), [])
+        return run(["linkage-collect"] + files + ["--trait-kpn-map-file", p("trait_kpn_map.tsv"), "--expected-pigean-commit",
+                                                  self.head, "--max-q", max_q, "--output-file", p("links.tsv"),
+                                                  "--output-summary-file", p("summary.tsv"),
+                                                  "--output-manifest-file", p("manifest.tsv")])
+
+    def test_phenotype_stats_keep_the_rows_eaggl_links_and_every_phenotypes_kpn_id(self):
+        self.assertEqual(self.phenotype_stats(), (0, ""))
+        with open(self.p("phewas.tsv")) as fh:
+            self.assertEqual([tuple(line.split("\t")[:3]) for line in fh][1:],
+                             [("T-one", "A1", "2.5"), ("T-one", "C10orf71", "1.2"), ("Solo", "D4", "3"), ("Solo", "e5", "2"),
+                              ("Other", "D4", "1.01"), ("rare_v2_7", "B2", "4"), ("gcat_none", "F6", "1.5")])
+        rows = read_rows(self.p("phenotypes.tsv"))
+        self.assertEqual([(r["phenotype"], r["kpn_trait_id"], r["kpn_match"], r["is_anchor"], r["n_genes"], r["n_genes_kept"])
+                          for r in rows],
+                         [("T-one", KPN_IDS["T-one"], "legacy_phenotype_id", "True", "3", "2"),
+                          ("Solo", KPN_IDS["Solo"], "legacy_phenotype_id", "True", "3", "2"),
+                          ("Other", "KPN.TRAIT:0000003", "legacy_phenotype_id", "False", "3", "1"),
+                          ("rare_v2_7", "KPN.TRAIT:0000007", "pigean_id", "False", "1", "1"),
+                          ("gcat_none", "NA", "none", "False", "3", "1")])
+        self.assertEqual(rows[3]["phenotype_name"], "Seven syndrome")
+        with open(self.p("case.map")) as fh:
+            self.assertEqual(fh.read(), "C10orf71\tC10ORF71\nd4\tD4\ne5\tE5\n")
+
+    def test_one_row_per_gene_prefers_the_exact_spelling(self):
+        target = pw.case_target({"C10ORF71", "A1", "B2"})
+        self.assertEqual([target(s) for s in ("C10orf71", "c10ORF71", "A1", "a1", "Xyz")], ["C10ORF71", "C10ORF71", "A1", "A1", None])
+        rows = [("a1", "lower"), ("A1", "exact"), ("C10orf71", "first"), ("c10ORF71", "second"), ("Xyz", "other")]
+        self.assertEqual(pw.one_row_per_gene(rows, target), (["exact", "first", "other"], 2))
+
+    def test_phenotype_stats_refuse_split_phenotypes_and_missing_anchors(self):
+        self.write_export(self.EXPORT + [("T-one", "D4", "2")])
+        code, err = self.phenotype_stats()
+        self.assertEqual(code, 1)
+        self.assertIn("The rows of T-one", err)
+        self.write_export([row for row in self.EXPORT if row[0] != "Solo"])
+        code, err = self.phenotype_stats()
+        self.assertEqual(code, 1)
+        self.assertIn("1 traits have no gene stats", err)
+
+    def test_each_factor_is_linked_to_every_phenotype(self):
+        self.assertEqual(self.phenotype_stats()[0], 0)
+        self.assertEqual(self.link("T-one"), (0, ""))
+        rows = read_rows(self.p("T-one", "links.tsv"))
+        phenotypes = ["T-one", "Solo", "Other", "rare_v2_7", "gcat_none"]
+        self.assertEqual(len(rows), 2 * len(phenotypes))
+        first = [r for r in rows if r["factor_id"] == "T-one::Factor1"]
+        self.assertEqual([r["phenotype"] for r in first], phenotypes[::-1])  # the smallest p first
+        by_phenotype = {r["phenotype"]: r for r in first}
+        self.assertEqual((by_phenotype["T-one"]["is_own_trait"], by_phenotype["Solo"]["is_own_trait"]), ("True", "False"))
+        self.assertEqual((by_phenotype["Solo"]["is_atlas_trait"], by_phenotype["Other"]["is_atlas_trait"]), ("True", "False"))
+        self.assertEqual((by_phenotype["rare_v2_7"]["phenotype_kpn_trait_id"], by_phenotype["gcat_none"]["phenotype_kpn_trait_id"]),
+                         ("KPN.TRAIT:0000007", "NA"))
+        self.assertEqual((first[0]["factor_label"], first[0]["kpn_trait_id"], first[0]["nnls_loading"], first[0]["phewas_p_onesided"]),
+                         ("Alpha program", KPN_IDS["T-one"], "0.5", "1e-05"))
+        qc = read_rows(self.p("T-one", "qc.tsv"))
+        self.assertEqual([(r["n_factors"], r["n_phenotypes"], r["n_rows"], r["n_genes"], r["n_genes_with_stats"],
+                           r["phewas_mode"], r["anchor_covariate"], r["pigean_commit"]) for r in qc],
+                         [("2", "5", "10", "6", "6", "marginal_anchor_adjusted_binary", "direct", self.head)])
+        with open(self.p("calls.txt")) as fh:
+            call = fh.read()
+        # eaggl gets the anchor's stats on the factor genes (PIGEAN spellings kept; eaggl maps them) and the gene map
+        stats = self.p("T-one", "linkage", "T-one.gene_stats.tsv")
+        self.assertIn("--gene-stats-in %s " % stats, call)
+        self.assertIn("--gene-map-in %s " % self.p("case.map"), call)
+        self.assertEqual([r["gene"] for r in read_rows(stats)], ["A1", "B2", "C10orf71", "D4", "E5", "F6"])
+        self.assertIn("--trait-linkage-threshold 1.0 ", call)
+        self.assertIn("--factor-phewas-thresholded-combined-cutoff 1.0 ", call)
+        # eaggl's factor file: every gene column, the long file's text where listed and 0 elsewhere
+        with open(self.p("T-one", "linkage", "T-one.factors_by_genes.tsv")) as fh:
+            self.assertEqual(fh.read().splitlines(), ["\t".join(["Factor"] + GENES),
+                                                      "T-one::Factor1\t1.0\t0.5\t0\t0\t0\t0",
+                                                      "T-one::Factor2\t0\t0.25\t0.8\t0.4\t0\t0"])
+
+    def test_linkage_refuses_a_failed_or_partial_eaggl_run(self):
+        self.assertEqual(self.phenotype_stats()[0], 0)
+        os.environ["FAKE_EAGGL_CRASH"] = "1"
+        code, err = self.link("T-one")
+        self.assertEqual(code, 1)
+        self.assertIn("eaggl failed for T-one", err)
+        os.environ.pop("FAKE_EAGGL_CRASH")
+        os.environ["FAKE_EAGGL_DROP"] = "Other"
+        code, err = self.link("T-one")
+        self.assertEqual(code, 1)
+        self.assertIn("cover different phenotypes", err)
+
+    def test_collect_links_by_q_value_over_all_traits(self):
+        self.assertEqual(self.phenotype_stats()[0], 0)
+        for trait in KPN_IDS:
+            self.assertEqual(self.link(trait)[0], 0)
+        self.assertEqual(self.collect(KPN_IDS)[0], 0)
+        tests = read_rows(self.p("Solo", "links.tsv")) + read_rows(self.p("T-one", "links.tsv"))
+        p_values = [float(r["phewas_p_onesided"]) for r in tests]
+        expected = {}  # Benjamini-Hochberg by hand
+        ranked = sorted(range(len(p_values)), key=lambda i: p_values[i])
+        running = 1.0
+        for position in range(len(ranked) - 1, -1, -1):
+            i = ranked[position]
+            running = min(running, p_values[i] * len(p_values) / (position + 1))
+            expected[(tests[i]["factor_id"], tests[i]["phenotype"])] = running
+        links = read_rows(self.p("links.tsv"))
+        self.assertEqual(sorted((r["factor_id"], r["phenotype"]) for r in links),
+                         sorted(key for key, q in expected.items() if q <= 0.05))
+        for r in links:
+            self.assertEqual(r["phewas_q"], "%.3g" % expected[(r["factor_id"], r["phenotype"])])
+        summary = {r["factor_id"]: r for r in read_rows(self.p("summary.tsv"))}
+        self.assertEqual(sorted(summary), ["Solo::Factor1", "T-one::Factor1", "T-one::Factor2"])
+        solo = summary["Solo::Factor1"]
+        linked = [r for r in links if r["factor_id"] == "Solo::Factor1"]
+        others = [r for r in linked if r["phenotype"] != "Solo"]
+        self.assertEqual((solo["n_phenotypes"], solo["n_linked"], solo["n_linked_atlas_traits"]),
+                         ("5", str(len(linked)), str(sum(r["is_atlas_trait"] == "True" for r in others))))
+        self.assertEqual(solo["n_linked_kpn_traits"], str(len({r["phenotype_kpn_trait_id"] for r in others} - {"NA"})))
+        self.assertEqual(solo["own_trait_q"], "%.3g" % expected[("Solo::Factor1", "Solo")])
+        self.assertEqual(solo["top_linked"].split("; ")[0], "gcat_none")  # no KPN name: the phenotype id
+        self.assertEqual([r["trait"] for r in read_rows(self.p("manifest.tsv"))], ["Solo", "T-one"])
+
+    def test_collect_needs_every_trait_at_the_pinned_commit(self):
+        self.assertEqual(self.phenotype_stats()[0], 0)
+        self.assertEqual(self.link("T-one")[0], 0)
+        code, err = self.collect(["T-one"])
+        self.assertEqual(code, 1)
+        self.assertIn("QC covers 1 traits; the project has 2", err)
+        self.assertEqual(self.link("Solo")[0], 0)
+        qc = read_rows(self.p("Solo", "qc.tsv"))
+        qc[0]["pigean_commit"] = "f" * 40
+        pw.write_tsv(self.p("Solo", "qc.tsv"), pw.LINKAGE_QC_COLUMNS, qc)
+        code, err = self.collect(KPN_IDS)
+        self.assertEqual(code, 1)
+        self.assertIn("Solo ran at pigean ffff", err)
+
+    def test_bh_q_values(self):
+        if np is None:
+            self.skipTest("numpy missing")
+        q = pw.bh_q_values(np.array([0.01, 0.04, 0.03, float("nan"), 0.2]))
+        self.assertEqual([round(x, 6) for x in q], [0.05, 0.066667, 0.066667, 1.0, 0.25])
+
+
 if __name__ == "__main__":
     unittest.main()

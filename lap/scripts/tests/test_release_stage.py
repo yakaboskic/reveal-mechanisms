@@ -185,7 +185,7 @@ def expand(decl, text, seen=()):
 
 class StagesCfgTest(unittest.TestCase):
     """The stages, in run order, and plain-text outputs."""
-    STAGES = ("genesets_", "factors_", "projection_", "betas_", "lincs_", "portal_", "release_")
+    STAGES = ("genesets_", "factors_", "projection_", "betas_", "linkage_", "lincs_", "portal_", "release_")
 
     @classmethod
     def setUpClass(cls):
@@ -271,6 +271,62 @@ class BetasCfgTest(unittest.TestCase):
     def test_the_release_build_takes_every_trait_gene_set_stats_file(self):
         self.assertIn("!{input:--gene-set-stats-file:trait_gene_set_stats_file}", self.cmds["release_build_cmd"][1])
         self.assertEqual(self.decl["trait_gene_set_stats_file"][1], "@trait.betas.tsv")
+
+
+class LinkageCfgTest(unittest.TestCase):
+    """The linkage_ stage: every factor against every PIGEAN phenotype with the pinned eaggl (projection-only)."""
+    COMMANDS = {"linkage_phenotype_stats_cmd": (["short", "cmd"], "class_level project"),
+                "linkage_trait_cmd": (["short", "cmd"], "class_level trait rusage_mod $linkage_trait_mem"),
+                "linkage_collect_cmd": (["short", "cmd"], "class_level project rusage_mod $linkage_collect_mem")}
+    EAGGL_CLI = os.path.join(bm.LAP_DIR, "raw", "pigean_ca59661", "src", "eaggl", "cli.py")
+
+    @classmethod
+    def setUpClass(cls):
+        cls.decl = cfg_declarations()
+        cls.cmds = {key: value for key, value in cls.decl.items() if "cmd" in value[0]}
+
+    def test_the_stage_and_its_levels(self):
+        self.assertEqual(sorted(key for key in self.cmds if key.startswith("linkage_")), sorted(self.COMMANDS))
+        for key, (prefixes, postfix) in self.COMMANDS.items():
+            with self.subTest(cmd=key):
+                self.assertEqual((self.cmds[key][0], self.cmds[key][2]), (prefixes, postfix))
+        self.assertEqual(float(self.decl["linkage_min_combined"][1]), 1.0)  # eaggl's default --trait-linkage-threshold
+        self.assertTrue(0 < float(self.decl["linkage_max_q"][1]) <= 1)
+
+    def test_eaggl_reads_the_filtered_rows_and_the_anchors_own_gene_stats(self):
+        stats, trait = self.cmds["linkage_phenotype_stats_cmd"][1], self.cmds["linkage_trait_cmd"][1]
+        self.assertIn("--gene-stats-file $pigean_gene_stats_file ", stats)
+        self.assertIn("--min-combined $linkage_min_combined ", stats)
+        self.assertNotIn("pigean_gene_stats_file", trait)  # the 18 GB export is read once, by the filter
+        self.assertIn("!{output:--output-gene-map-file:linkage_gene_map_file}", stats)
+        for text in ("!{input:--phewas-stats-file:linkage_phewas_stats_file}", "!{input:--phenotypes-file:linkage_phenotypes_file}",
+                     "!{input:--gene-map-file:linkage_gene_map_file}", "!{input:--genes-file:eaggl_genes_in_file}",
+                     "!{input:--gene-stats-file:trait_gene_stats_file}", "!{input:--trait-factors-file:trait_factors_file}",
+                     "--min-combined $linkage_min_combined ", "--work-dir !{key::trait_linkage_dir} ",
+                     "--repo-dir $pigean_repo_dir --expected-pigean-commit $pigean_commit "):
+            self.assertIn(text, trait)
+        collect = self.cmds["linkage_collect_cmd"][1]
+        for text in ("!{input:--links-file:trait_factor_links_file}", "!{input:--qc-file:trait_linkage_qc_file}",
+                     "--max-q $linkage_max_q ", "--expected-pigean-commit $pigean_commit "):
+            self.assertIn(text, collect)
+        for value in (self.cmds["release_build_cmd"][1], self.cmds["portal_build_db_cmd"][1]):
+            self.assertNotIn("link", value)  # not read by the release or the portal
+
+    def test_every_eaggl_flag_exists_in_the_pinned_cli(self):
+        if not os.path.isfile(self.EAGGL_CLI):
+            self.skipTest("pinned pigean clone missing: %s" % self.EAGGL_CLI)
+        import projection_workflow
+        options = set(re.findall(r'add_option\("",\s*"(--[a-zA-Z0-9-]+)"', read(self.EAGGL_CLI)))
+        command = projection_workflow.eaggl_linkage_command("python", "factors.tsv", "phewas.tsv", "stats.tsv", "case.map", 1.0,
+                                                             1, "out")
+        self.assertEqual(command[2:5], ["-m", "eaggl", "factor"])
+        flags = {part for part in command if part.startswith("--")}
+        self.assertGreaterEqual(len(flags), 20)
+        for flag in ("--gene-phewas-stats-in", "--trait-factor-links-out", "--run-factor-phewas", "--factor-phewas-stats-out",
+                     "--gene-stats-in", "--gene-map-in", "--trait-linkage-threshold",
+                     "--factor-phewas-thresholded-combined-cutoff"):
+            self.assertIn(flag, flags)
+        self.assertEqual(sorted(flags - options), [])
 
 
 class ProjectionCfgTest(unittest.TestCase):
