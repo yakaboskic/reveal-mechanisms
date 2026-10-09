@@ -65,7 +65,7 @@ DUPLICATE_KEY = 1062  # the only MySQL warning INSERT IGNORE may raise here
 # DDL on live tables waits at most SWAP_LOCK_WAIT seconds per attempt for their metadata locks: a RENAME queued behind a long
 # reader would block every other reader of those tables. Retried SWAP_ATTEMPTS times.
 SWAP_LOCK_WAIT, SWAP_ATTEMPTS, LOCK_WAIT_TIMEOUT = 5, 12, 1205
-LONG_SUFFIX = '.cfde_projection.long.tsv.gz'
+LONG_SUFFIX = '.projection.tsv'
 LONG_COLUMNS = ['trait', 'kpn_trait_id', 'factor_id', 'factor', 'factor_label', 'gene_set_id', 'collection_id', 'cfde_label', 'library',
                 'joint_loading', 'marginal_loading', 'joint_rank_in_factor', 'marginal_rank_in_factor', 'is_joint_top_factor',
                 'joint_rank_in_library', 'marginal_rank_in_library']
@@ -79,7 +79,7 @@ ARCHIVE_FILE = 'archived_factors.jsonl.gz'
 FACTOR_GENE_COLUMNS = ('factor_key', 'gene', 'loading')
 # Trait -> CFDE gene-set betas: the LAP betas_ stage's per-trait files (projection_workflow.py annotate-gene-set-stats:
 # `pigean betas` on the trait's existing PIGEAN gene stats, no outer Gibbs) and the release's trait_gene_sets.tsv.gz.
-GENE_SET_STATS_SUFFIX = '.cfde_gene_set_stats.tsv.gz'
+GENE_SET_STATS_SUFFIX = '.betas.tsv'
 LAP_GENE_SET_STATS_COLUMNS = ('trait', 'kpn_trait_id', 'gene_set_id', 'collection_id', 'cfde_label', 'library', 'n_genes',
                               'beta_uncorrected', 'beta', 'avg_postp', 'library_rank', 'response', 'p', 'sigma2')
 TRAIT_GENE_SET_COLUMNS = ('kpn_trait_id', 'gene_set_id', 'library', 'beta_uncorrected', 'beta', 'avg_postp', 'library_rank')
@@ -252,7 +252,7 @@ LAP_FILES = {
     'factor_index': ('factor_index.tsv', ('global_eaggl_column', 'factor_id', 'trait', 'kpn_trait_id', 'factor', 'factor_number',
                                           'factor_label', 'n_nonzero_loadings', 'loading_l2', 'loading_variant')),
     'factor_metadata': ('factor_metadata.tsv', ('factor_id', 'trait', 'factor', 'factor_number', 'label')),
-    'gene_set_index': ('gene_set_index.tsv.gz', ('gene_set_id', 'gene_set_name', 'collection_id', 'cfde_label', 'library', 'partition',
+    'gene_set_index': ('gene_set_index.tsv', ('gene_set_id', 'gene_set_name', 'collection_id', 'cfde_label', 'library', 'partition',
                                                  'model', 'comparison', 'program', 'gmt_row', 'n_genes', 'n_genes_in_eaggl_universe', 'cfde_snapshot')),
     'projection_manifest': ('projection_manifest.tsv', ('trait', 'kpn_trait_id', 'kpn_release', 'n_factors', 'pigean_commit', 'qc_pass')),
     'cfde_index': ('cfde_index.tsv', ('library', 'partition', 'model', 'comparison', 'program', 'label', 'collection_id', 'n_sets', 'n_genes')),
@@ -260,7 +260,7 @@ LAP_FILES = {
                                                       'legacy_trait_group', 'trait_group', 'trait_type', 'pigean_id')),
     'kpn_trait_flat': ('kpn_trait_flat.tsv', ('portal_id', 'description', 'is_dichotomous', 'is_complex', 'target_id', 'target_label',
                                               'target_ontology', 'mapping_predicate', 'confidence')),
-    'factors_by_genes': ('all_factors.factors_by_genes.tsv.gz', ('Factor',)),
+    'factors_by_genes': ('all_factors.factors_by_genes.tsv', ('Factor',)),
 }
 MAPPING_COLUMNS = ('target_id', 'target_label', 'target_ontology', 'mapping_predicate', 'confidence', 'mapping_justification', 'source')
 
@@ -909,7 +909,7 @@ def gene_set_stats_files_in(directory):
 
 
 def write_trait_gene_sets(path, files, kpn_map, gene_set_ids):
-    """trait_gene_sets.tsv.gz from the per-trait `<trait>.cfde_gene_set_stats.tsv.gz` files, in KPN trait order: one file per
+    """trait_gene_sets.tsv.gz from the per-trait `<trait>.betas.tsv` files, in KPN trait order: one file per
     trait (no gene set PIGEAN analyzed is a header-only file), one response, known gene sets, library ranks 1..n.
     Returns (rows, the manifest block)."""
     by_kpn = {}
@@ -1373,8 +1373,8 @@ def parser():
     commands = p.add_subparsers(dest='command', required=True, parser_class=_Parser)
     c = commands.add_parser('build', help='Write one reference release folder from LAP outputs (pure files; embeds only cache misses)')
     c.add_argument('--lap-project-dir', type=Path, required=True)
-    c.add_argument('--long-file', type=Path, action='extend', nargs='+', default=[], help='A per-trait <trait>.cfde_projection.long.tsv.gz (repeatable)')
-    c.add_argument('--long-files-from', type=Path, help='Directory searched recursively for *.cfde_projection.long.tsv.gz')
+    c.add_argument('--long-file', type=Path, action='extend', nargs='+', default=[], help='A per-trait <trait>.projection.tsv (repeatable)')
+    c.add_argument('--long-files-from', type=Path, help='Directory searched recursively for *.projection.tsv')
     c.add_argument('--gene-set-stats-file', type=Path, action='extend', nargs='+', default=[],
                    help=f'A per-trait <trait>{GENE_SET_STATS_SUFFIX} of the LAP betas_ stage (repeatable)')
     c.add_argument('--gene-set-stats-from', type=Path, help=f'Directory searched recursively for *{GENE_SET_STATS_SUFFIX}')

@@ -127,7 +127,7 @@ def write_project(root, perturb_marginal=False):
     tsv(p("kpn_trait_flat.tsv"), flat_cols, flat)
     tsv(p("projection_manifest.tsv"), QC_COLUMNS,
         [dict(zip(QC_COLUMNS, [t, k, "v0.0.2", n_factors[t], 5, 5, 5, "True", 0, "NA", len(UNIVERSE), 1, "capped",
-                               "c" * 40, "True"])) for t, (k, _) in TRAITS.items()])
+                               "c" * 40, 1, 40, 0, "True"])) for t, (k, _) in TRAITS.items()])
     index_rows, meta_rows = [], []
     for i, (factor_id, label, loadings) in enumerate(FACTORS, 1):
         trait, factor = factor_id.split("::")

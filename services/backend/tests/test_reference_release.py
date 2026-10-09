@@ -117,9 +117,9 @@ def lap_project(root):
     tsv(project / 'proj.factor_metadata.tsv', ('factor_id', 'trait', 'factor', 'factor_number', 'label', 'gene_set_score', 'top_genes'), [
         {'factor_id': f'{t}::Factor{n}', 'trait': t, 'factor': f'Factor{n}', 'factor_number': n, 'label': label, 'gene_set_score': '4.2',
          'top_genes': 'INS,GCK'} for t, k, n, label in FACTORS])
-    tsv(project / 'proj.all_factors.factors_by_genes.tsv.gz', ['Factor'] + GENES, [
+    tsv(project / 'proj.all_factors.factors_by_genes.tsv', ['Factor'] + GENES, [
         {'Factor': factor, **dict(zip(GENES, values))} for factor, values in LOADINGS.items()])
-    tsv(project / 'proj.gene_set_index.tsv.gz', rr.LAP_FILES['gene_set_index'][1], [
+    tsv(project / 'proj.gene_set_index.tsv', rr.LAP_FILES['gene_set_index'][1], [
         {'gene_set_id': g, 'gene_set_name': f'set {g[-3:]}', 'collection_id': COLL[0] if g in LIB_SETS else COLL[1],
          'cfde_label': LABELS[COLL[0] if g in LIB_SETS else COLL[1]], 'library': LIBRARY[g], 'partition': 'part', 'model': 'HZ1',
          'comparison': '', 'program': '', 'gmt_row': i, 'n_genes': 20, 'n_genes_in_eaggl_universe': 18, 'cfde_snapshot': '2026-09-28'}
@@ -296,9 +296,8 @@ def test_source_revision_follows_label_and_loadings_only(lap, tmp_path):
     path.write_text(path.read_text().replace('4.2', '4.3'))  # factor metadata changes, its content does not
     same, other = revisions(tmp_path / 'b')
     assert same == base and other != release
-    matrix = lap.project / 'proj.all_factors.factors_by_genes.tsv.gz'
-    with gzip.open(matrix, 'rt') as stream: text = stream.read()
-    with gzip.open(matrix, 'wt') as stream: stream.write(text.replace('T2D::Factor2\t0\t0.75', 'T2D::Factor2\t0\t0.8'))
+    matrix = lap.project / 'proj.all_factors.factors_by_genes.tsv'
+    matrix.write_text(matrix.read_text().replace('T2D::Factor2\t0\t0.75', 'T2D::Factor2\t0\t0.8'))
     changed, _ = revisions(tmp_path / 'c')
     assert changed[f'{KPN_A}::Factor2'] != base[f'{KPN_A}::Factor2']
     assert {key: value for key, value in changed.items() if key != f'{KPN_A}::Factor2'} == {key: value for key, value in base.items() if key != f'{KPN_A}::Factor2'}
@@ -516,8 +515,8 @@ def test_build_refuses_missing_long_files_and_unordered_factors(lap, tmp_path):
         rr.build_release(build_services(), lap.project, lap.long_files[:1], lap.cache, tmp_path / 'out',
                          gene_set_stats_files=lap.gene_set_stats, workers=1, runtime=RUNTIME)
     path = next(path for path in lap.long_files if path.name.startswith('T2D'))
-    with gzip.open(path, 'rt') as stream: lines = stream.readlines()
-    with gzip.open(path, 'wt') as stream: stream.writelines(lines[:2] + lines[9:10] + lines[2:9] + lines[10:])
+    with open(path) as stream: lines = stream.readlines()
+    with open(path, 'w') as stream: stream.writelines(lines[:2] + lines[9:10] + lines[2:9] + lines[10:])
     with pytest.raises(rr.Refused, match='are not contiguous'): build(lap, tmp_path / 'out')
     with pytest.raises(rr.Refused, match='are not contiguous'): build(lap, tmp_path / 'out', workers=2)  # raised in a spawned worker
     assert not (tmp_path / 'out').exists() and not list(tmp_path.glob('.out.*'))
@@ -726,9 +725,8 @@ def test_publishing_a_new_release_replaces_every_table_and_prunes_old_vectors(la
     events = []
     services = publish_services(tmp_path, events)
     first = rr.publish_release(services, release, ['qa'])
-    matrix = lap.project / 'proj.all_factors.factors_by_genes.tsv.gz'
-    with gzip.open(matrix, 'rt') as stream: text = stream.read()
-    with gzip.open(matrix, 'wt') as stream: stream.write(text.replace('BMI::Factor1\t0.3', 'BMI::Factor1\t0.35'))
+    matrix = lap.project / 'proj.all_factors.factors_by_genes.tsv'
+    matrix.write_text(matrix.read_text().replace('BMI::Factor1\t0.3', 'BMI::Factor1\t0.35'))
     second_release = build(lap, tmp_path / 'second')
     services.clock = lambda: datetime(2026, 10, 6, tzinfo=timezone.utc)
     services.index.namespaces['qa-contexts']['f' * 64] = {'vector': [1.0] * DIMS, 'metadata': {'kind': 'context'}}  # a retired context

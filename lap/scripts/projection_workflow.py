@@ -82,6 +82,13 @@ def open_text(path, mode="r"):
     return open(path, mode, encoding="utf-8", newline="")
 
 
+def open_bytes(path, mode="rb"):
+    """A binary handle; gzip (deterministic when writing) only for a name ending in .gz."""
+    if path.endswith(".gz"):
+        return DeterministicGzipWriter(path) if "w" in mode else gzip.open(path, "rb")
+    return open(path, mode)
+
+
 def read_tsv(path):
     with open_text(path) as fh:
         return list(csv.DictReader(fh, delimiter="\t", quoting=csv.QUOTE_NONE))
@@ -493,51 +500,75 @@ def read_factor_index(path, columns=FACTOR_INDEX_COLUMNS):
     return rows
 
 
-def write_trait_factors(all_factors_file, factor_index_rows, trait, output_file):
-    """One trait's rows of the all-factors table (every gene column); returns its trait factor index rows."""
+TRAIT_FACTOR_COLUMNS = ["factor_id", "gene", "loading"]
+
+
+def trait_factors(all_factors_file, factor_index_rows, trait):
+    """(genes, [(factor_id, [loading text per gene])], trait factor index rows): one trait's rows of the all-factors
+    table, in factor-index order (eaggl's Factor1..K)."""
     wanted = [r for r in factor_index_rows if r["trait"] == trait]
     check(wanted, "No factors for trait %s" % trait)
     wanted_ids = {r["factor_id"]: r for r in wanted}
-    kept = []
-    with open_text(all_factors_file) as fh, open_text(output_file, "w") as out:
-        header = fh.readline()
-        check(header.startswith("Factor\t"), "%s must start with Factor" % all_factors_file)
-        out.write(header)  # every gene column is kept so eaggl never drops a gene set
+    factors = []
+    with open_text(all_factors_file) as fh:
+        header = fh.readline().rstrip("\n").split("\t")
+        check(header[0] == "Factor", "%s must start with Factor" % all_factors_file)
         for line in fh:
             factor_id = line.split("\t", 1)[0]
             if factor_id in wanted_ids:
-                out.write(line)
-                kept.append(factor_id)
-    check(kept == [r["factor_id"] for r in wanted], "Factor rows for %s are missing or out of order" % trait)
+                values = line.rstrip("\n").split("\t")[1:]
+                check(len(values) == len(header) - 1, "Row %s of %s has %d values" % (factor_id, all_factors_file, len(values)))
+                factors.append((factor_id, values))
+    check([f for f, _ in factors] == [r["factor_id"] for r in wanted], "Factor rows for %s are missing or out of order" % trait)
     rows = []
-    for k, factor_id in enumerate(kept, 1):
+    for k, (factor_id, _) in enumerate(factors, 1):
         g = wanted_ids[factor_id]
         rows.append({"local_eaggl_column": "Factor%d" % k, "factor_id": factor_id, "trait": g["trait"],
                      "kpn_trait_id": g["kpn_trait_id"], "factor": g["factor"], "factor_number": g["factor_number"],
                      "factor_label": g["factor_label"], "global_eaggl_column": g["global_eaggl_column"]})
-    return rows
+    return header[1:], factors, rows
+
+
+def write_factors_long(path, genes, factors):
+    """The trait's factors as factor_id, gene, loading: every nonzero loading, its text unchanged."""
+    with open_text(path, "w") as out:
+        out.write(tsv_line(TRAIT_FACTOR_COLUMNS))
+        for factor_id, values in factors:
+            for gene, value in zip(genes, values):
+                if float(value) != 0.0:
+                    out.write(tsv_line([factor_id, gene, value]))
+
+
+def write_factors_wide(path, genes, factors):
+    """eaggl's factors-by-genes layout (header cell Factor, every gene column, so eaggl never drops a gene set)."""
+    with open_text(path, "w") as out:
+        out.write("\t".join(["Factor"] + genes) + "\n")
+        for factor_id, values in factors:
+            out.write("\t".join([factor_id] + values) + "\n")
 
 
 def cmd_trait_factors(args):
-    rows = write_trait_factors(args.all_factors_file, read_factor_index(args.factor_index_file), args.trait,
-                               args.output_file)
+    genes, factors, rows = trait_factors(args.all_factors_file, read_factor_index(args.factor_index_file), args.trait)
+    write_factors_long(args.output_file, genes, factors)
     write_tsv(args.output_factor_index_file, TRAIT_FACTOR_INDEX_COLUMNS, rows)
     print("%s: %d factors" % (args.trait, len(rows)))
 
 
 def read_factor_matrix(path, genes, factor_ids):
-    """A factors-by-genes file as the genes x K float64 matrix eaggl loads (rows must be exactly factor_ids)."""
+    """A trait's factors (factor_id, gene, loading) as the genes x K float64 matrix eaggl loads: the genes in the factor
+    tables' column order, the factors in factor-index order, zero where no loading is listed."""
     import numpy as np
+    gene_row = {gene: i for i, gene in enumerate(genes)}
+    column = {factor_id: k for k, factor_id in enumerate(factor_ids)}
+    matrix, seen = np.zeros((len(genes), len(factor_ids))), set()
     with open_text(path) as fh:
-        header = fh.readline().rstrip("\n").split("\t")
-        check(header == ["Factor"] + genes, "The gene columns of %s differ from the packed genes" % path)
-        names, rows = [], []
-        for line in fh:
-            fields = line.rstrip("\n").split("\t")
-            names.append(fields[0])
-            rows.append([float(value) for value in fields[1:]])
-    check(names == factor_ids, "%s holds factors %s..., expected %s..." % (path, names[:3], factor_ids[:3]))
-    matrix = np.array(rows, dtype=float).T
+        reader = csv.reader(fh, delimiter="\t", quoting=csv.QUOTE_NONE)
+        check(next(reader, None) == TRAIT_FACTOR_COLUMNS, "Unexpected columns in %s" % path)
+        for factor_id, gene, value in reader:
+            check(factor_id in column and gene in gene_row, "Unknown factor %s or gene %s in %s" % (factor_id, gene, path))
+            check((factor_id, gene) not in seen, "Repeated loading %s/%s in %s" % (factor_id, gene, path))
+            seen.add((factor_id, gene))
+            matrix[gene_row[gene], column[factor_id]] = float(value)
     check(np.all(np.isfinite(matrix)) and np.all(matrix >= 0), "Invalid factor loadings in %s" % path)
     return matrix
 
@@ -626,7 +657,8 @@ LONG_COLUMNS = ["trait", "kpn_trait_id", "factor_id", "factor", "factor_label", 
 TOP_COLUMNS = LONG_COLUMNS[:6] + ["gene_set_name"] + LONG_COLUMNS[6:]
 QC_COLUMNS = ["trait", "kpn_trait_id", "kpn_release", "n_factors", "n_gene_sets_index", "n_gene_sets_joint",
               "n_gene_sets_marginal", "ids_equal_index", "label_check_failures", "k1_joint_marginal_max_absdiff",
-              "aligned_genes", "seed", "loading_variant", "pigean_commit", "qc_pass"]
+              "aligned_genes", "seed", "loading_variant", "pigean_commit", "n_chunks", "most_updates",
+              "chunks_at_max_updates", "qc_pass"]
 
 
 CHUNK_COLUMNS = ["chunk", "first_row", "n_gene_sets", "first_gene_set_id", "last_gene_set_id", "n_entries"]
@@ -688,7 +720,7 @@ def cmd_pack_annotations(args):
     ids = [row["gene_set_id"] for row in gene_set_index_rows(args.gene_set_index_file)]
     indptr, indices, position = array("q", [0]), array("i"), 0
     check(indptr.itemsize == 8 and indices.itemsize == 4, "Unexpected C integer sizes")
-    with gzip.open(args.annotations_gmt_file, "rt", encoding="utf-8") as fh:
+    with open_text(args.annotations_gmt_file) as fh:
         for line in fh:
             if not line.strip():
                 continue
@@ -780,9 +812,9 @@ def cmd_check_projection(args):
         selected.update(rows[::max(1, len(rows) // args.sample_per_library)][:args.sample_per_library])
 
     os.makedirs(args.work_dir, exist_ok=True)
-    sample_gmt = os.path.join(args.work_dir, "sample.gmt.gz")
+    sample_gmt = os.path.join(args.work_dir, "sample.gmt")
     position, extra, n_mapped = 0, 0, 0
-    with gzip.open(args.annotations_gmt_file, "rt", encoding="utf-8") as fh, open_text(sample_gmt, "w") as out:
+    with open_text(args.annotations_gmt_file) as fh, open_text(sample_gmt, "w") as out:
         for line in fh:
             if not line.strip():
                 continue
@@ -804,10 +836,13 @@ def cmd_check_projection(args):
     report = []
     for trait in traits:
         prefix = os.path.join(args.work_dir, trait)
-        factors_file = prefix + ".factors_by_genes.tsv.gz"
-        local = write_trait_factors(args.all_factors_file, factor_index, trait, factors_file)
+        factors_file = prefix + ".factors_by_genes.tsv"  # eaggl's input
+        trait_genes, factors, local = trait_factors(args.all_factors_file, factor_index, trait)
+        check(trait_genes == genes, "The gene columns of %s differ from %s" % (args.all_factors_file, args.genes_file))
+        write_factors_wide(factors_file, trait_genes, factors)
+        write_factors_long(prefix + ".factors.tsv", trait_genes, factors)  # what factors_trait_cmd writes and the kernel reads
         factor_ids = [r["factor_id"] for r in local]
-        W = read_factor_matrix(factors_file, genes, factor_ids)
+        W = read_factor_matrix(prefix + ".factors.tsv", genes, factor_ids)
         started = time.time()
         params = run_eaggl(args.python, args.pigean_src, factors_file, sample_gmt, args.gene_map_file, prefix + ".eaggl",
                            args.seed)
@@ -960,19 +995,14 @@ def cmd_project_trait(args):
           "n_factors": K, "n_gene_sets_index": n, "n_gene_sets_joint": n, "n_gene_sets_marginal": n,
           "ids_equal_index": True, "label_check_failures": 0,
           "k1_joint_marginal_max_absdiff": "%.3g" % k1_diff if K == 1 else NA, "aligned_genes": len(genes),
-          "seed": args.seed, "loading_variant": args.loading_variant, "pigean_commit": commit, "qc_pass": True}
+          "seed": args.seed, "loading_variant": args.loading_variant, "pigean_commit": commit, "n_chunks": len(chunks),
+          "most_updates": most_updates, "chunks_at_max_updates": len(warnings), "qc_pass": True}
     write_tsv(args.output_qc_file, QC_COLUMNS, [qc])
-    with open(args.output_commit_file, "w") as fh:
-        fh.write(commit + "\n")
-    params = [("projection", "eaggl supplied-factor projection, projection_kernel.py"), ("eaggl_commit_checked", commit),
-              ("gene_set_projection_mode", "both"), ("seed", args.seed), ("tolerance", pk.TOL),
-              ("max_updates", pk.MAX_ITER), ("n_genes", len(genes)), ("n_factors", K), ("n_gene_sets", n),
-              ("n_chunks", len(chunks)), ("most_updates", most_updates), ("chunks_at_max_updates", len(warnings))]
-    write_tsv(args.output_params_file, ["parameter", "value"], [{"parameter": p, "value": v} for p, v in params])
-    with open(args.output_warnings_file, "w") as fh:
-        fh.writelines(warnings)
     with open(args.output_log_file, "w") as fh:
+        fh.write("eaggl supplied-factor projection (projection_kernel.py), checked against eaggl %s; seed %d, tolerance %g, "
+                 "at most %d updates per chunk\n" % (commit, args.seed, pk.TOL, pk.MAX_ITER))
         fh.writelines(log_lines)
+        fh.writelines("WARNING: " + line for line in warnings)
     print("%s: %d factors x %d gene sets in %d chunks (at most %d updates); %d gene sets in the long file"
           % (args.trait, K, n, len(chunks), most_updates, len(union_rows)))
 
@@ -1167,7 +1197,7 @@ def cmd_trait_gene_stats(args):
     check(len(set(genes)) == len(genes), "Duplicate genes in the gene stats of %s" % args.trait)
     if lines and not lines[-1].endswith(b"\n"):
         lines[-1] += b"\n"
-    with DeterministicGzipWriter(args.output_file) as out:
+    with open_bytes(args.output_file, "wb") as out:
         out.write(header)
         out.writelines(lines)
     print("%s: %d genes" % (args.trait, len(lines)))
@@ -1175,9 +1205,12 @@ def cmd_trait_gene_stats(args):
 
 LIBRARY_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 LIBRARY_GMT_COLUMNS = ["library", "file", "n_gene_sets", "sha256"]
-BETAS_RUN_COLUMNS = ["library", "status", "n_gene_sets", "gene_set_stats_file", "params_file", "log_file", "warnings_file",
-                     "response", "pigean_commit", "seconds"]
-NO_GENE_SETS = "No gene sets survived the input filters"
+BETAS_RUN_COLUMNS = ["trait", "kpn_trait_id", "library", "status", "n_gene_sets", "n_kept", "n_nonzero_beta_uncorrected",
+                     "p", "sigma2", "response", "pigean_commit", "seconds", "gene_set_stats_file", "params_file", "log_file",
+                     "warnings_file"]
+# pigean's two ways of saying that none of a library's gene sets survived its filters for the trait: a clean exit before
+# the betas, or a bail from the betas once the post-read filters (gene-set size, beta adjustment) left none.
+NO_GENE_SETS = ("No gene sets survived the input filters", "No gene sets are left!")
 
 
 def cmd_library_gmts(args):
@@ -1192,13 +1225,13 @@ def cmd_library_gmts(args):
         check(LIBRARY_RE.match(library), "Library name %r cannot name a file" % library)
     os.makedirs(args.output_dir, exist_ok=True)
     for name in os.listdir(args.output_dir):  # a previous split's GMTs
-        if name.endswith(".gmt.gz"):
+        if name.endswith((".gmt", ".gmt.gz")):
             os.unlink(os.path.join(args.output_dir, name))
-    paths = {library: os.path.join(args.output_dir, library + ".gmt.gz") for library in libraries}
-    writers = {library: DeterministicGzipWriter(paths[library]) for library in libraries}
+    paths = {library: os.path.join(args.output_dir, library + ".gmt") for library in libraries}
+    writers = {library: open_bytes(paths[library], "wb") for library in libraries}
     counts, ids = Counter(), iter(library_of)
     try:
-        with gzip.open(args.annotations_gmt_file, "rb") as fh:
+        with open_bytes(args.annotations_gmt_file) as fh:
             for line in fh:
                 if not line.strip():
                     continue
@@ -1216,12 +1249,15 @@ def cmd_library_gmts(args):
     print("Split %d gene sets into %d library GMTs: %s" % (len(library_of), len(libraries), dict(sorted(counts.items()))))
 
 
-def pigean_betas_command(python, profile, gmt_file, gene_stats_file, response, seed, prefix):
-    """One library's `pigean betas` run: the GWAS profile on the trait's gene stats (no outer Gibbs)."""
-    return [python, "-B", "-m", "pigean", "betas", "--config", profile, "--X-in", gmt_file,
+def pigean_betas_command(python, profile, gmt_file, gene_stats_file, response, seed, prefix, max_initial):
+    """One library's `pigean betas` run: the GWAS profile on the trait's gene stats (no outer Gibbs). With max_initial,
+    pigean keeps at most that many of the library's gene sets (the most significant by nominal p) for pruning, the
+    hyperparameters and the betas."""
+    cap = [] if max_initial is None else ["--max-num-gene-sets-initial", str(max_initial)]
+    return [python, "-B", "-m", "pigean", "betas", "--config", profile, "--X-in", gmt_file] + cap + [
             "--gene-stats-in", gene_stats_file, "--gene-stats-id-col", "gene", "--gene-stats-log-bf-col", response,
             "--retain-all-beta-uncorrected", "--deterministic", "--seed", str(seed), "--hide-progress", "--hide-opts",
-            "--gene-set-stats-out", prefix + ".gene_set_stats.tsv.gz", "--params-out", prefix + ".params.tsv",
+            "--gene-set-stats-out", prefix + ".gene_set_stats.tsv", "--params-out", prefix + ".params.tsv",
             "--warnings-file", prefix + ".warnings.txt", "--log-file", prefix + ".log"]
 
 
@@ -1238,27 +1274,37 @@ def read_columns(path, columns):
 
 
 def cmd_betas_trait(args):
-    """One trait's `pigean betas` fits, one per library on that library's GMT alone, and the table of runs.
+    """One trait's gene-set betas: a `pigean betas` fit per library on that library's GMT alone, then the gene sets
+    PIGEAN analyzed (filter_reason kept; the prefiltered ones carry no beta), ranked by beta_uncorrected within their
+    library.
 
-    Checks the pinned clone first (like record-pigean-commit). A library whose outputs and fingerprint (gene stats,
-    GMT, profile, response, seed and pigean commit) are in --work-dir is not refitted. pigean exits without outputs
-    when no gene set of a library survives its filters; that library is recorded with status no_gene_sets.
+    Checks the KPN id and the pinned clone first. A library whose outputs and fingerprint (gene stats, GMT, profile,
+    response, seed, initial cap and pigean commit) are in --work-dir is not refitted. When none of a library's gene sets
+    survives pigean's filters for the trait, pigean stops without outputs and the library is recorded as no_gene_sets.
+    Writes the runs (one row per library), every row pigean wrote (--output-all-file; with --retain-all-beta-uncorrected
+    the filtered gene sets too, with their filter_reason) and the ranked betas.
     """
+    check(args.max_num_gene_sets_initial is None or args.max_num_gene_sets_initial >= 1,
+          "--max-num-gene-sets-initial must be positive")
+    kpn = read_trait_kpn_map(args.trait_kpn_map_file)
+    check(args.trait in kpn and kpn[args.trait]["kpn_trait_id"] == args.kpn_trait_id,
+          "KPN id for %s disagrees: meta %s, map %s" % (args.trait, args.kpn_trait_id, kpn.get(args.trait, {}).get("kpn_trait_id")))
     head = check_pigean_clone(args.repo_dir, args.expected_pigean_commit)
     table = {r["library"]: r for r in read_columns(args.library_gmts_file, LIBRARY_GMT_COLUMNS)}
     excluded = {library for library in args.exclude_libraries.split(",") if library}
     libraries = [library for library in args.libraries.split(",") if library and library not in excluded]
-    check(len(set(libraries)) == len(libraries), "Repeated library in --libraries")
+    check(libraries and len(set(libraries)) == len(libraries), "--libraries must list distinct libraries")
     missing = [library for library in libraries if library not in table]
     check(not missing, "No GMT for libraries %s in %s" % (missing, args.library_gmts_file))
     os.makedirs(args.work_dir, exist_ok=True)
     env = dict(os.environ, PYTHONPATH=args.pigean_src, PYTHONDONTWRITEBYTECODE="1", OMP_NUM_THREADS="1",
                OPENBLAS_NUM_THREADS="1", MKL_NUM_THREADS="1")
-    base = "%s %s %s %s %s" % (sha256_file(args.gene_stats_file), sha256_file(args.profile), args.response, args.seed, head)
-    rows = []
+    base = "%s %s %s %s %s %s" % (sha256_file(args.gene_stats_file), sha256_file(args.profile), args.response, args.seed,
+                                  args.max_num_gene_sets_initial, head)
+    runs = []
     for library in libraries:
         entry, prefix = table[library], os.path.join(args.work_dir, library)
-        files = {"gene_set_stats_file": prefix + ".gene_set_stats.tsv.gz", "params_file": prefix + ".params.tsv",
+        files = {"gene_set_stats_file": prefix + ".gene_set_stats.tsv", "params_file": prefix + ".params.tsv",
                  "log_file": prefix + ".log", "warnings_file": prefix + ".warnings.txt"}
         fingerprint, done, seconds = "%s %s\n" % (entry["sha256"], base), prefix + ".done", "reused"
         if not (os.path.exists(done) and read_text(done) == fingerprint and all(map(os.path.exists, files.values()))):
@@ -1268,12 +1314,14 @@ def cmd_betas_trait(args):
             check(sha256_file(entry["file"]) == entry["sha256"], "%s changed since it was split" % entry["file"])
             started = time.time()
             proc = subprocess.run(pigean_betas_command(args.python, args.profile, entry["file"], args.gene_stats_file,
-                                                       args.response, args.seed, prefix),
+                                                       args.response, args.seed, prefix, args.max_num_gene_sets_initial),
                                   env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
-            check(proc.returncode == 0, "pigean betas failed on %s:\n%s" % (library, proc.stdout[-3000:]))
-            if not os.path.exists(files["gene_set_stats_file"]):
-                logged = proc.stdout + (read_text(files["log_file"]) if os.path.exists(files["log_file"]) else "")
-                check(NO_GENE_SETS in logged, "pigean betas wrote no gene-set stats for %s:\n%s" % (library, proc.stdout[-3000:]))
+            logged = proc.stdout + (read_text(files["log_file"]) if os.path.exists(files["log_file"]) else "")
+            none_left = any(message in logged for message in NO_GENE_SETS)
+            check(proc.returncode == 0 or none_left, "pigean betas failed on %s (exit %d):\n%s"
+                  % (library, proc.returncode, proc.stdout[-3000:]))
+            if proc.returncode != 0 or not os.path.exists(files["gene_set_stats_file"]):
+                check(none_left, "pigean betas wrote no gene-set stats for %s:\n%s" % (library, proc.stdout[-3000:]))
                 write_tsv(files["gene_set_stats_file"], sorted(PIGEAN_GENE_SET_STATS_COLUMNS), [])
                 if os.path.exists(files["params_file"]):
                     os.unlink(files["params_file"])
@@ -1284,72 +1332,121 @@ def cmd_betas_trait(args):
             with open(done, "w") as fh:
                 fh.write(fingerprint)
         status = "fitted" if os.path.getsize(files["params_file"]) else "no_gene_sets"
-        rows.append(dict(files, library=library, status=status, n_gene_sets=entry["n_gene_sets"], response=args.response,
-                         pigean_commit=head, seconds=seconds))
-    write_tsv(args.output_file, BETAS_RUN_COLUMNS, rows)
-    print("%d libraries: %s" % (len(rows), ", ".join("%s %s (%s s)" % (r["library"], r["status"], r["seconds"]) for r in rows)))
+        runs.append(dict(files, trait=args.trait, kpn_trait_id=args.kpn_trait_id, library=library, status=status,
+                         n_gene_sets=entry["n_gene_sets"], response=args.response, pigean_commit=head, seconds=seconds))
+
+    wanted = set(libraries)
+    gene_sets = {}
+    for row in gene_set_index_rows(args.gene_set_index_file):
+        if row["library"] in wanted:
+            gene_sets[row["gene_set_id"]] = (row["library"], row["collection_id"], row["cfde_label"])
+    rows, reasons, all_columns = annotate_runs(args, runs, gene_sets)
+    write_tsv(args.output_runs_file, BETAS_RUN_COLUMNS, runs)
+    write_tsv(args.output_file, GENE_SET_STATS_COLUMNS, rows)
+    if args.output_all_file:
+        with open_text(args.output_all_file, "w") as out:
+            out.write(tsv_line(["library"] + all_columns))
+            for run in runs:
+                with open_text(run["gene_set_stats_file"]) as fh:
+                    header = fh.readline().rstrip("\n").split("\t")
+                    if run["status"] == "fitted":
+                        check(header == all_columns, "pigean wrote other columns for %s: %s" % (run["library"], header))
+                        for line in fh:
+                            out.write(run["library"] + "\t" + line)
+    print("%s: %d gene sets analyzed in %d libraries (%s); %s" % (
+        args.trait, len(rows), len(runs), ", ".join("%s %s" % (r["library"], r["status"] if r["status"] != "fitted" else
+                                                             "%s kept" % r["n_kept"]) for r in runs), dict(sorted(reasons.items()))))
 
 
-def cmd_annotate_gene_set_stats(args):
-    """Validate one trait's per-library `pigean betas` fits and keep the gene sets PIGEAN analyzed (filter_reason
-    kept; the prefiltered ones carry no beta), ranked by beta_uncorrected within their library.
-
-    Every library of --libraries must have exactly one run among the --runs-file tables, at the expected pigean commit
-    and regressed on --response; each run's gene sets must belong to its library. p and sigma2 are that library's.
-    """
-    kpn = read_trait_kpn_map(args.trait_kpn_map_file)
-    check(args.trait in kpn and kpn[args.trait]["kpn_trait_id"] == args.kpn_trait_id,
-          "KPN id for %s disagrees: meta %s, map %s" % (args.trait, args.kpn_trait_id, kpn.get(args.trait, {}).get("kpn_trait_id")))
-    runs = [run for path in args.runs_file for run in read_columns(path, BETAS_RUN_COLUMNS)]
-    libraries = [library for library in args.libraries.split(",") if library]
-    ran = Counter(run["library"] for run in runs)
-    check(sorted(ran.elements()) == sorted(libraries), "The runs cover libraries %s; expected each of %s once"
-          % (sorted(ran.elements()), sorted(libraries)))
+def annotate_runs(args, runs, gene_sets):
+    """The kept gene sets of every run with their KPN and collection ids, ranked by beta_uncorrected within the library;
+    fills each run's n_kept, n_nonzero_beta_uncorrected, p and sigma2. Refuses another response or commit, an unknown or
+    repeated gene set and a gene set outside its run's library. Returns (rows, filter_reason counts, pigean columns)."""
+    rows, seen, reasons, all_columns = [], set(), Counter(), None
     for run in runs:
         check(run["pigean_commit"] == args.expected_pigean_commit, "pigean ran %s at %s, expected %s"
               % (run["library"], run["pigean_commit"], args.expected_pigean_commit))
-        check(run["response"] == args.response and run["status"] in ("fitted", "no_gene_sets"),
-              "Unexpected run of %s: %s, %s" % (run["library"], run["response"], run["status"]))
-    gene_sets = {}
-    for row in gene_set_index_rows(args.gene_set_index_file):
-        gene_sets[row["gene_set_id"]] = (row["library"], row["collection_id"], row["cfde_label"])
-    rows, seen, reasons = [], set(), Counter()
-    for run in runs:
         learned = {"p": NA, "sigma2": NA}
         if run["status"] == "fitted":
             params = read_params(run["params_file"])
             used = params.get("option_gene_stats_log_bf_col", [NA])[-1]
             check(used == args.response, "pigean regressed %s on %s, expected %s" % (run["library"], used, args.response))
             learned = {name: params.get(name, [NA])[-1] for name in ("p", "sigma2")}
-        library_rows = []
+        kept = []
         with open_text(run["gene_set_stats_file"]) as fh:
             reader = csv.DictReader(fh, delimiter="\t", quoting=csv.QUOTE_NONE)
             missing = PIGEAN_GENE_SET_STATS_COLUMNS - set(reader.fieldnames or [])
             check(not missing, "%s lacks the pigean columns %s" % (run["gene_set_stats_file"], sorted(missing)))
+            if run["status"] == "fitted":
+                all_columns = all_columns or list(reader.fieldnames)
             for r in reader:
                 gene_set_id = r["Gene_Set"]
-                check(gene_set_id in gene_sets, "Unknown gene set %s in %s" % (gene_set_id, run["gene_set_stats_file"]))
                 check(gene_set_id not in seen, "Duplicate gene set %s in %s" % (gene_set_id, run["gene_set_stats_file"]))
-                library, collection_id, label = gene_sets[gene_set_id]
-                check(library == run["library"], "%s is in %s, not %s" % (gene_set_id, library, run["library"]))
+                check(gene_set_id in gene_sets, "Unknown gene set %s in %s" % (gene_set_id, run["gene_set_stats_file"]))
+                check(gene_sets[gene_set_id][0] == run["library"], "%s is in %s, not %s"
+                      % (gene_set_id, gene_sets[gene_set_id][0], run["library"]))
                 seen.add(gene_set_id)
                 reasons[r["filter_reason"]] += 1
-                if r["filter_reason"] != "kept":
-                    continue
-                for name in ("beta_uncorrected", "beta", "avg_postp"):
-                    check(math.isfinite(float(r[name])), "Non-finite %s for %s" % (name, gene_set_id))
-                library_rows.append({"trait": args.trait, "kpn_trait_id": args.kpn_trait_id, "gene_set_id": gene_set_id,
-                                     "collection_id": collection_id, "cfde_label": label, "library": library,
-                                     "n_genes": r["N"], "beta_uncorrected": r["beta_uncorrected"], "beta": r["beta"],
-                                     "avg_postp": r["avg_postp"], "response": args.response, **learned})
+                if r["filter_reason"] == "kept":
+                    for name in ("beta_uncorrected", "beta", "avg_postp"):
+                        check(math.isfinite(float(r[name])), "Non-finite %s for %s" % (name, gene_set_id))
+                    kept.append(r)
+        # Below --update-hyper-min-gene-sets pigean keeps its default prior and records none: report the one it used.
+        for name in ("p", "sigma2"):
+            used = {r.get(name + "_used") for r in kept}
+            if learned[name] == NA and len(used) == 1 and None not in used:
+                learned[name] = used.pop()
+        library_rows = []
+        for r in kept:
+            library, collection_id, label = gene_sets[r["Gene_Set"]]
+            library_rows.append({"trait": args.trait, "kpn_trait_id": args.kpn_trait_id, "gene_set_id": r["Gene_Set"],
+                                 "collection_id": collection_id, "cfde_label": label, "library": library,
+                                 "n_genes": r["N"], "beta_uncorrected": r["beta_uncorrected"], "beta": r["beta"],
+                                 "avg_postp": r["avg_postp"], "response": args.response, **learned})
         library_rows.sort(key=lambda row: (-float(row["beta_uncorrected"]), row["gene_set_id"]))
         for rank, row in enumerate(library_rows, 1):
             row["library_rank"] = rank
+        run.update(learned, n_kept=len(library_rows),
+                   n_nonzero_beta_uncorrected=sum(1 for row in library_rows if float(row["beta_uncorrected"]) != 0))
         rows.extend(library_rows)
     rows.sort(key=lambda row: (row["library"], row["library_rank"]))
-    write_tsv(args.output_file, GENE_SET_STATS_COLUMNS, rows)
-    print("%s: %d of %d gene sets analyzed by PIGEAN in %d libraries (%s)"
-          % (args.trait, len(rows), len(seen), len(runs), dict(sorted(reasons.items()))))
+    return rows, reasons, all_columns or sorted(PIGEAN_GENE_SET_STATS_COLUMNS)
+
+
+BETAS_MANIFEST_COLUMNS = ["trait", "kpn_trait_id", "library", "status", "n_gene_sets", "n_kept",
+                          "n_nonzero_beta_uncorrected", "p", "sigma2", "seconds"]
+
+
+def cmd_betas_collect(args):
+    """Every trait's betas runs in one table: each trait of the KPN map must have one run per library of --libraries
+    (less --exclude-libraries), all at the expected pigean commit."""
+    kpn = read_trait_kpn_map(args.trait_kpn_map_file)
+    excluded = {library for library in args.exclude_libraries.split(",") if library}
+    libraries = sorted(library for library in args.libraries.split(",") if library and library not in excluded)
+    by_trait = defaultdict(list)
+    for path in args.runs_file:
+        for run in read_columns(path, BETAS_RUN_COLUMNS):
+            by_trait[run["trait"]].append(run)
+    check(set(by_trait) == set(kpn), "Runs cover %d traits; the project has %d (missing: %s)"
+          % (len(by_trait), len(kpn), sorted(set(kpn) - set(by_trait))[:10]))
+    rows = []
+    for trait in sorted(by_trait):
+        runs = by_trait[trait]
+        check(sorted(r["library"] for r in runs) == libraries, "%s has runs for %s, expected %s"
+              % (trait, sorted(r["library"] for r in runs), libraries))
+        for run in sorted(runs, key=lambda r: r["library"]):
+            check(run["pigean_commit"] == args.expected_pigean_commit, "%s/%s ran at pigean %s, expected %s"
+                  % (trait, run["library"], run["pigean_commit"], args.expected_pigean_commit))
+            check(run["kpn_trait_id"] == kpn[trait]["kpn_trait_id"], "KPN id of %s disagrees with the map" % trait)
+            rows.append(run)
+    write_tsv(args.output_file, BETAS_MANIFEST_COLUMNS, rows)
+    summary = []
+    for library in libraries:
+        library_runs = [r for r in rows if r["library"] == library]
+        kept = sorted(int(r["n_kept"]) for r in library_runs)
+        summary.append("%s %d/%d fitted, median %d kept" % (library, sum(r["status"] == "fitted" for r in library_runs),
+                                                            len(library_runs), kept[len(kept) // 2]))
+    print("%d traits x %d libraries: %s" % (len(by_trait), len(libraries), "; ".join(summary)))
 
 
 # -------------------------------------------------------------------------------------------------
@@ -1421,8 +1518,7 @@ def build_parser():
     p = sub.add_parser("project-trait", help="Project one trait onto every packed gene set and rank the loadings")
     for name in ("check-file", "chunks-file", "indptr-file", "indices-file", "genes-file", "trait-factors-file",
                  "trait-factor-index-file", "gene-set-index-file", "trait-kpn-map-file", "trait", "kpn-trait-id",
-                 "loading-variant", "output-long-file", "output-top-file", "output-qc-file", "output-commit-file",
-                 "output-params-file", "output-warnings-file", "output-log-file"):
+                 "loading-variant", "output-long-file", "output-top-file", "output-qc-file", "output-log-file"):
         p.add_argument("--" + name, required=True)
     p.add_argument("--seed", type=int, required=True)
     p.add_argument("--top-n", type=int, default=50)
@@ -1457,20 +1553,24 @@ def build_parser():
         p.add_argument("--" + name, required=True)
     p.set_defaults(func=cmd_library_gmts)
 
-    p = sub.add_parser("betas-trait", help="Run pigean betas for one trait on each library's GMT")
+    p = sub.add_parser("betas-trait", help="Fit pigean betas for one trait on each library's GMT and rank the gene sets")
     for name in ("python", "pigean-src", "repo-dir", "expected-pigean-commit", "profile", "library-gmts-file",
-                 "libraries", "gene-stats-file", "response", "work-dir", "output-file"):
+                 "libraries", "gene-stats-file", "gene-set-index-file", "trait-kpn-map-file", "trait", "kpn-trait-id",
+                 "response", "work-dir", "output-runs-file", "output-file"):
         p.add_argument("--" + name, required=True)
     p.add_argument("--exclude-libraries", default="")
+    p.add_argument("--output-all-file", help="Every row pigean wrote, with a library column")
     p.add_argument("--seed", type=int, required=True)
+    p.add_argument("--max-num-gene-sets-initial", type=int, default=None,
+                   help="pigean keeps at most this many of a library's gene sets (by nominal p) before pruning")
     p.set_defaults(func=cmd_betas_trait)
 
-    p = sub.add_parser("annotate-gene-set-stats", help="Validate and rank one trait's per-library pigean betas fits")
+    p = sub.add_parser("betas-collect", help="Every trait's betas runs in one table")
     p.add_argument("--runs-file", action="append", required=True)
-    for name in ("libraries", "gene-set-index-file", "trait-kpn-map-file", "trait", "kpn-trait-id", "response",
-                 "expected-pigean-commit", "output-file"):
+    for name in ("trait-kpn-map-file", "libraries", "expected-pigean-commit", "output-file"):
         p.add_argument("--" + name, required=True)
-    p.set_defaults(func=cmd_annotate_gene_set_stats)
+    p.add_argument("--exclude-libraries", default="")
+    p.set_defaults(func=cmd_betas_collect)
 
     p = sub.add_parser("compare-global", help="Compare per-trait and all-factor projections (manual check)")
     p.add_argument("--trait-long-file", action="append", required=True)

@@ -9,12 +9,14 @@ import csv
 import gzip
 import io
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
 import time
 import unittest
 from collections import OrderedDict
+from types import SimpleNamespace
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import projection_workflow as pw  # noqa: E402
@@ -300,8 +302,8 @@ class EndToEndTest(unittest.TestCase):
                       + sum((["--gmt-file", p("cfde", c[0], "genesets.dapper-ids.gmt")] for c in COLLECTIONS), [])
                       + sum((["--collection-gene-sets-file", p("out", c[0] + ".gene_sets.tsv")] for c in COLLECTIONS), [])
                       + ["--cfde-index-file", p("cfde", "index.tsv"), "--eaggl-genes-file", p("eaggl", "genes.tsv"),
-                         "--cfde-snapshot", "2026-09-28", "--output-gmt-file", p("out", "annotations.gmt.gz"),
-                         "--output-gene-set-index-file", p("out", "gene_set_index.tsv.gz"),
+                         "--cfde-snapshot", "2026-09-28", "--output-gmt-file", p("out", "annotations.gmt"),
+                         "--output-gene-set-index-file", p("out", "gene_set_index.tsv"),
                          "--output-gene-map-file", p("out", "case.gene.map"),
                          "--output-overlap-report-file", p("out", "overlap.tsv")])
         cls.check_run(["assemble-factors", "--loadings-file", p("eaggl", "loadings.tsv.gz"),
@@ -309,7 +311,7 @@ class EndToEndTest(unittest.TestCase):
                        "--factor-metadata-file", p("eaggl", "factor_metadata.tsv"),
                        "--genes-file", p("eaggl", "genes.tsv"), "--capped-entries-file", p("eaggl", "capped_entries.tsv.gz"),
                        "--trait-kpn-map-file", p("out", "trait_kpn_map.tsv"), "--loading-variant", "capped",
-                       "--output-file", p("out", "all_factors.tsv.gz"),
+                       "--output-file", p("out", "all_factors.tsv"),
                        "--output-factor-index-file", p("out", "factor_index.tsv")])
         # A clean checkout standing in for the pinned pigean clone (check-projection checks it like record-pigean-commit).
         cls.repo = p("pigean")
@@ -325,16 +327,16 @@ class EndToEndTest(unittest.TestCase):
         for trait in KPN_IDS:
             d = lambda name: p("out", trait, name)
             os.makedirs(p("out", trait))
-            cls.check_run(["trait-factors", "--all-factors-file", p("out", "all_factors.tsv.gz"),
+            cls.check_run(["trait-factors", "--all-factors-file", p("out", "all_factors.tsv"),
                            "--factor-index-file", p("out", "factor_index.tsv"), "--trait", trait,
-                           "--output-file", d("factors.tsv.gz"), "--output-factor-index-file", d("factor_index.tsv")])
+                           "--output-file", d("factors.tsv"), "--output-factor-index-file", d("factor_index.tsv")])
             cls.check_run(cls.project_args(trait, p("out", "pack"), d))
         os.makedirs(p("out", "global"))
-        cls.run_eaggl(p("out", "all_factors.tsv.gz"), p("out", "global", ""))
+        cls.run_eaggl(p("out", "all_factors.tsv"), p("out", "global", ""))
         g = lambda name: p("out", "global", name)
         cls.check_run(["relabel-global", "--joint-file", g("joint.tsv.gz"), "--marginal-file", g("marginal.tsv.gz"),
-                       "--all-factors-file", p("out", "all_factors.tsv.gz"), "--factor-index-file", p("out", "factor_index.tsv"),
-                       "--gene-set-index-file", p("out", "gene_set_index.tsv.gz"), "--params-file", g("params.tsv"),
+                       "--all-factors-file", p("out", "all_factors.tsv"), "--factor-index-file", p("out", "factor_index.tsv"),
+                       "--gene-set-index-file", p("out", "gene_set_index.tsv"), "--params-file", g("params.tsv"),
                        "--pigean-commit-file", g("commit.txt"), "--expected-pigean-commit", FAKE_COMMIT,
                        "--output-joint-file", g("joint.by_factor_id.tsv.gz"),
                        "--output-marginal-file", g("marginal.by_factor_id.tsv.gz"), "--output-qc-file", g("qc.tsv")])
@@ -354,8 +356,8 @@ class EndToEndTest(unittest.TestCase):
     def pack_args(cls, pack, chunk_size, gene_map=None):
         """The flags of prep_pack_annotations_cmd in cfde_projection.cfg (outputs <pack>.indptr.npy etc.)."""
         p = cls.fx.p
-        return ["pack-annotations", "--annotations-gmt-file", p("out", "annotations.gmt.gz"),
-                "--gene-set-index-file", p("out", "gene_set_index.tsv.gz"), "--gene-map-file", gene_map or p("out", "case.gene.map"),
+        return ["pack-annotations", "--annotations-gmt-file", p("out", "annotations.gmt"),
+                "--gene-set-index-file", p("out", "gene_set_index.tsv"), "--gene-map-file", gene_map or p("out", "case.gene.map"),
                 "--genes-file", p("eaggl", "genes.tsv"), "--chunk-size", str(chunk_size),
                 "--output-indptr-file", pack + ".indptr.npy", "--output-indices-file", pack + ".indices.npy",
                 "--output-file", pack + ".chunks.tsv"]
@@ -365,10 +367,10 @@ class EndToEndTest(unittest.TestCase):
         """The flags of prep_check_projection_cmd in cfde_projection.cfg (report <check>.tsv, work dir <check>/)."""
         p = cls.fx.p
         return ["check-projection", "--python", sys.executable, "--pigean-src", PIGEAN_SRC, "--repo-dir", cls.repo,
-                "--expected-pigean-commit", cls.head, "--annotations-gmt-file", p("out", "annotations.gmt.gz"),
-                "--gene-set-index-file", p("out", "gene_set_index.tsv.gz"), "--gene-map-file", p("out", "case.gene.map"),
+                "--expected-pigean-commit", cls.head, "--annotations-gmt-file", p("out", "annotations.gmt"),
+                "--gene-set-index-file", p("out", "gene_set_index.tsv"), "--gene-map-file", p("out", "case.gene.map"),
                 "--genes-file", p("eaggl", "genes.tsv"), "--indptr-file", pack + ".indptr.npy",
-                "--indices-file", pack + ".indices.npy", "--all-factors-file", p("out", "all_factors.tsv.gz"),
+                "--indices-file", pack + ".indices.npy", "--all-factors-file", p("out", "all_factors.tsv"),
                 "--factor-index-file", p("out", "factor_index.tsv"), "--traits", ",".join(KPN_IDS),
                 "--sample-per-library", "2", "--seed", "1", "--work-dir", check, "--output-file", check + ".tsv"]
 
@@ -378,14 +380,12 @@ class EndToEndTest(unittest.TestCase):
         p = cls.fx.p
         return ["project-trait", "--check-file", check or p("out", "check.tsv"), "--chunks-file", pack + ".chunks.tsv",
                 "--indptr-file", pack + ".indptr.npy", "--indices-file", pack + ".indices.npy",
-                "--genes-file", p("eaggl", "genes.tsv"), "--trait-factors-file", d("factors.tsv.gz"),
-                "--trait-factor-index-file", d("factor_index.tsv"), "--gene-set-index-file", p("out", "gene_set_index.tsv.gz"),
+                "--genes-file", p("eaggl", "genes.tsv"), "--trait-factors-file", d("factors.tsv"),
+                "--trait-factor-index-file", d("factor_index.tsv"), "--gene-set-index-file", p("out", "gene_set_index.tsv"),
                 "--trait-kpn-map-file", p("out", "trait_kpn_map.tsv"), "--trait", trait,
                 "--kpn-trait-id", kpn_trait_id or KPN_IDS[trait], "--loading-variant", "capped", "--seed", "1",
                 "--top-n", "2", "--output-long-file", d("long.tsv.gz"), "--output-top-file", d("top.tsv.gz"),
-                "--output-qc-file", d("qc.tsv"), "--output-commit-file", d("commit.txt"),
-                "--output-params-file", d("params.tsv"), "--output-warnings-file", d("warnings.txt"),
-                "--output-log-file", d("projection.log")]
+                "--output-qc-file", d("qc.tsv"), "--output-log-file", d("projection.log")]
 
     @staticmethod
     def check_run(argv):
@@ -403,7 +403,7 @@ class EndToEndTest(unittest.TestCase):
                    OPENBLAS_NUM_THREADS="1")
         proc = subprocess.run(
             [sys.executable, "-B", "-m", "eaggl", "factor", "--factor-gene-clusters-in", factors,
-             "--factor-gene-clusters-layout", "factors-by-genes", "--X-in", p("out", "annotations.gmt.gz"),
+             "--factor-gene-clusters-layout", "factors-by-genes", "--X-in", p("out", "annotations.gmt"),
              "--gene-map-in", p("out", "case.gene.map"), "--gene-set-projection-mode", "both",
              "--gene-set-clusters-out", prefix + "joint.tsv.gz", "--gene-set-clusters-marginal-out", prefix + "marginal.tsv.gz",
              "--factor-output-scope", "all", "--cluster-row-min-max-loading", "0", "--seed", "1", "--hide-progress",
@@ -417,13 +417,13 @@ class EndToEndTest(unittest.TestCase):
         return read_rows(self.fx.p("out", trait, "long.tsv.gz"))
 
     def test_annotations_concatenate_the_id_gmts_and_fix_case_only(self):
-        with gzip.open(self.fx.p("out", "annotations.gmt.gz"), "rt") as fh:
+        with open(self.fx.p("out", "annotations.gmt")) as fh:
             rows = [line.rstrip("\n").split("\t") for line in fh]
         # Each gene set's id, a blank description (the source GMTs' text is dropped) and its genes in GMT order.
         self.assertEqual(rows, [[i, ""] + genes for c in COLLECTIONS for i, _, genes in c[3]])
         with open(self.fx.p("out", "case.gene.map")) as fh:
             self.assertEqual(fh.read(), "C10orf71\tC10ORF71\n")
-        index = read_rows(self.fx.p("out", "gene_set_index.tsv.gz"))
+        index = read_rows(self.fx.p("out", "gene_set_index.tsv"))
         self.assertEqual({r["gene_set_id"]: (r["collection_id"], r["n_genes_in_eaggl_universe"]) for r in index},
                          {ID_A1: (COLLECTIONS[0][2], "2"), ID_A2: (COLLECTIONS[0][2], "2"),
                           ID_B1: (COLLECTIONS[1][2], "3"), ID_B2: (COLLECTIONS[1][2], "1")})
@@ -434,20 +434,20 @@ class EndToEndTest(unittest.TestCase):
         for i, path in enumerate(paths):
             if i:
                 time.sleep(1.1)  # gzip headers store a whole-second mtime
-            self.check_run(["trait-factors", "--all-factors-file", p("out", "all_factors.tsv.gz"),
+            self.check_run(["trait-factors", "--all-factors-file", p("out", "all_factors.tsv"),
                             "--factor-index-file", p("out", "factor_index.tsv"), "--trait", "Solo",
                             "--output-file", path, "--output-factor-index-file", path + ".index.tsv"])
-        with open(paths[0], "rb") as a, open(paths[1], "rb") as b, open(p("out", "Solo", "factors.tsv.gz"), "rb") as c:
-            first = a.read()
-            self.assertEqual(first, b.read())
-            self.assertEqual(first, c.read())
+        with open(paths[0], "rb") as a, open(paths[1], "rb") as b:
+            self.assertEqual(a.read(), b.read())
+        with gzip.open(paths[0], "rb") as a, open(p("out", "Solo", "factors.tsv"), "rb") as c:
+            self.assertEqual(a.read(), c.read())  # the pipeline's plain file holds the same bytes
 
     def test_factor_index_keeps_ids_order_and_kpn(self):
         rows = read_rows(self.fx.p("out", "factor_index.tsv"))
         self.assertEqual([(r["global_eaggl_column"], r["factor_id"], r["kpn_trait_id"]) for r in rows],
                          [("Factor1", "T-one::Factor1", KPN_IDS["T-one"]), ("Factor2", "T-one::Factor2", KPN_IDS["T-one"]),
                           ("Factor3", "Solo::Factor1", KPN_IDS["Solo"])])
-        with gzip.open(self.fx.p("out", "all_factors.tsv.gz"), "rt") as fh:
+        with open(self.fx.p("out", "all_factors.tsv")) as fh:
             self.assertEqual(fh.readline().split("\t")[0], "Factor")
 
     def test_long_files_carry_every_id_verbatim(self):
@@ -500,7 +500,7 @@ class EndToEndTest(unittest.TestCase):
 
     def test_project_trait_rejects_a_wrong_kpn_id(self):
         p = self.fx.p
-        d = lambda name: p("out", "Solo", name) if name in ("factors.tsv.gz", "factor_index.tsv") else p("out", "wrong-kpn", name)
+        d = lambda name: p("out", "Solo", name) if name in ("factors.tsv", "factor_index.tsv") else p("out", "wrong-kpn", name)
         code, err = run(self.project_args("Solo", p("out", "pack"), d, KPN_IDS["T-one"]))
         self.assertEqual(code, 1)
         self.assertIn("KPN id for Solo disagrees", err)
@@ -511,7 +511,7 @@ class EndToEndTest(unittest.TestCase):
         rows = read_rows(p("out", "check.tsv"))
         rows[0]["check_pass"] = "False"
         failed = write(p("out", "failed-check", "check.tsv"), tsv([pw.CHECK_COLUMNS] + [[r[c] for c in pw.CHECK_COLUMNS] for r in rows]))
-        d = lambda name: p("out", "Solo", name) if name in ("factors.tsv.gz", "factor_index.tsv") else p("out", "failed-check", name)
+        d = lambda name: p("out", "Solo", name) if name in ("factors.tsv", "factor_index.tsv") else p("out", "failed-check", name)
         code, err = run(self.project_args("Solo", p("out", "pack"), d, check=failed))
         self.assertEqual(code, 1)
         self.assertIn("records a failed check", err)
@@ -530,15 +530,15 @@ class EndToEndTest(unittest.TestCase):
 
     def test_pack_refuses_a_gmt_with_a_description(self):
         p = self.fx.p
-        with gzip.open(p("out", "annotations.gmt.gz"), "rt") as fh:
+        with open(p("out", "annotations.gmt")) as fh:
             lines = fh.readlines()
         first = lines[0].split("\t")
         lines[0] = "\t".join([first[0], "a description"] + first[2:])
         os.makedirs(p("out", "described"))
-        with gzip.open(p("out", "described", "annotations.gmt.gz"), "wt") as fh:
+        with open(p("out", "described", "annotations.gmt"), "w") as fh:
             fh.writelines(lines)
         args = self.pack_args(p("out", "described", "pack"), 3)
-        args[args.index("--annotations-gmt-file") + 1] = p("out", "described", "annotations.gmt.gz")
+        args[args.index("--annotations-gmt-file") + 1] = p("out", "described", "annotations.gmt")
         code, err = run(args)
         self.assertEqual(code, 1)
         self.assertIn("must have a blank description", err)
@@ -571,9 +571,11 @@ class EndToEndTest(unittest.TestCase):
             os.makedirs(p("out", "single", trait))  # LAP creates output directories in real runs
         self.check_run(self.pack_args(p("out", "single", "pack"), 100))
         for trait in KPN_IDS:
-            d = lambda name: p("out", trait, name) if name in ("factors.tsv.gz", "factor_index.tsv") else p("out", "single", trait, name)
+            d = lambda name: p("out", trait, name) if name in ("factors.tsv", "factor_index.tsv") else p("out", "single", trait, name)
             self.check_run(self.project_args(trait, p("out", "single", "pack"), d))
-            self.run_eaggl(p("out", trait, "factors.tsv.gz"), p("out", "single", trait, "eaggl."))
+            genes, factors, _ = pw.trait_factors(p("out", "all_factors.tsv"), pw.read_factor_index(p("out", "factor_index.tsv")), trait)
+            pw.write_factors_wide(p("out", "single", trait, "factors_by_genes.tsv"), genes, factors)
+            self.run_eaggl(p("out", "single", trait, "factors_by_genes.tsv"), p("out", "single", trait, "eaggl."))
             columns = OrderedDict((r["local_eaggl_column"], r["factor_id"]) for r in read_rows(p("out", trait, "factor_index.tsv")))
             ids = [i for c in COLLECTIONS for i, _, _ in c[3]]
             joint, _ = pw.read_projection(p("out", "single", trait, "eaggl.joint.tsv.gz"), columns, ids)
@@ -591,7 +593,7 @@ class EndToEndTest(unittest.TestCase):
         p = self.fx.p
         os.makedirs(p("out", "single-chunk", "T-one"))
         self.check_run(self.pack_args(p("out", "single-chunk", "pack"), 100))
-        d = lambda name: p("out", "single-chunk", "T-one", name) if name not in ("factors.tsv.gz", "factor_index.tsv") else p("out", "T-one", name)
+        d = lambda name: p("out", "single-chunk", "T-one", name) if name not in ("factors.tsv", "factor_index.tsv") else p("out", "T-one", name)
         self.check_run(self.project_args("T-one", p("out", "single-chunk", "pack"), d))
         chunked = {(r["factor_id"], r["gene_set_id"]): r for r in self.long_rows("T-one")}
         single = {(r["factor_id"], r["gene_set_id"]): r for r in read_rows(d("long.tsv.gz"))}
@@ -600,9 +602,9 @@ class EndToEndTest(unittest.TestCase):
             self.assertEqual(row["marginal_loading"], chunked[key]["marginal_loading"])
             self.assertAlmostEqual(float(row["joint_loading"]), float(chunked[key]["joint_loading"]), delta=1e-3)
         with open(d("projection.log")) as fh:
-            self.assertEqual(len(fh.readlines()), 1)
+            self.assertEqual(sum(line.startswith("chunk_") for line in fh), 1)
         with open(p("out", "T-one", "projection.log")) as fh:
-            self.assertEqual(len(fh.readlines()), 2)
+            self.assertEqual(sum(line.startswith("chunk_") for line in fh), 2)
 
     def test_library_ranks_restrict_the_factor_order_to_the_library(self):
         for row in self.long_rows("T-one"):
@@ -737,24 +739,26 @@ class GeneSetBetasTest(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("changed since it was indexed", err)
 
-    def runs_file(self, name, runs):
-        """A betas-trait run table: runs are (library, status, [pigean rows], used response, p)."""
-        table = []
-        for library, status, rows, used, p in runs:
-            prefix = self.p(name + "." + library)
+    def runs(self, specs):
+        """betas-trait runs of T-one: specs are (library, status, [pigean rows], used response, p)."""
+        out = []
+        for library, status, rows, used, p in specs:
+            prefix = self.p("%s.%d" % (library, len(os.listdir(self.tmp.name))))
             write(prefix + ".gene_set_stats.tsv", tsv([self.PIGEAN_COLUMNS] + rows))
             write(prefix + ".params.tsv", "" if status == "no_gene_sets" else tsv(
                 [("Parameter", "Version", "Value"), ("option_gene_stats_log_bf_col", "1", used), ("p", "1", p),
                  ("sigma2", "1", "7e-09")]))
-            table.append([library, status, "2", prefix + ".gene_set_stats.tsv", prefix + ".params.tsv", prefix + ".log",
-                          prefix + ".warnings.txt", "log_bf", FAKE_COMMIT, "1"])
-        return write(self.p(name + ".runs.tsv"), tsv([pw.BETAS_RUN_COLUMNS] + table))
+            out.append({"trait": "T-one", "kpn_trait_id": KPN_IDS["T-one"], "library": library, "status": status,
+                        "n_gene_sets": "2", "response": "log_bf", "pigean_commit": FAKE_COMMIT, "seconds": "1",
+                        "gene_set_stats_file": prefix + ".gene_set_stats.tsv", "params_file": prefix + ".params.tsv",
+                        "log_file": prefix + ".log", "warnings_file": prefix + ".warnings.txt"})
+        return out
 
-    def annotate(self, *runs_files, libraries="LIBA,LIBB", response="log_bf", trait="T-one"):
-        return run(["annotate-gene-set-stats"] + sum((["--runs-file", f] for f in runs_files), [])
-                   + ["--libraries", libraries, "--gene-set-index-file", self.gene_set_index, "--trait-kpn-map-file",
-                      self.kpn_map, "--trait", trait, "--kpn-trait-id", KPN_IDS[trait], "--response", response,
-                      "--expected-pigean-commit", FAKE_COMMIT, "--output-file", self.p("out.tsv.gz")])
+    def annotate(self, runs, response="log_bf"):
+        args = SimpleNamespace(trait="T-one", kpn_trait_id=KPN_IDS["T-one"], response=response,
+                               expected_pigean_commit=FAKE_COMMIT)
+        gene_sets = {row[0]: (row[4], row[2], row[3]) for row in self.index_rows}  # id -> library, collection id, label
+        return pw.annotate_runs(args, runs, gene_sets)
 
     @staticmethod
     def row(gene_set_id, reason, uncorrected):
@@ -762,61 +766,70 @@ class GeneSetBetasTest(unittest.TestCase):
 
     def test_annotate_ranks_each_library_by_its_own_fit(self):
         row = self.row
-        small = self.runs_file("small", [("LIBA", "fitted", [row(ID_A1, "kept", "0.2"), row(ID_A2, "kept", "0.9")], "log_bf", "0.004")])
-        large = self.runs_file("large", [("LIBB", "fitted", [row(ID_B1, "kept", "0.1"), row(ID_B2, "prefilter_p_value", "0")],
-                                          "log_bf", "1e-05")])
-        code, err = self.annotate(small, large)
-        self.assertEqual((code, err), (0, ""))
-        rows = read_rows(self.p("out.tsv.gz"))
+        runs = self.runs([("LIBA", "fitted", [row(ID_A1, "kept", "0.2"), row(ID_A2, "kept", "0.9")], "log_bf", "0.004"),
+                          ("LIBB", "fitted", [row(ID_B1, "kept", "0.1"), row(ID_B2, "prefilter_p_value", "0")], "log_bf", "1e-05")])
+        rows, reasons, columns = self.annotate(runs)
         self.assertEqual([(r["gene_set_id"], r["library"], r["library_rank"], r["beta_uncorrected"], r["p"]) for r in rows],
-                         [(ID_A2, "LIBA", "1", "0.9", "0.004"), (ID_A1, "LIBA", "2", "0.2", "0.004"),
-                          (ID_B1, "LIBB", "1", "0.1", "1e-05")])
+                         [(ID_A2, "LIBA", 1, "0.9", "0.004"), (ID_A1, "LIBA", 2, "0.2", "0.004"),
+                          (ID_B1, "LIBB", 1, "0.1", "1e-05")])
         self.assertEqual({(r["kpn_trait_id"], r["collection_id"], r["response"], r["sigma2"]) for r in rows if r["library"] == "LIBB"},
                          {(KPN_IDS["T-one"], COLLECTIONS[1][2], "log_bf", "7e-09")})
+        self.assertEqual([(r["n_kept"], r["n_nonzero_beta_uncorrected"], r["p"]) for r in runs], [(2, 2, "0.004"), (1, 1, "1e-05")])
+        self.assertEqual((reasons, columns), ({"kept": 3, "prefilter_p_value": 1}, self.PIGEAN_COLUMNS))
+
+    def test_annotate_reports_the_prior_pigean_used_when_it_learned_none(self):
+        runs = self.runs([("LIBA", "fitted", [self.row(ID_A1, "kept", "0.2"), self.row(ID_A2, "prefilter_p_value", "0")],
+                           "log_bf", "0.004")])
+        write(runs[0]["params_file"], tsv([("Parameter", "Version", "Value"), ("option_gene_stats_log_bf_col", "1", "log_bf")]))
+        rows, _, _ = self.annotate(runs)
+        self.assertEqual((runs[0]["p"], runs[0]["sigma2"], rows[0]["p"]), ("0.0004", "7e-07", "0.0004"))  # p_used, sigma2_used
 
     def test_annotate_records_a_library_without_gene_sets(self):
-        small = self.runs_file("small", [("LIBA", "fitted", [self.row(ID_A1, "kept", "0.2")], "log_bf", "0.004")])
-        empty = self.runs_file("large", [("LIBB", "no_gene_sets", [], "log_bf", pw.NA)])
-        self.assertEqual(self.annotate(small, empty), (0, ""))
-        self.assertEqual([r["library"] for r in read_rows(self.p("out.tsv.gz"))], ["LIBA"])
+        runs = self.runs([("LIBA", "fitted", [self.row(ID_A1, "kept", "0.2")], "log_bf", "0.004"),
+                          ("LIBB", "no_gene_sets", [], "log_bf", pw.NA)])
+        rows, _, _ = self.annotate(runs)
+        self.assertEqual([r["library"] for r in rows], ["LIBA"])
+        self.assertEqual((runs[1]["n_kept"], runs[1]["p"]), (0, pw.NA))
 
-    def test_annotate_refuses_missing_libraries_another_response_or_a_gene_set_of_another_library(self):
+    def test_annotate_refuses_another_response_commit_or_library_and_unknown_gene_sets(self):
         row = self.row
-        small = self.runs_file("small", [("LIBA", "fitted", [row(ID_A1, "kept", "0.2")], "log_bf", "0.004")])
-        code, err = self.annotate(small)
-        self.assertEqual(code, 1)
-        self.assertIn("The runs cover libraries ['LIBA']", err)
-        code, err = self.annotate(small, small)
-        self.assertEqual(code, 1)
-        self.assertIn("expected each of", err)
-        other = self.runs_file("other", [("LIBB", "fitted", [row(ID_B1, "kept", "0.1")], "combined", "0.004")])
-        code, err = self.annotate(small, other)
-        self.assertEqual(code, 1)
-        self.assertIn("pigean regressed LIBB on combined, expected log_bf", err)
-        wrong = self.runs_file("wrong", [("LIBB", "fitted", [row(ID_A2, "kept", "0.1")], "log_bf", "0.004")])
-        code, err = self.annotate(small, wrong)
-        self.assertEqual(code, 1)
-        self.assertIn("is in LIBA, not LIBB", err)
-        unknown = self.runs_file("unknown", [("LIBB", "fitted", [row("dapper:GeneSet." + "z" * 32, "kept", "0.1")], "log_bf", "0.004")])
-        code, err = self.annotate(small, unknown)
-        self.assertEqual(code, 1)
-        self.assertIn("Unknown gene set", err)
+        cases = [([("LIBB", "fitted", [row(ID_B1, "kept", "0.1")], "combined", "0.004")], "pigean regressed LIBB on combined"),
+                 ([("LIBB", "fitted", [row(ID_A2, "kept", "0.1")], "log_bf", "0.004")], "is in LIBA, not LIBB"),
+                 ([("LIBB", "fitted", [row("dapper:GeneSet." + "z" * 32, "kept", "0.1")], "log_bf", "0.004")], "Unknown gene set")]
+        for specs, message in cases:
+            with self.subTest(message=message):
+                with self.assertRaisesRegex(pw.WorkflowError, message):
+                    self.annotate(self.runs(specs))
+        runs = self.runs([("LIBA", "fitted", [row(ID_A1, "kept", "0.2")], "log_bf", "0.004")])
+        runs[0]["pigean_commit"] = "f" * 40
+        with self.assertRaisesRegex(pw.WorkflowError, "pigean ran LIBA at"):
+            self.annotate(runs)
 
 
 FAKE_PIGEAN = '''"""Stands in for `python -m pigean betas`: every gene set of --X-in is kept, beta_uncorrected falls with row order."""
 import gzip, os, sys
 args = sys.argv[2:]
 value = lambda flag: args[args.index(flag) + 1]
+opener = lambda path, mode: (gzip.open if path.endswith(".gz") else open)(path, mode)
 with open(os.environ["FAKE_PIGEAN_CALLS"], "a") as fh:
     fh.write(os.path.basename(value("--X-in")) + "\\n")
+with open(os.environ["FAKE_PIGEAN_CALLS"] + ".args", "a") as fh:
+    fh.write(" ".join(args) + "\\n")
 with open(value("--log-file"), "w") as log:
     if os.path.basename(value("--X-in")).startswith(os.environ.get("FAKE_PIGEAN_EMPTY", "-")):
         log.write("No gene sets survived the input filters; stopping\\n")
         sys.exit(0)
+    if os.path.basename(value("--X-in")).startswith(os.environ.get("FAKE_PIGEAN_NONE_LEFT", "-")):
+        log.write("Ignoring 1 gene sets due to too few genes (kept 0)\\n")
+        sys.stderr.write("Error: No gene sets are left!\\n")
+        sys.exit(1)
+    if os.path.basename(value("--X-in")).startswith(os.environ.get("FAKE_PIGEAN_CRASH", "-")):
+        sys.stderr.write("Killed\\n")
+        sys.exit(137)
     log.write("ok\\n")
-with gzip.open(value("--X-in"), "rt") as fh:
+with opener(value("--X-in"), "rt") as fh:
     ids = [line.split()[0] for line in fh if line.strip()]
-with gzip.open(value("--gene-set-stats-out"), "wt") as out:
+with opener(value("--gene-set-stats-out"), "wt") as out:
     out.write("Gene_Set\\tlabel\\tfilter_reason\\tN\\tbeta\\tbeta_uncorrected\\tavg_postp\\n")
     for k, gene_set in enumerate(ids):
         out.write("%s\\tx\\tkept\\t3\\t0.01\\t%g\\t0.5\\n" % (gene_set, 1.0 / (k + 1)))
@@ -827,17 +840,17 @@ with open(value("--params-out"), "w") as out:
 
 
 class BetasPerLibraryTest(unittest.TestCase):
-    """library-gmts and betas-trait: one `pigean betas` fit per library (a fake pigean), resumable."""
+    """library-gmts, betas-trait (one `pigean betas` fit per library, with a fake pigean; resumable) and betas-collect."""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         p = self.p = lambda *parts: os.path.join(self.tmp.name, *parts)
-        lines = [[i, ""] + genes for c in COLLECTIONS for i, _, genes in c[3]]
-        with gzip.open(p("annotations.gmt.gz"), "wt") as fh:
-            fh.write(tsv(lines))
+        write(p("annotations.gmt"), tsv([[i, ""] + genes for c in COLLECTIONS for i, _, genes in c[3]]))
         index = [(i, "set", c[2], c[0], c[1], "", "", "", "", "1", "3", "2", "2026-10-05") for c in COLLECTIONS for i, _, _ in c[3]]
         write(p("gene_set_index.tsv"), tsv([pw.GENE_SET_INDEX_COLUMNS] + index))
+        write(p("trait_kpn_map.tsv"), tsv([pw.TRAIT_KPN_COLUMNS] + [(t, k, "v0.0.2", "c", "x", t, "g", "lg", "tt", "1")
+                                                                    for t, k in KPN_IDS.items()]))
         write(p("src", "pigean", "__init__.py"), "")
         write(p("src", "pigean", "__main__.py"), FAKE_PIGEAN)
         self.repo = p("clone")
@@ -852,16 +865,23 @@ class BetasPerLibraryTest(unittest.TestCase):
         os.environ["FAKE_PIGEAN_CALLS"] = p("calls.txt")
         self.addCleanup(os.environ.pop, "FAKE_PIGEAN_CALLS", None)
         self.addCleanup(os.environ.pop, "FAKE_PIGEAN_EMPTY", None)
-        self.assertEqual(run(["library-gmts", "--annotations-gmt-file", p("annotations.gmt.gz"), "--gene-set-index-file",
+        self.addCleanup(os.environ.pop, "FAKE_PIGEAN_NONE_LEFT", None)
+        self.addCleanup(os.environ.pop, "FAKE_PIGEAN_CRASH", None)
+        self.assertEqual(run(["library-gmts", "--annotations-gmt-file", p("annotations.gmt"), "--gene-set-index-file",
                               p("gene_set_index.tsv"), "--output-dir", p("libraries"), "--output-file", p("libraries.tsv")]),
                          (0, ""))
 
-    def betas(self, libraries, output, exclude=""):
+    def betas(self, libraries, name, exclude="", cap="20000", trait="T-one"):
+        """betas_trait_cmd's flags; outputs <name>.runs.tsv, <name>.all.tsv and <name>.tsv."""
         p = self.p
         return run(["betas-trait", "--python", sys.executable, "--pigean-src", p("src"), "--repo-dir", self.repo,
                     "--expected-pigean-commit", self.head, "--profile", p("profile.json"), "--library-gmts-file",
                     p("libraries.tsv"), "--libraries", libraries, "--exclude-libraries", exclude, "--gene-stats-file",
-                    p("gene_stats.tsv"), "--response", "log_bf", "--seed", "1", "--work-dir", p("work"), "--output-file", output])
+                    p("gene_stats.tsv"), "--gene-set-index-file", p("gene_set_index.tsv"), "--trait-kpn-map-file",
+                    p("trait_kpn_map.tsv"), "--trait", trait, "--kpn-trait-id", KPN_IDS[trait], "--response", "log_bf",
+                    "--seed", "1", "--max-num-gene-sets-initial", cap, "--work-dir", p("work", trait),
+                    "--output-runs-file", p(name + ".runs.tsv"), "--output-all-file", p(name + ".all.tsv"),
+                    "--output-file", p(name + ".tsv")])
 
     def calls(self):
         with open(self.p("calls.txt")) as fh:
@@ -870,41 +890,84 @@ class BetasPerLibraryTest(unittest.TestCase):
     def test_library_gmts_split_the_annotations_in_index_order(self):
         rows = read_rows(self.p("libraries.tsv"))
         self.assertEqual([(r["library"], r["n_gene_sets"]) for r in rows], [("LIBA", "2"), ("LIBB", "2")])
-        with gzip.open(rows[1]["file"], "rt") as fh:
+        with open(rows[1]["file"]) as fh:
             self.assertEqual([line.split("\t")[0] for line in fh], [ID_B1, ID_B2])
         self.assertEqual(rows[1]["sha256"], pw.sha256_file(rows[1]["file"]))
 
-    def test_each_library_is_fitted_alone_once(self):
-        self.assertEqual(self.betas("LIBA,LIBB", self.p("small.tsv"), exclude="LIBB"), (0, ""))
-        self.assertEqual(self.betas("LIBB", self.p("large.tsv")), (0, ""))
-        self.assertEqual(self.calls(), ["LIBA.gmt.gz", "LIBB.gmt.gz"])
-        runs = read_rows(self.p("small.tsv")) + read_rows(self.p("large.tsv"))
-        self.assertEqual([(r["library"], r["status"], r["pigean_commit"]) for r in runs],
-                         [("LIBA", "fitted", self.head), ("LIBB", "fitted", self.head)])
-        # A rerun reuses both fits.
-        self.assertEqual(self.betas("LIBA,LIBB", self.p("again.tsv")), (0, ""))
-        self.assertEqual(self.calls(), ["LIBA.gmt.gz", "LIBB.gmt.gz"])
-        self.assertEqual({r["seconds"] for r in read_rows(self.p("again.tsv"))}, {"reused"})
-        # Changed gene stats refit every library.
+    def test_each_library_is_fitted_alone_then_ranked(self):
+        self.assertEqual(self.betas("LIBA,LIBB", "small", exclude="LIBB")[0], 0)
+        self.assertEqual(self.betas("LIBB", "large")[0], 0)
+        self.assertEqual(self.calls(), ["LIBA.gmt", "LIBB.gmt"])
+        runs = read_rows(self.p("small.runs.tsv")) + read_rows(self.p("large.runs.tsv"))
+        self.assertEqual([(r["trait"], r["library"], r["status"], r["n_kept"], r["p"], r["pigean_commit"]) for r in runs],
+                         [("T-one", "LIBA", "fitted", "2", "0.001", self.head), ("T-one", "LIBB", "fitted", "2", "0.001", self.head)])
+        self.assertEqual([(r["gene_set_id"], r["library_rank"]) for r in read_rows(self.p("small.tsv"))], [(ID_A1, "1"), (ID_A2, "2")])
+        rows = read_rows(self.p("large.all.tsv"))
+        self.assertEqual([(r["library"], r["Gene_Set"], r["filter_reason"]) for r in rows], [("LIBB", ID_B1, "kept"), ("LIBB", ID_B2, "kept")])
+        # A rerun reuses both fits; changed gene stats refit.
+        self.assertEqual(self.betas("LIBA,LIBB", "again")[0], 0)
+        self.assertEqual(self.calls(), ["LIBA.gmt", "LIBB.gmt"])
+        self.assertEqual({r["seconds"] for r in read_rows(self.p("again.runs.tsv"))}, {"reused"})
         write(self.p("gene_stats.tsv"), tsv([("phenotype", "gene", "log_bf"), ("T-one", "A1", "3")]))
-        self.assertEqual(self.betas("LIBA", self.p("refit.tsv")), (0, ""))
-        self.assertEqual(self.calls()[-1], "LIBA.gmt.gz")
+        self.assertEqual(self.betas("LIBA", "refit")[0], 0)
+        self.assertEqual(self.calls()[-1], "LIBA.gmt")
 
     def test_a_library_without_surviving_gene_sets_is_recorded(self):
-        os.environ["FAKE_PIGEAN_EMPTY"] = "LIBB"
-        self.assertEqual(self.betas("LIBA,LIBB", self.p("runs.tsv")), (0, ""))
-        runs = {r["library"]: r for r in read_rows(self.p("runs.tsv"))}
-        self.assertEqual((runs["LIBA"]["status"], runs["LIBB"]["status"]), ("fitted", "no_gene_sets"))
-        self.assertEqual(read_rows(runs["LIBB"]["gene_set_stats_file"]), [])
+        for variable in ("FAKE_PIGEAN_EMPTY", "FAKE_PIGEAN_NONE_LEFT"):  # a clean stop, or pigean's bail from the betas
+            with self.subTest(variable=variable):
+                os.environ[variable] = "LIBB"
+                self.assertEqual(self.betas("LIBA,LIBB", variable, cap="100")[0], 0)
+                runs = {r["library"]: r for r in read_rows(self.p(variable + ".runs.tsv"))}
+                self.assertEqual((runs["LIBA"]["status"], runs["LIBB"]["status"], runs["LIBB"]["n_kept"]),
+                                 ("fitted", "no_gene_sets", "0"))
+                self.assertEqual({r["library"] for r in read_rows(self.p(variable + ".tsv"))}, {"LIBA"})
+                os.environ.pop(variable)
+                shutil.rmtree(self.p("work"))  # the next variant refits from scratch
 
-    def test_refuses_an_unknown_library_or_a_dirty_clone(self):
-        code, err = self.betas("LIBA,LIBZ", self.p("runs.tsv"))
+    def test_a_killed_pigean_fails_the_library(self):
+        os.environ["FAKE_PIGEAN_CRASH"] = "LIBB"
+        code, err = self.betas("LIBA,LIBB", "runs")
+        self.assertEqual(code, 1)
+        self.assertIn("pigean betas failed on LIBB (exit 137)", err)
+        self.assertFalse(os.path.exists(self.p("work", "T-one", "LIBB.done")))
+
+    def test_the_initial_cap_reaches_pigean_and_its_fingerprint(self):
+        self.assertEqual(self.betas("LIBA", "runs")[0], 0)
+        with open(self.p("calls.txt.args")) as fh:
+            self.assertIn("--max-num-gene-sets-initial 20000 ", fh.read())
+        self.assertEqual(self.betas("LIBA", "again", cap="5000")[0], 0)  # another cap refits
+        self.assertEqual(self.calls(), ["LIBA.gmt", "LIBA.gmt"])
+
+    def test_refuses_an_unknown_library_a_wrong_kpn_id_or_a_dirty_clone(self):
+        code, err = self.betas("LIBA,LIBZ", "runs")
         self.assertEqual(code, 1)
         self.assertIn("No GMT for libraries ['LIBZ']", err)
+        write(self.p("trait_kpn_map.tsv"), tsv([pw.TRAIT_KPN_COLUMNS] + [("T-one", KPN_IDS["Solo"], "v0.0.2", "c", "x", "T-one", "g",
+                                                                          "lg", "tt", "1")]))
+        code, err = self.betas("LIBA", "runs")
+        self.assertEqual(code, 1)
+        self.assertIn("KPN id for T-one disagrees", err)
+        write(self.p("trait_kpn_map.tsv"), tsv([pw.TRAIT_KPN_COLUMNS] + [(t, k, "v0.0.2", "c", "x", t, "g", "lg", "tt", "1")
+                                                                         for t, k in KPN_IDS.items()]))
         write(os.path.join(self.repo, "src", "pigean", "y.py"), "y = 2\n")
-        code, err = self.betas("LIBA", self.p("runs.tsv"))
+        code, err = self.betas("LIBA", "runs")
         self.assertEqual(code, 1)
         self.assertIn("has local changes under src/", err)
+
+    def test_collect_needs_every_library_of_every_trait(self):
+        for trait in KPN_IDS:
+            self.assertEqual(self.betas("LIBA,LIBB,LINCS", trait, exclude="LINCS", trait=trait)[0], 0)
+        collect = lambda *files: run(["betas-collect"] + sum((["--runs-file", self.p(f + ".runs.tsv")] for f in files), [])
+                                     + ["--trait-kpn-map-file", self.p("trait_kpn_map.tsv"), "--libraries", "LIBA,LIBB,LINCS",
+                                        "--exclude-libraries", "LINCS", "--expected-pigean-commit", self.head,
+                                        "--output-file", self.p("manifest.tsv")])
+        self.assertEqual(collect("T-one", "Solo")[0], 0)
+        rows = read_rows(self.p("manifest.tsv"))
+        self.assertEqual([(r["trait"], r["library"], r["status"]) for r in rows],
+                         [("Solo", "LIBA", "fitted"), ("Solo", "LIBB", "fitted"), ("T-one", "LIBA", "fitted"), ("T-one", "LIBB", "fitted")])
+        code, err = collect("T-one")
+        self.assertEqual(code, 1)
+        self.assertIn("Runs cover 1 traits; the project has 2", err)
 
 if __name__ == "__main__":
     unittest.main()
