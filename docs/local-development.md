@@ -89,7 +89,7 @@ REVEAL_EXECUTION_MODE=deterministic ./scripts/dev-up.sh
 
 This exercises the actual application database and queue with the deterministic adapter. Its output is labeled as development execution and must not be reported as a live scientific result. Stop the stack before switching execution modes. Box mode requires both Box and Anthropic credentials.
 
-Authoring defaults to 100 turns (`REVEAL_AGENT_MAX_TURNS`), with the existing independent $3 cost cap and 1,800-second (30-minute) deadline. Configure a lower turn cap explicitly if needed. Changing environment limits requires recreating the worker container, not just restarting it. A turn-limit exit stays an operational failure with retained diagnostics; it never becomes an insufficient-evidence finding. Retrying starts a new attempt, and does not resume the completed failed provider session.
+Authoring defaults to 100 turns (`REVEAL_AGENT_MAX_TURNS`), with an independent $5 cost cap and 1,800-second (30-minute) deadline. Configure a lower turn cap explicitly if needed. Changing environment limits requires recreating the worker container, not just restarting it. A turn-limit exit stays an operational failure with retained diagnostics; it never becomes an insufficient-evidence finding. Retrying starts a new attempt, and does not resume the completed failed provider session.
 
 The root `.env` controls the authoring spending limit. For demos, for example:
 
@@ -97,7 +97,7 @@ The root `.env` controls the authoring spending limit. For demos, for example:
 REVEAL_AGENT_MAX_BUDGET_USD=25
 ```
 
-This accepts a positive finite USD amount and defaults to $3 per authoring job. Each analysis and paragraph job has its own cap, rather than a combined submission cap. Increasing it does not bypass deterministic validation or the separate authoring time and turn limits. Budget failures show the cap and recorded spend when available. The retired second AI review does not run, and `REVEAL_GROUNDING_*` settings no longer affect account or paragraph acceptance.
+This accepts a positive finite USD amount and defaults to $5 per research job. Paragraph (research statement) jobs use `REVEAL_PARAGRAPH_MAX_BUDGET_USD`, default $1; measured statement runs cost about $0.15. Each analysis and paragraph job has its own cap, rather than a combined submission cap. Increasing it does not bypass deterministic validation or the separate authoring time and turn limits. Budget failures show the cap and recorded spend when available. The retired second AI review does not run, and `REVEAL_GROUNDING_*` settings no longer affect account or paragraph acceptance.
 
 For old jobs stopped with `REVIEW_UNAVAILABLE` or `REVIEW_BUDGET_EXCEEDED`, **Save existing output** requeues the same job using its verified saved authoring output and frozen evidence. No authoring agent, evidence collection, or AI reviewer runs again. The action keeps the original model/runtime provenance, checks captured files, identities, sources, ownership and tool policy again, and saves passing results with separate attempt diagnostics. Historical scientific rejections and incomplete captures cannot use this recovery action. The compatible API route remains `/v1/jobs/{job_id}/retry-review`.
 

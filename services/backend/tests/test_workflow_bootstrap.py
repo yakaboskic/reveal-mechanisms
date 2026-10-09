@@ -42,7 +42,8 @@ class BootstrapWorkflowTests(unittest.IsolatedAsyncioTestCase):
         self.env = patch.dict('os.environ', {'REVEAL_JOB_TRANSPORT': 'workflow',
             'REVEAL_JOB_NAMESPACE': 'bootstrap-test', 'REVEAL_ENVIRONMENT': 'test',
             'REVEAL_EXECUTION_MODE': 'box', 'REVEAL_AGENT_TIMEOUT_SECONDS': '120',
-            'REVEAL_AGENT_MAX_BUDGET_USD': '0.75', 'REVEAL_AGENT_MAX_TURNS': '12'})
+            'REVEAL_AGENT_MAX_BUDGET_USD': '0.75', 'REVEAL_PARAGRAPH_MAX_BUDGET_USD': '0.25',
+            'REVEAL_AGENT_MAX_TURNS': '12'})
         self.env.start(); self.addCleanup(self.env.stop)
         self.store = BootstrapStore()
         self.adapter = BoxLifecycle(ROOT, environ={'REVEAL_CLAUDE_MODEL': 'frozen-model'})
@@ -96,7 +97,8 @@ class BootstrapWorkflowTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(hashlib.sha256(content).hexdigest(), bootstrap['bundle']['sha256'])
         self.assertEqual(config['job_id'], payload['job_id']); self.assertEqual(config['attempt'], 1)
         self.assertEqual(config['input_sha256'], descriptor['sha256'])
-        self.assertEqual(config['model'], 'frozen-model'); self.assertEqual(config['max_budget_usd'], .75)
+        # A paragraph job freezes the statement writer's own cap, not research authoring's.
+        self.assertEqual(config['model'], 'frozen-model'); self.assertEqual(config['max_budget_usd'], .25)
         self.assertEqual(config['timeout_seconds'], 120); self.assertEqual(config['max_turns'], 12)
         self.assertEqual(config['validation_feedback'], []); self.assertEqual(config['selected_graphs'], [])
         self.assertEqual(rows['execution']['workspace'], rows['queue']['workspace'])
@@ -110,7 +112,7 @@ class BootstrapWorkflowTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(OSError): await self.engine.step(payload, 0)
         saved = deepcopy(self.rows(payload))
         with patch.dict('os.environ', {'REVEAL_AGENT_TIMEOUT_SECONDS': '999',
-                'REVEAL_AGENT_MAX_BUDGET_USD': '9', 'REVEAL_AGENT_MAX_TURNS': '99'}):
+                'REVEAL_AGENT_MAX_BUDGET_USD': '9', 'REVEAL_PARAGRAPH_MAX_BUDGET_USD': '9', 'REVEAL_AGENT_MAX_TURNS': '99'}):
             result = await self.engine.step(payload, 0)
         self.assertEqual(result['phase'], 'create'); self.assertEqual(self.store.puts, 1)
         self.assertEqual(self.adapter.freeze_bootstrap.call_count, 1)
@@ -164,7 +166,7 @@ class BootstrapWorkflowTests(unittest.IsolatedAsyncioTestCase):
               patch.object(self.store, 'restore', side_effect=AssertionError('no workspace restore')),
               patch.object(self.store, 'snapshot', side_effect=AssertionError('no workspace snapshot')),
               patch.dict('os.environ', {'REVEAL_AGENT_TIMEOUT_SECONDS': '999',
-                'REVEAL_AGENT_MAX_BUDGET_USD': '9', 'REVEAL_AGENT_MAX_TURNS': '99'})):
+                'REVEAL_AGENT_MAX_BUDGET_USD': '9', 'REVEAL_PARAGRAPH_MAX_BUDGET_USD': '9', 'REVEAL_AGENT_MAX_TURNS': '99'})):
             result = await self.engine.step(payload, result['index'])
             self.assertEqual(result['phase'], 'launch')
             with patch('reveal_backend.workflow_execution.time.time', return_value=1000):
@@ -178,9 +180,9 @@ class BootstrapWorkflowTests(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); self.store.restore(rows['execution']['workspace'], root)
             with patch.dict('os.environ', {'REVEAL_AGENT_TIMEOUT_SECONDS': '999',
-                    'REVEAL_AGENT_MAX_BUDGET_USD': '9', 'REVEAL_AGENT_MAX_TURNS': '99'}):
+                    'REVEAL_AGENT_MAX_BUDGET_USD': '9', 'REVEAL_PARAGRAPH_MAX_BUDGET_USD': '9', 'REVEAL_AGENT_MAX_TURNS': '99'}):
                 request, _ = self.engine.request(rows['job'], rows['queue'], rows['execution'], root)
-        self.assertEqual((request.timeout_seconds, request.max_budget_usd, request.max_turns), (120, .75, 12))
+        self.assertEqual((request.timeout_seconds, request.max_budget_usd, request.max_turns), (120, .25, 12))
 
     async def test_lost_bootstrap_commit_retries_same_descriptor_and_lost_phase_ack_skips_remote(self):
         payload, result = await self.assigned(); saved = deepcopy(self.rows(payload))

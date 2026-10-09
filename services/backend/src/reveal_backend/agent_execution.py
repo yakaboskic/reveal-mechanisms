@@ -29,6 +29,14 @@ Cancelled = Callable[[], Awaitable[bool]]
 Checkpoint = Callable[[dict], Awaitable[None]]
 
 
+def agent_budget_usd(kind: str) -> float:
+    """Dollar cap for one agent run. Writing a statement costs cents, so it does not share research's cap."""
+    from .runtime_config import setting
+    if kind == 'paragraph':
+        return float(setting('REVEAL_PARAGRAPH_MAX_BUDGET_USD', '1'))
+    return float(setting('REVEAL_AGENT_MAX_BUDGET_USD', '5'))
+
+
 @dataclass(frozen=True)
 class ExecutionRequest:
     job_id: str
@@ -38,7 +46,7 @@ class ExecutionRequest:
     output_dir: Path
     selected_graphs: tuple[str, ...] = ()
     timeout_seconds: int = 1800
-    max_budget_usd: float = 3.0
+    max_budget_usd: float = 5.0
     max_turns: int = 100
     remote_handle: dict | None = None
     validation_feedback: tuple[str, ...] = ()

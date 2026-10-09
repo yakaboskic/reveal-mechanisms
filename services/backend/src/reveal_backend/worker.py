@@ -9,7 +9,7 @@ import signal
 import shutil
 import socket
 import time
-from .agent_execution import ExecutionRequest, MAX_EMIT_BATCH_EVENTS, MAX_EMIT_BATCH_BYTES, emit_batch_size
+from .agent_execution import ExecutionRequest, MAX_EMIT_BATCH_EVENTS, MAX_EMIT_BATCH_BYTES, agent_budget_usd, emit_batch_size
 from .auth import Problem, owned
 from .acceptance import assemble_account, claim_structure_record, object_envelope, object_projection, with_citations, release_root, LOCK, mint, prewarm, validate_paragraph_document
 from .evidence_package import DapperRuntime, canonical_json, decode, require, sha256
@@ -105,7 +105,15 @@ def read_preparation_inputs(repository,job):
             records=tx.get_records((('request',identity),('request_binding',identity)))
             return records[('request',identity)]['data'],records[('request_binding',identity)]['data']
         owner=tx.get('job',job['id'])['owner']
-        return owned(tx,'account',job['input_account_id'],owner)['data']
+        stored=owned(tx,'account',job['input_account_id'],owner)['data']
+        # Paragraph assembly re-mints every identity in the account document, so it needs the exact accepted
+        # document. The stored projection writes non-DAPPER CURIEs (HGNC.SYMBOL:, obo:) as full IRIs, which
+        # re-keys their propositions, claims and the account itself. Accounts without the index keep the projection.
+        reference=tx.get('object_document',digest([owner,job['input_account_id']]))
+        exact=tx.get('scientific_document',digest([owner,reference['data']['sha256']])) if reference and reference['owner']==owner else None
+        if exact and exact['owner']==owner:
+            stored={**stored,'result':{**stored['result'],'document':exact['data']['document']}}
+        return stored
 
 def persist_dispatch_input(repository,job_id,token,snapshot,package=None):
     """Commit collected evidence and its exact dispatch checkpoint together."""
@@ -439,7 +447,7 @@ class Worker:
                 research_access = await asyncio.to_thread(access, self.repository, job, queue['attempt'])
             request=ExecutionRequest(job_id=job['id'],attempt=execution_attempt,kind='research' if job['kind']=='analysis' else 'paragraph',input_path=input_path,
                 output_dir=root/f'attempt-{execution_attempt}'/'output',selected_graphs=selected,timeout_seconds=int(setting('REVEAL_AGENT_TIMEOUT_SECONDS','1800')),
-                max_budget_usd=float(setting('REVEAL_AGENT_MAX_BUDGET_USD','3')),max_turns=int(setting('REVEAL_AGENT_MAX_TURNS','100')),remote_handle=queue.get('remote_handle'),research_access=research_access)
+                max_budget_usd=agent_budget_usd('research' if job['kind']=='analysis' else 'paragraph'),max_turns=int(setting('REVEAL_AGENT_MAX_TURNS','100')),remote_handle=queue.get('remote_handle'),research_access=research_access)
             if review_source:
                 phase='scientific_validation'
                 from .review_retry import replay_capture

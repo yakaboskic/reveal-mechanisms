@@ -67,7 +67,9 @@ env:
   EMBEDDING_MODEL_REVISION: unspecified
   REVEAL_CLAUDE_MODEL: claude-sonnet-4-6
   REVEAL_AGENT_TIMEOUT_SECONDS: '1800'
-  REVEAL_AGENT_MAX_BUDGET_USD: '3'
+  # Per-run Claude spend caps. Measured research runs cost $1.1–3.1; statement (paragraph) runs about $0.15.
+  REVEAL_AGENT_MAX_BUDGET_USD: '5'
+  REVEAL_PARAGRAPH_MAX_BUDGET_USD: '1'
   REVEAL_AGENT_MAX_TURNS: '100'
   REVEAL_RETRIEVAL_BACKEND: upstash
   REVEAL_VECTOR_ENVIRONMENT: prod

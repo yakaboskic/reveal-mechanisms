@@ -86,7 +86,38 @@ class WorkerPreparationTests(unittest.TestCase):
         self.assertEqual(inputs['result']['research_statement']['job_id'], job['id'])
         self.assertEqual(len(self.repository.operations), 1)
         self.assertEqual(self.repository.operations[0][0], 'read')
-        self.assertEqual(len(self.repository.operations[0][1]), 2)
+        # Job, account and the (absent) exact-document index.
+        self.assertEqual(len(self.repository.operations[0][1]), 3)
+
+    def test_paragraph_input_carries_the_exact_accepted_document_not_its_projection(self):
+        account_id = 'dapper:ScientificAccount.' + 'b' * 32
+        exact = {'prefixes': {'HGNC.SYMBOL': 'https://identifiers.org/hgnc.symbol:'},
+                 'propositions': [{'id': 'dapper:Proposition.p', 'subject_entity': 'HGNC.SYMBOL:JAK1'}]}
+        projection = {'propositions': [{'id': 'dapper:Proposition.p', 'subject_entity': 'https://identifiers.org/hgnc.symbol:JAK1'}]}
+        stored = {'result': {'document': projection, 'citation_metadata': [{'target_id': 'dapper:Proposition.p'}]}, 'summary': {}}
+        with self.repository.transaction() as tx:
+            tx.put('account', digest([self.owner, account_id]), self.owner, stored)
+            tx.put('object_document', digest([self.owner, account_id]), self.owner, {'object_id': account_id, 'sha256': 'exact-sha'})
+            tx.put('scientific_document', digest([self.owner, 'exact-sha']), self.owner, {'sha256': 'exact-sha', 'document': exact})
+            job = jobs.enqueue(tx, self.owner, 'paragraph', account_id=account_id)
+        self.repository.operations.clear()
+        inputs = read_preparation_inputs(self.repository, job)
+        self.assertEqual(inputs['result']['document'], exact)
+        self.assertEqual(inputs['result']['citation_metadata'], stored['result']['citation_metadata'])
+        self.assertEqual(inputs['result']['research_statement']['job_id'], job['id'])
+        self.assertEqual([kind for kind, _ in self.repository.operations], ['read'])
+        self.assertEqual(len(self.repository.operations[0][1]), 4)
+        with self.repository.read_transaction() as tx:
+            self.assertEqual(tx.get('account', digest([self.owner, account_id]))['data']['result']['document'], projection)
+
+    def test_paragraph_input_ignores_an_exact_document_owned_by_someone_else(self):
+        account_id = 'dapper:ScientificAccount.' + 'c' * 32
+        stored = {'result': {'document': {'exact': 'projection'}, 'citation_metadata': []}, 'summary': {}}
+        with self.repository.transaction() as tx:
+            tx.put('account', digest([self.owner, account_id]), self.owner, stored)
+            tx.put('object_document', digest([self.owner, account_id]), 'another-owner', {'object_id': account_id, 'sha256': 'foreign'})
+            job = jobs.enqueue(tx, self.owner, 'paragraph', account_id=account_id)
+        self.assertEqual(read_preparation_inputs(self.repository, job)['result']['document'], {'exact': 'projection'})
 
     def test_slow_input_and_checkpoint_storage_do_not_block_async_progress(self):
         ticks = []

@@ -307,7 +307,8 @@ Production keeps its explicit two-Box setting.
 | `REVEAL_WORKFLOW_OBSERVE_INTERVAL_SECONDS` | 5 | 10 | Durable sleep between Box observations. |
 | `REVEAL_WORKFLOW_STEPS_PER_RUN` | 6 | 6 | Phase steps before a fresh run; positive integer, frozen per dispatch. |
 | `REVEAL_AGENT_TIMEOUT_SECONDS` | 1800 | 1800 | Agent runtime budget; frozen with each prepared input; the service-wide setting in `deploy/dig/service.yaml` is also 1800. |
-| `REVEAL_AGENT_MAX_BUDGET_USD` / `REVEAL_AGENT_MAX_TURNS` | 3 / 100 | 3 / 100 | Per-agent spending target / turn bound, frozen at preparation. |
+| `REVEAL_AGENT_MAX_BUDGET_USD` / `REVEAL_AGENT_MAX_TURNS` | 5 / 100 | 5 / 100 | Per-agent research spending target / turn bound, frozen at preparation. |
+| `REVEAL_PARAGRAPH_MAX_BUDGET_USD` | 1 | 1 | Per-agent spending target for a paragraph (research statement) job, frozen at preparation. |
 
 All listed environment controls are read by the runtime. QA leaves the pool
 settings at their defaults. DIG task count remains `min_tasks=max_tasks=1`; the
@@ -415,7 +416,7 @@ External limits were checked against official sources on October 8, 2026:
   input tokens and $15 per million output tokens; cache reads are $0.30 per
   million (cache writes have separate prices). A worked example of 100,000
   uncached input + 10,000 output tokens costs $0.45 per agent, or $11.25 for 25.
-  The configured $3 agent budgets total $75 for 25 fresh runs, excluding Box,
+  The configured $5 research budgets total $125 for 25 fresh runs, excluding Box,
   storage and delivery charges; they are client-side per-run targets, not an
   organization-wide spend reservation. [Sonnet 4.6 pricing](https://platform.claude.com/docs/en/models/sonnet-4-6/overview).
   Public Start-tier Sonnet 4.x limits are currently 1,000 RPM, 2 million input

@@ -25,7 +25,7 @@ from urllib.parse import urlsplit
 import httpx
 
 from . import jobs, workflow_state as state
-from .agent_execution import ExecutionRequest
+from .agent_execution import ExecutionRequest, agent_budget_usd
 from .artifact_store import store as artifact_store, StorageUnavailable
 from .box_adapter import CAPTURE_MARKER, atomic_capture_marker, read_capture_marker, captured_result, BoxTransportError, verified_box_not_found
 from .box_lifecycle import BoxLifecycle
@@ -625,10 +625,11 @@ class WorkflowExecution:
         attempt = execution['authoring_attempt']
         frozen = self.bootstrap_config(job, execution, queue['dispatch_input']) if queue['dispatch_input'].get('bootstrap') else None
         if frozen: require(tuple(frozen['selected_graphs']) == selected, 'Frozen bootstrap graph selection differs from input')
-        request = ExecutionRequest(job_id=job['id'], attempt=attempt, kind='research' if job['kind'] == 'analysis' else 'paragraph',
+        kind = 'research' if job['kind'] == 'analysis' else 'paragraph'
+        request = ExecutionRequest(job_id=job['id'], attempt=attempt, kind=kind,
             input_path=path, output_dir=root/f'attempt-{attempt}'/'output', selected_graphs=selected,
             timeout_seconds=frozen['timeout_seconds'] if frozen else int(setting('REVEAL_AGENT_TIMEOUT_SECONDS', '1800')),
-            max_budget_usd=frozen['max_budget_usd'] if frozen else float(setting('REVEAL_AGENT_MAX_BUDGET_USD', '3')),
+            max_budget_usd=frozen['max_budget_usd'] if frozen else agent_budget_usd(kind),
             max_turns=frozen['max_turns'] if frozen else int(setting('REVEAL_AGENT_MAX_TURNS', '100')),
             validation_feedback=tuple(frozen['validation_feedback']) if frozen else (), remote_handle=execution.get('box'))
         return request, inputs
