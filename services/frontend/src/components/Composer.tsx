@@ -13,7 +13,7 @@ import type { DiscoveryView, AccountSort } from "@/lib/community-discovery";
 import { GapAccounts } from "./GapAccounts";
 import { VoteControls } from "./VoteControls";
 import { onCollectionInvalidation } from "@/lib/collection-events";
-import { rememberSubmission, restoreSubmission, submissionActionDisabled, type SubmissionAttempt, type SubmissionMethod, type SubmissionStage } from "@/lib/submission";
+import { rememberSubmission, restoreSubmission, submissionActionDisabled, lightningSubmissionOwnerChanged, type SubmissionAttempt, type SubmissionMethod, type SubmissionStage } from "@/lib/submission";
 import { SubmissionProgress } from "./SubmissionProgress";
 import { LoadingSurface, LoadingStatus } from "./LoadingSurface";
 import { withRequestDeadline } from "@/lib/request-deadline";
@@ -33,6 +33,7 @@ import { ResearchModeMenu } from "./ResearchModeMenu";
 import { CfdeAssessment } from "./CfdeAssessment";
 import { LazyDraft } from "@/lib/lazy-draft";
 import { QueryHighlight } from "./QueryHighlight";
+import { lightningApi, lightningAuditHref, lightningDispatchRejected, LightningError, type ResearchMode } from "@/lib/lightning-audit";
 import "./draft-editor.css";
 import "./local-work.css";
 import "./cfde-assessment.css";
@@ -40,7 +41,7 @@ import "./cfde-assessment.css";
 const browserSelection = () => composerSelection(new URLSearchParams(window.location.search), window.location.pathname);
 export function Composer({ initialJobId, initialDraftId }: { initialJobId?: string; initialDraftId?: string } = {}) {
   const router = useRouter();
-  const requestedMode = useRef<"online" | "local">("online");
+  const requestedMode = useRef<ResearchMode>("online");
   const params = useSearchParams();
   const pathname = usePathname();
   const selection = composerSelection(params, pathname);
@@ -557,6 +558,9 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
         if (new URLSearchParams(window.location.search).has("error") || identity?.principal_kind !== "registered") throw new Error("Sign-in was not completed. Try signing in again, or return to your question to choose another option.");
       }
       if (!identity) throw new Error("We could not confirm your session. Please try again. Your question and anchors are saved in this browser.");
+      if (lightningSubmissionOwnerChanged(attempt, identity.user_id)) {
+        throw new Error("This audit may already exist in the workspace that submitted it. Check Research runs in the original or claimed workspace before starting another audit. The original submission receipt has been retained.");
+      }
       // Authentication can change the owner while this function is awaiting a response.
       // Set the owner before saving so the identity effect cannot discard a new draft.
       if (attempt.owner && attempt.owner !== identity.user_id) {
@@ -577,10 +581,18 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
       if (!current()) return;
       if (!saved) throw new Error("Your draft changed while it was being saved. Please try again.");
       attempt.draft = saved; draftRef.current = saved; setDraft(saved); rememberSubmission(attempt);
-      const binding = `${attempt.mode === "local" ? "local:" : ""}${saved.id}:${saved.version}`;
+      const binding = `${attempt.mode === "lightning" ? "lightning:" : attempt.mode === "local" ? "local:" : ""}${saved.id}:${saved.version}`;
       if (submitKey.current?.binding !== binding) submitKey.current = { binding, key: crypto.randomUUID() };
       attempt.submitKey = submitKey.current; rememberSubmission(attempt);
       setSubmission({ stage: "submitting" });
+      if (attempt.mode === "lightning") {
+        const audit = await lightningApi.create({ draft_id: saved.id, draft_version: saved.version }, submitKey.current.key);
+        if (!current()) return;
+        draftRef.current = null; setDraft(null); pendingSubmission.current = null; rememberSubmission(null);
+        setSubmission(null); submitKey.current = null;
+        router.push(lightningAuditHref(audit.id));
+        return;
+      }
       if (attempt.mode === "local") {
         const work = await localWorkApi.create({ draft_id: saved.id, draft_version: saved.version }, submitKey.current.key);
         if (!current()) return;
@@ -599,7 +611,7 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
       // Recording the visit is bookkeeping; it must not delay or block a research job.
       void api.explore({ source_gap: saved.composer.source_gap! }).catch(() => {});
     } catch (failure) {
-      const submissionFailure = failure instanceof LocalWorkError ? new ApiError(failure.status, failure.code, failure.message) : failure;
+      const submissionFailure = failure instanceof LocalWorkError || failure instanceof LightningError ? new ApiError(failure.status, failure.code, failure.message) : failure;
       let draftGone = false;
       if (current() && submissionFailure instanceof ApiError && submissionFailure.status === 404 && attempt.draft) {
         try { await api.draft(attempt.draft.id); }
@@ -613,12 +625,17 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
           const target = questionSelection(draftRef.current?.id, currentRef.current.source_gap?.id);
           freshSelection.current = selectionKey(target); navigateSelection(target);
           void verifyAnchors();
+        } else if (attempt.mode === "lightning" && lightningDispatchRejected(failure)) {
+          // A proven admission rejection created no audit. Keep the prepared inputs editable and let
+          // the researcher choose another mode; ambiguous deliveries still retain their exact key.
+          pendingSubmission.current = null; submitKey.current = null; rememberSubmission(null); setSubmission(null);
+          setError(messageOf(submissionFailure));
         } else submissionFailed(submissionFailure);
       }
     }
     finally { submissionRunning.current = false; }
   }
-  const launch = (mode: "online" | "local" = "online") => { requestedMode.current = mode; const attempt = beginSubmission("session"); if (attempt) void provision(attempt); };
+  const launch = (mode: ResearchMode = "online") => { requestedMode.current = mode; const attempt = beginSubmission("session"); if (attempt) void provision(attempt); };
   const anonymous = () => { const attempt = beginSubmission("anonymous"); if (attempt) void provision(attempt); };
   const redirectToProvider = async (provider: "google" | "orcid") => {
     if (submissionRunning.current) return;
@@ -707,7 +724,8 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
     if (assessable) void lazyDraft.current!.ensure().catch(failure => { if (mounted.current) setError(messageOf(failure)); });
   }, [assessable]);
   const discoveryVisible = !draftView && !job;
-  if (submission) return <SubmissionProgress stage={submission.stage} provider={pendingSubmission.current?.method} question={pendingSubmission.current?.question} error={submission.error} onRetry={retrySubmission} onBack={backToQuestion} retryLabel={pendingSubmission.current?.method === "google" || pendingSubmission.current?.method === "orcid" ? "Try again" : "Retry"} />;
+  if (submission) return <SubmissionProgress stage={submission.stage} provider={pendingSubmission.current?.method} question={pendingSubmission.current?.question} error={submission.error} onRetry={retrySubmission} onBack={backToQuestion} retryLabel={pendingSubmission.current?.method === "google" || pendingSubmission.current?.method === "orcid" ? "Try again" : "Retry"}
+    recoveryHref={lightningSubmissionOwnerChanged(pendingSubmission.current, me?.user_id) ? "/workspace?tab=runs" : undefined} />;
   const jobStatusSurface = <LoadingSurface compact={!!job} skeleton={job ? "none" : "rows"} title={jobRestoreError ? "Unable to retrieve job status" : "Retrieving job status"} description="Checking the current stage and reconnecting to recorded activity." error={jobRestoreError} onRetry={() => { setJobRestoreError(""); setRetrievingJob(true); setRestoreAttempt(value => value + 1); }} />;
   if (!job && (retrievingJob || jobRestoreError)) return <main id="main" className="composer-page prototype-composer has-job">{jobStatusSurface}{jobRestoreError && <a className="text-button" href="/">Return to knowledge gaps</a>}</main>;
   if (draftView && !gap && !job) {
@@ -724,7 +742,7 @@ export function Composer({ initialJobId, initialDraftId }: { initialJobId?: stri
   </main>;
   return <main id="main" className={`composer-page prototype-composer ${!gap && discoveryVisible ? "is-gap-browsing" : ""} ${gap ? "has-gap" : ""} ${job ? "has-job" : ""} ${job && terminal(job.status) ? "job-complete" : ""}`}>
     {(draft || (gap && draftView)) && !job && <nav className="composer-draft-nav" aria-label="Draft navigation"><DraftNavigation /><strong>{draft?.name || "New research draft"}</strong><span role="status">{saveState}</span></nav>}
-    {job && <nav className="run-navigation" aria-label="Research run navigation"><Link href="/workspace?tab=runs">← Research runs</Link><span>Submitted inputs · read-only</span></nav>}
+    {job && <nav className="run-navigation" aria-label="Research run navigation"><Link href="/workspace?tab=runs">← Research runs</Link>{runRequest?.lightning_audit_id && <Link href={lightningAuditHref(runRequest.lightning_audit_id)}>Initial Lightning audit</Link>}<span>Submitted inputs · read-only</span></nav>}
     {(retrievingJob || jobRestoreError) && jobStatusSurface}
     {restoring && !retrievingJob && <LoadingSurface compact={!!gap || !!job} skeleton={gap || job ? "none" : "rows"} title={restoring} description="Retrieving your saved question and mechanism anchors." />}
     {!gap && discoveryVisible && <p className="invitation">Let’s use <a href="https://cfdeknowledge.org/r/kc_landing" target="_blank" rel="noopener noreferrer">Common Fund Data</a> to close known <a href="https://dismech.monarchinitiative.org/app/discussions/index.html" target="_blank" rel="noopener noreferrer">biomedical knowledge gaps</a>.</p>}

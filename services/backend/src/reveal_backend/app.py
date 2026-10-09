@@ -57,7 +57,7 @@ async def publication_cache_policy(request: Request, call_next):
     response = await call_next(request)
     path = request.url.path.removeprefix(request.scope.get('root_path', ''))
     if path.startswith(('/v1/drafts', '/v1/admin/', '/v1/accounts', '/v1/claims', '/v1/objects', '/v1/gene-sets',
-            '/v1/paragraphs', '/v1/citations', '/v1/artifacts', '/v1/knowledge-gaps', '/v1/analysis-outcomes', '/v1/leaderboard')):
+            '/v1/paragraphs', '/v1/citations', '/v1/artifacts', '/v1/knowledge-gaps', '/v1/analysis-outcomes', '/v1/leaderboard', '/v1/lightning-audits')):
         # Visibility is revocable and workspace responses vary by principal.
         response.headers['Cache-Control'] = 'private, no-store'
         vary = [part.strip() for part in response.headers.get('Vary', '').split(',') if part.strip()]
@@ -919,6 +919,25 @@ def freeze_research_request(tx, identity, body, *, retrieval_mode=None, write=Tr
     return frozen, request_binding
 
 
+def check_job_quota(tx, identity, kind='analysis'):
+    """Shared admission for direct jobs and audit continuations, inside their write fence."""
+    mine=tx.list('job',identity['user_id'])
+    active=[r for r in mine if r['data']['status'] not in jobs.TERMINAL]
+    maximum=int(os.getenv('REVEAL_MAX_ACTIVE_JOBS','2'))
+    if len(active)>=maximum: raise Problem(429,'ANONYMOUS_QUOTA_EXCEEDED' if identity['principal_kind']=='anonymous' else 'JOB_QUOTA_EXCEEDED','Wait for an active job to finish or stop it.')
+    if identity['principal_kind']=='anonymous' and kind=='analysis':
+        cutoff=(datetime.now(timezone.utc)-timedelta(days=1)).isoformat().replace('+00:00','Z')
+        today=[r for r in mine if r['data']['kind']=='analysis' and r['data']['created_at']>=cutoff]
+        if len(today)>=int(os.getenv('REVEAL_ANONYMOUS_ANALYSES_PER_DAY','5')): raise Problem(429,'ANONYMOUS_QUOTA_EXCEEDED','This anonymous workspace has reached its daily analysis allowance.')
+
+
+def analysis_job_rows(identity, frozen, binding, inputs):
+    """Stage an analysis around an already authorized frozen request; no extra reads or writes."""
+    from . import research_hosted
+    job, rows=jobs.new(identity['user_id'],'analysis',request_id=frozen['id'],inputs=inputs)
+    return job, rows+research_hosted.rows(job,frozen,binding)
+
+
 def create_job_transaction(body,authorization,idempotency_key):
     analysis=body.get('kind')=='analysis'
     if analysis: preload_catalog()
@@ -926,14 +945,7 @@ def create_job_transaction(body,authorization,idempotency_key):
         reads=[(reference_generation.CONTROL_KIND,reference_generation.CONTROL_ID),('draft',body.get('draft_id')),('draft_binding',body.get('draft_id'))] if analysis else []
         identity=principal_for(tx,authorization,'job',idempotency_key,reads); user=identity['user_id']
         def create():
-            mine=tx.list('job',user)
-            active=[r for r in mine if r['data']['status'] not in jobs.TERMINAL]
-            maximum=int(os.getenv('REVEAL_MAX_ACTIVE_JOBS','2'))
-            if len(active)>=maximum: raise Problem(429,'ANONYMOUS_QUOTA_EXCEEDED' if identity['principal_kind']=='anonymous' else 'JOB_QUOTA_EXCEEDED','Wait for an active job to finish or stop it.')
-            if identity['principal_kind']=='anonymous' and body['kind']=='analysis':
-                cutoff=(datetime.now(timezone.utc)-timedelta(days=1)).isoformat().replace('+00:00','Z')
-                today=[r for r in mine if r['data']['kind']=='analysis' and r['data']['created_at']>=cutoff]
-                if len(today)>=int(os.getenv('REVEAL_ANONYMOUS_ANALYSES_PER_DAY','5')): raise Problem(429,'ANONYMOUS_QUOTA_EXCEEDED','This anonymous workspace has reached its daily analysis allowance.')
+            check_job_quota(tx,identity,body['kind'])
             if body['kind']=='paragraph':
                 # Research statements need no reference data: allowed on archived accounts and during reloads.
                 account=owned(tx,'account',body['account_id'],user)
@@ -943,9 +955,8 @@ def create_job_transaction(body,authorization,idempotency_key):
             reload_gate(tx)
             # The request is frozen as progressive and written once, with every other new row, in one statement.
             frozen,binding,rows=freeze_research_request(tx,identity,body,retrieval_mode='progressive',write=False)
-            job,queued=jobs.new(user,'analysis',request_id=frozen['id'],inputs=body)
-            from . import research_hosted
-            return job,rows+queued+research_hosted.rows(job,frozen,binding)
+            job,queued=analysis_job_rows(identity,frozen,binding,body)
+            return job,rows+queued
         return idempotent(tx,user,'job',idempotency_key,body,create,staged=True)
 
 @app.get('/v1/jobs')
@@ -1327,6 +1338,10 @@ from .workspace_events import register as register_workspace_events
 register_workspace_events(app, lambda: repo)
 from .research_http import register as register_research
 register_research(app, lambda: repo, freeze=freeze_research_request, preload=preload_catalog, reload_gate=reload_gate)
+from .lightning_http import register as register_lightning
+register_lightning(app, lambda: repo, lambda: catalog, freeze=freeze_research_request,
+    reload_gate=reload_gate, check_job_quota=check_job_quota, analysis_job_rows=analysis_job_rows,
+    deliver_after_response=deliver_after_response, paginate=page)
 from .workflow_routes import mount_workflow
 mount_workflow(app, repo)
 from .vector_workflow import mount_vector_workflow

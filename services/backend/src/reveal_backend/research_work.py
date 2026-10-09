@@ -184,6 +184,8 @@ def idempotent(tx, owner, operation, key, body, action):
 def prompt(work_id):
     return (f'Use Reveal MCP to get_local_work with local_work_id={work_id}. Download the research seed '
         'and pinned authoring kit with get_research_package and get_artifact_download, and verify checksums. '
+        'When present, read lightning_audit for the edited research direction and preliminary assessment; '
+        'its model conclusions are planning context and cannot establish scientific evidence. '
         'Search existing scientific accounts, Propositions and Claims before authoring new science. '
         'Use the loaded-reference data tools on demand; only the two explicitly offered small-model '
         'phenotype tools may query BioIndex. Preserve receipt IDs, coverage, source identities and prior authorship. '
@@ -329,23 +331,37 @@ class ResearchWorkService:
     def create(self, tx, identity, body, key, freeze):
         owner = identity['user_id']
         def action():
-            if len([r for r in tx.list('local_work', owner) if r['data']['state'] != 'closed']) >= 20:
-                raise Problem(429, 'LOCAL_WORK_LIMIT', 'Close an earlier local research run first.')
+            self.check_create_quota(tx, owner)
             frozen, binding = freeze(tx, identity, body)
-            from .reference_generation import generation_of_anchors
-            generation = generation_of_anchors(binding['anchors'])
-            work_id = uid(); created = now()
-            work = {'id': work_id, 'owner_user_id': owner, 'research_request_id': frozen['id'],
-                'state': 'preparing', 'created_at': created, 'last_activity': created,
-                'last_action': 'created', 'expires_at': min(deadline(30 * 86400), identity.get('workspace_expires_at') or '9999'),
-                'reference_generation_id': generation, 'package_id': None, 'package_sha256': None, 'last_error': None}
-            tx.put('local_work', work_id, owner, work)
-            tx.put('research_pin', frozen['id'], owner, {'id': frozen['id'], 'research_request_id': frozen['id'],
-                'generation_id': generation, 'state': 'active', 'expires_at': work['expires_at']})
-            op = self.enqueue(tx, owner, work, 'prepare', {}, None)
-            work['preparation_operation_id'] = op['id']; tx.put('local_work', work_id, owner, work)
-            return self.view(tx, owner, work_id)
+            work, rows = self.frozen_rows(identity, frozen, binding)
+            tx.insert_many(rows)
+            return self.view(tx, owner, work['id'])
         return idempotent(tx, owner, 'create-local', key, body, action)
+
+    @staticmethod
+    def check_create_quota(tx, owner):
+        if len([r for r in tx.list('local_work', owner) if r['data']['state'] != 'closed']) >= 20:
+            raise Problem(429, 'LOCAL_WORK_LIMIT', 'Close an earlier local research run first.')
+
+    @staticmethod
+    def frozen_rows(identity, frozen, binding):
+        """Stage local work for a newly frozen request, also used by Lightning continuation."""
+        from .reference_generation import generation_of_anchors
+        owner = identity['user_id']; generation = generation_of_anchors(binding['anchors'])
+        work_id = uid(); created = now(); operation_id = uid()
+        work = {'id': work_id, 'owner_user_id': owner, 'research_request_id': frozen['id'],
+            'state': 'preparing', 'created_at': created, 'last_activity': created,
+            'last_action': 'created', 'expires_at': min(deadline(30 * 86400), identity.get('workspace_expires_at') or '9999'),
+            'reference_generation_id': generation, 'package_id': None, 'package_sha256': None, 'last_error': None,
+            'preparation_operation_id': operation_id}
+        operation = {'id': operation_id, 'owner_user_id': owner, 'local_work_id': work_id,
+            'research_request_id': frozen['id'], 'grant_id': None, 'kind': 'prepare', 'arguments': {},
+            'state': 'received', 'created_at': created, 'validation_only': False,
+            'account_ids': [], 'reused_account_ids': [], 'attempt': 0}
+        return work, [('local_work', work_id, owner, work),
+            ('research_pin', frozen['id'], owner, {'id': frozen['id'], 'research_request_id': frozen['id'],
+                'generation_id': generation, 'state': 'active', 'expires_at': work['expires_at']}),
+            ('research_operation', operation_id, owner, operation)]
 
     def view(self, tx, owner, work_id, *, work_row=None, loaded=None):
         """work_row, when given, must already be authorized for owner in this transaction. loaded, when
@@ -658,6 +674,9 @@ class ResearchWorkService:
         owner, work_id = operation['owner_user_id'], operation['local_work_id']
         with self.repo.read_transaction() as tx:
             frozen = owned(tx, 'request', operation['research_request_id'], owner)['data']
+            if frozen.get('lightning_audit_id'):
+                from .lightning_continuation import hydrate_context
+                frozen = hydrate_context(tx, owner, frozen)
             binding = owned(tx, 'request_binding', frozen['id'], owner)['data']
             work = owned(tx, 'local_work', work_id, owner)['data']
             queue = owned(tx, 'queue', work['job_id'], owner)['data'] if work.get('job_id') else None

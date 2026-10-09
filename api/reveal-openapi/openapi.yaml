@@ -35,6 +35,7 @@ tags:
 - name: Citations
 - name: Administrator science read
 - name: CFDE assessment
+- name: Lightning audits
 security:
 - ApplicationBearer: []
 paths:
@@ -18348,7 +18349,7 @@ paths:
                 type: string
                 const: no-referrer
             Location:
-              schema: &id130
+              schema: &id132
                 type: string
                 format: uri
               example: https://reveal.example.org/research/connect?request_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa
@@ -23928,6 +23929,1054 @@ paths:
         source: 'curl -X GET ''https://api.reveal.example.org/v1/drafts/22222222-2222-4222-8222-222222222222/cfde-assessments/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb?wait=10''
           -H ''Authorization: Bearer <api-key-or-gateway-assertion>'' -H ''Accept:
           application/json'''
+  /v1/lightning-audits:
+    post:
+      operationId: createLightningAudit
+      tags:
+      - Lightning audits
+      summary: Create an initial evidence audit
+      description: Requires the owning registered or anonymous workspace principal.
+        All results are private, no-store. A Lightning audit assesses a bounded stored-evidence
+        snapshot; it creates no accepted scientific account and performs no connected-graph
+        or literature retrieval. Inputs and generated guidance are not instructions
+        or scientific acceptance. Examples are synthetic contract fixtures. Requires
+        REVEAL_LIGHTNING_ENABLED. Freezes the owned draft and starts at most one Claude
+        completion. Same-key replays recover the original audit even if the draft
+        is later changed or removed. Changed inputs with the same key conflict. Source
+        preparation and inference execute outside write transactions. The request
+        has a 100,000-byte limit, a 3,000-output-token cap and a 120-second overall
+        deadline. Failed or interrupted calls are not automatically retried; an explicit
+        new submission creates a new audit.
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 128
+        example: 66666666-6666-4666-8666-666666666666
+        description: Unique per caller and operation for at least 7 days. Same key
+          and same canonical body replay the original accepted response; changed body
+          returns 409 IDEMPOTENCY_CONFLICT. Compare idempotency before draft-version
+          checks on retries.
+      responses:
+        '202':
+          description: Saved audit receipt; read Location to observe progress.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LightningAudit'
+              examples:
+                preparing:
+                  summary: Preparing
+                  value: &id101
+                    id: cccccccc-cccc-4ccc-8ccc-cccccccccccc
+                    kind: lightning_audit
+                    status: preparing
+                    research_request_id: 33333333-3333-4333-8333-333333333333
+                    source_draft_id: 22222222-2222-4222-8222-222222222222
+                    source_draft_version: 2
+                    question:
+                      id: dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk
+                      text: Are the CAD PGS×context interactions driven by adverse
+                        exposures causally amplifying genetic risk, or are some "contexts"
+                        actually downstream readouts of incipient disease (reverse
+                        causation)?
+                    created_at: '2026-09-24T16:00:00Z'
+                    updated_at: '2026-09-24T16:00:00Z'
+                    completed_at: null
+                    continuation_expires_at: '2026-10-24T16:00:00Z'
+                    reference_generation_id: d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c
+                    result: null
+                    coverage: null
+                    evidence_references: []
+                    provenance:
+                      model: claude-sonnet-4-6
+                      prompt_version: lightning-audit-v8
+                    usage: null
+                    error: null
+                    continuations: []
+          headers:
+            X-Request-ID:
+              description: Correlation ID for this HTTP request.
+              schema:
+                type: string
+                format: uuid
+            Location:
+              description: Relative URL of the created resource.
+              schema:
+                type: string
+                format: uri-reference
+              example: /v1/lightning-audits/cccccccc-cccc-4ccc-8ccc-cccccccccccc
+            Retry-After:
+              description: Suggested polling delay in seconds.
+              schema:
+                type: integer
+                minimum: 1
+              example: 2
+            Cache-Control:
+              schema:
+                type: string
+              example: private, no-store
+            Vary:
+              schema:
+                type: string
+              example: Authorization
+        '400':
+          description: Invalid Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                invalid_request:
+                  summary: Invalid request
+                  value: *id004
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              example: private, no-store
+            Vary:
+              schema:
+                type: string
+              example: Authorization
+        '401':
+          description: Authentication Required
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                authentication_required:
+                  summary: Authentication required
+                  value: *id001
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              example: private, no-store
+            Vary:
+              schema:
+                type: string
+              example: Authorization
+        '403':
+          description: Sign In Required
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                sign_in_required:
+                  summary: Sign in required
+                  value: *id054
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              example: private, no-store
+            Vary:
+              schema:
+                type: string
+              example: Authorization
+        '404':
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                not_found:
+                  summary: Not found
+                  value: *id005
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              example: private, no-store
+            Vary:
+              schema:
+                type: string
+              example: Authorization
+        '409':
+          description: Version Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                version_conflict:
+                  summary: Version conflict
+                  value: *id006
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              example: private, no-store
+            Vary:
+              schema:
+                type: string
+              example: Authorization
+        '422':
+          description: Invalid Input
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                invalid_input:
+                  summary: Invalid input
+                  value: *id007
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              example: private, no-store
+            Vary:
+              schema:
+                type: string
+              example: Authorization
+        '429':
+          description: Rate Limited
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                rate_limited:
+                  summary: Rate limited
+                  value: *id002
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+                minimum: 1
+              example: 30
+            Cache-Control:
+              schema:
+                type: string
+              example: private, no-store
+            Vary:
+              schema:
+                type: string
+              example: Authorization
+        '503':
+          description: Dependency Unavailable
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                dependency_unavailable:
+                  summary: Dependency unavailable
+                  value: *id014
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              example: private, no-store
+            Vary:
+              schema:
+                type: string
+              example: Authorization
+      security:
+      - ApplicationBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LightningAuditInput'
+            examples:
+              draft:
+                summary: Draft
+                value:
+                  draft_id: 22222222-2222-4222-8222-222222222222
+                  draft_version: 2
+      x-codeSamples:
+      - lang: Shell
+        label: draft
+        source: 'curl -X POST https://api.reveal.example.org/v1/lightning-audits -H
+          ''Idempotency-Key: 66666666-6666-4666-8666-666666666666'' -H ''Authorization:
+          Bearer <api-key-or-gateway-assertion>'' -H ''Content-Type: application/json''
+          -H ''Accept: application/json'' --data-raw ''{"draft_id":"22222222-2222-4222-8222-222222222222","draft_version":2}'''
+    get:
+      operationId: listLightningAudits
+      tags:
+      - Lightning audits
+      summary: List private initial audits
+      description: Requires the owning registered or anonymous workspace principal.
+        All results are private, no-store. A Lightning audit assesses a bounded stored-evidence
+        snapshot; it creates no accepted scientific account and performs no connected-graph
+        or literature retrieval. Inputs and generated guidance are not instructions
+        or scientific acceptance. Examples are synthetic contract fixtures. Saved
+        results remain independent of mutable or deleted drafts. Listing never starts
+        inference.
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 50
+        example: 50
+        description: ''
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+        example: opaque-owned-audit-cursor
+        description: ''
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LightningAuditList'
+              examples:
+                history:
+                  summary: History
+                  value:
+                    items:
+                    - &id100
+                      id: cccccccc-cccc-4ccc-8ccc-cccccccccccc
+                      kind: lightning_audit
+                      status: succeeded
+                      research_request_id: 33333333-3333-4333-8333-333333333333
+                      source_draft_id: 22222222-2222-4222-8222-222222222222
+                      source_draft_version: 2
+                      question:
+                        id: dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk
+                        text: Are the CAD PGS×context interactions driven by adverse
+                          exposures causally amplifying genetic risk, or are some
+                          "contexts" actually downstream readouts of incipient disease
+                          (reverse causation)?
+                      created_at: '2026-09-24T16:00:00Z'
+                      updated_at: '2026-09-24T16:01:00Z'
+                      completed_at: '2026-09-24T16:01:00Z'
+                      continuation_expires_at: '2026-10-24T16:00:00Z'
+                      reference_generation_id: d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c
+                      result:
+                        assessment: partial
+                        summary: 'Synthetic example: the retained loading suggests
+                          a candidate direction that requires further checks.'
+                        observations:
+                        - text: A retained factor-gene loading is relevant to the
+                            proposed comparison.
+                          evidence_refs:
+                          - E1
+                        recommended_direction: Investigate whether the observed factor-gene
+                          association provides a context-specific connection to the
+                          gap.
+                        missing_evidence:
+                        - Direct evidence for the proposed biological connection.
+                        next_steps:
+                        - Inspect exact source captures and test the proposed connection
+                          using authorized evidence tools.
+                        limitations:
+                        - This synthetic example illustrates the contract and is not
+                          a scientific finding.
+                      coverage:
+                        factor_count: 1
+                        gene_loading_count: 1
+                        gene_set_loading_count: 0
+                        unique_gene_set_count: 0
+                        missing:
+                        - gene_set_loadings
+                        truncations: []
+                        complete: false
+                      evidence_references:
+                      - id: E1
+                        pointer: /factors/0/genes/rows/0
+                        label: Synthetic retained factor-gene loading
+                        value:
+                          symbol: GENE_EXAMPLE
+                          loading: 0.25
+                        source:
+                          generation_id: d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c
+                      provenance:
+                        model: claude-sonnet-4-6
+                        prompt_version: lightning-audit-v8
+                        source_state_sha256: 0930005c359bae46f01059f268a377b1a082f7d0bd68379807a03a68cc405ae7
+                        request_sha256: 9707a47769286ac99fe827ac45c05d0d1368c56b1eff64c2a12012933c40392d
+                        response_sha256: c136b7ece7251f2bd3fca18d9e318b11cf6790c6001319ab2c35adc366fd3a0a
+                      usage:
+                        input_tokens: 1000
+                        output_tokens: 300
+                      error: null
+                      continuations: []
+                    page:
+                      next_cursor: null
+                      has_more: false
+          headers:
+            X-Request-ID:
+              description: Correlation ID for this HTTP request.
+              schema:
+                type: string
+                format: uuid
+            Cache-Control:
+              schema:
+                type: string
+              example: private, no-store
+            Vary:
+              schema:
+                type: string
+              example: Authorization
+        '400':
+          description: Invalid Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                invalid_request:
+                  summary: Invalid request
+                  value: *id004
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              example: private, no-store
+            Vary:
+              schema:
+                type: string
+              example: Authorization
+        '401':
+          description: Authentication Required
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                authentication_required:
+                  summary: Authentication required
+                  value: *id001
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              example: private, no-store
+            Vary:
+              schema:
+                type: string
+              example: Authorization
+        '403':
+          description: Sign In Required
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                sign_in_required:
+                  summary: Sign in required
+                  value: *id054
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              example: private, no-store
+            Vary:
+              schema:
+                type: string
+              example: Authorization
+        '409':
+          description: Version Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                version_conflict:
+                  summary: Version conflict
+                  value: *id006
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              example: private, no-store
+            Vary:
+              schema:
+                type: string
+              example: Authorization
+        '422':
+          description: Invalid Input
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                invalid_input:
+                  summary: Invalid input
+                  value: *id007
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              example: private, no-store
+            Vary:
+              schema:
+                type: string
+              example: Authorization
+        '503':
+          description: Dependency Unavailable
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                dependency_unavailable:
+                  summary: Dependency unavailable
+                  value: *id014
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              example: private, no-store
+            Vary:
+              schema:
+                type: string
+              example: Authorization
+      security:
+      - ApplicationBearer: []
+      x-codeSamples:
+      - lang: Shell
+        label: request
+        source: 'curl -X GET ''https://api.reveal.example.org/v1/lightning-audits?limit=50''
+          -H ''Authorization: Bearer <api-key-or-gateway-assertion>'' -H ''Accept:
+          application/json'''
+  /v1/lightning-audits/{audit_id}:
+    get:
+      operationId: getLightningAudit
+      tags:
+      - Lightning audits
+      summary: Read an initial audit
+      description: Requires the owning registered or anonymous workspace principal.
+        All results are private, no-store. A Lightning audit assesses a bounded stored-evidence
+        snapshot; it creates no accepted scientific account and performs no connected-graph
+        or literature retrieval. Inputs and generated guidance are not instructions
+        or scientific acceptance. Examples are synthetic contract fixtures. Reading
+        never dispatches or retries model work. Pending results may long-poll without
+        holding a database connection. Terminal results return immediately. Optional
+        after_revision returns immediately for a newer preview; otherwise a pending
+        read waits. Assessing reads check stored progress at least once per second
+        across API processes. Preview text is unvalidated; only succeeded results
+        can continue. Audits remain inspectable after their continuation window expires.
+      parameters:
+      - name: audit_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        example: cccccccc-cccc-4ccc-8ccc-cccccccccccc
+        description: ''
+      - name: wait
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          maximum: 20
+          default: 0
+        example: 15
+        description: ''
+      - name: after_revision
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+        example: 0
+        description: ''
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LightningAudit'
+              examples:
+                completed:
+                  summary: Completed
+                  value: *id100
+                preparing:
+                  summary: Preparing
+                  value: *id101
+                writing:
+                  summary: Writing
+                  value:
+                    id: cccccccc-cccc-4ccc-8ccc-cccccccccccc
+                    kind: lightning_audit
+                    status: assessing
+                    research_request_id: 33333333-3333-4333-8333-333333333333
+                    source_draft_id: 22222222-2222-4222-8222-222222222222
+                    source_draft_version: 2
+                    question:
+                      id: dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk
+                      text: Are the CAD PGS×context interactions driven by adverse
+                        exposures causally amplifying genetic risk, or are some "contexts"
+                        actually downstream readouts of incipient disease (reverse
+                        causation)?
+                    created_at: '2026-09-24T16:00:00Z'
+                    updated_at: '2026-09-24T16:00:00Z'
+                    completed_at: null
+                    continuation_expires_at: '2026-10-24T16:00:00Z'
+                    reference_generation_id: d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c
+                    result: null
+                    coverage: null
+                    evidence_references: []
+                    provenance:
+                      model: claude-sonnet-4-6
+                      prompt_version: lightning-audit-v8
+                    usage: null
+                    error: null
+                    continuations: []
+                    progress:
+                      revision: 1
+                      phase: writing
+                      summary: The supplied CFDE data offers a limited research direction
+                      recommended_direction: ''
+                      observations: []
+                      missing_evidence: []
+                      next_steps: []
+                      limitations: []
+                failed:
+                  summary: Failed
+                  value:
+                    id: cccccccc-cccc-4ccc-8ccc-cccccccccccc
+                    kind: lightning_audit
+                    status: failed
+                    research_request_id: 33333333-3333-4333-8333-333333333333
+                    source_draft_id: 22222222-2222-4222-8222-222222222222
+                    source_draft_version: 2
+                    question:
+                      id: dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk
+                      text: Are the CAD PGS×context interactions driven by adverse
+                        exposures causally amplifying genetic risk, or are some "contexts"
+                        actually downstream readouts of incipient disease (reverse
+                        causation)?
+                    created_at: '2026-09-24T16:00:00Z'
+                    updated_at: '2026-09-24T16:01:00Z'
+                    completed_at: '2026-09-24T16:01:00Z'
+                    continuation_expires_at: '2026-10-24T16:00:00Z'
+                    reference_generation_id: d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c
+                    result: null
+                    coverage: null
+                    evidence_references: []
+                    provenance:
+                      model: claude-sonnet-4-6
+                      prompt_version: lightning-audit-v8
+                    usage: null
+                    error:
+                      code: LIGHTNING_TIMEOUT
+                      detail: This audit timed out. Start a new audit to try again.
+                      retryable: true
+                    continuations: []
+          headers:
+            X-Request-ID:
+              description: Correlation ID for this HTTP request.
+              schema:
+                type: string
+                format: uuid
+            Cache-Control:
+              schema:
+                type: string
+              example: private, no-store
+            Vary:
+              schema:
+                type: string
+              example: Authorization
+        '401':
+          description: Authentication Required
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                authentication_required:
+                  summary: Authentication required
+                  value: *id001
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              example: private, no-store
+            Vary:
+              schema:
+                type: string
+              example: Authorization
+        '403':
+          description: Sign In Required
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                sign_in_required:
+                  summary: Sign in required
+                  value: *id054
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              example: private, no-store
+            Vary:
+              schema:
+                type: string
+              example: Authorization
+        '404':
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                not_found:
+                  summary: Not found
+                  value: *id005
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              example: private, no-store
+            Vary:
+              schema:
+                type: string
+              example: Authorization
+        '422':
+          description: Invalid Input
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                invalid_input:
+                  summary: Invalid input
+                  value: *id007
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              example: private, no-store
+            Vary:
+              schema:
+                type: string
+              example: Authorization
+        '503':
+          description: Dependency Unavailable
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                dependency_unavailable:
+                  summary: Dependency unavailable
+                  value: *id014
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              example: private, no-store
+            Vary:
+              schema:
+                type: string
+              example: Authorization
+      security:
+      - ApplicationBearer: []
+      x-codeSamples:
+      - lang: Shell
+        label: request
+        source: 'curl -X GET ''https://api.reveal.example.org/v1/lightning-audits/cccccccc-cccc-4ccc-8ccc-cccccccccccc?wait=15&after_revision=0''
+          -H ''Authorization: Bearer <api-key-or-gateway-assertion>'' -H ''Accept:
+          application/json'''
+  /v1/lightning-audits/{audit_id}/continue:
+    post:
+      operationId: continueLightningAudit
+      tags:
+      - Lightning audits
+      summary: Continue an audit with an agent
+      description: Requires the owning registered or anonymous workspace principal.
+        All results are private, no-store. A Lightning audit assesses a bounded stored-evidence
+        snapshot; it creates no accepted scientific account and performs no connected-graph
+        or literature retrieval. Inputs and generated guidance are not instructions
+        or scientific acceptance. Examples are synthetic contract fixtures. Requires
+        REVEAL_LIGHTNING_ENABLED, a completed audit and an unexpired continuation
+        window. All assessment categories may continue. Clones a new frozen request
+        and independent generation pin, preserving original inputs separately from
+        the edited direction. Uses ordinary online/local quotas and authorization.
+        Retained superseded generations are allowed; unavailable generations require
+        a fresh audit. Audit artifacts enter the agent seed as preliminary context,
+        never eligible evidence.
+      parameters:
+      - name: audit_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        example: cccccccc-cccc-4ccc-8ccc-cccccccccccc
+        description: ''
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 8
+          maxLength: 128
+        example: 66666666-6666-4666-8666-666666666666
+        description: Unique per caller and operation for at least 7 days. Same key
+          and same canonical body replay the original accepted response; changed body
+          returns 409 IDEMPOTENCY_CONFLICT. Compare idempotency before draft-version
+          checks on retries.
+      responses:
+        '202':
+          description: Saved child-run receipt; online dispatch or local seed preparation
+            is asynchronous.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LightningContinuation'
+              examples:
+                online:
+                  summary: Online
+                  value:
+                    mode: online
+                    id: 44444444-4444-4444-8444-444444444444
+                    research_request_id: dddddddd-dddd-4ddd-8ddd-dddddddddddd
+                    created_at: '2026-09-24T16:01:00Z'
+                local:
+                  summary: Local
+                  value:
+                    mode: local
+                    id: 44444444-4444-4444-8444-444444444444
+                    research_request_id: dddddddd-dddd-4ddd-8ddd-dddddddddddd
+                    created_at: '2026-09-24T16:01:00Z'
+          headers:
+            X-Request-ID:
+              description: Correlation ID for this HTTP request.
+              schema:
+                type: string
+                format: uuid
+            Location:
+              description: Relative URL of the created resource.
+              schema:
+                type: string
+                format: uri-reference
+              example: /v1/jobs/44444444-4444-4444-8444-444444444444
+            Retry-After:
+              description: Suggested polling delay in seconds.
+              schema:
+                type: integer
+                minimum: 1
+              example: 2
+            Cache-Control:
+              schema:
+                type: string
+              example: private, no-store
+            Vary:
+              schema:
+                type: string
+              example: Authorization
+        '400':
+          description: Invalid Request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                invalid_request:
+                  summary: Invalid request
+                  value: *id004
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              example: private, no-store
+            Vary:
+              schema:
+                type: string
+              example: Authorization
+        '401':
+          description: Authentication Required
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                authentication_required:
+                  summary: Authentication required
+                  value: *id001
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              example: private, no-store
+            Vary:
+              schema:
+                type: string
+              example: Authorization
+        '403':
+          description: Sign In Required
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                sign_in_required:
+                  summary: Sign in required
+                  value: *id054
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              example: private, no-store
+            Vary:
+              schema:
+                type: string
+              example: Authorization
+        '404':
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                not_found:
+                  summary: Not found
+                  value: *id005
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              example: private, no-store
+            Vary:
+              schema:
+                type: string
+              example: Authorization
+        '409':
+          description: Version Conflict
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                version_conflict:
+                  summary: Version conflict
+                  value: *id006
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              example: private, no-store
+            Vary:
+              schema:
+                type: string
+              example: Authorization
+        '422':
+          description: Invalid Input
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                invalid_input:
+                  summary: Invalid input
+                  value: *id007
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              example: private, no-store
+            Vary:
+              schema:
+                type: string
+              example: Authorization
+        '429':
+          description: Rate Limited
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                rate_limited:
+                  summary: Rate limited
+                  value: *id002
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+                minimum: 1
+              example: 30
+            Cache-Control:
+              schema:
+                type: string
+              example: private, no-store
+            Vary:
+              schema:
+                type: string
+              example: Authorization
+        '503':
+          description: Dependency Unavailable
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                dependency_unavailable:
+                  summary: Dependency unavailable
+                  value: *id014
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              example: private, no-store
+            Vary:
+              schema:
+                type: string
+              example: Authorization
+      security:
+      - ApplicationBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LightningContinuationInput'
+            examples:
+              online:
+                summary: Online
+                value:
+                  mode: online
+                  research_direction: Investigate whether the observed factor-gene
+                    association provides a context-specific connection to the gap.
+              local:
+                summary: Local
+                value:
+                  mode: local
+                  research_direction: Investigate whether the observed factor-gene
+                    association provides a context-specific connection to the gap.
+      x-codeSamples:
+      - lang: Shell
+        label: online
+        source: 'curl -X POST https://api.reveal.example.org/v1/lightning-audits/cccccccc-cccc-4ccc-8ccc-cccccccccccc/continue
+          -H ''Idempotency-Key: 66666666-6666-4666-8666-666666666666'' -H ''Authorization:
+          Bearer <api-key-or-gateway-assertion>'' -H ''Content-Type: application/json''
+          -H ''Accept: application/json'' --data-raw ''{"mode":"online","research_direction":"Investigate
+          whether the observed factor-gene association provides a context-specific
+          connection to the gap."}'''
+      - lang: Shell
+        label: local
+        source: 'curl -X POST https://api.reveal.example.org/v1/lightning-audits/cccccccc-cccc-4ccc-8ccc-cccccccccccc/continue
+          -H ''Idempotency-Key: 66666666-6666-4666-8666-666666666666'' -H ''Authorization:
+          Bearer <api-key-or-gateway-assertion>'' -H ''Content-Type: application/json''
+          -H ''Accept: application/json'' --data-raw ''{"mode":"local","research_direction":"Investigate
+          whether the observed factor-gene association provides a context-specific
+          connection to the gap."}'''
 components:
   securitySchemes:
     ApplicationBearer:
@@ -30834,7 +31883,7 @@ components:
         source_id:
           type: string
           minLength: 1
-        source_revision: &id100
+        source_revision: &id102
           type: string
           pattern: ^[a-f0-9]{64}$
         dapper_id:
@@ -30863,7 +31912,7 @@ components:
           - gap_attachment
         suggestion_id:
           anyOf:
-          - &id103
+          - &id105
             type: string
             format: uuid
           - type: 'null'
@@ -30899,7 +31948,7 @@ components:
           type: string
         source_id:
           type: string
-        source_revision: *id100
+        source_revision: *id102
         object_class:
           const: Mechanism
           type: string
@@ -30928,7 +31977,7 @@ components:
           type: string
         source_id:
           type: string
-        source_revision: *id100
+        source_revision: *id102
         object_class:
           type: string
           const: Mechanism
@@ -30945,7 +31994,7 @@ components:
             or eaggl-capped-v1 (KPN reference generations).'
         catalog_file:
           $ref: '#/components/schemas/DapperFile'
-        reference_generation_id: &id117
+        reference_generation_id: &id119
           type: string
           description: 'Reference generation id: 64 lowercase hex characters.'
           pattern: ^[a-f0-9]{64}$
@@ -31032,7 +32081,7 @@ components:
           maxLength: 12000
         upload_ids:
           type: array
-          items: &id101
+          items: &id103
             type: string
             format: uuid
           uniqueItems: true
@@ -31054,7 +32103,7 @@ components:
       properties:
         composer:
           $ref: '#/components/schemas/Composer'
-        name: &id102
+        name: &id104
           type: string
           minLength: 1
           maxLength: 120
@@ -31064,7 +32113,7 @@ components:
           enum:
           - temporary
           - saved
-        source_draft_id: *id101
+        source_draft_id: *id103
         source_draft_version:
           type: integer
           minimum: 1
@@ -31084,7 +32133,7 @@ components:
           minimum: 1
         composer:
           $ref: '#/components/schemas/Composer'
-        name: *id102
+        name: *id104
         lifecycle:
           type: string
           enum:
@@ -31098,31 +32147,31 @@ components:
     Draft:
       type: object
       properties:
-        id: *id103
-        owner_user_id: *id103
+        id: *id105
+        owner_user_id: *id105
         version:
           type: integer
           minimum: 1
         composer:
           $ref: '#/components/schemas/Composer'
-        created_at: &id104
+        created_at: &id106
           type: string
           format: date-time
-        updated_at: *id104
-        name: *id102
+        updated_at: *id106
+        name: *id104
         lifecycle:
           type: string
           enum:
           - temporary
           - saved
-        source_draft_id: *id101
+        source_draft_id: *id103
         expires_at:
           anyOf:
-          - &id105
+          - &id107
             type: string
             format: date-time
           - type: 'null'
-        saved_at: *id105
+        saved_at: *id107
         source_draft_version:
           type: integer
           minimum: 1
@@ -31146,7 +32195,7 @@ components:
     DraftDeletion:
       type: object
       properties:
-        id: *id103
+        id: *id105
         deleted:
           type: boolean
           const: true
@@ -31176,7 +32225,7 @@ components:
     Me:
       type: object
       properties:
-        user_id: *id103
+        user_id: *id105
         display_name:
           anyOf:
           - type: string
@@ -31208,7 +32257,7 @@ components:
           - registered
         workspace_expires_at:
           anyOf:
-          - *id105
+          - *id107
           - type: 'null'
       required:
       - user_id
@@ -31226,7 +32275,7 @@ components:
     AttributionSnapshot:
       type: object
       properties:
-        user_id: *id103
+        user_id: *id105
         person_id:
           anyOf:
           - type: string
@@ -31245,7 +32294,7 @@ components:
           - type: 'null'
         orcid_authenticated:
           type: boolean
-        observed_at: *id104
+        observed_at: *id106
         principal_kind:
           type: string
           enum:
@@ -31263,9 +32312,9 @@ components:
     ResearchRequest:
       type: object
       properties:
-        id: *id103
-        owner_user_id: *id103
-        source_draft_id: *id103
+        id: *id105
+        owner_user_id: *id105
+        source_draft_id: *id105
         source_draft_version:
           type: integer
           minimum: 1
@@ -31280,10 +32329,10 @@ components:
           $ref: '#/components/schemas/DapperDocument'
         attribution:
           $ref: '#/components/schemas/AttributionSnapshot'
-        submitted_at: *id104
+        submitted_at: *id106
         user_inputs:
           $ref: '#/components/schemas/UserInputs'
-        originating_saved_draft_id: *id101
+        originating_saved_draft_id: *id103
         originating_saved_draft_version:
           type: integer
           minimum: 1
@@ -31293,6 +32342,14 @@ components:
             $ref: '#/components/schemas/SourceRef'
         archive:
           $ref: '#/components/schemas/ReferenceArchive'
+        lightning_audit_id: &id148
+          type: string
+          format: uuid
+        lightning_context:
+          type: object
+          additionalProperties: true
+          description: Private frozen preliminary audit context, preserved separately
+            from original researcher instructions; never eligible scientific evidence.
       required:
       - id
       - owner_user_id
@@ -31317,7 +32374,7 @@ components:
           - dismech
         source_id:
           type: string
-        source_revision: *id100
+        source_revision: *id102
         status:
           anyOf:
           - type: string
@@ -31578,7 +32635,7 @@ components:
     Suggestions:
       type: object
       properties:
-        suggestion_id: *id103
+        suggestion_id: *id105
         automatic_anchors:
           type: array
           items:
@@ -31646,7 +32703,7 @@ components:
         kind:
           const: analysis
           type: string
-        draft_id: *id103
+        draft_id: *id105
         draft_version:
           type: integer
           minimum: 1
@@ -31765,7 +32822,7 @@ components:
         kind:
           const: analysis
           type: string
-        request_id: *id103
+        request_id: *id105
         account_ids:
           type: array
           items:
@@ -31781,9 +32838,9 @@ components:
             $ref: '#/components/schemas/Enrichment'
         paragraph_job_ids:
           type: array
-          items: *id101
+          items: *id103
           maxItems: 3
-        evidence_package_sha256: &id112
+        evidence_package_sha256: &id114
           type: string
           pattern: ^[a-f0-9]{64}$
       required:
@@ -31834,14 +32891,14 @@ components:
     Job:
       type: object
       properties:
-        id: *id103
+        id: *id105
         kind:
           type: string
           enum:
           - analysis
           - paragraph
-        owner_user_id: *id103
-        status: &id106
+        owner_user_id: *id105
+        status: &id108
           type: string
           enum:
           - queued
@@ -31851,7 +32908,7 @@ components:
           - succeeded
           - insufficient_evidence
           - failed
-        stage: &id107
+        stage: &id109
           type: string
           enum:
           - queued
@@ -31868,7 +32925,7 @@ components:
           - collecting_output
         research_request_id:
           anyOf:
-          - *id103
+          - *id105
           - type: 'null'
         input_account_id:
           anyOf:
@@ -31877,11 +32934,11 @@ components:
               path values.
             pattern: ^dapper:ScientificAccount\.[A-Za-z0-9_-]{32}$
           - type: 'null'
-        created_at: *id104
-        updated_at: *id104
+        created_at: *id106
+        updated_at: *id106
         completed_at:
           anyOf:
-          - *id104
+          - *id106
           - type: 'null'
         result:
           anyOf:
@@ -31945,7 +33002,7 @@ components:
               const: analysis
         then:
           properties:
-            research_request_id: *id103
+            research_request_id: *id105
             input_account_id:
               type: 'null'
             result:
@@ -32020,7 +33077,7 @@ components:
               - cancelled
         then:
           properties:
-            completed_at: *id104
+            completed_at: *id106
         else:
           properties:
             completed_at:
@@ -32052,8 +33109,8 @@ components:
         id:
           type: string
           pattern: ^[0-9]+$
-        job_id: *id103
-        occurred_at: *id104
+        job_id: *id105
+        occurred_at: *id106
         event_type:
           type: string
           enum:
@@ -32063,8 +33120,8 @@ components:
           - result
           - failure
           - activity
-        status: *id106
-        stage: *id107
+        status: *id108
+        stage: *id109
         message:
           type: string
         result:
@@ -32109,8 +33166,8 @@ components:
     SchemaPin:
       type: object
       properties:
-        schema_sha256: *id100
-        dependency_snapshot_sha256: *id100
+        schema_sha256: *id102
+        dependency_snapshot_sha256: *id102
         identity_profile:
           const: DAPPER-ID-1
           type: string
@@ -32127,7 +33184,7 @@ components:
           description: Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode
             path values.
           pattern: ^dapper:[A-Za-z][A-Za-z0-9]*\.[A-Za-z0-9_-]{32}$
-        payload_sha256: *id100
+        payload_sha256: *id102
       required:
       - object_id
       - payload_sha256
@@ -32144,7 +33201,7 @@ components:
           - type: 'null'
         expires_at:
           anyOf:
-          - *id104
+          - *id106
           - type: 'null'
         availability:
           type: string
@@ -32341,7 +33398,7 @@ components:
               node_id:
                 type: string
                 pattern: '^gene_set:'
-              import_id: *id100
+              import_id: *id102
             required:
             - model
             - node_id
@@ -32437,7 +33494,7 @@ components:
           type: string
         detail:
           type: string
-        request_id: *id103
+        request_id: *id105
         retryable:
           type: boolean
         current_version:
@@ -32552,14 +33609,14 @@ components:
               type: string
             processor_version:
               type: string
-            style_sha256: *id100
-            locale_sha256: *id100
+            style_sha256: *id102
+            locale_sha256: *id102
             citation_profile:
               const: reveal-citation-v1
               type: string
             metadata_checksums:
               type: array
-              items: *id100
+              items: *id102
           required:
           - processor
           - processor_version
@@ -32762,7 +33819,7 @@ components:
           - type: 'null'
         mis_z:
           anyOf:
-          - &id108
+          - &id110
             type: number
           - type: 'null'
         lof_oe:
@@ -32796,16 +33853,16 @@ components:
     LoadingSummary:
       type: object
       properties:
-        total: &id109
+        total: &id111
           type: integer
           minimum: 0
         min:
           anyOf:
-          - *id108
+          - *id110
           - type: 'null'
         max:
           anyOf:
-          - *id108
+          - *id110
           - type: 'null'
         coverage:
           type: string
@@ -32830,7 +33887,7 @@ components:
           type: string
         loading:
           anyOf:
-          - *id108
+          - *id110
           - type: 'null'
         rank:
           type: integer
@@ -32844,9 +33901,9 @@ components:
           - type: 'null'
         library:
           type: string
-        gene_count: *id109
-        joint_loading: *id108
-        marginal_loading: *id108
+        gene_count: *id111
+        joint_loading: *id110
+        marginal_loading: *id110
         joint_rank:
           type: integer
           minimum: 1
@@ -32873,7 +33930,7 @@ components:
       properties:
         factor:
           $ref: '#/components/schemas/EagglFactor'
-        generation_id: &id110
+        generation_id: &id112
           anyOf:
           - type: string
             pattern: ^[a-f0-9]{64}$
@@ -32917,7 +33974,7 @@ components:
       properties:
         source_id:
           type: string
-        generation_id: *id110
+        generation_id: *id112
         kind:
           type: string
           enum:
@@ -32940,15 +33997,15 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/FactorLoading'
-        total: *id109
-        offset: *id109
+        total: *id111
+        offset: *id111
         limit:
           type: integer
           minimum: 1
           maximum: 500
         next_offset:
           anyOf:
-          - *id109
+          - *id111
           - type: 'null'
         summary:
           $ref: '#/components/schemas/LoadingSummary'
@@ -32983,7 +34040,7 @@ components:
           description: Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode
             path values.
           pattern: ^dapper:GeneSet\.[A-Za-z0-9_-]{32}$
-        generation_id: *id110
+        generation_id: *id112
         name:
           type: string
         library:
@@ -32992,20 +34049,20 @@ components:
           - type: 'null'
         gene_count:
           anyOf:
-          - *id109
+          - *id111
           - type: 'null'
         genes_in_universe:
           anyOf:
-          - *id109
+          - *id111
           - type: 'null'
         object:
           anyOf:
-          - &id111
+          - &id113
             type: object
             additionalProperties: true
           - type: 'null'
-        metadata: *id111
-        provenance: *id111
+        metadata: *id113
+        provenance: *id113
         collection:
           anyOf:
           - type: object
@@ -33019,10 +34076,10 @@ components:
                 type: string
               library:
                 type: string
-              gene_set_count: *id109
+              gene_set_count: *id111
               object:
                 anyOf:
-                - *id111
+                - *id113
                 - type: 'null'
               payload_sha256:
                 anyOf:
@@ -33074,7 +34131,7 @@ components:
           enum:
           - workspace
           - public
-        committed_at: *id105
+        committed_at: *id107
         event_type:
           type: string
         entity_id:
@@ -33102,6 +34159,7 @@ components:
             - accounts
             - identity
             - catalog
+            - audits
       required:
       - schema_version
       - event_id
@@ -33128,7 +34186,7 @@ components:
         source_id:
           type: string
           pattern: '^dismech:'
-        source_revision: *id112
+        source_revision: *id114
       required:
       - id
       - source_id
@@ -33150,7 +34208,7 @@ components:
           type: string
         version_id:
           type: string
-        sha256: *id112
+        sha256: *id114
         size_bytes:
           type: integer
           minimum: 0
@@ -33175,7 +34233,7 @@ components:
         segment_count:
           type: integer
           minimum: 1
-        original_sha256: *id112
+        original_sha256: *id114
       required:
       - storage
       - format
@@ -33185,8 +34243,8 @@ components:
     Upload:
       type: object
       properties:
-        id: *id101
-        draft_id: *id101
+        id: *id103
+        draft_id: *id103
         filename:
           type: string
         media_type:
@@ -33195,7 +34253,7 @@ components:
           type: integer
           minimum: 1
           maximum: 8000000
-        sha256: *id112
+        sha256: *id114
         status:
           type: string
           enum:
@@ -33203,8 +34261,8 @@ components:
           - ready
           - failed
           - removed
-        created_at: *id105
-        expires_at: *id105
+        created_at: *id107
+        expires_at: *id107
         storage:
           anyOf:
           - $ref: '#/components/schemas/UploadStorage'
@@ -33234,7 +34292,7 @@ components:
     UploadCreate:
       type: object
       properties:
-        draft_id: *id101
+        draft_id: *id103
         filename:
           type: string
           minLength: 1
@@ -33246,7 +34304,7 @@ components:
           type: integer
           minimum: 1
           maximum: 8000000
-        sha256: *id112
+        sha256: *id114
       required:
       - draft_id
       - filename
@@ -33340,7 +34398,7 @@ components:
           - canonical_fixture
         fixture_version:
           type: string
-        content_sha256: *id112
+        content_sha256: *id114
         scientific_acceptance:
           type: string
           enum:
@@ -33358,7 +34416,7 @@ components:
           type: string
         source_pointer:
           type: string
-        payload_sha256: *id112
+        payload_sha256: *id114
         raw:
           type: object
           additionalProperties: true
@@ -33382,7 +34440,7 @@ components:
           enum:
           - public_exact_gap
           - owner_exact_gap
-        as_of: *id105
+        as_of: *id107
         ranking:
           type: string
           enum:
@@ -33507,7 +34565,7 @@ components:
           - type: 'null'
         artifact_sha256:
           anyOf:
-          - *id112
+          - *id114
           - type: 'null'
         duration_ms:
           anyOf:
@@ -33531,7 +34589,7 @@ components:
                 minimum: 0
               truncated:
                 type: boolean
-              snapshot_sha256: *id112
+              snapshot_sha256: *id114
             required:
             - scope
             - nodes
@@ -33575,7 +34633,7 @@ components:
           - not_requested
         job_id:
           anyOf:
-          - *id101
+          - *id103
           - type: 'null'
         paragraph_id:
           anyOf:
@@ -33605,11 +34663,11 @@ components:
           minimum: 0
         published_at:
           anyOf:
-          - *id105
+          - *id107
           - type: 'null'
         updated_at:
           anyOf:
-          - *id105
+          - *id107
           - type: 'null'
         can_manage:
           type: boolean
@@ -33654,8 +34712,8 @@ components:
         kind:
           type: string
           const: analysis_outcome
-        outcome_id: *id101
-        evidence_package_sha256: *id112
+        outcome_id: *id103
+        evidence_package_sha256: *id114
       required:
       - kind
       - outcome_id
@@ -33701,7 +34759,7 @@ components:
           - type: integer
             minimum: 1
           - type: 'null'
-        artifact_sha256: *id112
+        artifact_sha256: *id114
         download_url:
           anyOf:
           - type: string
@@ -33717,15 +34775,15 @@ components:
     OutcomeProvenance:
       type: object
       properties:
-        evidence_package_sha256: *id112
-        outcome_sha256: *id112
+        evidence_package_sha256: *id114
+        outcome_sha256: *id114
         runtime_sha256:
           anyOf:
-          - *id112
+          - *id114
           - type: 'null'
         ledger_sha256:
           anyOf:
-          - *id112
+          - *id114
           - type: 'null'
         execution_mode:
           type: string
@@ -33787,8 +34845,8 @@ components:
                 - failed
                 - denied
                 - interrupted
-              request_sha256: *id112
-              response_sha256: *id112
+              request_sha256: *id114
+              response_sha256: *id114
             required:
             - sequence
             - graph
@@ -33811,7 +34869,7 @@ components:
     AnalysisOutcome:
       type: object
       properties:
-        id: *id101
+        id: *id103
         outcome:
           type: string
           enum:
@@ -33851,7 +34909,7 @@ components:
             enum:
             - biomarkerkg
             - prokn
-        created_at: *id105
+        created_at: *id107
         attribution:
           anyOf:
           - $ref: '#/components/schemas/AttributionSnapshot'
@@ -33867,7 +34925,7 @@ components:
           $ref: '#/components/schemas/OutcomeProvenance'
         job_id:
           anyOf:
-          - *id101
+          - *id103
           - type: 'null'
         publication:
           $ref: '#/components/schemas/PublicationState'
@@ -33961,10 +35019,10 @@ components:
         claim_count:
           type: integer
           minimum: 1
-        created_at: *id105
+        created_at: *id107
         job_id:
           anyOf:
-          - *id101
+          - *id103
           - type: 'null'
         research_statement:
           $ref: '#/components/schemas/ParagraphState'
@@ -34061,13 +35119,13 @@ components:
     LeaderboardDirections:
       type: object
       properties:
-        SUPPORTS: &id113
+        SUPPORTS: &id115
           type: integer
           minimum: 0
-        DISPUTES: *id113
-        MIXED: *id113
-        NEUTRAL: *id113
-        UNKNOWN: *id113
+        DISPUTES: *id115
+        MIXED: *id115
+        NEUTRAL: *id115
+        UNKNOWN: *id115
       required:
       - SUPPORTS
       - DISPUTES
@@ -34078,14 +35136,14 @@ components:
     LeaderboardMetrics:
       type: object
       properties:
-        account_count: *id113
-        upvotes: *id113
-        downvotes: *id113
-        voter_count: *id113
-        account_gap_count: *id113
-        explored_gap_count: *id113
-        claim_count: *id113
-        researcher_count: *id113
+        account_count: *id115
+        upvotes: *id115
+        downvotes: *id115
+        voter_count: *id115
+        account_gap_count: *id115
+        explored_gap_count: *id115
+        claim_count: *id115
+        researcher_count: *id115
         net_votes:
           type: integer
         overall_score:
@@ -34190,23 +35248,23 @@ components:
     LeaderboardMetadata:
       type: object
       properties:
-        as_of: *id105
+        as_of: *id107
         score_version:
           type: string
           enum:
           - public-contribution-v1
-        cohort_size: *id113
-        voting_participants: *id113
+        cohort_size: *id115
+        voting_participants: *id115
         exclusions:
           type: object
           properties:
-            fixture_accounts: *id113
-            uncredited_accounts: *id113
-            conflicting_accounts: *id113
-            invalid_public_accounts: *id113
-            excluded_evidence_paths: *id113
-            fixture_explorations: *id113
-            uncredited_explorations: *id113
+            fixture_accounts: *id115
+            uncredited_accounts: *id115
+            conflicting_accounts: *id115
+            invalid_public_accounts: *id115
+            excluded_evidence_paths: *id115
+            fixture_explorations: *id115
+            uncredited_explorations: *id115
           required:
           - fixture_accounts
           - uncredited_accounts
@@ -34287,20 +35345,20 @@ components:
           type: string
           enum:
           - public-contribution-v1
-        cohort_size: &id114
+        cohort_size: &id116
           type: integer
           minimum: 0
-        voting_participants: *id114
+        voting_participants: *id116
         exclusions:
           type: object
           properties:
-            fixture_accounts: *id114
-            uncredited_accounts: *id114
-            conflicting_accounts: *id114
-            invalid_public_accounts: *id114
-            excluded_evidence_paths: *id114
-            fixture_explorations: *id114
-            uncredited_explorations: *id114
+            fixture_accounts: *id116
+            uncredited_accounts: *id116
+            conflicting_accounts: *id116
+            invalid_public_accounts: *id116
+            excluded_evidence_paths: *id116
+            fixture_explorations: *id116
+            uncredited_explorations: *id116
           required:
           - fixture_accounts
           - uncredited_accounts
@@ -34443,20 +35501,20 @@ components:
           type: string
           enum:
           - public-contribution-v1
-        cohort_size: &id115
+        cohort_size: &id117
           type: integer
           minimum: 0
-        voting_participants: *id115
+        voting_participants: *id117
         exclusions:
           type: object
           properties:
-            fixture_accounts: *id115
-            uncredited_accounts: *id115
-            conflicting_accounts: *id115
-            invalid_public_accounts: *id115
-            excluded_evidence_paths: *id115
-            fixture_explorations: *id115
-            uncredited_explorations: *id115
+            fixture_accounts: *id117
+            uncredited_accounts: *id117
+            conflicting_accounts: *id117
+            invalid_public_accounts: *id117
+            excluded_evidence_paths: *id117
+            fixture_explorations: *id117
+            uncredited_explorations: *id117
           required:
           - fixture_accounts
           - uncredited_accounts
@@ -34524,7 +35582,7 @@ components:
           $ref: '#/components/schemas/LeaderboardEvidence'
         entry:
           $ref: '#/components/schemas/LeaderboardEntry'
-        total: *id113
+        total: *id115
         items:
           type: array
           items:
@@ -34555,7 +35613,7 @@ components:
           $ref: '#/components/schemas/SelectedGap'
         draft_id:
           anyOf:
-          - *id101
+          - *id103
           - type: 'null'
       required:
       - source_gap
@@ -34570,10 +35628,10 @@ components:
           $ref: '#/components/schemas/SelectedGap'
         knowledge_gap:
           $ref: '#/components/schemas/DapperKnowledgeGap'
-        last_explored_at: *id105
+        last_explored_at: *id107
         draft_id:
           anyOf:
-          - *id101
+          - *id103
           - type: 'null'
         scientific_accounts:
           $ref: '#/components/schemas/AccountCount'
@@ -42691,8 +43749,8 @@ components:
     EvidencePackageResult:
       type: object
       properties:
-        job_id: *id101
-        package_sha256: *id112
+        job_id: *id103
+        package_sha256: *id114
         package:
           $ref: '#/components/schemas/EvidencePackage'
       required:
@@ -42758,7 +43816,7 @@ components:
     KpnTrait:
       type: object
       properties:
-        id: &id116
+        id: &id118
           type: string
           pattern: ^KPN\.TRAIT:[0-9]{7}$
         name:
@@ -42817,7 +43875,7 @@ components:
           - type: 'null'
         kpn_trait_id:
           anyOf:
-          - *id116
+          - *id118
           - type: 'null'
         label:
           anyOf:
@@ -42831,7 +43889,7 @@ components:
           anyOf:
           - type: string
           - type: 'null'
-        archived_reference_factor_id: &id119
+        archived_reference_factor_id: &id121
           type: string
           pattern: ^[a-f0-9]{64}$
       required:
@@ -42858,19 +43916,19 @@ components:
         reason:
           type: string
           const: reference_generation_superseded
-        archived_at: &id118
+        archived_at: &id120
           type: string
           format: date-time
-        from_reference_generation: *id117
-        to_reference_generation: *id117
+        from_reference_generation: *id119
+        to_reference_generation: *id119
         history:
           type: array
           items:
             type: object
             properties:
-              from_reference_generation: *id117
-              to_reference_generation: *id117
-              archived_at: *id118
+              from_reference_generation: *id119
+              to_reference_generation: *id119
+              archived_at: *id120
             required:
             - from_reference_generation
             - to_reference_generation
@@ -42910,7 +43968,7 @@ components:
                 - type: 'null'
               source_revision:
                 anyOf:
-                - *id119
+                - *id121
                 - type: 'null'
             required:
             - id
@@ -42923,17 +43981,17 @@ components:
           properties:
             job_id:
               anyOf:
-              - &id120
+              - &id122
                 type: string
                 format: uuid
               - type: 'null'
             request_id:
               anyOf:
-              - *id120
+              - *id122
               - type: 'null'
             evidence_package_sha256:
               anyOf:
-              - *id119
+              - *id121
               - type: 'null'
             account_id:
               anyOf:
@@ -42944,7 +44002,7 @@ components:
               - type: 'null'
             outcome_id:
               anyOf:
-              - *id120
+              - *id122
               - type: 'null'
           required:
           - job_id
@@ -42978,8 +44036,8 @@ components:
         format:
           type: string
           const: reveal.archived-reference-factor/1
-        archive_id: *id119
-        generation_id: *id117
+        archive_id: *id121
+        generation_id: *id119
         model:
           type: string
           enum:
@@ -42996,7 +44054,7 @@ components:
           type: string
         kpn_trait_id:
           anyOf:
-          - *id116
+          - *id118
           - type: 'null'
         label:
           type: string
@@ -43029,7 +44087,7 @@ components:
             properties:
               symbol:
                 type: string
-              loading: &id121
+              loading: &id123
                 type: number
             required:
             - symbol
@@ -43065,15 +44123,15 @@ components:
                 - type: 'null'
               joint_loading:
                 anyOf:
-                - *id121
+                - *id123
                 - type: 'null'
               marginal_loading:
                 anyOf:
-                - *id121
+                - *id123
                 - type: 'null'
               score:
                 anyOf:
-                - *id121
+                - *id123
                 - type: 'null'
             required:
             - rank
@@ -43086,8 +44144,8 @@ components:
             - marginal_loading
             - score
             additionalProperties: false
-        generation_manifest_sha256: *id119
-        captured_at: *id118
+        generation_manifest_sha256: *id121
+        captured_at: *id120
       required:
       - format
       - archive_id
@@ -43150,7 +44208,7 @@ components:
     LocalWorkCreate:
       type: object
       properties:
-        draft_id: &id122
+        draft_id: &id124
           type: string
           format: uuid
         draft_version:
@@ -43163,15 +44221,15 @@ components:
     LocalWorkGrant:
       type: object
       properties:
-        grant_id: *id122
-        expires_at: &id123
+        grant_id: *id124
+        expires_at: &id125
           type: string
           format: date-time
         revoked_at:
           anyOf:
-          - *id123
+          - *id125
           - type: 'null'
-        created_at: *id123
+        created_at: *id125
       required:
       - grant_id
       - expires_at
@@ -43179,7 +44237,7 @@ components:
     LocalResearchOperation:
       type: object
       properties:
-        id: *id122
+        id: *id124
         kind:
           type: string
           enum:
@@ -43199,13 +44257,13 @@ components:
           - rejected
           - failed
           - cancelled
-        local_work_id: *id122
-        created_at: *id123
-        completed_at: *id123
-        result: &id124
+        local_work_id: *id124
+        created_at: *id125
+        completed_at: *id125
+        result: &id126
           type: object
           additionalProperties: true
-        error: &id126
+        error: &id128
           anyOf:
           - type: object
             properties:
@@ -43218,7 +44276,7 @@ components:
             - detail
             additionalProperties: false
           - type: 'null'
-        report: *id124
+        report: *id126
         account_ids:
           type: array
           items:
@@ -43244,8 +44302,8 @@ components:
     LocalWork:
       type: object
       properties:
-        id: *id122
-        research_request_id: *id122
+        id: *id124
+        research_request_id: *id124
         request:
           $ref: '#/components/schemas/ResearchRequest'
         state:
@@ -43255,12 +44313,12 @@ components:
           - ready
           - preparation_failed
           - closed
-        created_at: *id123
-        last_activity: *id123
+        created_at: *id125
+        last_activity: *id125
         last_action:
           type: string
-        expires_at: *id123
-        reference_generation_id: &id125
+        expires_at: *id125
+        reference_generation_id: &id127
           type: string
           pattern: ^[a-f0-9]{64}$
         package_id:
@@ -43269,11 +44327,11 @@ components:
           - type: 'null'
         package_sha256:
           anyOf:
-          - *id125
+          - *id127
           - type: 'null'
-        last_error: *id126
-        closed_at: *id123
-        preparation_operation_id: *id122
+        last_error: *id128
+        closed_at: *id125
+        preparation_operation_id: *id124
         submissions:
           type: array
           items:
@@ -43287,7 +44345,7 @@ components:
           format: uri
         prompt:
           type: string
-        instructions: &id127
+        instructions: &id129
           type: object
           properties:
             codex:
@@ -43298,7 +44356,7 @@ components:
           - codex
           - claude_code
           additionalProperties: false
-        local_work_id: *id122
+        local_work_id: *id124
       required:
       - id
       - research_request_id
@@ -43331,9 +44389,9 @@ components:
     LocalWorkGrantIssued:
       type: object
       properties:
-        grant_id: *id122
-        expires_at: *id123
-        local_work_id: *id122
+        grant_id: *id124
+        expires_at: *id125
+        local_work_id: *id124
         token:
           type: string
           pattern: ^rvlm_
@@ -43343,7 +44401,7 @@ components:
           format: uri
         prompt:
           type: string
-        instructions: *id127
+        instructions: *id129
       required:
       - grant_id
       - expires_at
@@ -43364,7 +44422,7 @@ components:
           type: string
         filename:
           type: string
-        sha256: *id125
+        sha256: *id127
         size_bytes:
           type: integer
           minimum: 0
@@ -43388,7 +44446,7 @@ components:
           type: string
         path:
           type: string
-        sha256: *id125
+        sha256: *id127
         size_bytes:
           type: integer
           minimum: 0
@@ -43415,9 +44473,9 @@ components:
           type: string
           enum:
           - reveal.context-manifest/2
-        seed_sha256: *id125
-        package_sha256: *id125
-        context_sha256: *id125
+        seed_sha256: *id127
+        package_sha256: *id127
+        context_sha256: *id127
         files:
           type: array
           items:
@@ -43439,9 +44497,9 @@ components:
           type: string
           enum:
           - reveal.validation-context-export/2
-        seed_sha256: *id125
-        package_sha256: *id125
-        context_sha256: *id125
+        seed_sha256: *id127
+        package_sha256: *id127
+        context_sha256: *id127
         receipt_ids:
           type: array
           items:
@@ -43501,8 +44559,8 @@ components:
           type: string
           enum:
           - progressive
-        research_request_id: *id122
-        reference_generation_id: *id125
+        research_request_id: *id124
+        reference_generation_id: *id127
       required:
       - package_version
       - seed_version
@@ -43521,10 +44579,10 @@ components:
         properties:
           package_id:
             type: string
-          package_sha256: *id125
+          package_sha256: *id127
           package:
             $ref: '#/components/schemas/ResearchSeed'
-          manifest: *id124
+          manifest: *id126
           artifacts:
             type: array
             items:
@@ -43545,7 +44603,7 @@ components:
             type: string
             enum:
             - preparing
-          operation_id: *id122
+          operation_id: *id124
         required:
         - state
         - operation_id
@@ -43568,7 +44626,7 @@ components:
           type: string
           pattern: ^rvls_[A-Za-z0-9_-]{43}$
           writeOnly: true
-        token_sha256: *id125
+        token_sha256: *id127
       required:
       - ticket
       - token_sha256
@@ -43580,10 +44638,10 @@ components:
     ResearchSetupConnection:
       type: object
       properties:
-        grant_id: *id122
-        expires_at: *id123
-        local_work_id: *id122
-        package_sha256: *id125
+        grant_id: *id124
+        expires_at: *id125
+        local_work_id: *id124
+        package_sha256: *id127
         mcp_url:
           type: string
           format: uri
@@ -43610,19 +44668,19 @@ components:
           enum:
           - codex
           - claude_code
-        local_work_id: &id128
+        local_work_id: &id130
           type: string
           format: uuid
-        research_request_id: *id128
-        reference_generation_id: &id129
+        research_request_id: *id130
+        reference_generation_id: &id131
           type: string
           pattern: ^[a-f0-9]{64}$
-        package_sha256: *id129
-        mcp_url: *id130
-        device_authorization_url: *id130
-        token_url: *id130
-        revocation_url: *id130
-        return_url: *id130
+        package_sha256: *id131
+        mcp_url: *id132
+        device_authorization_url: *id132
+        token_url: *id132
+        revocation_url: *id132
+        return_url: *id132
         files:
           type: array
           items:
@@ -43630,7 +44688,7 @@ components:
             properties:
               path:
                 type: string
-              sha256: *id129
+              sha256: *id131
               size_bytes:
                 type: integer
                 minimum: 0
@@ -43685,15 +44743,15 @@ components:
     ResearchOAuthRegistration:
       type: object
       properties:
-        client_name: &id131
+        client_name: &id133
           type: string
           maxLength: 120
-        redirect_uris: &id132
+        redirect_uris: &id134
           type: array
-          items: *id130
+          items: *id132
           maxItems: 10
           uniqueItems: true
-        grant_types: &id133
+        grant_types: &id135
           type: array
           items:
             type: string
@@ -43703,17 +44761,17 @@ components:
             - urn:ietf:params:oauth:grant-type:device_code
           minItems: 1
           uniqueItems: true
-        response_types: &id134
+        response_types: &id136
           type: array
           items:
             type: string
             enum:
             - code
-        token_endpoint_auth_method: &id135
+        token_endpoint_auth_method: &id137
           type: string
           enum:
           - none
-        scope: &id136
+        scope: &id138
           type: string
       required: []
       additionalProperties: false
@@ -43726,12 +44784,12 @@ components:
     ResearchOAuthClient:
       type: object
       properties:
-        client_name: *id131
-        redirect_uris: *id132
-        grant_types: *id133
-        response_types: *id134
-        token_endpoint_auth_method: *id135
-        scope: *id136
+        client_name: *id133
+        redirect_uris: *id134
+        grant_types: *id135
+        response_types: *id136
+        token_endpoint_auth_method: *id137
+        scope: *id138
         client_id:
           type: string
         client_id_issued_at:
@@ -43752,10 +44810,10 @@ components:
       properties:
         client_id:
           type: string
-        resource: *id130
+        resource: *id132
         scope:
           type: string
-        local_work_id: *id128
+        local_work_id: *id130
       required:
       - client_id
       - resource
@@ -43768,8 +44826,8 @@ components:
           writeOnly: false
         user_code:
           type: string
-        verification_uri: *id130
-        verification_uri_complete: *id130
+        verification_uri: *id132
+        verification_uri_complete: *id132
         expires_in:
           type: integer
           const: 600
@@ -43788,9 +44846,9 @@ components:
       oneOf:
       - type: object
         properties:
-          client_id: &id137
+          client_id: &id139
             type: string
-          resource: *id130
+          resource: *id132
           grant_type:
             type: string
             enum:
@@ -43798,7 +44856,7 @@ components:
           code:
             type: string
             writeOnly: true
-          redirect_uri: *id130
+          redirect_uri: *id132
           code_verifier:
             type: string
             minLength: 43
@@ -43814,8 +44872,8 @@ components:
         additionalProperties: false
       - type: object
         properties:
-          client_id: *id137
-          resource: *id130
+          client_id: *id139
+          resource: *id132
           grant_type:
             type: string
             enum:
@@ -43831,8 +44889,8 @@ components:
         additionalProperties: false
       - type: object
         properties:
-          client_id: *id137
-          resource: *id130
+          client_id: *id139
+          resource: *id132
           grant_type:
             type: string
             enum:
@@ -43865,11 +44923,11 @@ components:
           maximum: 900
         scope:
           type: string
-        resource: *id130
-        local_work_id: *id128
-        package_sha256: *id129
-        mcp_url: *id130
-        grant_id: *id128
+        resource: *id132
+        local_work_id: *id130
+        package_sha256: *id131
+        mcp_url: *id132
+        grant_id: *id130
       required:
       - access_token
       - token_type
@@ -43905,7 +44963,7 @@ components:
     ResearchOAuthConsent:
       type: object
       properties:
-        request_id: *id128
+        request_id: *id130
         kind:
           type: string
           enum:
@@ -43915,7 +44973,7 @@ components:
           type: string
         client_name:
           type: string
-        scopes: &id138
+        scopes: &id140
           type: array
           items:
             type: string
@@ -43924,16 +44982,16 @@ components:
             - research:write
           minItems: 1
           uniqueItems: true
-        resource: *id130
+        resource: *id132
         requested_local_work_id:
-          anyOf:
-          - *id128
-          - type: 'null'
-        redirect_uri:
           anyOf:
           - *id130
           - type: 'null'
-        expires_at: &id139
+        redirect_uri:
+          anyOf:
+          - *id132
+          - type: 'null'
+        expires_at: &id141
           type: string
           format: date-time
         status:
@@ -43960,10 +45018,10 @@ components:
     ResearchOAuthDecision:
       type: object
       properties:
-        request_id: *id128
+        request_id: *id130
         user_code:
           type: string
-        local_work_id: *id128
+        local_work_id: *id130
         approve:
           type: boolean
       required:
@@ -43991,7 +45049,7 @@ components:
       oneOf:
       - type: object
         properties:
-          redirect_url: *id130
+          redirect_url: *id132
         required:
         - redirect_url
         additionalProperties: false
@@ -43999,19 +45057,19 @@ components:
         properties:
           approved:
             type: boolean
-          local_work_id: *id128
+          local_work_id: *id130
         required:
         - approved
         additionalProperties: false
     ResearchAuthorizationMetadata:
       type: object
       properties:
-        issuer: *id130
-        authorization_endpoint: *id130
-        token_endpoint: *id130
-        registration_endpoint: *id130
-        device_authorization_endpoint: *id130
-        revocation_endpoint: *id130
+        issuer: *id132
+        authorization_endpoint: *id132
+        token_endpoint: *id132
+        registration_endpoint: *id132
+        device_authorization_endpoint: *id132
+        revocation_endpoint: *id132
         response_types_supported:
           type: array
           items:
@@ -44053,11 +45111,11 @@ components:
     ResearchProtectedResourceMetadata:
       type: object
       properties:
-        resource: *id130
+        resource: *id132
         authorization_servers:
           type: array
-          items: *id130
-        scopes_supported: *id138
+          items: *id132
+        scopes_supported: *id140
         bearer_methods_supported:
           type: array
           items:
@@ -44078,7 +45136,7 @@ components:
       properties:
         path:
           type: string
-        sha256: *id129
+        sha256: *id131
         size_bytes:
           type: integer
           minimum: 0
@@ -44086,12 +45144,12 @@ components:
           type: string
           enum:
           - application/json
-        download_url: *id130
+        download_url: *id132
         authentication:
           type: string
           enum:
           - none
-        expires_at: *id139
+        expires_at: *id141
       required:
       - path
       - sha256
@@ -44108,15 +45166,15 @@ components:
           type: string
           enum:
           - reveal.public-reference-capture/1
-        capture_id: *id129
-        expires_at: *id139
+        capture_id: *id131
+        expires_at: *id141
         reference_generation_id:
           anyOf:
-          - *id129
+          - *id131
           - type: 'null'
         operation:
           type: string
-        arguments: &id140
+        arguments: &id142
           type: object
           additionalProperties: true
         reader_version:
@@ -44129,15 +45187,15 @@ components:
           - imported_reference
           - bioindex_small_phenotype
           - external_kg
-        source: *id140
-        result: *id140
-        raw_sha256: *id129
-        metric_definitions: *id140
-        dapper_context: *id140
-        source_artifacts: *id140
+        source: *id142
+        result: *id142
+        raw_sha256: *id131
+        metric_definitions: *id142
+        dapper_context: *id142
+        source_artifacts: *id142
         source_ref:
           anyOf:
-          - *id140
+          - *id142
           - type: 'null'
         dapper_file_id:
           anyOf:
@@ -44145,7 +45203,7 @@ components:
           - type: 'null'
         object_resolution:
           type: array
-          items: *id140
+          items: *id142
         artifacts:
           type: array
           items:
@@ -44184,7 +45242,7 @@ components:
               type: 'null'
         else:
           properties:
-            reference_generation_id: *id129
+            reference_generation_id: *id131
       description: MCP get_public_capture/data/connected-KG response. Exact server-retained
         public bytes and context; no researcher prompts, work IDs or private scientific
         closures. Default retention 7 days; use the explicit expires_at, never assume
@@ -44198,13 +45256,13 @@ components:
     AdminAccountSummary:
       type: object
       properties:
-        record_id: &id141
+        record_id: &id143
           type: string
           pattern: ^[a-f0-9]{64}$
-        owner_user_id: &id142
+        owner_user_id: &id144
           type: string
           format: uuid
-        summary: &id143
+        summary: &id145
           $ref: '#/components/schemas/AccountSummary'
       required:
       - record_id
@@ -44218,9 +45276,9 @@ components:
     AdminAccountDetail:
       type: object
       properties:
-        record_id: *id141
-        owner_user_id: *id142
-        summary: *id143
+        record_id: *id143
+        owner_user_id: *id144
+        summary: *id145
         result:
           $ref: '#/components/schemas/AccountResult'
         paragraph:
@@ -44244,9 +45302,9 @@ components:
     AdminExplorationSummary:
       type: object
       properties:
-        record_id: *id142
-        owner_user_id: *id142
-        summary: &id144
+        record_id: *id144
+        owner_user_id: *id144
+        summary: &id146
           $ref: '#/components/schemas/AnalysisOutcomeSummary'
       required:
       - record_id
@@ -44259,9 +45317,9 @@ components:
     AdminExplorationDetail:
       type: object
       properties:
-        record_id: *id142
-        owner_user_id: *id142
-        summary: *id144
+        record_id: *id144
+        owner_user_id: *id144
+        summary: *id146
         result:
           $ref: '#/components/schemas/AnalysisOutcome'
       required:
@@ -44465,10 +45523,10 @@ components:
     CfdeAssessment:
       type: object
       properties:
-        id: &id145
+        id: &id147
           type: string
           format: uuid
-        draft_id: *id145
+        draft_id: *id147
         draft_version:
           type: integer
           minimum: 1
@@ -44580,6 +45638,353 @@ components:
           properties:
             error:
               type: 'null'
+    LightningAuditInput:
+      type: object
+      properties:
+        draft_id: *id148
+        draft_version:
+          type: integer
+          minimum: 1
+      required:
+      - draft_id
+      - draft_version
+      additionalProperties: false
+    LightningAuditResult:
+      type: object
+      additionalProperties: false
+      description: A substantive preliminary scientific audit of the supplied knowledge
+        gap and evidence package.
+      properties:
+        assessment:
+          type: string
+          enum:
+          - promising
+          - partial
+          - unsupported
+          description: How well this package supports a useful research direction;
+            justify the choice in summary.
+        summary:
+          type: string
+          description: 'Required explanatory rationale, 200-260 words in three short
+            paragraphs: the relevant lead, why the evidence does or does not support
+            the question, and what would change the assessment. Explain how the supplied
+            CFDE loading observations and DisMech context bear on this specific question,
+            which hypothesis is worth pursuing, and the specific inferential link
+            still missing. Explain why a partial or unsupported result follows from
+            the supplied data, without treating missing sampled rows as biological
+            absence. Do not only repeat the question or assessment. Use factual claims
+            grounded in the referenced observations. Write complete paragraphs, without
+            quotation marks around source labels. Never empty or a sentence fragment.'
+        observations:
+          type: array
+          description: At most 3 concrete, relevant source observations, each at most
+            45 words, when available, explaining their bearing on the question. Cite
+            only supplied evidence_ref IDs. May be empty for unsupported only if no
+            observation supports a direction.
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              text:
+                type: string
+                description: 'At most 45 words: a specific source observation and
+                  its relevance; distinguish stored evidence from a proposed interpretation.'
+              evidence_refs:
+                type: array
+                items: &id149
+                  type: string
+                minItems: 1
+                description: Exact evidence_ref IDs in this package that support this
+                  observation.
+            required:
+            - text
+            - evidence_refs
+        recommended_direction:
+          type: string
+          description: 'Required concrete, editable investigative research brief of
+            at most 90 words: state the hypothesis or comparison to investigate, the
+            relevant supplied mechanisms, and what would distinguish the alternatives.
+            For unsupported evidence, specify what evidence to seek and why. Never
+            empty; use existing research tools to inspect evidence; avoid a lengthy
+            experimental program.'
+        missing_evidence:
+          type: array
+          items: *id149
+          description: 'At most 2 items of 25 words each: specific missing observations
+            or assumptions needed to test the proposed explanation, not claims that
+            missing entities do not exist.'
+        next_steps:
+          type: array
+          items: *id149
+          minItems: 1
+          description: 'At most 2 items of 25 words each: prioritized concrete checks
+            an agent could perform next to test the direction. State these as future
+            work; at least one actionable check is required.'
+        limitations:
+          type: array
+          items: *id149
+          minItems: 1
+          description: 'At most 2 items of 25 words each: required scope caveats for
+            this bounded package, including relevant coverage omissions, source/species
+            context and association-versus-causation limits.'
+      required:
+      - assessment
+      - summary
+      - observations
+      - recommended_direction
+      - missing_evidence
+      - next_steps
+      - limitations
+    LightningAuditProgress:
+      type: object
+      properties:
+        revision:
+          type: integer
+          minimum: 1
+        phase:
+          type: string
+          enum:
+          - writing
+          - validating
+        summary:
+          type: string
+        recommended_direction:
+          type: string
+        observations:
+          type: array
+          items:
+            type: string
+        missing_evidence:
+          type: array
+          items:
+            type: string
+        next_steps:
+          type: array
+          items:
+            type: string
+        limitations:
+          type: array
+          items:
+            type: string
+      required:
+      - revision
+      - phase
+      - summary
+      - recommended_direction
+      - observations
+      - missing_evidence
+      - next_steps
+      - limitations
+      additionalProperties: false
+      description: Incomplete, unvalidated public answer text from the live model
+        response. Only present on pending detail reads; never scientific evidence
+        or a completed result.
+    LightningContinuationInput:
+      type: object
+      properties:
+        mode:
+          type: string
+          enum:
+          - online
+          - local
+        research_direction:
+          type: string
+          minLength: 1
+          maxLength: 6000
+      required:
+      - mode
+      - research_direction
+      additionalProperties: false
+    LightningContinuation:
+      type: object
+      properties:
+        mode:
+          type: string
+          enum:
+          - online
+          - local
+        id: *id148
+        research_request_id: *id148
+        created_at: &id150
+          type: string
+          format: date-time
+      required:
+      - mode
+      - id
+      - research_request_id
+      - created_at
+      additionalProperties: false
+      description: An independently authorized child run with its own frozen request
+        and reference-generation pin.
+    LightningEvidenceReference:
+      type: object
+      properties:
+        id:
+          type: string
+        pointer:
+          type: string
+        label:
+          type: string
+        value: {}
+        source:
+          type: object
+          additionalProperties: true
+      required:
+      - id
+      - pointer
+      - label
+      - value
+      - source
+      additionalProperties: false
+      description: A short model-visible reference resolved by the server to a retained
+        source-state location. An audit observation is preliminary guidance and is
+        not an accepted scientific Claim.
+    LightningAudit:
+      type: object
+      properties:
+        id: *id148
+        kind:
+          type: string
+          const: lightning_audit
+        status:
+          type: string
+          enum:
+          - preparing
+          - assessing
+          - succeeded
+          - failed
+          - interrupted
+        research_request_id: *id148
+        source_draft_id: *id148
+        source_draft_version:
+          type: integer
+          minimum: 1
+        question:
+          type: object
+          properties:
+            id:
+              type: string
+              description: Exact, case-sensitive, compact DAPPER-ID-1 identifier.
+                URL-encode path values.
+              pattern: ^dapper:KnowledgeGap\.[A-Za-z0-9_-]{32}$
+            text:
+              type: string
+          required:
+          - id
+          - text
+          additionalProperties: false
+        created_at: *id150
+        updated_at: *id150
+        completed_at:
+          anyOf:
+          - *id150
+          - type: 'null'
+        continuation_expires_at: *id150
+        reference_generation_id: &id151
+          type: string
+          pattern: ^[a-f0-9]{64}$
+        result:
+          anyOf:
+          - $ref: '#/components/schemas/LightningAuditResult'
+          - type: 'null'
+        coverage:
+          anyOf:
+          - $ref: '#/components/schemas/CfdeAssessmentCoverage'
+          - type: 'null'
+        evidence_references:
+          type: array
+          items:
+            $ref: '#/components/schemas/LightningEvidenceReference'
+        provenance:
+          type: object
+          properties:
+            model:
+              type: string
+            prompt_version:
+              type: string
+            source_state_sha256: *id151
+            request_sha256: *id151
+            response_sha256: *id151
+          required:
+          - model
+          - prompt_version
+          additionalProperties: false
+        usage:
+          anyOf:
+          - type: object
+            properties:
+              input_tokens:
+                type: integer
+                minimum: 0
+              output_tokens:
+                type: integer
+                minimum: 0
+            required:
+            - input_tokens
+            - output_tokens
+            additionalProperties: false
+          - type: 'null'
+        error:
+          anyOf:
+          - $ref: '#/components/schemas/CfdeAssessmentError'
+          - type: 'null'
+        continuations:
+          type: array
+          items:
+            $ref: '#/components/schemas/LightningContinuation'
+        progress:
+          $ref: '#/components/schemas/LightningAuditProgress'
+      required:
+      - id
+      - kind
+      - status
+      - research_request_id
+      - source_draft_id
+      - source_draft_version
+      - question
+      - created_at
+      - updated_at
+      - completed_at
+      - continuation_expires_at
+      - reference_generation_id
+      - result
+      - coverage
+      - evidence_references
+      - provenance
+      - usage
+      - error
+      - continuations
+      additionalProperties: false
+      description: Private frozen initial audit, independent of later editor changes
+        or deletion. Only an explicit POST may make one provider attempt. There is
+        no agent or retrieval loop. Every verdict is advisory and permits an explicitly
+        requested continuation.
+    LightningAuditList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/LightningAudit'
+        page:
+          type: object
+          properties:
+            next_cursor:
+              anyOf:
+              - type: string
+              - type: 'null'
+            has_more:
+              type: boolean
+            snapshot_id:
+              type: string
+          required:
+          - next_cursor
+          - has_more
+          additionalProperties: false
+      required:
+      - items
+      - page
+      additionalProperties: false
 x-dapper-dependency:
   base_commit: e44a913619c4c9832df6aeaac6a80dbf691ba120
   schema_sha256: 305fbd8f3a3ad01a7584892c1be2937b5a25a5741a8fef17851039ff8cf44e25

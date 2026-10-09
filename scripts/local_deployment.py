@@ -143,6 +143,7 @@ def prepare():
         'REVEAL_CANONICAL_URL': FRONTEND_URL, 'REVEAL_PUBLIC_WEB_URL': FRONTEND_URL,
     })
     frontend = {key: value for key, value in env.items() if key.startswith(('AUTH_GOOGLE_', 'AUTH_ORCID_')) or key == 'ADMIN_EMAILS'}
+    frontend['NEXT_PUBLIC_REVEAL_LIGHTNING_ENABLED'] = env.get('NEXT_PUBLIC_REVEAL_LIGHTNING_ENABLED', 'false')
     frontend.update({key: backend[key] for key in ('REVEAL_GATEWAY_SECRET', 'REVEAL_GATEWAY_SERVICE_TOKEN',
         'REVEAL_GATEWAY_ISSUER', 'REVEAL_GATEWAY_AUDIENCE', 'NEXTAUTH_URL')})
     frontend.update({'AUTH_SECRET': keys['session'], 'NEXTAUTH_SECRET': keys['session'],
@@ -154,7 +155,8 @@ def prepare():
     (RUNTIME / 'redis.conf').write_text('bind 0.0.0.0\nprotected-mode yes\nport 6379\nsave ""\nappendonly no\nmaxmemory 256mb\nmaxmemory-policy noeviction\nrequirepass '+keys['redis']+'\n')
     (RUNTIME / 'redis.conf').chmod(0o600)
     env_file(RUNTIME / 'compose.env', {'COMPOSE_PROJECT_NAME': 'reveal-deploy-'+hashlib.sha256(str(ROOT).encode()).hexdigest()[:8],
-        'REVEAL_WORKER_REPLICAS': '2', 'REVEAL_DEPLOY_API_PORT': '18000', 'REVEAL_DEPLOY_FRONTEND_PORT': str(FRONTEND_PORT)})
+        'REVEAL_WORKER_REPLICAS': '2', 'REVEAL_DEPLOY_API_PORT': '18000', 'REVEAL_DEPLOY_FRONTEND_PORT': str(FRONTEND_PORT),
+        'NEXT_PUBLIC_REVEAL_LIGHTNING_ENABLED': frontend['NEXT_PUBLIC_REVEAL_LIGHTNING_ENABLED']})
     print(f'Prepared verified source assets and private runtime configuration. Existing RDS tables: reveal_*; job queue: {namespace}.', flush=True)
 
 

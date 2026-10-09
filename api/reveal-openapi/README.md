@@ -75,6 +75,8 @@ Anonymous reference captures have an explicit expiry, seven days by default. The
 
 ## Regenerate and verify
 
+The private [Lightning audit](../docs/lightning-audit.md) routes create a bounded single-completion assessment, list/read retained audits, and explicitly continue into a local or online run. They retain frozen provenance and are independently gated by `REVEAL_LIGHTNING_ENABLED`. Contract examples are synthetic and do not call a model.
+
 Run from repository root with [OpenAPI dependencies](../scripts/requirements-openapi.txt):
 
 ```bash

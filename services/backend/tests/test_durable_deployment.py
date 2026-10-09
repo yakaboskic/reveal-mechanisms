@@ -29,7 +29,8 @@ def test_default_stack_has_no_queue_consumers_or_self_hosted_redis():
 
 @pytest.mark.parametrize('local_api_key', [False, True])
 @pytest.mark.parametrize('frontend_port', [3000, 3100])
-def test_prepare_separates_application_state_and_backend_secrets(tmp_path, monkeypatch, local_api_key, frontend_port):
+@pytest.mark.parametrize('lightning_enabled', [None, 'true'])
+def test_prepare_separates_application_state_and_backend_secrets(tmp_path, monkeypatch, local_api_key, frontend_port, lightning_enabled):
     root = tmp_path
     runtime = root/'.runtime/workflow'
     runtime.mkdir(parents=True)
@@ -45,12 +46,17 @@ def test_prepare_separates_application_state_and_backend_secrets(tmp_path, monke
     if local_api_key:
         with (root/'.env').open('a') as output:
             output.write('REVEAL_API_KEY_SHA256='+('a'*64)+'\nREVEAL_API_KEY_USER_ID=11111111-1111-4111-8111-111111111111\n')
+    if lightning_enabled is not None:
+        with (root/'.env').open('a') as output:
+            output.write('NEXT_PUBLIC_REVEAL_LIGHTNING_ENABLED='+lightning_enabled+'\n')
     (runtime/'qstash.log').write_text('QSTASH_URL=http://127.0.0.1:18080\nQSTASH_TOKEN=local-token\n'
         'QSTASH_CURRENT_SIGNING_KEY=local-current\nQSTASH_NEXT_SIGNING_KEY=local-next\n')
     monkeypatch.setattr(module,'ROOT',root); monkeypatch.setattr(module,'RUNTIME',runtime)
     monkeypatch.setattr(module,'storage_config',lambda path:({'REVEAL_S3_BUCKET':'test','REVEAL_S3_PREFIX':'local/'},'https://test.example/local/'))
     result=module.prepare(frontend_port=frontend_port)
     backend=module.read_env(runtime/'backend.env'); frontend=module.read_env(runtime/'frontend.env')
+    compose=module.read_env(runtime/'compose.env')
+    assert frontend['NEXT_PUBLIC_REVEAL_LIGHTNING_ENABLED'] == compose['NEXT_PUBLIC_REVEAL_LIGHTNING_ENABLED'] == (lightning_enabled or 'false')
     assert backend['REVEAL_APPLICATION_TABLE_PREFIX']=='reveal_workflow_local'
     assert backend['REVEAL_PUBLIC_WEB_URL'] == backend['REVEAL_CANONICAL_URL'] == frontend['NEXTAUTH_URL'] == f'http://localhost:{frontend_port}'
     assert backend['REVEAL_JOB_TRANSPORT']=='workflow'

@@ -29,6 +29,7 @@ COLLECTIONS = {
     'draft': ['drafts', 'gaps'], 'exploration': ['gaps', 'explorations'],
     'request': ['requests', 'gaps'], 'job': ['jobs', 'gaps'],
     'local_work': ['jobs'], 'research_operation': ['jobs'],
+    'lightning_audit': ['audits'],
     'account': ['accounts', 'gaps'], 'account_membership': ['accounts', 'gaps'],
     'paragraph': ['accounts'], 'publication': ['accounts', 'gaps'],
     'analysis_outcome': ['explorations', 'gaps'], 'outcome_summary': ['explorations', 'gaps'],
@@ -38,6 +39,7 @@ COLLECTIONS = {
     'vote': ['gaps', 'accounts'],
 }
 TYPES = {'draft':'draft.changed', 'exploration':'exploration.updated', 'job':'job.updated',
+    'lightning_audit':'lightning_audit.updated',
     'account':'scientific_account.updated', 'account_membership':'scientific_account.updated',
     'paragraph':'scientific_account.updated', 'publication':'publication.changed',
     'outcome_publication':'publication.changed', 'principal':'identity.changed',
@@ -54,6 +56,8 @@ def track(tx, kind, identity, owner, data, old=None, operation='upsert', revisio
         tx.notification_jobs.add(data['job_id'])
         return
     if old and old['data'] == data and old['owner'] == owner: return
+    if kind == 'lightning_audit' and old and old['owner'] == owner and old['data'].get('public') == data.get('public'):
+        return  # Retaining internal model/source bytes does not change the workspace list.
     if kind == 'job' and old:
         # Detailed agent/tool events update last_event_id and timestamps, but
         # must not repeatedly re-fetch every workspace list.
@@ -96,7 +100,7 @@ def ownership_changed(tx, source, target):
     for owner in (source, target):
         tx.workspace_changes[(owner, 'principal', owner)] = {'event_type':'identity.changed',
             'entity_id':owner, 'entity_revision':0, 'operation':'resync',
-            'collections':['identity', 'gaps', 'accounts', 'explorations', 'drafts', 'jobs', 'requests']}
+            'collections':['identity', 'gaps', 'accounts', 'explorations', 'drafts', 'jobs', 'requests', 'audits']}
 
 
 def prepare_commit(tx):

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { downloadLocalBlob, localClientPreference, localClientPreferenceKey, localErrorMessage, localLaunchCommand, localResearchPrompt, localWorkApi, localWorkTitle, LocalWorkError, submissionAccounts, type LocalAgentClient, type LocalSetupProgress, type LocalWork, type LocalSubmission } from "@/lib/local-work";
 import { createLocalWorkRefresher } from "@/lib/local-work-refresh";
 import { onCollectionInvalidation } from "@/lib/collection-events";
+import { lightningAuditHref } from "@/lib/lightning-audit";
 import { LocalWorkspaceDownload } from "./LocalWorkspaceDownload";
 import "./local-work.css";
 
@@ -137,7 +138,7 @@ export function LocalWorkView({ id, standalone = false }: { id: string; standalo
   }
   const prompt = localResearchPrompt(id);
   const preparationError = work?.state === "preparation_failed" ? localErrorMessage(work.last_error) || "We could not prepare this workspace. Your question and selections are saved." : "";
-  return <main id="main" className="local-work-page local-work-download-page"><nav><Link href="/workspace?tab=runs">← Research runs</Link><Link href="/">Explore another gap</Link></nav>
+  return <main id="main" className="local-work-page local-work-download-page"><nav><Link href="/workspace?tab=runs">← Research runs</Link>{work?.request?.lightning_audit_id && <Link href={lightningAuditHref(work.request.lightning_audit_id)}>Initial Lightning audit</Link>}<Link href="/">Explore another gap</Link></nav>
     {error && <p className="local-error" role="alert">{error} <button disabled={!!busy} onClick={() => setAttempt(value => value + 1)}>Refresh</button>{!work && <> <Link href="/">Return to your workspace connection</Link></>}</p>}
     {notice && <p className="local-notice" role="status">{notice}</p>}
     {(work || !error) && <LocalWorkspaceDownload

@@ -146,7 +146,7 @@ def setup(request):
         contract_sha256 = pinned_contract_sha256(frozen)
         prompt = research_prompt(request['selected_graphs'], request.get('validation_feedback', ()), progressive=progressive,
                                  contract_sha256=contract_sha256, skeleton_sha256=pinned_skeleton_sha256(frozen),
-                                 claim_structure_sha256=pinned_claim_structure_sha256(frozen))
+                                 claim_structure_sha256=pinned_claim_structure_sha256(frozen), lightning_audit=bool(frozen.get('lightning_audit')))
         frozen_input = BASE / 'input' / FILE_INPUT_FILENAME
         if frozen_input.exists():
             manifest = json.loads(frozen_input.read_bytes())

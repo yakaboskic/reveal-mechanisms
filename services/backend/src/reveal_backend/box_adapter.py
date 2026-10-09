@@ -247,7 +247,7 @@ def make_bundle(project_root: Path, request: ExecutionRequest):
                     validate_file_input(data, json.loads(manifest_data),
                                         research_prompt(request.selected_graphs, request.validation_feedback, progressive=value.get('retrieval_mode') == 'progressive',
                                                         contract_sha256=pinned_contract_sha256(value), skeleton_sha256=pinned_skeleton_sha256(value),
-                                                        claim_structure_sha256=pinned_claim_structure_sha256(value)))
+                                                        claim_structure_sha256=pinned_claim_structure_sha256(value), lightning_audit=bool(value.get('lightning_audit'))))
                     files['input/evidence-input.json'] = manifest_data
                 frozen_view = frozen_input.get('dispatch_view')
                 if frozen_view:

@@ -54,6 +54,9 @@
     },
     {
       "name": "CFDE assessment"
+    },
+    {
+      "name": "Lightning audits"
     }
   ],
   "security": [
@@ -36984,6 +36987,1802 @@
           }
         ]
       }
+    },
+    "/v1/lightning-audits": {
+      "post": {
+        "operationId": "createLightningAudit",
+        "tags": [
+          "Lightning audits"
+        ],
+        "summary": "Create an initial evidence audit",
+        "description": "Requires the owning registered or anonymous workspace principal. All results are private, no-store. A Lightning audit assesses a bounded stored-evidence snapshot; it creates no accepted scientific account and performs no connected-graph or literature retrieval. Inputs and generated guidance are not instructions or scientific acceptance. Examples are synthetic contract fixtures. Requires REVEAL_LIGHTNING_ENABLED. Freezes the owned draft and starts at most one Claude completion. Same-key replays recover the original audit even if the draft is later changed or removed. Changed inputs with the same key conflict. Source preparation and inference execute outside write transactions. The request has a 100,000-byte limit, a 3,000-output-token cap and a 120-second overall deadline. Failed or interrupted calls are not automatically retried; an explicit new submission creates a new audit.",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 8,
+              "maxLength": 128
+            },
+            "example": "66666666-6666-4666-8666-666666666666",
+            "description": "Unique per caller and operation for at least 7 days. Same key and same canonical body replay the original accepted response; changed body returns 409 IDEMPOTENCY_CONFLICT. Compare idempotency before draft-version checks on retries."
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Saved audit receipt; read Location to observe progress.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LightningAudit"
+                },
+                "examples": {
+                  "preparing": {
+                    "summary": "Preparing",
+                    "value": {
+                      "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+                      "kind": "lightning_audit",
+                      "status": "preparing",
+                      "research_request_id": "33333333-3333-4333-8333-333333333333",
+                      "source_draft_id": "22222222-2222-4222-8222-222222222222",
+                      "source_draft_version": 2,
+                      "question": {
+                        "id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+                        "text": "Are the CAD PGS×context interactions driven by adverse exposures causally amplifying genetic risk, or are some \"contexts\" actually downstream readouts of incipient disease (reverse causation)?"
+                      },
+                      "created_at": "2026-09-24T16:00:00Z",
+                      "updated_at": "2026-09-24T16:00:00Z",
+                      "completed_at": null,
+                      "continuation_expires_at": "2026-10-24T16:00:00Z",
+                      "reference_generation_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c",
+                      "result": null,
+                      "coverage": null,
+                      "evidence_references": [],
+                      "provenance": {
+                        "model": "claude-sonnet-4-6",
+                        "prompt_version": "lightning-audit-v8"
+                      },
+                      "usage": null,
+                      "error": null,
+                      "continuations": []
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "description": "Correlation ID for this HTTP request.",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              },
+              "Location": {
+                "description": "Relative URL of the created resource.",
+                "schema": {
+                  "type": "string",
+                  "format": "uri-reference"
+                },
+                "example": "/v1/lightning-audits/cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+              },
+              "Retry-After": {
+                "description": "Suggested polling delay in seconds.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "example": 2
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              },
+              "Vary": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "Authorization"
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "invalid_request": {
+                    "summary": "Invalid request",
+                    "value": {
+                      "type": "urn:reveal:problem:invalid-request",
+                      "title": "Invalid Request",
+                      "status": 400,
+                      "code": "INVALID_REQUEST",
+                      "detail": "A parameter or cursor does not match the requested operation.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              },
+              "Vary": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "Authorization"
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication Required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "authentication_required": {
+                    "summary": "Authentication required",
+                    "value": {
+                      "type": "urn:reveal:problem:authentication-required",
+                      "title": "Authentication Required",
+                      "status": 401,
+                      "code": "AUTHENTICATION_REQUIRED",
+                      "detail": "A valid trusted-gateway API assertion is required.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              },
+              "Vary": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "Authorization"
+              }
+            }
+          },
+          "403": {
+            "description": "Sign In Required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "sign_in_required": {
+                    "summary": "Sign in required",
+                    "value": {
+                      "type": "urn:reveal:problem:sign-in-required",
+                      "title": "Sign In Required",
+                      "status": 403,
+                      "code": "SIGN_IN_REQUIRED",
+                      "detail": "Sign in to publish a scientific account or exploration.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              },
+              "Vary": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "Authorization"
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "not_found": {
+                    "summary": "Not found",
+                    "value": {
+                      "type": "urn:reveal:problem:not-found",
+                      "title": "Not Found",
+                      "status": 404,
+                      "code": "NOT_FOUND",
+                      "detail": "No accessible record exists for the supplied identifier or exact revision.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              },
+              "Vary": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "Authorization"
+              }
+            }
+          },
+          "409": {
+            "description": "Version Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "version_conflict": {
+                    "summary": "Version conflict",
+                    "value": {
+                      "type": "urn:reveal:problem:version-conflict",
+                      "title": "Version Conflict",
+                      "status": 409,
+                      "code": "VERSION_CONFLICT",
+                      "detail": "The saved draft has changed. Reload and reconcile before retrying.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false,
+                      "current_version": 3
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              },
+              "Vary": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "Authorization"
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid Input",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "invalid_input": {
+                    "summary": "Invalid input",
+                    "value": {
+                      "type": "urn:reveal:problem:invalid-input",
+                      "title": "Invalid Input",
+                      "status": 422,
+                      "code": "INVALID_INPUT",
+                      "detail": "The request does not satisfy the operation contract.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false,
+                      "field_errors": [
+                        {
+                          "pointer": "/inquiry",
+                          "message": "A valid DAPPER inquiry is required."
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              },
+              "Vary": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "Authorization"
+              }
+            }
+          },
+          "429": {
+            "description": "Rate Limited",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "rate_limited": {
+                    "summary": "Rate limited",
+                    "value": {
+                      "type": "urn:reveal:problem:rate-limited",
+                      "title": "Rate Limited",
+                      "status": 429,
+                      "code": "RATE_LIMITED",
+                      "detail": "Retry after the interval in Retry-After.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": true
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "example": 30
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              },
+              "Vary": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "Authorization"
+              }
+            }
+          },
+          "503": {
+            "description": "Dependency Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "dependency_unavailable": {
+                    "summary": "Dependency unavailable",
+                    "value": {
+                      "type": "urn:reveal:problem:dependency-unavailable",
+                      "title": "Dependency Unavailable",
+                      "status": 503,
+                      "code": "DEPENDENCY_UNAVAILABLE",
+                      "detail": "A required dependency is temporarily unavailable; no replacement ranking or scientific result was fabricated.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": true
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              },
+              "Vary": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "Authorization"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApplicationBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LightningAuditInput"
+              },
+              "examples": {
+                "draft": {
+                  "summary": "Draft",
+                  "value": {
+                    "draft_id": "22222222-2222-4222-8222-222222222222",
+                    "draft_version": 2
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "label": "draft",
+            "source": "curl -X POST https://api.reveal.example.org/v1/lightning-audits -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"draft_id\":\"22222222-2222-4222-8222-222222222222\",\"draft_version\":2}'"
+          }
+        ]
+      },
+      "get": {
+        "operationId": "listLightningAudits",
+        "tags": [
+          "Lightning audits"
+        ],
+        "summary": "List private initial audits",
+        "description": "Requires the owning registered or anonymous workspace principal. All results are private, no-store. A Lightning audit assesses a bounded stored-evidence snapshot; it creates no accepted scientific account and performs no connected-graph or literature retrieval. Inputs and generated guidance are not instructions or scientific acceptance. Examples are synthetic contract fixtures. Saved results remain independent of mutable or deleted drafts. Listing never starts inference.",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            },
+            "example": 50,
+            "description": ""
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "example": "opaque-owned-audit-cursor",
+            "description": ""
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LightningAuditList"
+                },
+                "examples": {
+                  "history": {
+                    "summary": "History",
+                    "value": {
+                      "items": [
+                        {
+                          "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+                          "kind": "lightning_audit",
+                          "status": "succeeded",
+                          "research_request_id": "33333333-3333-4333-8333-333333333333",
+                          "source_draft_id": "22222222-2222-4222-8222-222222222222",
+                          "source_draft_version": 2,
+                          "question": {
+                            "id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+                            "text": "Are the CAD PGS×context interactions driven by adverse exposures causally amplifying genetic risk, or are some \"contexts\" actually downstream readouts of incipient disease (reverse causation)?"
+                          },
+                          "created_at": "2026-09-24T16:00:00Z",
+                          "updated_at": "2026-09-24T16:01:00Z",
+                          "completed_at": "2026-09-24T16:01:00Z",
+                          "continuation_expires_at": "2026-10-24T16:00:00Z",
+                          "reference_generation_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c",
+                          "result": {
+                            "assessment": "partial",
+                            "summary": "Synthetic example: the retained loading suggests a candidate direction that requires further checks.",
+                            "observations": [
+                              {
+                                "text": "A retained factor-gene loading is relevant to the proposed comparison.",
+                                "evidence_refs": [
+                                  "E1"
+                                ]
+                              }
+                            ],
+                            "recommended_direction": "Investigate whether the observed factor-gene association provides a context-specific connection to the gap.",
+                            "missing_evidence": [
+                              "Direct evidence for the proposed biological connection."
+                            ],
+                            "next_steps": [
+                              "Inspect exact source captures and test the proposed connection using authorized evidence tools."
+                            ],
+                            "limitations": [
+                              "This synthetic example illustrates the contract and is not a scientific finding."
+                            ]
+                          },
+                          "coverage": {
+                            "factor_count": 1,
+                            "gene_loading_count": 1,
+                            "gene_set_loading_count": 0,
+                            "unique_gene_set_count": 0,
+                            "missing": [
+                              "gene_set_loadings"
+                            ],
+                            "truncations": [],
+                            "complete": false
+                          },
+                          "evidence_references": [
+                            {
+                              "id": "E1",
+                              "pointer": "/factors/0/genes/rows/0",
+                              "label": "Synthetic retained factor-gene loading",
+                              "value": {
+                                "symbol": "GENE_EXAMPLE",
+                                "loading": 0.25
+                              },
+                              "source": {
+                                "generation_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c"
+                              }
+                            }
+                          ],
+                          "provenance": {
+                            "model": "claude-sonnet-4-6",
+                            "prompt_version": "lightning-audit-v8",
+                            "source_state_sha256": "0930005c359bae46f01059f268a377b1a082f7d0bd68379807a03a68cc405ae7",
+                            "request_sha256": "9707a47769286ac99fe827ac45c05d0d1368c56b1eff64c2a12012933c40392d",
+                            "response_sha256": "c136b7ece7251f2bd3fca18d9e318b11cf6790c6001319ab2c35adc366fd3a0a"
+                          },
+                          "usage": {
+                            "input_tokens": 1000,
+                            "output_tokens": 300
+                          },
+                          "error": null,
+                          "continuations": []
+                        }
+                      ],
+                      "page": {
+                        "next_cursor": null,
+                        "has_more": false
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "description": "Correlation ID for this HTTP request.",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              },
+              "Vary": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "Authorization"
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "invalid_request": {
+                    "summary": "Invalid request",
+                    "value": {
+                      "type": "urn:reveal:problem:invalid-request",
+                      "title": "Invalid Request",
+                      "status": 400,
+                      "code": "INVALID_REQUEST",
+                      "detail": "A parameter or cursor does not match the requested operation.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              },
+              "Vary": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "Authorization"
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication Required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "authentication_required": {
+                    "summary": "Authentication required",
+                    "value": {
+                      "type": "urn:reveal:problem:authentication-required",
+                      "title": "Authentication Required",
+                      "status": 401,
+                      "code": "AUTHENTICATION_REQUIRED",
+                      "detail": "A valid trusted-gateway API assertion is required.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              },
+              "Vary": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "Authorization"
+              }
+            }
+          },
+          "403": {
+            "description": "Sign In Required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "sign_in_required": {
+                    "summary": "Sign in required",
+                    "value": {
+                      "type": "urn:reveal:problem:sign-in-required",
+                      "title": "Sign In Required",
+                      "status": 403,
+                      "code": "SIGN_IN_REQUIRED",
+                      "detail": "Sign in to publish a scientific account or exploration.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              },
+              "Vary": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "Authorization"
+              }
+            }
+          },
+          "409": {
+            "description": "Version Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "version_conflict": {
+                    "summary": "Version conflict",
+                    "value": {
+                      "type": "urn:reveal:problem:version-conflict",
+                      "title": "Version Conflict",
+                      "status": 409,
+                      "code": "VERSION_CONFLICT",
+                      "detail": "The saved draft has changed. Reload and reconcile before retrying.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false,
+                      "current_version": 3
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              },
+              "Vary": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "Authorization"
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid Input",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "invalid_input": {
+                    "summary": "Invalid input",
+                    "value": {
+                      "type": "urn:reveal:problem:invalid-input",
+                      "title": "Invalid Input",
+                      "status": 422,
+                      "code": "INVALID_INPUT",
+                      "detail": "The request does not satisfy the operation contract.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false,
+                      "field_errors": [
+                        {
+                          "pointer": "/inquiry",
+                          "message": "A valid DAPPER inquiry is required."
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              },
+              "Vary": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "Authorization"
+              }
+            }
+          },
+          "503": {
+            "description": "Dependency Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "dependency_unavailable": {
+                    "summary": "Dependency unavailable",
+                    "value": {
+                      "type": "urn:reveal:problem:dependency-unavailable",
+                      "title": "Dependency Unavailable",
+                      "status": 503,
+                      "code": "DEPENDENCY_UNAVAILABLE",
+                      "detail": "A required dependency is temporarily unavailable; no replacement ranking or scientific result was fabricated.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": true
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              },
+              "Vary": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "Authorization"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApplicationBearer": []
+          }
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "label": "request",
+            "source": "curl -X GET 'https://api.reveal.example.org/v1/lightning-audits?limit=50' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
+          }
+        ]
+      }
+    },
+    "/v1/lightning-audits/{audit_id}": {
+      "get": {
+        "operationId": "getLightningAudit",
+        "tags": [
+          "Lightning audits"
+        ],
+        "summary": "Read an initial audit",
+        "description": "Requires the owning registered or anonymous workspace principal. All results are private, no-store. A Lightning audit assesses a bounded stored-evidence snapshot; it creates no accepted scientific account and performs no connected-graph or literature retrieval. Inputs and generated guidance are not instructions or scientific acceptance. Examples are synthetic contract fixtures. Reading never dispatches or retries model work. Pending results may long-poll without holding a database connection. Terminal results return immediately. Optional after_revision returns immediately for a newer preview; otherwise a pending read waits. Assessing reads check stored progress at least once per second across API processes. Preview text is unvalidated; only succeeded results can continue. Audits remain inspectable after their continuation window expires.",
+        "parameters": [
+          {
+            "name": "audit_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "description": ""
+          },
+          {
+            "name": "wait",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 20,
+              "default": 0
+            },
+            "example": 15,
+            "description": ""
+          },
+          {
+            "name": "after_revision",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "example": 0,
+            "description": ""
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LightningAudit"
+                },
+                "examples": {
+                  "completed": {
+                    "summary": "Completed",
+                    "value": {
+                      "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+                      "kind": "lightning_audit",
+                      "status": "succeeded",
+                      "research_request_id": "33333333-3333-4333-8333-333333333333",
+                      "source_draft_id": "22222222-2222-4222-8222-222222222222",
+                      "source_draft_version": 2,
+                      "question": {
+                        "id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+                        "text": "Are the CAD PGS×context interactions driven by adverse exposures causally amplifying genetic risk, or are some \"contexts\" actually downstream readouts of incipient disease (reverse causation)?"
+                      },
+                      "created_at": "2026-09-24T16:00:00Z",
+                      "updated_at": "2026-09-24T16:01:00Z",
+                      "completed_at": "2026-09-24T16:01:00Z",
+                      "continuation_expires_at": "2026-10-24T16:00:00Z",
+                      "reference_generation_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c",
+                      "result": {
+                        "assessment": "partial",
+                        "summary": "Synthetic example: the retained loading suggests a candidate direction that requires further checks.",
+                        "observations": [
+                          {
+                            "text": "A retained factor-gene loading is relevant to the proposed comparison.",
+                            "evidence_refs": [
+                              "E1"
+                            ]
+                          }
+                        ],
+                        "recommended_direction": "Investigate whether the observed factor-gene association provides a context-specific connection to the gap.",
+                        "missing_evidence": [
+                          "Direct evidence for the proposed biological connection."
+                        ],
+                        "next_steps": [
+                          "Inspect exact source captures and test the proposed connection using authorized evidence tools."
+                        ],
+                        "limitations": [
+                          "This synthetic example illustrates the contract and is not a scientific finding."
+                        ]
+                      },
+                      "coverage": {
+                        "factor_count": 1,
+                        "gene_loading_count": 1,
+                        "gene_set_loading_count": 0,
+                        "unique_gene_set_count": 0,
+                        "missing": [
+                          "gene_set_loadings"
+                        ],
+                        "truncations": [],
+                        "complete": false
+                      },
+                      "evidence_references": [
+                        {
+                          "id": "E1",
+                          "pointer": "/factors/0/genes/rows/0",
+                          "label": "Synthetic retained factor-gene loading",
+                          "value": {
+                            "symbol": "GENE_EXAMPLE",
+                            "loading": 0.25
+                          },
+                          "source": {
+                            "generation_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c"
+                          }
+                        }
+                      ],
+                      "provenance": {
+                        "model": "claude-sonnet-4-6",
+                        "prompt_version": "lightning-audit-v8",
+                        "source_state_sha256": "0930005c359bae46f01059f268a377b1a082f7d0bd68379807a03a68cc405ae7",
+                        "request_sha256": "9707a47769286ac99fe827ac45c05d0d1368c56b1eff64c2a12012933c40392d",
+                        "response_sha256": "c136b7ece7251f2bd3fca18d9e318b11cf6790c6001319ab2c35adc366fd3a0a"
+                      },
+                      "usage": {
+                        "input_tokens": 1000,
+                        "output_tokens": 300
+                      },
+                      "error": null,
+                      "continuations": []
+                    }
+                  },
+                  "preparing": {
+                    "summary": "Preparing",
+                    "value": {
+                      "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+                      "kind": "lightning_audit",
+                      "status": "preparing",
+                      "research_request_id": "33333333-3333-4333-8333-333333333333",
+                      "source_draft_id": "22222222-2222-4222-8222-222222222222",
+                      "source_draft_version": 2,
+                      "question": {
+                        "id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+                        "text": "Are the CAD PGS×context interactions driven by adverse exposures causally amplifying genetic risk, or are some \"contexts\" actually downstream readouts of incipient disease (reverse causation)?"
+                      },
+                      "created_at": "2026-09-24T16:00:00Z",
+                      "updated_at": "2026-09-24T16:00:00Z",
+                      "completed_at": null,
+                      "continuation_expires_at": "2026-10-24T16:00:00Z",
+                      "reference_generation_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c",
+                      "result": null,
+                      "coverage": null,
+                      "evidence_references": [],
+                      "provenance": {
+                        "model": "claude-sonnet-4-6",
+                        "prompt_version": "lightning-audit-v8"
+                      },
+                      "usage": null,
+                      "error": null,
+                      "continuations": []
+                    }
+                  },
+                  "writing": {
+                    "summary": "Writing",
+                    "value": {
+                      "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+                      "kind": "lightning_audit",
+                      "status": "assessing",
+                      "research_request_id": "33333333-3333-4333-8333-333333333333",
+                      "source_draft_id": "22222222-2222-4222-8222-222222222222",
+                      "source_draft_version": 2,
+                      "question": {
+                        "id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+                        "text": "Are the CAD PGS×context interactions driven by adverse exposures causally amplifying genetic risk, or are some \"contexts\" actually downstream readouts of incipient disease (reverse causation)?"
+                      },
+                      "created_at": "2026-09-24T16:00:00Z",
+                      "updated_at": "2026-09-24T16:00:00Z",
+                      "completed_at": null,
+                      "continuation_expires_at": "2026-10-24T16:00:00Z",
+                      "reference_generation_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c",
+                      "result": null,
+                      "coverage": null,
+                      "evidence_references": [],
+                      "provenance": {
+                        "model": "claude-sonnet-4-6",
+                        "prompt_version": "lightning-audit-v8"
+                      },
+                      "usage": null,
+                      "error": null,
+                      "continuations": [],
+                      "progress": {
+                        "revision": 1,
+                        "phase": "writing",
+                        "summary": "The supplied CFDE data offers a limited research direction",
+                        "recommended_direction": "",
+                        "observations": [],
+                        "missing_evidence": [],
+                        "next_steps": [],
+                        "limitations": []
+                      }
+                    }
+                  },
+                  "failed": {
+                    "summary": "Failed",
+                    "value": {
+                      "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+                      "kind": "lightning_audit",
+                      "status": "failed",
+                      "research_request_id": "33333333-3333-4333-8333-333333333333",
+                      "source_draft_id": "22222222-2222-4222-8222-222222222222",
+                      "source_draft_version": 2,
+                      "question": {
+                        "id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+                        "text": "Are the CAD PGS×context interactions driven by adverse exposures causally amplifying genetic risk, or are some \"contexts\" actually downstream readouts of incipient disease (reverse causation)?"
+                      },
+                      "created_at": "2026-09-24T16:00:00Z",
+                      "updated_at": "2026-09-24T16:01:00Z",
+                      "completed_at": "2026-09-24T16:01:00Z",
+                      "continuation_expires_at": "2026-10-24T16:00:00Z",
+                      "reference_generation_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c",
+                      "result": null,
+                      "coverage": null,
+                      "evidence_references": [],
+                      "provenance": {
+                        "model": "claude-sonnet-4-6",
+                        "prompt_version": "lightning-audit-v8"
+                      },
+                      "usage": null,
+                      "error": {
+                        "code": "LIGHTNING_TIMEOUT",
+                        "detail": "This audit timed out. Start a new audit to try again.",
+                        "retryable": true
+                      },
+                      "continuations": []
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "description": "Correlation ID for this HTTP request.",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              },
+              "Vary": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "Authorization"
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication Required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "authentication_required": {
+                    "summary": "Authentication required",
+                    "value": {
+                      "type": "urn:reveal:problem:authentication-required",
+                      "title": "Authentication Required",
+                      "status": 401,
+                      "code": "AUTHENTICATION_REQUIRED",
+                      "detail": "A valid trusted-gateway API assertion is required.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              },
+              "Vary": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "Authorization"
+              }
+            }
+          },
+          "403": {
+            "description": "Sign In Required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "sign_in_required": {
+                    "summary": "Sign in required",
+                    "value": {
+                      "type": "urn:reveal:problem:sign-in-required",
+                      "title": "Sign In Required",
+                      "status": 403,
+                      "code": "SIGN_IN_REQUIRED",
+                      "detail": "Sign in to publish a scientific account or exploration.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              },
+              "Vary": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "Authorization"
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "not_found": {
+                    "summary": "Not found",
+                    "value": {
+                      "type": "urn:reveal:problem:not-found",
+                      "title": "Not Found",
+                      "status": 404,
+                      "code": "NOT_FOUND",
+                      "detail": "No accessible record exists for the supplied identifier or exact revision.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              },
+              "Vary": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "Authorization"
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid Input",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "invalid_input": {
+                    "summary": "Invalid input",
+                    "value": {
+                      "type": "urn:reveal:problem:invalid-input",
+                      "title": "Invalid Input",
+                      "status": 422,
+                      "code": "INVALID_INPUT",
+                      "detail": "The request does not satisfy the operation contract.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false,
+                      "field_errors": [
+                        {
+                          "pointer": "/inquiry",
+                          "message": "A valid DAPPER inquiry is required."
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              },
+              "Vary": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "Authorization"
+              }
+            }
+          },
+          "503": {
+            "description": "Dependency Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "dependency_unavailable": {
+                    "summary": "Dependency unavailable",
+                    "value": {
+                      "type": "urn:reveal:problem:dependency-unavailable",
+                      "title": "Dependency Unavailable",
+                      "status": 503,
+                      "code": "DEPENDENCY_UNAVAILABLE",
+                      "detail": "A required dependency is temporarily unavailable; no replacement ranking or scientific result was fabricated.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": true
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              },
+              "Vary": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "Authorization"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApplicationBearer": []
+          }
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "label": "request",
+            "source": "curl -X GET 'https://api.reveal.example.org/v1/lightning-audits/cccccccc-cccc-4ccc-8ccc-cccccccccccc?wait=15&after_revision=0' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
+          }
+        ]
+      }
+    },
+    "/v1/lightning-audits/{audit_id}/continue": {
+      "post": {
+        "operationId": "continueLightningAudit",
+        "tags": [
+          "Lightning audits"
+        ],
+        "summary": "Continue an audit with an agent",
+        "description": "Requires the owning registered or anonymous workspace principal. All results are private, no-store. A Lightning audit assesses a bounded stored-evidence snapshot; it creates no accepted scientific account and performs no connected-graph or literature retrieval. Inputs and generated guidance are not instructions or scientific acceptance. Examples are synthetic contract fixtures. Requires REVEAL_LIGHTNING_ENABLED, a completed audit and an unexpired continuation window. All assessment categories may continue. Clones a new frozen request and independent generation pin, preserving original inputs separately from the edited direction. Uses ordinary online/local quotas and authorization. Retained superseded generations are allowed; unavailable generations require a fresh audit. Audit artifacts enter the agent seed as preliminary context, never eligible evidence.",
+        "parameters": [
+          {
+            "name": "audit_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "description": ""
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 8,
+              "maxLength": 128
+            },
+            "example": "66666666-6666-4666-8666-666666666666",
+            "description": "Unique per caller and operation for at least 7 days. Same key and same canonical body replay the original accepted response; changed body returns 409 IDEMPOTENCY_CONFLICT. Compare idempotency before draft-version checks on retries."
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Saved child-run receipt; online dispatch or local seed preparation is asynchronous.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LightningContinuation"
+                },
+                "examples": {
+                  "online": {
+                    "summary": "Online",
+                    "value": {
+                      "mode": "online",
+                      "id": "44444444-4444-4444-8444-444444444444",
+                      "research_request_id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+                      "created_at": "2026-09-24T16:01:00Z"
+                    }
+                  },
+                  "local": {
+                    "summary": "Local",
+                    "value": {
+                      "mode": "local",
+                      "id": "44444444-4444-4444-8444-444444444444",
+                      "research_request_id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+                      "created_at": "2026-09-24T16:01:00Z"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "description": "Correlation ID for this HTTP request.",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              },
+              "Location": {
+                "description": "Relative URL of the created resource.",
+                "schema": {
+                  "type": "string",
+                  "format": "uri-reference"
+                },
+                "example": "/v1/jobs/44444444-4444-4444-8444-444444444444"
+              },
+              "Retry-After": {
+                "description": "Suggested polling delay in seconds.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "example": 2
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              },
+              "Vary": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "Authorization"
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "invalid_request": {
+                    "summary": "Invalid request",
+                    "value": {
+                      "type": "urn:reveal:problem:invalid-request",
+                      "title": "Invalid Request",
+                      "status": 400,
+                      "code": "INVALID_REQUEST",
+                      "detail": "A parameter or cursor does not match the requested operation.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              },
+              "Vary": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "Authorization"
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication Required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "authentication_required": {
+                    "summary": "Authentication required",
+                    "value": {
+                      "type": "urn:reveal:problem:authentication-required",
+                      "title": "Authentication Required",
+                      "status": 401,
+                      "code": "AUTHENTICATION_REQUIRED",
+                      "detail": "A valid trusted-gateway API assertion is required.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              },
+              "Vary": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "Authorization"
+              }
+            }
+          },
+          "403": {
+            "description": "Sign In Required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "sign_in_required": {
+                    "summary": "Sign in required",
+                    "value": {
+                      "type": "urn:reveal:problem:sign-in-required",
+                      "title": "Sign In Required",
+                      "status": 403,
+                      "code": "SIGN_IN_REQUIRED",
+                      "detail": "Sign in to publish a scientific account or exploration.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              },
+              "Vary": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "Authorization"
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "not_found": {
+                    "summary": "Not found",
+                    "value": {
+                      "type": "urn:reveal:problem:not-found",
+                      "title": "Not Found",
+                      "status": 404,
+                      "code": "NOT_FOUND",
+                      "detail": "No accessible record exists for the supplied identifier or exact revision.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              },
+              "Vary": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "Authorization"
+              }
+            }
+          },
+          "409": {
+            "description": "Version Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "version_conflict": {
+                    "summary": "Version conflict",
+                    "value": {
+                      "type": "urn:reveal:problem:version-conflict",
+                      "title": "Version Conflict",
+                      "status": 409,
+                      "code": "VERSION_CONFLICT",
+                      "detail": "The saved draft has changed. Reload and reconcile before retrying.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false,
+                      "current_version": 3
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              },
+              "Vary": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "Authorization"
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid Input",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "invalid_input": {
+                    "summary": "Invalid input",
+                    "value": {
+                      "type": "urn:reveal:problem:invalid-input",
+                      "title": "Invalid Input",
+                      "status": 422,
+                      "code": "INVALID_INPUT",
+                      "detail": "The request does not satisfy the operation contract.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false,
+                      "field_errors": [
+                        {
+                          "pointer": "/inquiry",
+                          "message": "A valid DAPPER inquiry is required."
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              },
+              "Vary": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "Authorization"
+              }
+            }
+          },
+          "429": {
+            "description": "Rate Limited",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "rate_limited": {
+                    "summary": "Rate limited",
+                    "value": {
+                      "type": "urn:reveal:problem:rate-limited",
+                      "title": "Rate Limited",
+                      "status": 429,
+                      "code": "RATE_LIMITED",
+                      "detail": "Retry after the interval in Retry-After.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": true
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "example": 30
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              },
+              "Vary": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "Authorization"
+              }
+            }
+          },
+          "503": {
+            "description": "Dependency Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "dependency_unavailable": {
+                    "summary": "Dependency unavailable",
+                    "value": {
+                      "type": "urn:reveal:problem:dependency-unavailable",
+                      "title": "Dependency Unavailable",
+                      "status": 503,
+                      "code": "DEPENDENCY_UNAVAILABLE",
+                      "detail": "A required dependency is temporarily unavailable; no replacement ranking or scientific result was fabricated.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": true
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              },
+              "Vary": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "Authorization"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApplicationBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LightningContinuationInput"
+              },
+              "examples": {
+                "online": {
+                  "summary": "Online",
+                  "value": {
+                    "mode": "online",
+                    "research_direction": "Investigate whether the observed factor-gene association provides a context-specific connection to the gap."
+                  }
+                },
+                "local": {
+                  "summary": "Local",
+                  "value": {
+                    "mode": "local",
+                    "research_direction": "Investigate whether the observed factor-gene association provides a context-specific connection to the gap."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "label": "online",
+            "source": "curl -X POST https://api.reveal.example.org/v1/lightning-audits/cccccccc-cccc-4ccc-8ccc-cccccccccccc/continue -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"mode\":\"online\",\"research_direction\":\"Investigate whether the observed factor-gene association provides a context-specific connection to the gap.\"}'"
+          },
+          {
+            "lang": "Shell",
+            "label": "local",
+            "source": "curl -X POST https://api.reveal.example.org/v1/lightning-audits/cccccccc-cccc-4ccc-8ccc-cccccccccccc/continue -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"mode\":\"local\",\"research_direction\":\"Investigate whether the observed factor-gene association provides a context-specific connection to the gap.\"}'"
+          }
+        ]
+      }
     }
   },
   "components": {
@@ -46303,6 +48102,15 @@
           },
           "archive": {
             "$ref": "#/components/schemas/ReferenceArchive"
+          },
+          "lightning_audit_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "lightning_context": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Private frozen preliminary audit context, preserved separately from original researcher instructions; never eligible scientific evidence."
           }
         },
         "required": [
@@ -49078,7 +50886,8 @@
                 "jobs",
                 "accounts",
                 "identity",
-                "catalog"
+                "catalog",
+                "audits"
               ]
             }
           }
@@ -64544,6 +66353,489 @@
             }
           }
         ]
+      },
+      "LightningAuditInput": {
+        "type": "object",
+        "properties": {
+          "draft_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "draft_version": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "draft_id",
+          "draft_version"
+        ],
+        "additionalProperties": false
+      },
+      "LightningAuditResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "A substantive preliminary scientific audit of the supplied knowledge gap and evidence package.",
+        "properties": {
+          "assessment": {
+            "type": "string",
+            "enum": [
+              "promising",
+              "partial",
+              "unsupported"
+            ],
+            "description": "How well this package supports a useful research direction; justify the choice in summary."
+          },
+          "summary": {
+            "type": "string",
+            "description": "Required explanatory rationale, 200-260 words in three short paragraphs: the relevant lead, why the evidence does or does not support the question, and what would change the assessment. Explain how the supplied CFDE loading observations and DisMech context bear on this specific question, which hypothesis is worth pursuing, and the specific inferential link still missing. Explain why a partial or unsupported result follows from the supplied data, without treating missing sampled rows as biological absence. Do not only repeat the question or assessment. Use factual claims grounded in the referenced observations. Write complete paragraphs, without quotation marks around source labels. Never empty or a sentence fragment."
+          },
+          "observations": {
+            "type": "array",
+            "description": "At most 3 concrete, relevant source observations, each at most 45 words, when available, explaining their bearing on the question. Cite only supplied evidence_ref IDs. May be empty for unsupported only if no observation supports a direction.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "text": {
+                  "type": "string",
+                  "description": "At most 45 words: a specific source observation and its relevance; distinguish stored evidence from a proposed interpretation."
+                },
+                "evidence_refs": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "minItems": 1,
+                  "description": "Exact evidence_ref IDs in this package that support this observation."
+                }
+              },
+              "required": [
+                "text",
+                "evidence_refs"
+              ]
+            }
+          },
+          "recommended_direction": {
+            "type": "string",
+            "description": "Required concrete, editable investigative research brief of at most 90 words: state the hypothesis or comparison to investigate, the relevant supplied mechanisms, and what would distinguish the alternatives. For unsupported evidence, specify what evidence to seek and why. Never empty; use existing research tools to inspect evidence; avoid a lengthy experimental program."
+          },
+          "missing_evidence": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "At most 2 items of 25 words each: specific missing observations or assumptions needed to test the proposed explanation, not claims that missing entities do not exist."
+          },
+          "next_steps": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "description": "At most 2 items of 25 words each: prioritized concrete checks an agent could perform next to test the direction. State these as future work; at least one actionable check is required."
+          },
+          "limitations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "description": "At most 2 items of 25 words each: required scope caveats for this bounded package, including relevant coverage omissions, source/species context and association-versus-causation limits."
+          }
+        },
+        "required": [
+          "assessment",
+          "summary",
+          "observations",
+          "recommended_direction",
+          "missing_evidence",
+          "next_steps",
+          "limitations"
+        ]
+      },
+      "LightningAuditProgress": {
+        "type": "object",
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "phase": {
+            "type": "string",
+            "enum": [
+              "writing",
+              "validating"
+            ]
+          },
+          "summary": {
+            "type": "string"
+          },
+          "recommended_direction": {
+            "type": "string"
+          },
+          "observations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "missing_evidence": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "next_steps": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "limitations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "revision",
+          "phase",
+          "summary",
+          "recommended_direction",
+          "observations",
+          "missing_evidence",
+          "next_steps",
+          "limitations"
+        ],
+        "additionalProperties": false,
+        "description": "Incomplete, unvalidated public answer text from the live model response. Only present on pending detail reads; never scientific evidence or a completed result."
+      },
+      "LightningContinuationInput": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "online",
+              "local"
+            ]
+          },
+          "research_direction": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 6000
+          }
+        },
+        "required": [
+          "mode",
+          "research_direction"
+        ],
+        "additionalProperties": false
+      },
+      "LightningContinuation": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "online",
+              "local"
+            ]
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "research_request_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "mode",
+          "id",
+          "research_request_id",
+          "created_at"
+        ],
+        "additionalProperties": false,
+        "description": "An independently authorized child run with its own frozen request and reference-generation pin."
+      },
+      "LightningEvidenceReference": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "pointer": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "value": {},
+          "source": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "id",
+          "pointer",
+          "label",
+          "value",
+          "source"
+        ],
+        "additionalProperties": false,
+        "description": "A short model-visible reference resolved by the server to a retained source-state location. An audit observation is preliminary guidance and is not an accepted scientific Claim."
+      },
+      "LightningAudit": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string",
+            "const": "lightning_audit"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "preparing",
+              "assessing",
+              "succeeded",
+              "failed",
+              "interrupted"
+            ]
+          },
+          "research_request_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "source_draft_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "source_draft_version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "question": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values.",
+                "pattern": "^dapper:KnowledgeGap\\.[A-Za-z0-9_-]{32}$"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "text"
+            ],
+            "additionalProperties": false
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "continuation_expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "reference_generation_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LightningAuditResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "coverage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CfdeAssessmentCoverage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "evidence_references": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LightningEvidenceReference"
+            }
+          },
+          "provenance": {
+            "type": "object",
+            "properties": {
+              "model": {
+                "type": "string"
+              },
+              "prompt_version": {
+                "type": "string"
+              },
+              "source_state_sha256": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "request_sha256": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "response_sha256": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              }
+            },
+            "required": [
+              "model",
+              "prompt_version"
+            ],
+            "additionalProperties": false
+          },
+          "usage": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "input_tokens": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "output_tokens": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "input_tokens",
+                  "output_tokens"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CfdeAssessmentError"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "continuations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LightningContinuation"
+            }
+          },
+          "progress": {
+            "$ref": "#/components/schemas/LightningAuditProgress"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "status",
+          "research_request_id",
+          "source_draft_id",
+          "source_draft_version",
+          "question",
+          "created_at",
+          "updated_at",
+          "completed_at",
+          "continuation_expires_at",
+          "reference_generation_id",
+          "result",
+          "coverage",
+          "evidence_references",
+          "provenance",
+          "usage",
+          "error",
+          "continuations"
+        ],
+        "additionalProperties": false,
+        "description": "Private frozen initial audit, independent of later editor changes or deletion. Only an explicit POST may make one provider attempt. There is no agent or retrieval loop. Every verdict is advisory and permits an explicitly requested continuation."
+      },
+      "LightningAuditList": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LightningAudit"
+            }
+          },
+          "page": {
+            "type": "object",
+            "properties": {
+              "next_cursor": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "has_more": {
+                "type": "boolean"
+              },
+              "snapshot_id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "next_cursor",
+              "has_more"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "items",
+          "page"
+        ],
+        "additionalProperties": false
       }
     }
   },

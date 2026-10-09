@@ -1,0 +1,43 @@
+{
+  "operation_id": "continueLightningAudit",
+  "case": "online",
+  "method": "POST",
+  "path_template": "/v1/lightning-audits/{audit_id}/continue",
+  "request": {
+    "url": "https://api.reveal.example.org/v1/lightning-audits/cccccccc-cccc-4ccc-8ccc-cccccccccccc/continue",
+    "path": {
+      "audit_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+    },
+    "query": {},
+    "headers": {
+      "Idempotency-Key": "66666666-6666-4666-8666-666666666666",
+      "Authorization": "Bearer <api-key-or-gateway-assertion>",
+      "Content-Type": "application/json",
+      "Accept": "application/json"
+    },
+    "body": {
+      "mode": "online",
+      "research_direction": "Investigate whether the observed factor-gene association provides a context-specific connection to the gap."
+    }
+  },
+  "responses": {
+    "202": {
+      "content_type": "application/json",
+      "examples": {
+        "online": {
+          "mode": "online",
+          "id": "44444444-4444-4444-8444-444444444444",
+          "research_request_id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "created_at": "2026-09-24T16:01:00Z"
+        },
+        "local": {
+          "mode": "local",
+          "id": "44444444-4444-4444-8444-444444444444",
+          "research_request_id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "created_at": "2026-09-24T16:01:00Z"
+        }
+      }
+    }
+  },
+  "curl": "curl -X POST https://api.reveal.example.org/v1/lightning-audits/cccccccc-cccc-4ccc-8ccc-cccccccccccc/continue -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"mode\":\"online\",\"research_direction\":\"Investigate whether the observed factor-gene association provides a context-specific connection to the gap.\"}'"
+}

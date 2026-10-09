@@ -4,8 +4,11 @@
 .research-mode-menu > .research-mode-trigger:hover:not(:disabled) { background:var(--soft); color:var(--teal); }
 .research-mode-trigger .cfde-estimate-arrow { display:inline-flex; justify-content:center; align-items:center; width:32px; height:32px; border-radius:50%; background:var(--teal); color:#fff; font-size:23px; }
 .research-mode-popup { position:absolute; right:0; bottom:calc(100% + .5rem); z-index:30; min-width:220px; max-width:calc(100vw - 48px); padding:.3rem; background:white; border:1px solid var(--line); border-radius:7px; box-shadow:0 8px 24px #18364626; }
-button.research-mode-item { display:block; width:100%; padding:.75rem .85rem; border:0; background:white; color:var(--ink); text-align:left; white-space:nowrap; }
+button.research-mode-item { display:flex; align-items:flex-start; gap:.65rem; width:100%; padding:.75rem .85rem; border:0; background:white; color:var(--ink); text-align:left; white-space:nowrap; }
 button.research-mode-item strong,button.research-mode-item span { display:block; }
 button.research-mode-item span { margin-top:.25rem; color:var(--muted); font-size:.8rem; font-weight:400; }
 button.research-mode-item:hover:not(:disabled),button.research-mode-item:focus-visible { background:var(--soft); color:var(--teal); }
 button.research-mode-item:focus-visible { outline:2px solid var(--teal); outline-offset:-2px; }
+button.research-mode-item .research-mode-icon { flex:none; margin-top:.1rem; }
+button.research-mode-item .research-mode-copy { margin-top:0; }
+button.research-mode-item strong { color:var(--ink); font-size:.875rem; }

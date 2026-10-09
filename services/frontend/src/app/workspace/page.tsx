@@ -13,6 +13,7 @@ import { searchableWorkspaceTab, workspaceTabs as tabs, type WorkspaceTab } from
 import { outcomeHref } from "@/components/AnalysisOutcome";
 import { ReferenceBadge, ReferenceFilter, useReferenceReloaded } from "@/components/ReferenceArchive";
 import { isArchived, parseReferenceState, type ReferenceState } from "@/lib/reference";
+import { lightningAuditHref, lightningStatusLabel, lightningAssessmentLabel, type LightningAudit } from "@/lib/lightning-audit";
 import "@/components/workspace-activity.css";
 
 const tabLabels = { drafts: "Saved drafts", runs: "Research runs", gaps: "Knowledge gaps", accounts: "Scientific accounts", explorations: "Explorations" };
@@ -54,6 +55,14 @@ function LocalResearchRun({ work }: { work: LocalWork }) {
     </div>
   </article>;
 }
+function LightningAuditRun({ audit }: { audit: LightningAudit }) {
+  return <article className="workspace-run-row workspace-account-row" data-audit-id={audit.id}>
+    <div className="workspace-item-meta"><span className="workspace-run-mode">Lightning</span><span className="workspace-visibility">{lightningStatusLabel[audit.status]}</span><time dateTime={audit.created_at}>Started {shortDate(audit.created_at)}</time></div>
+    <Link className="workspace-item-title" href={lightningAuditHref(audit.id)}>{audit.question.text}</Link>
+    {audit.result && <p className="workspace-account-conclusion">{audit.result.summary}</p>}
+    <div className="workspace-item-meta">{audit.result && <span>{lightningAssessmentLabel[audit.result.assessment]}</span>}<Link href={lightningAuditHref(audit.id)}>View audit →</Link></div>
+  </article>;
+}
 function Workspace() {
   const searchParams = useSearchParams();
   const requestedTab = searchParams.get("tab");
@@ -68,7 +77,7 @@ function Workspace() {
   const query = searchableWorkspaceTab(tab) ? searches[tab] : "";
   const cached = useWorkspaceData(tab, query, listedReference);
   const reloaded = useReferenceReloaded();
-  const { gaps = [], accounts = [], outcomes = [], drafts = [], jobs = [], requests = [], localWorks = [], cursor = null } = cached.data || {};
+  const { gaps = [], accounts = [], outcomes = [], drafts = [], jobs = [], requests = [], localWorks = [], audits = [], cursor = null } = cached.data || {};
   const { loading, loadingMore, counts } = cached;
   const error = cached.error ? messageOf(cached.error) : "";
   const dialog = useRef<HTMLDialogElement>(null);
@@ -79,6 +88,7 @@ function Workspace() {
   const runs = [
     ...jobs.filter(job => job.kind === "analysis").map(job => ({ mode: "online" as const, record: job })),
     ...localWorks.map(work => ({ mode: "local" as const, record: work })),
+    ...audits.map(audit => ({ mode: "lightning" as const, record: audit })),
   ].sort((a, b) => b.record.created_at.localeCompare(a.record.created_at) || b.record.id.localeCompare(a.record.id));
   const load = (append = false) => append ? cached.loadMore() : cached.refresh();
   const navigate = (value: WorkspaceTab, state: ReferenceState) => { window.history.replaceState(null, "", `?tab=${value}${state === "all" ? "" : `&reference=${state}`}`); };
@@ -110,7 +120,7 @@ function Workspace() {
     <div id="workspace-results" role="tabpanel" aria-labelledby={`workspace-tab-${tab}`} aria-busy={initialLoading || loading}>
       {initialLoading ? <LoadingSurface key={`${me?.user_id || "session"}:${tab}`} title={!ready ? "Opening your workspace" : `Loading your ${tabLabels[tab].toLowerCase()}`} description={!ready ? "Checking this browser’s access to your saved work." : "Your saved explorations will appear here when the request completes."} /> : <>
         {tab === "drafts" ? (hasCurrentData ? drafts : []).map(draft => <WorkspaceDraftRow key={draft.id} draft={draft} refresh={cached.refresh} />)
-          : tab === "runs" ? (hasCurrentData ? runs : []).map(run => run.mode === "local" ? <LocalResearchRun key={`local:${run.record.id}`} work={run.record} /> : <ResearchRun key={`online:${run.record.id}`} job={run.record} request={frozenRequests.get(run.record.research_request_id || "")} />)
+          : tab === "runs" ? (hasCurrentData ? runs : []).map(run => run.mode === "lightning" ? <LightningAuditRun key={`lightning:${run.record.id}`} audit={run.record} /> : run.mode === "local" ? <LocalResearchRun key={`local:${run.record.id}`} work={run.record} /> : <ResearchRun key={`online:${run.record.id}`} job={run.record} request={frozenRequests.get(run.record.research_request_id || "")} />)
           : tab === "gaps" ? me ? (hasCurrentData ? gaps : []).map(item => <WorkspaceGapRow key={`${me.user_id}:${item.source_gap.source_id}`} item={item} drafts={drafts.filter(draft => draft.composer.source_gap?.id === item.source_gap.id)} activity={activity} refresh={cached.refresh} />) : localGaps.map(gap => <article className="workspace-gap-row" key={gap.object.id}><Link className="workspace-item-title" href={`/knowledge-gaps/${encodeURIComponent(gap.object.id)}`}>{gap.object.text}</Link><div className="workspace-item-meta">{gap.source.disease_label && <span>{gap.source.disease_label}</span>}<span>Kept in this browser</span></div></article>) : tab === "explorations" ? (hasCurrentData ? outcomes : []).map(item => <article className="workspace-account-row" key={item.id}>
           <div className="workspace-item-meta"><PublicationStatus publication={item.publication} /><time dateTime={item.created_at}>Explored {shortDate(item.created_at)}</time><ReferenceBadge archive={item.archive} /></div>
           <Link className="workspace-item-title" href={outcomeHref(item.id)}>{item.knowledge_gap.text}</Link>

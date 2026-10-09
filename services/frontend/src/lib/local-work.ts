@@ -30,7 +30,7 @@ export type LocalSubmission = {
 };
 export type LocalWork = {
   id: string; state: LocalWorkState; created_at: string; last_activity?: string | null; last_action?: string;
-  request: { id?: string; question_id?: string; composer?: { context?: string; research_direction?: string }; document?: { knowledge_gaps?: { id: string; text?: string; name?: string }[] } };
+  request: { id?: string; question_id?: string; lightning_audit_id?: string; composer?: { context?: string; research_direction?: string }; document?: { knowledge_gaps?: { id: string; text?: string; name?: string }[] } };
   package_id?: string | null; package_sha256?: string | null; package?: Record<string, unknown> | null;
   submissions: LocalSubmission[]; grants: LocalGrant[];
   last_error?: string | { message?: string; detail?: string } | null;

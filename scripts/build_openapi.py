@@ -738,6 +738,8 @@ def main():
     openapi_admin.extend(module, fixture, examples)
     import openapi_cfde_assessment
     openapi_cfde_assessment.extend(module, fixture, examples)
+    import openapi_lightning
+    openapi_lightning.extend(module, fixture, examples)
     # Pair representation-specific inputs with the correct output, and include
     # paragraph polling under its own job ID in the portable exchange library.
     def extra_exchange(operation_id, case, *, query=None, path=None, media=None, response_name=None, value=None):
@@ -779,7 +781,7 @@ def main():
         'servers': [{'url': 'http://127.0.0.1:18000', 'description': 'Local Docker deployment backend (private routes require a gateway assertion)'},
                     {'url': 'http://localhost:3000/api/backend', 'description': 'Local Next.js v1 gateway (browser session for private routes; OAuth protocol/metadata use the backend server)'},
                     {'url': BASE, 'description': 'Reserved example domain; replace for deployment'}],
-        'tags': [{'name': n} for n in ['Identity', 'Knowledge gaps', 'Mechanisms', 'Drafts', 'Research history', 'Jobs', 'Local research', 'Scientific content', 'Citations', 'Administrator science read', 'CFDE assessment']],
+        'tags': [{'name': n} for n in ['Identity', 'Knowledge gaps', 'Mechanisms', 'Drafts', 'Research history', 'Jobs', 'Local research', 'Scientific content', 'Citations', 'Administrator science read', 'CFDE assessment', 'Lightning audits']],
         'security': [{'ApplicationBearer': []}], 'paths': PATHS,
         'components': {'securitySchemes': {'ApplicationBearer': {'type': 'http', 'scheme': 'bearer', 'bearerFormat': 'API key or JWT',
             'description': 'Paste your rvl_ workspace API key or a short-lived trusted-gateway JWT. Swagger adds the Bearer prefix automatically. API keys resolve to one configured existing workspace and retain its ownership, expiry and job limits; they grant no internal or administrator access. Gateway JWTs are issued after registered login or anonymous session bootstrap. Never share gateway signing/service credentials or send provider access tokens or Auth.js cookies. Without a bearer, only public operations are available.'},

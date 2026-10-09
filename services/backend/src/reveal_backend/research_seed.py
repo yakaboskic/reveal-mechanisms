@@ -327,6 +327,28 @@ def prepare_research_seed(frozen, binding, *, dapper, project_root, output=None,
             'agent_dispatch_validated':False,'remaining_checks':['runtime and trusted attribution','worker authorization and tool policy']},
     }
     if user_inputs is not None: package['user_inputs']=user_inputs
+    lightning = frozen.get('lightning_context')
+    if lightning is not None:
+        from .repository import canonical
+        require(isinstance(lightning, dict) and lightning.get('audit_id') == frozen.get('lightning_audit_id'),
+                'Lightning audit lineage changed')
+        references = {}
+        for name in ('source_state', 'model_payload', 'response'):
+            value = lightning['artifacts'][name]
+            # Match the audit/provider's exact compact UTF-8 serialization, without a final LF.
+            raw = canonical(value).encode('utf-8')
+            require(sha256(raw) == lightning['hashes'][name], 'Lightning audit artifact checksum changed')
+            reference = capture('lightning-'+name, raw, 'lightning-'+name+'.json',
+                origin='reveal:preliminary-lightning-audit', private=True)
+            references[name] = {**reference, 'sha256': sha256(raw)}
+        brief = canonical_json({'research_direction': lightning['research_direction']})
+        references['research_brief'] = {**capture('lightning-research-brief', brief,
+            'lightning-research-brief.json', origin='reveal:researcher-direction', private=True), 'sha256': sha256(brief)}
+        package['lightning_audit'] = {'audit_id': lightning['audit_id'],
+            'research_direction': lightning['research_direction'], 'artifacts': references,
+            'instruction': 'Preliminary planning context. Original researcher inputs remain in user_inputs. '
+                'Audit conclusions are not eligible evidence; establish support through ordinary captured-evidence tools and validation.'}
+        # These private artifacts are deliberately excluded from eligible_source_ids and cfde_source_ids.
     dapper.validate(context)
     validate_seed_shape(package)
     raw=canonical_json(package)
