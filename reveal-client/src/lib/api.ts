@@ -1,3 +1,4 @@
+import { announceSessionChange, BrowserSessionError, browserSessions } from "./browser-session";
 import type { AnalysisInput, Composer, Draft, Factor, Gap, Job, Me, Page, Schema } from "./types";
 
 export class ApiError extends Error {
@@ -13,8 +14,10 @@ export async function responseError(response: Response): Promise<ApiError> {
   const code = value?.code || "API_UNAVAILABLE";
   return new ApiError(response.status, code, referenceCopy[code] || value?.detail || `Request failed (${response.status}).`);
 }
+let expectedWorkspace: string | null = null;
 export async function request<T>(path: string, options: { method?: string; body?: unknown; key?: string; signal?: AbortSignal } = {}): Promise<T> {
   const headers = new Headers({ Accept: "application/json" });
+  if (expectedWorkspace && path.startsWith("/api/backend/")) headers.set("X-Reveal-Workspace-ID", expectedWorkspace);
   if (options.body !== undefined) headers.set("Content-Type", "application/json");
   if (options.key) headers.set("Idempotency-Key", options.key);
   const timeout = AbortSignal.timeout(30000);
@@ -37,10 +40,16 @@ export type CfdeAssessment = {
 export type FactorLoading = { id: string; label: string; loading: number; rank: number; gene_set_id?: string | null; library?: string | null; joint_loading?: number | null; marginal_loading?: number | null };
 export type CatalogGeneSet = { id: string; object?: { members?: unknown[] | null } | null };
 export type FactorLoadings = { items: FactorLoading[]; total: number; offset: number; limit: number; next_offset: number | null };
+const sessions = browserSessions<Me>({
+  read: () => request<{ principal: Me | null }>("/api/session"),
+  create: () => request<{ principal: Me }>("/api/session", { method: "POST", body: {} }),
+  remove: () => request<{ principal: null }>("/api/session", { method: "DELETE" }),
+  locks: () => typeof navigator === "undefined" ? undefined : navigator.locks,
+  remember: principal => { expectedWorkspace = principal?.user_id || null; },
+  announce: announceSessionChange,
+});
 export const api = {
-  session: () => request<{ principal: Me | null }>("/api/session"),
-  connect: () => request<{ principal: Me }>("/api/session", { method: "POST", body: {} }),
-  disconnect: () => request<{ principal: null }>("/api/session", { method: "DELETE" }),
+  ...sessions,
   drafts: () => request<Page<Draft>>(backend("drafts?limit=100")),
   draft: (id: string) => request<Draft>(backend("drafts/" + encodeURIComponent(id))),
   jobs: () => request<Page<Job>>(backend("jobs?limit=100")),
@@ -89,7 +98,7 @@ export const api = {
   }),
 };
 export function errorMessage(error: unknown) {
-  if (error instanceof ApiError) return error.message;
+  if (error instanceof ApiError || error instanceof BrowserSessionError) return error.message;
   if (error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name)) return "The request timed out. Its outcome may be unknown; retry the same action to recover its result.";
   return "The API could not be reached. Your selections are still here; retry the same action.";
 }

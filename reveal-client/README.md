@@ -5,6 +5,61 @@ includes the session gateway, a working research UI, typed API calls, event
 streams, and a framework-neutral server adapter. Copy this directory into your
 own project; the backend and scientific workers run separately.
 
+## Hosted CFDE testing site
+
+The separate Vercel project is **reveal-client**, available at
+**https://reveal-client.vercel.app**. It builds only `reveal-client/` from
+`dk-UI-update` and connects to the existing **QA backend**:
+`https://api-qa.hugeampkpnbi.org/api/reveal`.
+
+Push frontend updates to `dk-UI-update`; Vercel builds and publishes them to
+that stable address automatically. Before pushing, run `npm ci`, `npm test`,
+`npm run typecheck`, and `npm run build` inside this directory. A failed build
+leaves the previous successful deployment available. No merge into `main` or
+backend/platform deployment is part of this release process.
+
+The `reveal-mechanisms` Vercel project and the QA/production backend release
+process remain independent. Backend behavior and execution capacity are still
+shared with other QA clients, so QA backend updates can affect this frontend.
+This site does not deploy a separate backend or database.
+
+Vercel configuration:
+
+| Setting | Value |
+| --- | --- |
+| Team | Chase Yakaboski's projects |
+| Project | `reveal-client` |
+| Repository | `yakaboskic/reveal-mechanisms` |
+| Production branch | `dk-UI-update` |
+| Root directory | `reveal-client` |
+| Framework / Node | Next.js / 22.x |
+| Install / build | `npm ci` / `npm run build` |
+| Preview deployments | Disabled |
+| Ignored build step | Skip every branch except `dk-UI-update` |
+
+Vercel calls the deployment at the stable frontend address **Production**;
+its backend is nevertheless QA. `vercel.json` also permits automatic deployment
+only from `dk-UI-update`. Keep the project's branch filter in its settings so
+commits from other branches are ignored even if those branches lack this file.
+
+The project's Production environment stores `REVEAL_API_URL`,
+`REVEAL_GATEWAY_SECRET`, `REVEAL_GATEWAY_SERVICE_TOKEN`,
+`REVEAL_GATEWAY_ISSUER`, `REVEAL_GATEWAY_AUDIENCE`,
+`REVEAL_ARTIFACT_DOWNLOAD_BASE_URLS`, and a separate random `AUTH_SECRET`.
+It sets `APP_ORIGIN=https://reveal-client.vercel.app`,
+`REVEAL_SESSION_MODE=guest`, and `REVEAL_DEMO_MODE=false`.
+All credentials stay on the server; none uses `NEXT_PUBLIC_`.
+
+Each browser gets its own anonymous QA workspace when it connects. Reconnecting
+with its valid cookie preserves that workspace; another browser gets a different
+one. Access lasts until the backend's guest expiration (at most 30 days).
+Clearing cookies or disconnecting loses access to that guest workspace.
+Guest sessions do not provide cross-device recovery, publication, or voting.
+Research submission still uses the shared QA backend's execution limits.
+New guest sessions require browser Web Locks support so two tabs cannot create
+competing workspaces. Tabs synchronize session changes, and guest API writes
+include `X-Reveal-Workspace-ID` to reject saves from a stale workspace.
+
 ## Start locally
 
 Use Node.js 22 or later. From this directory:

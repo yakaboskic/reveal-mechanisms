@@ -1,4 +1,5 @@
 "use client";
+import { changedWorkspace, sessionReloadKey } from "@/lib/browser-session";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { version as clientVersion } from "../../package.json";
@@ -611,7 +612,7 @@ function forgetCfdePassed(draftId: string) {
 const productApis: { method: string; path: string; detail: string }[] = [
   { method: "GET", path: "/api/session", detail: "Check whether this browser already has a workspace session." },
   { method: "POST", path: "/api/session", detail: "Connect to the workspace." },
-  { method: "DELETE", path: "/api/session", detail: "Disconnect the workspace. Saved drafts and running jobs stay on the server." },
+  { method: "DELETE", path: "/api/session", detail: "Disconnect the workspace. Guests lose access to saved work; running jobs continue." },
   { method: "GET", path: "/v1/drafts", detail: "List saved drafts." },
   { method: "GET", path: "/v1/drafts/{id}", detail: "Open one saved draft." },
   { method: "POST", path: "/v1/drafts", detail: "Save a new draft." },
@@ -879,13 +880,25 @@ export default function Home() {
 
   useEffect(() => {
     let active = true;
+    const changedInAnotherTab = sessionStorage.getItem(sessionReloadKey) === "true";
+    sessionStorage.removeItem(sessionReloadKey);
     api.session().then(value => {
       if (!active) return;
       if (value.principal) { setPrincipal(value.principal); setChecking(false); return; }
       setChecking(false);
+      if (changedInAnotherTab) { setNotice("The workspace changed in another tab. Connect to open a new guest workspace."); return; }
       void connect();
     }).catch(error => { if (active) { setError(errorMessage(error)); setChecking(false); } });
     return () => { active = false; };
+  }, []);
+  useEffect(() => {
+    function onSessionChange(event: StorageEvent) {
+      if (!changedWorkspace(event, identity.current)) return;
+      sessionStorage.setItem(sessionReloadKey, "true");
+      window.location.reload();
+    }
+    window.addEventListener("storage", onSessionChange);
+    return () => window.removeEventListener("storage", onSessionChange);
   }, []);
   useEffect(() => { setOpenLastDraft(readOpenLastDraft()); }, []);
   useEffect(() => { if (draft?.id) localStorage.setItem(LAST_DRAFT_KEY, draft.id); }, [draft?.id]);
@@ -1141,11 +1154,13 @@ export default function Home() {
     finally { setBusy(""); }
   }
   async function disconnect() {
+    const guest = principal?.principal_kind === "anonymous";
+    if (guest && !window.confirm("Disconnect this guest workspace? You will lose access to its saved work. Running jobs continue, and reconnecting creates a new workspace.")) return;
     setBusy("disconnect");
     try {
       await api.disconnect(); setSessionOpen(false); setDraftPicker(false); setHelpOpen(false); setSettingsOpen(false); setWelcomeOpen(false); setPanelView("menu"); setStep("gap"); setActivityOpen(false); setPrincipal(null); currentJob.current = null; setJob(null); setDraft(null); setJobs([]); setDrafts([]);
       setComposer(emptyComposer()); setName(""); setGap(null); setSuggestion(null); setActivity([]); setPending(null);
-      setNotice("Disconnected. Saved work and running jobs remain on the server.");
+      setNotice(guest ? "Disconnected. Access to this guest workspace is lost. Running jobs remain on the server." : "Disconnected. Saved work and running jobs remain on the server.");
     } catch (error) { setError(errorMessage(error)); }
     finally { setBusy(""); }
   }
@@ -1433,7 +1448,7 @@ export default function Home() {
     {!!job?.warnings.length && <div className="notice"><ul>{job.warnings.map(value => <li key={value}>{value}</li>)}</ul></div>}
     {job?.failure && <div className="notice error" role="alert"><div><strong>Research could not complete</strong><p>{job.failure.message}</p><span className="small">{job.failure.code}</span>{job.failure.code.startsWith("REVIEW_") && job.failure.retryable && <p><button className="secondary" onClick={retryReview} disabled={!!busy}>{busy === "review" ? "Requesting review…" : "Retry saved review"}</button></p>}</div></div>}
     {job?.status === "cancelled" && <p className="notice">This job was stopped. No successful result is implied.</p>}
-    {job?.result && <ResultView job={job} onActions={setResultActions} />}
+    {job?.result && <ResultView job={job} principalKind={principal?.principal_kind} onActions={setResultActions} />}
     {job?.kind === "analysis" && job.status === "succeeded" && <section className="paragraph-result"><h3>Cited claim</h3>{job.result?.kind === "analysis" && job.result.paragraph_job_ids.map(id => <ParagraphView key={id} progress={paragraphs[id]} />)}</section>}
   </>;
   const activeStep = step === "anchors" || step === "investigation" ? step : "gap";
@@ -1458,6 +1473,7 @@ export default function Home() {
       </div></header>
     {inWorkspace && <div className="workspace-bar"><div className="step-rail" role="tablist" aria-label="Investigation steps"><button type="button" role="tab" aria-selected={activeStep === "gap"} className={"step-rail-card" + (activeStep === "gap" ? " active" : "")} onClick={() => setStep("gap")}><span className="step-rail-title"><span className="step-number">1</span>Choose a knowledge gap</span>{gap && <span className="step-rail-summary">{gap.object.text || gapTitle(gap)}</span>}</button><button type="button" role="tab" aria-selected={activeStep === "anchors"} className={"step-rail-card" + (activeStep === "anchors" ? " active" : "") + (gapChosen ? "" : " inactive")} disabled={!gapChosen && activeStep !== "anchors"} onClick={() => { if (gapChosen) setStep("anchors"); }}><span className="step-rail-title"><span className="step-number">2</span>Select mechanism anchors</span>{anchorChosen && <span className="step-rail-summary bubbles">{factorBubbles(2)}</span>}</button><button type="button" role="tab" aria-selected={activeStep === "investigation"} className={"step-rail-card" + (activeStep === "investigation" ? " active" : "") + (job ? "" : " inactive")} disabled={!job && activeStep !== "investigation"} onClick={() => { if (job) setStep("investigation"); }}><span className="step-rail-title"><span className="step-number">3</span>Investigation</span>{investigationRail}</button></div>{errorNotice}</div>}
     <main className={inWorkspace ? "workspace" : undefined}>
+      {principal?.principal_kind === "anonymous" && <p className="notice">Guest workspace: available in this browser until {date(principal.workspace_expires_at || "")}. Clearing cookies or disconnecting loses access to saved work.</p>}
       {!inWorkspace && errorNotice}
       {(!principal || (welcomeOpen && panelView === "menu")) ? <section className="welcome"><div className="welcome-lead"><h2>Choose the gap. Ground the claim.</h2><svg className="welcome-mark" viewBox="0 0 132 18" aria-hidden="true"><line x1="16" y1="9" x2="116" y2="9" stroke="#a7a9ad" strokeWidth="1.7" /><circle cx="9" cy="9" r="6.1" fill="#fff" stroke="#e07b39" strokeWidth="1.8" /><circle cx="123" cy="9" r="7" fill="#e07b39" /></svg><div className="welcome-choices"><button type="button" onClick={startSearch} disabled={!principal || checking || busy === "connect"}>Search knowledge gaps</button><button type="button" onClick={() => void browseTrending()} disabled={!principal || checking || busy === "connect" || searching}>Trending knowledge gaps</button></div></div><img className="welcome-flow" src="/workflow_updated.svg" alt="Choose the gap. Ground the claim. Search or browse trending DisMech knowledge gaps and select one. The system suggests CFDE REVEAL KG mechanism factors matched to that gap's DisMech mechanisms, and you select them. Starting the investigation collects BiomarkerKG and ProKN evidence and writes a scientific account and cited claim." /><div className="welcome-cards"><a className="welcome-card" href="#learn-reveal-client" onClick={event => event.preventDefault()}><svg viewBox="0 0 72 56" aria-hidden="true"><path d="M36 12v32M14 16c7 5 15 5 22-2 7 7 15 7 22 2v28c-7 5-15 5-22-2-7 7-15 7-22 2V16z" /></svg><strong>Learn REVEAL Close the gap</strong><span>A guide to the workspace, from a knowledge gap to a grounded claim.</span></a><a className="welcome-card" href="#quick-start-demo" onClick={event => event.preventDefault()}><svg viewBox="0 0 72 56" aria-hidden="true"><rect x="14" y="12" width="44" height="32" rx="3" /><path className="card-icon-fill" d="M33 22l12 6-12 6z" /></svg><strong>Watch quick start demo</strong><span>A short walkthrough of connecting and starting an investigation.</span></a></div></section> : welcomeOpen ? <div className="welcome-panel-stage"><section className="welcome-panel" role="dialog" aria-modal="true" aria-labelledby="welcome-heading"><button type="button" className="panel-back" aria-label="Back to welcome" onClick={() => { if (panelView === "copy") setName(keptName.current); else { setName(""); setNotice(""); } setPanelView("menu"); }}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22.9 12H6M11 6l-6 6 6 6" /></svg></button><div className="draft-start"><h2 id="welcome-heading">{panelView === "copy" ? "Save as a new draft" : "Start a draft"}</h2><label htmlFor="draft-name">Draft name</label><input id="draft-name" value={name} maxLength={120} onChange={event => setName(event.target.value)} disabled={!mutable} placeholder="Name this investigation" autoFocus />{notice && <p className="notice" role="status">{notice}</p>}<div className="actions"><button onClick={() => save(panelView === "copy")} disabled={!mutable || !name.trim() || (panelView !== "copy" && !dirty)}>{busy === "save" ? "Saving…" : "Save draft"}</button></div></div></section></div> : <>
         <div className={inspectGap || inspectFactorId || inspectResult || activityLogOpen ? "workspace-frames" : "workspace-frames steps-only"}>
@@ -1501,10 +1517,9 @@ export default function Home() {
   </>;
 }
 
-const QA_SITE = "https://reveal-mechanisms-qa.vercel.app";
 type ResultInspect = { title: string; data: unknown; links: { href: string; label: string }[] };
 type ResultAction = { key: string; label: string; inspect: ResultInspect };
-type ResultRecord = { path: string; title: string; publishHref?: string; data?: Record<string, unknown>; error?: string };
+type ResultRecord = { path: string; title: string; data?: Record<string, unknown>; error?: string };
 function textValue(value: unknown): string { return typeof value === "string" ? value : ""; }
 function paragraphText(data: Record<string, unknown>) {
   const document = data.document as { paragraphs?: { text?: unknown }[] } | undefined;
@@ -1523,13 +1538,13 @@ function ParagraphView({ progress }: { progress?: ParagraphProgress }) {
     {text && <p className="research-text">{text}</p>}
   </>;
 }
-function ResultView({ job, onActions }: { job: Job; onActions: (actions: ResultAction[]) => void }) {
+function ResultView({ job, principalKind, onActions }: { job: Job; principalKind?: Me["principal_kind"]; onActions: (actions: ResultAction[]) => void }) {
   const [records, setRecords] = useState<ResultRecord[]>([]);
   const result = job.result;
   useEffect(() => {
     if (!result) return;
     let active = true;
-    const paths = result.kind === "analysis" ? result.account_ids.map(id => ({ path: "accounts/" + encodeURIComponent(id), title: "Scientific account", publishHref: QA_SITE + "/accounts/" + encodeURIComponent(id) }))
+    const paths = result.kind === "analysis" ? result.account_ids.map(id => ({ path: "accounts/" + encodeURIComponent(id), title: "Scientific account" }))
       : result.kind === "paragraph" ? [{ path: "paragraphs/" + encodeURIComponent(result.paragraph_id), title: "Cited claim" }]
       : [{ path: "analysis-outcomes/" + encodeURIComponent(result.outcome_id), title: "Insufficient evidence" }];
     setRecords(paths);
@@ -1556,6 +1571,7 @@ function ResultView({ job, onActions }: { job: Job; onActions: (actions: ResultA
   useEffect(() => () => onActions([]), [onActions]);
   if (!result) return null;
   return <section className="results">{result.kind === "analysis" && records.map(record => record.data ? <AccountGraph data={record.data} key={record.path} /> : null)}<h3>{result.kind === "analysis_outcome" ? "Investigation outcome" : "Scientific account"}</h3>
+    {principalKind === "anonymous" && result.kind === "analysis" && <p className="muted">Guest results are private to this workspace. Publishing requires a registered account.</p>}
     {records.map(record => {
       const document = record.data?.document as Record<string, Record<string, unknown>[]> | undefined;
       const object = document?.scientific_accounts?.[0];
