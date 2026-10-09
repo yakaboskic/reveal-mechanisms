@@ -5,18 +5,20 @@ import { LightningError, type LightningAudit } from "../src/lib/lightning-audit"
 
 const tick = () => new Promise<void>(resolve => setTimeout(resolve, 0));
 function harness(initial: LightningAudit["status"] = "preparing") {
-  const timers: { run: () => void; ms: number; cleared: boolean }[] = [], reads: { wait: number; signal: AbortSignal }[] = [];
+  const timers: { run: () => void; ms: number; cleared: boolean }[] = [], reads: { wait: number; signal: AbortSignal; afterRevision?: number }[] = [];
   const accepted: LightningAudit[] = [], errors: unknown[] = [];
+  let revision: number | undefined;
   let hidden = false, status = initial, gate: Promise<void> | null = null, failure: unknown = null;
   const refresher = createLightningRefresher({
     hidden: () => hidden, now: () => 0,
-    load: async (signal, wait) => { reads.push({ signal, wait }); if (gate) await gate; if (failure) throw failure; return { id: "audit", status, updated_at: status } as LightningAudit; },
+    load: async (signal, wait, afterRevision) => { reads.push({ signal, wait, afterRevision }); if (gate) await gate; if (failure) throw failure; return { id: "audit", status, updated_at: status, ...(revision !== undefined ? { progress: { revision } } : {}) } as LightningAudit; },
     onAudit: audit => accepted.push(audit), onError: error => errors.push(error),
     timers: { set: (run, ms) => { const timer = { run, ms, cleared: false }; timers.push(timer); return timer; }, clear: timer => { (timer as typeof timers[number]).cleared = true; } },
   });
   const pending = () => timers.filter(timer => !timer.cleared);
   return { refresher, reads, accepted, errors, pending,
-    set: (value: { hidden?: boolean; status?: LightningAudit["status"]; gate?: Promise<void> | null; failure?: unknown }) => {
+    set: (value: { revision?: number; hidden?: boolean; status?: LightningAudit["status"]; gate?: Promise<void> | null; failure?: unknown }) => {
+      if (value.revision !== undefined) revision = value.revision;
       if (value.hidden !== undefined) hidden = value.hidden; if (value.status) status = value.status;
       if ("gate" in value) gate = value.gate!; if ("failure" in value) failure = value.failure;
     },
@@ -82,4 +84,40 @@ test("unmount aborts outstanding requests and drops responses", async () => {
   h.set({ gate: new Promise<void>(resolve => { release = resolve; }) });
   h.refresher.refresh(); await tick(); h.refresher.stop(); release(); await tick();
   assert.equal(h.reads[0].signal.aborted, true); assert.equal(h.accepted.length, 0); assert.equal(h.pending().length, 0);
+});
+
+test("stream revisions advance the cursor even without a status timestamp change", async () => {
+  const h = harness("assessing");
+  h.refresher.refresh(); await tick();
+  assert.equal(h.reads[0].afterRevision, undefined, "The initial GET retrieves the current snapshot");
+  h.set({ revision: 1 }); await h.fire();
+  assert.equal(h.reads.at(-1)?.afterRevision, 0);
+  assert.equal(h.pending()[0].ms, 250, "New provider text is delivered promptly");
+  h.set({ revision: 2 }); await h.fire();
+  assert.equal(h.reads.at(-1)?.afterRevision, 1);
+  assert.equal(h.accepted.at(-1)?.progress?.revision, 2);
+  await h.fire();
+  assert.equal(h.reads.at(-1)?.afterRevision, 2);
+  assert.equal(h.pending()[0].ms, 1000, "Unchanged streaming reads cannot spin");
+  h.set({ status: "failed" }); await h.fire();
+  assert.equal(h.pending().length, 0);
+  h.refresher.stop();
+});
+
+test("returning to a hidden stream resumes from its last revision without duplicate reads", async () => {
+  const h = harness("assessing"); h.set({ revision: 3 });
+  h.refresher.refresh(); await tick();
+  let release!: () => void;
+  h.set({ gate: new Promise<void>(resolve => { release = resolve; }) });
+  await h.fire(); assert.equal(h.reads.at(-1)?.afterRevision, 3);
+  h.set({ hidden: true }); h.refresher.visibility();
+  assert.equal(h.reads.at(-1)?.signal.aborted, true);
+  h.set({ hidden: false, revision: 5 }); h.refresher.visibility(); await tick();
+  assert.equal(h.reads.length, 2, "Return waits for the aborted read to settle");
+  release(); await tick();
+  assert.equal(h.reads.length, 3);
+  assert.equal(h.reads.at(-1)?.afterRevision, 3);
+  assert.equal(h.accepted.at(-1)?.progress?.revision, 5);
+  assert.equal(h.accepted.length, 2, "No late aborted preview is applied");
+  h.refresher.stop();
 });

@@ -15,7 +15,7 @@ def transfer_workspace(tx, source, target):
     # Assessment indexes include the old owner in their digest. Retain the
     # immutable assessment itself, but never carry an unusable private cache or
     # idempotency namespace into the newly claimed workspace.
-    for kind in ('cfde_assessment_cache', 'cfde_assessment_idempotency', 'lightning_audit_idempotency', 'lightning_continuation'):
+    for kind in ('cfde_assessment_cache', 'cfde_assessment_idempotency', 'lightning_audit_idempotency', 'lightning_continuation', 'lightning_audit_progress'):
         for row in tx.list(kind, source): tx.remove(kind, row['id'])
     for row in tx.list('lightning_audit', source):
         value = deepcopy(row['data']); public = value['public']

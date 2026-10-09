@@ -4,6 +4,11 @@ import { invalidateWorkspace, type WorkspaceEvent } from "./workspace-events";
 export const lightningEnabled = process.env.NEXT_PUBLIC_REVEAL_LIGHTNING_ENABLED === "true";
 export type ResearchMode = "online" | "local" | "lightning";
 export type LightningContinuation = { mode: "online" | "local"; id: string; research_request_id: string; created_at: string };
+export type LightningProgress = {
+  revision: number; phase: "writing" | "validating";
+  summary: string; recommended_direction: string;
+  observations: string[]; missing_evidence: string[]; next_steps: string[]; limitations: string[];
+};
 export type LightningAudit = {
   id: string; kind: "lightning_audit"; status: "preparing" | "assessing" | "succeeded" | "failed" | "interrupted";
   research_request_id: string; source_draft_id: string; source_draft_version: number;
@@ -14,6 +19,7 @@ export type LightningAudit = {
     observations: { text: string; evidence_refs: string[] }[]; recommended_direction: string;
     missing_evidence: string[]; next_steps: string[]; limitations: string[];
   };
+  progress?: LightningProgress | null;
   coverage: Record<string, unknown> | null;
   evidence_references: { id: string; pointer: string; label: string; value: unknown; source: Record<string, unknown> }[];
   provenance: { model: string; prompt_version: string; source_state_sha256?: string; request_sha256?: string; response_sha256?: string };
@@ -29,6 +35,11 @@ export const lightningStatusLabel: Record<LightningAudit["status"], string> = {
 };
 export const lightningAssessmentLabel = { promising: "Promising direction", partial: "Limited or partial direction", unsupported: "No supported direction in this package" };
 export const lightningPending = (audit: LightningAudit) => audit.status === "preparing" || audit.status === "assessing";
+/** Only unfinished audits may display a provider draft. Never use it to seed a run. */
+export const lightningLiveProgress = (audit: LightningAudit) => lightningPending(audit) ? audit.progress ?? null : null;
+export const lightningProgressLabel = (audit: LightningAudit) => audit.status === "preparing" ? "Preparing evidence"
+  : lightningLiveProgress(audit)?.phase === "validating" ? "Checking evidence references"
+  : lightningLiveProgress(audit) ? "Writing your assessment" : "Thinking about the CFDE evidence";
 export const lightningBrief = (audit: LightningAudit) => audit.result
   ? [audit.result.recommended_direction, audit.result.next_steps.length ? `Next steps:\n${audit.result.next_steps.map(step => `- ${step}`).join("\n")}` : ""].filter(Boolean).join("\n\n").slice(0, 6000) : "";
 
@@ -50,6 +61,13 @@ export function readLightningAudit(value: unknown): LightningAudit {
     || !Array.isArray(audit.evidence_references) || !audit.evidence_references.every(ref => ref && typeof ref.id === "string" && typeof ref.pointer === "string" && typeof ref.label === "string" && ref.source && typeof ref.source === "object")
     || (audit.usage !== null && (!audit.usage || !Number.isInteger(audit.usage.input_tokens) || !Number.isInteger(audit.usage.output_tokens))))
     throw new LightningError(502, "INVALID_AUDIT_RESPONSE", "The audit response was incomplete. Refresh to check its saved status.");
+  if (lightningPending(audit) && audit.progress != null) {
+    const progress = audit.progress;
+    if (!Number.isSafeInteger(progress.revision) || progress.revision < 0 || !["writing", "validating"].includes(progress.phase)
+      || typeof progress.summary !== "string" || typeof progress.recommended_direction !== "string"
+      || ![progress.observations, progress.missing_evidence, progress.next_steps, progress.limitations].every(items => Array.isArray(items) && items.every(item => typeof item === "string")))
+      throw new LightningError(502, "INVALID_AUDIT_RESPONSE", "The live response was incomplete. Refresh to check its saved status.");
+  }
   if (audit.status === "succeeded") {
     const result = audit.result;
     if (!result || !Object.hasOwn(lightningAssessmentLabel, result.assessment) || typeof result.summary !== "string" || typeof result.recommended_direction !== "string"
@@ -81,8 +99,11 @@ export function createLightningClient(fetcher: typeof fetch = (...args) => fetch
   }
   return {
     create: async (body: { draft_id: string; draft_version: number }, key: string) => { const audit = readLightningAudit(await request(base, { body, key })); changed(audit.id); return audit; },
-    get: async (id: string, signal?: AbortSignal, wait = 0) => {
-      const audit = readLightningAudit(await request(`${base}/${encodeURIComponent(id)}${wait ? `?wait=${wait}` : ""}`, { signal }));
+    get: async (id: string, signal?: AbortSignal, wait = 0, afterRevision?: number) => {
+      const query = new URLSearchParams();
+      if (wait) query.set("wait", String(wait));
+      if (afterRevision !== undefined) query.set("after_revision", String(afterRevision));
+      const audit = readLightningAudit(await request(`${base}/${encodeURIComponent(id)}${query.size ? `?${query}` : ""}`, { signal }));
       if (audit.id !== id) throw new LightningError(502, "AUDIT_IDENTITY_MISMATCH", "The response did not match this audit.");
       return audit;
     },

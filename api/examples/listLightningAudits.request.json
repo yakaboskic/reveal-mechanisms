@@ -86,7 +86,7 @@
               ],
               "provenance": {
                 "model": "claude-sonnet-4-6",
-                "prompt_version": "lightning-audit-v1",
+                "prompt_version": "lightning-audit-v8",
                 "source_state_sha256": "0930005c359bae46f01059f268a377b1a082f7d0bd68379807a03a68cc405ae7",
                 "request_sha256": "9707a47769286ac99fe827ac45c05d0d1368c56b1eff64c2a12012933c40392d",
                 "response_sha256": "c136b7ece7251f2bd3fca18d9e318b11cf6790c6001319ab2c35adc366fd3a0a"

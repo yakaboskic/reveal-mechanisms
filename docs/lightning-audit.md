@@ -2,7 +2,7 @@
 
 Lightning is an explicitly requested, private initial assessment of the evidence associated with a selected knowledge gap. Choose **Lightning audit** alongside **Run online** and **Use my local agent**. The automatic Jev indicator remains independent.
 
-The audit uses one Claude Messages API completion with [structured JSON output](https://platform.claude.com/docs/en/build-with-claude/structured-outputs). It returns an advisory assessment, a substantive rationale connecting the question to the supplied CFDE and DisMech observations, referenced observations, one proposed research direction, missing evidence, next steps, and limitations. The rationale explains both the proposed connection and its strongest uncertainty; a partial or unsupported assessment still includes an explanation and concrete next checks. **Promising direction**, **Limited or partial direction**, and **No supported direction in this package** all allow the researcher to continue. An audit does not close a gap, create an accepted scientific account, or establish that evidence is absent elsewhere.
+The audit uses one Claude Messages API completion with [structured JSON output](https://platform.claude.com/docs/en/build-with-claude/structured-outputs). Its primary question is whether the CFDE data represented in Reveal’s selected evidence package can likely help address the gap. It returns an advisory assessment, a substantive rationale connecting the question to the supplied CFDE and DisMech observations, referenced observations, one proposed research direction, missing evidence, next steps, and limitations. The rationale explains both the proposed connection and its strongest uncertainty; a partial or unsupported assessment still includes an explanation and concrete next checks. **Promising direction**, **Limited or partial direction**, and **No supported direction in this package** all allow the researcher to continue. An audit does not close a gap, create an accepted scientific account, or establish that evidence is absent elsewhere.
 
 ## Evidence and execution
 
@@ -14,9 +14,17 @@ The request preserves schema field order so the rationale precedes supporting li
 
 The deployment uses `ANTHROPIC_API_KEY` and `REVEAL_CLAUDE_MODEL`. Request/response hashes, model and prompt version, token usage, and timing are retained privately. HTTP failures retain only the status, an allowlisted provider error type and a bounded provider request ID privately; transport and timeout failures retain their category. Credentials and raw provider error bodies or messages are not retained or returned. Completion within 60 seconds on warm, typical inputs is a measurement target, not a guaranteed response time.
 
+## Live response
+
+The one-attempt request uses [Claude Messages streaming](https://platform.claude.com/docs/en/build-with-claude/streaming). Bounded SSE parsing reconstructs the final provider message and decodes only public answer fields from incomplete JSON. No raw JSON, provider thinking blocks, or simulated typing is shown. A clean message stop and the normal final checks are required for success.
+
+A compact `lightning_audit_progress` record stores the latest preview at most approximately once per second, plus the final validation phase. Each write checks current ownership, attempt, pending status and deadline. It neither rewrites the retained evidence snapshot nor triggers workspace list refreshes. Authorized detail reads include the preview only for the same pending attempt. Terminal states clear it, and workspace transfer removes it and fences late writes.
+
+The browser uses serial revision-aware long polls, suspends them while hidden, and resumes the latest preview without another model call. No database connection is held while waiting. Assessing reads check persisted progress once per second across API processes, so streaming does not require process affinity. List/history responses contain completed results and status, without live previews.
+
 ## Private history and continuation
 
-Audits live under **Workspace → Research runs**, independently of changes to or deletion of the original draft. Their detail pages show preparing/assessing progress followed by the complete structured result. A failed audit offers an explicit return to the composer to start a new audit.
+Audits live under **Workspace → Research runs**, independently of changes to or deletion of the original draft. Their detail pages show evidence preparation, a Thinking indicator, then actual answer text as it arrives. The answer is marked as a draft until the full response and references pass validation. Failed or interrupted previews never appear as completed assessments. A failed audit offers an explicit return to the composer to start a new audit.
 
 Review or edit the proposed brief, then choose local or online research. Each continuation creates a new immutable research request and its own generation pin. Original researcher instructions remain separate from the edited brief. The parent audit and its child runs link to each other. Ordinary ownership, research quotas, and local connection/consent rules still apply.
 
@@ -28,7 +36,7 @@ Continuation is available for 30 days, capped by the owning workspace's expiry. 
 
 - `POST /v1/lightning-audits`: `{draft_id, draft_version}` and an `Idempotency-Key`; returns `202` with the saved audit and its `Location`.
 - `GET /v1/lightning-audits`: the caller's private audit history.
-- `GET /v1/lightning-audits/{audit_id}?wait=15`: current audit state; optional `wait` is 0–20 seconds, with no database connection held while waiting.
+- `GET /v1/lightning-audits/{audit_id}?wait=15&after_revision=0`: current audit state and optional unvalidated `progress`; `wait` is 0–20 seconds and `after_revision` is a nonnegative integer. Newer preview revisions return immediately; otherwise pending reads wait without holding a database connection.
 - `POST /v1/lightning-audits/{audit_id}/continue`: `{mode: "online" | "local", research_direction}` and an `Idempotency-Key`; returns the child run and request IDs.
 
 Identical keyed POST retries reconcile the original operation; reusing a key with different content conflicts. A new explicit audit uses a new key. Replays do not start another paid call. Detail and history reads are authorized against current ownership, and responses are `private, no-store`. Ownership transfer interrupts active audit attempts and invalidates their commit authority while preserving immutable attribution and completed content.

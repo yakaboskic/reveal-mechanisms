@@ -9,7 +9,7 @@ import { onWorkspaceChange } from "@/lib/workspace-events";
 import { onPageReturn } from "@/lib/page-return";
 import { createLightningRefresher } from "@/lib/lightning-refresh";
 import { lightningApi, lightningEnabled, lightningAccessLost, lightningDispatchRejected, lightningPending, lightningBrief, lightningStatusLabel, lightningAssessmentLabel,
-  lightningContinuationHref, rememberLightningHandoff, restoreLightningHandoff, rememberLightningBrief, restoreLightningBrief,
+  lightningLiveProgress, lightningProgressLabel, lightningContinuationHref, rememberLightningHandoff, restoreLightningHandoff, rememberLightningBrief, restoreLightningBrief,
   type LightningAudit, type LightningHandoff } from "@/lib/lightning-audit";
 import "./lightning-audit.css";
 
@@ -19,6 +19,36 @@ const evidenceId = (id: string) => `audit-evidence-${encodeURIComponent(id)}`;
 
 function AuditList({ title, items }: { title: string; items: string[] }) {
   return <section><h2>{title}</h2>{items.length ? <ul>{items.map((item, index) => <li key={index}>{item}</li>)}</ul> : <p className="lightning-muted">None identified in this package.</p>}</section>;
+}
+
+/** The live text is a draft, separate from the validated result and continuation brief. */
+export function LightningLiveResponse({ audit }: { audit: LightningAudit }) {
+  if (!lightningPending(audit)) return null;
+  const progress = lightningLiveProgress(audit);
+  const lists = progress ? [
+    { title: "Supporting observations", items: progress.observations },
+    { title: "Missing evidence", items: progress.missing_evidence },
+    { title: "Next steps", items: progress.next_steps },
+    { title: "Evidence scope", items: progress.limitations },
+  ] : [];
+  const hasText = !!progress && !!(progress.summary || progress.recommended_direction || lists.some(list => list.items.length));
+  return <section className="lightning-live" aria-labelledby="lightning-live-heading" data-phase={audit.status === "preparing" ? "preparing" : progress?.phase ?? "thinking"}>
+    <div className="lightning-live-status" role="status" aria-live="polite" aria-atomic="true">
+      <span className="lightning-live-dots" aria-hidden="true"><i /><i /><i /></span>
+      <span>{lightningProgressLabel(audit)}</span>
+    </div>
+    <h2 id="lightning-live-heading">Can CFDE data help address this gap?</h2>
+    {hasText ? <>
+      <p className="lightning-live-note">Draft response · Evidence references are checked before the audit is complete.</p>
+      <div className="lightning-live-text" aria-live="off">
+        {progress.summary && <p className="lightning-preserve lightning-live-summary">{progress.summary}</p>}
+        {!!progress.observations.length && <section><h3>Supporting observations</h3><ul>{progress.observations.map((item, index) => <li key={index}>{item}</li>)}</ul></section>}
+        {progress.recommended_direction && <section><h3>Proposed direction</h3><p className="lightning-preserve">{progress.recommended_direction}</p></section>}
+        {lists.slice(1).filter(list => list.items.length).map(list => <section key={list.title}><h3>{list.title}</h3><ul>{list.items.map((item, index) => <li key={index}>{item}</li>)}</ul></section>)}
+      </div>
+    </> : <p className="lightning-live-note">{audit.status === "preparing" ? "Gathering the selected CFDE data and related evidence already in Reveal." : "Reviewing what the supplied CFDE data can support, where it falls short, and what to investigate next."}</p>}
+    <p className="lightning-live-saved">Your audit is saved. You can leave and return while it finishes.</p>
+  </section>;
 }
 
 export function LightningResult({ audit }: { audit: LightningAudit }) {
@@ -78,7 +108,7 @@ function AuditView({ id, owner }: { id: string; owner: string }) {
     if (saved !== null) { initialized.current = true; setBrief(saved); }
     const refresher = createLightningRefresher({
       hidden: () => document.visibilityState === "hidden",
-      load: (signal, wait) => lightningApi.get(id, signal, wait),
+      load: (signal, wait, afterRevision) => lightningApi.get(id, signal, wait, afterRevision),
       onAudit: value => {
         setAudit(value); setError(""); setNow(Date.now());
         if (!initialized.current && value.result) { initialized.current = true; setBrief(lightningBrief(value)); }
@@ -138,9 +168,9 @@ function AuditView({ id, owner }: { id: string; owner: string }) {
     {audit && <>
       <header className="lightning-header"><span className="lightning-eyebrow">Lightning audit</span><h1>{audit.question.text}</h1>
         <div className="lightning-meta"><span>{lightningStatusLabel[audit.status]}</span><time dateTime={audit.created_at}>{date(audit.created_at)}</time></div>
-        <p>An initial assessment of the supplied evidence. A research agent can investigate the direction and establish scientific support.</p>
+        <p>Can the CFDE data already in Reveal help address this gap? This audit assesses the selected evidence, explains its limits, and suggests where to investigate next.</p>
       </header>
-      {lightningPending(audit) && <LoadingSurface title={lightningStatusLabel[audit.status]} description="Your audit is saved. You can return here while the assessment completes." skeleton="record" />}
+      <LightningLiveResponse audit={audit} />
       {(audit.status === "failed" || audit.status === "interrupted") && <section className="lightning-failure"><h2>{lightningStatusLabel[audit.status]}</h2>
         <p role="alert">{audit.error?.detail || "This assessment did not complete. The submitted evidence is retained."}</p>
         {lightningEnabled && <Link href={`/?gap=${encodeURIComponent(audit.question.id)}`}>Start a new audit from this gap →</Link>}

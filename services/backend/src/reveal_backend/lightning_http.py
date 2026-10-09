@@ -29,10 +29,13 @@ def register(app, repository, catalog, *, freeze, reload_gate, check_job_quota,
         return audits.listing(repository(), request.headers.get('authorization'), paginate=paginate, limit=limit, cursor=cursor)
 
     @app.get('/v1/lightning-audits/{audit_id}')
-    async def detail(audit_id: str, request: Request, wait: str = '0'):
+    async def detail(audit_id: str, request: Request, wait: str = '0', after_revision: str | None = None):
         if not (wait.isascii() and wait.isdigit() and int(wait) <= 20):
             raise Problem(422, 'INVALID_QUERY', 'Supply wait as an integer from 0 to 20 seconds.')
-        return await audits.wait_get(repository(), request.headers.get('authorization'), audit_id, int(wait))
+        if after_revision is not None and not (after_revision.isascii() and after_revision.isdigit() and len(after_revision) <= 12):
+            raise Problem(422, 'INVALID_QUERY', 'Supply after_revision as a nonnegative integer.')
+        return await audits.wait_get(repository(), request.headers.get('authorization'), audit_id, int(wait),
+            int(after_revision) if after_revision is not None else None)
 
     @app.post('/v1/lightning-audits/{audit_id}/continue', status_code=202)
     async def continuation(audit_id: str, request: Request, background: BackgroundTasks):

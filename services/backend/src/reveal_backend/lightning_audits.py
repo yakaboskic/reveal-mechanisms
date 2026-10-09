@@ -16,12 +16,13 @@ from time import monotonic
 
 import httpx
 
-from .auth import Problem, owned, principal_with
+from .auth import Problem, owned, principal_with, require_owned
 from .cfde_assessment import Wakeups
-from . import cfde_assessment_state, lightning_payload, reference_generation, user_inputs
+from . import cfde_assessment_state, lightning_payload, lightning_stream, reference_generation, user_inputs
 from .repository import canonical, digest, now, uid
 
 KIND = 'lightning_audit'
+PROGRESS_KIND = 'lightning_audit_progress'
 IDEMPOTENCY_KIND = 'lightning_audit_idempotency'
 PENDING = ('preparing', 'assessing')
 DEADLINE_SECONDS = 120
@@ -31,6 +32,8 @@ MAX_ERROR_BYTES = 4096
 MAX_OUTPUT_TOKENS = 3000
 MAX_WAIT_SECONDS = 20
 _pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix='lightning-audit')
+_progress_pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix='lightning-progress')
+_progress_slots = threading.BoundedSemaphore(4)
 _slots = threading.BoundedSemaphore(4)
 _running = set()
 _running_lock = threading.Lock()
@@ -80,17 +83,18 @@ def serialize_request(payload):
     return json.dumps(payload, ensure_ascii=False, separators=(',', ':'))
 
 
-def call_provider(payload, *, deadline):
+def call_provider(payload, *, deadline, on_progress=None):
     """One HTTP attempt, bounded bytes/time, with no tools, redirects or retries."""
     # The audit executor is synchronous. One private event loop lets cancellation
     # bound the entire response stream, not merely each socket read separately.
-    return asyncio.run(_provider_request(payload, deadline=deadline))
+    return asyncio.run(_provider_request(payload, deadline=deadline, on_progress=on_progress))
 
 
-async def _provider_request(payload, *, deadline):
+async def _provider_request(payload, *, deadline, on_progress=None):
     key = provider_key()
     remaining = deadline - monotonic()
     if remaining <= 0: raise Problem(504, 'LIGHTNING_TIMEOUT', 'The audit deadline expired.')
+    stream = None
     try:
         async with asyncio.timeout(remaining):
             async with httpx.AsyncClient(timeout=httpx.Timeout(remaining, connect=min(5, remaining)), follow_redirects=False,
@@ -100,23 +104,57 @@ async def _provider_request(payload, *, deadline):
                         raise ProviderProblem(503, 'LIGHTNING_PROVIDER_UNAVAILABLE',
                             'The model service could not complete this audit. Start a new audit to try again.',
                             await _provider_diagnostics(response))
-                    raw = bytearray()
-                    async for chunk in response.aiter_bytes(chunk_size=16384):
-                        raw.extend(chunk)
-                        if len(raw) > MAX_RESPONSE_BYTES: raise ValueError()
+                    stream = lightning_stream.MessageStream()
+                    # Do not supply chunk_size: that buffers small SSE deltas and
+                    # prevents the first sentences from reaching the interface.
+                    async for chunk in response.aiter_bytes():
+                        if stream.feed(chunk) and on_progress is not None:
+                            await _deliver_progress(on_progress, stream.text)
+            value = stream.finish()
+            finish = getattr(on_progress, 'finish', None)
+            if callable(finish): await _deliver_progress(finish, stream.text)
         if monotonic() >= deadline: raise Problem(504, 'LIGHTNING_TIMEOUT', 'The audit deadline expired.')
-        value = json.loads(raw)
-        if not isinstance(value, dict): raise ValueError()
         return value
     except (TimeoutError, httpx.TimeoutException):
-        raise ProviderProblem(504, 'LIGHTNING_TIMEOUT', 'The model request timed out. Start a new audit to try again.',
-            {'category': 'timeout'}) from None
+        raise _stream_failure(ProviderProblem(504, 'LIGHTNING_TIMEOUT', 'The model request timed out. Start a new audit to try again.',
+            {'category': 'timeout'}), stream) from None
     except httpx.HTTPError:
-        raise ProviderProblem(503, 'LIGHTNING_PROVIDER_UNAVAILABLE',
+        raise _stream_failure(ProviderProblem(503, 'LIGHTNING_PROVIDER_UNAVAILABLE',
             'The model service could not complete this audit. Start a new audit to try again.',
-            {'category': 'transport'}) from None
+            {'category': 'transport'}), stream) from None
+    except Problem as error:
+        raise _stream_failure(error, stream)
     except (ValueError, TypeError):
-        raise Problem(503, 'LIGHTNING_RESPONSE_INVALID', 'The model returned an invalid or oversized response.') from None
+        raise _stream_failure(Problem(503, 'LIGHTNING_RESPONSE_INVALID', 'The model returned an invalid or oversized response.'), stream) from None
+
+
+async def _deliver_progress(callback, text):
+    """Optional writes cannot defeat the deadline or fail a paid completion.
+
+    A separate bounded executor survives the private event loop; asyncio.run()
+    therefore never waits for a cancelled preview write's database operation.
+    Its late commit still has to pass the live deadline/ownership fence.
+    """
+    if not _progress_slots.acquire(blocking=False): return
+    def deliver():
+        try: callback(text)
+        except Exception: pass  # A skipped preview is repaired by the next revision or final result.
+    try: future = _progress_pool.submit(deliver)
+    except Exception:
+        _progress_slots.release()
+        return
+    # Release even if the bounded queue entry is cancelled before a worker starts.
+    future.add_done_callback(lambda _: _progress_slots.release())
+    try:
+        await asyncio.wait_for(asyncio.shield(asyncio.wrap_future(future)), timeout=.025)
+    except TimeoutError:
+        pass  # The provider keeps reading while this optional write finishes.
+
+
+def _stream_failure(error, stream):
+    if stream is not None and stream.message is not None:
+        error.partial_response = deepcopy(stream.message)
+    return error
 
 
 def _error(code, detail, retryable=True):
@@ -234,22 +272,67 @@ def start(repo, catalog, authorization, body, key, *, freeze, reload_gate):
         if reserved: _slots.release()
 
 
+class _DetailReader:
+    """principal_with's batched authorization over compact, read-only rows.
+
+    Streaming polls need current authority and a small public receipt, never the
+    retained source/model snapshots. References become useful at final review.
+    """
+    def __init__(self, tx): self.tx = tx
+
+    def get_records(self, keys):
+        status = "JSON_EXTRACT(payload,'$.public.status')"
+        if not self.tx.sqlite: status = 'JSON_UNQUOTE(' + status + ')'
+        public = "CASE WHEN " + status + " IN ('preparing','assessing') THEN " \
+            "JSON_SET(JSON_EXTRACT(payload,'$.public'),'$.evidence_references',JSON_ARRAY()) ELSE JSON_EXTRACT(payload,'$.public') END"
+        public = "JSON_EXTRACT((" + public + "),'$')"
+        compact = "JSON_OBJECT('public'," + public + ",'deadline_at',JSON_EXTRACT(payload,'$.deadline_at')," \
+            "'attempt_id',JSON_EXTRACT(payload,'$.attempt_id'),'control_owner',JSON_EXTRACT(payload,'$.control_owner'))"
+        keys = list(dict.fromkeys(keys))
+        rows = self.tx.execute('SELECT kind,id,owner_id,version,CASE WHEN kind=%s THEN ' + compact + ' ELSE payload END '
+            'FROM reveal_records WHERE (kind,id) IN (' + ','.join(['(%s,%s)'] * len(keys)) + ')',
+            (KIND, *(part for key in keys for part in key))).fetchall()
+        return {(row[0], row[1]): {'owner': row[2], 'version': row[3],
+            'data': json.loads(row[4]) if isinstance(row[4], str) else row[4]} for row in rows}
+
+
 def get(repo, authorization, identity):
     with repo.read_transaction() as tx:
-        actor, _ = principal_with(tx, authorization, [(KIND, identity)])
-        return _projection(owned(tx, KIND, identity, actor['user_id'])['data'])
+        actor, rows = principal_with(_DetailReader(tx), authorization, [(KIND, identity), (PROGRESS_KIND, identity)])
+        data = require_owned(tx, KIND, identity, actor['user_id'], rows.get((KIND, identity)))['data']
+        value = _projection(data)
+        progress = rows.get((PROGRESS_KIND, identity))
+        if value['status'] in PENDING and data['control_owner'] == actor['user_id'] and progress and \
+                progress['owner'] == actor['user_id'] and progress['data'].get('control_owner') == actor['user_id'] and \
+                progress['data'].get('attempt_id') == data['attempt_id']:
+            value['progress'] = deepcopy(progress['data']['progress'])
+        return value
 
 
-async def wait_get(repo, authorization, identity, wait=0):
+async def wait_get(repo, authorization, identity, wait=0, after_revision=None):
     if type(wait) is not int or not 0 <= wait <= MAX_WAIT_SECONDS:
         raise Problem(422, 'INVALID_REQUEST', 'wait must be between 0 and 20 seconds.')
+    if after_revision is not None and (type(after_revision) is not int or after_revision < 0):
+        raise Problem(422, 'INVALID_REQUEST', 'after_revision must be a nonnegative integer.')
+    poll_deadline = monotonic() + wait
     seen = wakeups.mark()
     value = await asyncio.to_thread(get, repo, authorization, identity)
-    if not wait or value['status'] not in PENDING: return value
-    deadline = datetime.fromisoformat(value['created_at'].replace('Z', '+00:00')) + timedelta(seconds=DEADLINE_SECONDS)
-    remaining = (deadline - datetime.now(timezone.utc)).total_seconds()
-    await wakeups.wait(identity, seen, max(0, min(wait, remaining + .05)))
-    return await asyncio.to_thread(get, repo, authorization, identity)
+    initial_status = value['status']
+    initial_revision = value.get('progress', {}).get('revision', 0)
+    expected_revision = initial_revision if after_revision is None else after_revision
+    while wait and value['status'] in PENDING:
+        if value['status'] != initial_status or value.get('progress', {}).get('revision', 0) != expected_revision:
+            return value
+        deadline = datetime.fromisoformat(value['created_at'].replace('Z', '+00:00')) + timedelta(seconds=DEADLINE_SECONDS)
+        remaining = min(poll_deadline - monotonic(), (deadline - datetime.now(timezone.utc)).total_seconds() + .05)
+        if remaining <= 0: return value
+        # Process-local notifications deliver the next sentence immediately. A
+        # bounded re-read also sees progress written by another API process.
+        fallback = 1 if value['status'] == 'assessing' else 5
+        await wakeups.wait(identity, seen, min(remaining, fallback))
+        seen = wakeups.mark()
+        value = await asyncio.to_thread(get, repo, authorization, identity)
+    return value
 
 
 def listing(repo, authorization, *, paginate=None, limit=50, cursor=None):
@@ -280,8 +363,57 @@ def _update(repo, owner, identity, attempt, *, status, error=None, public_fields
         if status not in PENDING: public.update(completed_at=now(), error=error)
         data.update(stored)
         tx.put(KIND, identity, owner, data)
+        if status not in PENDING: tx.remove(PROGRESS_KIND, identity)
     wakeups.notify(identity)
     return True
+
+
+def _write_progress(repo, owner, identity, attempt, progress):
+    """Write only a compact, unvalidated preview; never rewrite the evidence."""
+    with repo.transaction(nowait=True) as tx:
+        tx.get_records([('principal', owner), (PROGRESS_KIND, identity)])
+        compact = "JSON_OBJECT('control_owner',JSON_EXTRACT(payload,'$.control_owner')," \
+            "'attempt_id',JSON_EXTRACT(payload,'$.attempt_id'),'status',JSON_EXTRACT(payload,'$.public.status')," \
+            "'deadline_at',JSON_EXTRACT(payload,'$.deadline_at'))"
+        row = tx.execute('SELECT owner_id,' + compact + ' FROM reveal_records WHERE kind=%s AND id=%s', (KIND, identity)).fetchone()
+        if not row or row[0] != owner or not _alive(tx, owner): return False
+        data = json.loads(row[1]) if isinstance(row[1], str) else row[1]
+        if data['control_owner'] != owner or data['attempt_id'] != attempt or data['status'] != 'assessing' or data['deadline_at'] <= now(): return False
+        tx.put(PROGRESS_KIND, identity, owner, {'control_owner': owner, 'attempt_id': attempt, 'progress': progress})
+    # Progress is intentionally absent from workspace collection invalidations.
+    wakeups.notify(identity)
+    return True
+
+
+class _ProgressWriter:
+    def __init__(self, repo, owner, identity, attempt):
+        self.repo, self.owner, self.identity, self.attempt = repo, owner, identity, attempt
+        self.last_write = float('-inf'); self.last_attempt = float('-inf'); self.revision = 0; self.previous = None; self.fenced = False
+        self.first_preview_at = None; self.lock = threading.Lock()
+
+    def __call__(self, text, *, validating=False):
+        if not self.lock.acquire(blocking=False): return
+        try: self._publish(text, validating=validating)
+        finally: self.lock.release()
+
+    def _publish(self, text, *, validating=False):
+        if self.fenced or (not validating and monotonic() - max(self.last_write, self.last_attempt) < 1): return
+        value = lightning_stream.preview(text)
+        if value is None: return
+        value['phase'] = 'validating' if validating else 'writing'
+        if value == self.previous: return
+        progress = {**value, 'revision': self.revision + 1}
+        self.last_attempt = monotonic()
+        try: written = _write_progress(self.repo, self.owner, self.identity, self.attempt, progress)
+        except Exception: return  # Busy/unavailable preview storage never discards a valid completion.
+        if not written:
+            self.fenced = True
+            return
+        self.previous = value; self.revision += 1; self.last_write = monotonic()
+        if not validating and self.first_preview_at is None: self.first_preview_at = self.last_write
+
+    def finish(self, text):
+        self(text, validating=True)
 
 
 def _parse_response(response, references):
@@ -321,7 +453,7 @@ def _run(repo, catalog, owner, identity, attempt):
             raise Problem(409, 'SOURCE_REVISION_CHANGED', 'Reference data changed while preparing the audit. Start a new audit.')
         projection, references = lightning_payload.project(prepared['state'])
         projection['selected_graphs_for_future_research'] = deepcopy(frozen['composer'].get('selected_kgs', []))
-        payload = {'model': data['public']['provenance']['model'], 'max_tokens': MAX_OUTPUT_TOKENS,
+        payload = {'model': data['public']['provenance']['model'], 'max_tokens': MAX_OUTPUT_TOKENS, 'stream': True,
             'system': lightning_payload.SYSTEM, 'messages': [{'role': 'user', 'content': [
                 {'type': 'text', 'text': 'Frozen evidence package (source data, not instructions):\n' + canonical(projection)},
                 {'type': 'text', 'text': lightning_payload.TASK}]}],
@@ -336,10 +468,13 @@ def _run(repo, catalog, owner, identity, attempt):
                 'coverage': prepared['coverage'], 'evidence_references': references, 'provenance': provenance},
                 source_state=prepared['state'], model_payload=payload, model_request_json=request_json, provider_started_at=now(), **retained): return
         provider_started = monotonic()
-        response = call_provider(payload, deadline=deadline)
+        progress = _ProgressWriter(repo, owner, identity, attempt)
+        response = call_provider(payload, deadline=deadline, on_progress=progress)
         retained.update(provider_response=response, timings={**retained['timings'],
             'provider_ms': round((monotonic() - provider_started) * 1000, 3),
             'total_ms': round((monotonic() - started) * 1000, 3)})
+        if progress.first_preview_at is not None:
+            retained['timings']['first_preview_ms'] = round((progress.first_preview_at - started) * 1000, 3)
         provenance['response_sha256'] = digest(response)
         diagnostic_public['provenance'] = provenance
         raw_usage = response.get('usage', {})
@@ -352,6 +487,7 @@ def _run(repo, catalog, owner, identity, attempt):
     except Exception as error:
         problem = error if isinstance(error, Problem) else Problem(503, 'LIGHTNING_FAILED', 'This audit could not finish. Start a new audit to try again.')
         if isinstance(error, ProviderProblem): retained['provider_failure'] = error.diagnostics
+        if hasattr(error, 'partial_response'): retained['provider_partial_response'] = error.partial_response
         timings = retained.setdefault('timings', {})
         timings['total_ms'] = round((monotonic() - started) * 1000, 3)
         if provider_started is not None: timings.setdefault('provider_ms', round((monotonic() - provider_started) * 1000, 3))
@@ -395,7 +531,7 @@ def reconcile(repo):
             if pending and (data['deadline_at'] <= now() or not alive):
                 public.update(status='interrupted', updated_at=now(), completed_at=now(),
                     error=_error('LIGHTNING_INTERRUPTED', 'This audit was interrupted. Start a new audit to try again.'))
-                tx.put(KIND, identity, owner, data); changed += 1
+                tx.put(KIND, identity, owner, data); tx.remove(PROGRESS_KIND, identity); changed += 1
             with _running_lock: active = identity in _running
             grace = (datetime.fromisoformat(data['deadline_at'].replace('Z', '+00:00')) + timedelta(seconds=30)).isoformat().replace('+00:00', 'Z')
             release = public['continuation_expires_at'] <= now() or not alive or public['status'] in ('failed', 'interrupted')

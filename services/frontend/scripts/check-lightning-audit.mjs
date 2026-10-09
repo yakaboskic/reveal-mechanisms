@@ -50,7 +50,7 @@ async function harness(options = {}) {
     if (url.origin !== origin) { state.unexpected.push(`${method} ${url.href}`); return route.abort(); }
     if (!path.startsWith('/api/')) return route.continue();
     const body = request.postData() ? request.headers()['content-type']?.includes('application/x-www-form-urlencoded') ? Object.fromEntries(new URLSearchParams(request.postData())) : request.postDataJSON() : undefined;
-    const key = request.headers()['idempotency-key']; state.calls.push({ method, path, body: structuredClone(body), key });
+    const key = request.headers()['idempotency-key']; state.calls.push({ method, path, ...(url.search ? { query: url.search } : {}), body: structuredClone(body), key });
     const respond = (value, status = 200) => route.fulfill({ status, json: structuredClone(value) }).catch(error => { if (!/closed|cancel|handled/i.test(error.message)) throw error; });
     const fail = (status, code, detail) => respond({ code, detail }, status);
     const receiptKey = `${method}:${path}:${key}`;
@@ -86,9 +86,9 @@ async function harness(options = {}) {
       if (options.rejectAudit && !state.rejected) { state.rejected = true; return fail(429, 'LIGHTNING_BUSY', 'Lightning audits are busy. Try again shortly.'); }
       const source = state.drafts.get(body.draft_id); assert.ok(source); assert.equal(source.version, body.draft_version);
       const id = uuid(state.sequence++), requestId = uuid(state.sequence++);
-      const audit = { id, kind: 'lightning_audit', status: 'succeeded', research_request_id: requestId, source_draft_id: source.id, source_draft_version: source.version,
+      const audit = { id, kind: 'lightning_audit', status: options.streamAudit ? 'preparing' : 'succeeded', research_request_id: requestId, source_draft_id: source.id, source_draft_version: source.version,
         question: { id: gap.object.id, text: gap.object.text }, created_at: stamp, updated_at: stamp, completed_at: stamp, continuation_expires_at: '2099-11-08T12:00:00Z', reference_generation_id: 'mock-generation',
-        result: auditResult, coverage: { missing: ['A tissue annotation'], truncations: [{ source: 'loading', included_chars: 50, total_chars: 100 }] },
+        result: options.streamAudit ? null : auditResult, coverage: { missing: ['A tissue annotation'], truncations: [{ source: 'loading', included_chars: 50, total_chars: 100 }] },
         evidence_references: [{ id: 'E1', pointer: '/factors/0/genes/0', label: 'Supplied loading', value: 'Original retained evidence', source: { revision: 'mock-revision' } }],
         provenance: { model: 'mock-only', prompt_version: 'mock-v1' }, usage: { input_tokens: 100, output_tokens: 50 }, error: null, continuations: [] };
       state.audits.set(id, structuredClone(audit)); state.frozen.set(requestId, { id: requestId, composer: structuredClone(source.composer), question_id: gap.object.id, document: { knowledge_gaps: [gap.object] } }); remember(audit);
@@ -144,6 +144,49 @@ try {
     assert.equal(await h.page.evaluate(() => document.activeElement.textContent), 'Use my local agentWork with an agent on your computer.');
     await h.close(); console.log('PASS: disabled feature retains two modes and keyboard navigation');
   } else {
+    {
+      const h = await harness({ streamAudit: true }); await h.open(); await h.launch();
+      await h.page.waitForURL(/\/lightning-audits\//);
+      await h.page.locator('.lightning-live-status').filter({ hasText: 'Preparing evidence' }).waitFor();
+      const audit = [...h.state.audits.values()][0]; audit.status = 'assessing';
+      await h.page.locator('.lightning-live-status').filter({ hasText: 'Thinking about the CFDE evidence' }).waitFor();
+      assert.equal(await h.page.getByLabel('Direction and next steps for the agent').count(), 0);
+      audit.progress = { revision: 1, phase: 'writing', summary: 'The supplied CFDE factor', recommended_direction: '', observations: [], missing_evidence: [], next_steps: [], limitations: [] };
+      await h.page.getByText('The supplied CFDE factor', { exact: true }).waitFor();
+      assert.equal(await h.page.locator('.lightning-live-text').getAttribute('aria-live'), 'off', 'Token updates do not repeatedly interrupt assistive technology');
+      assert.equal(await h.page.locator('.lightning-live-status').getAttribute('aria-live'), 'polite');
+      audit.progress = { ...audit.progress, revision: 2, summary: 'The supplied CFDE factor offers a possible lead, but the sampled evidence cannot establish causality.', observations: ['A retained source connects the candidate to a relevant signature.'] };
+      await h.page.getByText(audit.progress.summary, { exact: true }).waitFor();
+      await h.page.getByText(audit.progress.observations[0], { exact: true }).waitFor();
+      if (process.env.LIGHTNING_STREAM_SCREENSHOT) await h.page.screenshot({ path: process.env.LIGHTNING_STREAM_SCREENSHOT, fullPage: true });
+      assert.equal(await h.page.locator('.lightning-result').count(), 0, 'Draft output is not a validated result');
+      assert.equal(await h.page.getByRole('button', { name: 'Run online', exact: true }).count(), 0);
+      await h.page.reload(); await h.page.getByText(audit.progress.summary, { exact: true }).waitFor();
+      assert.equal(auditPosts(h.state).length, 1, 'Reload restores text without a new provider request');
+      await until(() => h.state.calls.some(call => call.query?.includes('after_revision=2')), 'progress revision sent on the next detail read');
+      audit.progress = { ...audit.progress, revision: 3, phase: 'validating' };
+      await h.page.locator('.lightning-live-status').filter({ hasText: 'Checking evidence references' }).waitFor();
+      audit.status = 'succeeded'; audit.result = auditResult; delete audit.progress;
+      await h.complete(); assert.equal(await h.page.locator('.lightning-live').count(), 0);
+      await h.page.getByLabel('Direction and next steps for the agent').fill('My direction after the live assessment.');
+      await h.page.reload(); await h.complete();
+      assert.equal(await h.page.getByLabel('Direction and next steps for the agent').inputValue(), 'My direction after the live assessment.');
+      assert.equal(auditPosts(h.state).length, 1);
+      await h.close(); console.log('PASS: preparation, thinking, progressive prose, revision recovery, validation, final replacement and preserved brief');
+    }
+    {
+      const h = await harness({ streamAudit: true }); await h.open(); await h.launch(); await h.page.waitForURL(/\/lightning-audits\//);
+      const audit = [...h.state.audits.values()][0];
+      audit.status = 'assessing'; audit.progress = { revision: 1, phase: 'writing', summary: 'This draft may not finish.', recommended_direction: '', observations: [], missing_evidence: [], next_steps: [], limitations: [] };
+      await h.page.getByText(audit.progress.summary, { exact: true }).waitFor();
+      audit.status = 'failed'; audit.error = { code: 'LIGHTNING_INCOMPLETE', detail: 'The response stopped before its evidence references could be checked.', retryable: false };
+      await h.page.locator('.lightning-failure').waitFor();
+      assert.equal(await h.page.locator('.lightning-live').count(), 0, 'A failed partial response disappears');
+      assert.equal(await h.page.getByText(audit.progress.summary, { exact: true }).count(), 0);
+      assert.equal(await h.page.getByLabel('Direction and next steps for the agent').count(), 0);
+      assert.equal(auditPosts(h.state).length, 1, 'Failure never retries inference');
+      await h.close(); console.log('PASS: failed stream clears partial text and cannot continue or retry automatically');
+    }
     {
       const h = await harness(); await h.open();
       const trigger = h.page.getByRole('button', { name: 'Let’s close this gap', exact: true }); await until(() => trigger.isEnabled(), 'launch is ready');

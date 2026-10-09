@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createLightningClient, readLightningAudit, lightningBrief, lightningContinuationHref, lightningDispatchRejected, LightningError,
+import { createLightningClient, readLightningAudit, lightningBrief, lightningLiveProgress, lightningProgressLabel, lightningContinuationHref, lightningDispatchRejected, LightningError,
   rememberLightningHandoff, restoreLightningHandoff, rememberLightningBrief, restoreLightningBrief, type LightningAudit } from "../src/lib/lightning-audit";
 import { affectedWorkspaceTabs, changesWorkspace, onWorkspaceChange } from "../src/lib/workspace-events";
 import { rememberSubmission, restoreSubmission, lightningSubmissionOwnerChanged, type SubmissionAttempt } from "../src/lib/submission";
@@ -28,11 +28,12 @@ test("audit POST uses an exact receipt while GET and long polling are private re
   const client = createLightningClient((async (url, init) => { calls.push({ url: String(url), init: init! }); return Response.json(auditFixture()); }) as typeof fetch);
   try {
     await client.create({ draft_id: "source", draft_version: 3 }, "original-key");
-    await client.get("audit"); await client.get("audit", undefined, 15);
-    assert.deepEqual(calls.map(call => call.init.method), ["POST", "GET", "GET"]);
+    await client.get("audit"); await client.get("audit", undefined, 15); await client.get("audit", undefined, 15, 7);
+    assert.deepEqual(calls.map(call => call.init.method), ["POST", "GET", "GET", "GET"]);
     assert.deepEqual(JSON.parse(calls[0].init.body as string), { draft_id: "source", draft_version: 3 });
     assert.equal(new Headers(calls[0].init.headers).get("Idempotency-Key"), "original-key");
     assert.equal(calls[2].url, "/api/backend/v1/lightning-audits/audit?wait=15");
+    assert.equal(calls[3].url, "/api/backend/v1/lightning-audits/audit?wait=15&after_revision=7");
     assert.ok(calls.every(call => call.init.credentials === "same-origin" && call.init.cache === "no-store"));
     assert.equal(events.length, 1, "Reads neither mutate nor invalidate workspace history");
     assert.ok(events[0].includes("audits"));
@@ -123,4 +124,27 @@ test("a possibly committed Lightning dispatch cannot migrate automatically to an
   assert.equal(lightningSubmissionOwnerChanged(uncertain, "original"), false);
   assert.equal(lightningSubmissionOwnerChanged({ ...uncertain, submitKey: null }, "claimed"), false, "Sign-in before first dispatch still works");
   for (const mode of ["online", "local"] as const) assert.equal(lightningSubmissionOwnerChanged({ ...uncertain, mode }, "claimed"), false, "Existing agent submission flow is unchanged");
+});
+
+const progressFixture = () => ({ revision: 4, phase: "writing" as const, summary: "The supplied CFDE factor offers a possible lead", recommended_direction: "", observations: ["A source observation arriving in parts"], missing_evidence: [], next_steps: [], limitations: [] });
+
+test("live drafts display only while pending and never become a continuation brief", () => {
+  const progress = progressFixture(), audit = { ...auditFixture("assessing"), progress };
+  assert.equal(readLightningAudit(audit), audit);
+  assert.equal(lightningLiveProgress(audit), progress);
+  assert.equal(lightningProgressLabel(audit), "Writing your assessment");
+  assert.equal(lightningBrief(audit), "", "A stream preview is not validated research guidance");
+  assert.equal(lightningProgressLabel(auditFixture("preparing")), "Preparing evidence");
+  assert.equal(lightningProgressLabel(auditFixture("assessing")), "Thinking about the CFDE evidence");
+  assert.equal(lightningProgressLabel({ ...audit, progress: { ...progress, phase: "validating" } }), "Checking evidence references");
+  for (const status of ["succeeded", "failed", "interrupted"] as const) {
+    assert.equal(lightningLiveProgress({ ...auditFixture(status), progress }), null, `${status} hides a stale draft`);
+  }
+});
+
+test("malformed live revisions and raw structured observations cannot enter the text view", () => {
+  const audit = { ...auditFixture("assessing"), progress: progressFixture() };
+  for (const value of [{ revision: -1 }, { revision: 1.2 }, { phase: "thinking" }, { summary: {} }, { observations: [{ text: "Raw structured content" }] }, { next_steps: null }])
+    assert.throws(() => readLightningAudit({ ...audit, progress: { ...audit.progress, ...value } }), /live response was incomplete/);
+  assert.equal(readLightningAudit({ ...auditFixture("assessing"), progress: null }).progress, null, "Historical responses need no stream preview");
 });

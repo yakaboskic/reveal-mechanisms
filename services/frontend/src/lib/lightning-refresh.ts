@@ -4,7 +4,7 @@ import { lightningAccessLost, lightningPending, type LightningAudit } from "./li
 export function createLightningRefresher({ load, hidden, onAudit, onError, now = Date.now, timers = {
   set: (run: () => void, ms: number): unknown => setTimeout(run, ms), clear: (id: unknown) => clearTimeout(id as ReturnType<typeof setTimeout>),
 } }: {
-  load: (signal: AbortSignal, wait: number) => Promise<LightningAudit>; hidden: () => boolean;
+  load: (signal: AbortSignal, wait: number, afterRevision?: number) => Promise<LightningAudit>; hidden: () => boolean;
   onAudit: (audit: LightningAudit) => void; onError: (error: unknown) => void; now?: () => number;
   timers?: { set: (run: () => void, ms: number) => unknown; clear: (id: unknown) => void };
 }) {
@@ -17,11 +17,12 @@ export function createLightningRefresher({ load, hidden, onAudit, onError, now =
     cancelTimer();
     if (controller) { again = true; return; }
     const request = new AbortController(); controller = request;
-    const started = now(), previous = audit?.updated_at;
+    const started = now(), previous = audit ? `${audit.status}:${audit.updated_at}:${audit.progress?.revision ?? 0}` : null;
     try {
-      const value = await load(request.signal, longPoll && audit && lightningPending(audit) ? 15 : 0);
+      const pending = !!audit && lightningPending(audit);
+      const value = await load(request.signal, longPoll && pending ? 15 : 0, pending ? audit?.progress?.revision ?? 0 : undefined);
       if (stopped || request.signal.aborted) return;
-      audit = value; failures = 0; unchanged = previous === value.updated_at ? unchanged + 1 : 0; onAudit(value);
+      audit = value; failures = 0; unchanged = previous === `${value.status}:${value.updated_at}:${value.progress?.revision ?? 0}` ? unchanged + 1 : 0; onAudit(value);
     } catch (error) {
       if (stopped || request.signal.aborted) return;
       onError(error); failures++;
@@ -31,7 +32,11 @@ export function createLightningRefresher({ load, hidden, onAudit, onError, now =
       if (!stopped && !hidden()) {
         if (again) { again = false; void read(); }
         else if (failures) schedule(Math.min(60_000, 4000 * 2 ** Math.min(failures - 1, 4)));
-        else if (audit && lightningPending(audit)) schedule(Math.max(0, Math.min(4000, 1000 * Math.max(unchanged, 1)) - (now() - started)));
+        else if (audit && lightningPending(audit)) {
+          // Stream revisions need a responsive detail read, independent of workspace list refreshes.
+          const interval = audit.status === "assessing" ? (audit.progress && !unchanged ? 250 : 1000) : Math.min(4000, 1000 * Math.max(unchanged, 1));
+          schedule(Math.max(0, interval - (now() - started)));
+        }
       }
     }
   }

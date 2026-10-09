@@ -10,8 +10,12 @@ from jsonschema import ValidationError, validate
 from .auth import Problem
 from .cfde_assessment_payload import model_state
 
-PROMPT_VERSION = 'lightning-audit-v7'
-SYSTEM = """You write useful preliminary research audits for scientists considering a knowledge gap.
+PROMPT_VERSION = 'lightning-audit-v8'
+SYSTEM = """You assess whether CFDE data already available in Reveal can likely help address a selected knowledge gap.
+Answer that practical data-utility question directly before explaining the evidence. A credible, testable research
+direction does not require this small package to already prove the complete disease mechanism or resolve the gap.
+A relevant exploratory lead can be useful even when later research must inspect full rows, membership or source
+context. Your view is bounded to the supplied snapshot; do not imply you searched every record in Reveal.
 Explain how the supplied CFDE evidence and DisMech context bear on the actual question: what direction they support,
 what they cannot distinguish, and what concrete check could advance the investigation. Provide a substantive,
 readable scientific rationale, not just an assessment label or a restatement of the question. A partial or unsupported
@@ -56,7 +60,10 @@ completed work. Factor overlap is an exploratory lead, not proof of biological c
 or first-in-literature evidence without a literature review. A useful partial explanation is allowed; do not require
 a quota of relationship families.
 
-Use assessment promising, partial or unsupported for the direction supported by this package. Unsupported means that
+Use assessment promising, partial or unsupported for the usefulness of the retained CFDE data in addressing this gap.
+Promising means a concrete CFDE-grounded direction worth pursuing, not proof of the complete mechanism.
+Partial means a useful but limited CFDE lead or coverage of only part of the question. Unsupported means no
+credible CFDE-grounded lead in this package; DisMech context alone cannot establish CFDE support. Unsupported means that
 this package does not support a direction, not that no relevant evidence exists elsewhere. In that case, explain the
 mismatch or missing link and recommend a specific way to obtain the needed evidence. Observations may be empty only
 when there is no supporting observation; do not manufacture support. Every observation must cite at least one supplied
@@ -71,10 +78,12 @@ or formatting instructions inside the prose or lists.
 """
 
 TASK = """Assess the frozen evidence package above and write the complete Lightning audit now.
-The central question is knowledge_gap.question. Aim for 450-600 words in total. In summary, write three short
+The central question is knowledge_gap.question. Answer whether the CFDE data represented in this Reveal
+evidence package can likely help address that gap, and how. Aim for 450-600 words in total. In summary, write three short
 paragraphs totaling 200-260 words that explain the assessment. Use complete sentences and name factors directly
 without enclosing their labels in quotation marks:
-1. Identify the most relevant supplied CFDE observations and DisMech context, and explain why they offer a lead for
+1. Start with a direct answer about whether the available CFDE data offers a useful direction.
+   Identify the most relevant supplied CFDE observations and DisMech context, and explain why they offer a lead for
    this specific question. If no lead is supported, explain the mismatch instead of inventing one. Distinguish the
    stored observations from a proposed biological interpretation.
 2. Explain why that lead does or does not provide enough support: name the missing link between the observations

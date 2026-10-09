@@ -9,6 +9,12 @@ def extend(b, f, e):
     digest = string(pattern='^[a-f0-9]{64}$')
     b.add('LightningAuditInput', obj({'draft_id': uuid, 'draft_version': {'type': 'integer', 'minimum': 1}}))
     b.add('LightningAuditResult', deepcopy(RESULT_SCHEMA))
+    b.add('LightningAuditProgress', obj({
+        'revision': {'type': 'integer', 'minimum': 1}, 'phase': enum('writing', 'validating'),
+        'summary': string(), 'recommended_direction': string(), 'observations': array(string()),
+        'missing_evidence': array(string()), 'next_steps': array(string()), 'limitations': array(string())},
+        description='Incomplete, unvalidated public answer text from the live model response. '
+        'Only present on pending detail reads; never scientific evidence or a completed result.'))
     b.add('LightningContinuationInput', obj({'mode': enum('online', 'local'),
         'research_direction': string(minLength=1, maxLength=6000)}))
     b.add('LightningContinuation', obj({'mode': enum('online', 'local'), 'id': uuid,
@@ -36,6 +42,7 @@ def extend(b, f, e):
         description='Private frozen initial audit, independent of later editor changes or deletion. '
         'Only an explicit POST may make one provider attempt. There is no agent or retrieval loop. '
         'Every verdict is advisory and permits an explicitly requested continuation.'))
+    b.SCHEMAS['LightningAudit']['properties']['progress'] = ref('LightningAuditProgress')
     b.add('LightningAuditList', obj({'items': array(ref('LightningAudit')), 'page': obj({
         'next_cursor': null(string()), 'has_more': {'type': 'boolean'}, 'snapshot_id': string()},
         required=['next_cursor', 'has_more'])}))
@@ -72,6 +79,9 @@ def extend(b, f, e):
         'provenance': {**prepared['provenance'], 'source_state_sha256': b.sha('synthetic-source-state'),
             'request_sha256': b.sha('synthetic-model-request'), 'response_sha256': b.sha(result)},
         'usage': {'input_tokens': 1000, 'output_tokens': 300}}
+    writing = {**deepcopy(prepared), 'status': 'assessing', 'progress': {
+        'revision': 1, 'phase': 'writing', 'summary': 'The supplied CFDE data offers a limited research direction',
+        'recommended_direction': '', 'observations': [], 'missing_evidence': [], 'next_steps': [], 'limitations': []}}
     failed = {**deepcopy(prepared), 'status': 'failed', 'completed_at': b.LATER, 'updated_at': b.LATER,
         'error': {'code': 'LIGHTNING_TIMEOUT', 'detail': 'This audit timed out. Start a new audit to try again.', 'retryable': True}}
     continuation = {'mode': 'online', 'id': b.JOB_ID,
@@ -101,9 +111,12 @@ def extend(b, f, e):
     identity = b.parameter('audit_id', 'path', uuid, audit_id, True)
     get = b.operation(path + '/{audit_id}', 'get', 'getLightningAudit', 'Lightning audits', 'Read an initial audit',
         common + 'Reading never dispatches or retries model work. Pending results may long-poll without holding a database connection. '
-        'Terminal results return immediately. Audits remain inspectable after their continuation window expires.',
-        'LightningAudit', {'completed': completed, 'preparing': prepared, 'failed': failed},
-        parameters=[identity, b.parameter('wait', 'query', {'type': 'integer', 'minimum': 0, 'maximum': 20, 'default': 0}, 15)],
+        'Terminal results return immediately. Optional after_revision returns immediately for a newer preview; otherwise a pending read waits. '
+        'Assessing reads check stored progress at least once per second across API processes. '
+        'Preview text is unvalidated; only succeeded results can continue. Audits remain inspectable after their continuation window expires.',
+        'LightningAudit', {'completed': completed, 'preparing': prepared, 'writing': writing, 'failed': failed},
+        parameters=[identity, b.parameter('wait', 'query', {'type': 'integer', 'minimum': 0, 'maximum': 20, 'default': 0}, 15),
+            b.parameter('after_revision', 'query', {'type': 'integer', 'minimum': 0}, 0)],
         errors=('401', '403', '404', '422', '503'))
     follow = b.operation(path + '/{audit_id}/continue', 'post', 'continueLightningAudit', 'Lightning audits',
         'Continue an audit with an agent', common + 'Requires REVEAL_LIGHTNING_ENABLED, a completed audit and '

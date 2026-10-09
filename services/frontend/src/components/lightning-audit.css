@@ -41,3 +41,21 @@
 .lightning-error button { color: inherit; font: inherit; text-decoration: underline; border: 0; background: transparent; cursor: pointer; }
 .lightning-provenance { margin-top: 3rem; }
 @media (max-width: 560px) { .lightning-header h1 { font-size: 16px; line-height: 1.65; } .lightning-page { padding: 1.5rem 1rem 4rem; } .lightning-handoff, .lightning-summary { padding: 1rem; } .lightning-source dl { grid-template-columns: 1fr; } .lightning-actions button { width: 100%; } }
+
+.lightning-live { margin: 2rem 0 2.4rem; padding: 1.5rem; border: 1px solid #d5dfd7; border-left: 3px solid #4b7560; border-radius: 4px; background: #f6f8f4; }
+.lightning-live-status { display: flex; align-items: center; gap: .65rem; color: var(--muted, #66756d); font-size: .85rem; margin-bottom: 1rem; }
+.lightning-live h2 { font-size: 1.1rem; font-weight: 550; }
+.lightning-live-dots { display: inline-flex; gap: 3px; }
+.lightning-live-dots i { width: 4px; height: 4px; border-radius: 50%; background: currentColor; animation: lightning-wait 1.5s ease-in-out infinite; }
+.lightning-live-dots i:nth-child(2) { animation-delay: .2s; }
+.lightning-live-dots i:nth-child(3) { animation-delay: .4s; }
+.lightning-live-note, .lightning-live-saved { color: var(--muted, #66756d); font-size: .85rem; }
+.lightning-live-note { margin: .75rem 0 1.2rem; }
+.lightning-live-saved { margin: 1.4rem 0 0; padding-top: .8rem; border-top: 1px solid #dce2dd; }
+.lightning-live-text { overflow-wrap: anywhere; }
+.lightning-live-summary { margin: 0; }
+.lightning-live-text section { margin-top: 1.5rem; }
+.lightning-live-text section > :last-child { margin-bottom: 0; }
+@keyframes lightning-wait { 0%, 70%, 100% { opacity: .35; } 35% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .lightning-live-dots i { animation: none; opacity: .7; } }
+@media (max-width: 560px) { .lightning-live { padding: 1rem; } }

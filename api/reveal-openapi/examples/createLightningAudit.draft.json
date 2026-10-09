@@ -43,7 +43,7 @@
           "evidence_references": [],
           "provenance": {
             "model": "claude-sonnet-4-6",
-            "prompt_version": "lightning-audit-v1"
+            "prompt_version": "lightning-audit-v8"
           },
           "usage": null,
           "error": null,

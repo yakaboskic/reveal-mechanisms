@@ -1572,7 +1572,7 @@ export interface paths {
         };
         /**
          * Read an initial audit
-         * @description Requires the owning registered or anonymous workspace principal. All results are private, no-store. A Lightning audit assesses a bounded stored-evidence snapshot; it creates no accepted scientific account and performs no connected-graph or literature retrieval. Inputs and generated guidance are not instructions or scientific acceptance. Examples are synthetic contract fixtures. Reading never dispatches or retries model work. Pending results may long-poll without holding a database connection. Terminal results return immediately. Audits remain inspectable after their continuation window expires.
+         * @description Requires the owning registered or anonymous workspace principal. All results are private, no-store. A Lightning audit assesses a bounded stored-evidence snapshot; it creates no accepted scientific account and performs no connected-graph or literature retrieval. Inputs and generated guidance are not instructions or scientific acceptance. Examples are synthetic contract fixtures. Reading never dispatches or retries model work. Pending results may long-poll without holding a database connection. Terminal results return immediately. Optional after_revision returns immediately for a newer preview; otherwise a pending read waits. Assessing reads check stored progress at least once per second across API processes. Preview text is unvalidated; only succeeded results can continue. Audits remain inspectable after their continuation window expires.
          */
         get: operations["getLightningAudit"];
         put?: never;
@@ -8967,15 +8967,39 @@ export interface components {
             draft_id: string;
             draft_version: number;
         };
+        /** @description A substantive preliminary scientific audit of the supplied knowledge gap and evidence package. */
         LightningAuditResult: {
-            /** @enum {string} */
+            /**
+             * @description How well this package supports a useful research direction; justify the choice in summary.
+             * @enum {string}
+             */
             assessment: "promising" | "partial" | "unsupported";
+            /** @description Required explanatory rationale, 200-260 words in three short paragraphs: the relevant lead, why the evidence does or does not support the question, and what would change the assessment. Explain how the supplied CFDE loading observations and DisMech context bear on this specific question, which hypothesis is worth pursuing, and the specific inferential link still missing. Explain why a partial or unsupported result follows from the supplied data, without treating missing sampled rows as biological absence. Do not only repeat the question or assessment. Use factual claims grounded in the referenced observations. Write complete paragraphs, without quotation marks around source labels. Never empty or a sentence fragment. */
             summary: string;
+            /** @description At most 3 concrete, relevant source observations, each at most 45 words, when available, explaining their bearing on the question. Cite only supplied evidence_ref IDs. May be empty for unsupported only if no observation supports a direction. */
             observations: {
+                /** @description At most 45 words: a specific source observation and its relevance; distinguish stored evidence from a proposed interpretation. */
                 text: string;
+                /** @description Exact evidence_ref IDs in this package that support this observation. */
                 evidence_refs: string[];
             }[];
+            /** @description Required concrete, editable investigative research brief of at most 90 words: state the hypothesis or comparison to investigate, the relevant supplied mechanisms, and what would distinguish the alternatives. For unsupported evidence, specify what evidence to seek and why. Never empty; use existing research tools to inspect evidence; avoid a lengthy experimental program. */
             recommended_direction: string;
+            /** @description At most 2 items of 25 words each: specific missing observations or assumptions needed to test the proposed explanation, not claims that missing entities do not exist. */
+            missing_evidence: string[];
+            /** @description At most 2 items of 25 words each: prioritized concrete checks an agent could perform next to test the direction. State these as future work; at least one actionable check is required. */
+            next_steps: string[];
+            /** @description At most 2 items of 25 words each: required scope caveats for this bounded package, including relevant coverage omissions, source/species context and association-versus-causation limits. */
+            limitations: string[];
+        };
+        /** @description Incomplete, unvalidated public answer text from the live model response. Only present on pending detail reads; never scientific evidence or a completed result. */
+        LightningAuditProgress: {
+            revision: number;
+            /** @enum {string} */
+            phase: "writing" | "validating";
+            summary: string;
+            recommended_direction: string;
+            observations: string[];
             missing_evidence: string[];
             next_steps: string[];
             limitations: string[];
@@ -9048,6 +9072,7 @@ export interface components {
             } | null;
             error: components["schemas"]["CfdeAssessmentError"] | null;
             continuations: components["schemas"]["LightningContinuation"][];
+            progress?: components["schemas"]["LightningAuditProgress"];
         };
         LightningAuditList: {
             items: components["schemas"]["LightningAudit"][];
@@ -15794,6 +15819,8 @@ export interface operations {
             query?: {
                 /** @example 15 */
                 wait?: number;
+                /** @example 0 */
+                after_revision?: number;
             };
             header?: never;
             path: {

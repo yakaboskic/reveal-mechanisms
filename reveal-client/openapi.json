@@ -37042,7 +37042,7 @@
                       "evidence_references": [],
                       "provenance": {
                         "model": "claude-sonnet-4-6",
-                        "prompt_version": "lightning-audit-v1"
+                        "prompt_version": "lightning-audit-v8"
                       },
                       "usage": null,
                       "error": null,
@@ -37551,7 +37551,7 @@
                           ],
                           "provenance": {
                             "model": "claude-sonnet-4-6",
-                            "prompt_version": "lightning-audit-v1",
+                            "prompt_version": "lightning-audit-v8",
                             "source_state_sha256": "0930005c359bae46f01059f268a377b1a082f7d0bd68379807a03a68cc405ae7",
                             "request_sha256": "9707a47769286ac99fe827ac45c05d0d1368c56b1eff64c2a12012933c40392d",
                             "response_sha256": "c136b7ece7251f2bd3fca18d9e318b11cf6790c6001319ab2c35adc366fd3a0a"
@@ -37852,7 +37852,7 @@
           "Lightning audits"
         ],
         "summary": "Read an initial audit",
-        "description": "Requires the owning registered or anonymous workspace principal. All results are private, no-store. A Lightning audit assesses a bounded stored-evidence snapshot; it creates no accepted scientific account and performs no connected-graph or literature retrieval. Inputs and generated guidance are not instructions or scientific acceptance. Examples are synthetic contract fixtures. Reading never dispatches or retries model work. Pending results may long-poll without holding a database connection. Terminal results return immediately. Audits remain inspectable after their continuation window expires.",
+        "description": "Requires the owning registered or anonymous workspace principal. All results are private, no-store. A Lightning audit assesses a bounded stored-evidence snapshot; it creates no accepted scientific account and performs no connected-graph or literature retrieval. Inputs and generated guidance are not instructions or scientific acceptance. Examples are synthetic contract fixtures. Reading never dispatches or retries model work. Pending results may long-poll without holding a database connection. Terminal results return immediately. Optional after_revision returns immediately for a newer preview; otherwise a pending read waits. Assessing reads check stored progress at least once per second across API processes. Preview text is unvalidated; only succeeded results can continue. Audits remain inspectable after their continuation window expires.",
         "parameters": [
           {
             "name": "audit_id",
@@ -37876,6 +37876,17 @@
               "default": 0
             },
             "example": 15,
+            "description": ""
+          },
+          {
+            "name": "after_revision",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "example": 0,
             "description": ""
           }
         ],
@@ -37955,7 +37966,7 @@
                       ],
                       "provenance": {
                         "model": "claude-sonnet-4-6",
-                        "prompt_version": "lightning-audit-v1",
+                        "prompt_version": "lightning-audit-v8",
                         "source_state_sha256": "0930005c359bae46f01059f268a377b1a082f7d0bd68379807a03a68cc405ae7",
                         "request_sha256": "9707a47769286ac99fe827ac45c05d0d1368c56b1eff64c2a12012933c40392d",
                         "response_sha256": "c136b7ece7251f2bd3fca18d9e318b11cf6790c6001319ab2c35adc366fd3a0a"
@@ -37991,11 +38002,51 @@
                       "evidence_references": [],
                       "provenance": {
                         "model": "claude-sonnet-4-6",
-                        "prompt_version": "lightning-audit-v1"
+                        "prompt_version": "lightning-audit-v8"
                       },
                       "usage": null,
                       "error": null,
                       "continuations": []
+                    }
+                  },
+                  "writing": {
+                    "summary": "Writing",
+                    "value": {
+                      "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+                      "kind": "lightning_audit",
+                      "status": "assessing",
+                      "research_request_id": "33333333-3333-4333-8333-333333333333",
+                      "source_draft_id": "22222222-2222-4222-8222-222222222222",
+                      "source_draft_version": 2,
+                      "question": {
+                        "id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+                        "text": "Are the CAD PGS×context interactions driven by adverse exposures causally amplifying genetic risk, or are some \"contexts\" actually downstream readouts of incipient disease (reverse causation)?"
+                      },
+                      "created_at": "2026-09-24T16:00:00Z",
+                      "updated_at": "2026-09-24T16:00:00Z",
+                      "completed_at": null,
+                      "continuation_expires_at": "2026-10-24T16:00:00Z",
+                      "reference_generation_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c",
+                      "result": null,
+                      "coverage": null,
+                      "evidence_references": [],
+                      "provenance": {
+                        "model": "claude-sonnet-4-6",
+                        "prompt_version": "lightning-audit-v8"
+                      },
+                      "usage": null,
+                      "error": null,
+                      "continuations": [],
+                      "progress": {
+                        "revision": 1,
+                        "phase": "writing",
+                        "summary": "The supplied CFDE data offers a limited research direction",
+                        "recommended_direction": "",
+                        "observations": [],
+                        "missing_evidence": [],
+                        "next_steps": [],
+                        "limitations": []
+                      }
                     }
                   },
                   "failed": {
@@ -38021,7 +38072,7 @@
                       "evidence_references": [],
                       "provenance": {
                         "model": "claude-sonnet-4-6",
-                        "prompt_version": "lightning-audit-v1"
+                        "prompt_version": "lightning-audit-v8"
                       },
                       "usage": null,
                       "error": {
@@ -38263,7 +38314,7 @@
           {
             "lang": "Shell",
             "label": "request",
-            "source": "curl -X GET 'https://api.reveal.example.org/v1/lightning-audits/cccccccc-cccc-4ccc-8ccc-cccccccccccc?wait=15' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
+            "source": "curl -X GET 'https://api.reveal.example.org/v1/lightning-audits/cccccccc-cccc-4ccc-8ccc-cccccccccccc?wait=15&after_revision=0' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
           }
         ]
       }
@@ -66324,6 +66375,7 @@
       "LightningAuditResult": {
         "type": "object",
         "additionalProperties": false,
+        "description": "A substantive preliminary scientific audit of the supplied knowledge gap and evidence package.",
         "properties": {
           "assessment": {
             "type": "string",
@@ -66331,25 +66383,31 @@
               "promising",
               "partial",
               "unsupported"
-            ]
+            ],
+            "description": "How well this package supports a useful research direction; justify the choice in summary."
           },
           "summary": {
-            "type": "string"
+            "type": "string",
+            "description": "Required explanatory rationale, 200-260 words in three short paragraphs: the relevant lead, why the evidence does or does not support the question, and what would change the assessment. Explain how the supplied CFDE loading observations and DisMech context bear on this specific question, which hypothesis is worth pursuing, and the specific inferential link still missing. Explain why a partial or unsupported result follows from the supplied data, without treating missing sampled rows as biological absence. Do not only repeat the question or assessment. Use factual claims grounded in the referenced observations. Write complete paragraphs, without quotation marks around source labels. Never empty or a sentence fragment."
           },
           "observations": {
             "type": "array",
+            "description": "At most 3 concrete, relevant source observations, each at most 45 words, when available, explaining their bearing on the question. Cite only supplied evidence_ref IDs. May be empty for unsupported only if no observation supports a direction.",
             "items": {
               "type": "object",
               "additionalProperties": false,
               "properties": {
                 "text": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "At most 45 words: a specific source observation and its relevance; distinguish stored evidence from a proposed interpretation."
                 },
                 "evidence_refs": {
                   "type": "array",
                   "items": {
                     "type": "string"
-                  }
+                  },
+                  "minItems": 1,
+                  "description": "Exact evidence_ref IDs in this package that support this observation."
                 }
               },
               "required": [
@@ -66359,7 +66417,68 @@
             }
           },
           "recommended_direction": {
+            "type": "string",
+            "description": "Required concrete, editable investigative research brief of at most 90 words: state the hypothesis or comparison to investigate, the relevant supplied mechanisms, and what would distinguish the alternatives. For unsupported evidence, specify what evidence to seek and why. Never empty; use existing research tools to inspect evidence; avoid a lengthy experimental program."
+          },
+          "missing_evidence": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "At most 2 items of 25 words each: specific missing observations or assumptions needed to test the proposed explanation, not claims that missing entities do not exist."
+          },
+          "next_steps": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "description": "At most 2 items of 25 words each: prioritized concrete checks an agent could perform next to test the direction. State these as future work; at least one actionable check is required."
+          },
+          "limitations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "description": "At most 2 items of 25 words each: required scope caveats for this bounded package, including relevant coverage omissions, source/species context and association-versus-causation limits."
+          }
+        },
+        "required": [
+          "assessment",
+          "summary",
+          "observations",
+          "recommended_direction",
+          "missing_evidence",
+          "next_steps",
+          "limitations"
+        ]
+      },
+      "LightningAuditProgress": {
+        "type": "object",
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "phase": {
+            "type": "string",
+            "enum": [
+              "writing",
+              "validating"
+            ]
+          },
+          "summary": {
             "type": "string"
+          },
+          "recommended_direction": {
+            "type": "string"
+          },
+          "observations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "missing_evidence": {
             "type": "array",
@@ -66381,14 +66500,17 @@
           }
         },
         "required": [
-          "assessment",
+          "revision",
+          "phase",
           "summary",
-          "observations",
           "recommended_direction",
+          "observations",
           "missing_evidence",
           "next_steps",
           "limitations"
-        ]
+        ],
+        "additionalProperties": false,
+        "description": "Incomplete, unvalidated public answer text from the live model response. Only present on pending detail reads; never scientific evidence or a completed result."
       },
       "LightningContinuationInput": {
         "type": "object",
@@ -66644,6 +66766,9 @@
             "items": {
               "$ref": "#/components/schemas/LightningContinuation"
             }
+          },
+          "progress": {
+            "$ref": "#/components/schemas/LightningAuditProgress"
           }
         },
         "required": [
