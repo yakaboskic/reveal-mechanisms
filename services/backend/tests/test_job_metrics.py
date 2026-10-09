@@ -128,11 +128,22 @@ class CostTelemetryTests(unittest.TestCase):
         self.assertEqual(costs['budget'], {'exceeded': 1, 'near_limit': 0})
         failures = {f['code']: f for f in costs['failures']}
         self.assertEqual(failures['VALIDATION_FAILED']['causes'], {'EvidenceBuildError · commit': 1})
+        self.assertEqual(failures['AUTHORING_BUDGET_EXCEEDED']['causes'], {'error_max_budget_usd': 1})
         self.assertEqual(failures['AUTHORING_BUDGET_EXCEEDED']['spend_usd'], 3.14)
         owners = {o['owner']: o for o in costs['owners']}
         self.assertEqual(owners['client-user']['label'], 'dk/developer'); self.assertIsNone(owners['person']['label'])
         self.assertEqual(owners['client-user']['spend_usd'], 4.79); self.assertEqual(owners['person']['unreported'], 1)
         self.assertEqual(sum(d['jobs'] for d in costs['daily']), 6)
+
+    def test_a_run_that_ended_normally_is_not_named_as_a_failure_cause(self):
+        with self.repo.transaction() as tx:
+            tx.put('job', 'late', 'person', {'id': 'late', 'kind': 'analysis', 'status': 'failed', 'stage': 'validating',
+                                             'created_at': '2026-10-01T10:00:00Z', 'failure': {'code': 'LATE_VALIDATION'}})
+            tx.put('job_metrics', 'late', 'person', {'job_id': 'late', 'kind': 'analysis', 'created_at': '2026-10-01T10:00:00Z',
+                                                     'agent': {'cost_usd': 0.56, 'cost_source': 'provider', 'subtype': 'success'}})
+        with self.repo.read_transaction(utc=True) as tx:
+            failures = {f['code']: f for f in cost_summary(tx, current=self.now)['failures']}
+        self.assertEqual((failures['LATE_VALIDATION']['jobs'], failures['LATE_VALIDATION']['causes']), (1, {}))
 
     def test_job_rows_carry_metrics_and_workflow_execution_state(self):
         rows = {row['id']: row for row in snapshot(self.repo)['jobs']}

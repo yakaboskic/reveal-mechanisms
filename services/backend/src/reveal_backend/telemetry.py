@@ -145,7 +145,9 @@ def cost_summary(tx, current=None):
         if status == 'failed':
             entry = failures.setdefault(code or 'UNKNOWN', {'code': code or 'UNKNOWN', 'jobs': 0, 'spend_usd': 0.0, 'causes': {}})
             entry['jobs'] += 1; entry['spend_usd'] += cost or 0
-            cause = ' · '.join(filter(None, (data.get('error.error_type'), data.get('error.phase')))) or data.get('agent.subtype')
+            # A run that ended normally ('success') is not why a later phase failed.
+            subtype = data.get('agent.subtype') if data.get('agent.subtype') != 'success' else None
+            cause = ' · '.join(filter(None, (data.get('error.error_type'), data.get('error.phase')))) or subtype
             if cause: entry['causes'][cause] = entry['causes'].get(cause, 0) + 1
         if data.get('agent.subtype') == 'error_max_budget_usd' or code == 'AUTHORING_BUDGET_EXCEEDED': exceeded += 1
         elif isinstance(data.get('agent.budget_used'), (int, float)) and data['agent.budget_used'] >= .8: near += 1
