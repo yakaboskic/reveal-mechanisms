@@ -381,7 +381,8 @@ class WorkflowExecution:
         token = execution['fence']; deadline = None
         try:
             if execution.pop('deferred'):
-                return await run_sync(state.complete, self.repository, payload, token, next_phase=execution['phase'], sleep=10)
+                return await run_sync(state.complete, self.repository, payload, token, next_phase=execution['phase'],
+                                      sleep=10, rescheduled=True)
             # Even an acknowledgment lost after outcome commit must replay the
             # authoritative outcome rather than attempting scientific work twice.
             if job['status'] in jobs.TERMINAL and (not execution.get('capacity_reserved')
@@ -420,7 +421,7 @@ class WorkflowExecution:
                     raise
         except state.StepBusy:
             return await run_sync(state.complete, self.repository, payload, token,
-                                           next_phase=execution['phase'], sleep=10)
+                                  next_phase=execution['phase'], sleep=10, rescheduled=True)
         except state.RecoveryRequired:
             await run_sync(state.release, self.repository, payload, token, recovery=True, reason='External creation requires reconciliation')
             raise
@@ -457,7 +458,8 @@ class WorkflowExecution:
         The phase's own failure does: its step deadline expired, or the error has no infrastructure cause. A busy
         or lost database session, a lost observation commit, a storage or Box outage and a network timeout retry as
         delivery-class work (delivery_recoveries) until the phase has been unable to complete for
-        REVEAL_WORKFLOW_INFRA_RETRY_SECONDS; state.release then records them as the phase's own failures."""
+        REVEAL_WORKFLOW_INFRA_RETRY_SECONDS; state.release then records them as the phase's own failures. A deferred
+        or busy step reschedules the phase without completing it and does not restart that window."""
         own = (deadline is not None and deadline.expired()) or not infrastructure_error(exc)
         await run_sync(state.release, self.repository, payload, token, cause='step_failure' if own else 'infrastructure',
             reason=('Phase failed' if own else 'Transient infrastructure') + ' (' + type(exc).__name__ + '); retry the same phase')

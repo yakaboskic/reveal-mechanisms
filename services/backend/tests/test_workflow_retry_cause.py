@@ -125,8 +125,8 @@ class StepRetryCauseTests(unittest.IsolatedAsyncioTestCase):
             row = tx.get('execution', payload['job_id']); row['data']['expected_at'] = ''
             tx.put('execution', payload['job_id'], row['owner'], row['data'])
 
-    async def failed_tick(self, engine, payload, expected):
-        with self.assertRaises(expected): await engine.step(payload, 0)
+    async def failed_tick(self, engine, payload, expected, index=0):
+        with self.assertRaises(expected): await engine.step(payload, index)
         execution = self.execution(payload)
         self.assertEqual((execution['fence'], execution['disposition']), (None, 'retry'))
         return execution
@@ -327,6 +327,62 @@ class StepRetryCauseTests(unittest.IsolatedAsyncioTestCase):
                 execution = self.execution(payload); payload['generation'] = execution['generation']
         self.assertEqual((execution['disposition'], execution['failure_code'], execution['recoveries'],
                           execution['delivery_recoveries']), ('recovery_required', 'WORKFLOW_RECOVERY_EXHAUSTED', 3, 2))
+        self.assertFalse(execution['capacity_reserved'])
+        self.assertTrue(execution['cleanup_abandoned'])
+        with self.repo.read_transaction() as tx:
+            self.assertEqual(tx.get('job', job['id'])['data']['status'], 'failed')
+            self.assertTrue(state.has_cleanup_handoff(tx, execution))
+            self.assertEqual(tx.get('workflow_cleanup', execution['cleanup_id'])['data']['box_id'], 'box')
+
+    def capturing(self):
+        """A capture-phase job whose Box API answers 502 when its output is captured to the store."""
+        job, payload = self.new('paragraph')
+        handle = {'box_id': 'box', 'job_id': job['id'], 'attempt': 1, 'phase': 'terminal', 'cursor': 3,
+                  'capture_protocol': 's3-v1', 'state': {'status': 'succeeded'}}
+        with self.repo.transaction() as tx:
+            execution = tx.get('execution', job['id'])['data']
+            execution.update(phase='capture', box=handle, capacity_reserved=True, workspace={'ref': 'w'})
+            tx.put('execution', job['id'], 'owner', execution)
+            queue = tx.get('queue', job['id'])['data']; queue['dispatch_input'] = {'selected_graphs': [], 'sha256': 'x'}
+            tx.put('queue', job['id'], 'owner', queue)
+            current = tx.get('job', job['id'])['data']; current.update(status='running', stage='authoring_paragraph')
+            tx.put('job', job['id'], 'owner', current)
+        adapter = Mock(); adapter.capture_to_store = AsyncMock(side_effect=BoxError('bad gateway', status_code=502))
+        return job, payload, adapter, WorkflowExecution(self.repo, storage=self.store, adapter=adapter)
+
+    async def test_a_deferred_or_busy_reschedule_keeps_the_infrastructure_window(self):
+        # A reschedule is not a completion. Were a deferral to restart the window, a Box API that keeps failing
+        # on a busy system would retry as infrastructure forever while its job held the Box reservation.
+        job, payload, adapter, engine = self.capturing()
+        others = [self.new('paragraph')[0]['id'] for _ in range(2)]
+        def capture_leases(until):
+            with self.repo.transaction() as tx:
+                for identity in others:
+                    row = tx.get('execution', identity); row['data'].update(phase='capture', lease_until=until)
+                    tx.put('execution', identity, row['owner'], row['data'])
+        with patch.dict('os.environ', {'REVEAL_MAX_CAPTURE_STEPS': '2'}), patch('reveal_backend.acceptance.prewarm'):
+            execution = await self.failed_tick(engine, payload, BoxError)
+            self.assertEqual(execution['retry_cause'], 'infrastructure')
+            self.backdate(payload, 7200)   # failing for two hours, past the default 3600-second window
+            since = self.execution(payload)['infrastructure_since']
+            capture_leases(state.after(600))   # the capture group is full: the retry is deferred
+            self.assertEqual(await engine.step(payload, 0), {'phase': 'capture', 'index': 1, 'sleep': 10, 'done': False})
+            self.assertEqual(self.execution(payload)['infrastructure_since'], since)
+            capture_leases(None)
+            # A busy resource (here, cleanup owning the Box) reschedules the phase the same way.
+            adapter.capture_to_store.side_effect = state.StepBusy('Cleanup already owns its Box')
+            self.assertEqual(await engine.step(payload, 1), {'phase': 'capture', 'index': 2, 'sleep': 10, 'done': False})
+            execution = self.execution(payload)
+            self.assertEqual((execution['infrastructure_since'], execution['phase_index']), (since, 2))
+            adapter.capture_to_store.side_effect = BoxError('bad gateway', status_code=502)
+            for expected in (1, 1, 1, 0):
+                execution = await self.failed_tick(engine, payload, BoxError, index=2)
+                self.assertEqual(execution['retry_cause'], 'step_failure')
+                self.assertIn('Infrastructure unavailable since ' + since, execution['diagnostic'])
+                self.stall(payload); self.assertEqual(reconcile_stale(self.repo), expected)
+                execution = self.execution(payload); payload['generation'] = execution['generation']
+        self.assertEqual((execution['disposition'], execution['failure_code'], execution['recoveries'],
+                          execution.get('delivery_recoveries', 0)), ('recovery_required', 'WORKFLOW_RECOVERY_EXHAUSTED', 3, 0))
         self.assertFalse(execution['capacity_reserved'])
         self.assertTrue(execution['cleanup_abandoned'])
         with self.repo.read_transaction() as tx:

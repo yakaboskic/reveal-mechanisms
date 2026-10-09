@@ -322,9 +322,15 @@ def save(repository, payload, token, **updates):
     return state
 
 
-def complete(repository, payload, token, *, next_phase, sleep=0, done=False, observation=None, **updates):
+def complete(repository, payload, token, *, next_phase, sleep=0, done=False, observation=None, rescheduled=False,
+             **updates):
     """Finish the step in one fenced transaction: one read, its records in one INSERT, then execution and queue.
-    observation (an observe step's Box inspection) commits its cursor and events here too."""
+    observation (an observe step's Box inspection) commits its cursor and events here too.
+
+    rescheduled marks a step that only rescheduled its phase without running it: it was deferred because the
+    phase's concurrency group or scratch cap was full, or it found its Box, cleanup or capacity busy. Such a step
+    keeps infrastructure_since, so a busy system cannot restart the infrastructure retry window of a phase that has
+    not run to completion since its outage began."""
     jid = payload['job_id']
     with repository.transaction() as tx:
         tx.get_records([('execution', jid), ('queue', jid), *([('job', jid)] if done else []),
@@ -351,7 +357,8 @@ def complete(repository, payload, token, *, next_phase, sleep=0, done=False, obs
         records.append(('workflow_step', state['step'], owner, {'job_id': payload['job_id'], 'generation': payload['generation'],
             'phase': state['phase'], 'index': state['phase_index'], 'result': result, 'completed_at': now()}))
         tx.insert_new(records, ('workflow_step',))
-        state.pop('infrastructure_since', None)   # the phase completed: a later outage starts a new window
+        if not rescheduled:
+            state.pop('infrastructure_since', None)   # the phase ran to completion: a later outage starts a new window
         state.update(updates, phase=next_phase, phase_index=result['index'], fence=None, lease_until=None,
             step=None, updated_at=now(), expected_at=after(sleep + 120), retry_cause=None, disposition='complete' if done else 'ready')
         tx.put('execution', payload['job_id'], owner, state)
@@ -376,7 +383,8 @@ def release(repository, payload, token, *, recovery=False, reason=None, cause='s
     spends REVEAL_WORKFLOW_MAX_RECOVERIES) or 'infrastructure' when a dependency was unavailable (a delivery-class
     retry, counted in delivery_recoveries).
 
-    The first infrastructure retry of a phase records infrastructure_since; the phase's next completion clears it.
+    The first infrastructure retry of a phase records infrastructure_since. Only a step that runs the phase to
+    completion clears it; a deferred or busy step that merely reschedules the phase keeps it (complete's rescheduled).
     An outage that has kept the phase from completing for REVEAL_WORKFLOW_INFRA_RETRY_SECONDS is no longer treated
     as transient: its retries are recorded as step_failure, so the recovery budget bounds them and exhausting it
     fails the job and hands its Box to durable cleanup, releasing its capacity, as any phase failure does."""

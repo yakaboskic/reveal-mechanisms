@@ -259,15 +259,19 @@ failing the job. An application error raised from an outage keeps its own
 outcome.
 
 Infrastructure retries are bounded by time. The first one records
-`infrastructure_since`; the phase's next completion clears it. Once a phase has
-been unable to complete for `REVEAL_WORKFLOW_INFRA_RETRY_SECONDS` (default one
-hour), its further retries are recorded as `step_failure`, with the outage start
-in the diagnostic and a warning in the log. A Box API that keeps failing
-therefore exhausts the budget and reaches the same recovery as any failed
-phase: the job fails, the Box is handed to durable cleanup and its reservation
-is released. Operator `resume` resets `retry_cause`, `infrastructure_since`, the
-scheduler-failure fields and any sweep hold together with the budget, keeping
-the previous values in the recovery audit.
+`infrastructure_since`, and only a step that runs the phase to completion clears
+it. A step that merely reschedules the phase keeps it: one deferred because the
+phase's concurrency group or scratch cap is full, or one that finds its Box,
+cleanup or capacity busy. A busy system therefore cannot restart the window.
+Once a phase has been unable to complete for
+`REVEAL_WORKFLOW_INFRA_RETRY_SECONDS` (default one hour), its further retries
+are recorded as `step_failure`, with the outage start in the diagnostic and a
+warning in the log. A Box API that keeps failing therefore exhausts the budget
+and reaches the same recovery as any failed phase: the job fails, the Box is
+handed to durable cleanup and its reservation is released. Operator `resume`
+resets `retry_cause`, `infrastructure_since`, the scheduler-failure fields and
+any sweep hold together with the budget, keeping the previous values in the
+recovery audit.
 
 Reconciliation decides each stale execution in its own transaction. A busy,
 lost or failing database still defers or fails the whole tick. Any other
