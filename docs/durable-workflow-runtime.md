@@ -241,15 +241,33 @@ Only its own failures are `step_failure` and spend the budget: an expired step
 deadline, or an error with no infrastructure cause, such as a size limit, an
 unsafe path, a checksum or binding mismatch, rejected credential material, an
 inconsistent remote cursor, a remote command that did not complete, a rejected
-provider request (HTTP 4xx other than 408/425/429) or a missing local file.
-Infrastructure is `infrastructure` and counts in `delivery_recoveries` however
-often it recurs: `DatabaseBusy`/`FenceBusy`, a lost or deadlocked session (which
-now retries the phase instead of failing the job), a lost observation commit,
-network timeouts, connection/DNS/TLS errors, a full scratch disk, and S3 or Box
-throttling or 5xx responses. `StorageUnavailable` and `BoxTransportError` are
-classified by the errors they were explicitly raised from. Operator `resume`
-resets `retry_cause`, the scheduler-failure fields and any sweep hold together
-with the budget, keeping the previous values in the recovery audit.
+provider request (HTTP 4xx other than 408/425/429), a deterministic database
+rejection (for example an oversized packet or invalid JSON text), a corrupt
+archive or a missing local file. Infrastructure is `infrastructure` and counts
+in `delivery_recoveries`: `DatabaseBusy`/`FenceBusy`; a lost, refused or
+timed-out session, connection limit, lock wait timeout, deadlock, server
+shutdown or read-only failover (MySQL 1040, 1053, 1205, 1213, 1290, 1836, 2003,
+2006, 2013, 2055, 4031 and driver interface errors); a lost observation commit;
+network timeouts; connection, DNS or TLS errors; a full scratch disk or
+exhausted descriptors; and S3 or Box throttling or 5xx responses. These are
+recognized when a client library raises them directly, such as the raw `httpx`
+error or `BoxError` that `AsyncBox.get` raises when a phase connects to its Box,
+as well as when `StorageUnavailable` or `BoxTransportError` was explicitly
+raised from them; those wrappers are classified by that cause. Every database
+session error and every Box provider response retries the phase rather than
+failing the job. An application error raised from an outage keeps its own
+outcome.
+
+Infrastructure retries are bounded by time. The first one records
+`infrastructure_since`; the phase's next completion clears it. Once a phase has
+been unable to complete for `REVEAL_WORKFLOW_INFRA_RETRY_SECONDS` (default one
+hour), its further retries are recorded as `step_failure`, with the outage start
+in the diagnostic and a warning in the log. A Box API that keeps failing
+therefore exhausts the budget and reaches the same recovery as any failed
+phase: the job fails, the Box is handed to durable cleanup and its reservation
+is released. Operator `resume` resets `retry_cause`, `infrastructure_since`, the
+scheduler-failure fields and any sweep hold together with the budget, keeping
+the previous values in the recovery audit.
 
 Reconciliation decides each stale execution in its own transaction. A busy,
 lost or failing database still defers or fails the whole tick. Any other
@@ -280,7 +298,8 @@ Production keeps its explicit two-Box setting.
 | `REVEAL_MAX_REVIEW_STEPS` | 2 | 2 | Deterministic validation/commit phase leases; retained legacy setting name. |
 | `REVEAL_MYSQL_POOL_SIZE` | 10 | 10 | Pooled sessions per process; allowed 1–32, half of them (rounded down) for pooled reference reads. Zero bypasses the bounded pool and is unsuitable for this load. |
 | `REVEAL_MYSQL_POOL_WAIT_SECONDS` | 5 | 5 | Bounded connection wait; allowed greater than zero through 30 seconds. |
-| `REVEAL_WORKFLOW_MAX_RECOVERIES` | 3 | 3 | Genuine step failures an execution may retry before it fails and hands its Box to cleanup; delivery stalls and handoffs do not count. |
+| `REVEAL_WORKFLOW_MAX_RECOVERIES` | 3 | 3 | Genuine step failures an execution may retry before it fails and hands its Box to cleanup; delivery stalls, handoffs and infrastructure retries within the window below do not count. |
+| `REVEAL_WORKFLOW_INFRA_RETRY_SECONDS` | 3600 | 3600 | How long a phase may keep retrying unavailable infrastructure before its retries spend `REVEAL_WORKFLOW_MAX_RECOVERIES`; positive integer. |
 | `REVEAL_WORKFLOW_OBSERVE_INTERVAL_SECONDS` | 5 | 10 | Durable sleep between Box observations. |
 | `REVEAL_WORKFLOW_STEPS_PER_RUN` | 6 | 6 | Phase steps before a fresh run; positive integer, frozen per dispatch. |
 | `REVEAL_AGENT_TIMEOUT_SECONDS` | 1800 | 1800 | Agent runtime budget; frozen with each prepared input; the service-wide setting in `deploy/dig/service.yaml` is also 1800. |

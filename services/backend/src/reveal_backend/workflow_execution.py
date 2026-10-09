@@ -8,11 +8,15 @@ import asyncio
 from contextlib import nullcontext
 from copy import deepcopy
 import errno
+import gzip
+import io
 import json
 import os
 from pathlib import Path
 import re
+import shutil
 import socket
+import ssl
 import tempfile
 from threading import Event
 import time
@@ -147,15 +151,35 @@ class Observation:
         return records
 
 
-def transient_database(error):
-    """A lost connection, lock wait timeout or deadlock: the transaction rolled back and the step can retry."""
+# MySQL errors a retry can outlive: a refused, lost or idle-timed-out connection (2003, 2006, 2013, 2055, 4031), too
+# many connections (1040), a server shutting down (1053), a lock wait timeout or deadlock (1205, 1213) and a writer
+# that failed over to read-only (1290, 1836). pymysql reports every other unmapped server error as OperationalError
+# too, including deterministic rejections such as an oversized packet (1153) or invalid JSON text (3140).
+_TRANSIENT_MYSQL_ERRORS = frozenset((1040, 1053, 1205, 1213, 1290, 1836, 2003, 2006, 2013, 2055, 4031))
+
+
+def database_error(error):
+    """A database session error: its transaction rolled back, so the phase is retried rather than failed.
+    transient_database decides whether that retry is infrastructure."""
     import pymysql
     return isinstance(error, (pymysql.err.OperationalError, pymysql.err.InterfaceError))
 
 
-# Local filesystem errors that repeat on every attempt: a missing or misplaced path is the phase's own failure.
-_DETERMINISTIC_OS_ERRORS = (FileNotFoundError, FileExistsError, IsADirectoryError, NotADirectoryError, PermissionError)
-_DETERMINISTIC_ERRNOS = frozenset((errno.EINVAL, errno.ENAMETOOLONG, errno.ELOOP))
+def transient_database(error):
+    """A lost or refused connection, connection limit, lock wait timeout, deadlock or failover: a retry can succeed."""
+    import pymysql
+    if isinstance(error, pymysql.err.InterfaceError): return True
+    return (isinstance(error, pymysql.err.OperationalError) and bool(error.args)
+            and error.args[0] in _TRANSIENT_MYSQL_ERRORS)
+
+
+# Local errors that repeat on every attempt are the phase's own failure: a missing, misplaced or unwritable path, a
+# corrupt archive, an unsupported file operation, a failed tree copy or move, an oversized argument list or file.
+_DETERMINISTIC_OS_ERRORS = (FileNotFoundError, FileExistsError, IsADirectoryError, NotADirectoryError, PermissionError,
+                            gzip.BadGzipFile, io.UnsupportedOperation, shutil.Error)
+_DETERMINISTIC_ERRNOS = frozenset((errno.EINVAL, errno.ENAMETOOLONG, errno.ELOOP, errno.E2BIG, errno.EXDEV,
+                                   errno.ENOTEMPTY, errno.EROFS, errno.EFBIG, errno.EBADF, errno.ENOEXEC, errno.ESPIPE,
+                                   errno.ENOTTY, errno.ENOTSUP, errno.EOPNOTSUPP, errno.EDOM, errno.ERANGE))
 _THROTTLED_CODES = frozenset(('SlowDown', 'Throttling', 'ThrottlingException', 'RequestTimeout', 'RequestLimitExceeded',
                               'InternalError', 'ServiceUnavailable', 'TooManyRequestsException'))
 
@@ -168,6 +192,7 @@ def _infrastructure(error):
     # DatabaseBusy and FenceBusy are TimeoutErrors; ConnectionError covers resets, refusals and broken pipes.
     if isinstance(error, (TimeoutError, ConnectionError)): return True
     if isinstance(error, OSError):   # DNS, TLS, unreachable hosts, a full scratch disk, descriptor exhaustion
+        if isinstance(error, (socket.gaierror, socket.herror, ssl.SSLError)): return True   # errno is not an OS errno
         return not isinstance(error, _DETERMINISTIC_OS_ERRORS) and error.errno not in _DETERMINISTIC_ERRNOS
     if transient_database(error): return True
     if isinstance(error, httpx.TransportError):   # an unsupported URL or a request this side malformed repeats
@@ -179,9 +204,25 @@ def _infrastructure(error):
         response = error.response or {}
         return (_retryable_status(response.get('ResponseMetadata', {}).get('HTTPStatusCode'))
                 or response.get('Error', {}).get('Code') in _THROTTLED_CODES)
+    return _box_error(error) and _retryable_status(error.status_code)
+
+
+def _box_error(error):
     try: from upstash_box.errors import BoxError
     except ImportError: return False
-    return isinstance(error, BoxError) and _retryable_status(error.status_code)
+    return isinstance(error, BoxError)
+
+
+def retried(error):
+    """Whether step() retries the same phase after an error no adapter wrapped, instead of failing the job.
+
+    BoxTransportError, StorageUnavailable, TimeoutError and OSError are always retried. So are a database session
+    error (its transaction rolled back), a provider client's own connection, timeout, throttling or 5xx error, such
+    as the raw httpx or BoxError that AsyncBox.get raises when a Box is connected, and any other Box provider
+    response, which is retried as its wrapped BoxTransportError form is. retry_phase then decides whether the retry
+    spends the recovery budget. Only the error itself is examined, never its cause: an application error raised
+    from an outage (ScientificReviewUnavailable) keeps its own outcome."""
+    return database_error(error) or _infrastructure(error) or _box_error(error)
 
 
 def infrastructure_error(error):
@@ -365,7 +406,7 @@ class WorkflowExecution:
                         BoxTransportError, StorageUnavailable, TimeoutError, OSError):
                     raise
                 except Exception as exc:
-                    if transient_database(exc): raise   # the session rolled back; retried, never a scientific outcome
+                    if retried(exc): raise   # an outage or a rolled-back session; retried, never a scientific outcome
                     # An incomplete restore must never replace the saved source
                     # workspace with the partial contents of this scratch dir.
                     await run_sync(self.retain_failure, payload, token, root if workspace_ready else None,
@@ -389,7 +430,7 @@ class WorkflowExecution:
             await self.retry_phase(payload, token, exc, deadline)
             raise
         except Exception as exc:
-            if transient_database(exc):
+            if retried(exc):
                 await self.retry_phase(payload, token, exc, deadline)
                 raise
             from .scientific_grounding import ScientificReviewUnavailable
@@ -413,9 +454,10 @@ class WorkflowExecution:
     async def retry_phase(self, payload, token, exc, deadline):
         """Release the fence so the same phase retries, recording whether the retry spends the recovery budget.
 
-        Only the phase's own failure does: its step deadline expired, or the error has no infrastructure cause.
-        A busy or lost database session, a lost observation commit, a storage or Box transport outage and a
-        network timeout retry as delivery-class work (delivery_recoveries), however often they recur."""
+        The phase's own failure does: its step deadline expired, or the error has no infrastructure cause. A busy
+        or lost database session, a lost observation commit, a storage or Box outage and a network timeout retry as
+        delivery-class work (delivery_recoveries) until the phase has been unable to complete for
+        REVEAL_WORKFLOW_INFRA_RETRY_SECONDS; state.release then records them as the phase's own failures."""
         own = (deadline is not None and deadline.expired()) or not infrastructure_error(exc)
         await run_sync(state.release, self.repository, payload, token, cause='step_failure' if own else 'infrastructure',
             reason=('Phase failed' if own else 'Transient infrastructure') + ' (' + type(exc).__name__ + '); retry the same phase')

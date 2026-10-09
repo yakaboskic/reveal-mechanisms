@@ -37,16 +37,19 @@ class WorkflowAdminRecoveryTests(unittest.TestCase):
                 job = jobs.enqueue(tx, 'owner', 'analysis', request_id='request')
                 execution = tx.get('execution', job['id'])['data']
                 execution.update(disposition='retry', retry_cause='step_failure', recoveries=3, expected_at='',
+                    infrastructure_since='2026-10-08T17:00:00Z',
                     scheduler_failure_at='2026-10-08T18:00:00Z', scheduler_failure_status=500,
                     sweep_hold={'error': 'StaleExecution', 'detail': 'Recovery cleanup binding changed'})
                 tx.put('execution', job['id'], 'owner', execution)
                 tx.remove('workflow_dispatch', job['id'])
             result = resume(repository, job['id'], execution['generation'])
-            self.assertEqual((result['recoveries'], result['retry_cause'], result['scheduler_failure_at'],
-                              result['scheduler_failure_status'], result['sweep_hold']), (0, None, None, None, None))
+            self.assertEqual((result['recoveries'], result['retry_cause'], result['infrastructure_since'],
+                              result['scheduler_failure_at'], result['scheduler_failure_status'], result['sweep_hold']),
+                             (0, None, None, None, None, None))
             with repository.read_transaction() as tx:
                 audit = tx.get('workflow_recovery_audit', digest([job['id'], result['generation']]))['data']['previous_execution']
-            self.assertEqual((audit['retry_cause'], audit['recoveries'], audit['scheduler_failure_status']), ('step_failure', 3, 500))
+            self.assertEqual((audit['retry_cause'], audit['recoveries'], audit['scheduler_failure_status'], audit['infrastructure_since']),
+                             ('step_failure', 3, 500, '2026-10-08T17:00:00Z'))
             self.assertEqual(audit['sweep_hold']['error'], 'StaleExecution')
             # The resumed run is never delivered: a delivery stall, which must not spend the fresh budget.
             with repository.transaction() as tx:

@@ -14,7 +14,7 @@ from . import jobs, workflow_state as state
 from .repository import Repository, digest, now
 
 # Why the previous attempt was retried or held: reset with the recovery budget when an operator resumes.
-RETRY_MARKERS = ('retry_cause', 'scheduler_failure_at', 'scheduler_failure_status', 'sweep_hold')
+RETRY_MARKERS = ('retry_cause', 'infrastructure_since', 'scheduler_failure_at', 'scheduler_failure_status', 'sweep_hold')
 
 
 def inspect_execution(repository, identity):
@@ -25,7 +25,7 @@ def inspect_execution(repository, identity):
     keys=('job_id','namespace','generation','phase','phase_index','disposition','created_at','updated_at','expected_at',
           'capacity_reserved','creation_intent','launch_intent','capture_complete','cleanup_complete','cleanup_id',
           'cleanup_abandoned','failure_code','review_attempt','recoveries','delivery_recoveries','handoffs','diagnostic',
-          'retry_cause','scheduler_failure_at','scheduler_failure_status','sweep_hold')
+          'retry_cause','infrastructure_since','scheduler_failure_at','scheduler_failure_status','sweep_hold')
     return {**{key:value.get(key) for key in keys}, 'job_status':job['status'],
             'box_id':(value.get('box') or {}).get('box_id'), 'box_phase':(value.get('box') or {}).get('phase')}
 

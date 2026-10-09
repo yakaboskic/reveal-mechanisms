@@ -4,10 +4,12 @@ This module never connects to Redis. Scheduler history is advisory: only this
 record can authorize a phase, paid creation, validation, or outcome commit.
 """
 from datetime import datetime, timedelta, timezone
+import logging
 import os
 from .repository import now, uid, digest
 
 VERSION = 1
+log = logging.getLogger(__name__)
 
 class StaleExecution(RuntimeError): pass
 class StepBusy(RuntimeError): pass
@@ -349,6 +351,7 @@ def complete(repository, payload, token, *, next_phase, sleep=0, done=False, obs
         records.append(('workflow_step', state['step'], owner, {'job_id': payload['job_id'], 'generation': payload['generation'],
             'phase': state['phase'], 'index': state['phase_index'], 'result': result, 'completed_at': now()}))
         tx.insert_new(records, ('workflow_step',))
+        state.pop('infrastructure_since', None)   # the phase completed: a later outage starts a new window
         state.update(updates, phase=next_phase, phase_index=result['index'], fence=None, lease_until=None,
             step=None, updated_at=now(), expected_at=after(sleep + 120), retry_cause=None, disposition='complete' if done else 'ready')
         tx.put('execution', payload['job_id'], owner, state)
@@ -361,17 +364,38 @@ def complete(repository, payload, token, *, next_phase, sleep=0, done=False, obs
 RETRY_CAUSES = ('step_failure', 'infrastructure')
 
 
+def infrastructure_window():
+    """Seconds a phase may keep failing on unavailable infrastructure before its retries spend the recovery budget."""
+    seconds = int(os.getenv('REVEAL_WORKFLOW_INFRA_RETRY_SECONDS', '3600'))
+    if seconds < 1: raise ValueError('REVEAL_WORKFLOW_INFRA_RETRY_SECONDS must be positive')
+    return seconds
+
+
 def release(repository, payload, token, *, recovery=False, reason=None, cause='step_failure'):
     """Release the fence for a retry of the same phase. cause is 'step_failure' when the phase itself failed (it
     spends REVEAL_WORKFLOW_MAX_RECOVERIES) or 'infrastructure' when a dependency was unavailable (a delivery-class
-    retry, counted in delivery_recoveries)."""
+    retry, counted in delivery_recoveries).
+
+    The first infrastructure retry of a phase records infrastructure_since; the phase's next completion clears it.
+    An outage that has kept the phase from completing for REVEAL_WORKFLOW_INFRA_RETRY_SECONDS is no longer treated
+    as transient: its retries are recorded as step_failure, so the recovery budget bounds them and exhausting it
+    fails the job and hands its Box to durable cleanup, releasing its capacity, as any phase failure does."""
     if cause not in RETRY_CAUSES: raise ValueError('Unknown workflow retry cause')
+    window = infrastructure_window() if cause == 'infrastructure' else None
     with repository.transaction() as tx:
         owner, state = owned(tx, payload, token)
         if recovery:
             return require_recovery(tx, owner, state, reason or 'Workflow phase requires recovery',
                 failure_code='WORKFLOW_ALLOCATION_AMBIGUOUS' if state.get('creation_intent') and not state.get('box')
                 else 'WORKFLOW_STEP_FAILED', token=token)
+        if window is not None:
+            since = state['infrastructure_since'] = state.get('infrastructure_since') or now()
+            if since <= after(-window):
+                cause = 'step_failure'
+                reason = ('Infrastructure unavailable since ' + since + ', longer than ' + str(window) + ' seconds: '
+                          + (reason or 'retry the same phase'))
+                log.warning('Workflow execution %s phase %s has failed on infrastructure since %s; its retries now '
+                            'spend the recovery budget', payload['job_id'], state.get('phase'), since)
         state.update(fence=None, lease_until=None, updated_at=now(), expected_at=after(60),
             disposition='retry', retry_cause=cause, diagnostic=reason)
         tx.put('execution', payload['job_id'], owner, state)
