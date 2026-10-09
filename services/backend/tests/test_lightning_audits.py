@@ -795,3 +795,31 @@ def test_late_preview_callback_cannot_overlap_revision_writes(case, monkeypatch)
         future.result(1)
     assert writer.revision == 1
     assert read(case, first['id'])['progress']['summary'] == 'First provisional sentence'
+
+
+def test_unexpected_request_storage_failure_has_safe_private_diagnostics_and_no_provider_retry(case, monkeypatch):
+    from reveal_backend.mysql_pool import DatabaseBusy
+    import pymysql
+    original = audits._update
+    def busy_request(*args, **kwargs):
+        if kwargs['status'] == 'assessing':
+            raise DatabaseBusy('private connection and SQL details') from pymysql.err.OperationalError(1205, 'private SQL and credentials')
+        return original(*args, **kwargs)
+    monkeypatch.setattr(audits, '_update', busy_request)
+    first = start(case); case.queue.run()
+    result = read(case, first['id']); data = stored(case, first['id'])
+    assert result['status'] == 'failed' and result['error']['code'] == 'LIGHTNING_FAILED'
+    assert data['worker_failure'] == {'stage': 'persist_request', 'exception_type': 'DatabaseBusy', 'error_code': 1205}
+    assert 'worker_failure' not in result and 'private' not in json.dumps(data['worker_failure'])
+    assert 'provider_started_at' not in data and 'model_payload' not in data
+    assert start(case) == result and not case.queue.calls
+    case.provider.assert_not_called()
+
+
+def test_unexpected_provider_callback_failure_retains_only_type_and_stage(case):
+    case.provider.side_effect = RuntimeError('private provider credentials')
+    first = start(case); case.queue.run()
+    data = stored(case, first['id']); result = read(case, first['id'])
+    assert data['worker_failure'] == {'stage': 'provider_request', 'exception_type': 'RuntimeError'}
+    assert result['status'] == 'failed' and 'worker_failure' not in result
+    assert 'private' not in json.dumps(data['worker_failure']) and case.provider.call_count == 1

@@ -434,8 +434,20 @@ def _parse_response(response, references):
     return result, {key: usage[key] for key in ('input_tokens', 'output_tokens')}
 
 
+def _worker_failure(error, stage):
+    """Private operational identifiers only; never retain exception messages/SQL."""
+    name = type(error).__name__
+    value = {'stage': stage, 'exception_type': name if re.fullmatch(r'[A-Za-z][A-Za-z0-9_]{0,63}', name) else 'Exception'}
+    for candidate in (error, error.__cause__):
+        arguments = getattr(candidate, 'args', ())
+        if arguments and type(arguments[0]) is int and 0 <= arguments[0] <= 65535:
+            value['error_code'] = arguments[0]
+            break
+    return value
+
+
 def _run(repo, catalog, owner, identity, attempt):
-    started = monotonic(); provider_started = None; retained = {}; diagnostic_public = {}
+    started = monotonic(); provider_started = None; retained = {}; diagnostic_public = {}; stage = 'read_request'
     with _running_lock: _running.add(identity)
     try:
         with repo.read_transaction() as tx:
@@ -448,9 +460,11 @@ def _run(repo, catalog, owner, identity, attempt):
         if remaining <= 0: return
         deadline = monotonic() + remaining
         frozen = data['frozen']
+        stage = 'prepare_evidence'
         prepared = cfde_assessment_state.build_state(catalog, frozen['composer'], frozen['user_inputs'], deadline=deadline)
         if prepared['reference_generation_id'] != data['public']['reference_generation_id']:
             raise Problem(409, 'SOURCE_REVISION_CHANGED', 'Reference data changed while preparing the audit. Start a new audit.')
+        stage = 'build_request'
         projection, references = lightning_payload.project(prepared['state'])
         projection['selected_graphs_for_future_research'] = deepcopy(frozen['composer'].get('selected_kgs', []))
         payload = {'model': data['public']['provenance']['model'], 'max_tokens': MAX_OUTPUT_TOKENS, 'stream': True,
@@ -464,9 +478,11 @@ def _run(repo, catalog, owner, identity, attempt):
             raise Problem(422, 'LIGHTNING_INPUT_TOO_LARGE', 'This evidence package exceeds the audit size limit. Select fewer mechanisms or shorter context.')
         provenance = {**data['public']['provenance'], 'source_state_sha256': digest(prepared['state']), 'request_sha256': hashlib.sha256(request_bytes).hexdigest()}
         retained['timings'] = {'preparation_ms': round((monotonic() - started) * 1000, 3)}
+        stage = 'persist_request'
         if not _update(repo, owner, identity, attempt, status='assessing', expected_status='preparing', public_fields={
                 'coverage': prepared['coverage'], 'evidence_references': references, 'provenance': provenance},
                 source_state=prepared['state'], model_payload=payload, model_request_json=request_json, provider_started_at=now(), **retained): return
+        stage = 'provider_request'
         provider_started = monotonic()
         progress = _ProgressWriter(repo, owner, identity, attempt)
         response = call_provider(payload, deadline=deadline, on_progress=progress)
@@ -481,11 +497,14 @@ def _run(repo, catalog, owner, identity, attempt):
         if isinstance(raw_usage, dict) and all(type(raw_usage.get(key)) is int and raw_usage[key] >= 0
                 for key in ('input_tokens', 'output_tokens')):
             diagnostic_public['usage'] = {key: raw_usage[key] for key in ('input_tokens', 'output_tokens')}
+        stage = 'validate_response'
         result, usage = _parse_response(response, references)
+        stage = 'persist_result'
         _update(repo, owner, identity, attempt, status='succeeded', public_fields={
             'result': result, 'usage': usage, 'provenance': provenance}, response=result, **retained)
     except Exception as error:
         problem = error if isinstance(error, Problem) else Problem(503, 'LIGHTNING_FAILED', 'This audit could not finish. Start a new audit to try again.')
+        if not isinstance(error, Problem): retained['worker_failure'] = _worker_failure(error, stage)
         if isinstance(error, ProviderProblem): retained['provider_failure'] = error.diagnostics
         if hasattr(error, 'partial_response'): retained['provider_partial_response'] = error.partial_response
         timings = retained.setdefault('timings', {})
