@@ -34,6 +34,7 @@ def saved_diagnostics(job_id, attempts):
     # or follow a symlink into another job (or outside the artifact volume).
     if root.is_symlink() or not root.resolve().is_relative_to(base): return [], False
     candidates = [root / ('evidence/' + name) for name in ('dispatch-budget-failure.json', 'collection-error.json')]
+    candidates.append(root / 'token-budget.json')  # Workflow preparation writes its measurement at the workspace root.
     for attempt in reversed(attempts):
         directory = root / f"attempt-{attempt['attempt']}"
         candidates.extend(directory / name for name in ('failure.json', 'token-budget.json', 'paragraph-grounding.json', 'output/runtime.json'))
@@ -70,7 +71,7 @@ def s3_diagnostics(workspace, attempts):
         for item in manifest['files']:
             name = item['path']
             match = re.fullmatch(r'attempt-([1-9][0-9]*)/(?:failure|token-budget|paragraph-grounding|(?:validation|grounding)-[0-9]+|output/runtime)\.json', name)
-            if name in ('evidence/dispatch-budget-failure.json', 'evidence/collection-error.json') or match and int(match[1]) in allowed:
+            if name in ('evidence/dispatch-budget-failure.json', 'evidence/collection-error.json', 'token-budget.json') or match and int(match[1]) in allowed:
                 candidates.append(item)
         result = []
         for item in candidates[:MAX_DIAGNOSTICS]:
@@ -112,10 +113,17 @@ def job_detail(repository, job_id, *, before=None, limit=100):
                             ('attempt', job_id+':', job_id+';')).fetchall()
         attempts = [json.loads(row[0]) for row in values[:50]]
         attempts = sorted((a for a in attempts if type(a.get('attempt')) is int and 0 < a['attempt'] <= 100000), key=lambda a: a['attempt'])
+        execution = tx.get('execution', job_id)
+        execution = execution['data'] if execution else {}
+        # Durable workflow jobs record their attempt on the execution rather than as legacy attempt rows.
+        current = execution.get('authoring_attempt')
+        allowed = attempts or ([{'attempt': current}] if type(current) is int and 0 < current <= 100000 else [])
+        metrics = tx.get('job_metrics', job_id)
         from .artifact_store import s3_enabled
         remote = s3_enabled()
         queue = tx.get('queue', job_id) if remote else None
-        workspace = queue['data'].get('workspace') if queue else None
-    diagnostics, diagnostics_limited = s3_diagnostics(workspace, attempts) if remote else saved_diagnostics(job_id, attempts)
+        workspace = execution.get('workspace') or (queue['data'].get('workspace') if queue else None) if remote else None
+    diagnostics, diagnostics_limited = s3_diagnostics(workspace, allowed) if remote else saved_diagnostics(job_id, allowed)
     return {'job': job, 'events': events, 'next_before': next_before, 'attempts': attempts,
-            'attempts_limited': len(values) > 50, 'diagnostics': diagnostics, 'diagnostics_limited': diagnostics_limited}
+            'attempts_limited': len(values) > 50, 'diagnostics': diagnostics, 'diagnostics_limited': diagnostics_limited,
+            'metrics': redact(metrics['data']) if metrics else None}

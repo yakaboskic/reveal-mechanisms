@@ -97,6 +97,34 @@ class WorkflowFailureDiagnosticsTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn(b'test-sensitive-provider-key', files['attempt-2/validation-1.json'])
         self.assertEqual(files['validated/account-0.json'], b'{"assembled":"draft"}')
         self.assertEqual(files['attempt-2/output/output/account-1.json'], b'{"original":"draft"}')
+        # Admin telemetry keeps the cause the public message does not name, without credentials.
+        with self.repo.read_transaction() as tx:
+            metrics = tx.get('job_metrics', job['id'])['data']
+        self.assertEqual((metrics['error']['error_type'], metrics['error']['phase']), ('AccountValidationError', 'validate'))
+        self.assertNotIn('test-sensitive-provider-key', json.dumps(metrics))
+
+    async def test_budget_stop_records_the_runs_cost_for_admin_telemetry(self):
+        job, payload = self.seed()
+        async def validate(payload, token, job, execution, root):
+            _, queue, current = self.engine.context(payload)
+            request = ExecutionRequest(job_id=job['id'], attempt=2, kind='research', max_budget_usd=3,
+                input_path=root/'input.json', output_dir=root/'attempt-2/output', selected_graphs=())
+            runtime = request.output_dir/'runtime.json'
+            runtime.write_text(json.dumps({'model': 'test-model', 'execution_limits': {'max_budget_usd': 3},
+                'completion': {'status': 'failed', 'provider_result_subtype': 'error_max_budget_usd',
+                               'cost_usd': 3.1378, 'max_budget_usd': 3, 'turns_used': 38}}))
+            result = ExecutionResult('failed', request.output_dir, runtime_manifest_path=runtime, reason='Budget reached.')
+            with (patch.object(self.engine, 'verified_capture', return_value={}),
+                  patch('reveal_backend.workflow_execution.captured_result', return_value=result)):
+                return await self.engine.validate(payload, token, job, queue, current, root, request, {})
+        with patch.object(self.engine, 'operate', side_effect=validate):
+            self.assertTrue((await self.engine.step(payload, 0))['done'])
+        with self.repo.read_transaction() as tx:
+            current = tx.get('job', job['id'])['data']; metrics = tx.get('job_metrics', job['id'])['data']
+        self.assertEqual(current['failure']['code'], 'AUTHORING_BUDGET_EXCEEDED')
+        self.assertEqual(current['failure']['budget']['spent_usd'], 3.1378)
+        self.assertEqual((metrics['agent']['cost_usd'], metrics['agent']['turns'], metrics['agent']['budget_used']), (3.1378, 38, 1.0459))
+        self.assertNotIn('error', metrics)
 
     async def test_agent_timeout_never_announces_scientific_validation(self):
         job, payload = self.seed()

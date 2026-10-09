@@ -13,7 +13,12 @@ from .public_tool_activity import tool_failed
 
 
 MAX_ACTIVE_TOOLS = 256
+MAX_TRACKED_MESSAGES = 4096
 MAX_COUNTER = 2 ** 53 - 1
+# Claude API list prices in USD per million tokens (5-minute cache writes) for the models REVEAL pins.
+# A run's provider-reported total stays authoritative; these only estimate spend it has not reported yet.
+MODEL_PRICES_PER_MTOK = {'claude-sonnet-4-6': {'input_tokens': 3.0, 'output_tokens': 15.0,
+                                               'cache_creation_input_tokens': 3.75, 'cache_read_input_tokens': 0.30}}
 LIFECYCLE = ('message_start', 'message_delta', 'message_stop', 'content_block_start',
              'content_block_delta', 'content_block_stop')
 NOTIFICATIONS = ('rate_limit_event', 'tool_progress', 'tool_use_summary', 'auth_status', 'api_retry')
@@ -28,6 +33,15 @@ def number(value, *, integer=False):
     if value < 0 or value > MAX_COUNTER or not math.isfinite(value) or integer and not isinstance(value, int):
         return None
     return value
+
+
+def estimated_cost_usd(model, usage):
+    """Price observed token usage at the pinned model's list prices; None for an unpriced model or no usage."""
+    prices = MODEL_PRICES_PER_MTOK.get(model)
+    if not prices or not isinstance(usage, dict): return None
+    counts = {field: number(usage.get(field), integer=True) for field in prices}
+    if any(value is None for value in counts.values()): return None
+    return round(sum(counts[field] * price for field, price in prices.items()) / 1_000_000, 6)
 
 
 def provider_metrics(result):
@@ -65,6 +79,27 @@ class RuntimeTiming:
         self.tool_tracking_complete = True
         self.union_started = None
         self.union_seconds = self.completed_seconds = self.longest_completed = 0.0
+        # Token usage observed per provider message, so spend can be estimated before (or without) a terminal result.
+        self.message_usage = {}
+        self.usage_totals = dict.fromkeys(TOKEN_FIELDS, 0)
+        self.messages_seen = 0
+        self.current_message = None
+
+    def account(self, identity, usage):
+        """Fold one observation of a provider message's usage. Within a message the counts only grow."""
+        if not isinstance(identity, str) or not identity or len(identity) > 200 or not isinstance(usage, dict):
+            return
+        entry = self.message_usage.get(identity)
+        if entry is None:
+            if len(self.message_usage) >= MAX_TRACKED_MESSAGES:
+                self.message_usage.pop(next(iter(self.message_usage)))
+            entry = self.message_usage[identity] = dict.fromkeys(TOKEN_FIELDS, 0)
+            self.messages_seen = self.increment(self.messages_seen)
+        for field in TOKEN_FIELDS:
+            value = number(usage.get(field), integer=True)
+            if value is not None and value > entry[field]:
+                self.usage_totals[field] = self.increment(self.usage_totals[field], value - entry[field])
+                entry[field] = value
 
     @staticmethod
     def increment(value, amount=1):
@@ -102,10 +137,21 @@ class RuntimeTiming:
                 self.lifecycle_last[subtype] = observed
                 if subtype in ('message_start', 'message_stop'):
                     self.message_open = subtype == 'message_start'
+                # Usage numbers only: message_start carries input and cache counts, message_delta the output total.
+                if subtype == 'message_start':
+                    started = nested.get('message') if isinstance(nested.get('message'), dict) else {}
+                    identity = started.get('id')
+                    self.current_message = identity if isinstance(identity, str) and identity else f"stream:{self.lifecycle['message_start']}"
+                    self.account(self.current_message, started.get('usage'))
+                elif subtype == 'message_delta':
+                    self.account(self.current_message, nested.get('usage'))
             # The delta's text, thinking, signature and input fragments are never read.
         if kind not in ('assistant', 'user'):
             return
         message = event.get('message')
+        if kind == 'assistant' and isinstance(message, dict):
+            # Messages that were not streamed still report their usage on the assembled message.
+            self.account(message.get('id'), message.get('usage'))
         content = message.get('content') if isinstance(message, dict) else None
         if not isinstance(content, list):
             return
@@ -160,6 +206,7 @@ class RuntimeTiming:
         return {'format': 'reveal.runtime-timing/1',
             'measurement': 'Local receipt intervals; gaps do not identify provider, network or reasoning time.',
             'elapsed_seconds': seconds(observed - self.started), 'streams': streams,
+            'usage': {'messages': self.messages_seen, **self.usage_totals},
             'stream_events': {'count': self.event_count, 'lifecycle': dict(self.lifecycle),
                 'lifecycle_receipts': {name: {
                     'first_elapsed_seconds': seconds(self.lifecycle_first[name] - self.started) if self.lifecycle_first[name] is not None else None,

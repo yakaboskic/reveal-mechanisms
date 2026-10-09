@@ -443,6 +443,9 @@ class WorkflowExecution:
                 'code': 'EVIDENCE_PREPARATION_FAILED' if execution['phase'] == 'prepare' else
                         'VALIDATION_FAILED' if validation_error else 'WORKER_FAILED',
                 'message': 'The workflow phase could not be completed. Saved output and source captures are preserved.', 'retryable': True}
+            # The public message stays generic; operators see the recorded cause in admin telemetry.
+            from .job_metrics import failure_metrics, record
+            await run_sync(record, self.repository, {'id': payload['job_id']}, error=failure_metrics(execution['phase'], exc))
             # Uncaptured remote work cannot be orphaned. A committed cleanup
             # obligation owns deletion independently of the scientific outcome.
             _, _, latest = await run_sync(self.context, payload)
@@ -671,9 +674,17 @@ class WorkflowExecution:
         await run_sync(mark_running)
         return {'next_phase': 'create'}
 
+    def record_agent_metrics(self, job, result):
+        """Copy the runner's terminal cost and usage numbers into admin telemetry; never affects the job."""
+        from .job_metrics import agent_metrics, record
+        try: runtime = decode(result.runtime_manifest_path.read_bytes()) if result.runtime_manifest_path else None
+        except (OSError, ValueError): runtime = None
+        if isinstance(runtime, dict): record(self.repository, job, agent=agent_metrics(runtime))
+
     async def validate(self, payload, token, job, queue, execution, root, request, inputs):
         marker = await run_sync(self.verified_capture, payload, execution, request)
         result = captured_result(request, execution['box'], marker)
+        await run_sync(self.record_agent_metrics, job, result)
         if result.status not in ('succeeded', 'insufficient_evidence'):
             from .job_failures import authoring_failure
             if result.status == 'failed':
