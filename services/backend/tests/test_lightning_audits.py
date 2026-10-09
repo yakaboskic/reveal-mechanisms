@@ -110,7 +110,7 @@ def test_frozen_input_single_call_and_exact_private_retention(case):
         assert projected['knowledge_gap']['question'] == 'Could secretion explain this gap?'
         assert projected['selected_graphs_for_future_research'] == ['graph:future']
         assert blocks[1]['text'] == audits.lightning_payload.TASK
-        assert 'two short paragraphs totaling 80-120 words' in blocks[1]['text']
+        assert 'paragraphs totaling 200-260 words' in blocks[1]['text']
         assert 'CFDE' in payload['system']
         return response()
     case.builder.side_effect = build; case.provider.side_effect = send
@@ -270,7 +270,7 @@ def test_empty_live_response_is_retained_diagnosed_and_never_retried(case):
     assert complete['usage'] == raw['usage'] and retained['provider_response'] == raw
     assert retained['source_state'] == source_state()
     assert complete['provenance']['response_sha256'] == digest(raw)
-    assert complete['provenance']['prompt_version'] == 'lightning-audit-v4'
+    assert complete['provenance']['prompt_version'] == 'lightning-audit-v5'
     assert case.provider.call_count == 1
     assert start(case) == complete and read(case, first['id']) == complete
     assert not case.queue.calls
