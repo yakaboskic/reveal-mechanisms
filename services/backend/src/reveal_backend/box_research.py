@@ -135,6 +135,19 @@ class AuthoringTiming:
         self.value.update(phase=name, phase_started=current, elapsed_ms=round((current-self.value['started'])*1000, 3))
         self._save()
 
+    def spend(self):
+        """(estimated model spend, dollar cap) from the runner's latest usage checkpoint, or None if unpriced."""
+        from .box_timing import estimated_cost_usd
+        try: runtime = json.loads((self.path.parent.parent / 'runtime.json').read_text())
+        except (OSError, ValueError): return None
+        if not isinstance(runtime, dict): return None
+        checkpoint = runtime.get('timing_checkpoint') if isinstance(runtime.get('timing_checkpoint'), dict) else {}
+        timing = checkpoint.get('timing') if isinstance(checkpoint.get('timing'), dict) else {}
+        limits = runtime.get('execution_limits') if isinstance(runtime.get('execution_limits'), dict) else {}
+        estimate, budget = estimated_cost_usd(runtime.get('model'), timing.get('usage')), limits.get('max_budget_usd')
+        if estimate is None or type(budget) not in (int, float) or not math.isfinite(budget) or budget <= 0: return None
+        return estimate, budget
+
     def feedback(self, result, execution_deadline=None):
         self.check()
         if type(execution_deadline) not in (int, float): return result
@@ -144,8 +157,17 @@ class AuthoringTiming:
         value.setdefault('structuredContent', {})['execution_budget'] = {
             'remaining_seconds': remaining,
             'authoring_call_elapsed_seconds': round(max(0, current-self.value['started']), 3)}
-        value.setdefault('content', []).append({'type': 'text', 'text':
-            f'Execution time remaining: {remaining:.3f} seconds. Prioritize required repairs, then return the completed output; optional expansion is not required. This timing is operational guidance, not a scientific finding.'})
+        guidance = f'Execution time remaining: {remaining:.3f} seconds. Prioritize required repairs, then return the completed output; optional expansion is not required. This timing is operational guidance, not a scientific finding.'
+        spend = self.spend()
+        if spend:
+            estimate, budget = spend
+            value['structuredContent']['execution_budget'].update(estimated_spend_usd=round(estimate, 2), spend_cap_usd=budget)
+            # The provider stops the run at its dollar cap and nothing is saved, so say so while there is room to finish.
+            if estimate >= .6 * budget:
+                guidance += (f' Estimated model spend so far: ${estimate:.2f} of the ${budget:.2f} execution cap. The run stops '
+                             'without saving a result if the cap is reached: make only required repairs with small edits rather '
+                             'than rewriting the whole draft, then return the completed output.')
+        value.setdefault('content', []).append({'type': 'text', 'text': guidance})
         return value
 
     def __enter__(self):
