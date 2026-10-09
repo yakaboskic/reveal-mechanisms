@@ -22,6 +22,11 @@ flowchart TB
   R["Anonymous public research<br/>exact generation and portable captures<br/>offline files remain available"]
   O["Explicit registered browser consent<br/>device or S256 PKCE<br/>scoped private reads and contribution"]
   D -->|Use my local agent| L --> R -->|when ready to contribute| O
+  LA["Lightning audit<br/>POST /v1/lightning-audits<br/>one completion; private assessment + direction"]
+  LB["Review research brief<br/>POST /v1/lightning-audits/{id}/continue<br/>new request + independent generation pin"]
+  D -->|Lightning audit| LA --> LB
+  LB -->|online| J
+  LB -->|local| L
   O -->|validate and submit private accounts| S
   J -->|accepted accounts| S
   J -->|automatic outbox fan-out| P --> Q
@@ -498,8 +503,28 @@ Automatically request an advisory prediction once the selected gap and mechanism
 - Idempotency keys recover the original assessment and reject changed bodies. Failed or interrupted work is never a no prediction; explicit retries use a new key. Polling and process restart never repeat provider calls automatically. An operation has a 120-second deadline, and owner daily quotas bound new model work.
 - Changed inputs invalidate the displayed assessment; preserve stale results only as labeled historical predictions. Owner authorization and private no-store responses apply to both operations.
 
+### Assess evidence with Lightning and choose a research direction
+
+Explicitly request one preliminary completion, review the saved direction, then choose local or online research.
+
+**Request:** Owned draft/version and Idempotency-Key; continuation adds the edited research direction and chosen mode.
+
+**Response:** Private structured audit with source references, coverage and provenance; a continuation has a new frozen request, run ID and generation pin.
+
+- `POST /v1/lightning-audits` — [draft request/response](examples/createLightningAudit.draft.json)
+- `GET /v1/lightning-audits` — [request request/response](examples/listLightningAudits.request.json)
+- `GET /v1/lightning-audits/{audit_id}` — [request request/response](examples/getLightningAudit.request.json)
+- `POST /v1/lightning-audits/{audit_id}/continue` — [online request/response](examples/continueLightningAudit.online.json)
+- `POST /v1/lightning-audits/{audit_id}/continue` — [local request/response](examples/continueLightningAudit.local.json)
+
+- Lightning performs one Claude completion against bounded stored evidence. No fresh graph or literature queries and no agent loop run during the audit.
+- Every assessment is advisory. Missing evidence or an unsupported direction can still lead to a user-requested investigation.
+- Reads never dispatch model work. Same-key replays recover the original submission. Failures require a new explicit audit.
+- Continuation preserves exact preliminary artifacts separately from original researcher instructions and eligible scientific evidence. Normal agent authorization and validation remain in force.
+- Audits are private history independent of draft deletion. Retained superseded generations can be continued within the explicit retention window; parent and child pins release independently.
+
 ## Evidence and validation
 
 Requests/responses are taken from the existing validated OpenAPI exchange library. The CADinT2D analysis/paragraph sequence is internally linked. The CAD source-selected gap now frames the request and account. The evidence package is a separate captured input; the authored account is not its validated agent output. Semantic scores and agent outputs remain illustrative fixtures.
 
-The mapping covers 87 operations and all 109 exchanges. OpenAPI SHA-256: `8a9f82f46402238221805d4d74ca8ec0af737c5d1a6e50d0d9056ad07236bd51`. No endpoints or payloads were changed to build this diagram.
+The mapping covers 91 operations and all 114 exchanges. OpenAPI SHA-256: `59ed88408f544734017265340a37c8889f36edaea04d1de97ccf74b973675772`. No endpoints or payloads were changed to build this diagram.

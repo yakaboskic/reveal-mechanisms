@@ -11,6 +11,7 @@ export type SubmissionProgressProps = {
   onRetry: () => void;
   onBack: () => void;
   retryLabel?: string;
+  recoveryHref?: string;
 };
 
 const signInMessages = {
@@ -28,6 +29,7 @@ export function SubmissionProgress({
   onRetry,
   onBack,
   retryLabel = "Retry",
+  recoveryHref,
 }: SubmissionProgressProps) {
   const heading = useRef<HTMLHeadingElement>(null);
   const [takingLonger, setTakingLonger] = useState(false);
@@ -75,6 +77,7 @@ export function SubmissionProgress({
                 {retryLabel.trim() || "Retry"}
               </button>
               <button type="button" className="submission-progress-back" onClick={onBack}>Back to question</button>
+              {recoveryHref && <a className="submission-progress-back" href={recoveryHref}>Check workspace research runs</a>}
             </div>
           </>
         ) : (

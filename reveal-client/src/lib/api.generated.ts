@@ -1539,6 +1539,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/lightning-audits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List private initial audits
+         * @description Requires the owning registered or anonymous workspace principal. All results are private, no-store. A Lightning audit assesses a bounded stored-evidence snapshot; it creates no accepted scientific account and performs no connected-graph or literature retrieval. Inputs and generated guidance are not instructions or scientific acceptance. Examples are synthetic contract fixtures. Saved results remain independent of mutable or deleted drafts. Listing never starts inference.
+         */
+        get: operations["listLightningAudits"];
+        put?: never;
+        /**
+         * Create an initial evidence audit
+         * @description Requires the owning registered or anonymous workspace principal. All results are private, no-store. A Lightning audit assesses a bounded stored-evidence snapshot; it creates no accepted scientific account and performs no connected-graph or literature retrieval. Inputs and generated guidance are not instructions or scientific acceptance. Examples are synthetic contract fixtures. Requires REVEAL_LIGHTNING_ENABLED. Freezes the owned draft and starts at most one Claude completion. Same-key replays recover the original audit even if the draft is later changed or removed. Changed inputs with the same key conflict. Source preparation and inference execute outside write transactions. The request has a 100,000-byte limit, a 3,000-output-token cap and a 120-second overall deadline. Failed or interrupted calls are not automatically retried; an explicit new submission creates a new audit.
+         */
+        post: operations["createLightningAudit"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/lightning-audits/{audit_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read an initial audit
+         * @description Requires the owning registered or anonymous workspace principal. All results are private, no-store. A Lightning audit assesses a bounded stored-evidence snapshot; it creates no accepted scientific account and performs no connected-graph or literature retrieval. Inputs and generated guidance are not instructions or scientific acceptance. Examples are synthetic contract fixtures. Reading never dispatches or retries model work. Pending results may long-poll without holding a database connection. Terminal results return immediately. Audits remain inspectable after their continuation window expires.
+         */
+        get: operations["getLightningAudit"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/lightning-audits/{audit_id}/continue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Continue an audit with an agent
+         * @description Requires the owning registered or anonymous workspace principal. All results are private, no-store. A Lightning audit assesses a bounded stored-evidence snapshot; it creates no accepted scientific account and performs no connected-graph or literature retrieval. Inputs and generated guidance are not instructions or scientific acceptance. Examples are synthetic contract fixtures. Requires REVEAL_LIGHTNING_ENABLED, a completed audit and an unexpired continuation window. All assessment categories may continue. Clones a new frozen request and independent generation pin, preserving original inputs separately from the edited direction. Uses ordinary online/local quotas and authorization. Retained superseded generations are allowed; unavailable generations require a fresh audit. Audit artifacts enter the agent seed as preliminary context, never eligible evidence.
+         */
+        post: operations["continueLightningAudit"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -4065,6 +4129,12 @@ export interface components {
             originating_saved_draft_version?: number;
             linked_dismech_context: components["schemas"]["SourceRef"][];
             archive?: components["schemas"]["ReferenceArchive"];
+            /** Format: uuid */
+            lightning_audit_id?: string;
+            /** @description Private frozen preliminary audit context, preserved separately from original researcher instructions; never eligible scientific evidence. */
+            lightning_context?: {
+                [key: string]: unknown;
+            };
         };
         GapSource: {
             /** @enum {string} */
@@ -4603,7 +4673,7 @@ export interface components {
             entity_revision: number;
             /** @enum {string} */
             operation: "upsert" | "remove" | "invalidate" | "resync";
-            collections: ("drafts" | "gaps" | "explorations" | "requests" | "jobs" | "accounts" | "identity" | "catalog")[];
+            collections: ("drafts" | "gaps" | "explorations" | "requests" | "jobs" | "accounts" | "identity" | "catalog" | "audits")[];
         };
         /** @description Exact imported DisMech source observation and DAPPER mapping. Resolve and validate server-side. No client-authored question. */
         SelectedGap: {
@@ -8892,6 +8962,101 @@ export interface components {
             error: components["schemas"]["CfdeAssessmentError"] | null;
             stale: boolean;
         } & (unknown & unknown);
+        LightningAuditInput: {
+            /** Format: uuid */
+            draft_id: string;
+            draft_version: number;
+        };
+        LightningAuditResult: {
+            /** @enum {string} */
+            assessment: "promising" | "partial" | "unsupported";
+            summary: string;
+            observations: {
+                text: string;
+                evidence_refs: string[];
+            }[];
+            recommended_direction: string;
+            missing_evidence: string[];
+            next_steps: string[];
+            limitations: string[];
+        };
+        LightningContinuationInput: {
+            /** @enum {string} */
+            mode: "online" | "local";
+            research_direction: string;
+        };
+        /** @description An independently authorized child run with its own frozen request and reference-generation pin. */
+        LightningContinuation: {
+            /** @enum {string} */
+            mode: "online" | "local";
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            research_request_id: string;
+            /** Format: date-time */
+            created_at: string;
+        };
+        /** @description A short model-visible reference resolved by the server to a retained source-state location. An audit observation is preliminary guidance and is not an accepted scientific Claim. */
+        LightningEvidenceReference: {
+            id: string;
+            pointer: string;
+            label: string;
+            value: unknown;
+            source: {
+                [key: string]: unknown;
+            };
+        };
+        /** @description Private frozen initial audit, independent of later editor changes or deletion. Only an explicit POST may make one provider attempt. There is no agent or retrieval loop. Every verdict is advisory and permits an explicitly requested continuation. */
+        LightningAudit: {
+            /** Format: uuid */
+            id: string;
+            /** @constant */
+            kind: "lightning_audit";
+            /** @enum {string} */
+            status: "preparing" | "assessing" | "succeeded" | "failed" | "interrupted";
+            /** Format: uuid */
+            research_request_id: string;
+            /** Format: uuid */
+            source_draft_id: string;
+            source_draft_version: number;
+            question: {
+                /** @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values. */
+                id: string;
+                text: string;
+            };
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            completed_at: string | null;
+            /** Format: date-time */
+            continuation_expires_at: string;
+            reference_generation_id: string;
+            result: components["schemas"]["LightningAuditResult"] | null;
+            coverage: components["schemas"]["CfdeAssessmentCoverage"] | null;
+            evidence_references: components["schemas"]["LightningEvidenceReference"][];
+            provenance: {
+                model: string;
+                prompt_version: string;
+                source_state_sha256?: string;
+                request_sha256?: string;
+                response_sha256?: string;
+            };
+            usage: {
+                input_tokens: number;
+                output_tokens: number;
+            } | null;
+            error: components["schemas"]["CfdeAssessmentError"] | null;
+            continuations: components["schemas"]["LightningContinuation"][];
+        };
+        LightningAuditList: {
+            items: components["schemas"]["LightningAudit"][];
+            page: {
+                next_cursor: string | null;
+                has_more: boolean;
+                snapshot_id?: string;
+            };
+        };
     };
     responses: never;
     parameters: never;
@@ -15338,6 +15503,519 @@ export interface operations {
             /** @description Invalid Input */
             422: {
                 headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dependency Unavailable */
+            503: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listLightningAudits: {
+        parameters: {
+            query?: {
+                /** @example 50 */
+                limit?: number;
+                /** @example opaque-owned-audit-cursor */
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LightningAuditList"];
+                };
+            };
+            /** @description Invalid Request */
+            400: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sign In Required */
+            403: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Version Conflict */
+            409: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid Input */
+            422: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dependency Unavailable */
+            503: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    createLightningAudit: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description Unique per caller and operation for at least 7 days. Same key and same canonical body replay the original accepted response; changed body returns 409 IDEMPOTENCY_CONFLICT. Compare idempotency before draft-version checks on retries.
+                 * @example 66666666-6666-4666-8666-666666666666
+                 */
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LightningAuditInput"];
+            };
+        };
+        responses: {
+            /** @description Saved audit receipt; read Location to observe progress. */
+            202: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    /**
+                     * @description Relative URL of the created resource.
+                     * @example /v1/lightning-audits/cccccccc-cccc-4ccc-8ccc-cccccccccccc
+                     */
+                    Location?: string;
+                    /**
+                     * @description Suggested polling delay in seconds.
+                     * @example 2
+                     */
+                    "Retry-After"?: number;
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LightningAudit"];
+                };
+            };
+            /** @description Invalid Request */
+            400: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sign In Required */
+            403: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Version Conflict */
+            409: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid Input */
+            422: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate Limited */
+            429: {
+                headers: {
+                    /** @example 30 */
+                    "Retry-After"?: number;
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dependency Unavailable */
+            503: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getLightningAudit: {
+        parameters: {
+            query?: {
+                /** @example 15 */
+                wait?: number;
+            };
+            header?: never;
+            path: {
+                /** @example cccccccc-cccc-4ccc-8ccc-cccccccccccc */
+                audit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LightningAudit"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sign In Required */
+            403: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid Input */
+            422: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dependency Unavailable */
+            503: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    continueLightningAudit: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description Unique per caller and operation for at least 7 days. Same key and same canonical body replay the original accepted response; changed body returns 409 IDEMPOTENCY_CONFLICT. Compare idempotency before draft-version checks on retries.
+                 * @example 66666666-6666-4666-8666-666666666666
+                 */
+                "Idempotency-Key": string;
+            };
+            path: {
+                /** @example cccccccc-cccc-4ccc-8ccc-cccccccccccc */
+                audit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LightningContinuationInput"];
+            };
+        };
+        responses: {
+            /** @description Saved child-run receipt; online dispatch or local seed preparation is asynchronous. */
+            202: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    /**
+                     * @description Relative URL of the created resource.
+                     * @example /v1/jobs/44444444-4444-4444-8444-444444444444
+                     */
+                    Location?: string;
+                    /**
+                     * @description Suggested polling delay in seconds.
+                     * @example 2
+                     */
+                    "Retry-After"?: number;
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LightningContinuation"];
+                };
+            };
+            /** @description Invalid Request */
+            400: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sign In Required */
+            403: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Version Conflict */
+            409: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid Input */
+            422: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate Limited */
+            429: {
+                headers: {
+                    /** @example 30 */
+                    "Retry-After"?: number;
                     /** @example private, no-store */
                     "Cache-Control"?: string;
                     /** @example Authorization */

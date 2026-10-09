@@ -115,6 +115,7 @@ def prepare(environment):
     secretfile.write_text(json.dumps(backend_secret))
     env_file(runtime / f'{environment}-backend.env', {**settings, **backend_secret})
     frontend = {k: v for k, v in source.items() if k.startswith(('AUTH_GOOGLE_', 'AUTH_ORCID_')) or k == 'ADMIN_EMAILS'}
+    frontend['NEXT_PUBLIC_REVEAL_LIGHTNING_ENABLED'] = source.get('NEXT_PUBLIC_REVEAL_LIGHTNING_ENABLED', 'false')
     frontend.update({k: settings[k] for k in ('NEXTAUTH_URL', 'REVEAL_GATEWAY_ISSUER', 'REVEAL_GATEWAY_AUDIENCE')})
     frontend.update(REVEAL_GATEWAY_SECRET=keys['gateway'], REVEAL_GATEWAY_SERVICE_TOKEN=keys['service'],
         AUTH_SECRET=keys['session'], NEXTAUTH_SECRET=keys['session'], DISABLE_ADMIN_LOGIN='false',

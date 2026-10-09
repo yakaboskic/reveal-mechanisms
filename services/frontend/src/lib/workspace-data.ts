@@ -3,6 +3,7 @@ import { allWorkspacePages, isSavedDraft } from "./workspace";
 import type { LoadMode } from "./revalidation-cache";
 import { parseReferenceState, type ReferenceState } from "./reference";
 import { localWorkApi, type LocalWork } from "./local-work";
+import { lightningApi, lightningEnabled, type LightningAudit } from "./lightning-audit";
 
 export const workspaceTabs = ["gaps", "accounts", "drafts", "explorations", "runs"] as const;
 export type WorkspaceTab = typeof workspaceTabs[number];
@@ -26,12 +27,13 @@ export function workspaceKeyParts(key: WorkspaceKey): { tab: WorkspaceTab; query
 export type WorkspaceData = {
   gaps: Schema<"Exploration">[]; accounts: Schema<"AccountSummary">[]; outcomes: Schema<"AnalysisOutcomeSummary">[];
   drafts: Schema<"Draft">[]; jobs: Schema<"Job">[]; localWorks: LocalWork[]; requests: Schema<"ResearchRequest">[];
+  audits?: LightningAudit[];
   cursor: string | null; pages: number;
 };
 const blank: WorkspaceData = { gaps: [], accounts: [], outcomes: [], drafts: [], jobs: [], localWorks: [], requests: [], cursor: null, pages: 0 };
 
 export function workspaceSize(tab: WorkspaceTab, data: WorkspaceData) {
-  return tab === "runs" ? data.jobs.filter(job => job.kind === "analysis").length + data.localWorks.length
+  return tab === "runs" ? data.jobs.filter(job => job.kind === "analysis").length + data.localWorks.length + (data.audits?.length || 0)
     : (tab === "gaps" ? data.gaps : tab === "drafts" ? data.drafts : tab === "accounts" ? data.accounts : data.outcomes).length;
 }
 
@@ -43,6 +45,20 @@ async function localResearchPages(signal: AbortSignal) {
     for (const item of result.items) items.set(item.id, item);
     cursor = result.page?.next_cursor || undefined;
     if (cursor && seen.has(cursor)) throw new Error("Local research history changed. Please refresh it.");
+    if (cursor) seen.add(cursor);
+  } while (cursor);
+  return [...items.values()];
+}
+
+async function lightningPages(signal: AbortSignal) {
+  if (!lightningEnabled) return [];
+  const items = new Map<string, LightningAudit>(), seen = new Set<string>();
+  let cursor: string | undefined;
+  do {
+    const result = await lightningApi.list(cursor, signal);
+    for (const item of result.items) items.set(item.id, item);
+    cursor = result.page.next_cursor || undefined;
+    if (cursor && seen.has(cursor)) throw new Error("Audit history changed. Please refresh it.");
     if (cursor) seen.add(cursor);
   } while (cursor);
   return [...items.values()];
@@ -67,14 +83,15 @@ export async function loadWorkspaceData(key: WorkspaceKey, previous: WorkspaceDa
   const { tab, query, reference } = workspaceKeyParts(key);
   const saved = previous || blank;
   if (mode === "activity" && previous && (tab === "gaps" || tab === "runs")) {
-    const [jobs, localWorks] = await Promise.all([
+    const [jobs, localWorks, audits] = await Promise.all([
       allWorkspacePages(cursor => api.jobs(cursor, signal)),
       tab === "runs" ? localResearchPages(signal) : previous.localWorks,
+      tab === "runs" ? lightningPages(signal) : previous.audits,
     ]);
     const known = new Set(previous.requests.map(request => request.id));
     const requests = jobs.some(job => job.research_request_id && !known.has(job.research_request_id))
       ? await allWorkspacePages(cursor => api.requests(cursor, signal)) : previous.requests;
-    return { ...previous, jobs: tab === "runs" ? jobs.filter(job => job.kind === "analysis") : jobs, localWorks, requests };
+    return { ...previous, jobs: tab === "runs" ? jobs.filter(job => job.kind === "analysis") : jobs, localWorks, requests, audits };
   }
   const append = mode === "append" && !!previous;
   if (append && !saved.cursor) return saved;
@@ -84,12 +101,13 @@ export async function loadWorkspaceData(key: WorkspaceKey, previous: WorkspaceDa
     return { ...saved, drafts: list.items.filter(isSavedDraft), cursor: list.cursor, pages: list.pages };
   }
   if (tab === "runs") {
-    const [jobs, requests, localWorks] = await Promise.all([
+    const [jobs, requests, localWorks, audits] = await Promise.all([
       allWorkspacePages(cursor => api.jobs(cursor, signal)),
       allWorkspacePages(cursor => api.requests(cursor, signal)),
       localResearchPages(signal),
+      lightningPages(signal),
     ]);
-    return { ...saved, jobs: jobs.filter(job => job.kind === "analysis"), localWorks, requests, cursor: null, pages: 1 };
+    return { ...saved, jobs: jobs.filter(job => job.kind === "analysis"), localWorks, requests, audits, cursor: null, pages: 1 };
   }
   if (tab === "accounts") {
     const list = await listing(cursor => api.accounts(cursor, signal, query || undefined, reference), item => item.account.id, saved.accounts, depth, append, saved.cursor);

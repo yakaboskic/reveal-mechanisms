@@ -3,11 +3,18 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { CfdeEstimateRing } from "./CfdeAssessmentView";
 import { assessmentSupportLabel, type CfdeAssessment } from "../lib/cfde-assessment";
+import { lightningEnabled, type ResearchMode } from "../lib/lightning-audit";
 import "./research-mode-menu.css";
+
+const modeChoices: { mode: ResearchMode; label: string; description: string }[] = [
+  { mode: "online", label: "Run online", description: "Let Reveal run the investigation." },
+  { mode: "local", label: "Use my local agent", description: "Work with an agent on your computer." },
+  ...(lightningEnabled ? [{ mode: "lightning" as const, label: "Lightning audit", description: "Assess this evidence and suggest a direction." }] : []),
+];
 
 export function ResearchModeMenu({ disabled, onSelect, assessment, assessing = false }: {
   disabled: boolean;
-  onSelect: (mode: "online" | "local") => void;
+  onSelect: (mode: ResearchMode) => void;
   assessment?: CfdeAssessment | null; assessing?: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -46,7 +53,7 @@ export function ResearchModeMenu({ disabled, onSelect, assessment, assessing = f
       onClick={() => { initialFocus.current = 0; setOpen(!visible); }}
       onKeyDown={event => {
         if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-          event.preventDefault(); initialFocus.current = event.key === "ArrowUp" ? 1 : 0; setOpen(true);
+          event.preventDefault(); initialFocus.current = event.key === "ArrowUp" ? modeChoices.length - 1 : 0; setOpen(true);
         }
       }}>
       <span>Let’s close this gap</span><span className="send cfde-estimate-arrow" aria-hidden="true"><span>↑</span>{(assessing || assessment?.result) && <CfdeEstimateRing loading={assessing} probability={assessment?.result?.probability_yes} />}</span>
@@ -62,12 +69,9 @@ export function ResearchModeMenu({ disabled, onSelect, assessment, assessing = f
           : event.key === "Home" ? 0 : event.key === "End" ? items.length - 1 : null;
         if (next !== null) { event.preventDefault(); items[next]?.focus(); }
       }}>
-      <button type="button" role="menuitem" tabIndex={-1} onClick={() => { close(true); onSelect("online"); }}>
-        <span>Run online</span><small>Let Reveal run the investigation.</small>
-      </button>
-      <button type="button" role="menuitem" tabIndex={-1} onClick={() => { close(true); onSelect("local"); }}>
-        <span>Use my local agent</span><small>Work with an agent on your computer.</small>
-      </button>
+      {modeChoices.map(choice => <button key={choice.mode} type="button" role="menuitem" tabIndex={-1} onClick={() => { close(true); onSelect(choice.mode); }}>
+        <span>{choice.label}</span><small>{choice.description}</small>
+      </button>)}
     </div>}
   </div>;
 }

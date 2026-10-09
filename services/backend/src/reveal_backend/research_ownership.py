@@ -15,8 +15,17 @@ def transfer_workspace(tx, source, target):
     # Assessment indexes include the old owner in their digest. Retain the
     # immutable assessment itself, but never carry an unusable private cache or
     # idempotency namespace into the newly claimed workspace.
-    for kind in ('cfde_assessment_cache', 'cfde_assessment_idempotency'):
+    for kind in ('cfde_assessment_cache', 'cfde_assessment_idempotency', 'lightning_audit_idempotency', 'lightning_continuation'):
         for row in tx.list(kind, source): tx.remove(kind, row['id'])
+    for row in tx.list('lightning_audit', source):
+        value = deepcopy(row['data']); public = value['public']
+        value['control_owner'] = target
+        if public['status'] in ('preparing', 'assessing'):
+            public.update(status='interrupted', updated_at=timestamp, completed_at=timestamp,
+                error={'code': 'WORKSPACE_TRANSFERRED', 'retryable': True,
+                    'detail': 'This workspace moved to your registered account. Create another audit to try again.'})
+        # Frozen scientific input and attribution stay exactly as accepted. The old attempt cannot commit.
+        tx.put('lightning_audit', row['id'], source, value)
     from .user_inputs import INPUT_FIELDS
     for row in tx.list('cfde_assessment', source):
         value = deepcopy(row['data']); public = value.get('public') or {}

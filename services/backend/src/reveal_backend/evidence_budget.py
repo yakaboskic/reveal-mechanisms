@@ -79,7 +79,7 @@ def _fit_input_budget_locked(package_path, mode, budget, validation_feedback=())
             from .dispatch_view import pinned_claim_structure_sha256, pinned_contract_sha256, pinned_skeleton_sha256
             validate_file_input(raw, decode(metadata), research_prompt(package['external_evidence']['selected_graphs'], validation_feedback, progressive=package.get('retrieval_mode') == 'progressive',
                                 contract_sha256=pinned_contract_sha256(package), skeleton_sha256=pinned_skeleton_sha256(package),
-                                claim_structure_sha256=pinned_claim_structure_sha256(package)))
+                                claim_structure_sha256=pinned_claim_structure_sha256(package), lightning_audit=bool(package.get('lightning_audit'))))
             return chosen, package, saved['measurement']
         # Honor older jobs' exact captures without relabeling their token counts
         # as measurements of the new file reader or recollecting source evidence.

@@ -34,6 +34,11 @@ MERMAID = '''flowchart TB
   R["Anonymous public research<br/>exact generation and portable captures<br/>offline files remain available"]
   O["Explicit registered browser consent<br/>device or S256 PKCE<br/>scoped private reads and contribution"]
   D -->|Use my local agent| L --> R -->|when ready to contribute| O
+  LA["Lightning audit<br/>POST /v1/lightning-audits<br/>one completion; private assessment + direction"]
+  LB["Review research brief<br/>POST /v1/lightning-audits/{id}/continue<br/>new request + independent generation pin"]
+  D -->|Lightning audit| LA --> LB
+  LB -->|online| J
+  LB -->|local| L
   O -->|validate and submit private accounts| S
   J -->|accepted accounts| S
   J -->|automatic outbox fan-out| P --> Q

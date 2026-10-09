@@ -21550,6 +21550,422 @@
     "curl": "curl -X GET 'https://api.reveal.example.org/v1/drafts/22222222-2222-4222-8222-222222222222/cfde-assessments/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb?wait=10' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
   },
   {
+    "operation_id": "createLightningAudit",
+    "case": "draft",
+    "method": "POST",
+    "path_template": "/v1/lightning-audits",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/lightning-audits",
+      "path": {},
+      "query": {},
+      "headers": {
+        "Idempotency-Key": "66666666-6666-4666-8666-666666666666",
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      },
+      "body": {
+        "draft_id": "22222222-2222-4222-8222-222222222222",
+        "draft_version": 2
+      }
+    },
+    "responses": {
+      "202": {
+        "content_type": "application/json",
+        "examples": {
+          "preparing": {
+            "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "kind": "lightning_audit",
+            "status": "preparing",
+            "research_request_id": "33333333-3333-4333-8333-333333333333",
+            "source_draft_id": "22222222-2222-4222-8222-222222222222",
+            "source_draft_version": 2,
+            "question": {
+              "id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+              "text": "Are the CAD PGS×context interactions driven by adverse exposures causally amplifying genetic risk, or are some \"contexts\" actually downstream readouts of incipient disease (reverse causation)?"
+            },
+            "created_at": "2026-09-24T16:00:00Z",
+            "updated_at": "2026-09-24T16:00:00Z",
+            "completed_at": null,
+            "continuation_expires_at": "2026-10-24T16:00:00Z",
+            "reference_generation_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c",
+            "result": null,
+            "coverage": null,
+            "evidence_references": [],
+            "provenance": {
+              "model": "claude-sonnet-4-6",
+              "prompt_version": "lightning-audit-v1"
+            },
+            "usage": null,
+            "error": null,
+            "continuations": []
+          }
+        }
+      }
+    },
+    "curl": "curl -X POST https://api.reveal.example.org/v1/lightning-audits -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"draft_id\":\"22222222-2222-4222-8222-222222222222\",\"draft_version\":2}'"
+  },
+  {
+    "operation_id": "listLightningAudits",
+    "case": "request",
+    "method": "GET",
+    "path_template": "/v1/lightning-audits",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/lightning-audits?limit=50",
+      "path": {},
+      "query": {
+        "limit": 50
+      },
+      "headers": {
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
+        "Accept": "application/json"
+      },
+      "body": null
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/json",
+        "examples": {
+          "history": {
+            "items": [
+              {
+                "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+                "kind": "lightning_audit",
+                "status": "succeeded",
+                "research_request_id": "33333333-3333-4333-8333-333333333333",
+                "source_draft_id": "22222222-2222-4222-8222-222222222222",
+                "source_draft_version": 2,
+                "question": {
+                  "id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+                  "text": "Are the CAD PGS×context interactions driven by adverse exposures causally amplifying genetic risk, or are some \"contexts\" actually downstream readouts of incipient disease (reverse causation)?"
+                },
+                "created_at": "2026-09-24T16:00:00Z",
+                "updated_at": "2026-09-24T16:01:00Z",
+                "completed_at": "2026-09-24T16:01:00Z",
+                "continuation_expires_at": "2026-10-24T16:00:00Z",
+                "reference_generation_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c",
+                "result": {
+                  "assessment": "partial",
+                  "summary": "Synthetic example: the retained loading suggests a candidate direction that requires further checks.",
+                  "observations": [
+                    {
+                      "text": "A retained factor-gene loading is relevant to the proposed comparison.",
+                      "evidence_refs": [
+                        "E1"
+                      ]
+                    }
+                  ],
+                  "recommended_direction": "Investigate whether the observed factor-gene association provides a context-specific connection to the gap.",
+                  "missing_evidence": [
+                    "Direct evidence for the proposed biological connection."
+                  ],
+                  "next_steps": [
+                    "Inspect exact source captures and test the proposed connection using authorized evidence tools."
+                  ],
+                  "limitations": [
+                    "This synthetic example illustrates the contract and is not a scientific finding."
+                  ]
+                },
+                "coverage": {
+                  "factor_count": 1,
+                  "gene_loading_count": 1,
+                  "gene_set_loading_count": 0,
+                  "unique_gene_set_count": 0,
+                  "missing": [
+                    "gene_set_loadings"
+                  ],
+                  "truncations": [],
+                  "complete": false
+                },
+                "evidence_references": [
+                  {
+                    "id": "E1",
+                    "pointer": "/factors/0/genes/rows/0",
+                    "label": "Synthetic retained factor-gene loading",
+                    "value": {
+                      "symbol": "GENE_EXAMPLE",
+                      "loading": 0.25
+                    },
+                    "source": {
+                      "generation_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c"
+                    }
+                  }
+                ],
+                "provenance": {
+                  "model": "claude-sonnet-4-6",
+                  "prompt_version": "lightning-audit-v1",
+                  "source_state_sha256": "0930005c359bae46f01059f268a377b1a082f7d0bd68379807a03a68cc405ae7",
+                  "request_sha256": "9707a47769286ac99fe827ac45c05d0d1368c56b1eff64c2a12012933c40392d",
+                  "response_sha256": "c136b7ece7251f2bd3fca18d9e318b11cf6790c6001319ab2c35adc366fd3a0a"
+                },
+                "usage": {
+                  "input_tokens": 1000,
+                  "output_tokens": 300
+                },
+                "error": null,
+                "continuations": []
+              }
+            ],
+            "page": {
+              "next_cursor": null,
+              "has_more": false
+            }
+          }
+        }
+      }
+    },
+    "curl": "curl -X GET 'https://api.reveal.example.org/v1/lightning-audits?limit=50' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
+  },
+  {
+    "operation_id": "getLightningAudit",
+    "case": "request",
+    "method": "GET",
+    "path_template": "/v1/lightning-audits/{audit_id}",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/lightning-audits/cccccccc-cccc-4ccc-8ccc-cccccccccccc?wait=15",
+      "path": {
+        "audit_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+      },
+      "query": {
+        "wait": 15
+      },
+      "headers": {
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
+        "Accept": "application/json"
+      },
+      "body": null
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/json",
+        "examples": {
+          "completed": {
+            "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "kind": "lightning_audit",
+            "status": "succeeded",
+            "research_request_id": "33333333-3333-4333-8333-333333333333",
+            "source_draft_id": "22222222-2222-4222-8222-222222222222",
+            "source_draft_version": 2,
+            "question": {
+              "id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+              "text": "Are the CAD PGS×context interactions driven by adverse exposures causally amplifying genetic risk, or are some \"contexts\" actually downstream readouts of incipient disease (reverse causation)?"
+            },
+            "created_at": "2026-09-24T16:00:00Z",
+            "updated_at": "2026-09-24T16:01:00Z",
+            "completed_at": "2026-09-24T16:01:00Z",
+            "continuation_expires_at": "2026-10-24T16:00:00Z",
+            "reference_generation_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c",
+            "result": {
+              "assessment": "partial",
+              "summary": "Synthetic example: the retained loading suggests a candidate direction that requires further checks.",
+              "observations": [
+                {
+                  "text": "A retained factor-gene loading is relevant to the proposed comparison.",
+                  "evidence_refs": [
+                    "E1"
+                  ]
+                }
+              ],
+              "recommended_direction": "Investigate whether the observed factor-gene association provides a context-specific connection to the gap.",
+              "missing_evidence": [
+                "Direct evidence for the proposed biological connection."
+              ],
+              "next_steps": [
+                "Inspect exact source captures and test the proposed connection using authorized evidence tools."
+              ],
+              "limitations": [
+                "This synthetic example illustrates the contract and is not a scientific finding."
+              ]
+            },
+            "coverage": {
+              "factor_count": 1,
+              "gene_loading_count": 1,
+              "gene_set_loading_count": 0,
+              "unique_gene_set_count": 0,
+              "missing": [
+                "gene_set_loadings"
+              ],
+              "truncations": [],
+              "complete": false
+            },
+            "evidence_references": [
+              {
+                "id": "E1",
+                "pointer": "/factors/0/genes/rows/0",
+                "label": "Synthetic retained factor-gene loading",
+                "value": {
+                  "symbol": "GENE_EXAMPLE",
+                  "loading": 0.25
+                },
+                "source": {
+                  "generation_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c"
+                }
+              }
+            ],
+            "provenance": {
+              "model": "claude-sonnet-4-6",
+              "prompt_version": "lightning-audit-v1",
+              "source_state_sha256": "0930005c359bae46f01059f268a377b1a082f7d0bd68379807a03a68cc405ae7",
+              "request_sha256": "9707a47769286ac99fe827ac45c05d0d1368c56b1eff64c2a12012933c40392d",
+              "response_sha256": "c136b7ece7251f2bd3fca18d9e318b11cf6790c6001319ab2c35adc366fd3a0a"
+            },
+            "usage": {
+              "input_tokens": 1000,
+              "output_tokens": 300
+            },
+            "error": null,
+            "continuations": []
+          },
+          "preparing": {
+            "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "kind": "lightning_audit",
+            "status": "preparing",
+            "research_request_id": "33333333-3333-4333-8333-333333333333",
+            "source_draft_id": "22222222-2222-4222-8222-222222222222",
+            "source_draft_version": 2,
+            "question": {
+              "id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+              "text": "Are the CAD PGS×context interactions driven by adverse exposures causally amplifying genetic risk, or are some \"contexts\" actually downstream readouts of incipient disease (reverse causation)?"
+            },
+            "created_at": "2026-09-24T16:00:00Z",
+            "updated_at": "2026-09-24T16:00:00Z",
+            "completed_at": null,
+            "continuation_expires_at": "2026-10-24T16:00:00Z",
+            "reference_generation_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c",
+            "result": null,
+            "coverage": null,
+            "evidence_references": [],
+            "provenance": {
+              "model": "claude-sonnet-4-6",
+              "prompt_version": "lightning-audit-v1"
+            },
+            "usage": null,
+            "error": null,
+            "continuations": []
+          },
+          "failed": {
+            "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "kind": "lightning_audit",
+            "status": "failed",
+            "research_request_id": "33333333-3333-4333-8333-333333333333",
+            "source_draft_id": "22222222-2222-4222-8222-222222222222",
+            "source_draft_version": 2,
+            "question": {
+              "id": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+              "text": "Are the CAD PGS×context interactions driven by adverse exposures causally amplifying genetic risk, or are some \"contexts\" actually downstream readouts of incipient disease (reverse causation)?"
+            },
+            "created_at": "2026-09-24T16:00:00Z",
+            "updated_at": "2026-09-24T16:01:00Z",
+            "completed_at": "2026-09-24T16:01:00Z",
+            "continuation_expires_at": "2026-10-24T16:00:00Z",
+            "reference_generation_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c",
+            "result": null,
+            "coverage": null,
+            "evidence_references": [],
+            "provenance": {
+              "model": "claude-sonnet-4-6",
+              "prompt_version": "lightning-audit-v1"
+            },
+            "usage": null,
+            "error": {
+              "code": "LIGHTNING_TIMEOUT",
+              "detail": "This audit timed out. Start a new audit to try again.",
+              "retryable": true
+            },
+            "continuations": []
+          }
+        }
+      }
+    },
+    "curl": "curl -X GET 'https://api.reveal.example.org/v1/lightning-audits/cccccccc-cccc-4ccc-8ccc-cccccccccccc?wait=15' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
+  },
+  {
+    "operation_id": "continueLightningAudit",
+    "case": "online",
+    "method": "POST",
+    "path_template": "/v1/lightning-audits/{audit_id}/continue",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/lightning-audits/cccccccc-cccc-4ccc-8ccc-cccccccccccc/continue",
+      "path": {
+        "audit_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+      },
+      "query": {},
+      "headers": {
+        "Idempotency-Key": "66666666-6666-4666-8666-666666666666",
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      },
+      "body": {
+        "mode": "online",
+        "research_direction": "Investigate whether the observed factor-gene association provides a context-specific connection to the gap."
+      }
+    },
+    "responses": {
+      "202": {
+        "content_type": "application/json",
+        "examples": {
+          "online": {
+            "mode": "online",
+            "id": "44444444-4444-4444-8444-444444444444",
+            "research_request_id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+            "created_at": "2026-09-24T16:01:00Z"
+          },
+          "local": {
+            "mode": "local",
+            "id": "44444444-4444-4444-8444-444444444444",
+            "research_request_id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+            "created_at": "2026-09-24T16:01:00Z"
+          }
+        }
+      }
+    },
+    "curl": "curl -X POST https://api.reveal.example.org/v1/lightning-audits/cccccccc-cccc-4ccc-8ccc-cccccccccccc/continue -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"mode\":\"online\",\"research_direction\":\"Investigate whether the observed factor-gene association provides a context-specific connection to the gap.\"}'"
+  },
+  {
+    "operation_id": "continueLightningAudit",
+    "case": "local",
+    "method": "POST",
+    "path_template": "/v1/lightning-audits/{audit_id}/continue",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/lightning-audits/cccccccc-cccc-4ccc-8ccc-cccccccccccc/continue",
+      "path": {
+        "audit_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+      },
+      "query": {},
+      "headers": {
+        "Idempotency-Key": "66666666-6666-4666-8666-666666666666",
+        "Authorization": "Bearer <api-key-or-gateway-assertion>",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      },
+      "body": {
+        "mode": "local",
+        "research_direction": "Investigate whether the observed factor-gene association provides a context-specific connection to the gap."
+      }
+    },
+    "responses": {
+      "202": {
+        "content_type": "application/json",
+        "examples": {
+          "online": {
+            "mode": "online",
+            "id": "44444444-4444-4444-8444-444444444444",
+            "research_request_id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+            "created_at": "2026-09-24T16:01:00Z"
+          },
+          "local": {
+            "mode": "local",
+            "id": "44444444-4444-4444-8444-444444444444",
+            "research_request_id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+            "created_at": "2026-09-24T16:01:00Z"
+          }
+        }
+      }
+    },
+    "curl": "curl -X POST https://api.reveal.example.org/v1/lightning-audits/cccccccc-cccc-4ccc-8ccc-cccccccccccc/continue -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"mode\":\"local\",\"research_direction\":\"Investigate whether the observed factor-gene association provides a context-specific connection to the gap.\"}'"
+  },
+  {
     "operation_id": "getJob",
     "case": "paragraph",
     "method": "GET",

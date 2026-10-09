@@ -14,14 +14,14 @@ export function invalidateWorkspace(event?: WorkspaceEvent, local = false) { for
 export function resetWorkspaceCache() { for (const listener of listeners) listener(true); }
 
 export function changesWorkspace(method: string, path: string) {
-  return ["POST", "PATCH", "DELETE"].includes(method) && /\/v1\/(?:drafts(?:\/[^/]+(?:\/save)?)?|jobs(?:\/[^/]+\/(?:cancel|retry-review))?|local-work(?:\/[^/]+\/(?:close|grants(?:\/[^/]+)?))?|me\/explorations|accounts\/[^/]+\/(?:publication|vote)|knowledge-gaps\/[^/]+\/vote|analysis-outcomes\/[^/]+\/publication)$/.test(path);
+  return ["POST", "PATCH", "DELETE"].includes(method) && /\/v1\/(?:drafts(?:\/[^/]+(?:\/save)?)?|jobs(?:\/[^/]+\/(?:cancel|retry-review))?|local-work(?:\/[^/]+\/(?:close|grants(?:\/[^/]+)?))?|lightning-audits(?:\/[^/]+\/continue)?|me\/explorations|accounts\/[^/]+\/(?:publication|vote)|knowledge-gaps\/[^/]+\/vote|analysis-outcomes\/[^/]+\/publication)$/.test(path);
 }
 
 export function affectedWorkspaceTabs(event?: WorkspaceEvent): WorkspaceTab[] {
   const tabs = ["drafts", "runs", "gaps", "accounts", "explorations"] as const;
   if (!event || event.collections.includes("identity") || event.collections.includes("catalog")) return [...tabs];
   return tabs.filter(tab => (tab !== "runs" && event.collections.includes(tab))
-    || (tab === "runs" && event.collections.some(value => ["jobs", "requests"].includes(value)))
+    || (tab === "runs" && event.collections.some(value => ["jobs", "requests", "audits"].includes(value)))
     || (tab === "gaps" && event.collections.some(value => ["drafts", "jobs", "requests"].includes(value))));
 }
 

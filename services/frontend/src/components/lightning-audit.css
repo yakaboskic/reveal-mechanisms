@@ -1,0 +1,43 @@
+.lightning-page { max-width: 850px; margin: 0 auto; padding: 2.5rem 1.5rem 6rem; color: var(--text, #263b34); }
+.lightning-navigation, .lightning-meta, .lightning-actions, .lightning-evidence-links { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; }
+.lightning-navigation { justify-content: space-between; margin-bottom: 2.5rem; font-size: .85rem; }
+.lightning-navigation > span, .lightning-muted, .lightning-meta { color: var(--muted, #66756d); font-size: .85rem; }
+.lightning-header h1 { font-size: clamp(1.7rem, 3vw, 2.4rem); line-height: 1.25; margin: .7rem 0 1.1rem; }
+.lightning-header > p { max-width: 65ch; line-height: 1.65; margin: 1.2rem 0 2rem; }
+.lightning-eyebrow { font-size: .72rem; text-transform: uppercase; letter-spacing: .11em; font-weight: 650; color: var(--muted, #66756d); }
+.lightning-result > section, .lightning-following, .lightning-failure { margin: 2.4rem 0; }
+.lightning-page h2 { font-size: 1.18rem; margin: 0 0 .8rem; }
+.lightning-page h3 { font-size: .95rem; margin: 1rem 0 .5rem; }
+.lightning-page p, .lightning-page li { line-height: 1.7; }
+.lightning-page li + li { margin-top: .6rem; }
+.lightning-summary { padding: 1.5rem; border: 1px solid #d5dfd7; border-left: 3px solid #4b7560; border-radius: 4px; background: #f6f8f4; }
+.lightning-summary h2 { margin-top: .5rem; font-size: 1.45rem; }
+.lightning-summary.is-partial, .lightning-summary.is-unsupported { border-left-color: #9b8457; background: #faf8f2; }
+.lightning-summary > p:last-child { margin-bottom: 0; }
+.lightning-observations { padding-left: 1.4rem; }
+.lightning-observations p { margin-bottom: .45rem; }
+.lightning-evidence-links { gap: .5rem; }
+.lightning-evidence-links a { font-size: .75rem; border: 1px solid #d9e0da; border-radius: 3px; padding: .1rem .45rem; }
+.lightning-preserve { white-space: pre-wrap; overflow-wrap: anywhere; }
+.lightning-source { border-top: 1px solid #dce2dd; scroll-margin-top: 2rem; }
+.lightning-source summary { padding: .9rem 0; cursor: pointer; font-size: .9rem; }
+.lightning-source:target { outline: 2px solid #6e8d79; outline-offset: .3rem; }
+.lightning-source-content { padding: 0 .8rem 1rem; }
+.lightning-source pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .75rem; max-height: 30rem; overflow-y: auto; background: #f4f5f2; padding: 1rem; }
+.lightning-source dl { display: grid; grid-template-columns: minmax(7rem, 1fr) minmax(0, 3fr); gap: .6rem 1rem; font-size: .8rem; }
+.lightning-source dt { color: var(--muted, #66756d); }
+.lightning-source dd { margin: 0; overflow-wrap: anywhere; }
+.lightning-handoff { border: 1px solid #c9d8ce; border-radius: 5px; padding: 1.6rem; background: #fafbf8; margin: 3rem 0 2rem; }
+.lightning-handoff h2 { margin-top: .5rem; font-size: 1.5rem; }
+.lightning-handoff label { display: block; font-weight: 600; font-size: .85rem; margin: 1.5rem 0 .5rem; }
+.lightning-handoff textarea { box-sizing: border-box; width: 100%; resize: vertical; padding: .9rem; border: 1px solid #bacac0; border-radius: 4px; color: inherit; background: white; font: inherit; font-size: .9rem; line-height: 1.6; }
+.lightning-handoff textarea:disabled { background: #f1f3ef; }
+.lightning-actions { margin-top: 1rem; }
+.lightning-actions button { border: 1px solid #3e6451; background: #325541; color: white; border-radius: 4px; padding: .75rem 1rem; font: inherit; font-size: .85rem; cursor: pointer; }
+.lightning-actions button + button { background: white; color: #325541; }
+.lightning-actions button:disabled { opacity: .55; cursor: default; }
+.lightning-actions > p { flex-basis: 100%; margin: 0; }
+.lightning-error { color: #943c30; }
+.lightning-error button { color: inherit; font: inherit; text-decoration: underline; border: 0; background: transparent; cursor: pointer; }
+.lightning-provenance { margin-top: 3rem; }
+@media (max-width: 560px) { .lightning-page { padding: 1.5rem 1rem 4rem; } .lightning-handoff, .lightning-summary { padding: 1rem; } .lightning-source dl { grid-template-columns: 1fr; } .lightning-actions button { width: 100%; } }

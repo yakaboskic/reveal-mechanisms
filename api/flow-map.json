@@ -1,5 +1,5 @@
 {
-  "openapi_sha256": "8a9f82f46402238221805d4d74ca8ec0af737c5d1a6e50d0d9056ad07236bd51",
+  "openapi_sha256": "59ed88408f544734017265340a37c8889f36edaea04d1de97ccf74b973675772",
   "steps": [
     {
       "id": "gap",
@@ -502,8 +502,30 @@
         "Idempotency keys recover the original assessment and reject changed bodies. Failed or interrupted work is never a no prediction; explicit retries use a new key. Polling and process restart never repeat provider calls automatically. An operation has a 120-second deadline, and owner daily quotas bound new model work.",
         "Changed inputs invalidate the displayed assessment; preserve stale results only as labeled historical predictions. Owner authorization and private no-store responses apply to both operations."
       ]
+    },
+    {
+      "id": "lightning-audit",
+      "title": "Assess evidence with Lightning and choose a research direction",
+      "route": "POST /v1/lightning-audits; GET /v1/lightning-audits[/{audit_id}]; POST /v1/lightning-audits/{audit_id}/continue",
+      "action": "Explicitly request one preliminary completion, review the saved direction, then choose local or online research.",
+      "incoming": "Owned draft/version and Idempotency-Key; continuation adds the edited research direction and chosen mode.",
+      "outgoing": "Private structured audit with source references, coverage and provenance; a continuation has a new frozen request, run ID and generation pin.",
+      "cases": [
+        "createLightningAudit.draft",
+        "listLightningAudits.request",
+        "getLightningAudit.request",
+        "continueLightningAudit.online",
+        "continueLightningAudit.local"
+      ],
+      "rules": [
+        "Lightning performs one Claude completion against bounded stored evidence. No fresh graph or literature queries and no agent loop run during the audit.",
+        "Every assessment is advisory. Missing evidence or an unsupported direction can still lead to a user-requested investigation.",
+        "Reads never dispatch model work. Same-key replays recover the original submission. Failures require a new explicit audit.",
+        "Continuation preserves exact preliminary artifacts separately from original researcher instructions and eligible scientific evidence. Normal agent authorization and validation remain in force.",
+        "Audits are private history independent of draft deletion. Retained superseded generations can be continued within the explicit retention window; parent and child pins release independently."
+      ]
     }
   ],
-  "operation_count": 87,
-  "exchange_count": 109
+  "operation_count": 91,
+  "exchange_count": 114
 }

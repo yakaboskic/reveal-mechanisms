@@ -193,7 +193,7 @@ class DraftHydrationTests(unittest.TestCase):
 
 
 class ResearchPromptTests(unittest.TestCase):
-    def prepared_prompt(self, selected_graphs, feedback=(), frozen_input=False, tamper_input=False):
+    def prepared_prompt(self, selected_graphs, feedback=(), frozen_input=False, tamper_input=False, lightning_audit=False):
         """Exercise normal setup without a network clone or a model invocation."""
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp); state = root / 'state'; state.mkdir()
@@ -202,8 +202,13 @@ class ResearchPromptTests(unittest.TestCase):
             (work / 'docs/authoring-contract.md').write_bytes(
                 (Path(__file__).resolve().parents[3] / 'docs/authoring-contract.md').read_bytes())
             package = work / 'input/evidence-package.json'
-            package.write_text(json.dumps({'selection': {}, 'pigean': {}, 'source_artifacts': {},
-                'dapper_context': {}, 'external_evidence': {'selected_graphs': list(selected_graphs)}}))
+            package_value = {'selection': {}, 'pigean': {}, 'source_artifacts': {},
+                'dapper_context': {}, 'external_evidence': {'selected_graphs': list(selected_graphs)}}
+            if lightning_audit:
+                package_value.update(retrieval_mode='progressive', lightning_audit={'audit_id': 'retained-audit'},
+                    research_context={'local_work_id': 'hosted-work', 'research_request_id': 'request',
+                        'mcp_url': 'http://127.0.0.1:18000/mcp'})
+            package.write_text(json.dumps(package_value))
             schema = root / 'workspace/dapper/schema'; schema.mkdir(parents=True)
             for name in ('dapper.yaml', 'claims.yaml'): (schema / name).write_text('{}')
             # Current bootstrap bundles the pinned schema/example aids independently of evidence.
@@ -220,6 +225,7 @@ class ResearchPromptTests(unittest.TestCase):
                 'selected_graphs': list(selected_graphs), 'model': 'test-model', 'claude_version': 'test-version',
                 'timeout_seconds': 60, 'max_budget_usd': 1, 'max_turns': 10, 'input_sha256': 'frozen-input'}
             if feedback: request['validation_feedback'] = list(feedback)
+            if lightning_audit: request['research_context'] = package_value['research_context']
             if frozen_input:
                 from reveal_backend.dispatch_view import file_input_manifest
                 (root / 'input').mkdir()
@@ -232,7 +238,8 @@ class ResearchPromptTests(unittest.TestCase):
                     patch('reveal_backend.dapper_release.prepare_agent_workspace', return_value=runtime):
                 _, manifest, prompt = box_remote.setup(request)
             from reveal_backend.dispatch_view import research_prompt
-            self.assertEqual(prompt, research_prompt(selected_graphs, feedback))
+            self.assertEqual(prompt, research_prompt(selected_graphs, feedback, progressive=lightning_audit,
+                lightning_audit=lightning_audit))
             index = work / 'input/evidence-index.json'
             self.assertEqual(manifest['evidence_reader']['index_sha256'], __import__('hashlib').sha256(index.read_bytes()).hexdigest())
             self.assertEqual(manifest['research_prompt_sha256'], __import__('hashlib').sha256(prompt.encode()).hexdigest())
@@ -240,6 +247,12 @@ class ResearchPromptTests(unittest.TestCase):
             self.assertFalse((work / 'input/package-sections/source_artifacts.json').exists())
             self.assertNotIn('dispatch_budget', manifest)
             return prompt, manifest
+
+    def test_remote_audit_guidance_matches_the_frozen_input_manifest(self):
+        prompt, manifest = self.prepared_prompt((), frozen_input=True, lightning_audit=True)
+        self.assertIn('lightning_audit', prompt)
+        self.assertIn('not eligible scientific evidence', prompt)
+        self.assertEqual(manifest['file_input']['prompt_sha256'], manifest['research_prompt_sha256'])
 
     def test_normal_runner_without_feedback_checks_every_scientific_field(self):
         prompt, manifest = self.prepared_prompt(())

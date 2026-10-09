@@ -5,6 +5,8 @@ services:
     build:
       context: ..
       dockerfile: services/frontend/Dockerfile
+      args:
+        NEXT_PUBLIC_REVEAL_LIGHTNING_ENABLED: ${NEXT_PUBLIC_REVEAL_LIGHTNING_ENABLED:-false}
     env_file:
       - path: ${REVEAL_RUNTIME_DIR:-../.runtime/deployment}/frontend.env
         format: raw

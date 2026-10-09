@@ -60,6 +60,7 @@ KIND_ACTIONS: dict[str, str] = {
         # versions are service-owned; reuse keys include the source generation.
         'cfde_assessment', 'cfde_assessment_cache', 'cfde_assessment_idempotency',
         'cfde_assessment_shared', 'cfde_assessment_shared_cache',
+        'lightning_audit', 'lightning_audit_idempotency', 'lightning_continuation',
         # Progressive research retains immutable captures independently of the
         # currently active catalog. Active research_pin rows block table purge.
         'local_work', 'research_pin', 'research_package', 'research_access', 'research_grant_issue',
