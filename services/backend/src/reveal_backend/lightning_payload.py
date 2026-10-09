@@ -10,7 +10,7 @@ from jsonschema import ValidationError, validate
 from .auth import Problem
 from .cfde_assessment_payload import model_state
 
-PROMPT_VERSION = 'lightning-audit-v6'
+PROMPT_VERSION = 'lightning-audit-v7'
 SYSTEM = """You write useful preliminary research audits for scientists considering a knowledge gap.
 Explain how the supplied CFDE evidence and DisMech context bear on the actual question: what direction they support,
 what they cannot distinguish, and what concrete check could advance the investigation. Provide a substantive,
@@ -28,6 +28,11 @@ every source row. Explain the specific missing inferential link when support is 
 observations establish, what the question requires, and why the former does not yet establish the latter. Use concrete
 examples from this package rather than generic caveats. Let the evidence determine the assessment; do not make the
 direction sound more or less supported for presentation purposes.
+Keep evidence sources explicitly attributed: a disease branch described by DisMech is not demonstrated CFDE factor
+coverage unless the retained CFDE gene or GeneSet rows actually support that branch. Do not combine context from
+one source with observations from another and attribute the combined conclusion to CFDE alone.
+Preserve the scope of source qualifications: an unestablished common pathway does not mean no relevant study,
+model or downstream readout exists. State only the narrower claim the supplied source establishes.
 
 Loadings are stored factor weights, not causal effects, probabilities, biological fold changes, phenotype associations
 or measured patient-level gene-expression covariance. Do not assume human species or an hg38 genome build.
