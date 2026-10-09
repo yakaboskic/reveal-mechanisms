@@ -1235,7 +1235,12 @@ export default function Home() {
       const value = await api.suggest(next, controller.signal);
       if (controller.signal.aborted || generation !== editorGeneration.current) return;
       setSuggestion(value); setFactors(values => ({ ...values, ...Object.fromEntries(value.automatic_anchors.map(anchor => [anchor.factor.source_id, anchor.factor])) }));
-      if (replaceSelection) setComposer(current => withFactors(current, value.automatic_anchors.slice(0, 1).map(anchor => anchor.factor), value.suggestion_id, true));
+      const suggested = value.automatic_anchors.map(anchor => anchor.factor);
+      setComposer(current => {
+        if (current.source_gap?.source_id !== next.source_gap?.source_id) return current;
+        if (!replaceSelection && current.eaggl_anchors.length > 0) return current;
+        return withFactors(current, suggested, value.suggestion_id, true);
+      });
     } catch (error) { if (!controller.signal.aborted && generation === editorGeneration.current) setError(errorMessage(error)); }
     finally { if (!controller.signal.aborted) setSuggesting(false); }
   }
@@ -1558,7 +1563,7 @@ export default function Home() {
             </div>
           </section>}
           {activeStep === "anchors" && <section className="step open">
-            <div className="step-heading-row"><div className="step-heading-copy"><h2 className="step-heading"><span className="step-number">2</span>Select mechanism anchors</h2><p className="step-guide">Choose genetic factors that may help explain the selected gap. At least one factor is required to start an investigation, and none is selected for you.{suggestion?.limitations.length ? ` ${suggestion.limitations.join(" ")}` : ""}</p></div>{(anchorChosen || pending) && (!(startedDraftId && startedDraftId === draft?.id) || selectionForked) && <button type="button" className="step-next" onClick={() => void startInvestigation()} disabled={!mutable || suggesting || !!cfdeGate || (!pending && (!composer.source_gap || !composer.eaggl_anchors.length))}>{busy === "assess" ? "Checking CFDE support…" : busy === "submit" ? "Submitting…" : busy === "save" ? "Saving draft…" : pending ? "Recover submission" : "Start investigation"}</button>}</div>
+            <div className="step-heading-row"><div className="step-heading-copy"><h2 className="step-heading"><span className="step-number">2</span>Select mechanism anchors</h2><p className="step-guide">Choose genetic factors that may help explain the selected gap. Suggested factors start selected, and at least one is required to start an investigation.{suggestion?.limitations.length ? ` ${suggestion.limitations.join(" ")}` : ""}</p></div>{(anchorChosen || pending) && (!(startedDraftId && startedDraftId === draft?.id) || selectionForked) && <button type="button" className="step-next" onClick={() => void startInvestigation()} disabled={!mutable || suggesting || !!cfdeGate || (!pending && (!composer.source_gap || !composer.eaggl_anchors.length))}>{busy === "assess" ? "Checking CFDE support…" : busy === "submit" ? "Submitting…" : busy === "save" ? "Saving draft…" : pending ? "Recover submission" : "Start investigation"}</button>}</div>
             <div className="step-body">{!composer.source_gap ? <p className="empty">Select a question to find related genetic mechanisms.</p> : <>
                 <label className="research-context" htmlFor="research-context">Attach research context (optional)<input id="research-context" type="text" value={researchContext} onChange={event => setResearchContext(event.target.value)} disabled={!mutable} autoComplete="off" /></label>
                 {!!anchorIds.length && <FactorNetwork guide={anchorChosen ? undefined : "At least one factor has to be selected to initiate investigation."} gapLabel={gap?.object.text || (gap ? gapTitle(gap) : "Knowledge gap")} rows={anchorIds.map(sourceId => {
