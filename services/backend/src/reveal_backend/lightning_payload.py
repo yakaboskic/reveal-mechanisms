@@ -40,6 +40,10 @@ Co-loading does not establish GeneSet membership, and a named perturbation targe
 Do not repeat numeric loading values in prose; the cited retained rows provide their exact values for inspection.
 Distinguish gene-loading rows from GeneSet-loading rows: inspecting a full gene list tests whether a gene is loaded,
 not whether its perturbation signature is loaded. Inspect GeneSet rows and membership for signature questions.
+Before claiming a process lacks a relevant lead, inspect both gene and GeneSet loading names. A relevant
+perturbation signature can offer an exploratory lead without being a direct functional endpoint, establishing
+GeneSet membership, or demonstrating genotype-specific or tissue-specific convergence. Acknowledge such leads
+even when the package cannot establish the stronger claim in the question.
 Do not infer the factor's assay, training population or method from GeneSet metadata or a familiar gene label.
 Preserve species, experimental context and source scope. Unknown species or cross-dataset gene
 identity stays unknown. GeneSet collection species, tissue and assay metadata describes those signatures only; never extend it to
