@@ -318,8 +318,11 @@ loop. The gene sets are the CFDE gene sets the projection uses, **fitted one lib
 **LINCS (optional, `lincs_trait_betas_cmd`).** The same fit on LINCS alone writes `<trait>.lincs_betas_runs.tsv` and
 `<trait>.lincs_betas.tsv`; the release build does not read them. Without the cap, LINCS's prefilter kept 50,000 to
 427,000 of its 1.5M signatures depending on the trait, and the fits took 40 minutes to 2.3 hours and up to 160 GB
-(UGER killed them). With it, T2D's fit peaked at about 5 GB and learned nearly the same p (1.18e-5 against 1.12e-5);
-each fit still spends ~30 minutes reading the signatures.
+(UGER killed them). With it, T2D took 29 minutes at ~10 GB and HospC19vAll (killed above 140 GB uncapped) 41 minutes
+at ~6 GB; nearly all of that is reading the signatures. The capped fit is an approximation of the uncapped one. For
+T2D it learns nearly the same p (1.18e-5 against 1.12e-5) and the betas of gene sets both runs analyze agree (Pearson
+0.9999 for `beta_uncorrected`), but only a third of the 5,000 gene sets it analyzes are the uncapped run's (56 of the
+top 100 by `beta_uncorrected`).
 
 **Response** (`gene_set_stats_response`, default `log_bf`):
 - `log_bf`, the direct genetic support. This is a PIGEAN run on the CFDE gene sets minus the outer Gibbs loop.
