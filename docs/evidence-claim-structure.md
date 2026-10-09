@@ -85,7 +85,7 @@ Other Claims stay welcome: knowledge-graph observations (biomarker KG, Proto-OKN
 These are targets, not quotas, and are never enforced:
 
 - about one to three atomic Claims per family the gap actually uses;
-- at most about thirty atomic Claims per account;
+- at most about twelve atomic Claims per account;
 - at least one gap-relevance synthesis.
 
 Families without relevant evidence are left out; lint names them only as hints. Do not pad with paraphrases or duplicate observations. Snippet and locator fidelity applies to every atomic Claim, so write the first draft early and lint it.

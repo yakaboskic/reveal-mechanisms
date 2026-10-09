@@ -476,12 +476,14 @@ def write_draft_tool(filename, document):
         if path.is_symlink():
             raise PolicyError('Draft output symlink forbidden')
         timing.phase('draft_write')
-        raw = canonical(document)
+        # One field per line, so the agent can Read the saved draft and Edit reported fields in place
+        # instead of regenerating the whole document for every repair.
+        raw = (json.dumps(document, ensure_ascii=False, sort_keys=True, indent=1) + '\n').encode()
         timing.check()
         path.write_bytes(raw)
         user = pwd.getpwnam('reveal-agent')
         os.chown(path, user.pw_uid, user.pw_gid)
-        return timing.feedback({'content': [{'type': 'text', 'text': 'Draft saved to ' + str(path) + '. Run lint_account; this file has not been accepted or minted.'}]}, runtime.get('execution_deadline_monotonic'))
+        return timing.feedback({'content': [{'type': 'text', 'text': 'Draft saved to ' + str(path) + '. Run lint_account; this file has not been accepted or minted. To repair findings, Edit only the reported fields in this file and run lint_account again.'}]}, runtime.get('execution_deadline_monotonic'))
 
 
 def main():
@@ -561,7 +563,8 @@ def main():
                    '/usr/bin/timeout', '--signal=TERM', '--kill-after=10s', str(max(1, int(request['timeout_seconds'] - (time.monotonic() - started)))),
                    '/reveal/claude/node_modules/.bin/claude', '-p', '--verbose', '--output-format', 'stream-json',
                    '--include-partial-messages', '--model', request['model'], '--max-turns', str(request['max_turns']),
-                   '--effort', 'medium',
+                   # Low effort: about 60% of a run's output was reasoning, and slow runs hit the time limit.
+                   '--effort', 'low',
                    '--max-budget-usd', str(request['max_budget_usd']), '--permission-mode', 'bypassPermissions',
                    '--tools', 'Read,Glob,Grep,Write,Edit', '--strict-mcp-config', '--mcp-config', str(config_path),
                    '--setting-sources', '', '--disable-slash-commands']

@@ -360,7 +360,9 @@ p.write_text(json.dumps(doc))
             self.assertEqual(draft_errors[0]['severity'], 'error')
             self.assertEqual(draft_errors[0]['rule'], 'evidence-snippet')
             self.assertEqual(draft_errors[0]['message'],
-                'Copy a verbatim excerpt from the exact captured source row; put summaries in explanation.')
+                'Replace snippet with a verbatim excerpt of repair.source_excerpt, the cited source text at this EvidenceItem locator; put summaries in explanation.')
+            # The draft tool and final assembly report the same cited source text to copy.
+            self.assertIn('source_excerpt', draft_errors[0]['repair'])
             self.assertNotIn('source-file', {item['check'] for item in retained['findings']})
             # A real source quotation must pass both paths with the same live
             # external capture, rather than merely making both paths reject.

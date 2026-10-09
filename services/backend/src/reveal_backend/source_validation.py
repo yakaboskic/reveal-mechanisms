@@ -30,8 +30,11 @@ def _numeric(value):
         return None
 
 
-def finding(check, where, message):
-    return {'severity': 'error', 'check': check, 'where': where, 'message': message, 'why': ''}
+def finding(check, where, message, repair=None):
+    # `repair` carries the cited source values to copy, so the author can fix the field in place.
+    value = {'severity': 'error', 'check': check, 'where': where, 'message': message, 'why': ''}
+    if repair: value['repair'] = repair
+    return value
 
 
 def ledger_sources(ledger_path):
@@ -148,8 +151,13 @@ def observation_findings(document, observed, *, exact_observed=None, authored_ex
             metric = score.get('metric')
             value = _numeric(exact_nodes.get(score.get('id'), score).get('value'))
             if value is None or not isinstance(metric, str) or not any(metric in row and _numeric(row[metric]) == value for row in rows):
+                cited = [_numeric(row[metric]) for row in rows if isinstance(metric, str) and metric in row]
+                repair = {'metric': metric if isinstance(metric, str) else None, 'value': str(value) if value is not None else None}
+                if cited: repair['source_values'] = [str(number) if number is not None else None for number in cited[:5]]
+                elif rows: repair['source_metrics'] = sorted({key for row in rows for key, item in row.items() if _numeric(item) is not None})[:20]
+                else: repair['note'] = 'No cited source row resolves for this Claim; fix its EvidenceItem locators first.'
                 findings.append(finding('source-metric', score.get('id', claim.get('id', 'claims')),
-                    'ClaimScore does not match the exact metric at its cited source row'))
+                    'ClaimScore does not match the exact metric at its cited source row', repair))
             expected = {'factor_value': 'LOADING', 'loading': 'LOADING', 'joint_loading': 'LOADING',
                         'marginal_loading': 'LOADING', 'beta': 'EFFECT_ESTIMATE',
                         'beta_uncorrected': 'EFFECT_ESTIMATE', 'combined': 'SCORE', 'log_bf': 'SCORE',
@@ -171,8 +179,10 @@ def observation_findings(document, observed, *, exact_observed=None, authored_ex
         from .evidence_reader import exact_json
         serialized = lambda value: value if type(value) is str else exact_json(value) if exact_observed is not None else json.dumps(value, ensure_ascii=False)
         if not any(norm(snippet) in norm(serialized(value)) for value in candidates):
+            excerpt = next((text for text in map(serialized, candidates) if text), '')
             findings.append(finding('evidence-snippet', item.get('id', 'evidence_items'),
-                'Evidence snippet is not a verbatim excerpt of the cited source observation. Copy text from the exact captured row; put summaries and derived fields in explanation, not snippet.'))
+                'Evidence snippet is not a verbatim excerpt of the cited source observation. Copy text from the exact captured row; put summaries and derived fields in explanation, not snippet.',
+                {'source_excerpt': excerpt[:400], 'excerpt_truncated': len(excerpt) > 400} if excerpt else None))
     return findings
 
 

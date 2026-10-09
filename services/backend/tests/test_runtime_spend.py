@@ -77,3 +77,19 @@ def test_low_or_unknown_spend_adds_no_warning(tmp_path):
     (tmp_path / 'unpriced').mkdir()
     unknown = authoring(tmp_path / 'unpriced', None)
     assert unknown['structuredContent']['execution_budget'] == {'remaining_seconds': 60, 'authoring_call_elapsed_seconds': 0}
+
+
+def paced(tmp_path, remaining):
+    (tmp_path / 'runtime.json').write_text(json.dumps({'model': 'claude-sonnet-4-6',
+                                                       'execution_limits': {'max_budget_usd': 50, 'timeout_seconds': 1800}}))
+    timing = AuthoringTiming(tmp_path / 'ledger/authoring-timing.json', 'lint_account', 10_000, clock=lambda: 10)
+    return timing.feedback({'content': []}, 10 + remaining)['content'][-1]['text']
+
+
+def test_authoring_tools_pace_the_rest_of_the_run_against_its_time_limit(tmp_path):
+    assert 'run time' not in paced(tmp_path, 1000)
+    middle = paced(tmp_path, 800)
+    assert 'More than half the run time is used' in middle and 'small in-place Edits' in middle
+    late = paced(tmp_path, 400)
+    assert 'Less than a quarter of the run time remains' in late and 'return the account now' in late
+    assert 'More than half' not in late

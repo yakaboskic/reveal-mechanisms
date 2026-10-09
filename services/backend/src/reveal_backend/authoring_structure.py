@@ -222,8 +222,25 @@ def _preflight(document, dapper_root, release_lock):
         'counts': {'nodes': nodes, 'errors': len(findings), 'warnings': 0}, 'findings': findings}
 
 
+# A dangling DAPPER reference names only an identifier, never prose.
+REFERENCE = re.compile(r'reference to ((?:dapper:[A-Za-z]+\.[A-Za-z0-9_-]{32})|(?:urn:[A-Za-z0-9:._~-]{1,280})|(?:https?://[^\s<>"]{1,280})) does not resolve')
+
+
+def _bounded(value, depth=0):
+    """Repair details are short data: strings at most 400 characters, at most 20 items, shallow."""
+    if isinstance(value, str): return value[:400]
+    if isinstance(value, bool) or value is None or isinstance(value, (int, float)): return value
+    if isinstance(value, list) and depth < 2: return [_bounded(item, depth + 1) for item in value[:20]]
+    if isinstance(value, dict) and depth < 2: return {str(key)[:80]: _bounded(item, depth + 1) for key, item in list(value.items())[:20]}
+    return None
+
+
 def _normalized_finding(finding):
-    """Keep all locations/rules; never repeat document values in feedback."""
+    """Keep all locations/rules; never repeat rendered lint messages in feedback.
+
+    Source-fidelity findings carry a bounded `repair` with the cited source values or excerpt to copy, and a
+    dangling reference names the unresolved identifier, so the author can fix the field in place.
+    """
     check = finding.get('check', 'validation')
     where = finding.get('where', '')
     rule = finding.get('rule')
@@ -257,8 +274,9 @@ def _normalized_finding(finding):
                 'source-ancestry': 'Preserve the exact eligible source and upstream provenance path.',
                 'source-locator': 'Use an exact locator in the captured source artifact.',
                 'source-snippet': 'Copy the exact observed source text at the stated locator.',
-                'evidence-snippet': 'Copy a verbatim excerpt from the exact captured source row; put summaries in explanation.',
-                'source-metric': 'Preserve the captured numeric value and metric meaning.',
+                'evidence-snippet': 'Replace snippet with a verbatim excerpt of repair.source_excerpt, the cited source text at this EvidenceItem locator; put summaries in explanation.',
+                'source-metric': 'Set this ClaimScore value to its cited row value in repair.source_values (repair.source_metrics lists the numeric fields when the metric is absent); keep metric and score_kind, and fix the EvidenceItem locator if it cites the wrong row.',
+                'refs': 'repair.unresolved names no node in this draft: reference an object present in the draft or an exact trusted id, or add it with write_account_draft so its dependencies are copied.',
                 'source-metric-kind': 'Keep the source metric mathematical meaning: loading is LOADING, beta is EFFECT_ESTIMATE, combined is SCORE.',
                 'source-file': 'Use the unchanged trusted capture File with its exact checksum and size; do not author replacement source bytes.',
                 'evidence-target': 'Set EvidenceItem.target_proposition to the owning Claim.proposition.',
@@ -278,6 +296,10 @@ def _normalized_finding(finding):
                 'relationship-support-missing': 'Retain an exact source observation supporting this relationship and its biological scope.',
                 'query-scope-overclaim': 'Restrict each assertion to its exact queried factors, filters, page and coverage; partial or empty results do not establish broader absence.',
             }.get(check, 'Inspect this location against the pinned account profile and captured source; preserve trusted objects.')
+            if check in ('source-metric', 'evidence-snippet') and isinstance(finding.get('repair'), dict):
+                details['repair'] = _bounded(finding['repair'])
+            elif check == 'refs' and (match := REFERENCE.match(original)):
+                details['repair'] = {'unresolved': match.group(1)}
     return {'severity': finding.get('severity', 'error'), 'check': check, 'where': where,
             'rule': rule, 'message': message, **details}
 
@@ -294,7 +316,7 @@ def diagnostic_response(report, *, output, filename, capture_roots=()):
     normalized = {key: report[key] for key in ('valid', 'operational_error', 'mode', 'profile',
         'document_sha256', 'evidence_package_sha256', 'dapper_release', 'counts', 'deferred', 'claim_structure') if key in report}
     normalized.update(format=REPORT_FORMAT, source_report_format=report.get('report_version', report.get('format')),
-        message_format='Normalized field/rule diagnostics; original rendered values are intentionally omitted.',
+        message_format='Normalized field/rule diagnostics; original rendered values are omitted. Source-metric, evidence-snippet and refs findings add a bounded repair with the cited source values, a source excerpt or the unresolved id.',
         findings=findings, finding_count=len(findings), findings_complete=True,
         advisories=advisories, advisory_count=len(advisories))
     raw = canonical_json(normalized)

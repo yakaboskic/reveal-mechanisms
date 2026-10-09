@@ -135,18 +135,19 @@ class AuthoringTiming:
         self.value.update(phase=name, phase_started=current, elapsed_ms=round((current-self.value['started'])*1000, 3))
         self._save()
 
-    def spend(self):
-        """(estimated model spend, dollar cap) from the runner's latest usage checkpoint, or None if unpriced."""
+    def limits(self):
+        """(estimated spend and dollar cap, or None; time limit in seconds, or None) from the runner's latest checkpoint."""
         from .box_timing import estimated_cost_usd
         try: runtime = json.loads((self.path.parent.parent / 'runtime.json').read_text())
-        except (OSError, ValueError): return None
-        if not isinstance(runtime, dict): return None
+        except (OSError, ValueError): return None, None
+        if not isinstance(runtime, dict): return None, None
         checkpoint = runtime.get('timing_checkpoint') if isinstance(runtime.get('timing_checkpoint'), dict) else {}
         timing = checkpoint.get('timing') if isinstance(checkpoint.get('timing'), dict) else {}
         limits = runtime.get('execution_limits') if isinstance(runtime.get('execution_limits'), dict) else {}
+        positive = lambda value: type(value) in (int, float) and math.isfinite(value) and value > 0
         estimate, budget = estimated_cost_usd(runtime.get('model'), timing.get('usage')), limits.get('max_budget_usd')
-        if estimate is None or type(budget) not in (int, float) or not math.isfinite(budget) or budget <= 0: return None
-        return estimate, budget
+        timeout = limits.get('timeout_seconds')
+        return ((estimate, budget) if estimate is not None and positive(budget) else None), (timeout if positive(timeout) else None)
 
     def feedback(self, result, execution_deadline=None):
         self.check()
@@ -158,7 +159,14 @@ class AuthoringTiming:
             'remaining_seconds': remaining,
             'authoring_call_elapsed_seconds': round(max(0, current-self.value['started']), 3)}
         guidance = f'Execution time remaining: {remaining:.3f} seconds. Prioritize required repairs, then return the completed output; optional expansion is not required. This timing is operational guidance, not a scientific finding.'
-        spend = self.spend()
+        spend, time_limit = self.limits()
+        # The run is stopped at its time limit and nothing is saved, so pace the remaining work explicitly.
+        if time_limit and remaining < .25 * time_limit:
+            guidance += (' Less than a quarter of the run time remains: finish this repair round with small in-place Edits '
+                         'of the reported fields, lint once more and return the account now. Start no new research.')
+        elif time_limit and remaining < .5 * time_limit:
+            guidance += (' More than half the run time is used: stop optional research and expansion, repair only blocking '
+                         'findings with small in-place Edits of the saved draft, and return the account.')
         if spend:
             estimate, budget = spend
             value['structuredContent']['execution_budget'].update(estimated_spend_usd=round(estimate, 2), spend_cap_usd=budget)
