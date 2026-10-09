@@ -91,13 +91,15 @@ def prepare(*, scheduler='local', api_port=18001, frontend_port=3000, callback_u
     frontend.update({k:backend[k] for k in ('REVEAL_GATEWAY_SECRET','REVEAL_GATEWAY_SERVICE_TOKEN',
         'REVEAL_GATEWAY_ISSUER','REVEAL_GATEWAY_AUDIENCE','NEXTAUTH_URL')})
     frontend.update(AUTH_SECRET=keys['session'], NEXTAUTH_SECRET=keys['session'],
-        REVEAL_API_URL='http://api:8000', REVEAL_ARTIFACT_DOWNLOAD_BASE_URL=download_base, DISABLE_ADMIN_LOGIN='false')
+        REVEAL_API_URL='http://api:8000', REVEAL_ARTIFACT_DOWNLOAD_BASE_URL=download_base, DISABLE_ADMIN_LOGIN='false',
+        NEXT_PUBLIC_REVEAL_LIGHTNING_ENABLED=source.get('NEXT_PUBLIC_REVEAL_LIGHTNING_ENABLED', 'false'))
     env_file(RUNTIME / 'backend.env', backend)
     env_file(RUNTIME / 'frontend.env', frontend)
     env_file(RUNTIME / 'compose.env', {'COMPOSE_PROJECT_NAME':'reveal-workflow-'+hashlib.sha256(str(ROOT).encode()).hexdigest()[:8],
         'REVEAL_RUNTIME_DIR':str(RUNTIME), 'REVEAL_BACKEND_IMAGE':'reveal-workflow-backend:local',
         'REVEAL_FRONTEND_IMAGE':'reveal-workflow-frontend:local', 'REVEAL_DEPLOY_API_PORT':str(api_port),
-        'REVEAL_DEPLOY_FRONTEND_PORT':str(frontend_port)})
+        'REVEAL_DEPLOY_FRONTEND_PORT':str(frontend_port),
+        'NEXT_PUBLIC_REVEAL_LIGHTNING_ENABLED':frontend['NEXT_PUBLIC_REVEAL_LIGHTNING_ENABLED']})
     return {'frontend':origin, 'api':f'http://127.0.0.1:{api_port}',
         'application_tables':'reveal_workflow_local_*', 'scheduler':scheduler,
         'redis':'managed Pub/Sub; zero recurring reads', 'worker_services':0}
