@@ -32,6 +32,13 @@ function investigationDraftName(search: string, gap: Gap | null) {
   const head = label.length > room ? label.slice(0, Math.max(1, room - 1)).trimEnd() + "…" : label;
   return head + suffix;
 }
+function splitDraftTitle(name: string) {
+  const mark = name.lastIndexOf(" · ");
+  if (mark < 1) return null;
+  const saved = name.slice(mark + 3).trim();
+  if (!/^[A-Za-z]{3,9}\.?\s+\d{1,2},\s+\d{1,2}:\d{2}\s*[AP]M$/i.test(saved)) return null;
+  return { query: name.slice(0, mark).trim(), saved };
+}
 const gapTitle = (gap: Gap) => gap.object.name || gap.object.text || "Knowledge gap";
 const gapBody = (gap: Gap) => gap.object.gap_description || gap.object.text || gap.source.source_id;
 function accountLevel(count: number, max: number) {
@@ -237,6 +244,16 @@ function accountGraph(data: unknown) {
   if (!gap && !claimNodes.length) return null;
   return { gap, claims: claimNodes, evidence: evidenceNodes, files: [...graphNodes, ...fileNodes], edges };
 }
+function AccountNodeView({ node }: { node: AccountNode }) {
+  const [popup, setPopup] = useState<{ top: number; left: number } | null>(null);
+  const text = node.title && node.title.length >= node.label.length ? node.title : node.label;
+  function enter(event: { currentTarget: HTMLElement }) {
+    const box = event.currentTarget.getBoundingClientRect();
+    const width = Math.min(352, window.innerWidth - 24);
+    setPopup({ top: Math.min(box.bottom + 8, window.innerHeight - 16), left: Math.max(12, Math.min(box.left, window.innerWidth - width - 12)) });
+  }
+  return <article className="account-node" data-net-id={node.id} onMouseEnter={enter} onMouseLeave={() => setPopup(null)}><span>{node.label}</span>{node.source && <small>{node.source}</small>}{popup && <div className="account-node-pop" style={{ top: popup.top, left: popup.left }} role="tooltip">{text}</div>}</article>;
+}
 function AccountGraph({ data }: { data: unknown }) {
   const model = useMemo(() => accountGraph(data), [data]);
   const root = useRef<HTMLDivElement>(null);
@@ -268,7 +285,7 @@ function AccountGraph({ data }: { data: unknown }) {
     return () => observer.disconnect();
   }, [layoutKey, model]);
   if (!model) return <p className="settings-note">This record has no scientific account graph.</p>;
-  const column = (title: string, nodes: AccountNode[], className = "") => <div className={"account-net-col " + className}><h3>{title}</h3>{nodes.map(node => <article className="account-node" data-net-id={node.id} title={node.title} key={node.id}><span>{node.label}</span>{node.source && <small>{node.source}</small>}</article>)}</div>;
+  const column = (title: string, nodes: AccountNode[], className = "") => <div className={"account-net-col " + className}><h3>{title}</h3>{nodes.map(node => <AccountNodeView node={node} key={node.id} />)}</div>;
   return <figure className="account-net-figure">
     <figcaption className="account-net-legend"><span className="account-swatch support" />Supports<span className="account-swatch dispute" />Disputes<span className="account-swatch plain" />Other</figcaption>
     <div className="account-net-scroll"><div className="account-net" ref={root}>
@@ -321,9 +338,10 @@ function formatLoading(value: number | null | undefined) {
   const abs = Math.abs(value);
   return abs !== 0 && abs < 0.0001 ? value.toExponential(2) : value.toLocaleString(undefined, { maximumFractionDigits: 4 });
 }
-function LoadingDot({ value }: { value: number | null | undefined }) {
-  if (value == null || !Number.isFinite(value)) return null;
-  return <span className="loading-dot" style={{ opacity: Math.min(1, Math.max(0, value)) }} aria-hidden="true" />;
+function LoadingDot({ value, tone }: { value: number | null | undefined; tone: "gene" | "joint" | "marginal" }) {
+  const size = dotSize(value);
+  if (!size) return null;
+  return <span className={"loading-dot " + tone} style={{ width: size, height: size }} aria-hidden="true" />;
 }
 function FactorSummary({ factor }: { factor: Factor }) {
   return factor.cfde_anchor.subtitle ? <p>{factor.cfde_anchor.subtitle}</p> : null;
@@ -360,6 +378,8 @@ function ScoreDot({ value, tone }: { value: number | null | undefined; tone: "ge
 }
 function CrossingMap({ genes, sets }: { genes: FactorLoading[]; sets: CrossingSet[] }) {
   return <div className="crossing">
+    <h3>Top 10 gene and gene set crossings</h3>
+    <ul className="crossing-legend"><li><span className="crossing-dot gene" />Gene loading</li><li><span className="crossing-dot joint" />Joint</li><li><span className="crossing-dot marginal" />Marginal</li><li className="crossing-scale"><span>Scores:</span> 0 <span className="crossing-scale-dots" aria-hidden="true"><span style={{ width: dotSize(0.2), height: dotSize(0.2) }} /><span style={{ width: dotSize(0.55), height: dotSize(0.55) }} /><span style={{ width: dotSize(1), height: dotSize(1) }} /></span> 1</li></ul>
     <div className="crossing-scroll">
       <table className="crossing-map" aria-label="Crossings of the top genes and gene sets">
         <thead><tr><th className="set" />{genes.map(gene => <th className="gene" key={gene.id} scope="col"><span>{gene.label}</span></th>)}</tr></thead>
@@ -384,7 +404,6 @@ function CrossingMap({ genes, sets }: { genes: FactorLoading[]; sets: CrossingSe
         })}</tbody>
       </table>
     </div>
-    <ul className="crossing-legend"><li><span className="crossing-dot gene" />Gene loading</li><li><span className="crossing-dot joint" />Joint</li><li><span className="crossing-dot marginal" />Marginal</li></ul>
   </div>;
 }
 function LoadingTable({ rows, kind, empty }: { rows: FactorLoading[]; kind: "gene" | "gene_set"; empty: string }) {
@@ -397,8 +416,8 @@ function LoadingTable({ rows, kind, empty }: { rows: FactorLoading[]; kind: "gen
     {!!visible.length && <table className="loading-table">
       <thead>{kind === "gene" ? <tr><th>Gene</th><th className="num">Loading</th></tr> : <tr><th>Gene set</th><th className="source">Source</th><th className="num">Joint</th><th className="num">Marginal</th></tr>}</thead>
       <tbody>{visible.map(item => kind === "gene"
-        ? <tr key={item.id}><td>{item.label}</td><td className="num"><LoadingDot value={item.loading} />{formatLoading(item.loading)}</td></tr>
-        : <tr key={item.id}><td className="set-id">{wrapAtUnderscore(item.label)}</td><td className="source">{item.library || "—"}</td><td className="num"><LoadingDot value={item.joint_loading ?? item.loading} />{formatLoading(item.joint_loading ?? item.loading)}</td><td className="num"><LoadingDot value={item.marginal_loading} />{formatLoading(item.marginal_loading)}</td></tr>)}</tbody>
+        ? <tr key={item.id}><td>{item.label}</td><td className="num"><LoadingDot value={item.loading} tone="gene" />{formatLoading(item.loading)}</td></tr>
+        : <tr key={item.id}><td className="set-id">{wrapAtUnderscore(item.label)}</td><td className="source">{item.library || "—"}</td><td className="num"><LoadingDot value={item.joint_loading ?? item.loading} tone="joint" />{formatLoading(item.joint_loading ?? item.loading)}</td><td className="num"><LoadingDot value={item.marginal_loading} tone="marginal" />{formatLoading(item.marginal_loading)}</td></tr>)}</tbody>
     </table>}
     {rows.length > LOADING_PAGE_SIZE && <nav className="inspect-pages" aria-label={title + " pages"}><button type="button" className="step" aria-label="First page" disabled={page === 0} onClick={() => setPage(0)}>«</button><button type="button" className="step" aria-label="Previous page" disabled={page === 0} onClick={() => setPage(value => value - 1)}>‹</button>{page > 0 && <button type="button" className="page-num" aria-label={"Page " + page} onClick={() => setPage(page - 1)}>{page}</button>}<button type="button" className="current" aria-current="page">{page + 1}</button>{page < pages - 1 && <button type="button" className="page-num" aria-label={"Page " + (page + 2)} onClick={() => setPage(page + 1)}>{page + 2}</button>}<button type="button" className="step" aria-label="Next page" disabled={page >= pages - 1} onClick={() => setPage(value => value + 1)}>›</button><button type="button" className="step" aria-label="Last page" disabled={page >= pages - 1} onClick={() => setPage(pages - 1)}>»</button></nav>}
   </section>;
@@ -428,35 +447,34 @@ function FactorLoadings({ sourceId }: { sourceId: string }) {
     });
     return () => { controller.abort(); crossingAbort.current?.abort(); };
   }, [sourceId]);
-  async function checkCrossings() {
+  useEffect(() => {
     if (!rows.gene || !rows.gene_set) return;
     const genes = [...rows.gene].sort((a, b) => scoreValue(b.loading) - scoreValue(a.loading)).slice(0, CROSSING_LIMIT);
     const sets = [...rows.gene_set].sort((a, b) => scoreValue(b.joint_loading ?? b.loading) - scoreValue(a.joint_loading ?? a.loading)).slice(0, CROSSING_LIMIT);
     if (!genes.length || !sets.length) { setCrossing(null); setCrossingNote("This factor does not have genes and gene sets to compare."); return; }
-    crossingAbort.current?.abort();
     const controller = new AbortController();
     crossingAbort.current = controller;
     setCrossingBusy(true); setCrossingNote(""); setCrossing(null);
-    try {
-      const mapped = await Promise.all(sets.map(async item => {
-        if (!item.gene_set_id) return { item, members: null };
-        try {
-          const record = await api.catalogGeneSet(item.gene_set_id, controller.signal);
-          const raw = record.object?.members;
-          if (!Array.isArray(raw)) return { item, members: null };
-          return { item, members: new Set(raw.flatMap(value => typeof value === "string" ? symbolKeys(value) : [])) };
-        } catch (error) {
-          if (controller.signal.aborted) throw error;
-          return { item, members: null };
-        }
-      }));
+    void Promise.all(sets.map(async item => {
+      if (!item.gene_set_id) return { item, members: null };
+      try {
+        const record = await api.catalogGeneSet(item.gene_set_id, controller.signal);
+        const raw = record.object?.members;
+        if (!Array.isArray(raw)) return { item, members: null };
+        return { item, members: new Set(raw.flatMap(value => typeof value === "string" ? symbolKeys(value) : [])) };
+      } catch (error) {
+        if (controller.signal.aborted) throw error;
+        return { item, members: null };
+      }
+    })).then(mapped => {
       if (!controller.signal.aborted) setCrossing({ genes, sets: mapped });
-    } catch (error) {
+    }).catch(error => {
       if (!controller.signal.aborted) setCrossingNote(errorMessage(error));
-    } finally {
+    }).finally(() => {
       if (!controller.signal.aborted) setCrossingBusy(false);
-    }
-  }
+    });
+    return () => controller.abort();
+  }, [rows]);
   const filtered = useMemo(() => {
     const query = geneQuery.trim().toLowerCase();
     const geneCut = loadingCut(geneMin);
@@ -486,8 +504,8 @@ function FactorLoadings({ sourceId }: { sourceId: string }) {
         <label>Joint<input type="number" inputMode="decimal" min={0} max={1} step="any" value={jointMin} onChange={event => setJointMin(event.target.value)} placeholder="Any" /></label>
         <label>Marginal<input type="number" inputMode="decimal" min={0} max={1} step="any" value={marginalMin} onChange={event => setMarginalMin(event.target.value)} placeholder="Any" /></label>
       </div>
-      <button type="button" className="secondary crossing-check" disabled={!rows.gene || !rows.gene_set || crossingBusy} onClick={() => void checkCrossings()}>{crossingBusy ? "Checking crossings…" : "Check crossings of top 10 genes and gene sets"}</button>
     </div>}
+    {crossingBusy && <p className="settings-note">Checking crossings…</p>}
     {crossingNote && <p className="settings-note">{crossingNote}</p>}
     {crossing && <CrossingMap genes={crossing.genes} sets={crossing.sets} />}
     <div role="tablist" aria-label="Factor loadings"><button type="button" role="tab" aria-selected={tab === "gene"} onClick={() => setTab("gene")}>Genes</button><button type="button" role="tab" aria-selected={tab === "gene_set"} onClick={() => setTab("gene_set")}>Gene sets</button></div>
@@ -671,8 +689,9 @@ function SavedDrafts({ drafts, jobs, requests, gapLabels, factorLabels, ready, r
       <button type="button" className="panel-back" aria-label="Back" onClick={onClose}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22.9 12H6M11 6l-6 6 6 6" /></svg></button>
       <div className="draft-picker-heading"><h2 id="draft-picker-heading">Saved drafts</h2></div>
       <div className="draft-table-wrap"><table className="draft-table">
-        <thead><tr><th scope="col">Draft</th><th scope="col">Knowledge gap</th><th scope="col">Factors</th><th scope="col">Evidence</th><th scope="col">Investigation</th><th scope="col">Select</th><th scope="col">Delete</th></tr></thead>
-        <tbody>{rows.length === 0 ? <tr><td colSpan={7}>No saved drafts.</td></tr> : rows.map(draft => {
+        <thead><tr><th scope="col">Draft</th><th scope="col">Query</th><th scope="col">Saved time</th><th scope="col">Knowledge gap</th><th scope="col">Factors</th><th scope="col">Evidence</th><th scope="col">Investigation</th><th scope="col">Select</th><th scope="col">Delete</th></tr></thead>
+        <tbody>{rows.length === 0 ? <tr><td colSpan={9}>No saved drafts.</td></tr> : rows.map(draft => {
+          const titled = splitDraftTitle(draft.name || "");
           const gapId = draft.composer.source_gap?.id;
           const factorIds = draft.composer.eaggl_anchors.map(anchor => anchor.reference.source_id);
           const linked = requests.filter(request => request.source_draft_id === draft.id).sort((a, b) => b.submitted_at.localeCompare(a.submitted_at));
@@ -681,7 +700,9 @@ function SavedDrafts({ drafts, jobs, requests, gapLabels, factorLabels, ready, r
             return matches.length ? matches.map(job => `${job.kind === "analysis" ? "Analysis" : "Cited claim"} — ${readable(job.status)} — ${date(job.created_at)}`) : [`Analysis — ${date(request.submitted_at)}`];
           });
           return <tr key={draft.id}>
-            <td>{draft.name || "Untitled draft"} ({date(draft.updated_at)})</td>
+            <td>{titled ? "—" : `${draft.name || "Untitled draft"} (${date(draft.updated_at)})`}</td>
+            <td>{titled?.query || "—"}</td>
+            <td>{titled?.saved || "—"}</td>
             <td>{gapId ? gapLabels[gapId] || (ready ? "—" : "Loading…") : "—"}</td>
             <td>{factorIds.length ? factorIds.map(id => factorLabels[id] || (ready ? "—" : "Loading…")).join(", ") : "—"}</td>
             <td>{draft.composer.selected_kgs.map(evidenceName).join(", ") || "—"}</td>
@@ -708,6 +729,7 @@ export default function Home() {
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [guestNote, setGuestNote] = useState(true);
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [moreRecords, setMoreRecords] = useState(false);
@@ -901,6 +923,22 @@ export default function Home() {
     return () => window.removeEventListener("storage", onSessionChange);
   }, []);
   useEffect(() => { setOpenLastDraft(readOpenLastDraft()); }, []);
+  useEffect(() => {
+    if (!notice) return;
+    const timer = window.setTimeout(() => setNotice(""), 3000);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
+  useEffect(() => {
+    if (!error) return;
+    const timer = window.setTimeout(() => setError(""), 3000);
+    return () => window.clearTimeout(timer);
+  }, [error]);
+  useEffect(() => {
+    if (principal?.principal_kind !== "anonymous") { setGuestNote(false); return; }
+    setGuestNote(true);
+    const timer = window.setTimeout(() => setGuestNote(false), 3000);
+    return () => window.clearTimeout(timer);
+  }, [principal?.user_id, principal?.principal_kind]);
   useEffect(() => { if (draft?.id) localStorage.setItem(LAST_DRAFT_KEY, draft.id); }, [draft?.id]);
   useEffect(() => {
     if (!settingsOpen) return;
@@ -1221,6 +1259,8 @@ export default function Home() {
     setQuery(""); setGaps([]); setSearched(false); setGapListMode(null); setLocation("draft", null); setLocation("job", null);
     setNotice(""); setError(""); setStep("gap"); setActivityOpen(false); setPanelView("menu");
     setWelcomeOpen(true);
+    factorInspectId.current = "";
+    setInspectGap(null); setInspectGapNote(""); setInspectFactor(null); setInspectFactorId(null); setInspectFactorNote(""); setInspectResult(null); setActivityLogOpen(false);
     currentJob.current = null; setJob(null);
   }
   function startSearch() {
@@ -1327,7 +1367,7 @@ export default function Home() {
     let verdict: "yes" | "no" | null = null;
     try {
       const next = { ...composer, selected_kgs: ["biomarkerkg", "prokn"] as Composer["selected_kgs"] };
-      saved = await save(false, { quiet: true, composer: next, ...(draft ? {} : { name: investigationDraftName(query, gap) }) });
+      saved = await save(false, { quiet: true, composer: next, name: investigationDraftName(query, gap) });
       if (!saved) { noteActivity("The draft could not be saved, so the CFDE assessment did not start.", "failure"); return; }
       verdict = await assessCfdeSupport(saved);
     } catch (error) {
@@ -1473,7 +1513,7 @@ export default function Home() {
       </div></header>
     {inWorkspace && <div className="workspace-bar"><div className="step-rail" role="tablist" aria-label="Investigation steps"><button type="button" role="tab" aria-selected={activeStep === "gap"} className={"step-rail-card" + (activeStep === "gap" ? " active" : "")} onClick={() => setStep("gap")}><span className="step-rail-title"><span className="step-number">1</span>Choose a knowledge gap</span>{gap && <span className="step-rail-summary">{gap.object.text || gapTitle(gap)}</span>}</button><button type="button" role="tab" aria-selected={activeStep === "anchors"} className={"step-rail-card" + (activeStep === "anchors" ? " active" : "") + (gapChosen ? "" : " inactive")} disabled={!gapChosen && activeStep !== "anchors"} onClick={() => { if (gapChosen) setStep("anchors"); }}><span className="step-rail-title"><span className="step-number">2</span>Select mechanism anchors</span>{anchorChosen && <span className="step-rail-summary bubbles">{factorBubbles(2)}</span>}</button><button type="button" role="tab" aria-selected={activeStep === "investigation"} className={"step-rail-card" + (activeStep === "investigation" ? " active" : "") + (job ? "" : " inactive")} disabled={!job && activeStep !== "investigation"} onClick={() => { if (job) setStep("investigation"); }}><span className="step-rail-title"><span className="step-number">3</span>Investigation</span>{investigationRail}</button></div>{errorNotice}</div>}
     <main className={inWorkspace ? "workspace" : undefined}>
-      {principal?.principal_kind === "anonymous" && <p className="notice">Guest workspace: available in this browser until {date(principal.workspace_expires_at || "")}. Clearing cookies or disconnecting loses access to saved work.</p>}
+      {guestNote && principal?.principal_kind === "anonymous" && <p className="notice">Guest workspace: available in this browser until {date(principal.workspace_expires_at || "")}. Clearing cookies or disconnecting loses access to saved work.</p>}
       {!inWorkspace && errorNotice}
       {(!principal || (welcomeOpen && panelView === "menu")) ? <section className="welcome"><div className="welcome-lead"><h2>Choose the gap. Ground the claim.</h2><svg className="welcome-mark" viewBox="0 0 132 18" aria-hidden="true"><line x1="16" y1="9" x2="116" y2="9" stroke="#a7a9ad" strokeWidth="1.7" /><circle cx="9" cy="9" r="6.1" fill="#fff" stroke="#e07b39" strokeWidth="1.8" /><circle cx="123" cy="9" r="7" fill="#e07b39" /></svg><div className="welcome-choices"><button type="button" onClick={startSearch} disabled={!principal || checking || busy === "connect"}>Search knowledge gaps</button><button type="button" onClick={() => void browseTrending()} disabled={!principal || checking || busy === "connect" || searching}>Trending knowledge gaps</button></div></div><img className="welcome-flow" src="/workflow_updated.svg" alt="Choose the gap. Ground the claim. Search or browse trending DisMech knowledge gaps and select one. The system suggests CFDE REVEAL KG mechanism factors matched to that gap's DisMech mechanisms, and you select them. Starting the investigation collects BiomarkerKG and ProKN evidence and writes a scientific account and cited claim." /><div className="welcome-cards"><a className="welcome-card" href="#learn-reveal-client" onClick={event => event.preventDefault()}><svg viewBox="0 0 72 56" aria-hidden="true"><path d="M36 12v32M14 16c7 5 15 5 22-2 7 7 15 7 22 2v28c-7 5-15 5-22-2-7 7-15 7-22 2V16z" /></svg><strong>Learn REVEAL Close the gap</strong><span>A guide to the workspace, from a knowledge gap to a grounded claim.</span></a><a className="welcome-card" href="#quick-start-demo" onClick={event => event.preventDefault()}><svg viewBox="0 0 72 56" aria-hidden="true"><rect x="14" y="12" width="44" height="32" rx="3" /><path className="card-icon-fill" d="M33 22l12 6-12 6z" /></svg><strong>Watch quick start demo</strong><span>A short walkthrough of connecting and starting an investigation.</span></a></div></section> : welcomeOpen ? <div className="welcome-panel-stage"><section className="welcome-panel" role="dialog" aria-modal="true" aria-labelledby="welcome-heading"><button type="button" className="panel-back" aria-label="Back to welcome" onClick={() => { if (panelView === "copy") setName(keptName.current); else { setName(""); setNotice(""); } setPanelView("menu"); }}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22.9 12H6M11 6l-6 6 6 6" /></svg></button><div className="draft-start"><h2 id="welcome-heading">{panelView === "copy" ? "Save as a new draft" : "Start a draft"}</h2><label htmlFor="draft-name">Draft name</label><input id="draft-name" value={name} maxLength={120} onChange={event => setName(event.target.value)} disabled={!mutable} placeholder="Name this investigation" autoFocus />{notice && <p className="notice" role="status">{notice}</p>}<div className="actions"><button onClick={() => save(panelView === "copy")} disabled={!mutable || !name.trim() || (panelView !== "copy" && !dirty)}>{busy === "save" ? "Saving…" : "Save draft"}</button></div></div></section></div> : <>
         <div className={inspectGap || inspectFactorId || inspectResult || activityLogOpen ? "workspace-frames" : "workspace-frames steps-only"}>
