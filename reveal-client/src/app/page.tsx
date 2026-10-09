@@ -23,6 +23,9 @@ const setupStages = new Set(["queued", "freezing_inputs", "retrieving_cfde", "pr
 function analysisHasStarted(job: Job) {
   return job.kind !== "analysis" || terminal(job.status) || !setupStages.has(job.stage);
 }
+function selectionSignature(value: Pick<Composer, "source_gap" | "eaggl_anchors">) {
+  return [value.source_gap?.source_id || "", ...value.eaggl_anchors.map(anchor => anchor.reference.source_id).sort()].join("\n");
+}
 function investigationDraftName(search: string, gap: Gap | null) {
   const stamp = date(new Date().toISOString());
   const source = search.trim() || gap?.object.text || gap?.source.disease_label || "Investigation";
@@ -64,16 +67,21 @@ function GapOption({ gap, selected, disabled, maxAccounts, onSelect, onInspect }
     observer.observe(node);
     return () => observer.disconnect();
   }, [body, open]);
-  return <div className={selected ? "gap-option selected" : "gap-option"} role="button" tabIndex={disabled ? -1 : 0} aria-pressed={selected} aria-disabled={disabled} onClick={() => { if (!disabled) onSelect(); }} onKeyDown={event => { if (event.target !== event.currentTarget || disabled) return; if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelect(); } }}>
-    <strong>{gapTitle(gap)}</strong>
-    <span ref={bodyRef} className={open ? "expanded" : undefined}>{body}</span>
-    <div className="gap-meta">
-      {(overflows || open) && <button type="button" className="read-more" aria-expanded={open} onClick={event => { event.stopPropagation(); setOpen(value => !value); }}>{open ? "Show less" : "Read more"}</button>}
-      <div className="gap-bubbles" onClick={event => event.stopPropagation()}>
-        <span className={"gap-bubble accounts level-" + accountLevel(accounts, maxAccounts)} aria-label={accounts + " connected accounts"}>{accounts}</span>
-        <span className={"gap-bubble votes tone-" + voteTone} aria-label={upvotes + " upvotes, " + downvotes + " downvotes"}><span className="vote-up">{upvotes}</span><span className="vote-bar" aria-hidden="true">|</span><span className="vote-down">{downvotes}</span></span>
-        <button type="button" className="gap-bubble inspect" onClick={onInspect}>Inspect gap</button>
+  return <div className={selected ? "gap-option selected" : "gap-option"} aria-disabled={disabled || undefined}>
+    <div className="gap-main">
+      <strong>{gapTitle(gap)}</strong>
+      <span ref={bodyRef} className={open ? "expanded" : undefined}>{body}</span>
+      <div className="gap-meta">
+        {(overflows || open) && <button type="button" className="read-more" aria-expanded={open} onClick={() => setOpen(value => !value)}>{open ? "Show less" : "Read more"}</button>}
+        <div className="gap-bubbles">
+          <span className={"gap-bubble accounts level-" + accountLevel(accounts, maxAccounts)} aria-label={accounts + " connected accounts"}>{accounts}</span>
+          <span className={"gap-bubble votes tone-" + voteTone} aria-label={upvotes + " upvotes, " + downvotes + " downvotes"}><span className="vote-up">{upvotes}</span><span className="vote-bar" aria-hidden="true">|</span><span className="vote-down">{downvotes}</span></span>
+          <button type="button" className="gap-bubble inspect" onClick={onInspect}>Inspect gap</button>
+        </div>
       </div>
+    </div>
+    <div className="gap-select">
+      <button type="button" disabled={disabled} aria-pressed={selected} onClick={() => { if (!disabled) onSelect(); }}>Select</button>
     </div>
   </div>;
 }
@@ -737,6 +745,7 @@ export default function Home() {
   const [composer, setComposer] = useState<Composer>(emptyComposer);
   const [gap, setGap] = useState<Gap | null>(null);
   const [query, setQuery] = useState("");
+  const [researchContext, setResearchContext] = useState("");
   const [gaps, setGaps] = useState<Gap[]>([]);
   const [searching, setSearching] = useState(false);
   const [searched, setSearched] = useState(false);
@@ -771,6 +780,8 @@ export default function Home() {
   const [inspectFactorId, setInspectFactorId] = useState<string | null>(null);
   const [inspectFactorNote, setInspectFactorNote] = useState("");
   const [inspectFocus, setInspectFocus] = useState<"gap" | "factor" | "result" | "activity">("gap");
+  const [trackedStep, setTrackedStep] = useState<"gap" | "anchors" | "investigation">("gap");
+  const [inspectorMemory, setInspectorMemory] = useState<{ gap: "gap" | null; anchors: "factor" | null; investigation: "result" | "activity" | null }>({ gap: null, anchors: null, investigation: null });
   const [inspectResult, setInspectResult] = useState<ResultInspect | null>(null);
   const [resultActions, setResultActions] = useState<ResultAction[]>([]);
   const factorInspectId = useRef("");
@@ -805,11 +816,13 @@ export default function Home() {
   const keptName = useRef("");
   const searchedQuery = useRef<string | null>(null);
   const dirty = !draft || JSON.stringify(draft.composer) !== JSON.stringify(composer) || (draft.name || "") !== name;
+  const selectionForked = !!draft && selectionSignature(composer) !== selectionSignature(draft.composer);
   const mutable = Boolean(principal) && !busy;
   const gapChosen = Boolean(composer.source_gap);
   const anchorChosen = composer.eaggl_anchors.length > 0;
   const suggestedIds = suggestion?.automatic_anchors.map(anchor => anchor.factor.source_id) ?? [];
-  const anchorIds = suggestedIds.length ? Array.from(new Set([...composer.eaggl_anchors.map(anchor => anchor.reference.source_id), ...suggestedIds])) : composer.eaggl_anchors.map(anchor => anchor.reference.source_id);
+  const selectedIds = composer.eaggl_anchors.map(anchor => anchor.reference.source_id);
+  const anchorIds = suggestedIds.length ? Array.from(new Set([...suggestedIds, ...selectedIds])) : selectedIds;
   const missingFactorKey = composer.eaggl_anchors.map(anchor => anchor.reference.source_id).filter(id => !factors[id] && !factorMisses[id]).join("\n");
 
   const refresh = useCallback((kinds: string[] = ["drafts", "jobs"]): Promise<void> => {
@@ -847,7 +860,7 @@ export default function Home() {
     try {
       const value = await api.draft(id);
       if (generation !== editorGeneration.current || owner !== identity.current) return;
-      setDraft(value); setComposer(value.composer); setName(value.name || ""); setSuggestion(null); setGap(null); setCfdePassed(readCfdePassed().includes(id));
+      setDraft(value); setComposer(value.composer); setName(value.name || ""); setSuggestion(null); setGap(null); setResearchContext(""); setCfdePassed(readCfdePassed().includes(id));
       setQuery(""); setGaps([]); setSearched(false); setGapListMode(null); searchedQuery.current = null;
       setLocation("draft", id); setNotice("Saved draft loaded."); setError(""); setWelcomeOpen(false);
       const suggestionController = new AbortController();
@@ -1066,7 +1079,7 @@ export default function Home() {
     if (!activityLogOpen) return;
     const node = activityLogRef.current;
     if (node) node.scrollTop = node.scrollHeight;
-  }, [activity, activityLogOpen]);
+  }, [activity, activityLogOpen, step]);
   useEffect(() => {
     if (!job || !terminal(job.status) || activityCollapsed.current === job.id) return;
     activityCollapsed.current = job.id;
@@ -1185,7 +1198,7 @@ export default function Home() {
       }
       if (restore) setLocation("draft", restore);
       setPrincipal(value.principal); setNotice(""); setPanelView("menu"); setWelcomeOpen(!restore); setActivityOpen(false); setSettingsOpen(false);
-      setDraft(null); setComposer(emptyComposer()); setName(""); setGap(null); setSuggestion(null); setStep("gap"); currentJob.current = null; setJob(null);
+      setDraft(null); setComposer(emptyComposer()); setName(""); setGap(null); setSuggestion(null); setResearchContext(""); setStep("gap"); currentJob.current = null; setJob(null);
     }
     catch (error) { setError(errorMessage(error)); }
     finally { setBusy(""); }
@@ -1196,7 +1209,7 @@ export default function Home() {
     setBusy("disconnect");
     try {
       await api.disconnect(); setSessionOpen(false); setDraftPicker(false); setHelpOpen(false); setSettingsOpen(false); setWelcomeOpen(false); setPanelView("menu"); setStep("gap"); setActivityOpen(false); setPrincipal(null); currentJob.current = null; setJob(null); setDraft(null); setJobs([]); setDrafts([]);
-      setComposer(emptyComposer()); setName(""); setGap(null); setSuggestion(null); setActivity([]); setPending(null);
+      setComposer(emptyComposer()); setName(""); setGap(null); setSuggestion(null); setResearchContext(""); setActivity([]); setPending(null);
       setNotice(guest ? "Disconnected. Access to this guest workspace is lost. Running jobs remain on the server." : "Disconnected. Saved work and running jobs remain on the server.");
     } catch (error) { setError(errorMessage(error)); }
     finally { setBusy(""); }
@@ -1237,13 +1250,13 @@ export default function Home() {
   function newDraft() {
     if (dirty && (composer.source_gap || name) && !window.confirm("Start a new draft? Unsaved changes will be discarded.")) return false;
     ++editorGeneration.current; suggestionAbort.current?.abort(); setSuggesting(false);
-    setDraft(null); setName(""); setComposer(emptyComposer()); setGap(null); setSuggestion(null); setLocation("draft", null); setNotice(""); setError(""); setStep("gap"); setActivityOpen(false);
+    setDraft(null); setName(""); setComposer(emptyComposer()); setGap(null); setSuggestion(null); setResearchContext(""); setLocation("draft", null); setNotice(""); setError(""); setStep("gap"); setActivityOpen(false);
     return true;
   }
   function beginWithoutDraft() {
     if (dirty && (draft || composer.source_gap || name) && !window.confirm("Leave this draft and choose a knowledge gap? Unsaved changes will be discarded.")) return;
     ++editorGeneration.current; suggestionAbort.current?.abort(); setSuggesting(false);
-    setDraft(null); setName(""); setComposer(emptyComposer()); setGap(null); setSuggestion(null);
+    setDraft(null); setName(""); setComposer(emptyComposer()); setGap(null); setSuggestion(null); setResearchContext("");
     searchedQuery.current = null;
     setQuery(""); setGaps([]); setSearched(false); setGapListMode(null); setLocation("draft", null); setNotice(""); setError("");
     setStep("gap"); setActivityOpen(false); setWelcomeOpen(false); setPanelView("menu");
@@ -1253,7 +1266,7 @@ export default function Home() {
     setSessionOpen(false);
     if (dirty && (draft || composer.source_gap || name) && !window.confirm("Start a new session? Unsaved changes will be discarded.")) return;
     ++editorGeneration.current; suggestionAbort.current?.abort(); setSuggesting(false);
-    setDraft(null); setName(""); setComposer(emptyComposer()); setGap(null); setSuggestion(null);
+    setDraft(null); setName(""); setComposer(emptyComposer()); setGap(null); setSuggestion(null); setResearchContext("");
     searchedQuery.current = null;
     setQuery(""); setGaps([]); setSearched(false); setGapListMode(null); setLocation("draft", null); setLocation("job", null);
     setNotice(""); setError(""); setStep("gap"); setActivityOpen(false); setPanelView("menu");
@@ -1282,7 +1295,7 @@ export default function Home() {
   async function browseTrending() {
     if (dirty && (draft || composer.source_gap || name) && !window.confirm("Leave this draft and browse trending knowledge gaps? Unsaved changes will be discarded.")) return;
     ++editorGeneration.current; suggestionAbort.current?.abort(); setSuggesting(false);
-    setDraft(null); setName(""); setComposer(emptyComposer()); setGap(null); setSuggestion(null);
+    setDraft(null); setName(""); setComposer(emptyComposer()); setGap(null); setSuggestion(null); setResearchContext("");
     searchedQuery.current = null;
     setQuery(""); setGaps([]); setSearched(false); setGapListMode(null); setLocation("draft", null); setNotice(""); setError("");
     setStep("gap"); setActivityOpen(false); setWelcomeOpen(false); setPanelView("menu");
@@ -1307,7 +1320,7 @@ export default function Home() {
       await mutationKeys.current.run(["delete", value.id, value.version], key => api.deleteDraft(value, key));
       if (draft?.id === value.id) {
         ++editorGeneration.current; suggestionAbort.current?.abort(); setSuggesting(false);
-        setDraft(null); setName(""); setComposer(emptyComposer()); setGap(null); setSuggestion(null); setLocation("draft", null); setStep("gap"); setActivityOpen(false);
+        setDraft(null); setName(""); setComposer(emptyComposer()); setGap(null); setSuggestion(null); setResearchContext(""); setLocation("draft", null); setStep("gap"); setActivityOpen(false);
       }
       await refresh(["drafts"]);
     } catch (error) { setError(errorMessage(error)); }
@@ -1316,9 +1329,11 @@ export default function Home() {
   async function save(asNew = false, options?: { name?: string; quiet?: boolean; updateOnly?: boolean; draftId?: string; composer?: Composer }): Promise<Draft | null> {
     if (options?.updateOnly && (!draft || (options.draftId && draft.id !== options.draftId))) return null;
     const fromStart = welcomeOpen && panelView === "draft";
-    const fromCopy = asNew || (welcomeOpen && panelView === "copy");
     const savedName = (options?.name ?? name).trim();
     const savedComposer = options?.composer ?? composer;
+    const selectionChanged = !!draft && selectionSignature(savedComposer) !== selectionSignature(draft.composer);
+    if (options?.updateOnly && selectionChanged) return null;
+    const fromCopy = asNew || selectionChanged || (welcomeOpen && panelView === "copy");
     if (!options?.quiet) setBusy("save");
     setError("");
     try {
@@ -1326,7 +1341,7 @@ export default function Home() {
       setDraft(value); setComposer(value.composer); setName(value.name || ""); setLocation("draft", value.id);
       if (!fromStart && searchedQuery.current !== null) rememberGapSearch(searchedQuery.current, value.id, value.composer.source_gap?.source_id);
       if (fromStart) { searchedQuery.current = null; setGaps([]); setSearched(false); setGapListMode(null); setNotice(""); setStep("gap"); setActivityOpen(false); setWelcomeOpen(false); setPanelView("menu"); }
-      else if (fromCopy) { setNotice(""); setWelcomeOpen(false); setPanelView("menu"); setStep(value.composer.source_gap ? "anchors" : "gap"); }
+      else if (fromCopy && !options?.quiet) { setNotice(""); setWelcomeOpen(false); setPanelView("menu"); setStep(value.composer.source_gap ? "anchors" : "gap"); }
       await refresh();
       return value;
     } catch (error) { setError(error instanceof ApiError && error.status === 409 && error.code !== "REFERENCE_GENERATION_SUPERSEDED" ? "This draft changed on the server. Open the saved draft again to review it before saving. Your local selections remain visible." : errorMessage(error)); return null; }
@@ -1484,13 +1499,30 @@ export default function Home() {
   const investigationPanel = <>
     {!!factorList && <p className="investigation-field"><strong>Factors:</strong> {factorList}</p>}
     {job && <div className="activity-status-row"><strong>Status:</strong><p>Started {date(job.created_at)}</p>{job.completed_at && <p>Completed {date(job.completed_at)}</p>}<span className={"status " + job.status}>{readable(job.status)}</span>{paragraphWriting && <span className="status running">Writing the cited claim</span>}{!terminal(job.status) && <button className="danger small" onClick={cancel} disabled={!!busy || job.status === "cancel_requested"}>{job.status === "cancel_requested" ? "Stopping…" : "Stop"}</button>}{resultActions.map(action => <span className="status-link-item" key={action.key}><span className="status-rule" aria-hidden="true">|</span><button type="button" className="status-link" onClick={() => openResultInspect(action.inspect)}>{action.label}</button></span>)}<span className="status-link-item"><span className="status-rule" aria-hidden="true">|</span><button type="button" className="status-link" onClick={openActivityInspect}>Activity</button></span></div>}
+    {job?.kind === "analysis" && job.status === "succeeded" && <p className="evidence-provenance"><button type="button">Evidence provenance</button></p>}
     {!!job?.warnings.length && <div className="notice"><ul>{job.warnings.map(value => <li key={value}>{value}</li>)}</ul></div>}
     {job?.failure && <div className="notice error" role="alert"><div><strong>Research could not complete</strong><p>{job.failure.message}</p><span className="small">{job.failure.code}</span>{job.failure.code.startsWith("REVIEW_") && job.failure.retryable && <p><button className="secondary" onClick={retryReview} disabled={!!busy}>{busy === "review" ? "Requesting review…" : "Retry saved review"}</button></p>}</div></div>}
     {job?.status === "cancelled" && <p className="notice">This job was stopped. No successful result is implied.</p>}
+    {(job?.status === "failed" || job?.status === "cancelled") && <p className="session-restart"><button type="button" onClick={startSession}>Start a new session?</button></p>}
     {job?.result && <ResultView job={job} principalKind={principal?.principal_kind} onActions={setResultActions} />}
     {job?.kind === "analysis" && job.status === "succeeded" && <section className="paragraph-result"><h3>Cited claim</h3>{job.result?.kind === "analysis" && job.result.paragraph_job_ids.map(id => <ParagraphView key={id} progress={paragraphs[id]} />)}</section>}
   </>;
   const activeStep = step === "anchors" || step === "investigation" ? step : "gap";
+  if (trackedStep !== activeStep) {
+    const previous = trackedStep;
+    const snapshot = previous === "gap" ? (inspectGap ? "gap" as const : null) : previous === "anchors" ? (inspectFactorId ? "factor" as const : null) : inspectFocus === "result" && inspectResult ? "result" as const : inspectFocus === "activity" && activityLogOpen ? "activity" as const : activityLogOpen ? "activity" as const : inspectResult ? "result" as const : null;
+    const saved = inspectorMemory[activeStep];
+    const restored = saved === "gap" && inspectGap ? "gap" as const : saved === "factor" && inspectFactorId ? "factor" as const : saved === "result" && inspectResult ? "result" as const : saved === "activity" && activityLogOpen ? "activity" as const : null;
+    setTrackedStep(activeStep);
+    setInspectorMemory(current => ({ ...current, [previous]: snapshot }));
+    if (restored && restored !== inspectFocus) setInspectFocus(restored);
+  }
+  const showGapInspect = activeStep === "gap" && !!inspectGap;
+  const showFactorInspect = activeStep === "anchors" && !!inspectFactorId;
+  const showResultInspect = activeStep === "investigation" && !!inspectResult;
+  const showActivityInspect = activeStep === "investigation" && activityLogOpen;
+  const inspectColumnOpen = showGapInspect || showFactorInspect || showResultInspect || showActivityInspect;
+  const inspectColumnFocus = activeStep === "gap" ? "gap" as const : activeStep === "anchors" ? "factor" as const : inspectFocus === "activity" && showActivityInspect ? "activity" as const : inspectFocus === "result" && showResultInspect ? "result" as const : showActivityInspect ? "activity" as const : "result" as const;
   const analysisRunning = !!job && !terminal(job.status);
   const lastActivity = displayActivity(activity).at(-1) ?? null;
   const analysisComplete = !!job && terminal(job.status);
@@ -1515,19 +1547,20 @@ export default function Home() {
       {guestNote && principal?.principal_kind === "anonymous" && <p className="notice">Guest workspace: available in this browser until {date(principal.workspace_expires_at || "")}. Clearing cookies or disconnecting loses access to saved work.</p>}
       {!inWorkspace && errorNotice}
       {(!principal || (welcomeOpen && panelView === "menu")) ? <section className="welcome"><div className="welcome-lead"><h2>Choose the gap. Ground the claim.</h2><svg className="welcome-mark" viewBox="0 0 132 18" aria-hidden="true"><line x1="16" y1="9" x2="116" y2="9" stroke="#a7a9ad" strokeWidth="1.7" /><circle cx="9" cy="9" r="6.1" fill="#fff" stroke="#e07b39" strokeWidth="1.8" /><circle cx="123" cy="9" r="7" fill="#e07b39" /></svg><div className="welcome-choices"><button type="button" onClick={startSearch} disabled={!principal || checking || busy === "connect"}>Search knowledge gaps</button><button type="button" onClick={() => void browseTrending()} disabled={!principal || checking || busy === "connect" || searching}>Trending knowledge gaps</button></div></div><img className="welcome-flow" src="/workflow_updated.svg" alt="Choose the gap. Ground the claim. Search or browse trending DisMech knowledge gaps and select one. The system suggests CFDE REVEAL KG mechanism factors matched to that gap's DisMech mechanisms, and you select them. Starting the investigation collects BiomarkerKG and ProKN evidence and writes a scientific account and cited claim." /><div className="welcome-cards"><a className="welcome-card" href="#learn-reveal-client" onClick={event => event.preventDefault()}><svg viewBox="0 0 72 56" aria-hidden="true"><path d="M36 12v32M14 16c7 5 15 5 22-2 7 7 15 7 22 2v28c-7 5-15 5-22-2-7 7-15 7-22 2V16z" /></svg><strong>Learn REVEAL Close the gap</strong><span>A guide to the workspace, from a knowledge gap to a grounded claim.</span></a><a className="welcome-card" href="#quick-start-demo" onClick={event => event.preventDefault()}><svg viewBox="0 0 72 56" aria-hidden="true"><rect x="14" y="12" width="44" height="32" rx="3" /><path className="card-icon-fill" d="M33 22l12 6-12 6z" /></svg><strong>Watch quick start demo</strong><span>A short walkthrough of connecting and starting an investigation.</span></a></div></section> : welcomeOpen ? <div className="welcome-panel-stage"><section className="welcome-panel" role="dialog" aria-modal="true" aria-labelledby="welcome-heading"><button type="button" className="panel-back" aria-label="Close" onClick={() => { if (panelView === "copy") setName(keptName.current); else { setName(""); setNotice(""); } setPanelView("menu"); }}>×</button><div className="draft-start"><h2 id="welcome-heading">{panelView === "copy" ? "Save as a new draft" : "Start a draft"}</h2><label htmlFor="draft-name">Draft name</label><input id="draft-name" value={name} maxLength={120} onChange={event => setName(event.target.value)} disabled={!mutable} placeholder="Name this investigation" autoFocus />{notice && <p className="notice" role="status">{notice}</p>}<div className="actions"><button onClick={() => save(panelView === "copy")} disabled={!mutable || !name.trim() || (panelView !== "copy" && !dirty)}>{busy === "save" ? "Saving…" : "Save draft"}</button></div></div></section></div> : <>
-        <div className={inspectGap || inspectFactorId || inspectResult || activityLogOpen ? "workspace-frames" : "workspace-frames steps-only"}>
+        <div className={inspectColumnOpen ? "workspace-frames" : "workspace-frames steps-only"}>
         <div className="steps">
           {activeStep === "gap" && <section className="step open">
             <h2 className="step-heading"><span className="step-number">1</span>Choose a knowledge gap</h2>
             <p className="step-guide">Find an existing scientific question that evidence still leaves unexplained. The gap you select becomes the question this investigation will try to ground.</p>
             <div className="step-body"><form className="search-control" autoComplete="off" onSubmit={event => { event.preventDefault(); void search(); }}><label className="sr-only" htmlFor="gap-search">Search knowledge gaps</label><input id="gap-search" name="reveal-gap-search" type="text" inputMode="search" autoComplete="off" autoCorrect="off" spellCheck={false} value={query} onChange={event => setQuery(event.target.value)} placeholder="Search a disease or research question" /><button type="submit" className="secondary" disabled={searching}>{searching ? "Searching…" : "Search"}</button></form>
-              {gaps.length > 0 && <div className="gap-results"><p className="gap-guide">{gapListMode === "selected" ? "The knowledge gap selected for this draft." : `${query.trim() ? `${gaps.length} knowledge gap${gaps.length === 1 ? "" : "s"} found.` : `${gaps.length} trending knowledge gaps.`} Click one to select for the next step.`}</p><div className="gap-list" aria-label="Knowledge gap search results">{gaps.map(value => <GapOption key={value.source.source_id} gap={value} maxAccounts={maxGapAccounts} selected={composer.source_gap?.source_id === value.source.source_id} disabled={!mutable} onSelect={() => selectGap(value)} onInspect={() => void openInspect(value)} />)}</div><ul className="gap-legend"><li><span className="gap-swatch accounts" aria-hidden="true" />Accounts</li><li><span className="gap-swatch up" aria-hidden="true" />Upvotes</li><li><span className="gap-swatch down" aria-hidden="true" />Downvotes</li></ul></div>}
+              {gaps.length > 0 && <div className="gap-results"><p className="gap-guide">{gapListMode === "selected" ? "The knowledge gap selected for this draft." : `${query.trim() ? `${gaps.length} knowledge gap${gaps.length === 1 ? "" : "s"} found.` : `${gaps.length} trending knowledge gaps.`} Use Select to choose one for the next step.`}</p><div className="gap-list" aria-label="Knowledge gap search results">{gaps.map(value => <GapOption key={value.source.source_id} gap={value} maxAccounts={maxGapAccounts} selected={composer.source_gap?.source_id === value.source.source_id} disabled={!mutable} onSelect={() => selectGap(value)} onInspect={() => void openInspect(value)} />)}</div><ul className="gap-legend"><li><span className="gap-swatch accounts" aria-hidden="true" />Accounts</li><li><span className="gap-swatch up" aria-hidden="true" />Upvotes</li><li><span className="gap-swatch down" aria-hidden="true" />Downvotes</li></ul></div>}
               {searched && !searching && !gaps.length && <p className="empty">No matching gaps. Try a broader disease name.</p>}
             </div>
           </section>}
           {activeStep === "anchors" && <section className="step open">
-            <div className="step-heading-row"><div className="step-heading-copy"><h2 className="step-heading"><span className="step-number">2</span>Select mechanism anchors</h2><p className="step-guide">Choose genetic factors that may help explain the selected gap. At least one factor is required to start an investigation, and none is selected for you.{suggestion?.limitations.length ? ` ${suggestion.limitations.join(" ")}` : ""}</p></div>{(anchorChosen || pending) && !(startedDraftId && startedDraftId === draft?.id) && <button type="button" className="step-next" onClick={() => void startInvestigation()} disabled={!mutable || suggesting || !!cfdeGate || (!pending && (!composer.source_gap || !composer.eaggl_anchors.length))}>{busy === "assess" ? "Checking CFDE support…" : busy === "submit" ? "Submitting…" : busy === "save" ? "Saving draft…" : pending ? "Recover submission" : "Start investigation"}</button>}</div>
+            <div className="step-heading-row"><div className="step-heading-copy"><h2 className="step-heading"><span className="step-number">2</span>Select mechanism anchors</h2><p className="step-guide">Choose genetic factors that may help explain the selected gap. At least one factor is required to start an investigation, and none is selected for you.{suggestion?.limitations.length ? ` ${suggestion.limitations.join(" ")}` : ""}</p></div>{(anchorChosen || pending) && (!(startedDraftId && startedDraftId === draft?.id) || selectionForked) && <button type="button" className="step-next" onClick={() => void startInvestigation()} disabled={!mutable || suggesting || !!cfdeGate || (!pending && (!composer.source_gap || !composer.eaggl_anchors.length))}>{busy === "assess" ? "Checking CFDE support…" : busy === "submit" ? "Submitting…" : busy === "save" ? "Saving draft…" : pending ? "Recover submission" : "Start investigation"}</button>}</div>
             <div className="step-body">{!composer.source_gap ? <p className="empty">Select a question to find related genetic mechanisms.</p> : <>
+                <label className="research-context" htmlFor="research-context">Attach research context (optional)<input id="research-context" type="text" value={researchContext} onChange={event => setResearchContext(event.target.value)} disabled={!mutable} autoComplete="off" /></label>
                 {!!anchorIds.length && <FactorNetwork guide={anchorChosen ? undefined : "At least one factor has to be selected to initiate investigation."} gapLabel={gap?.object.text || (gap ? gapTitle(gap) : "Knowledge gap")} rows={anchorIds.map(sourceId => {
                   const factor = factors[sourceId], selected = composer.eaggl_anchors.some(value => value.reference.source_id === sourceId);
                   const title = factor ? factorTitle(factor) : factorMisses[sourceId] ? sourceId : "Loading…";
@@ -1545,7 +1578,7 @@ export default function Home() {
             <div className="step-body">{investigationPanel}</div>
           </section>}
         </div>
-        {(inspectGap || inspectFactorId || inspectResult || activityLogOpen) && <InspectColumn gap={inspectGap} factor={inspectFactor} factorPending={!!inspectFactorId && !inspectFactor} result={inspectResult} activity={activityLogOpen ? <ActivityRecord events={activity} logRef={activityLogRef} /> : null} cfdePassed={cfdePassed} focus={inspectFocus === "activity" && activityLogOpen ? "activity" : inspectFocus === "result" && inspectResult ? "result" : inspectFocus === "factor" && inspectFactorId ? "factor" : inspectGap ? "gap" : inspectFactorId ? "factor" : inspectResult ? "result" : "activity"} gapNote={inspectGapNote} factorNote={inspectFactorNote} onFocus={setInspectFocus} onCloseGap={closeGapInspect} onCloseFactor={closeFactorInspect} onCloseResult={closeResultInspect} onCloseActivity={closeActivityInspect} />}
+        {inspectColumnOpen && <InspectColumn gap={showGapInspect ? inspectGap : null} factor={showFactorInspect ? inspectFactor : null} factorPending={showFactorInspect && !inspectFactor} result={showResultInspect ? inspectResult : null} activity={showActivityInspect ? <ActivityRecord events={activity} logRef={activityLogRef} /> : null} cfdePassed={cfdePassed} focus={inspectColumnFocus} gapNote={inspectGapNote} factorNote={inspectFactorNote} onFocus={setInspectFocus} onCloseGap={closeGapInspect} onCloseFactor={closeFactorInspect} onCloseResult={closeResultInspect} onCloseActivity={closeActivityInspect} />}
         </div>
       </>}
     </main>
