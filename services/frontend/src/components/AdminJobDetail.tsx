@@ -6,14 +6,47 @@ import type { Schema } from "@/lib/client";
 import type { AdminJob } from "@/lib/admin-job";
 
 type Diagnostic = { path: string; available: boolean; data?: unknown; reason?: string };
+type Tokens = { input: number | null; output: number | null; cache_write: number | null; cache_read: number | null };
+type Metrics = {
+  parent_job_id?: string | null; recorded_at?: string;
+  agent?: { model: string | null; status: string | null; subtype: string | null; reason: string | null; cost_usd: number | null; estimated_cost_usd?: number | null; cost_source: string; budget_usd: number | null; budget_used: number | null; turns: number | null; turn_limit: number | null; elapsed_seconds: number | null; time_limit_seconds: number | null; api_seconds: number | null; tokens: Tokens | null; tool_calls: number | null; tool_failures: number | null; lint_checks: number | null; draft_writes: number | null };
+  error?: { phase: string | null; error_type: string; message: string | null; recorded_at: string };
+};
 type Detail = {
-  job: AdminJob & { failure: { code: string; message: string; retryable: boolean } | null; warnings: string[]; research_request_id: string | null; input_account_id: string | null };
+  job: AdminJob & { failure: { code: string; message: string; retryable: boolean; budget?: { limit_usd: number; spent_usd: number | null } } | null; warnings: string[]; research_request_id: string | null; input_account_id: string | null };
   events: Schema<"JobEvent">[]; next_before: string | null;
   attempts: { attempt: number; started_at: string | null; worker_id: string | null; "remote_handle.box_id": string | null }[];
-  attempts_limited: boolean; diagnostics: Diagnostic[]; diagnostics_limited: boolean;
+  attempts_limited: boolean; diagnostics: Diagnostic[]; diagnostics_limited: boolean; metrics?: Metrics | null;
 };
 const terminal = new Set(["succeeded", "failed", "cancelled", "insufficient_evidence"]);
 const json = (value: unknown) => formatAdminJson(JSON.stringify(value, null, 2));
+const usd = (value: number | null | undefined) => value == null ? "—" : `$${value.toFixed(4)}`;
+const count = (value: number | null | undefined) => value == null ? "—" : value.toLocaleString();
+const of = (value: string, limit: string | null) => limit ? `${value} of ${limit}` : value;
+
+function AgentUsage({ metrics }: { metrics: Metrics }) {
+  const agent = metrics.agent;
+  if (!agent) return null;
+  const rows: [string, string][] = [
+    ["Agent cost", agent.cost_usd != null ? `${usd(agent.cost_usd)} (provider reported)` : agent.estimated_cost_usd != null ? `≈${usd(agent.estimated_cost_usd)} estimated from streamed tokens; the run stopped before the provider reported its total` : "Not reported: the run stopped before the provider reported its total"],
+    ["Budget used", agent.budget_used == null ? of("—", agent.budget_usd == null ? null : usd(agent.budget_usd)) : `${Math.round(agent.budget_used * 100)}% of ${usd(agent.budget_usd)}`],
+    ["Turns", of(count(agent.turns), agent.turn_limit == null ? null : count(agent.turn_limit))],
+    ["Agent run time", of(duration(agent.elapsed_seconds), agent.time_limit_seconds == null ? null : duration(agent.time_limit_seconds))],
+    ["Provider API time", duration(agent.api_seconds)],
+    ["Tokens: output · input", agent.tokens ? `${count(agent.tokens.output)} · ${count(agent.tokens.input)}` : "—"],
+    ["Tokens: cache write · cache read", agent.tokens ? `${count(agent.tokens.cache_write)} · ${count(agent.tokens.cache_read)}` : "—"],
+    ["Tool calls (failed)", agent.tool_calls == null ? "—" : `${count(agent.tool_calls)} (${count(agent.tool_failures)})`],
+    ["Lint checks · draft writes", `${count(agent.lint_checks)} · ${count(agent.draft_writes)}`],
+    ["Model", agent.model || "—"],
+    ["Run outcome", [agent.status, agent.subtype].filter(Boolean).join(" · ") || "—"],
+  ];
+  return <details className="admin-agent-usage" open><summary>Agent cost and usage · {agent.cost_usd != null ? usd(agent.cost_usd) : agent.estimated_cost_usd != null ? `≈${usd(agent.estimated_cost_usd)} est.` : "not reported"}</summary>
+    {agent.budget_used != null && <div className="admin-bar" aria-hidden="true"><i style={{ width: `${Math.min(100, 100 * agent.budget_used)}%` }} /></div>}
+    <dl className="admin-detail-grid">{rows.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
+    {agent.reason && <p>Runner reason: {agent.reason}</p>}
+    {metrics.parent_job_id && <p>Research statement for <a href={`/admin?job=${metrics.parent_job_id}`}>{metrics.parent_job_id}</a>.</p>}
+  </details>;
+}
 
 export function AdminJobDetail({ jobId, auto, onClose }: { jobId: string; auto: boolean; onClose: () => void }) {
   const [data, setData] = useState<Detail | null>(null);
@@ -69,10 +102,11 @@ export function AdminJobDetail({ jobId, auto, onClose }: { jobId: string; auto: 
     {error && <p role="alert" className="error">{error}{data && " Showing previously loaded logs."}</p>}
     {data && job && <>
       <p><span className={`admin-status ${job.status === "failed" ? "bad" : job.status === "succeeded" ? "good" : ""}`}>{job.status.replaceAll("_", " ")}</span> <span className="admin-log-stage">{job.stage.replaceAll("_", " ")}</span> · <a href={`/admin?job=${job.id}`}>Link to this job</a></p>
-      {job.failure && <div className="admin-job-failure"><h3>{job.failure.code}</h3><p>{job.failure.message}</p>{failures.map(item => {
+      {job.failure && <div className="admin-job-failure"><h3>{job.failure.code}</h3><p>{job.failure.message}</p>{data.metrics?.error && <div><strong>{data.metrics.error.error_type}{data.metrics.error.phase ? ` · ${data.metrics.error.phase.replaceAll("_", " ")}` : ""}</strong><p>{data.metrics.error.message || "No message was recorded."}</p><small>Recorded cause · {date(data.metrics.error.recorded_at)}</small></div>}{failures.map(item => {
         const failure = item.data as { phase?: string; error_type?: string; message?: string };
         return <div key={item.path}><strong>{failure.error_type || "Saved failure"}{failure.phase ? ` · ${failure.phase.replaceAll("_", " ")}` : ""}</strong><p>{failure.message}</p><small>{item.path}</small></div>;
       })}</div>}
+      {data.metrics && <AgentUsage metrics={data.metrics} />}
       <dl className="admin-detail-grid">{([['Created', job.created_at], ['Started', job.started_at], ['Updated', job.updated_at], ['Finished', job.completed_at], ['Current attempt started', job.attempt_started_at]] as const).map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{date(value)}</dd></div>)}<div><dt>Worker</dt><dd>{job.worker || "—"}</dd></div><div><dt>Box</dt><dd>{job.box_id || "No Box runtime recorded"}</dd></div><div><dt>Attempt / recoveries</dt><dd>{job.attempt} / {job.recoveries}</dd></div></dl>
       <div className="admin-section-heading"><div><h3>Event log</h3><p>{data.events.length} stored events loaded{data.next_before ? " · earlier events available" : " · beginning of retained history"}. {active ? auto && !olderLoaded ? "Live logs refresh every 15s." : "Refresh logs to see current activity." : "Job finished."}</p></div><input className="field" aria-label="Search job logs" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search loaded messages, tools or stages" /></div>
       <div className="admin-log-actions"><button className="submit" disabled={loading || !data.next_before} onClick={() => void older()}>{loading && data ? "Loading…" : "Load earlier events"}</button><button className="text-button" onClick={async () => { try { await navigator.clipboard.writeText(JSON.stringify(data, null, 2)); setCopied(true); } catch { setError("Copy is unavailable in this browser."); } }}>{copied ? "Copied" : "Copy loaded logs"}</button><span>Oldest to newest · adjacent agent text fragments are combined</span></div>
