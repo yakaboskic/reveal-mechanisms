@@ -107,6 +107,8 @@ qa:
     REVEAL_WORKFLOW_STEPS_PER_RUN: '6'
     REVEAL_WORKFLOW_OBSERVE_INTERVAL_SECONDS: '10'
     REVEAL_AGENT_TIMEOUT_SECONDS: '1800'
+    # Private Lightning audits (docs/lightning-audit.md); the QA frontend is built with NEXT_PUBLIC_REVEAL_LIGHTNING_ENABLED=true.
+    REVEAL_LIGHTNING_ENABLED: 'true'
     REVEAL_JOB_NAMESPACE: reveal-workflow-qa
     REVEAL_VECTOR_ENVIRONMENT: qa
     REVEAL_NOTIFICATION_NAMESPACE: reveal-qa
