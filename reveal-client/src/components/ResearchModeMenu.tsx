@@ -5,6 +5,13 @@ import { CfdeEstimateRing } from "./CfdeAssessmentView";
 import { assessmentSupportLabel, type CfdeAssessment } from "../lib/cfde-assessment";
 import "./research-mode-menu.css";
 
+function ModeIcon({ mode }: { mode: "online" | "local" }) {
+  return <svg className="research-mode-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+    {mode === "online" ? <path d="M7 18a5 5 0 1 1 .6-10 6 6 0 0 1 11.7 1.8A4.1 4.1 0 0 1 18 18H7Z" />
+      : <><rect x="3" y="4" width="18" height="16" rx="2" /><path d="m7 9 3 3-3 3m6 0h4" /></>}
+  </svg>;
+}
+
 export function ResearchModeMenu({ disabled, onSelect, assessment, assessing = false }: { disabled: boolean; onSelect: (mode: "online" | "local") => void; assessment?: CfdeAssessment | null; assessing?: boolean }) {
   const [open, setOpen] = useState(false);
   const id = useId(), root = useRef<HTMLDivElement>(null), trigger = useRef<HTMLButtonElement>(null);
@@ -38,8 +45,8 @@ export function ResearchModeMenu({ disabled, onSelect, assessment, assessing = f
     </button>
     {(assessing || assessment?.result) && <span className="sr-only" id={`${id}-estimate`}>{assessing ? "Assessing likely CFDE support" : assessmentSupportLabel(assessment!.result!.probability_yes)}</span>}
     {open && !disabled && <div className="research-mode-popup" id={`${id}-menu`} role="menu" aria-labelledby={`${id}-trigger`} onKeyDown={navigate}>
-      <button type="button" className="research-mode-item" role="menuitem" tabIndex={-1} aria-label="Run online" aria-describedby={`${id}-online-description`} onClick={() => { close(true); onSelect("online"); }}><strong>Run online</strong><span id={`${id}-online-description`}>Run research in Reveal.</span></button>
-      <button type="button" className="research-mode-item" role="menuitem" tabIndex={-1} aria-label="Use my local agent" aria-describedby={`${id}-local-description`} onClick={() => { close(true); onSelect("local"); }}><strong>Use my local agent</strong><span id={`${id}-local-description`}>Connect Codex or Claude Code.</span></button>
+      <button type="button" className="research-mode-item" role="menuitem" tabIndex={-1} aria-label="Run online" aria-describedby={`${id}-online-description`} onClick={() => { close(true); onSelect("online"); }}><ModeIcon mode="online" /><span className="research-mode-copy"><strong>Run online</strong><span id={`${id}-online-description`}>Run research in Reveal.</span></span></button>
+      <button type="button" className="research-mode-item" role="menuitem" tabIndex={-1} aria-label="Use my local agent" aria-describedby={`${id}-local-description`} onClick={() => { close(true); onSelect("local"); }}><ModeIcon mode="local" /><span className="research-mode-copy"><strong>Use my local agent</strong><span id={`${id}-local-description`}>Connect Codex or Claude Code.</span></span></button>
     </div>}
   </div>;
 }

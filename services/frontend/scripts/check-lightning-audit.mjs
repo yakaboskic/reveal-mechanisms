@@ -147,8 +147,22 @@ try {
     {
       const h = await harness(); await h.open();
       const trigger = h.page.getByRole('button', { name: 'Let’s close this gap', exact: true }); await until(() => trigger.isEnabled(), 'launch is ready');
-      await trigger.focus(); await trigger.press('ArrowUp'); assert.match(await h.page.evaluate(() => document.activeElement.textContent), /^Lightning audit/);
+      await trigger.focus(); await trigger.press('ArrowDown');
+      assert.match(await h.page.evaluate(() => document.activeElement.textContent), /^Lightning auditRecommended/);
+      const choices = h.page.getByRole('menuitem');
+      assert.deepEqual(await choices.locator('.research-mode-label').allTextContents(), ['Lightning auditRecommended', 'Run online', 'Use my local agent']);
+      assert.equal(await choices.locator('svg[aria-hidden="true"]').count(), 3);
+      assert.equal(await h.page.getByText('Recommended', { exact: true }).count(), 1);
+      await h.page.keyboard.press('End'); assert.match(await h.page.evaluate(() => document.activeElement.textContent), /^Use my local agent/);
+      await h.page.keyboard.press('ArrowDown'); assert.match(await h.page.evaluate(() => document.activeElement.textContent), /^Lightning audit/);
+      await h.page.keyboard.press('Escape'); await trigger.press('ArrowUp'); assert.match(await h.page.evaluate(() => document.activeElement.textContent), /^Use my local agent/);
+      await h.page.keyboard.press('Home'); assert.match(await h.page.evaluate(() => document.activeElement.textContent), /^Lightning audit/);
       await h.page.keyboard.press('Enter'); await h.complete(); assert.equal(auditPosts(h.state).length, 1);
+      await h.page.getByRole('heading', { name: 'Rationale', exact: true }).waitFor();
+      assert.equal(await h.page.locator('.lightning-header h1').evaluate(element => getComputedStyle(element).fontSize), '17px');
+      await h.page.setViewportSize({ width: 390, height: 844 });
+      assert.equal(await h.page.locator('.lightning-header h1').evaluate(element => getComputedStyle(element).fontSize), '16px');
+      await h.page.setViewportSize({ width: 1200, height: 950 });
       await h.page.getByRole('link', { name: 'E1', exact: true }).click(); await h.page.getByText('Supplied loading', { exact: false }).click();
       await h.page.getByText('Original retained evidence', { exact: true }).waitFor();
       const brief = h.page.getByLabel('Direction and next steps for the agent'); await brief.fill('Reviewed online direction');

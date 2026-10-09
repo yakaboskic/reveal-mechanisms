@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
+import hashlib
 import json
 import threading
 from unittest.mock import Mock
@@ -96,11 +97,21 @@ def test_frozen_input_single_call_and_exact_private_retention(case):
     def build(*args, **kwargs):
         assert not active; assert args[1]['context'] == 'My original research notes'
         return case.prepared
+    sent = []
     def send(payload, **kwargs):
+        sent.append(audits.serialize_request(payload))
         assert not active
         assert payload['model'] == 'configured-fixture-model' and payload['max_tokens'] == 3000
         assert 'tools' not in payload and 'isolated-provider-secret' not in json.dumps(payload)
         assert payload['output_config']['format']['type'] == 'json_schema'
+        blocks = payload['messages'][0]['content']
+        assert len(blocks) == 2 and all(block['type'] == 'text' for block in blocks)
+        projected = json.loads(blocks[0]['text'].split('\n', 1)[1])
+        assert projected['knowledge_gap']['question'] == 'Could secretion explain this gap?'
+        assert projected['selected_graphs_for_future_research'] == ['graph:future']
+        assert blocks[1]['text'] == audits.lightning_payload.TASK
+        assert 'two short paragraphs totaling 80-120 words' in blocks[1]['text']
+        assert 'CFDE' in payload['system']
         return response()
     case.builder.side_effect = build; case.provider.side_effect = send
     first = start(case); assert first['status'] == 'preparing'; assert case.provider.call_count == 0
@@ -114,7 +125,10 @@ def test_frozen_input_single_call_and_exact_private_retention(case):
     assert data['source_state'] == source_state() and data['response'] == audit_result()
     assert set(data['timings']) == {'preparation_ms', 'provider_ms', 'total_ms'}
     assert complete['provenance']['source_state_sha256'] == digest(data['source_state'])
-    assert complete['provenance']['request_sha256'] == digest(data['model_payload'])
+    assert sent == [data['model_request_json']]
+    assert json.loads(data['model_request_json']) == data['model_payload']
+    assert len(data['model_request_json'].encode()) <= audits.MAX_REQUEST_BYTES
+    assert complete['provenance']['request_sha256'] == hashlib.sha256(data['model_request_json'].encode()).hexdigest()
     assert case.provider.call_count == 1
     with case.repo.read_transaction() as tx:
         assert tx.list('job') == [] and tx.list('account') == []
@@ -242,6 +256,26 @@ def test_provider_failures_are_explicit_and_never_automatically_retried(case, fa
     with case.repo.read_transaction() as tx: assert tx.get('research_pin', first['research_request_id'])['data']['state'] == 'released'
 
 
+def test_empty_live_response_is_retained_diagnosed_and_never_retried(case):
+    value = {'assessment': 'partial', 'limitations': [], 'missing_evidence': [], 'next_steps': [],
+        'observations': [], 'recommended_direction': '', 'summary': ''}
+    raw = {'stop_reason': 'end_turn', 'content': [{'type': 'text', 'text': json.dumps(value)}],
+        'usage': {'input_tokens': 20933, 'output_tokens': 42}}
+    case.provider.return_value = raw
+    first = start(case); case.queue.run()
+    complete = read(case, first['id']); retained = stored(case, first['id'])
+    assert complete['status'] == 'failed' and complete['result'] is None
+    assert complete['error']['code'] == 'LIGHTNING_RESPONSE_EMPTY'
+    assert 'without a rationale or research direction' in complete['error']['detail']
+    assert complete['usage'] == raw['usage'] and retained['provider_response'] == raw
+    assert retained['source_state'] == source_state()
+    assert complete['provenance']['response_sha256'] == digest(raw)
+    assert complete['provenance']['prompt_version'] == 'lightning-audit-v4'
+    assert case.provider.call_count == 1
+    assert start(case) == complete and read(case, first['id']) == complete
+    assert not case.queue.calls
+
+
 def test_oversized_input_and_changed_generation_never_call_provider(case):
     case.prepared['state']['user_inputs']['context']['text'] = 'x' * 100001
     first = start(case); case.queue.run()
@@ -350,3 +384,48 @@ def test_absolute_provider_deadline_cancels_an_idle_read_after_chunks(monkeypatc
     assert error.value.code == 'LIGHTNING_TIMEOUT'
     assert monotonic() - started < .4
     assert stream.closed and len(attempts) == 1
+
+
+@pytest.mark.parametrize('variant', ['http', 'unknown', 'oversized', 'transport'])
+def test_provider_failure_diagnostics_are_bounded_and_private(case, monkeypatch, variant):
+    attempts = []
+    def handler(request):
+        attempts.append(request)
+        if variant == 'transport': raise httpx.ConnectError('private transport configuration')
+        error_type = 'private error type' if variant == 'unknown' else 'invalid_request_error'
+        raw = json.dumps({'error': {'type': error_type, 'message': 'private model request and secret'}})
+        if variant == 'oversized': raw += ' ' * audits.MAX_ERROR_BYTES
+        return httpx.Response(400, text=raw, headers={'request-id': 'req_fixture_123'})
+    factory = httpx.AsyncClient
+    monkeypatch.setattr(audits.httpx, 'AsyncClient', lambda **kwargs: factory(transport=httpx.MockTransport(handler), **kwargs))
+    case.provider.side_effect = lambda payload, **kwargs: asyncio.run(audits._provider_request(payload, **kwargs))
+    first = start(case); case.queue.run()
+    complete = read(case, first['id']); retained = stored(case, first['id'])
+    expected = {'category': 'transport'} if variant == 'transport' else {'http_status': 400, 'request_id': 'req_fixture_123'}
+    if variant == 'http': expected['error_type'] = 'invalid_request_error'
+    assert retained['provider_failure'] == expected
+    assert complete['status'] == 'failed' and complete['error']['code'] == 'LIGHTNING_PROVIDER_UNAVAILABLE'
+    assert 'provider_failure' not in complete
+    assert 'private' not in json.dumps(retained['provider_failure'])
+    assert 'private' not in json.dumps(complete['error'])
+    assert len(attempts) == 1 and case.provider.call_count == 1
+    assert start(case) == complete and not case.queue.calls
+
+
+def test_transport_preserves_rationale_first_schema_order_and_exact_wire_bytes(monkeypatch):
+    monkeypatch.setenv('ANTHROPIC_API_KEY', 'transport-test-private-key')
+    payload = {'model': 'fixture', 'messages': [{'role': 'user', 'content': 'A species-qualified résumé'}],
+        'output_config': {'format': {'type': 'json_schema', 'schema': audits.lightning_payload.RESULT_SCHEMA}}}
+    expected = audits.serialize_request(payload).encode(); captured = []
+    def handler(request):
+        captured.append(request.content)
+        decoded = json.loads(request.content)
+        assert list(decoded['output_config']['format']['schema']['properties']) == [
+            'assessment', 'summary', 'observations', 'recommended_direction', 'missing_evidence', 'next_steps', 'limitations']
+        assert request.content == expected
+        return httpx.Response(200, json=response())
+    factory = httpx.AsyncClient
+    monkeypatch.setattr(audits.httpx, 'AsyncClient', lambda **kwargs: factory(transport=httpx.MockTransport(handler), **kwargs))
+    from time import monotonic
+    assert audits.call_provider(payload, deadline=monotonic() + 10) == response()
+    assert len(captured) == 1

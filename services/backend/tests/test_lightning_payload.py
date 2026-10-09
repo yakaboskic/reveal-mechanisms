@@ -2,6 +2,7 @@
 from copy import deepcopy
 
 import pytest
+from jsonschema import ValidationError, validate
 
 from reveal_backend.auth import Problem
 from reveal_backend import lightning_payload as payload
@@ -76,8 +77,12 @@ def test_upload_and_researcher_references_stay_distinct_and_addressable():
     assert len({ref['id'] for ref in references}) == len(references)
 
 
-@pytest.mark.parametrize('change', ['unknown', 'empty', 'duplicate', 'huge', 'extra', 'empty_summary'])
-def test_invalid_model_content_is_rejected(change):
+@pytest.mark.parametrize(('change', 'code'), [
+    ('unknown', 'LIGHTNING_REFERENCES_INVALID'), ('empty', 'LIGHTNING_RESPONSE_INVALID'),
+    ('duplicate', 'LIGHTNING_REFERENCES_INVALID'), ('huge', 'LIGHTNING_RESPONSE_INVALID'),
+    ('extra', 'LIGHTNING_RESPONSE_INVALID'), ('empty_summary', 'LIGHTNING_RESPONSE_EMPTY'),
+])
+def test_invalid_model_content_is_rejected(change, code):
     _, references = payload.project(source_state()); result = audit_result()
     if change == 'unknown': result['observations'][0]['evidence_refs'] = ['invented-ref']
     if change == 'empty': result['observations'][0]['evidence_refs'] = []
@@ -85,10 +90,81 @@ def test_invalid_model_content_is_rejected(change):
     if change == 'huge': result['recommended_direction'] = 'x' * 8001
     if change == 'extra': result['scientific_accounts'] = []
     if change == 'empty_summary': result['summary'] = ' '
-    with pytest.raises(Problem, match='valid evidence references'):
+    with pytest.raises(Problem) as error:
         payload.validate_result(result, references)
+    assert error.value.code == code
 
 
 def test_unsupported_audit_can_have_no_observations():
     result = audit_result(); result.update(assessment='unsupported', observations=[])
     assert payload.validate_result(result, []) == result
+
+
+def test_observed_empty_provider_shell_cannot_pass_validation():
+    result = {'assessment': 'partial', 'limitations': [], 'missing_evidence': [], 'next_steps': [],
+        'observations': [], 'recommended_direction': '', 'summary': ''}
+    with pytest.raises(ValidationError): validate(result, payload.RESULT_SCHEMA)
+    with pytest.raises(Problem) as error: payload.validate_result(result, [])
+    assert error.value.code == 'LIGHTNING_RESPONSE_EMPTY'
+    assert 'without a rationale or research direction' in error.value.detail
+    assert 'references' not in error.value.detail
+
+
+@pytest.mark.parametrize('field', ['summary', 'recommended_direction'])
+@pytest.mark.parametrize('empty', ['', '   ', '\n\t'])
+def test_lightweight_provider_schema_keeps_strict_local_nonblank_checks(field, empty):
+    result = audit_result(); result[field] = empty
+    validate(result, payload.RESULT_SCHEMA)  # The provider grammar intentionally avoids string patterns.
+    with pytest.raises(Problem) as error: payload.validate_result(result, [])
+    assert error.value.code == 'LIGHTNING_RESPONSE_EMPTY'
+
+
+@pytest.mark.parametrize('field', ['next_steps', 'limitations'])
+def test_provider_schema_requires_useful_next_checks_and_scope(field):
+    result = audit_result(); result[field] = []
+    with pytest.raises(ValidationError): validate(result, payload.RESULT_SCHEMA)
+
+
+@pytest.mark.parametrize('assessment', ['partial', 'promising'])
+def test_supported_direction_requires_referenced_observations(assessment):
+    result = audit_result(); result.update(assessment=assessment, observations=[])
+    with pytest.raises(Problem) as error: payload.validate_result(result, [])
+    assert error.value.code == 'LIGHTNING_INCOMPLETE'
+
+
+def test_populated_scientific_rationale_preserves_exact_evidence_references():
+    projected, references = payload.project(source_state())
+    gene_ref = projected['eaggl_mechanisms'][0]['top_genes']['rows'][0][-1]
+    mechanism_ref = projected['dismech_mechanisms'][0]['evidence_ref']
+    result = audit_result(gene_ref)
+    result['summary'] = ('The selected secretion factor offers a starting point because its retained GENE_A '
+        'loading can be inspected alongside the recorded DisMech mechanism. This is a proposed connection, '
+        'not evidence that secretion explains the disease.\n\n'
+        'The DisMech qualification is mouse-only, while the package includes human and mouse signatures. '
+        'The immediate research question is whether that mechanism and the factor overlap in an appropriate '
+        'species and context; the supplied rows do not establish GeneSet membership.')
+    result['observations'].append({'text': 'The DisMech mechanism is qualified as mouse-only, limiting direct '
+        'translation to a human disease explanation.', 'evidence_refs': [mechanism_ref]})
+    assert payload.validate_result(result, references) == result
+    for observation in result['observations']:
+        assert set(observation['evidence_refs']) <= {ref['id'] for ref in references}
+
+
+def test_provider_schema_omits_expensive_string_constraints():
+    def inspect(node):
+        if isinstance(node, dict):
+            assert not {'pattern', 'minLength', 'maxLength'} & node.keys()
+            for child in node.values(): inspect(child)
+        elif isinstance(node, list):
+            for child in node: inspect(child)
+    inspect(payload.RESULT_SCHEMA)
+
+
+@pytest.mark.parametrize('field', ['observation', 'missing_evidence', 'next_steps', 'limitations'])
+def test_local_validation_rejects_whitespace_content_beyond_required_prose(field):
+    _, references = payload.project(source_state()); result = audit_result()
+    if field == 'observation': result['observations'][0]['text'] = ' \n\t'
+    else: result[field] = [' \n\t']
+    validate(result, payload.RESULT_SCHEMA)
+    with pytest.raises(Problem) as error: payload.validate_result(result, references)
+    assert error.value.code == 'LIGHTNING_RESPONSE_INVALID'

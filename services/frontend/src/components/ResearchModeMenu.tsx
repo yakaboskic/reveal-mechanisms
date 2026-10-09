@@ -7,10 +7,18 @@ import { lightningEnabled, type ResearchMode } from "../lib/lightning-audit";
 import "./research-mode-menu.css";
 
 const modeChoices: { mode: ResearchMode; label: string; description: string }[] = [
+  ...(lightningEnabled ? [{ mode: "lightning" as const, label: "Lightning audit", description: "Assess this evidence and suggest a direction." }] : []),
   { mode: "online", label: "Run online", description: "Let Reveal run the investigation." },
   { mode: "local", label: "Use my local agent", description: "Work with an agent on your computer." },
-  ...(lightningEnabled ? [{ mode: "lightning" as const, label: "Lightning audit", description: "Assess this evidence and suggest a direction." }] : []),
 ];
+
+function ModeIcon({ mode }: { mode: ResearchMode }) {
+  return <svg className="research-mode-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+    {mode === "lightning" ? <path d="m13 2-9 12h7l-1 8 10-12h-7V2Z" />
+      : mode === "online" ? <path d="M7 18a5 5 0 1 1 .6-10 6 6 0 0 1 11.7 1.8A4.1 4.1 0 0 1 18 18H7Z" />
+      : <><rect x="3" y="4" width="18" height="16" rx="2" /><path d="m7 9 3 3-3 3m6 0h4" /></>}
+  </svg>;
+}
 
 export function ResearchModeMenu({ disabled, onSelect, assessment, assessing = false }: {
   disabled: boolean;
@@ -70,7 +78,7 @@ export function ResearchModeMenu({ disabled, onSelect, assessment, assessing = f
         if (next !== null) { event.preventDefault(); items[next]?.focus(); }
       }}>
       {modeChoices.map(choice => <button key={choice.mode} type="button" role="menuitem" tabIndex={-1} onClick={() => { close(true); onSelect(choice.mode); }}>
-        <span>{choice.label}</span><small>{choice.description}</small>
+        <ModeIcon mode={choice.mode} /><span className="research-mode-copy"><span className="research-mode-label">{choice.label}{choice.mode === "lightning" && <span className="research-mode-recommended">Recommended</span>}</span><small>{choice.description}</small></span>
       </button>)}
     </div>}
   </div>;

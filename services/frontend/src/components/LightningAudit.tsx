@@ -30,7 +30,7 @@ export function LightningResult({ audit }: { audit: LightningAudit }) {
   return <div className="lightning-result">
     <section className={`lightning-summary is-${result.assessment}`} aria-labelledby="lightning-assessment-heading">
       <span className="lightning-eyebrow">Initial evidence assessment</span><h2 id="lightning-assessment-heading">{lightningAssessmentLabel[result.assessment]}</h2>
-      <p>{result.summary}</p>
+      <h3>Rationale</h3><p className="lightning-preserve">{result.summary}</p>
     </section>
     <section><h2>Supporting observations</h2>{result.observations.length ? <ol className="lightning-observations">{result.observations.map((observation, index) => <li key={index}>
       <p>{observation.text}</p>{observation.evidence_refs.length > 0 && <div className="lightning-evidence-links" aria-label="Supporting evidence">{observation.evidence_refs.map(ref => <a key={ref} href={`#${evidenceId(ref)}`}>{ref}</a>)}</div>}

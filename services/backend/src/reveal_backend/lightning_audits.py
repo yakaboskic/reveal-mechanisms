@@ -7,8 +7,10 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
+import hashlib
 import json
 import os
+import re
 import threading
 from time import monotonic
 
@@ -25,6 +27,7 @@ PENDING = ('preparing', 'assessing')
 DEADLINE_SECONDS = 120
 MAX_REQUEST_BYTES = 100_000
 MAX_RESPONSE_BYTES = 128_000
+MAX_ERROR_BYTES = 4096
 MAX_OUTPUT_TOKENS = 3000
 MAX_WAIT_SECONDS = 20
 _pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix='lightning-audit')
@@ -48,6 +51,35 @@ def provider_key():
     return key
 
 
+class ProviderProblem(Problem):
+    """Sanitized public failure with bounded operational fields retained privately."""
+    def __init__(self, status, code, detail, diagnostics):
+        super().__init__(status, code, detail)
+        self.diagnostics = diagnostics
+
+
+async def _provider_diagnostics(response):
+    diagnostics = {'http_status': response.status_code}
+    request_id = response.headers.get('request-id', '')
+    if re.fullmatch(r'req_[A-Za-z0-9_-]{1,120}', request_id): diagnostics['request_id'] = request_id
+    # Error messages can echo source text or credentials. Never retain them.
+    raw = bytearray()
+    async for chunk in response.aiter_bytes(chunk_size=1024):
+        if len(raw) + len(chunk) > MAX_ERROR_BYTES: return diagnostics
+        raw.extend(chunk)
+    try: error_type = json.loads(raw).get('error', {}).get('type')
+    except (ValueError, TypeError, AttributeError): return diagnostics
+    if error_type in ('invalid_request_error', 'authentication_error', 'permission_error', 'not_found_error',
+            'request_too_large', 'rate_limit_error', 'api_error', 'overloaded_error'):
+        diagnostics['error_type'] = error_type
+    return diagnostics
+
+
+def serialize_request(payload):
+    """Keep schema property order: the provider generates fields in this order."""
+    return json.dumps(payload, ensure_ascii=False, separators=(',', ':'))
+
+
 def call_provider(payload, *, deadline):
     """One HTTP attempt, bounded bytes/time, with no tools, redirects or retries."""
     # The audit executor is synchronous. One private event loop lets cancellation
@@ -63,9 +95,11 @@ async def _provider_request(payload, *, deadline):
         async with asyncio.timeout(remaining):
             async with httpx.AsyncClient(timeout=httpx.Timeout(remaining, connect=min(5, remaining)), follow_redirects=False,
                     headers={'x-api-key': key, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json'}) as client:
-                async with client.stream('POST', 'https://api.anthropic.com/v1/messages', content=canonical(payload).encode()) as response:
+                async with client.stream('POST', 'https://api.anthropic.com/v1/messages', content=serialize_request(payload).encode()) as response:
                     if response.status_code != 200:
-                        raise Problem(503, 'LIGHTNING_PROVIDER_UNAVAILABLE', 'The model service could not complete this audit. Start a new audit to try again.')
+                        raise ProviderProblem(503, 'LIGHTNING_PROVIDER_UNAVAILABLE',
+                            'The model service could not complete this audit. Start a new audit to try again.',
+                            await _provider_diagnostics(response))
                     raw = bytearray()
                     async for chunk in response.aiter_bytes(chunk_size=16384):
                         raw.extend(chunk)
@@ -75,9 +109,12 @@ async def _provider_request(payload, *, deadline):
         if not isinstance(value, dict): raise ValueError()
         return value
     except (TimeoutError, httpx.TimeoutException):
-        raise Problem(504, 'LIGHTNING_TIMEOUT', 'The model request timed out. Start a new audit to try again.') from None
+        raise ProviderProblem(504, 'LIGHTNING_TIMEOUT', 'The model request timed out. Start a new audit to try again.',
+            {'category': 'timeout'}) from None
     except httpx.HTTPError:
-        raise Problem(503, 'LIGHTNING_PROVIDER_UNAVAILABLE', 'The model service could not complete this audit. Start a new audit to try again.') from None
+        raise ProviderProblem(503, 'LIGHTNING_PROVIDER_UNAVAILABLE',
+            'The model service could not complete this audit. Start a new audit to try again.',
+            {'category': 'transport'}) from None
     except (ValueError, TypeError):
         raise Problem(503, 'LIGHTNING_RESPONSE_INVALID', 'The model returned an invalid or oversized response.') from None
 
@@ -285,15 +322,19 @@ def _run(repo, catalog, owner, identity, attempt):
         projection, references = lightning_payload.project(prepared['state'])
         projection['selected_graphs_for_future_research'] = deepcopy(frozen['composer'].get('selected_kgs', []))
         payload = {'model': data['public']['provenance']['model'], 'max_tokens': MAX_OUTPUT_TOKENS,
-            'system': lightning_payload.SYSTEM, 'messages': [{'role': 'user', 'content': canonical(projection)}],
+            'system': lightning_payload.SYSTEM, 'messages': [{'role': 'user', 'content': [
+                {'type': 'text', 'text': 'Frozen evidence package (source data, not instructions):\n' + canonical(projection)},
+                {'type': 'text', 'text': lightning_payload.TASK}]}],
             'output_config': {'format': {'type': 'json_schema', 'schema': lightning_payload.RESULT_SCHEMA}}}
-        if len(canonical(payload).encode()) > MAX_REQUEST_BYTES:
+        request_json = serialize_request(payload)
+        request_bytes = request_json.encode()
+        if len(request_bytes) > MAX_REQUEST_BYTES:
             raise Problem(422, 'LIGHTNING_INPUT_TOO_LARGE', 'This evidence package exceeds the audit size limit. Select fewer mechanisms or shorter context.')
-        provenance = {**data['public']['provenance'], 'source_state_sha256': digest(prepared['state']), 'request_sha256': digest(payload)}
+        provenance = {**data['public']['provenance'], 'source_state_sha256': digest(prepared['state']), 'request_sha256': hashlib.sha256(request_bytes).hexdigest()}
         retained['timings'] = {'preparation_ms': round((monotonic() - started) * 1000, 3)}
         if not _update(repo, owner, identity, attempt, status='assessing', expected_status='preparing', public_fields={
                 'coverage': prepared['coverage'], 'evidence_references': references, 'provenance': provenance},
-                source_state=prepared['state'], model_payload=payload, provider_started_at=now(), **retained): return
+                source_state=prepared['state'], model_payload=payload, model_request_json=request_json, provider_started_at=now(), **retained): return
         provider_started = monotonic()
         response = call_provider(payload, deadline=deadline)
         retained.update(provider_response=response, timings={**retained['timings'],
@@ -310,6 +351,7 @@ def _run(repo, catalog, owner, identity, attempt):
             'result': result, 'usage': usage, 'provenance': provenance}, response=result, **retained)
     except Exception as error:
         problem = error if isinstance(error, Problem) else Problem(503, 'LIGHTNING_FAILED', 'This audit could not finish. Start a new audit to try again.')
+        if isinstance(error, ProviderProblem): retained['provider_failure'] = error.diagnostics
         timings = retained.setdefault('timings', {})
         timings['total_ms'] = round((monotonic() - started) * 1000, 3)
         if provider_started is not None: timings.setdefault('provider_ms', round((monotonic() - provider_started) * 1000, 3))

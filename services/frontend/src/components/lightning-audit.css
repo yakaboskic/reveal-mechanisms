@@ -2,7 +2,7 @@
 .lightning-navigation, .lightning-meta, .lightning-actions, .lightning-evidence-links { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; }
 .lightning-navigation { justify-content: space-between; margin-bottom: 2.5rem; font-size: .85rem; }
 .lightning-navigation > span, .lightning-muted, .lightning-meta { color: var(--muted, #66756d); font-size: .85rem; }
-.lightning-header h1 { font-size: clamp(1.7rem, 3vw, 2.4rem); line-height: 1.25; margin: .7rem 0 1.1rem; }
+.lightning-header h1 { font: 400 17px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; letter-spacing: -.3px; color: var(--ink, #20293a); overflow-wrap: anywhere; margin: .7rem 0 1.1rem; }
 .lightning-header > p { max-width: 65ch; line-height: 1.65; margin: 1.2rem 0 2rem; }
 .lightning-eyebrow { font-size: .72rem; text-transform: uppercase; letter-spacing: .11em; font-weight: 650; color: var(--muted, #66756d); }
 .lightning-result > section, .lightning-following, .lightning-failure { margin: 2.4rem 0; }
@@ -40,4 +40,4 @@
 .lightning-error { color: #943c30; }
 .lightning-error button { color: inherit; font: inherit; text-decoration: underline; border: 0; background: transparent; cursor: pointer; }
 .lightning-provenance { margin-top: 3rem; }
-@media (max-width: 560px) { .lightning-page { padding: 1.5rem 1rem 4rem; } .lightning-handoff, .lightning-summary { padding: 1rem; } .lightning-source dl { grid-template-columns: 1fr; } .lightning-actions button { width: 100%; } }
+@media (max-width: 560px) { .lightning-header h1 { font-size: 16px; line-height: 1.65; } .lightning-page { padding: 1.5rem 1rem 4rem; } .lightning-handoff, .lightning-summary { padding: 1rem; } .lightning-source dl { grid-template-columns: 1fr; } .lightning-actions button { width: 100%; } }
