@@ -270,7 +270,7 @@ def test_empty_live_response_is_retained_diagnosed_and_never_retried(case):
     assert complete['usage'] == raw['usage'] and retained['provider_response'] == raw
     assert retained['source_state'] == source_state()
     assert complete['provenance']['response_sha256'] == digest(raw)
-    assert complete['provenance']['prompt_version'] == 'lightning-audit-v5'
+    assert complete['provenance']['prompt_version'] == audits.lightning_payload.PROMPT_VERSION
     assert case.provider.call_count == 1
     assert start(case) == complete and read(case, first['id']) == complete
     assert not case.queue.calls
@@ -429,3 +429,21 @@ def test_transport_preserves_rationale_first_schema_order_and_exact_wire_bytes(m
     from time import monotonic
     assert audits.call_provider(payload, deadline=monotonic() + 10) == response()
     assert len(captured) == 1
+
+
+def test_live_nonblank_rationale_fragment_fails_and_retains_raw_response_without_retry(case):
+    value = audit_result(); value['summary'] = 'The CFDE package contains a factor explicitly named '
+    raw = {'stop_reason': 'end_turn', 'content': [{'type': 'text', 'text': json.dumps(value)}],
+        'usage': {'input_tokens': 20933, 'output_tokens': 763}}
+    case.provider.return_value = raw
+    first = start(case); case.queue.run()
+    complete = read(case, first['id']); retained = stored(case, first['id'])
+    assert complete['status'] == 'failed' and complete['result'] is None
+    assert complete['error']['code'] == 'LIGHTNING_INCOMPLETE'
+    assert 'incomplete rationale' in complete['error']['detail']
+    assert complete['usage'] == raw['usage'] and retained['provider_response'] == raw
+    assert retained['source_state'] == source_state()
+    assert complete['provenance']['response_sha256'] == digest(raw)
+    assert case.provider.call_count == 1
+    assert start(case) == complete and read(case, first['id']) == complete
+    assert not case.queue.calls

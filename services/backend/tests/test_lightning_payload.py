@@ -37,7 +37,14 @@ def source_state():
 
 
 def audit_result(ref='E4'):
-    return {'assessment': 'partial', 'summary': 'A secretion direction merits investigation.',
+    return {'assessment': 'partial', 'summary': (
+        'The retained CFDE secretion factor includes a loading for GENE_A, making it a concrete entry point '
+        'for investigating this gap. That loading identifies an exploratory association within the factor, '
+        'not a causal mechanism or evidence that secretion explains the disease.\n\n'
+        'The package supplies only a bounded window of top loadings. It does not establish which genes belong '
+        'to the associated GeneSets or whether their source context matches the disease. Inspecting exact '
+        'membership and species-qualified gene identities is therefore the next useful check before '
+        'interpreting a shared mechanism.'),
         'observations': [{'text': 'The retained factor contains a loading for GENE_A.', 'evidence_refs': [ref]}],
         'recommended_direction': 'Inspect the selected secretion factor and confirm species-qualified gene identities.',
         'missing_evidence': ['GeneSet membership was not supplied.'], 'next_steps': ['Inspect exact GeneSet members.'],
@@ -168,3 +175,21 @@ def test_local_validation_rejects_whitespace_content_beyond_required_prose(field
     validate(result, payload.RESULT_SCHEMA)
     with pytest.raises(Problem) as error: payload.validate_result(result, references)
     assert error.value.code == 'LIGHTNING_RESPONSE_INVALID'
+
+
+@pytest.mark.parametrize('summary', [
+    'The CFDE package contains a factor explicitly named ',
+    'A secretion direction merits investigation.',
+])
+def test_nonblank_fragment_is_incomplete_even_when_schema_is_valid(summary):
+    _, references = payload.project(source_state()); result = audit_result(); result['summary'] = summary
+    validate(result, payload.RESULT_SCHEMA)
+    with pytest.raises(Problem) as error: payload.validate_result(result, references)
+    assert error.value.code == 'LIGHTNING_INCOMPLETE'
+    assert 'incomplete rationale' in error.value.detail
+
+
+def test_unsupported_assessment_still_requires_a_substantive_rationale():
+    result = audit_result(); result.update(assessment='unsupported', observations=[], summary='No supported direction.')
+    with pytest.raises(Problem) as error: payload.validate_result(result, [])
+    assert error.value.code == 'LIGHTNING_INCOMPLETE'

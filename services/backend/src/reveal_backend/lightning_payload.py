@@ -10,7 +10,7 @@ from jsonschema import ValidationError, validate
 from .auth import Problem
 from .cfde_assessment_payload import model_state
 
-PROMPT_VERSION = 'lightning-audit-v5'
+PROMPT_VERSION = 'lightning-audit-v6'
 SYSTEM = """You write useful preliminary research audits for scientists considering a knowledge gap.
 Explain how the supplied CFDE evidence and DisMech context bear on the actual question: what direction they support,
 what they cannot distinguish, and what concrete check could advance the investigation. Provide a substantive,
@@ -32,7 +32,10 @@ direction sound more or less supported for presentation purposes.
 Loadings are stored factor weights, not causal effects, probabilities, biological fold changes, phenotype associations
 or measured patient-level gene-expression covariance. Do not assume human species or an hg38 genome build.
 Co-loading does not establish GeneSet membership, and a named perturbation target is not necessarily a signature member.
-Avoid repeating numeric loadings unless essential; if included, copy the exact supplied value without rounding.
+Do not repeat numeric loading values in prose; the cited retained rows provide their exact values for inspection.
+Distinguish gene-loading rows from GeneSet-loading rows: inspecting a full gene list tests whether a gene is loaded,
+not whether its perturbation signature is loaded. Inspect GeneSet rows and membership for signature questions.
+Do not infer the factor's assay, training population or method from GeneSet metadata or a familiar gene label.
 Preserve species, experimental context and source scope. Unknown species or cross-dataset gene
 identity stays unknown. GeneSet collection species, tissue and assay metadata describes those signatures only; never extend it to
 neighboring gene-loading rows or every gene in the factor.
@@ -53,12 +56,15 @@ a subsequent agent. Return only the structured audit. Aim for 450-600 words TOTA
 an explanatory rationale of 200-260 words in three short paragraphs. Use at most 3 observations of 45 words each,
 a direction of at most 90 words, and at most 2 items of 25 words each in each remaining list. These are maximums,
 not quotas: do not pad an evidence-poor package. Complete every required field within the response budget.
-Never put field names, enum labels, or formatting instructions inside the prose or lists.
+Write complete plain-text sentences. Refer to factor and source names directly, without decorative quotation marks.
+Never end a paragraph immediately before naming or explaining a source. Never put field names, enum labels,
+or formatting instructions inside the prose or lists.
 """
 
 TASK = """Assess the frozen evidence package above and write the complete Lightning audit now.
 The central question is knowledge_gap.question. Aim for 450-600 words in total. In summary, write three short
-paragraphs totaling 200-260 words that explain the assessment:
+paragraphs totaling 200-260 words that explain the assessment. Use complete sentences and name factors directly
+without enclosing their labels in quotation marks:
 1. Identify the most relevant supplied CFDE observations and DisMech context, and explain why they offer a lead for
    this specific question. If no lead is supported, explain the mismatch instead of inventing one. Distinguish the
    stored observations from a proposed biological interpretation.
@@ -93,7 +99,7 @@ RESULT_SCHEMA = {
         'summary': {**_STRING, 'description': 'Required explanatory rationale, 200-260 words in three short paragraphs: the relevant lead, why the evidence does or does not support the question, and what would change the assessment. Explain how the '
             'supplied CFDE loading observations and DisMech context bear on this specific question, which hypothesis '
             'is worth pursuing, and the specific inferential link still missing. Explain why a partial or unsupported result follows from the supplied data, without treating missing sampled rows as biological absence. Do not only repeat the '
-            'question or assessment. Use factual claims grounded in the referenced observations. Never empty.'},
+            'question or assessment. Use factual claims grounded in the referenced observations. Write complete paragraphs, without quotation marks around source labels. Never empty or a sentence fragment.'},
         'observations': {'type': 'array', 'description': 'At most 3 concrete, relevant source observations, each at most 45 words, when '
             'available, explaining their bearing on the question. Cite only supplied evidence_ref IDs. May be empty '
             'for unsupported only if no observation supports a direction.',
@@ -213,6 +219,11 @@ def validate_result(result, references):
     except (ValidationError, ValueError, TypeError):
         raise Problem(503, 'LIGHTNING_RESPONSE_INVALID',
             'The model returned audit content that did not match the required structure.') from None
+    # A nonblank fragment can be valid JSON without being a useful rationale.
+    # Enforce this locally; string-length constraints inflate provider grammars.
+    if len(result['summary'].split()) < 60:
+        raise Problem(503, 'LIGHTNING_INCOMPLETE',
+            'The model returned an incomplete rationale. Start a new audit to try again.')
     if result['assessment'] != 'unsupported' and not result['observations']:
         raise Problem(503, 'LIGHTNING_INCOMPLETE',
             'The model proposed a direction without supporting observations. Start a new audit to try again.')
