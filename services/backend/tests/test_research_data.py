@@ -533,6 +533,16 @@ class ReleaseQueryTests(unittest.TestCase):
         with self.assertRaises(Problem) as caught: self.query('get_factor',{'factor_id':FACTOR})
         self.assertEqual((caught.exception.status,caught.exception.code),(409,'SOURCE_UNAVAILABLE'))
         self.assertNotIn('reason',caught.exception.extra)
+        # A retained generation row whose reload tables cleanup already dropped: the same conflict, from every read.
+        with sqlite3.connect(self.path) as c:
+            c.execute('CREATE TABLE reference_generations(generation_id TEXT,kind TEXT,model TEXT,status TEXT,eaggl_import_id TEXT,'
+                      'legacy_mapping_run_id TEXT,legacy_gene_set_import_id TEXT,manifest TEXT)')
+            c.execute('INSERT INTO reference_generations VALUES(?,?,?,?,?,?,?,?)',(OTHER,'kpn','eaggl-capped-v1','complete','c'*64,None,None,'{}'))
+        for call in (lambda:self.query('get_factor',{'factor_id':FACTOR},OTHER),lambda:self.query('search_genes',{'q':'gene'},OTHER),
+                     lambda:self.service.phenotype_trait(OTHER,'T2D')):
+            with self.subTest(call=call),self.assertRaises(Problem) as caught: call()
+            self.assertEqual((caught.exception.status,caught.exception.code),(409,'SOURCE_UNAVAILABLE'))
+        self.assertEqual(self.service.catalog(OTHER)['generation']['generation_id'],OTHER)
 
     def test_release_loadings_rank_within_libraries_and_genes_have_no_import_index(self):
         first=self.query('get_factor_loadings',{'factor_id':FACTOR,'limit':1})
@@ -644,8 +654,8 @@ class ReleaseQueryTests(unittest.TestCase):
         catalog=self.service.catalog(RELEASE)
         self.assertEqual({item['name'] for item in catalog['operations'] if item['availability']=='not_stored'},
                          {*RELEASE_OPERATIONS,'get_connections','get_imported_graph'})
-        self.assertEqual((catalog['coverage']['gene_set_betas'],catalog['generation']['absent_files']),
-                         ('not_stored',['factor_trait_links.tsv.gz','trait_gene_sets.tsv.gz']))
+        self.assertEqual((catalog['coverage']['gene_set_betas'],catalog['coverage']['phenotype_associations'],catalog['generation']['absent_files']),
+                         ('not_stored','not_stored',['factor_trait_links.tsv.gz','trait_gene_sets.tsv.gz']))
 
     def test_release_catalog_marks_graph_tools_not_stored_and_serves_betas(self):
         catalog=self.service.catalog(RELEASE)

@@ -36,7 +36,7 @@ A `reference_generation_id` may name the environment's published reference relea
 - `get_gene_set` returns the set's definition and only the lineage closure of its construction (`payload.provenance`; inputs sharing their onward lineage are represented by one, listed in `payload.collapsed`), not the whole collection.
 - `get_connections` and `get_imported_graph` are `not_stored`.
 - `get_trait_gene_sets` (`trait_id`, optional `library` and `q`) and `get_gene_set_traits` (`gene_set_id`) read the PIGEAN betas-mode gene-set betas (`beta_uncorrected`, `beta`, `avg_postp`, `library_rank`), by `beta_uncorrected`. They are not the BioIndex small-model values. An absent pair is not a zero beta, and some kept rows are exactly 0.
-- `get_factor_trait_links` (`factor_id`, optional `scope` `atlas`/`all`) and `get_trait_factor_links` (`trait_id`) read the factor-phenotype links (`nnls_loading`, `phewas_beta`, `phewas_p_onesided`, `phewas_q`), kept at q ≤ 0.05, by `phewas_q`. An absent phenotype is unlinked at that threshold, not a negative result.
+- `get_factor_trait_links` (`factor_id`, optional `scope` `atlas`/`all`) and `get_trait_factor_links` (`trait_id`, optional `scope`; the trait's own factors are flagged `is_own_trait`) read the factor-phenotype links (`nnls_loading`, `phewas_beta`, `phewas_p_onesided`, `phewas_q`), kept at q ≤ 0.05, by `phewas_q`. An absent phenotype is unlinked at that threshold, not a negative result.
 
 These four operations are `not_stored` for a reload-era generation.
 

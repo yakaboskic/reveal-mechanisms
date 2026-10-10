@@ -177,6 +177,15 @@ def _trait(value):
     return 'KPN.TRAIT:' + trait.rsplit(':', 1)[1] if re.fullmatch(r'trait:kpn:\d{7}', trait) else trait
 
 
+def _no_table(error):
+    """A reload-era table cleanup dropped (MySQL 1146): the generation is no longer readable, a conflict rather than an error."""
+    return bool(getattr(error, 'args', None)) and error.args[0] == NO_TABLE
+
+
+def _unretained():
+    return Problem(409, 'SOURCE_UNAVAILABLE', 'The pinned reference generation is not retained for research queries.')
+
+
 def _release_pin(release):
     """A published release as query()'s pin: its generation_id is the release id (the bindings' convention), its model KPN."""
     manifest = release['manifest'] if isinstance(release['manifest'], dict) else {}
@@ -358,11 +367,10 @@ class ReferenceQueryService:
             rows = self._remembered(('generation', identity), lambda: self._rows(connection,
                 'SELECT ' + ','.join(columns) + ' FROM reference_generations WHERE generation_id=%s', [identity], columns))
         except Exception as error:
-            if not (getattr(error, 'args', None) and error.args[0] == NO_TABLE): raise
+            if not _no_table(error): raise
             rows = []
         if not rows and published: raise superseded_problem(ReleaseUnavailable(identity, published['release_id']))
-        if not rows or rows[0]['status'] not in ('complete', 'superseded'):
-            raise Problem(409, 'SOURCE_UNAVAILABLE', 'The pinned reference generation is not retained for research queries.')
+        if not rows or rows[0]['status'] not in ('complete', 'superseded'): raise _unretained()
         return rows[0]
 
     def _release_factors(self, connection, identities):
@@ -478,8 +486,11 @@ class ReferenceQueryService:
                                                               application_prefix(self.prefix)), [phenotype] * 4, columns)
             else:
                 select = 'SELECT ' + ','.join(columns) + ' FROM kpn_traits WHERE generation_id=%s AND '
-                rows = self._rows(connection, select + 'kpn_trait_id=%s UNION ' + select + 'legacy_phenotype_id=%s',
-                                  [generation_id, phenotype, generation_id, phenotype], columns)
+                try: rows = self._rows(connection, select + 'kpn_trait_id=%s UNION ' + select + 'legacy_phenotype_id=%s',
+                                       [generation_id, phenotype, generation_id, phenotype], columns)
+                except Exception as error:
+                    if not _no_table(error): raise
+                    raise _unretained() from None
             if len(rows) > 1: raise Problem(409, 'AMBIGUOUS_IDENTITY', 'The phenotype identifier is ambiguous in the pinned generation.')
             return rows[0] if rows else None
         finally:
@@ -522,7 +533,10 @@ class ReferenceQueryService:
             version = RELEASE_READER_VERSION if release else READER_VERSION
             binding = sha256(canonical_json([version, generation_id, operation, args, limit]))
             offset = self._cursor(binding, value=cursor) if cursor is not None else 0
-            result, tables = (self._release if release else self._execute)(connection, generation, operation, args, limit, offset)
+            try: result, tables = (self._release if release else self._execute)(connection, generation, operation, args, limit, offset)
+            except Exception as error:
+                if release or not _no_table(error): raise
+                raise _unretained() from None  # its reference_generations row outlived the tables it reads
             items, has_more = self._bounded(result, limit)
             result.update(returned_rows=len(items), limit=limit, offset=offset, truncated=has_more,
                           next_cursor=self._cursor(binding, offset + len(items)) if has_more else None)
@@ -982,7 +996,7 @@ def capability_catalog(generation=None, *, phenotype_verified=None, source_kind=
         operations.append(descriptor)
     coverage={'gene_loadings':gene_coverage,'gene_set_projections':set_coverage if model==KPN_MODEL else 'not_stored' if model==LEGACY_MODEL else 'requires_generation_metadata',
               'legacy_gene_set_links':LEGACY_COVERAGE if model==LEGACY_MODEL else 'not_applicable' if model==KPN_MODEL else 'requires_generation_metadata',
-              'phenotype_associations':'gene_set_betas' if release else 'not_stored'}
+              'phenotype_associations':'gene_set_betas' if release and 'trait_gene_sets.tsv.gz' not in absent else 'not_stored'}
     if release:
         coverage.update(gene_set_betas=BETA_COVERAGE if 'trait_gene_sets.tsv.gz' not in absent else 'not_stored',
                         factor_trait_links=LINK_COVERAGE if 'factor_trait_links.tsv.gz' not in absent else 'not_stored',
