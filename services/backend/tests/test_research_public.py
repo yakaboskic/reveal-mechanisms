@@ -86,6 +86,23 @@ class PublicCaptureTests(unittest.TestCase):
         self.assertEqual(descriptor['authentication'], 'none')
         self.assertNotIn('storage', descriptor)
 
+    def test_release_capture_is_retained_and_replayed_under_its_reader_version(self):
+        from reveal_backend.research_data import READER_VERSION, RELEASE_OPERATIONS, RELEASE_READER_VERSION
+        release = data_fixture.ReleaseQueryTests(); release.setUp(); self.addCleanup(release.doCleanups)
+        self.service.data_service = release.service
+        result = self.query(generation=data_fixture.RELEASE)
+        self.assertEqual((result['reader_version'], result['source']['source_kind'], result['source']['release_id']),
+                         (RELEASE_READER_VERSION, 'reference_release', data_fixture.RELEASE))
+        self.assertEqual(result['object_resolution'][0]['status'], 'ready')
+        self.assertEqual(public.public_dispatch(self.service, 'get_public_capture', {'capture_id': result['capture_id']}), result)
+        links = self.query('get_factor_trait_links', {'factor_id': data_fixture.FACTOR}, data_fixture.RELEASE)
+        self.assertEqual([item['phenotype'] for item in links['result']['items']], ['T2D', 'BMI', 'gcat_trait_height'])
+        self.assertTrue(set(RELEASE_OPERATIONS) <= {tool['name'] for tool in public.definitions()})
+        # A capture whose reader this server does not know is never replayed.
+        with patch.object(public, 'READER_VERSIONS', (READER_VERSION,)), self.assertRaises(Problem) as failure:
+            public.public_dispatch(self.service, 'get_public_capture', {'capture_id': result['capture_id']})
+        self.assertEqual(failure.exception.code, 'PUBLIC_CAPTURE_INTEGRITY')
+
     def test_authenticated_attachment_preserves_exact_bytes_without_live_source_and_loads_normal_context(self):
         result = self.query(); authority = self.work()
         with sqlite3.connect(self.reference.path) as db:

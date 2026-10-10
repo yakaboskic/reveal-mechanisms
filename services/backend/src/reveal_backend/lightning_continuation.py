@@ -2,7 +2,7 @@
 from copy import deepcopy
 
 from .auth import Problem, owned, principal_with
-from .reference_generation import CONTROL_KIND, CONTROL_ID, generation_of_anchors
+from .reference_generation import CONTROL_KIND, CONTROL_ID, shared_release
 from .repository import digest, now, uid
 from .research_work import ResearchWorkService
 
@@ -61,8 +61,8 @@ def continue_audit(repository, authorization, audit_id, body, key, *, reload_gat
         source = owned(tx, 'request', public['research_request_id'], owner)['data']
         binding = deepcopy(owned(tx, 'request_binding', source['id'], owner)['data'])
         pin = owned(tx, 'research_pin', source['id'], owner)['data']
-        generation = generation_of_anchors(binding['anchors'])
-        if (pin.get('state') != 'active' or pin.get('generation_id') != generation
+        generation = shared_release(binding['anchors'])  # the audit's pin; anchors saved under several releases pin none
+        if (not generation or pin.get('state') != 'active' or pin.get('generation_id') != generation
                 or generation != public['reference_generation_id'] or pin.get('expires_at', '') <= now()):
             raise Problem(409, 'SOURCE_UNAVAILABLE', 'The audit’s reference generation is no longer retained. Create a fresh audit.')
         artifacts = {name: deepcopy(audit.get(name)) for name in ('source_state', 'model_payload', 'response')}

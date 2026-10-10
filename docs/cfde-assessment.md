@@ -11,8 +11,8 @@ The backend uses the current browser composer, including unsaved edits, while au
 - The selected knowledge gap question, rationale and disease.
 - Names and descriptions of attached DisMech mechanisms.
 - Names and trait context of only the selected EAGGL mechanisms, in their chosen order.
-- Up to 50 gene names/loadings and 50 GeneSet names/loadings per mechanism. GeneSets are ordered by joint loading, with exact joint/marginal decimal strings. These are retained per-trait projections, not an exhaustive library query.
-- Short GeneSet source labels, library, species, assay/data type and relevant experimental context. Different species or contexts remain distinct.
+- Up to 50 gene names/loadings and 50 GeneSet names/loadings per mechanism, read from the environment's published reference release (state format `reveal.cfde-assessment-state/2`; a release a later publish replaced is refused with `409 SOURCE_UNAVAILABLE`, reason `reference_release_superseded`). GeneSets are ordered by joint loading, with exact joint/marginal decimal strings. These are the release's retained projections (the top 50 per library, ranked within the library), not an exhaustive library query.
+- Short GeneSet source labels, library, species, assay/data type and relevant experimental context, including the curated source datasets of a collection (`reference_lineage.collection_lineage`). Different species or contexts remain distinct.
 - Up to 2,000 characters of each researcher input field and each verified upload extraction, plus a short coverage summary.
 
 No new embeddings, BioIndex queries, member lists, or searches for replacement factors are performed. Missing legacy numeric GeneSet loadings stay missing. Unknown species stays unknown. Co-loading is not membership, a perturbation target is not necessarily a signature member, and loadings are not causal effects. A useful partial explanation with at least one supported CFDE claim can qualify; every relationship category need not be filled.

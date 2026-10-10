@@ -240,7 +240,8 @@ def start(repo, catalog, authorization, body, key, *, freeze, reload_gate):
             if count >= (20 if actor['principal_kind'] == 'anonymous' else 100):
                 raise Problem(429, 'LIGHTNING_QUOTA', 'This workspace has reached its daily Lightning audit allowance.')
             frozen, binding, rows = freeze(tx, actor, body, retrieval_mode='progressive', write=False)
-            generation = reference_generation.generation_of_anchors(binding['anchors'])
+            # The one release every anchor was saved under (as research work pins); a draft mixing releases pins none.
+            generation = reference_generation.shared_release(binding['anchors'])
             if not generation: raise Problem(503, 'SOURCE_NOT_READY', 'A retained reference generation is required.')
             timestamp = now()
             operation_deadline = (datetime.now(timezone.utc) + timedelta(seconds=DEADLINE_SECONDS)).isoformat().replace('+00:00', 'Z')

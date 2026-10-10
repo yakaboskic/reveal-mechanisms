@@ -85,6 +85,13 @@ class LightningContinuationTests(unittest.TestCase):
         self.assertEqual(self.row('research_pin', child['id'])['data']['generation_id'], fixtures.GEN)
         self.assertEqual(self.row('request', self.frozen['id'])['data']['archive']['status'], 'archived')
 
+    def test_anchors_saved_under_several_releases_are_unavailable_not_an_error(self):
+        mixed = deepcopy(self.binding); mixed['anchors'].append({**mixed['anchors'][0], 'reference_generation_id': fixtures.OTHER})
+        with self.repo.transaction() as tx: tx.put('request_binding', self.frozen['id'], self.owner, mixed)
+        with self.assertRaises(Problem) as caught: self.create()
+        self.assertEqual((caught.exception.status, caught.exception.code), (409, 'SOURCE_UNAVAILABLE'))
+        self.assertEqual(self.row('lightning_audit', self.audit_id)['data']['public']['continuations'], [])
+
     def test_delivery_replay_and_changed_body_have_one_child(self):
         first = self.create(key='same-key')
         self.assertEqual(self.create(key='same-key'), first)

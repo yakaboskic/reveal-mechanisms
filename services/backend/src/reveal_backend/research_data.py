@@ -1,8 +1,12 @@
-"""Bounded research reads of an immutable imported reference generation.
+"""Bounded research reads of an immutable imported reference generation or of the published reference release.
 
 No active-catalog selection or external fallback is used here. Callers authorize
 the request, retain its generation and persist each QueryCapture before exposing
 it to an agent. This module owns the scientific bytes and their File identities.
+
+A pin is either the environment's published release (read first on each query's connection, reference_pin; its
+reveal_ref_* tables, reader RELEASE_READER_VERSION) or a reload-era generation (reference_generations and the migration-008
+tables, reader READER_VERSION). A release pin that a later publish replaced is refused (reference_pin.superseded_problem).
 """
 from __future__ import annotations
 
@@ -24,8 +28,14 @@ from .auth import Problem
 from .evidence_package import canonical_json, decode, require, sha256
 from .factor_details import GENE_COVERAGE, SET_COVERAGE, LEGACY_COVERAGE
 from .reference_generation import KPN_MODEL, LEGACY_MODEL, GENERATION_RE, mechanism_node, parse_public_id
+from .reference_lineage import collection_lineage, lineage_closure
+from .reference_pin import NO_TABLE, ReleaseUnavailable, current_release, superseded_problem
+from .repository import application_prefix, application_sql
 
 READER_VERSION = 'reveal.reference-query/2'
+RELEASE_READER_VERSION = 'reveal.reference-query/3'  # captures of a reference release (source_kind reference_release)
+READER_VERSIONS = (READER_VERSION, RELEASE_READER_VERSION)
+RELEASE = 'reference_release'
 CAPTURE_FORMAT = 'reveal.reference-query.capture/1'
 MAX_CAPTURE_BYTES = 1_000_000
 PAGE_FIELDS = {'limit', 'cursor'}
@@ -38,22 +48,65 @@ OPERATIONS = {
     'get_gene_set_members': {'gene_set_id'}, 'get_gene_set_factors': {'gene_set_id'},
     'search_traits': {'q'}, 'get_trait': {'trait_id'},
     'get_connections': {'factor_id'}, 'get_imported_graph': {'node_id'},
+    'get_trait_gene_sets': {'trait_id', 'library', 'q'}, 'get_gene_set_traits': {'gene_set_id'},
+    'get_factor_trait_links': {'factor_id', 'scope'}, 'get_trait_factor_links': {'trait_id', 'scope'},
 }
+# Stored only in reference releases (not_stored for reload-era generations); releases store no EAGGL graph.
+RELEASE_OPERATIONS = ('get_trait_gene_sets', 'get_gene_set_traits', 'get_factor_trait_links', 'get_trait_factor_links')
+GRAPH_OPERATIONS = ('get_connections', 'get_imported_graph')
 METRICS = {
     'loading': 'Stored nonzero EAGGL gene weight; absent rows are not zero.',
-    'joint_loading': 'Retained per-trait gene-set joint projection, not a phenotype association.',
-    'marginal_loading': 'Retained per-trait gene-set marginal projection, not a phenotype association.',
-    'joint_rank': 'Rank in source per-trait joint projections, before retained-subset filtering.',
-    'marginal_rank': 'Rank in source per-trait marginal projections, before retained-subset filtering.',
+    'joint_loading': 'Retained gene-set joint projection (top 50 per trait in a reload-era generation, per library in a release), not a phenotype association.',
+    'marginal_loading': 'Retained gene-set marginal projection (top 50 per trait in a reload-era generation, per library in a release), not a phenotype association.',
+    'joint_rank': 'Rank in the source joint projections (per trait in a reload-era generation, within the library in a release), before retained-subset filtering.',
+    'marginal_rank': 'Rank in the source marginal projections (per trait in a reload-era generation, within the library in a release), before retained-subset filtering.',
+    'beta_uncorrected': 'Release PIGEAN betas-mode gene-set effect on the trait before PIGEAN\'s correction (one fit per CFDE library, no outer Gibbs); not the BioIndex small-model value.',
+    'beta': 'Release PIGEAN betas-mode corrected gene-set effect on the trait (one fit per CFDE library); not the BioIndex small-model value.',
+    'avg_postp': 'Release PIGEAN betas-mode average posterior probability that the gene set is associated with the trait; not the BioIndex small-model value.',
+    'library_rank': 'Rank of the gene set within its library for the trait, by beta_uncorrected.',
+    'nnls_loading': 'eaggl trait linkage: the phenotype\'s support projected onto the fitted trait\'s factors by fixed-W NNLS; descriptive, no p-value.',
+    'phewas_beta': 'eaggl factor-PheWAS: OLS coefficient of the phenotype\'s hit genes on the factor\'s gene loadings, adjusted for the fitted trait\'s direct support.',
+    'phewas_p_onesided': 'eaggl factor-PheWAS one-sided p-value (robust HC3 standard errors) for enrichment of the phenotype in the factor.',
+    'phewas_q': 'Benjamini-Hochberg q-value of phewas_p_onesided over every factor-phenotype test of the release; links are kept at q <= 0.05.',
 }
 # Operation-specific notes appended to the shared loaded-data tool descriptions.
 DESCRIPTIONS = {
     'get_gene_gene_sets': ' Lists CFDE gene sets whose stored membership contains the gene (symbol matched without case; member and'
-        ' source_pointer give the exact stored identifier). With factor_id, only that factor\'s retained per-trait projections, with their'
-        ' joint and marginal loadings.',
+        ' source_pointer give the exact stored identifier). With factor_id, only that factor\'s retained projections (per trait in a'
+        ' reload-era generation, per library in a release), with their joint and marginal loadings.',
+    'get_trait_gene_sets': ' Lists the PIGEAN gene-set betas of a KPN trait by beta_uncorrected (library keeps one CFDE library; q filters'
+        ' the gene-set name). Reference releases only; these are not the BioIndex small-model values.',
+    'get_gene_set_traits': ' Lists the KPN traits with a PIGEAN beta for a gene set, by beta_uncorrected. Reference releases only.',
+    'get_factor_trait_links': ' Lists the phenotypes a factor is linked to (eaggl trait linkage and factor-PheWAS, q <= 0.05), by phewas_q;'
+        ' scope atlas keeps the atlas traits. Reference releases only.',
+    'get_trait_factor_links': ' Lists the factors linked to a KPN trait, its own factors flagged is_own_trait, by phewas_q. Reference releases only.',
 }
 MEMBERSHIP_COVERAGE = ('Exact stored CFDE gene-set membership of this generation, matched on the gene symbol without case; member is the'
     ' stored identifier at source_pointer in the GeneSet definition. Read the trusted GeneSet with get_gene_set before citing membership.')
+# Reference release coverage (reveal_ref_*): projections are ranked within each library, and only the gene sets the release
+# references (a factor projection or a trait beta) are stored.
+RELEASE_GENE_COVERAGE = 'All stored nonzero EAGGL gene loadings of this release. Genes absent from a factor are not assigned a zero loading.'
+RELEASE_SET_COVERAGE = ('Retained projections: per library, the gene sets in the top 50 by joint or marginal loading (ranks are within the'
+    ' library). Search covers this retained subset, not every gene set in the source library.')
+RELEASE_MEMBERSHIP_COVERAGE = ('Exact stored CFDE gene-set membership, matched on the gene symbol without case, of the gene sets this release'
+    ' references (a factor projection or a trait beta); a gene set not listed may still contain the gene (absent is not non-member). member is'
+    ' the stored identifier at source_pointer in the GeneSet definition. Read the trusted GeneSet with get_gene_set before citing membership.')
+RELEASE_GENE_SET_COVERAGE = ('The gene sets this release references (a factor projection or a trait beta); other gene sets of the CFDE'
+    ' libraries are not stored.')
+RELEASE_GENE_SEARCH_COVERAGE = ('Loaded genes only: symbols with a stored nonzero loading on a factor of this release (genes of the EAGGL'
+    ' universe without one are not listed); external identifier equivalence and organism are not inferred.')
+RELEASE_TRAIT_COVERAGE = ('Release trait metadata: the atlas traits (is_atlas) and the other KPN phenotypes of the factor-trait linkage.'
+    ' Gene-set betas are read with get_trait_gene_sets, factor links with get_trait_factor_links.')
+BETA_COVERAGE = ('PIGEAN betas mode (no outer Gibbs) on each atlas trait\'s PIGEAN gene statistics, one fit per CFDE library (LINCS not fitted);'
+    ' rows are the gene sets PIGEAN kept. An absent (trait, gene set) pair is not a zero beta, and some kept rows are exactly 0.'
+    ' Not the BioIndex small-model values.')
+LINK_COVERAGE = ('eaggl trait linkage (nnls_loading) and factor-PheWAS (phewas_*), kept at Benjamini-Hochberg q <= 0.05 over every'
+    ' factor-phenotype test of the release. A phenotype absent here is unlinked at this threshold, not a negative result.')
+NO_GRAPH = 'A reference release stores no EAGGL factor hierarchy graph.'
+RELEASE_ONLY = 'Gene-set betas and factor-trait links are stored only in reference releases.'
+# An optional release file absent at publish leaves its table empty (the stored manifest's absent_files).
+RELEASE_FILES = {'get_trait_gene_sets': 'trait_gene_sets.tsv.gz', 'get_gene_set_traits': 'trait_gene_sets.tsv.gz',
+                 'get_factor_trait_links': 'factor_trait_links.tsv.gz', 'get_trait_factor_links': 'factor_trait_links.tsv.gz'}
 
 
 KPN_FACTOR_COLUMNS = ('factor_key', 'public_id', 'eaggl_factor_id', 'kpn_trait_id', 'label', 'source_revision', 'metadata', 'factor_index')
@@ -73,6 +126,33 @@ GENE_LOADING_TABLES, SET_LOADING_TABLES = ['eaggl_gene_loadings', 'eaggl_genes']
 GENE_ORDER, SET_ORDER = 'l.loading DESC,g.symbol,g.gene_index', 'p.joint_loading DESC,s.gene_set_id'
 SET_COLUMNS = ('gene_set_id', 'name', 'library', 'joint_loading', 'marginal_loading', 'joint_loading_text',
                'marginal_loading_text', 'joint_rank', 'marginal_rank', 'is_joint_top_factor')
+# A release factor by any of its three unique keys. Release statements name the contract tables (application_sql prefixes them).
+RELEASE_FACTOR_COLUMNS = ('factor_key', 'public_id', 'eaggl_factor_id', 'kpn_trait_id', 'factor_number', 'label', 'source_revision', 'metadata')
+RELEASE_FACTOR_LOOKUP = ('SELECT ' + ','.join('f.' + c for c in RELEASE_FACTOR_COLUMNS) +
+    ' FROM (SELECT factor_key FROM reveal_ref_factors WHERE public_id IN ({marks}) UNION SELECT factor_key FROM reveal_ref_factors'
+    ' WHERE factor_key IN ({marks}) UNION SELECT factor_key FROM reveal_ref_factors WHERE eaggl_factor_id IN ({marks})) k'
+    ' JOIN reveal_ref_factors f ON f.factor_key=k.factor_key ORDER BY f.factor_key')
+RELEASE_GENE_TABLES, RELEASE_SET_TABLES = ['reveal_ref_factor_genes'], ['reveal_ref_projections', 'reveal_ref_gene_sets']
+RELEASE_GENE_ORDER = 'loading DESC,gene'
+SET_SELECT = 's.gene_set_id,s.gene_set_name,s.library,' + ','.join('p.' + c for c in SET_COLUMNS[3:])
+TRAIT_COLUMNS = ('kpn_trait_id', 'legacy_phenotype_id', 'phenotype_name', 'trait_group', 'trait_type', 'description', 'metadata')
+# Atlas traits, then the linkage's other KPN phenotypes (is_atlas 0), in one statement.
+RELEASE_TRAITS = ('SELECT ' + ','.join(TRAIT_COLUMNS) + ',1 FROM reveal_ref_traits WHERE {traits} UNION ALL SELECT kpn_trait_id,'
+    'legacy_phenotype_id,display_name,NULL,NULL,NULL,metadata,0 FROM reveal_ref_phenotypes WHERE is_atlas=0 AND kpn_trait_id IS NOT NULL AND {phenotypes}')
+BETA_COLUMNS = ('kpn_trait_id', 'trait_name', 'gene_set_id', 'gene_set_name', 'library', 'collection_id', 'n_genes', 'beta_uncorrected',
+                'beta', 'avg_postp', 'library_rank')
+BETA_SQL = ('SELECT t.kpn_trait_id,r.phenotype_name,t.gene_set_id,s.gene_set_name,t.library,s.collection_id,s.n_genes,t.beta_uncorrected,'
+    't.beta,t.avg_postp,t.library_rank FROM reveal_ref_trait_gene_sets t JOIN reveal_ref_gene_sets s ON s.gene_set_id=t.gene_set_id'
+    ' JOIN reveal_ref_traits r ON r.kpn_trait_id=t.kpn_trait_id WHERE ')
+BETA_TABLES = ['reveal_ref_trait_gene_sets', 'reveal_ref_gene_sets', 'reveal_ref_traits']
+LINK_COLUMNS = ('source_id', 'factor_label', 'fitted_kpn_trait_id', 'fitted_trait_name', 'phenotype', 'phenotype_kpn_trait_id', 'phenotype_name',
+                'is_own_trait', 'is_atlas_trait', 'nnls_loading', 'phewas_beta', 'phewas_p_onesided', 'phewas_q')
+LINK_SQL = ('SELECT f.public_id,f.label,f.kpn_trait_id,r.phenotype_name,l.phenotype,l.phenotype_kpn_trait_id,COALESCE(p.display_name,l.phenotype),'
+    'l.is_own_trait,l.is_atlas_trait,l.nnls_loading,l.phewas_beta,l.phewas_p_onesided,l.phewas_q FROM reveal_ref_factor_trait_links l'
+    ' JOIN reveal_ref_factors f ON f.factor_key=l.factor_key JOIN reveal_ref_traits r ON r.kpn_trait_id=f.kpn_trait_id'
+    ' LEFT JOIN reveal_ref_phenotypes p ON p.phenotype=l.phenotype WHERE ')
+LINK_TABLES = ['reveal_ref_factor_trait_links', 'reveal_ref_factors', 'reveal_ref_traits', 'reveal_ref_phenotypes']
+LINK_SUMMARY = ('n_phenotypes', 'n_linked', 'n_linked_kpn_traits', 'n_linked_atlas_traits', 'own_trait_q')
 
 
 def _json(value):
@@ -90,6 +170,20 @@ def _text(value, name, maximum=250):
     if not isinstance(value, str) or not value.strip() or len(value) > maximum or any(ord(c) < 32 for c in value):
         raise Problem(422, 'INVALID_QUERY', f'{name} must be a nonempty string of at most {maximum} characters.')
     return value
+
+
+def _trait(value):
+    trait = _text(value, 'trait_id')
+    return 'KPN.TRAIT:' + trait.rsplit(':', 1)[1] if re.fullmatch(r'trait:kpn:\d{7}', trait) else trait
+
+
+def _release_pin(release):
+    """A published release as query()'s pin: its generation_id is the release id (the bindings' convention), its model KPN."""
+    manifest = release['manifest'] if isinstance(release['manifest'], dict) else {}
+    return {'generation_id': release['release_id'], 'release_id': release['release_id'], 'kind': RELEASE, 'source_kind': RELEASE,
+            'model': KPN_MODEL, 'status': 'published', 'published_at': release['published_at'],
+            'eaggl_import_id': manifest.get('eaggl_import_id'), 'legacy_mapping_run_id': None, 'legacy_gene_set_import_id': None,
+            'manifest': manifest}
 
 
 @dataclass(frozen=True)
@@ -206,10 +300,11 @@ class QueryCapture:
 
 
 class ReferenceQueryService:
-    def __init__(self, connection_factory, *, cursor_secret=None, max_capture_bytes=MAX_CAPTURE_BYTES, single_snapshot=False):
+    def __init__(self, connection_factory, *, cursor_secret=None, max_capture_bytes=MAX_CAPTURE_BYTES, single_snapshot=False, prefix=None):
         self.connection_factory = connection_factory
         self.cursor_secret = cursor_secret.encode() if isinstance(cursor_secret, str) else cursor_secret
         self.max_capture_bytes = max_capture_bytes
+        self.prefix = prefix  # the environment's table prefix (application_prefix) of its reveal_ref_* tables
         # single_snapshot: every read of this instance shares one read view (an assessment build), so a generation row
         # or factor lookup it already made is reused, as a copy, instead of read again.
         self._memo = {} if single_snapshot else None
@@ -233,15 +328,47 @@ class ReferenceQueryService:
             result.append(item)
         return result
 
-    def _generation(self, connection, identity):
+    def _published(self, connection):
+        """The environment's published release ({release_id, published_at, manifest}) or None: read on connection, so a query
+        reads it first and every later statement of its transaction is of that release."""
+        return self._remembered(('release',), lambda: current_release(connection, self.prefix))
+
+    def _pin(self, connection, identity):
+        """The published release (_release_pin) when identity is it, else the retained reload-era generation."""
+        if not isinstance(identity, str) or not GENERATION_RE.fullmatch(identity):
+            raise Problem(422, 'INVALID_QUERY', 'An exact reference generation is required.')
+        published = self._published(connection)
+        if published and published['release_id'] == identity: return _release_pin(published)
+        return self._generation(connection, identity, published)
+
+    def release(self, connection, release_id):
+        """The published release as a pin; superseded_problem when release_id is not it (a later publish replaced it)."""
+        published = self._published(connection)
+        if not published or published['release_id'] != release_id:
+            raise superseded_problem(ReleaseUnavailable(release_id, published and published['release_id']))
+        return _release_pin(published)
+
+    def _generation(self, connection, identity, published=None):
+        """A retained reload-era generation. Without one (or without the reload tables, MySQL 1146), a pin while a release is
+        published is a superseded release (superseded_problem); otherwise the generation is not retained."""
         if not isinstance(identity, str) or not GENERATION_RE.fullmatch(identity):
             raise Problem(422, 'INVALID_QUERY', 'An exact reference generation is required.')
         columns = ('generation_id', 'kind', 'model', 'status', 'eaggl_import_id', 'legacy_mapping_run_id', 'legacy_gene_set_import_id', 'manifest')
-        rows = self._remembered(('generation', identity), lambda: self._rows(connection,
-            'SELECT ' + ','.join(columns) + ' FROM reference_generations WHERE generation_id=%s', [identity], columns))
+        try:
+            rows = self._remembered(('generation', identity), lambda: self._rows(connection,
+                'SELECT ' + ','.join(columns) + ' FROM reference_generations WHERE generation_id=%s', [identity], columns))
+        except Exception as error:
+            if not (getattr(error, 'args', None) and error.args[0] == NO_TABLE): raise
+            rows = []
+        if not rows and published: raise superseded_problem(ReleaseUnavailable(identity, published['release_id']))
         if not rows or rows[0]['status'] not in ('complete', 'superseded'):
             raise Problem(409, 'SOURCE_UNAVAILABLE', 'The pinned reference generation is not retained for research queries.')
         return rows[0]
+
+    def _release_factors(self, connection, identities):
+        """reveal_ref_factors rows matching any of identities (public id, factor key or EAGGL factor id: three unique keys)."""
+        return self._rows(connection, application_sql(RELEASE_FACTOR_LOOKUP.format(marks=','.join(['%s'] * len(identities))),
+                                                      application_prefix(self.prefix)), list(identities) * 3, RELEASE_FACTOR_COLUMNS)
 
     def _kpn_factors(self, connection, generation, import_id, identities):
         """reference_factors rows matching any of identities, each with its import factor_index. Rows of an import
@@ -272,22 +399,29 @@ class ReferenceQueryService:
         return for each KPN identity, read in three statements for every identity instead of nine each: the
         factors, then the top genes and the top gene sets of all of them (one bounded branch per factor). For each
         identity: its factor items, or the Problem query() would raise, then per kind the result's items, status,
-        truncated, import_coverage and origin. Call it only inside the caller's single read view."""
+        truncated, import_coverage and origin. Call it only inside the caller's single read view. A release pin (_release_pin)
+        reads its reveal_ref_* tables, as query() does for it."""
         for identity in identities: _text(identity, 'factor_id')
-        gen, imp = generation['generation_id'], generation['eaggl_import_id']
-        rows = self._kpn_factors(connection, gen, imp, identities)
+        gen, imp, release = generation['generation_id'], generation['eaggl_import_id'], generation.get('source_kind') == RELEASE
+        lookup = (lambda values: self._release_factors(connection, values)) if release else \
+            (lambda values: self._kpn_factors(connection, gen, imp, values))
+        rows = lookup(identities)
         factors, found = {}, []
         for identity in identities:
             matches = [row for row in rows if identity in (row['public_id'], row['factor_key'], row['eaggl_factor_id'])]
             if not matches:  # an id the exact SQL comparison may still match: the single lookup decides
-                matches = self._kpn_factors(connection, gen, imp, [identity])
+                matches = lookup([identity])
             if len(matches) > 1:
                 factors[identity] = Problem(409, 'AMBIGUOUS_IDENTITY', 'The imported factor identifier is ambiguous.'); continue
             result = {'items': deepcopy(matches[:1]), 'import_coverage': 'Exact imported factor metadata. Crosswalks describe routing correspondence, not scientific equivalence.'}
             factors[identity] = self._bounded(result, 1)[0]
             if factors[identity]: found.append((identity, factors[identity][0]))
         tops = {}
-        for kind, tables, coverage, order, columns, branch, final in (
+        specs = ((('gene', RELEASE_GENE_TABLES, RELEASE_GENE_COVERAGE, RELEASE_GENE_ORDER, ('symbol', 'loading'),
+                   'SELECT %s AS anchor,gene AS symbol,loading FROM reveal_ref_factor_genes WHERE factor_key=%s', 'loading DESC,symbol'),
+                  ('gene_set', RELEASE_SET_TABLES, RELEASE_SET_COVERAGE, SET_ORDER, SET_COLUMNS, 'SELECT %s AS anchor,' + SET_SELECT +
+                   ' FROM reveal_ref_projections p JOIN reveal_ref_gene_sets s ON s.gene_set_id=p.gene_set_id WHERE p.factor_key=%s',
+                   'joint_loading DESC,gene_set_id')) if release else (
                 ('gene', GENE_LOADING_TABLES, GENE_COVERAGE, GENE_ORDER, ('symbol', 'gene_index', 'loading'),
                  'SELECT %s AS anchor,g.symbol,g.gene_index,l.loading FROM eaggl_gene_loadings l JOIN eaggl_genes g'
                  ' ON g.import_id=l.import_id AND g.gene_index=l.gene_index WHERE l.import_id=%s AND l.factor_index=%s', 'loading DESC,symbol,gene_index'),
@@ -295,43 +429,57 @@ class ReferenceQueryService:
                  'SELECT %s AS anchor,s.gene_set_id,s.gene_set_name,s.library,p.joint_loading,p.marginal_loading,p.joint_loading_text,'
                  'p.marginal_loading_text,p.joint_rank,p.marginal_rank,p.is_joint_top_factor FROM factor_gene_set_projections p'
                  ' JOIN cfde_gene_sets s ON s.generation_id=p.generation_id AND s.gene_set_id=p.gene_set_id'
-                 ' WHERE p.generation_id=%s AND p.scope=%s AND p.factor_key=%s', 'joint_loading DESC,gene_set_id')):
+                 ' WHERE p.generation_id=%s AND p.scope=%s AND p.factor_key=%s', 'joint_loading DESC,gene_set_id')))
+        for kind, tables, coverage, order, columns, branch, final in specs:
             if not found: break
             # query() filters LOWER(name) LIKE '%%' for an empty search: true for every NOT NULL symbol and set name.
             sql = ' UNION ALL '.join('SELECT * FROM (' + branch + ' ORDER BY ' + order + ' LIMIT %s) a' + str(position)
                                      for position in range(len(found))) + ' ORDER BY anchor,' + final
             parameters = [value for position, (_, item) in enumerate(found) for value in
-                          ((position, imp, item['factor_index']) if kind == 'gene' else (position, gen, 'per_trait', item['factor_key'])) + (limit + 1,)]
+                          ((position, item['factor_key']) if release else (position, imp, item['factor_index']) if kind == 'gene'
+                           else (position, gen, 'per_trait', item['factor_key'])) + (limit + 1,)]
             grouped = [[] for _ in found]
-            for row in self._rows(connection, sql, parameters, ('anchor', *columns)):
+            for row in self._rows(connection, application_sql(sql, application_prefix(self.prefix)), parameters, ('anchor', *columns)):
                 grouped[row.pop('anchor')].append(row)
             for (identity, _), items in zip(found, grouped):
+                if release and kind == 'gene': items = [{'symbol': row['symbol'], 'gene_index': None, 'loading': row['loading']} for row in items]
                 result = {'items': items, 'import_coverage': coverage, 'ordering': order, 'total_rows': None}
                 items, truncated = self._bounded(result, limit)
                 tops[(identity, kind)] = {'items': items, 'status': result['status'], 'truncated': truncated, 'import_coverage': coverage,
-                    'origin': 'mysql:' + '+'.join(['reference_generations', *KPN_FACTOR_TABLES, *tables]) + '?generation_id=' + gen}
+                    'origin': 'mysql:' + '+'.join(['reveal_ref_release', 'reveal_ref_factors', *tables] if release else
+                                                  ['reference_generations', *KPN_FACTOR_TABLES, *tables]) + '?generation_id=' + gen}
         return factors, tops
 
     def catalog(self, generation_id):
         connection = self.connection_factory()
         try:
-            generation = self._generation(connection, generation_id)
+            generation = self._pin(connection, generation_id)
             # Catalogs expose scientific source identity, never backend manifest
             # paths or operator-only import configuration.
             public = {key: value for key, value in generation.items() if key != 'manifest'}
             public['generation_manifest_sha256'] = sha256(canonical_json(generation['manifest']))
-            return capability_catalog(public)
+            if generation.get('source_kind') == RELEASE: public['absent_files'] = sorted(generation['manifest'].get('absent_files') or [])
+            return capability_catalog(public, source_kind=generation.get('source_kind'))
         finally: connection.close()
 
     def phenotype_trait(self, generation_id, phenotype):
-        """The pinned KPN trait whose kpn_trait_id or legacy (BioIndex) phenotype id is phenotype, or None."""
+        """The pinned KPN trait whose kpn_trait_id or legacy (BioIndex) phenotype id is phenotype, or None. A release also
+        resolves the linkage's other KPN phenotypes that have a legacy phenotype id."""
         connection = self.connection_factory()
         try:
-            if self._generation(connection, generation_id)['model'] != KPN_MODEL: return None
+            generation = self._pin(connection, generation_id)
+            if generation['model'] != KPN_MODEL: return None
             columns = ('kpn_trait_id', 'legacy_phenotype_id', 'phenotype_name', 'gwas_source_category')
-            select = 'SELECT ' + ','.join(columns) + ' FROM kpn_traits WHERE generation_id=%s AND '
-            rows = self._rows(connection, select + 'kpn_trait_id=%s UNION ' + select + 'legacy_phenotype_id=%s',
-                              [generation_id, phenotype, generation_id, phenotype], columns)
+            if generation.get('source_kind') == RELEASE:
+                select = ('SELECT kpn_trait_id,legacy_phenotype_id,phenotype_name,gwas_source_category FROM reveal_ref_traits WHERE {} UNION '
+                          'SELECT kpn_trait_id,legacy_phenotype_id,display_name,category FROM reveal_ref_phenotypes'
+                          ' WHERE is_atlas=0 AND kpn_trait_id IS NOT NULL AND legacy_phenotype_id IS NOT NULL AND {}')
+                rows = self._rows(connection, application_sql(select.format('kpn_trait_id=%s OR legacy_phenotype_id=%s', 'kpn_trait_id=%s OR legacy_phenotype_id=%s'),
+                                                              application_prefix(self.prefix)), [phenotype] * 4, columns)
+            else:
+                select = 'SELECT ' + ','.join(columns) + ' FROM kpn_traits WHERE generation_id=%s AND '
+                rows = self._rows(connection, select + 'kpn_trait_id=%s UNION ' + select + 'legacy_phenotype_id=%s',
+                                  [generation_id, phenotype, generation_id, phenotype], columns)
             if len(rows) > 1: raise Problem(409, 'AMBIGUOUS_IDENTITY', 'The phenotype identifier is ambiguous in the pinned generation.')
             return rows[0] if rows else None
         finally:
@@ -366,12 +514,15 @@ class ReferenceQueryService:
         for key, value in args.items():
             if key == 'q' and value == '': continue
             _text(value, key)
-        binding = sha256(canonical_json([READER_VERSION, generation_id, operation, args, limit]))
-        offset = self._cursor(binding, value=cursor) if cursor is not None else 0
+        if cursor is not None and not self.cursor_secret: self._cursor(None, value=cursor)  # no signing secret: refused before any read
         connection = self.connection_factory()
         try:
-            generation = self._generation(connection, generation_id)
-            result, tables = self._execute(connection, generation, operation, args, limit, offset)
+            generation = self._pin(connection, generation_id)  # first statement: the published release
+            release = generation.get('source_kind') == RELEASE
+            version = RELEASE_READER_VERSION if release else READER_VERSION
+            binding = sha256(canonical_json([version, generation_id, operation, args, limit]))
+            offset = self._cursor(binding, value=cursor) if cursor is not None else 0
+            result, tables = (self._release if release else self._execute)(connection, generation, operation, args, limit, offset)
             items, has_more = self._bounded(result, limit)
             result.update(returned_rows=len(items), limit=limit, offset=offset, truncated=has_more,
                           next_cursor=self._cursor(binding, offset + len(items)) if has_more else None)
@@ -382,8 +533,10 @@ class ReferenceQueryService:
                       'gene_set_import_id': generation['legacy_gene_set_import_id'],
                       'generation_manifest_sha256': sha256(canonical_json(generation['manifest']))}
             if generation['model'] == KPN_MODEL:
+                # A release mints as the catalog does: its manifest's identity version (1 unless it opts in) and EAGGL import.
                 source['mechanism_identity_version'] = generation['manifest'].get('mechanism_identity_version', 1)
-            envelope = {'format': CAPTURE_FORMAT, 'reader_version': READER_VERSION,
+            if release: source.update(release_id=generation_id, source_kind=RELEASE)
+            envelope = {'format': CAPTURE_FORMAT, 'reader_version': version,
                         'source_mode': 'imported_reference', 'source': source,
                         'operation': operation, 'arguments': {**args, 'limit': limit, 'offset': offset},
                         'metric_definitions': METRICS, 'result': result}
@@ -394,6 +547,194 @@ class ReferenceQueryService:
             try: connection.rollback()
             except AttributeError: pass
             finally: connection.close()
+
+    def _release(self, c, g, op, a, limit, offset):
+        """_execute's operations on the published release (reveal_ref_*): ranks are per library, genes have no import index,
+        only referenced gene sets are stored, and the betas, factor-trait links and phenotypes are read; there is no graph."""
+        release, prefix, tables = g['generation_id'], application_prefix(self.prefix), ['reveal_ref_release']
+        def rows(sql, params, columns, involved):
+            for table in involved:
+                if table not in tables: tables.append(table)
+            return self._rows(c, application_sql(sql, prefix), params, columns)
+        def page(sql, params, columns, involved, coverage, order):
+            data = rows(sql + ' ORDER BY ' + order + ' LIMIT %s OFFSET %s', [*params, limit + 1, offset], columns, involved)
+            return {'items': data, 'import_coverage': coverage, 'ordering': order, 'total_rows': None}, tables
+        def missing(reason='The requested records are not stored in this release.'):
+            return {'status': 'not_stored', 'items': [], 'reason': reason, 'import_coverage': 'No stored observation; this is not a biological negative.'}, tables
+        def factor(identity):
+            _text(identity, 'factor_id')
+            if 'reveal_ref_factors' not in tables: tables.append('reveal_ref_factors')
+            found = self._remembered(('factor', release, identity), lambda: self._release_factors(c, [identity]))
+            if len(found) > 1: raise Problem(409, 'AMBIGUOUS_IDENTITY', 'The imported factor identifier is ambiguous.')
+            return found[0] if found else None
+        def scope():
+            value = a.get('scope', 'all')
+            if value not in ('atlas', 'all'): raise Problem(422, 'INVALID_QUERY', 'Use scope atlas or all.')
+            return value
+        search = a.get('q', '').lower().replace('!', '!!').replace('%', '!%').replace('_', '!_')
+        like = '%' + search + '%'
+        if op in GRAPH_OPERATIONS: return missing(NO_GRAPH)
+        if RELEASE_FILES.get(op) in (g['manifest'].get('absent_files') or ()):
+            return missing(f'This release was published without {RELEASE_FILES[op]}.')
+        if op in ('get_factor', 'get_factor_loadings', 'get_factor_trait_links'):
+            item = factor(a.get('factor_id'))
+            if not item: return missing()
+            if op == 'get_factor':
+                traits = rows('SELECT ' + ','.join(TRAIT_COLUMNS) + ' FROM reveal_ref_traits WHERE kpn_trait_id=%s', [item['kpn_trait_id']],
+                              TRAIT_COLUMNS, ['reveal_ref_traits'])
+                item['trait_metadata'] = traits[0] if traits else None
+                return {'items': [item], 'import_coverage': 'Exact imported factor metadata. Crosswalks describe routing correspondence, not scientific equivalence.'}, tables
+            if op == 'get_factor_trait_links':
+                kept = scope()
+                result, tables = page(LINK_SQL + 'l.factor_key=%s' + (' AND l.is_atlas_trait=1' if kept == 'atlas' else ''), [item['factor_key']],
+                                      LINK_COLUMNS, LINK_TABLES, LINK_COVERAGE, 'l.phewas_q,l.phenotype')
+                summary = (item.get('metadata') or {}).get('trait_links')
+                result.update(factor={'factor_id': item['public_id'], 'factor_key': item['factor_key'], 'label': item['label']}, scope=kept,
+                              summary={key: summary.get(key) for key in LINK_SUMMARY} if isinstance(summary, dict) else None)
+                for row in result['items']:
+                    row.update(phenotype_kpn_trait_id=row['phenotype_kpn_trait_id'] or None, is_own_trait=bool(row['is_own_trait']),
+                               is_atlas_trait=bool(row['is_atlas_trait']))
+                return result, tables
+            kind, metric = a.get('kind', 'gene'), a.get('metric', 'joint')
+            if kind not in ('gene', 'gene_set') or metric not in ('joint', 'marginal'):
+                raise Problem(422, 'INVALID_QUERY', 'Use gene/gene_set and joint/marginal.')
+            if kind == 'gene':
+                result, tables = page("SELECT gene,loading FROM reveal_ref_factor_genes WHERE factor_key=%s AND LOWER(gene) LIKE %s ESCAPE '!'",
+                    [item['factor_key'], like], ('symbol', 'loading'), RELEASE_GENE_TABLES, RELEASE_GENE_COVERAGE, RELEASE_GENE_ORDER)
+                result['items'] = [{'symbol': row['symbol'], 'gene_index': None, 'loading': row['loading']} for row in result['items']]
+                return result, tables
+            order = 'p.marginal_loading' if metric == 'marginal' else 'p.joint_loading'
+            return page('SELECT ' + SET_SELECT + ' FROM reveal_ref_projections p JOIN reveal_ref_gene_sets s ON s.gene_set_id=p.gene_set_id'
+                " WHERE p.factor_key=%s AND LOWER(s.gene_set_name) LIKE %s ESCAPE '!'", [item['factor_key'], like], SET_COLUMNS,
+                RELEASE_SET_TABLES, RELEASE_SET_COVERAGE, order + ' DESC,s.gene_set_id')
+        if op == 'search_factors':
+            return page('SELECT public_id,factor_key,eaggl_factor_id,kpn_trait_id,label,source_revision FROM reveal_ref_factors'
+                " WHERE LOWER(label) LIKE %s ESCAPE '!' OR LOWER(eaggl_factor_id) LIKE %s ESCAPE '!'", [like, like],
+                ('public_id', 'factor_key', 'eaggl_factor_id', 'kpn_trait_id', 'label', 'source_revision'), ['reveal_ref_factors'],
+                'All factors stored in this release.', 'public_id')
+        if op in ('search_genes', 'resolve_gene'):
+            # The release stores each factor's nonzero loadings by symbol: its genes are the distinct loaded symbols.
+            clause, value = ("LOWER(gene) LIKE %s ESCAPE '!'", like) if op == 'search_genes' else ('gene=%s', _text(a.get('gene'), 'gene'))
+            result, tables = page('SELECT DISTINCT gene FROM reveal_ref_factor_genes WHERE ' + clause, [value], ('symbol',),
+                                  RELEASE_GENE_TABLES, RELEASE_GENE_SEARCH_COVERAGE, 'gene')
+            result['items'] = [{'gene_index': None, 'symbol': row['symbol'], 'namespace': 'EAGGL symbol', 'external_identity_mapping': 'not_resolved',
+                                'organism': None, 'source_local_id': f'urn:reveal:release-gene:{release}:{row["symbol"]}'} for row in result['items']]
+            if op == 'resolve_gene':
+                from .gene_identity import resolve_pinned_gene
+                for item in result['items']:
+                    try:
+                        item['identity_mapping'] = resolve_pinned_gene(item['symbol'], taxon=a.get('taxon'),
+                            mapping_revision=a.get('mapping_revision'), source_import=release, source_index=None)
+                    except (ValueError, OSError) as exc:
+                        raise Problem(409, 'MAPPING_REVISION_UNAVAILABLE', str(exc)) from None
+                    item['external_identity_mapping'] = item['identity_mapping']['status']
+                    item['organism_context'] = {'taxon': a.get('taxon'), 'basis': 'explicit_query_parameter' if a.get('taxon') else 'unknown'}
+            return result, tables
+        if op == 'get_gene_factors':
+            return page('SELECT f.eaggl_factor_id,f.public_id,f.kpn_trait_id,t.legacy_phenotype_id,f.label,g.loading FROM reveal_ref_factor_genes g'
+                ' JOIN reveal_ref_factors f ON f.factor_key=g.factor_key JOIN reveal_ref_traits t ON t.kpn_trait_id=f.kpn_trait_id WHERE g.gene=%s',
+                [_text(a.get('gene'), 'gene')], ('factor_id', 'public_id', 'kpn_trait_id', 'trait', 'label', 'loading'),
+                ['reveal_ref_factor_genes', 'reveal_ref_factors', 'reveal_ref_traits'], RELEASE_GENE_COVERAGE, 'g.loading DESC,g.factor_key')
+        if op == 'get_gene_gene_sets':
+            gene = _text(a.get('gene'), 'gene')
+            symbol = gene[12:] if gene[:12].upper() == 'HGNC.SYMBOL:' else gene
+            if not symbol or any(c in symbol for c in ':"\\'):
+                raise Problem(422, 'INVALID_QUERY', 'Use a gene symbol or an HGNC.SYMBOL CURIE.')
+            # Portable prefilter on the stored members' JSON text (a member string ending in :<symbol>), checked exactly below.
+            members = "JSON_EXTRACT(s.metadata,'$.dapper_gene_set.members')"
+            pattern = '%' + (':' + symbol + '"').lower().replace('!', '!!').replace('%', '!%').replace('_', '!_') + '%'
+            columns, select, scoped = ('gene_set_id', 'name', 'library', 'n_genes'), 'SELECT s.gene_set_id,s.gene_set_name,s.library,s.n_genes,', {}
+            if 'factor_id' in a:
+                item = factor(a['factor_id'])
+                if not item: return missing()
+                columns += SET_COLUMNS[3:]
+                sql = (select + ''.join('p.' + column + ',' for column in SET_COLUMNS[3:]) + members + ' FROM reveal_ref_projections p'
+                       ' JOIN reveal_ref_gene_sets s ON s.gene_set_id=p.gene_set_id WHERE p.factor_key=%s AND ')
+                params, involved = [item['factor_key']], RELEASE_SET_TABLES
+                coverage, order = RELEASE_MEMBERSHIP_COVERAGE + ' ' + RELEASE_SET_COVERAGE, SET_ORDER
+                scoped = {'factor': {'factor_id': item['public_id'], 'factor_key': item['factor_key'], 'label': item['label']}}
+            else:
+                sql, params, involved = select + members + ' FROM reveal_ref_gene_sets s WHERE ', [], ['reveal_ref_gene_sets']
+                coverage, order = RELEASE_MEMBERSHIP_COVERAGE, 's.n_genes,s.gene_set_id'
+            result, tables = page(sql + 'LOWER(' + members + ") LIKE %s ESCAPE '!'", [*params, pattern], (*columns, 'members'), involved, coverage, order)
+            found = []
+            for row in result['items']:
+                stored = _json(row.pop('members')) or []
+                index = next((i for i, member in enumerate(stored) if isinstance(member, str)
+                              and member.rsplit(':', 1)[-1].lower() == symbol.lower()), None)
+                if index is not None: found.append({**row, 'member': stored[index], 'source_pointer': '/members/' + str(index)})
+            result.update(items=found, gene=symbol, _more=len(result['items']) > limit, **scoped)
+            return result, tables
+        if op in ('search_traits', 'get_trait'):
+            if op == 'search_traits':
+                where, params = ("LOWER(phenotype_name) LIKE %s ESCAPE '!'", "LOWER(display_name) LIKE %s ESCAPE '!'"), [like, like]
+            else:
+                trait = _trait(a.get('trait_id'))
+                where, params = ('kpn_trait_id=%s', 'kpn_trait_id=%s'), [trait, trait]
+            result, tables = page(RELEASE_TRAITS.format(traits=where[0], phenotypes=where[1]), params, (*TRAIT_COLUMNS, 'is_atlas'),
+                                  ['reveal_ref_traits', 'reveal_ref_phenotypes'], RELEASE_TRAIT_COVERAGE, 'kpn_trait_id')
+            for row in result['items']: row['is_atlas'] = bool(row['is_atlas'])
+            return result, tables
+        if op in ('get_trait_gene_sets', 'get_gene_set_traits'):
+            if op == 'get_gene_set_traits':
+                identity = _text(a.get('gene_set_id'), 'gene_set_id')
+                result, tables = page(BETA_SQL + 't.gene_set_id=%s', [identity], BETA_COLUMNS, BETA_TABLES, BETA_COVERAGE,
+                                      't.beta_uncorrected DESC,t.library_rank,t.kpn_trait_id')
+                result['gene_set_id'] = identity
+                return result, tables
+            trait, clauses, params = _trait(a.get('trait_id')), ['t.kpn_trait_id=%s'], []
+            params.append(trait)
+            if 'library' in a: clauses.append('t.library=%s'); params.append(_text(a['library'], 'library', 64))
+            clauses.append("LOWER(s.gene_set_name) LIKE %s ESCAPE '!'"); params.append(like)
+            result, tables = page(BETA_SQL + ' AND '.join(clauses), params, BETA_COLUMNS, BETA_TABLES, BETA_COVERAGE,
+                                  't.beta_uncorrected DESC,t.library_rank,t.gene_set_id')
+            result.update(trait_id=trait, library=a.get('library'))
+            return result, tables
+        if op == 'get_trait_factor_links':
+            trait, kept = _trait(a.get('trait_id')), scope()
+            result, tables = page(LINK_SQL + 'l.phenotype_kpn_trait_id=%s' + (' AND l.is_atlas_trait=1' if kept == 'atlas' else ''), [trait],
+                                  LINK_COLUMNS, LINK_TABLES, LINK_COVERAGE, 'l.phewas_q,l.factor_key')
+            for row in result['items']:
+                row.update(is_own_trait=bool(row['is_own_trait']), is_atlas_trait=bool(row['is_atlas_trait']))
+            result.update(trait_id=trait, scope=kept)
+            return result, tables
+        if op in ('search_gene_sets', 'get_gene_set', 'get_gene_set_members'):
+            if op == 'search_gene_sets':
+                return page("SELECT gene_set_id,gene_set_name,library,n_genes,n_genes_in_eaggl_universe FROM reveal_ref_gene_sets WHERE LOWER(gene_set_name) LIKE %s ESCAPE '!'",
+                    [like], ('gene_set_id', 'name', 'library', 'n_genes', 'n_genes_in_eaggl_universe'), ['reveal_ref_gene_sets'],
+                    RELEASE_GENE_SET_COVERAGE, 'gene_set_id')
+            identity = _text(a.get('gene_set_id'), 'gene_set_id')
+            if op == 'get_gene_set':
+                found = rows('SELECT s.gene_set_id,s.gene_set_name,s.library,s.n_genes,s.n_genes_in_eaggl_universe,s.metadata,s.collection_id,'
+                    'c.portal_collection_id,c.payload FROM reveal_ref_gene_sets s JOIN reveal_ref_collections c ON c.collection_id=s.collection_id'
+                    ' WHERE s.gene_set_id=%s', [identity], ('gene_set_id', 'name', 'library', 'n_genes', 'n_genes_in_eaggl_universe', 'metadata',
+                    'collection_id', 'portal_collection_id', 'payload'), ['reveal_ref_gene_sets', 'reveal_ref_collections'])
+            else:
+                found = rows('SELECT gene_set_id,metadata FROM reveal_ref_gene_sets WHERE gene_set_id=%s', [identity], ('gene_set_id', 'metadata'),
+                             ['reveal_ref_gene_sets'])
+            if not found: return missing()
+            item = found[0]; node = (item['metadata'] or {}).get('dapper_gene_set')
+            if node and node.get('id') != identity: raise Problem(503, 'SOURCE_NOT_READY', 'Stored gene-set object identity differs from its key.')
+            if op == 'get_gene_set':
+                # Only this gene set's lineage closure (producer plus curated provenance, wide fan-ins collapsed), never the
+                # whole collection: a GlyGen HZ2 collection alone exceeds the capture budget.
+                payload = item.pop('payload') or {}
+                closure = lineage_closure(node or {}, collection_lineage(payload))
+                item['payload'] = {'collection_id': item.pop('collection_id'), 'document_sha256': payload.get('document_sha256'),
+                                   'portal_collection_id': item.pop('portal_collection_id'), **closure}
+                return {'items': [item], 'import_coverage': 'Exact release definition and the provenance closure of its construction (inputs'
+                        ' sharing their onward lineage are represented by one; see collapsed); missing membership is explicit.'}, tables
+            if not node or not isinstance(node.get('members'), list): return missing('Exact gene-set membership is not stored.')
+            members = node['members']; selected = members[offset:offset + limit + 1]
+            return {'items': [{'member': member, 'source_pointer': '/members/' + str(offset + i)} for i, member in enumerate(selected)],
+                    'total_rows': len(members), 'gene_set_id': identity, 'source_object_sha256': sha256(canonical_json(node)),
+                    'ordering': 'source member order', 'import_coverage': 'A page of the exact source membership; never a newly minted truncated GeneSet.'}, tables
+        if op == 'get_gene_set_factors':
+            return page('SELECT f.public_id,p.factor_key,' + ','.join('p.' + c for c in SET_COLUMNS[3:9]) + ',p.library FROM reveal_ref_projections p'
+                ' JOIN reveal_ref_factors f ON f.factor_key=p.factor_key WHERE p.gene_set_id=%s', [_text(a.get('gene_set_id'), 'gene_set_id')],
+                ('factor_id', 'factor_key', *SET_COLUMNS[3:9], 'library'), ['reveal_ref_projections', 'reveal_ref_factors'], RELEASE_SET_COVERAGE,
+                'p.joint_loading DESC,p.factor_key')
+        raise Problem(422, 'INVALID_QUERY', 'Unknown imported reference operation.')
 
     def _execute(self, c, g, op, a, limit, offset):
         gen, imp, kpn = g['generation_id'], g['eaggl_import_id'], g['model'] == KPN_MODEL
@@ -410,6 +751,7 @@ class ReferenceQueryService:
             return {'items': data, 'import_coverage': coverage, 'ordering': order, 'total_rows': None}, tables
         def missing(reason='The requested records are not stored in this import.'):
             return {'status': 'not_stored', 'items': [], 'reason': reason, 'import_coverage': 'No stored observation; this is not a biological negative.'}, tables
+        if op in RELEASE_OPERATIONS: return missing(RELEASE_ONLY)
         def factor(identity):
             _text(identity, 'factor_id')
             if kpn:
@@ -608,10 +950,15 @@ def phenotype_gate():
     return setting('REVEAL_SMALL_PHENOTYPE_VERIFIED', 'false').lower() == 'true'
 
 
-def capability_catalog(generation=None, *, phenotype_verified=None):
+def capability_catalog(generation=None, *, phenotype_verified=None, source_kind=None):
+    """The data operations of a pin. source_kind 'reference_release' (also read from generation['source_kind']) is a release:
+    no EAGGL graph, its betas and factor-trait links (unless absent at publish); other pins are reload-era generations."""
     from .gene_identity import crosswalk_capability
     if phenotype_verified is None: phenotype_verified = phenotype_gate()
     model=(generation or {}).get('model')
+    release=(source_kind or (generation or {}).get('source_kind'))==RELEASE
+    absent=set((generation or {}).get('absent_files') or ())
+    gene_coverage,set_coverage=(RELEASE_GENE_COVERAGE,RELEASE_SET_COVERAGE) if release else (GENE_COVERAGE,SET_COVERAGE)
     operations=[]
     for name,fields in OPERATIONS.items():
         availability='supported' if model in (KPN_MODEL,LEGACY_MODEL) else 'not_supported_for_model' if model else 'requires_generation_metadata'
@@ -621,18 +968,28 @@ def capability_catalog(generation=None, *, phenotype_verified=None):
             reason=('This model stores factor trait labels, not a KPN trait catalog.' if name in ('search_traits','get_trait')
                     else 'This model stores ranked factor-to-gene-set links, not numeric gene-set projections.' if name=='get_gene_set_factors'
                     else 'This model stores ranked gene-set links, not CFDE definitions with exact membership.')
+        if release and name in GRAPH_OPERATIONS: availability,reason='not_stored',NO_GRAPH
+        if name in RELEASE_OPERATIONS and not release: availability,reason='not_stored',RELEASE_ONLY
+        if release and RELEASE_FILES.get(name) in absent: availability,reason='not_stored',f'This release was published without {RELEASE_FILES[name]}.'
         descriptor={'name':name,'arguments':sorted(fields | PAGE_FIELDS),'availability':availability}
         if reason: descriptor['reason']=reason
         if name=='get_factor_loadings':
-            descriptor['semantics']={'gene':GENE_COVERAGE,'gene_set':SET_COVERAGE if model==KPN_MODEL else LEGACY_COVERAGE if model==LEGACY_MODEL else 'requires_generation_metadata'}
+            descriptor['semantics']={'gene':gene_coverage,'gene_set':set_coverage if model==KPN_MODEL else LEGACY_COVERAGE if model==LEGACY_MODEL else 'requires_generation_metadata'}
         if name=='get_gene_gene_sets':
-            descriptor['semantics']={'membership':MEMBERSHIP_COVERAGE,'factor_id':SET_COVERAGE}
+            descriptor['semantics']={'membership':RELEASE_MEMBERSHIP_COVERAGE if release else MEMBERSHIP_COVERAGE,'factor_id':set_coverage}
+        if name in ('get_trait_gene_sets','get_gene_set_traits'): descriptor['semantics']={'betas':BETA_COVERAGE}
+        if name in ('get_factor_trait_links','get_trait_factor_links'): descriptor['semantics']={'links':LINK_COVERAGE}
         operations.append(descriptor)
-    return {'version':READER_VERSION,'source_mode':'imported_reference',
+    coverage={'gene_loadings':gene_coverage,'gene_set_projections':set_coverage if model==KPN_MODEL else 'not_stored' if model==LEGACY_MODEL else 'requires_generation_metadata',
+              'legacy_gene_set_links':LEGACY_COVERAGE if model==LEGACY_MODEL else 'not_applicable' if model==KPN_MODEL else 'requires_generation_metadata',
+              'phenotype_associations':'gene_set_betas' if release else 'not_stored'}
+    if release:
+        coverage.update(gene_set_betas=BETA_COVERAGE if 'trait_gene_sets.tsv.gz' not in absent else 'not_stored',
+                        factor_trait_links=LINK_COVERAGE if 'factor_trait_links.tsv.gz' not in absent else 'not_stored',
+                        gene_set_membership=RELEASE_MEMBERSHIP_COVERAGE, imported_graph='not_stored')
+    return {'version':RELEASE_READER_VERSION if release else READER_VERSION,'source_mode':'imported_reference',
         'generation':deepcopy(generation),'operations':operations,
-        'coverage':{'gene_loadings':GENE_COVERAGE,'gene_set_projections':SET_COVERAGE if model==KPN_MODEL else 'not_stored' if model==LEGACY_MODEL else 'requires_generation_metadata',
-                    'legacy_gene_set_links':LEGACY_COVERAGE if model==LEGACY_MODEL else 'not_applicable' if model==KPN_MODEL else 'requires_generation_metadata',
-                    'phenotype_associations':'not_stored'},
+        'coverage':coverage,
         'availability_note':'Supported means a reader exists for the retained model; each query reports actual imported coverage and missing rows.',
         'external_fallback':False,'gene_identity_crosswalk':crosswalk_capability(),
         'small_model_phenotype':SmallModelBioIndex.descriptor(verified=phenotype_verified)}
