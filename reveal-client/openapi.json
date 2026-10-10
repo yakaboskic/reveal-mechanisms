@@ -41365,6 +41365,1021 @@
           }
         ]
       }
+    },
+    "/v1/traits/{kpn_trait_id}": {
+      "get": {
+        "operationId": "getTrait",
+        "tags": [
+          "Mechanisms"
+        ],
+        "summary": "Inspect a reference trait",
+        "description": "Public reference data of the published release: an atlas trait with its fitted factors, per-library gene-set beta counts and linked factors of other traits, or a non-atlas phenotype the factor-trait linkage reached (is_atlas false). GWAS links point to the Translator provenance portal and are built from stored ids; the portal is never called. Unknown or malformed ids return 404. Examples are illustrative: no release build, linkage or portal read was performed for them.",
+        "parameters": [
+          {
+            "name": "kpn_trait_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^KPN\\.TRAIT:[0-9]{7}$"
+            },
+            "example": "KPN.TRAIT:0000398",
+            "description": ""
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TraitDetail"
+                },
+                "examples": {
+                  "atlas_trait": {
+                    "summary": "Atlas trait",
+                    "value": {
+                      "kpn_trait_id": "KPN.TRAIT:0000398",
+                      "phenotype": "T2D",
+                      "name": "Type 2 diabetes (T2D)",
+                      "category": "KPN",
+                      "is_atlas": true,
+                      "legacy_phenotype_id": "T2D",
+                      "trait_group": "metabolic",
+                      "trait_type": "phenotype",
+                      "description": null,
+                      "kpn_url": "https://broadinstitute.github.io/kpn-data-models/kpn.trait/0000398/",
+                      "gwas": {
+                        "status": "available",
+                        "portal_trait_id": "T2D",
+                        "gwas_artifact_id": "bl-t2d-mixed",
+                        "portal_href": "https://translator.broadinstitute.org/artifact_provenance/bottom_line/T2D",
+                        "artifacts": [
+                          {
+                            "ancestry_code": "EU",
+                            "ancestry_name": "European",
+                            "artifact_id": "bl-t2d-eu",
+                            "href": "https://translator.broadinstitute.org/artifact_provenance/artifact/bl-t2d-eu"
+                          },
+                          {
+                            "ancestry_code": "Mixed",
+                            "ancestry_name": "Mixed ancestry",
+                            "artifact_id": "bl-t2d-mixed",
+                            "href": "https://translator.broadinstitute.org/artifact_provenance/artifact/bl-t2d-mixed"
+                          }
+                        ]
+                      },
+                      "factors": [
+                        {
+                          "source_id": "factor:kpn:0000398:eaggl-capped-v1:Factor1",
+                          "label": "Metabolic Dysregulation Indicators",
+                          "factor_number": 1
+                        }
+                      ],
+                      "gene_set_libraries": [
+                        {
+                          "library": "GTEx",
+                          "n_gene_sets": 140,
+                          "n_nonzero": 112,
+                          "top_gene_sets": [
+                            {
+                              "kpn_trait_id": "KPN.TRAIT:0000398",
+                              "trait_name": "Type 2 diabetes (T2D)",
+                              "gene_set_id": "dapper:GeneSet.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                              "gene_set_name": "Example imported gene set",
+                              "library": "GTEx",
+                              "collection_id": "dapper:GeneSetCollection.cccccccccccccccccccccccccccccccc",
+                              "n_genes": 120,
+                              "beta_uncorrected": 0.031,
+                              "beta": 0.027,
+                              "avg_postp": 0.62,
+                              "library_rank": 1
+                            }
+                          ]
+                        },
+                        {
+                          "library": "MoTrPAC",
+                          "n_gene_sets": 64,
+                          "n_nonzero": 41,
+                          "top_gene_sets": [
+                            {
+                              "kpn_trait_id": "KPN.TRAIT:0000398",
+                              "trait_name": "Type 2 diabetes (T2D)",
+                              "gene_set_id": "dapper:GeneSet.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                              "gene_set_name": "Second example gene set",
+                              "library": "MoTrPAC",
+                              "collection_id": "dapper:GeneSetCollection.dddddddddddddddddddddddddddddddd",
+                              "n_genes": 85,
+                              "beta_uncorrected": 0.012,
+                              "beta": 0.0,
+                              "avg_postp": 0.18,
+                              "library_rank": 1
+                            }
+                          ]
+                        }
+                      ],
+                      "linked_factors": {
+                        "n_factors": 37
+                      },
+                      "release_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c"
+                    }
+                  },
+                  "linked_phenotype": {
+                    "summary": "Linked phenotype",
+                    "value": {
+                      "kpn_trait_id": "KPN.TRAIT:0001360",
+                      "phenotype": "gcat_trait_illustrative_phenotype",
+                      "name": "illustrative phenotype",
+                      "category": null,
+                      "is_atlas": false,
+                      "legacy_phenotype_id": null,
+                      "trait_group": null,
+                      "trait_type": null,
+                      "description": null,
+                      "kpn_url": "https://broadinstitute.github.io/kpn-data-models/kpn.trait/0001360/",
+                      "gwas": {
+                        "status": "not_on_portal",
+                        "portal_trait_id": null,
+                        "gwas_artifact_id": null,
+                        "portal_href": null,
+                        "artifacts": []
+                      },
+                      "factors": [],
+                      "gene_set_libraries": [],
+                      "linked_factors": {
+                        "n_factors": 1
+                      },
+                      "release_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "description": "Correlation ID for this HTTP request.",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "not_found": {
+                    "summary": "Not found",
+                    "value": {
+                      "type": "urn:reveal:problem:not-found",
+                      "title": "Not Found",
+                      "status": 404,
+                      "code": "NOT_FOUND",
+                      "detail": "No accessible record exists for the supplied identifier or exact revision.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Dependency Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "dependency_unavailable": {
+                    "summary": "Dependency unavailable",
+                    "value": {
+                      "type": "urn:reveal:problem:dependency-unavailable",
+                      "title": "Dependency Unavailable",
+                      "status": 503,
+                      "code": "DEPENDENCY_UNAVAILABLE",
+                      "detail": "A required dependency is temporarily unavailable; no replacement ranking or scientific result was fabricated.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {},
+          {
+            "ApplicationBearer": []
+          }
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "label": "request",
+            "source": "curl -X GET https://api.reveal.example.org/v1/traits/KPN.TRAIT%3A0000398 -H 'Accept: application/json'"
+          }
+        ]
+      }
+    },
+    "/v1/trait-gene-sets": {
+      "get": {
+        "operationId": "listTraitGeneSets",
+        "tags": [
+          "Mechanisms"
+        ],
+        "summary": "Page gene-set betas of a trait or of a gene set",
+        "description": "Give exactly one of trait_id (the trait's gene sets) or gene_set_id (the traits of one gene set); otherwise 422. Values are the release's PIGEAN betas mode, distinct from the BioIndex small-model values. A release without betas returns 404. Examples are illustrative: no release build, linkage or portal read was performed for them.",
+        "parameters": [
+          {
+            "name": "trait_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^KPN\\.TRAIT:[0-9]{7}$"
+            },
+            "example": "KPN.TRAIT:0000398",
+            "description": "A KPN trait id: list its gene sets. Exclusive with gene_set_id."
+          },
+          {
+            "name": "gene_set_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values.",
+              "pattern": "^dapper:GeneSet\\.[A-Za-z0-9_-]{32}$"
+            },
+            "example": "dapper:GeneSet.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "description": "A gene set: list the traits it has a beta for. Exclusive with trait_id."
+          },
+          {
+            "name": "library",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "example": "GTEx",
+            "description": "Keep one CFDE library."
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "beta_uncorrected",
+                "beta",
+                "avg_postp"
+              ],
+              "default": "beta_uncorrected"
+            },
+            "example": "beta_uncorrected",
+            "description": "Descending with zero values last; ties by library_rank, then gene_set_id."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500,
+              "default": 50
+            },
+            "example": 50,
+            "description": ""
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            },
+            "example": 0,
+            "description": ""
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TraitGeneSets"
+                },
+                "examples": {
+                  "trait": {
+                    "summary": "Trait",
+                    "value": {
+                      "trait_id": "KPN.TRAIT:0000398",
+                      "gene_set_id": null,
+                      "library": null,
+                      "sort": "beta_uncorrected",
+                      "total": 2,
+                      "next_offset": null,
+                      "coverage": "Gene-set betas from PIGEAN betas mode (one fit per CFDE library on the trait's PIGEAN gene statistics, no outer Gibbs), for the gene sets PIGEAN kept. A trait and gene set without a row were not fitted: an absent pair is not a zero beta. Some kept rows are exactly 0.",
+                      "release_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c",
+                      "items": [
+                        {
+                          "kpn_trait_id": "KPN.TRAIT:0000398",
+                          "trait_name": "Type 2 diabetes (T2D)",
+                          "gene_set_id": "dapper:GeneSet.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                          "gene_set_name": "Example imported gene set",
+                          "library": "GTEx",
+                          "collection_id": "dapper:GeneSetCollection.cccccccccccccccccccccccccccccccc",
+                          "n_genes": 120,
+                          "beta_uncorrected": 0.031,
+                          "beta": 0.027,
+                          "avg_postp": 0.62,
+                          "library_rank": 1
+                        },
+                        {
+                          "kpn_trait_id": "KPN.TRAIT:0000398",
+                          "trait_name": "Type 2 diabetes (T2D)",
+                          "gene_set_id": "dapper:GeneSet.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                          "gene_set_name": "Second example gene set",
+                          "library": "MoTrPAC",
+                          "collection_id": "dapper:GeneSetCollection.dddddddddddddddddddddddddddddddd",
+                          "n_genes": 85,
+                          "beta_uncorrected": 0.012,
+                          "beta": 0.0,
+                          "avg_postp": 0.18,
+                          "library_rank": 1
+                        }
+                      ]
+                    }
+                  },
+                  "gene_set": {
+                    "summary": "Gene set",
+                    "value": {
+                      "trait_id": null,
+                      "gene_set_id": "dapper:GeneSet.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                      "library": null,
+                      "sort": "beta_uncorrected",
+                      "total": 1,
+                      "next_offset": null,
+                      "coverage": "Gene-set betas from PIGEAN betas mode (one fit per CFDE library on the trait's PIGEAN gene statistics, no outer Gibbs), for the gene sets PIGEAN kept. A trait and gene set without a row were not fitted: an absent pair is not a zero beta. Some kept rows are exactly 0.",
+                      "release_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c",
+                      "items": [
+                        {
+                          "kpn_trait_id": "KPN.TRAIT:0000398",
+                          "trait_name": "Type 2 diabetes (T2D)",
+                          "gene_set_id": "dapper:GeneSet.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                          "gene_set_name": "Example imported gene set",
+                          "library": "GTEx",
+                          "collection_id": "dapper:GeneSetCollection.cccccccccccccccccccccccccccccccc",
+                          "n_genes": 120,
+                          "beta_uncorrected": 0.031,
+                          "beta": 0.027,
+                          "avg_postp": 0.62,
+                          "library_rank": 1
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "description": "Correlation ID for this HTTP request.",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "not_found": {
+                    "summary": "Not found",
+                    "value": {
+                      "type": "urn:reveal:problem:not-found",
+                      "title": "Not Found",
+                      "status": 404,
+                      "code": "NOT_FOUND",
+                      "detail": "No accessible record exists for the supplied identifier or exact revision.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid Input",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "invalid_input": {
+                    "summary": "Invalid input",
+                    "value": {
+                      "type": "urn:reveal:problem:invalid-input",
+                      "title": "Invalid Input",
+                      "status": 422,
+                      "code": "INVALID_INPUT",
+                      "detail": "The request does not satisfy the operation contract.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false,
+                      "field_errors": [
+                        {
+                          "pointer": "/inquiry",
+                          "message": "A valid DAPPER inquiry is required."
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Dependency Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "dependency_unavailable": {
+                    "summary": "Dependency unavailable",
+                    "value": {
+                      "type": "urn:reveal:problem:dependency-unavailable",
+                      "title": "Dependency Unavailable",
+                      "status": 503,
+                      "code": "DEPENDENCY_UNAVAILABLE",
+                      "detail": "A required dependency is temporarily unavailable; no replacement ranking or scientific result was fabricated.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {},
+          {
+            "ApplicationBearer": []
+          }
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "label": "trait",
+            "source": "curl -X GET 'https://api.reveal.example.org/v1/trait-gene-sets?trait_id=KPN.TRAIT%3A0000398&sort=beta_uncorrected&limit=50&offset=0' -H 'Accept: application/json'"
+          },
+          {
+            "lang": "Shell",
+            "label": "gene_set",
+            "source": "curl -X GET 'https://api.reveal.example.org/v1/trait-gene-sets?gene_set_id=dapper%3AGeneSet.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa&limit=50&offset=0' -H 'Accept: application/json'"
+          }
+        ]
+      }
+    },
+    "/v1/factor-trait-links": {
+      "get": {
+        "operationId": "listFactorTraitLinks",
+        "tags": [
+          "Mechanisms"
+        ],
+        "summary": "Page factor-trait links of a factor or of a trait",
+        "description": "Give exactly one of source_id (the phenotypes a factor is linked to) or trait_id (the factors linked to a trait: the gap use case); otherwise 422. Only links at BH q <= 0.05 are stored: an absent phenotype is unlinked at this threshold, not a negative result. An unknown source_id, or a release without links, returns 404. Examples are illustrative: no release build, linkage or portal read was performed for them.",
+        "parameters": [
+          {
+            "name": "source_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            },
+            "example": "factor:kpn:0000398:eaggl-capped-v1:Factor1",
+            "description": "A served factor: list its linked phenotypes. Exclusive with trait_id."
+          },
+          {
+            "name": "trait_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^KPN\\.TRAIT:[0-9]{7}$"
+            },
+            "example": "KPN.TRAIT:0001360",
+            "description": "A KPN trait id: list the factors linked to it. Exclusive with source_id."
+          },
+          {
+            "name": "scope",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "atlas",
+                "all"
+              ],
+              "default": "all"
+            },
+            "example": "all",
+            "description": "atlas keeps links whose phenotype is an atlas trait."
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "phewas_q",
+                "phewas_beta",
+                "nnls_loading"
+              ],
+              "default": "phewas_q"
+            },
+            "example": "phewas_q",
+            "description": "phewas_q ascends; phewas_beta and nnls_loading descend; ties by phenotype, then factor."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500,
+              "default": 50
+            },
+            "example": 50,
+            "description": ""
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            },
+            "example": 0,
+            "description": ""
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FactorTraitLinks"
+                },
+                "examples": {
+                  "factor": {
+                    "summary": "Factor",
+                    "value": {
+                      "source_id": "factor:kpn:0000398:eaggl-capped-v1:Factor1",
+                      "trait_id": null,
+                      "scope": "all",
+                      "sort": "phewas_q",
+                      "summary": {
+                        "n_phenotypes": 6698,
+                        "n_linked": 2,
+                        "n_linked_kpn_traits": 2,
+                        "n_linked_atlas_traits": 1,
+                        "own_trait_q": 4.6e-10
+                      },
+                      "total": 2,
+                      "next_offset": null,
+                      "coverage": "Factor-phenotype links from the eaggl trait linkage and factor-PheWAS, kept at BH q <= 0.05 over all factor x phenotype tests. A phenotype absent for a factor is unlinked at this threshold, not a negative result.",
+                      "release_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c",
+                      "items": [
+                        {
+                          "source_id": "factor:kpn:0000398:eaggl-capped-v1:Factor1",
+                          "factor_label": "Metabolic Dysregulation Indicators",
+                          "fitted_kpn_trait_id": "KPN.TRAIT:0000398",
+                          "fitted_trait_name": "Type 2 diabetes (T2D)",
+                          "phenotype": "T2D",
+                          "phenotype_kpn_trait_id": "KPN.TRAIT:0000398",
+                          "phenotype_name": "Type 2 diabetes (T2D)",
+                          "is_own_trait": true,
+                          "is_atlas_trait": true,
+                          "nnls_loading": 0.18,
+                          "phewas_beta": 0.52,
+                          "phewas_p_onesided": 1e-12,
+                          "phewas_q": 4.6e-10
+                        },
+                        {
+                          "source_id": "factor:kpn:0000398:eaggl-capped-v1:Factor1",
+                          "factor_label": "Metabolic Dysregulation Indicators",
+                          "fitted_kpn_trait_id": "KPN.TRAIT:0000398",
+                          "fitted_trait_name": "Type 2 diabetes (T2D)",
+                          "phenotype": "gcat_trait_illustrative_phenotype",
+                          "phenotype_kpn_trait_id": "KPN.TRAIT:0001360",
+                          "phenotype_name": "illustrative phenotype",
+                          "is_own_trait": false,
+                          "is_atlas_trait": false,
+                          "nnls_loading": 0.042,
+                          "phewas_beta": 0.31,
+                          "phewas_p_onesided": 2.1e-07,
+                          "phewas_q": 3.4e-05
+                        }
+                      ]
+                    }
+                  },
+                  "trait": {
+                    "summary": "Trait",
+                    "value": {
+                      "source_id": null,
+                      "trait_id": "KPN.TRAIT:0001360",
+                      "scope": "all",
+                      "sort": "phewas_q",
+                      "summary": null,
+                      "total": 1,
+                      "next_offset": null,
+                      "coverage": "Factor-phenotype links from the eaggl trait linkage and factor-PheWAS, kept at BH q <= 0.05 over all factor x phenotype tests. A phenotype absent for a factor is unlinked at this threshold, not a negative result.",
+                      "release_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c",
+                      "items": [
+                        {
+                          "source_id": "factor:kpn:0000398:eaggl-capped-v1:Factor1",
+                          "factor_label": "Metabolic Dysregulation Indicators",
+                          "fitted_kpn_trait_id": "KPN.TRAIT:0000398",
+                          "fitted_trait_name": "Type 2 diabetes (T2D)",
+                          "phenotype": "gcat_trait_illustrative_phenotype",
+                          "phenotype_kpn_trait_id": "KPN.TRAIT:0001360",
+                          "phenotype_name": "illustrative phenotype",
+                          "is_own_trait": false,
+                          "is_atlas_trait": false,
+                          "nnls_loading": 0.042,
+                          "phewas_beta": 0.31,
+                          "phewas_p_onesided": 2.1e-07,
+                          "phewas_q": 3.4e-05
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "description": "Correlation ID for this HTTP request.",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "not_found": {
+                    "summary": "Not found",
+                    "value": {
+                      "type": "urn:reveal:problem:not-found",
+                      "title": "Not Found",
+                      "status": 404,
+                      "code": "NOT_FOUND",
+                      "detail": "No accessible record exists for the supplied identifier or exact revision.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid Input",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "invalid_input": {
+                    "summary": "Invalid input",
+                    "value": {
+                      "type": "urn:reveal:problem:invalid-input",
+                      "title": "Invalid Input",
+                      "status": 422,
+                      "code": "INVALID_INPUT",
+                      "detail": "The request does not satisfy the operation contract.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false,
+                      "field_errors": [
+                        {
+                          "pointer": "/inquiry",
+                          "message": "A valid DAPPER inquiry is required."
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Dependency Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "dependency_unavailable": {
+                    "summary": "Dependency unavailable",
+                    "value": {
+                      "type": "urn:reveal:problem:dependency-unavailable",
+                      "title": "Dependency Unavailable",
+                      "status": 503,
+                      "code": "DEPENDENCY_UNAVAILABLE",
+                      "detail": "A required dependency is temporarily unavailable; no replacement ranking or scientific result was fabricated.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {},
+          {
+            "ApplicationBearer": []
+          }
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "label": "factor",
+            "source": "curl -X GET 'https://api.reveal.example.org/v1/factor-trait-links?source_id=factor%3Akpn%3A0000398%3Aeaggl-capped-v1%3AFactor1&scope=all&sort=phewas_q&limit=50&offset=0' -H 'Accept: application/json'"
+          },
+          {
+            "lang": "Shell",
+            "label": "trait",
+            "source": "curl -X GET 'https://api.reveal.example.org/v1/factor-trait-links?trait_id=KPN.TRAIT%3A0001360&limit=50&offset=0' -H 'Accept: application/json'"
+          }
+        ]
+      }
+    },
+    "/v1/mechanism-objects/{dapper_id}": {
+      "get": {
+        "operationId": "getMechanismObject",
+        "tags": [
+          "Mechanisms"
+        ],
+        "summary": "Resolve a minted Mechanism id to its factor",
+        "description": "A DAPPER Mechanism id the catalog minted for a served factor resolves to that factor's source_id. A Mechanism of a factor a superseded release served returns 410 REFERENCE_GENERATION_SUPERSEDED with the frozen archived_reference_factor; other ids return 404. The example factor is from an illustrative eaggl-capped-v1 release.",
+        "parameters": [
+          {
+            "name": "dapper_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values.",
+              "pattern": "^dapper:Mechanism\\.[A-Za-z0-9_-]{32}$"
+            },
+            "example": "dapper:Mechanism.DDGbWvsSn5KPwztUH_htX778WdrO5Zan",
+            "description": "Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MechanismObject"
+                },
+                "examples": {
+                  "current": {
+                    "summary": "Current",
+                    "value": {
+                      "dapper_id": "dapper:Mechanism.DDGbWvsSn5KPwztUH_htX778WdrO5Zan",
+                      "status": "current",
+                      "source_id": "factor:kpn:0000398:eaggl-capped-v1:Factor1",
+                      "release_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c"
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "description": "Correlation ID for this HTTP request.",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "not_found": {
+                    "summary": "Not found",
+                    "value": {
+                      "type": "urn:reveal:problem:not-found",
+                      "title": "Not Found",
+                      "status": 404,
+                      "code": "NOT_FOUND",
+                      "detail": "No accessible record exists for the supplied identifier or exact revision.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Reference Generation Superseded",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "reference_generation_superseded": {
+                    "summary": "Reference generation superseded",
+                    "value": {
+                      "type": "urn:reveal:problem:reference-generation-superseded",
+                      "title": "Reference Generation Superseded",
+                      "status": 410,
+                      "code": "REFERENCE_GENERATION_SUPERSEDED",
+                      "detail": "This Mechanism names a factor the published reference release no longer serves.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false,
+                      "archived_reference_factor": {
+                        "format": "reveal.archived-reference-factor/1",
+                        "generation_id": "16e78f6a1282320367b4e6507ad828fc71bdb38ad06e0e0a7d384026f4414e19",
+                        "model": "cfde-inc-v2",
+                        "source_id": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                        "factor_id": "CADinT2D::Factor1",
+                        "trait": "CADinT2D",
+                        "kpn_trait_id": null,
+                        "label": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+                        "mechanism": {
+                          "id": "dapper:Mechanism.MyhahXB55tDUS667sJzeJZ40BeeQBWOR",
+                          "name": "CADinT2D mechanism Factor1",
+                          "description": "EAGGL mechanism factor:portal:CADinT2D:cfde-inc-v2:Factor1. Source label: AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn."
+                        },
+                        "metadata": {
+                          "node_id": "factor:portal:CADinT2D:cfde-inc-v2:Factor1",
+                          "node_type": "factor",
+                          "node_key": "Factor1",
+                          "label": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+                          "subtitle": "Coronary artery disease in type 2 diabetes (CAD in T2D) (Factor1)"
+                        },
+                        "top_genes": [
+                          {
+                            "symbol": "SHH",
+                            "loading": 0.5042
+                          },
+                          {
+                            "symbol": "TCF7L2",
+                            "loading": 0.3813
+                          },
+                          {
+                            "symbol": "SIX2",
+                            "loading": 0.3377
+                          },
+                          {
+                            "symbol": "GLI3",
+                            "loading": 0.3245
+                          },
+                          {
+                            "symbol": "FGF13",
+                            "loading": 0.2899
+                          }
+                        ],
+                        "top_gene_sets": [
+                          {
+                            "rank": 1,
+                            "gene_set_id": "dapper:GeneSet.I1UZhVhKU-YDerPLIxtnZOGlTXNAlrgD",
+                            "name": "AMP AD / all brain / AMP AD MAYO TCX Diagnosis.AOD AD-CONTROL ALL dn | GTEx / brain / GTEx aging Brain 20-29 60-69 dn",
+                            "library": null,
+                            "collection_id": null,
+                            "source_key": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis.AOD_AD-CONTROL_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+                            "joint_loading": null,
+                            "marginal_loading": null,
+                            "score": null
+                          },
+                          {
+                            "rank": 2,
+                            "gene_set_id": "dapper:GeneSet.vz9FgYhauWzJN2g7y69RtjsfhQgQhVHV",
+                            "name": "AMP AD / all brain / AMP AD MAYO TCX Diagnosis AD-OTHER ALL dn | GTEx / brain / GTEx aging Brain 20-29 60-69 dn",
+                            "library": null,
+                            "collection_id": null,
+                            "source_key": "AMP_AD__all_brain__AMP_AD_MAYO_TCX_Diagnosis_AD-OTHER_ALL_dn___GTEx__brain__GTEx_aging_Brain_20-29_60-69_dn",
+                            "joint_loading": null,
+                            "marginal_loading": null,
+                            "score": null
+                          },
+                          {
+                            "rank": 3,
+                            "gene_set_id": "dapper:GeneSet.zQ8X81n_J-Fuv0zNRp1iQQXqIzuAOzGP",
+                            "name": "PsychENCODE / all signatures / PsychENCODE geneM16",
+                            "library": "PsychENCODE",
+                            "collection_id": null,
+                            "source_key": "PsychENCODE__all_signatures__PsychENCODE_geneM16",
+                            "joint_loading": null,
+                            "marginal_loading": null,
+                            "score": null
+                          }
+                        ],
+                        "generation_manifest_sha256": "92ec1f0f03a84d5cbb8ee3ad036b38cc0e77b7ccbd2ff6653089d867a3df6e03",
+                        "archive_id": "96d0fe43d87b838e172f352529665d602f4d42ec728f75f030207c5358f262f1",
+                        "captured_at": "2026-10-01T08:30:00Z"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Dependency Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "dependency_unavailable": {
+                    "summary": "Dependency unavailable",
+                    "value": {
+                      "type": "urn:reveal:problem:dependency-unavailable",
+                      "title": "Dependency Unavailable",
+                      "status": 503,
+                      "code": "DEPENDENCY_UNAVAILABLE",
+                      "detail": "A required dependency is temporarily unavailable; no replacement ranking or scientific result was fabricated.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {},
+          {
+            "ApplicationBearer": []
+          }
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "label": "request",
+            "source": "curl -X GET https://api.reveal.example.org/v1/mechanism-objects/dapper%3AMechanism.DDGbWvsSn5KPwztUH_htX778WdrO5Zan -H 'Accept: application/json'"
+          }
+        ]
+      }
     }
   },
   "components": {
@@ -70642,6 +71657,640 @@
           "page"
         ],
         "additionalProperties": false
+      },
+      "TraitDetail": {
+        "type": "object",
+        "properties": {
+          "kpn_trait_id": {
+            "type": "string",
+            "pattern": "^KPN\\.TRAIT:[0-9]{7}$"
+          },
+          "phenotype": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "is_atlas": {
+            "type": "boolean"
+          },
+          "legacy_phenotype_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "trait_group": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "trait_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "kpn_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "gwas": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": [
+                  "available",
+                  "not_a_gwas_trait",
+                  "not_on_portal"
+                ]
+              },
+              "portal_trait_id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "gwas_artifact_id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "portal_href": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "artifacts": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "ancestry_code": {
+                      "type": "string"
+                    },
+                    "ancestry_name": {
+                      "type": "string"
+                    },
+                    "artifact_id": {
+                      "type": "string"
+                    },
+                    "href": {
+                      "type": "string",
+                      "format": "uri"
+                    }
+                  },
+                  "required": [
+                    "ancestry_code",
+                    "ancestry_name",
+                    "artifact_id",
+                    "href"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "status",
+              "portal_trait_id",
+              "gwas_artifact_id",
+              "portal_href",
+              "artifacts"
+            ],
+            "additionalProperties": false,
+            "description": "The Translator provenance portal's bottom-line GWAS of the trait, as links built from stored ids (never fetched). gwas_artifact_id is the one artifact the account trace's GWAS route uses. Rare-disease gene lists have no GWAS (not_a_gwas_trait); other traits without artifacts are not_on_portal."
+          },
+          "factors": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "source_id": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "factor_number": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "required": [
+                "source_id",
+                "label",
+                "factor_number"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "gene_set_libraries": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "library": {
+                  "type": "string"
+                },
+                "n_gene_sets": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "n_nonzero": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "top_gene_sets": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TraitGeneSet"
+                  },
+                  "maxItems": 5
+                }
+              },
+              "required": [
+                "library",
+                "n_gene_sets",
+                "n_nonzero",
+                "top_gene_sets"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "linked_factors": {
+            "type": "object",
+            "properties": {
+              "n_factors": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "n_factors"
+            ],
+            "additionalProperties": false
+          },
+          "release_id": {
+            "type": "string",
+            "description": "The published reference release these rows were read from.",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        },
+        "required": [
+          "kpn_trait_id",
+          "phenotype",
+          "name",
+          "category",
+          "is_atlas",
+          "legacy_phenotype_id",
+          "trait_group",
+          "trait_type",
+          "description",
+          "kpn_url",
+          "gwas",
+          "factors",
+          "gene_set_libraries",
+          "linked_factors",
+          "release_id"
+        ],
+        "additionalProperties": false,
+        "description": "A KPN trait of the published reference release. Atlas traits (is_atlas) have fitted EAGGL factors; a non-atlas phenotype is one the factor-trait linkage linked factors to, with no factors, betas or trait group of its own. phenotype is the PIGEAN phenotype id (an atlas trait without a phenotype row falls back to its EAGGL phenotype code). factors are fitted on this trait, in factor order; gene_set_libraries count its PIGEAN-kept gene sets per library and those with a nonzero beta_uncorrected, with its best 5 nonzero gene sets of each library by library_rank (page the rest at /v1/trait-gene-sets); linked_factors counts factors of other traits linked to this trait."
+      },
+      "TraitGeneSet": {
+        "type": "object",
+        "properties": {
+          "kpn_trait_id": {
+            "type": "string",
+            "pattern": "^KPN\\.TRAIT:[0-9]{7}$"
+          },
+          "trait_name": {
+            "type": "string"
+          },
+          "gene_set_id": {
+            "type": "string",
+            "description": "Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values.",
+            "pattern": "^dapper:GeneSet\\.[A-Za-z0-9_-]{32}$"
+          },
+          "gene_set_name": {
+            "type": "string"
+          },
+          "library": {
+            "type": "string"
+          },
+          "collection_id": {
+            "type": "string",
+            "description": "Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values.",
+            "pattern": "^dapper:GeneSetCollection\\.[A-Za-z0-9_-]{32}$"
+          },
+          "n_genes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "beta_uncorrected": {
+            "type": "number"
+          },
+          "beta": {
+            "type": "number"
+          },
+          "avg_postp": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "library_rank": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "kpn_trait_id",
+          "trait_name",
+          "gene_set_id",
+          "gene_set_name",
+          "library",
+          "collection_id",
+          "n_genes",
+          "beta_uncorrected",
+          "beta",
+          "avg_postp",
+          "library_rank"
+        ],
+        "additionalProperties": false,
+        "description": "One trait x gene-set row of the release's PIGEAN betas mode (one fit per CFDE library on the trait's PIGEAN gene statistics, no outer Gibbs). beta_uncorrected is the gene set's uncorrected effect, beta its effect corrected for the library's other gene sets, avg_postp its average posterior inclusion probability; library_rank orders the trait's gene sets within the library by beta_uncorrected. These are not the BioIndex small-model values."
+      },
+      "TraitGeneSets": {
+        "type": "object",
+        "properties": {
+          "trait_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^KPN\\.TRAIT:[0-9]{7}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "gene_set_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values.",
+                "pattern": "^dapper:GeneSet\\.[A-Za-z0-9_-]{32}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "library": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sort": {
+            "type": "string",
+            "enum": [
+              "beta_uncorrected",
+              "beta",
+              "avg_postp"
+            ]
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TraitGeneSet"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "next_offset": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "coverage": {
+            "type": "string"
+          },
+          "release_id": {
+            "type": "string",
+            "description": "The published reference release these rows were read from.",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        },
+        "required": [
+          "trait_id",
+          "gene_set_id",
+          "library",
+          "sort",
+          "items",
+          "total",
+          "next_offset",
+          "coverage",
+          "release_id"
+        ],
+        "additionalProperties": false,
+        "description": "Bounded page of gene-set betas for one trait (trait_id) or of one gene set across traits (gene_set_id). Sorted descending by sort with zero values last (below the few negative corrected betas), ties by library_rank then gene_set_id, before pagination. Only gene sets PIGEAN kept have rows: an absent pair is not a zero beta, and some kept rows are exactly 0."
+      },
+      "FactorTraitLink": {
+        "type": "object",
+        "properties": {
+          "source_id": {
+            "type": "string"
+          },
+          "factor_label": {
+            "type": "string"
+          },
+          "fitted_kpn_trait_id": {
+            "type": "string",
+            "pattern": "^KPN\\.TRAIT:[0-9]{7}$"
+          },
+          "fitted_trait_name": {
+            "type": "string"
+          },
+          "phenotype": {
+            "type": "string"
+          },
+          "phenotype_kpn_trait_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^KPN\\.TRAIT:[0-9]{7}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "phenotype_name": {
+            "type": "string"
+          },
+          "is_own_trait": {
+            "type": "boolean"
+          },
+          "is_atlas_trait": {
+            "type": "boolean"
+          },
+          "nnls_loading": {
+            "type": "number"
+          },
+          "phewas_beta": {
+            "type": "number"
+          },
+          "phewas_p_onesided": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "phewas_q": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        },
+        "required": [
+          "source_id",
+          "factor_label",
+          "fitted_kpn_trait_id",
+          "fitted_trait_name",
+          "phenotype",
+          "phenotype_kpn_trait_id",
+          "phenotype_name",
+          "is_own_trait",
+          "is_atlas_trait",
+          "nnls_loading",
+          "phewas_beta",
+          "phewas_p_onesided",
+          "phewas_q"
+        ],
+        "additionalProperties": false,
+        "description": "A factor linked to a PIGEAN phenotype at BH q <= 0.05. nnls_loading is the factor's non-negative least-squares loading in eaggl's trait linkage; phewas_beta, phewas_p_onesided and phewas_q are the factor-PheWAS effect, its one-sided p value and its Benjamini-Hochberg q over all factor x phenotype tests. is_own_trait marks the phenotype the factor was fitted on; is_atlas_trait a phenotype that is an atlas trait. phenotype_name is the display name; phenotypes without a KPN id have a null phenotype_kpn_trait_id."
+      },
+      "FactorTraitLinks": {
+        "type": "object",
+        "properties": {
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "trait_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^KPN\\.TRAIT:[0-9]{7}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "atlas",
+              "all"
+            ]
+          },
+          "sort": {
+            "type": "string",
+            "enum": [
+              "phewas_q",
+              "phewas_beta",
+              "nnls_loading"
+            ]
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "n_phenotypes": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "n_linked": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "n_linked_kpn_traits": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "n_linked_atlas_traits": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "own_trait_q": {
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "n_phenotypes",
+                  "n_linked",
+                  "n_linked_kpn_traits",
+                  "n_linked_atlas_traits",
+                  "own_trait_q"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FactorTraitLink"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "next_offset": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "coverage": {
+            "type": "string"
+          },
+          "release_id": {
+            "type": "string",
+            "description": "The published reference release these rows were read from.",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        },
+        "required": [
+          "source_id",
+          "trait_id",
+          "scope",
+          "sort",
+          "summary",
+          "items",
+          "total",
+          "next_offset",
+          "coverage",
+          "release_id"
+        ],
+        "additionalProperties": false,
+        "description": "Bounded page of the phenotypes linked to one factor (source_id), or of the factors linked to one trait (trait_id; the trait's own factors are flagged is_own_trait). scope=atlas keeps links whose phenotype is an atlas trait. phewas_q sorts ascending, phewas_beta and nnls_loading descending, ties by phenotype then factor, before pagination. summary (source_id only) is the factor's linkage over every phenotype tested: own_trait_q is null when its own trait was not tested."
+      },
+      "MechanismObject": {
+        "type": "object",
+        "properties": {
+          "dapper_id": {
+            "type": "string",
+            "description": "Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values.",
+            "pattern": "^dapper:Mechanism\\.[A-Za-z0-9_-]{32}$"
+          },
+          "status": {
+            "type": "string",
+            "const": "current"
+          },
+          "source_id": {
+            "type": "string"
+          },
+          "release_id": {
+            "type": "string",
+            "description": "The published reference release these rows were read from.",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        },
+        "required": [
+          "dapper_id",
+          "status",
+          "source_id",
+          "release_id"
+        ],
+        "additionalProperties": false,
+        "description": "The served factor whose minted DAPPER Mechanism this id is. Resolve the factor at /v1/mechanisms/{source_id}."
       }
     }
   },
