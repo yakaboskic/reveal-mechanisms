@@ -689,6 +689,27 @@ def get_catalog_gene_set(gene_set_id:str,generation_id:str|None=None):
     from .factor_details import gene_set_detail
     return gene_set_detail(catalog,gene_set_id,generation_id=generation_id)
 
+@app.get('/v1/traits/{kpn_trait_id}')
+def get_trait(kpn_trait_id:str):
+    from .trait_details import trait_detail
+    return trait_detail(kpn_trait_id)
+
+@app.get('/v1/trait-gene-sets')
+def list_trait_gene_sets(trait_id:str|None=None,gene_set_id:str|None=None,library:str|None=None,sort:str='beta_uncorrected',limit:int=50,offset:int=0):
+    from .trait_details import trait_gene_sets
+    return trait_gene_sets(trait_id=trait_id,gene_set_id=gene_set_id,library=library,sort=sort,limit=limit,offset=offset)
+
+@app.get('/v1/factor-trait-links')
+def list_factor_trait_links(source_id:str|None=None,trait_id:str|None=None,scope:str='all',sort:str='phewas_q',limit:int=50,offset:int=0):
+    from .trait_details import factor_trait_links
+    return factor_trait_links(source_id=source_id,trait_id=trait_id,scope=scope,sort=sort,limit=limit,offset=offset)
+
+# Registered before /v1/mechanisms/{source_id:path}, which must never shadow it.
+@app.get('/v1/mechanism-objects/{dapper_id:path}')
+def get_mechanism_object(dapper_id:str):
+    from .trait_details import mechanism_object
+    return mechanism_object(catalog,dapper_id)
+
 @app.get('/v1/mechanisms/{source_id:path}')
 def get_mechanism(source_id:str,source_revision:str|None=None):
     catalog.load(); record=catalog.factors.get(source_id) or catalog.mechanisms.get(source_id)

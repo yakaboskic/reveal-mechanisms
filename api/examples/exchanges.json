@@ -24351,6 +24351,393 @@
     "curl": "curl -X GET 'https://api.reveal.example.org/v1/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/provenance?payload_sha256=9c4cdd23451a6ec0c04ec47539387b4d78a3db81ca707eba62f7a97e34619d66&limit=100' -H 'Accept: application/json'"
   },
   {
+    "operation_id": "getTrait",
+    "case": "request",
+    "method": "GET",
+    "path_template": "/v1/traits/{kpn_trait_id}",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/traits/KPN.TRAIT%3A0000398",
+      "path": {
+        "kpn_trait_id": "KPN.TRAIT:0000398"
+      },
+      "query": {},
+      "headers": {
+        "Accept": "application/json"
+      },
+      "body": null
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/json",
+        "examples": {
+          "atlas_trait": {
+            "kpn_trait_id": "KPN.TRAIT:0000398",
+            "phenotype": "T2D",
+            "name": "Type 2 diabetes (T2D)",
+            "category": "KPN",
+            "is_atlas": true,
+            "legacy_phenotype_id": "T2D",
+            "trait_group": "metabolic",
+            "trait_type": "phenotype",
+            "description": null,
+            "kpn_url": "https://broadinstitute.github.io/kpn-data-models/kpn.trait/0000398/",
+            "gwas": {
+              "status": "available",
+              "portal_trait_id": "T2D",
+              "gwas_artifact_id": "bl-t2d-mixed",
+              "portal_href": "https://translator.broadinstitute.org/artifact_provenance/bottom_line/T2D",
+              "artifacts": [
+                {
+                  "ancestry_code": "EU",
+                  "ancestry_name": "European",
+                  "artifact_id": "bl-t2d-eu",
+                  "href": "https://translator.broadinstitute.org/artifact_provenance/artifact/bl-t2d-eu"
+                },
+                {
+                  "ancestry_code": "Mixed",
+                  "ancestry_name": "Mixed ancestry",
+                  "artifact_id": "bl-t2d-mixed",
+                  "href": "https://translator.broadinstitute.org/artifact_provenance/artifact/bl-t2d-mixed"
+                }
+              ]
+            },
+            "factors": [
+              {
+                "source_id": "factor:kpn:0000398:eaggl-capped-v1:Factor1",
+                "label": "Metabolic Dysregulation Indicators",
+                "factor_number": 1
+              }
+            ],
+            "gene_set_libraries": [
+              {
+                "library": "GTEx",
+                "n_gene_sets": 140,
+                "n_nonzero": 112
+              },
+              {
+                "library": "MoTrPAC",
+                "n_gene_sets": 64,
+                "n_nonzero": 41
+              }
+            ],
+            "linked_factors": {
+              "n_factors": 37
+            },
+            "release_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c"
+          },
+          "linked_phenotype": {
+            "kpn_trait_id": "KPN.TRAIT:0001360",
+            "phenotype": "gcat_trait_illustrative_phenotype",
+            "name": "illustrative phenotype",
+            "category": null,
+            "is_atlas": false,
+            "legacy_phenotype_id": null,
+            "trait_group": null,
+            "trait_type": null,
+            "description": null,
+            "kpn_url": "https://broadinstitute.github.io/kpn-data-models/kpn.trait/0001360/",
+            "gwas": {
+              "status": "not_on_portal",
+              "portal_trait_id": null,
+              "gwas_artifact_id": null,
+              "portal_href": null,
+              "artifacts": []
+            },
+            "factors": [],
+            "gene_set_libraries": [],
+            "linked_factors": {
+              "n_factors": 1
+            },
+            "release_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c"
+          }
+        }
+      }
+    },
+    "curl": "curl -X GET https://api.reveal.example.org/v1/traits/KPN.TRAIT%3A0000398 -H 'Accept: application/json'"
+  },
+  {
+    "operation_id": "listTraitGeneSets",
+    "case": "trait",
+    "method": "GET",
+    "path_template": "/v1/trait-gene-sets",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/trait-gene-sets?trait_id=KPN.TRAIT%3A0000398&sort=beta_uncorrected&limit=50&offset=0",
+      "path": {},
+      "query": {
+        "trait_id": "KPN.TRAIT:0000398",
+        "sort": "beta_uncorrected",
+        "limit": 50,
+        "offset": 0
+      },
+      "headers": {
+        "Accept": "application/json"
+      },
+      "body": null
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/json",
+        "examples": {
+          "trait": {
+            "trait_id": "KPN.TRAIT:0000398",
+            "gene_set_id": null,
+            "library": null,
+            "sort": "beta_uncorrected",
+            "total": 2,
+            "next_offset": null,
+            "coverage": "Gene-set betas from PIGEAN betas mode (one fit per CFDE library on the trait's PIGEAN gene statistics, no outer Gibbs), for the gene sets PIGEAN kept. A trait and gene set without a row were not fitted: an absent pair is not a zero beta. Some kept rows are exactly 0.",
+            "release_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c",
+            "items": [
+              {
+                "kpn_trait_id": "KPN.TRAIT:0000398",
+                "trait_name": "Type 2 diabetes (T2D)",
+                "gene_set_id": "dapper:GeneSet.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "gene_set_name": "Example imported gene set",
+                "library": "GTEx",
+                "collection_id": "dapper:GeneSetCollection.cccccccccccccccccccccccccccccccc",
+                "n_genes": 120,
+                "beta_uncorrected": 0.031,
+                "beta": 0.027,
+                "avg_postp": 0.62,
+                "library_rank": 1
+              },
+              {
+                "kpn_trait_id": "KPN.TRAIT:0000398",
+                "trait_name": "Type 2 diabetes (T2D)",
+                "gene_set_id": "dapper:GeneSet.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "gene_set_name": "Second example gene set",
+                "library": "MoTrPAC",
+                "collection_id": "dapper:GeneSetCollection.dddddddddddddddddddddddddddddddd",
+                "n_genes": 85,
+                "beta_uncorrected": 0.012,
+                "beta": 0.0,
+                "avg_postp": 0.18,
+                "library_rank": 1
+              }
+            ]
+          }
+        }
+      }
+    },
+    "curl": "curl -X GET 'https://api.reveal.example.org/v1/trait-gene-sets?trait_id=KPN.TRAIT%3A0000398&sort=beta_uncorrected&limit=50&offset=0' -H 'Accept: application/json'"
+  },
+  {
+    "operation_id": "listTraitGeneSets",
+    "case": "gene_set",
+    "method": "GET",
+    "path_template": "/v1/trait-gene-sets",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/trait-gene-sets?gene_set_id=dapper%3AGeneSet.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa&limit=50&offset=0",
+      "path": {},
+      "query": {
+        "gene_set_id": "dapper:GeneSet.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "limit": 50,
+        "offset": 0
+      },
+      "headers": {
+        "Accept": "application/json"
+      },
+      "body": null
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/json",
+        "examples": {
+          "gene_set": {
+            "trait_id": null,
+            "gene_set_id": "dapper:GeneSet.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "library": null,
+            "sort": "beta_uncorrected",
+            "total": 1,
+            "next_offset": null,
+            "coverage": "Gene-set betas from PIGEAN betas mode (one fit per CFDE library on the trait's PIGEAN gene statistics, no outer Gibbs), for the gene sets PIGEAN kept. A trait and gene set without a row were not fitted: an absent pair is not a zero beta. Some kept rows are exactly 0.",
+            "release_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c",
+            "items": [
+              {
+                "kpn_trait_id": "KPN.TRAIT:0000398",
+                "trait_name": "Type 2 diabetes (T2D)",
+                "gene_set_id": "dapper:GeneSet.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "gene_set_name": "Example imported gene set",
+                "library": "GTEx",
+                "collection_id": "dapper:GeneSetCollection.cccccccccccccccccccccccccccccccc",
+                "n_genes": 120,
+                "beta_uncorrected": 0.031,
+                "beta": 0.027,
+                "avg_postp": 0.62,
+                "library_rank": 1
+              }
+            ]
+          }
+        }
+      }
+    },
+    "curl": "curl -X GET 'https://api.reveal.example.org/v1/trait-gene-sets?gene_set_id=dapper%3AGeneSet.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa&limit=50&offset=0' -H 'Accept: application/json'"
+  },
+  {
+    "operation_id": "listFactorTraitLinks",
+    "case": "factor",
+    "method": "GET",
+    "path_template": "/v1/factor-trait-links",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/factor-trait-links?source_id=factor%3Akpn%3A0000398%3Aeaggl-capped-v1%3AFactor1&scope=all&sort=phewas_q&limit=50&offset=0",
+      "path": {},
+      "query": {
+        "source_id": "factor:kpn:0000398:eaggl-capped-v1:Factor1",
+        "scope": "all",
+        "sort": "phewas_q",
+        "limit": 50,
+        "offset": 0
+      },
+      "headers": {
+        "Accept": "application/json"
+      },
+      "body": null
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/json",
+        "examples": {
+          "factor": {
+            "source_id": "factor:kpn:0000398:eaggl-capped-v1:Factor1",
+            "trait_id": null,
+            "scope": "all",
+            "sort": "phewas_q",
+            "summary": {
+              "n_phenotypes": 6698,
+              "n_linked": 2,
+              "n_linked_kpn_traits": 2,
+              "n_linked_atlas_traits": 1,
+              "own_trait_q": 4.6e-10
+            },
+            "total": 2,
+            "next_offset": null,
+            "coverage": "Factor-phenotype links from the eaggl trait linkage and factor-PheWAS, kept at BH q <= 0.05 over all factor x phenotype tests. A phenotype absent for a factor is unlinked at this threshold, not a negative result.",
+            "release_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c",
+            "items": [
+              {
+                "source_id": "factor:kpn:0000398:eaggl-capped-v1:Factor1",
+                "factor_label": "Metabolic Dysregulation Indicators",
+                "fitted_kpn_trait_id": "KPN.TRAIT:0000398",
+                "fitted_trait_name": "Type 2 diabetes (T2D)",
+                "phenotype": "T2D",
+                "phenotype_kpn_trait_id": "KPN.TRAIT:0000398",
+                "phenotype_name": "Type 2 diabetes (T2D)",
+                "is_own_trait": true,
+                "is_atlas_trait": true,
+                "nnls_loading": 0.18,
+                "phewas_beta": 0.52,
+                "phewas_p_onesided": 1e-12,
+                "phewas_q": 4.6e-10
+              },
+              {
+                "source_id": "factor:kpn:0000398:eaggl-capped-v1:Factor1",
+                "factor_label": "Metabolic Dysregulation Indicators",
+                "fitted_kpn_trait_id": "KPN.TRAIT:0000398",
+                "fitted_trait_name": "Type 2 diabetes (T2D)",
+                "phenotype": "gcat_trait_illustrative_phenotype",
+                "phenotype_kpn_trait_id": "KPN.TRAIT:0001360",
+                "phenotype_name": "illustrative phenotype",
+                "is_own_trait": false,
+                "is_atlas_trait": false,
+                "nnls_loading": 0.042,
+                "phewas_beta": 0.31,
+                "phewas_p_onesided": 2.1e-07,
+                "phewas_q": 3.4e-05
+              }
+            ]
+          }
+        }
+      }
+    },
+    "curl": "curl -X GET 'https://api.reveal.example.org/v1/factor-trait-links?source_id=factor%3Akpn%3A0000398%3Aeaggl-capped-v1%3AFactor1&scope=all&sort=phewas_q&limit=50&offset=0' -H 'Accept: application/json'"
+  },
+  {
+    "operation_id": "listFactorTraitLinks",
+    "case": "trait",
+    "method": "GET",
+    "path_template": "/v1/factor-trait-links",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/factor-trait-links?trait_id=KPN.TRAIT%3A0001360&limit=50&offset=0",
+      "path": {},
+      "query": {
+        "trait_id": "KPN.TRAIT:0001360",
+        "limit": 50,
+        "offset": 0
+      },
+      "headers": {
+        "Accept": "application/json"
+      },
+      "body": null
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/json",
+        "examples": {
+          "trait": {
+            "source_id": null,
+            "trait_id": "KPN.TRAIT:0001360",
+            "scope": "all",
+            "sort": "phewas_q",
+            "summary": null,
+            "total": 1,
+            "next_offset": null,
+            "coverage": "Factor-phenotype links from the eaggl trait linkage and factor-PheWAS, kept at BH q <= 0.05 over all factor x phenotype tests. A phenotype absent for a factor is unlinked at this threshold, not a negative result.",
+            "release_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c",
+            "items": [
+              {
+                "source_id": "factor:kpn:0000398:eaggl-capped-v1:Factor1",
+                "factor_label": "Metabolic Dysregulation Indicators",
+                "fitted_kpn_trait_id": "KPN.TRAIT:0000398",
+                "fitted_trait_name": "Type 2 diabetes (T2D)",
+                "phenotype": "gcat_trait_illustrative_phenotype",
+                "phenotype_kpn_trait_id": "KPN.TRAIT:0001360",
+                "phenotype_name": "illustrative phenotype",
+                "is_own_trait": false,
+                "is_atlas_trait": false,
+                "nnls_loading": 0.042,
+                "phewas_beta": 0.31,
+                "phewas_p_onesided": 2.1e-07,
+                "phewas_q": 3.4e-05
+              }
+            ]
+          }
+        }
+      }
+    },
+    "curl": "curl -X GET 'https://api.reveal.example.org/v1/factor-trait-links?trait_id=KPN.TRAIT%3A0001360&limit=50&offset=0' -H 'Accept: application/json'"
+  },
+  {
+    "operation_id": "getMechanismObject",
+    "case": "request",
+    "method": "GET",
+    "path_template": "/v1/mechanism-objects/{dapper_id}",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/mechanism-objects/dapper%3AMechanism.DDGbWvsSn5KPwztUH_htX778WdrO5Zan",
+      "path": {
+        "dapper_id": "dapper:Mechanism.DDGbWvsSn5KPwztUH_htX778WdrO5Zan"
+      },
+      "query": {},
+      "headers": {
+        "Accept": "application/json"
+      },
+      "body": null
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/json",
+        "examples": {
+          "current": {
+            "dapper_id": "dapper:Mechanism.DDGbWvsSn5KPwztUH_htX778WdrO5Zan",
+            "status": "current",
+            "source_id": "factor:kpn:0000398:eaggl-capped-v1:Factor1",
+            "release_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c"
+          }
+        }
+      }
+    },
+    "curl": "curl -X GET https://api.reveal.example.org/v1/mechanism-objects/dapper%3AMechanism.DDGbWvsSn5KPwztUH_htX778WdrO5Zan -H 'Accept: application/json'"
+  },
+  {
     "operation_id": "getJob",
     "case": "paragraph",
     "method": "GET",

@@ -1,0 +1,31 @@
+{
+  "operation_id": "getMechanismObject",
+  "case": "request",
+  "method": "GET",
+  "path_template": "/v1/mechanism-objects/{dapper_id}",
+  "request": {
+    "url": "https://api.reveal.example.org/v1/mechanism-objects/dapper%3AMechanism.DDGbWvsSn5KPwztUH_htX778WdrO5Zan",
+    "path": {
+      "dapper_id": "dapper:Mechanism.DDGbWvsSn5KPwztUH_htX778WdrO5Zan"
+    },
+    "query": {},
+    "headers": {
+      "Accept": "application/json"
+    },
+    "body": null
+  },
+  "responses": {
+    "200": {
+      "content_type": "application/json",
+      "examples": {
+        "current": {
+          "dapper_id": "dapper:Mechanism.DDGbWvsSn5KPwztUH_htX778WdrO5Zan",
+          "status": "current",
+          "source_id": "factor:kpn:0000398:eaggl-capped-v1:Factor1",
+          "release_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c"
+        }
+      }
+    }
+  },
+  "curl": "curl -X GET https://api.reveal.example.org/v1/mechanism-objects/dapper%3AMechanism.DDGbWvsSn5KPwztUH_htX778WdrO5Zan -H 'Accept: application/json'"
+}
