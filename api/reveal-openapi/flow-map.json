@@ -1,5 +1,5 @@
 {
-  "openapi_sha256": "ab75aee22fac6b4d4e9926b6c20343f187a3052bcd545ef61680488cc6bdb47a",
+  "openapi_sha256": "61d69e16cc5ae0563c5655e7c04ed1c57dde9ee2d710a8e2e90494e3b51efeea",
   "steps": [
     {
       "id": "gap",
@@ -379,6 +379,27 @@
       ]
     },
     {
+      "id": "trait-catalog",
+      "title": "Inspect traits, gene-set betas and factor-trait links",
+      "route": "GET /v1/traits/{kpn_trait_id}; GET /v1/trait-gene-sets; GET /v1/factor-trait-links; GET /v1/mechanism-objects/{dapper_id}",
+      "action": "Open a KPN trait, page its gene-set betas or a gene set's traits, page a factor's linked phenotypes or a trait's linked factors, and resolve a minted Mechanism id to its factor.",
+      "incoming": "KPN trait, gene set, factor or Mechanism id; library, scope and sort; offset and bounded page size.",
+      "outgoing": "Trait detail with portal GWAS links, beta and link pages with coverage, and the current factor of a Mechanism id, each with the published release id.",
+      "cases": [
+        "getTrait.request",
+        "listTraitGeneSets.trait",
+        "listTraitGeneSets.gene_set",
+        "listFactorTraitLinks.factor",
+        "listFactorTraitLinks.trait",
+        "getMechanismObject.request"
+      ],
+      "rules": [
+        "Every read is of the one published release; a release without the betas or links returns 404.",
+        "Only PIGEAN-kept gene sets have betas and only links at BH q <= 0.05 are stored: absent rows are not zeros or negatives.",
+        "A Mechanism id of a superseded release's factor returns 410 with the frozen factor; portal links are built from ids, never fetched."
+      ]
+    },
+    {
       "id": "local-research",
       "title": "Download and resume local research",
       "route": "/v1/local-work; /v1/local-work/{id}; /package; /setup-kit; /close",
@@ -528,6 +549,6 @@
       ]
     }
   ],
-  "operation_count": 92,
-  "exchange_count": 115
+  "operation_count": 96,
+  "exchange_count": 121
 }

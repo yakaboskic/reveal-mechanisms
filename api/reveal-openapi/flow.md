@@ -390,6 +390,25 @@ Open an exact reference factor, search its retained loadings, and follow a gene 
 - Gene sets retain the top 50 projections by joint or marginal rank; absent weights are never treated as zero.
 - Public reference reads expose imported catalog data only; account gene-set permissions are unchanged.
 
+### Inspect traits, gene-set betas and factor-trait links
+
+Open a KPN trait, page its gene-set betas or a gene set's traits, page a factor's linked phenotypes or a trait's linked factors, and resolve a minted Mechanism id to its factor.
+
+**Request:** KPN trait, gene set, factor or Mechanism id; library, scope and sort; offset and bounded page size.
+
+**Response:** Trait detail with portal GWAS links, beta and link pages with coverage, and the current factor of a Mechanism id, each with the published release id.
+
+- `GET /v1/traits/{kpn_trait_id}` — [request request/response](examples/getTrait.request.json)
+- `GET /v1/trait-gene-sets` — [trait request/response](examples/listTraitGeneSets.trait.json)
+- `GET /v1/trait-gene-sets` — [gene set request/response](examples/listTraitGeneSets.gene_set.json)
+- `GET /v1/factor-trait-links` — [factor request/response](examples/listFactorTraitLinks.factor.json)
+- `GET /v1/factor-trait-links` — [trait request/response](examples/listFactorTraitLinks.trait.json)
+- `GET /v1/mechanism-objects/{dapper_id}` — [request request/response](examples/getMechanismObject.request.json)
+
+- Every read is of the one published release; a release without the betas or links returns 404.
+- Only PIGEAN-kept gene sets have betas and only links at BH q <= 0.05 are stored: absent rows are not zeros or negatives.
+- A Mechanism id of a superseded release's factor returns 410 with the frozen factor; portal links are built from ids, never fetched.
+
 ### Download and resume local research
 
 Prepare a frozen workspace, explore public science anonymously and inspect accepted/reused results in Research runs.
@@ -529,4 +548,4 @@ Explicitly request one preliminary completion, review the saved direction, then 
 
 Requests/responses are taken from the existing validated OpenAPI exchange library. The CADinT2D analysis/paragraph sequence is internally linked. The CAD source-selected gap now frames the request and account. The evidence package is a separate captured input; the authored account is not its validated agent output. Semantic scores and agent outputs remain illustrative fixtures.
 
-The mapping covers 92 operations and all 115 exchanges. OpenAPI SHA-256: `ab75aee22fac6b4d4e9926b6c20343f187a3052bcd545ef61680488cc6bdb47a`. No endpoints or payloads were changed to build this diagram.
+The mapping covers 96 operations and all 121 exchanges. OpenAPI SHA-256: `61d69e16cc5ae0563c5655e7c04ed1c57dde9ee2d710a8e2e90494e3b51efeea`. No endpoints or payloads were changed to build this diagram.
