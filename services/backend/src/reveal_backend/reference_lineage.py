@@ -77,7 +77,12 @@ class _Index:
                           + [parent for parent, _, _ in self.members.get(identity, ())]))
 
 
-def lineage_closure(gene_set, lineage, *, threshold=GROUP_THRESHOLD):
+def lineage_index(lineage):
+    """A lineage's index, for lineage_closure(..., index=) when one lineage serves many gene sets."""
+    return _Index(lineage)
+
+
+def lineage_closure(gene_set, lineage, *, threshold=GROUP_THRESHOLD, index=None):
     """One gene set's reachable lineage: {'provenance': {group: [...]}, 'collapsed': [{activity, representative,
     collapsed_inputs}]}.
 
@@ -87,9 +92,10 @@ def lineage_closure(gene_set, lineage, *, threshold=GROUP_THRESHOLD):
     (ORG_FIELDS). An activity's inputs are grouped by their lineage signature (generating activities, derived-from and
     parent entities); a group larger than `threshold` keeps its smallest id and drops the others with their edges.
     Groups are PROVENANCE_GROUPS keys holding only reached nodes and edges (both ends reached), sorted by id or
-    (subject, predicate, object); prefixes are kept whole. Relations stated by node fields stay on the nodes.
+    (subject, predicate, object); prefixes are kept whole. Relations stated by node fields stay on the nodes. `index` is
+    lineage_index(lineage), built once by a caller closing many gene sets over one lineage.
     """
-    index, root = _Index(lineage), gene_set.get('id')
+    index, root = index or _Index(lineage), gene_set.get('id')
     reached, edges, collapsed = set(), {}, []
     pending = deque((activity, 'activity') for activity in _refs(gene_set.get('was_generated_by')))
     if isinstance(root, str):

@@ -1612,7 +1612,7 @@ export interface paths {
         };
         /**
          * Expand scientific account provenance and dataset reuse
-         * @description Read the full authorized account and annotate its propositions and evidence with dataset and organization lineage. Totals count distinct claims, before trace pagination. Stored factor projections are distinguished from direct lineage; no complete model-input provenance is implied. Source gaps produce explicit lower bounds. The processing bounds are 10,000 nodes, 50,000 edges and depth 128; responses are capped at 8 MiB. Exceeding bounds returns PROVENANCE_LIMIT_EXCEEDED without rankings. Cursors bind authorization, immutable observations and tracing policy. Public reads use frozen publication records and public reference sources only. The example uses the existing illustrative scientific-account fixture and does not claim historical provenance recovery.
+         * @description Read the full authorized account and annotate its propositions and evidence with dataset and organization lineage. Totals count distinct claims, before trace pagination. Stored factor projections are distinguished from direct lineage; no complete model-input provenance is implied. A reached KPN trait (a factor's fitted trait or one a proposition cites) adds its published GWAS: route trait_gwas to the bottom-line Dataset of the Translator provenance portal, read within a 15 s budget (an unreachable portal is coverage external_provenance_unavailable, never an error); the GWAS raw inputs are shown on reveal:portalTransitiveInput edges and never traversed. An activity's inputs sharing one onward lineage are followed through one representative past 25 (collapsed_inputs). Source gaps produce explicit lower bounds. The processing bounds are 10,000 nodes, 50,000 edges and depth 128; responses are capped at 8 MiB. Exceeding bounds returns PROVENANCE_LIMIT_EXCEEDED without rankings. Cursors bind authorization, immutable observations and tracing policy. Public reads use frozen publication records and public reference sources only. The example uses the existing illustrative scientific-account fixture and does not claim historical provenance recovery.
          */
         get: operations["getAccountProvenance"];
         put?: never;
@@ -9166,7 +9166,7 @@ export interface components {
             source_field: string;
             source_id: string;
             dataset_id: string;
-            route_classifications: ("proposition_reference" | "evidence_derivation" | "inherited_source_claim" | "factor_projection")[];
+            route_classifications: ("proposition_reference" | "evidence_derivation" | "inherited_source_claim" | "factor_projection" | "trait_gwas")[];
             input_roles: string[];
             organization_ids: string[];
             organization_attributions: {
@@ -9196,6 +9196,7 @@ export interface components {
             sha256?: string | null;
             filename?: string | null;
             ror?: string | null;
+            href?: string | null;
         };
         ProvenanceEdge: {
             id: string;
@@ -9222,12 +9223,14 @@ export interface components {
                 evidence_derivation: number;
                 inherited_source_claim: number;
                 factor_projection: number;
+                trait_gwas: number;
             };
             classification_claim_ids: {
                 proposition_reference: string[];
                 evidence_derivation: string[];
                 inherited_source_claim: string[];
                 factor_projection: string[];
+                trait_gwas: string[];
             };
             input_roles: string[];
         };
@@ -9249,7 +9252,7 @@ export interface components {
                 };
             };
         };
-        /** @description Independent lineage, retained projection and source-recovery coverage. Complete retained projection rows do not establish complete model-construction lineage. Missing or withheld sources make counts lower bounds. */
+        /** @description Independent lineage, retained projection and source-recovery coverage. Complete retained projection rows do not establish complete model-construction lineage. Missing or withheld sources make counts lower bounds. Issue codes include external_provenance_unavailable (a trait's portal GWAS graph could not be read: object_id is the trait), reference_release_superseded (the account's captures pin a release that is no longer published; only capture bytes and archived snapshots were read), trait_unavailable and unlinked_inputs ({activity, count}: more inputs of one activity than the fan-out bound, none with recorded lineage). */
         ProvenanceCoverage: {
             /** @enum {string} */
             status: "complete" | "incomplete";
@@ -9271,6 +9274,14 @@ export interface components {
             issues: {
                 [key: string]: unknown;
             }[];
+            /** @description Gaps of the upstream sources themselves: absent, never inferred. They do not make the trace incomplete. */
+            upstream_gaps?: {
+                /** @enum {string} */
+                route: "proposition_reference" | "evidence_derivation" | "inherited_source_claim" | "factor_projection" | "trait_gwas";
+                /** @description not_a_gwas_trait (a rare-disease list), not_on_portal (no bottom-line GWAS listed), or no_upstream_organizations (the reached Dataset names no organization). */
+                code: string;
+                object_ids: string[];
+            }[];
         };
         ProvenanceSnapshot: {
             id: string;
@@ -9282,6 +9293,7 @@ export interface components {
             publication_version: number;
             reference_generation_ids: string[];
             supplement_ids: string[];
+            /** @description Hashes of every source read. kind portal_bottom_line: key is the portal URL read, sha256 that of the compacted GWAS graph (canonical JSON); a changed portal graph expires cursors. */
             source_observations: {
                 kind: string;
                 key: string;

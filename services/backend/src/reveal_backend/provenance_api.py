@@ -1,16 +1,33 @@
-"""Authorized account provenance representation, stable trace pages and immutable pins."""
+"""Authorized account provenance representation, stable trace pages and immutable pins.
+
+GET /v1/accounts/{id}/provenance (trace) runs in three phases and writes no file:
+  1a  under one application read transaction: identity, the authorized source, its artifact records, the cursor secret;
+  1b  with no application lease: capture bytes, then the reference reads under the reference lease alone
+      (provenance_reference.expand; only the legacy-generation path opens an application read for its supplements);
+  2   no database lease: the portal's bottom-line GWAS graph of every reached trait, within PORTAL_BUDGET_SECONDS
+      (a failure is coverage external_provenance_unavailable for that trait, never an error);
+  3   a short read transaction re-checks identity, publication or ownership and the withheld ids (a change is 409
+      CURSOR_EXPIRED), then collect, the withheld filter, the snapshot and the page.
+Phases 1 and 3 run in the threadpool, at most TRACE_SLOTS at once per process.
+"""
+import asyncio
+from contextlib import ExitStack
 from copy import deepcopy
 import base64
 import hashlib
 import hmac
 import json
 import os
+import weakref
 
 from .auth import Problem
 from .repository import digest
 
 from .account_provenance import TRACING_POLICY_VERSION as POLICY_VERSION
 MAX_RESPONSE_BYTES = 8 * 1024 * 1024
+PORTAL_BUDGET_SECONDS = 15
+TRACE_SLOTS = 2
+_SLOTS = weakref.WeakKeyDictionary()  # running loop -> its Semaphore(TRACE_SLOTS)
 
 
 def artifact_records(tx, source):
@@ -40,11 +57,16 @@ def _decode_cursor(cursor, secret):
         raise Problem(409, 'CURSOR_EXPIRED', 'Reload the first provenance page; this cursor is invalid.') from None
 
 
-def paginate(result, snapshot, authority, query, *, secret=None):
-    """Paginate traces only, preserving complete-account annotations and metrics."""
+def _secret(secret=None):
     secret = os.getenv('REVEAL_GATEWAY_SECRET', '').encode() if secret is None else secret
     if len(secret) < 32:
         raise Problem(503, 'SERVICE_UNAVAILABLE', 'Configure the provenance cursor signing secret before serving this endpoint.')
+    return secret
+
+
+def paginate(result, snapshot, authority, query, *, secret=None):
+    """Paginate traces only, preserving complete-account annotations and metrics."""
+    secret = _secret(secret)
     try:
         limit = int(query.get('limit', '100'))
         if not 1 <= limit <= 250: raise ValueError()
@@ -89,20 +111,79 @@ def paginate(result, snapshot, authority, query, *, secret=None):
     return response
 
 
-def read(tx, account_id, source, query):
-    from .account_provenance import collect
-    from .provenance_reference import expand
-    if 'legacy_result' in source or not source.get('full_document_available', True):
-        raise Problem(409, 'PROVENANCE_SOURCE_UNAVAILABLE', 'The complete scientific account source is unavailable.')
-    original = source['document']
+def _fence(source):
+    """What phase 3 re-checks: the reader, the publication or ownership state and the withheld dependencies."""
+    publication, record = source['public'], source['publication_record']
+    return digest([source['user'], publication and [publication['id'], publication.get('owner'), publication['data'].get('version')],
+                   record and [record.get('owner'), record['data'].get('version')], source['root_payload'], digest(source['document']),
+                   sorted(source.get('withheld_ids', ())), bool(source['withheld_dependencies'])])
+
+
+class _SupplementReads:
+    """load_supplement's tx, for the legacy-generation path only: one application read transaction opened at its first
+    lookup (inside the reference lease, the order that cannot starve the pool: reference reads hold at most half of it)
+    and closed when expansion ends. A release needs no supplement and never opens it."""
+    def __init__(self, repo): self.repo, self.stack, self.tx = repo, ExitStack(), None
+    def get(self, kind, identity):
+        if self.tx is None: self.tx = self.stack.enter_context(self.repo.read_transaction())
+        return self.tx.get(kind, identity)
+
+
+def _phase1(repo, account_id, resolve, archived):
+    from . import provenance_reference
     from .artifact_store import StorageUnavailable
+    with repo.read_transaction() as tx:
+        source = resolve(tx)
+        if 'legacy_result' in source or not source.get('full_document_available', True):
+            raise Problem(409, 'PROVENANCE_SOURCE_UNAVAILABLE', 'The complete scientific account source is unavailable.')
+        records, fence = artifact_records(tx, source), _fence(source)
+    _secret()
+    supplements = _SupplementReads(repo)
     try:
-        expanded, metadata = expand(original, artifact_records(tx, source), tx=tx,
-                                    blocked_ids=source.get('withheld_ids', ()), account_id=account_id)
+        with supplements.stack:
+            expanded, metadata = provenance_reference.expand(source['document'], records, tx=supplements,
+                blocked_ids=source.get('withheld_ids', ()), account_id=account_id, archived=archived)
     except StorageUnavailable as error:
         raise Problem(503, 'SERVICE_UNAVAILABLE', 'Retained provenance storage is temporarily unavailable.') from error
-    expanded = deepcopy(expanded)
+    return source, fence, expanded, metadata
+
+
+async def _gwas(traits):
+    """{trait id: provenance_portal.Outcome} of every trait whose GWAS route names a portal artifact, all within
+    PORTAL_BUDGET_SECONDS of the first request."""
+    from . import provenance_portal
+    wanted = {identity: info['gwas_artifact']['artifact_id'] for identity, info in traits.items()
+              if isinstance(info.get('gwas_artifact'), dict) and isinstance(info['gwas_artifact'].get('artifact_id'), str)}
+    artifacts = sorted(set(wanted.values()))
+    deadline = asyncio.get_running_loop().time() + PORTAL_BUDGET_SECONDS
+    outcomes = await asyncio.gather(*(provenance_portal.bottom_line(artifact, timeout=deadline - asyncio.get_running_loop().time())
+                                      for artifact in artifacts))
+    found = dict(zip(artifacts, outcomes))
+    return {identity: found[artifact] for identity, artifact in wanted.items()}
+
+
+def _phase3(repo, account_id, resolve, fence, original, expanded, metadata, outcomes, query):
+    from .account_provenance import collect
+    from .provenance_portal import trait_lineage
+    with repo.read_transaction() as tx:
+        try: source = resolve(tx)
+        except Problem as error:
+            if error.status != 404: raise
+            source = None
+        if source is None or 'legacy_result' in source or _fence(source) != fence:
+            raise Problem(409, 'CURSOR_EXPIRED', 'Permissions or sources changed while the provenance was read; reload the first page.')
     blocked = set(metadata.get('blocked_reference_ids', ()))
+    issues, observations, gaps = list(metadata.get('issues', [])), list(metadata.get('source_observations', [])), {}
+    for identity, info in sorted(metadata.get('traits', {}).items()):
+        outcome = outcomes.get(identity)
+        if outcome is None:
+            if info.get('gwas_reason'): gaps.setdefault(info['gwas_reason'], []).append(identity)
+        elif outcome.status == 'ok':
+            for group, rows in trait_lineage(identity, outcome).items():
+                expanded.setdefault(group, []).extend(rows)
+            observations.append({'kind': 'portal_bottom_line', 'key': outcome.portal_url, 'sha256': outcome.sha256})
+        else:
+            issues.append({'code': 'external_provenance_unavailable', 'object_id': identity})
     if blocked:
         for group, values in expanded.items():
             if isinstance(values, list):
@@ -110,7 +191,9 @@ def read(tx, account_id, source, query):
                                    (value.get('id') not in blocked and value.get('subject') not in blocked
                                     and value.get('object') not in blocked)]
     expanded['_provenance_coverage'] = {key: metadata.get(key, []) for key in
-        ('issues', 'retained_projection_coverage', 'recovery_status', 'blocked_reference_ids')}
+        ('retained_projection_coverage', 'recovery_status', 'blocked_reference_ids')}
+    expanded['_provenance_coverage'].update(issues=issues, upstream_gaps=[
+        {'route': 'trait_gwas', 'code': code, 'object_ids': sorted(ids)} for code, ids in sorted(gaps.items())])
     result = collect(expanded, account_id)
     if source['withheld_dependencies']:
         withheld = source.get('withheld_ids', set())
@@ -133,5 +216,23 @@ def read(tx, account_id, source, query):
                 'publication_version': publication_version,
                 'reference_generation_ids': sorted(metadata.get('reference_generation_ids', [])),
                 'supplement_ids': sorted(metadata.get('supplement_ids', [])),
-                'source_observations': metadata.get('source_observations', [])}
+                'source_observations': sorted(observations, key=lambda item: (item['kind'], item['key'], item['sha256']))}
     return paginate(result, snapshot, authority, query)
+
+
+def _slots():
+    loop = asyncio.get_running_loop()
+    slots = _SLOTS.get(loop)
+    if slots is None: slots = _SLOTS[loop] = asyncio.Semaphore(TRACE_SLOTS)
+    return slots
+
+
+async def trace(repo, account_id, resolve, query, *, archived=None):
+    """The account trace. resolve(tx) returns the authorized scientific source (the route's identity and
+    scientific_source); archived(mechanism_id) is the catalog's archived-snapshot lookup."""
+    from starlette.concurrency import run_in_threadpool
+    async with _slots():
+        source, fence, expanded, metadata = await run_in_threadpool(_phase1, repo, account_id, resolve, archived)
+    outcomes = await _gwas(metadata.get('traits', {}))
+    async with _slots():
+        return await run_in_threadpool(_phase3, repo, account_id, resolve, fence, source['document'], expanded, metadata, outcomes, query)

@@ -102,11 +102,16 @@ def load_supplement(tx, generation_id, collection_id, source_document_sha256):
 
 
 def _source_binding(tx, generation_id, collection_id, sha):
-    result = tx.execute('SELECT manifest FROM reference_generations WHERE generation_id=%s', (generation_id,)).fetchone()
-    if result is None: raise RecoveryRefused('Reference generation is unavailable')
-    manifest = json.loads(result[0]) if isinstance(result[0], (str, bytes)) else result[0]
-    result = tx.execute('SELECT cfde_label,payload FROM cfde_gene_set_collections WHERE generation_id=%s AND collection_id=%s',
-                        (generation_id, collection_id)).fetchone()
+    try:
+        result = tx.execute('SELECT manifest FROM reference_generations WHERE generation_id=%s', (generation_id,)).fetchone()
+        if result is None: raise RecoveryRefused('Reference generation is unavailable')
+        manifest = json.loads(result[0]) if isinstance(result[0], (str, bytes)) else result[0]
+        result = tx.execute('SELECT cfde_label,payload FROM cfde_gene_set_collections WHERE generation_id=%s AND collection_id=%s',
+                            (generation_id, collection_id)).fetchone()
+    except Exception as error:
+        # MySQL 1146: cleanup dropped the reload-era tables, so nothing can be recovered any more.
+        if getattr(error, 'args', None) and error.args[0] == 1146: raise RecoveryRefused('Reference generation tables were cleaned up') from error
+        raise
     if result is None: raise RecoveryRefused('Stored collection is unavailable')
     label, payload = result
     payload = json.loads(payload) if isinstance(payload, (str, bytes)) else payload

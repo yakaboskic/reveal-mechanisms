@@ -1,6 +1,6 @@
 # Scientific account provenance and reuse
 
-`GET /v1/accounts/{account_id}/provenance` expands one accepted scientific account into dataset and organization lineage. It follows structured scientific references in propositions and evidence, including inherited source claims and retained factor–GeneSet projections. Existing leaderboard definitions are unchanged.
+`GET /v1/accounts/{account_id}/provenance` expands one accepted scientific account into dataset and organization lineage. It follows structured scientific references in propositions and evidence, including inherited source claims, retained factor–GeneSet projections and the published GWAS of the KPN traits the account reaches. Existing leaderboard definitions are unchanged. It is the only trace surface: there is no MCP trace tool.
 
 Use the stored, minted `dapper:ScientificAccount.…` ID returned by account acceptance. A local authoring URN or a JSON filename is not an accepted account ID. Private accounts require their owner's application bearer credential; published accounts are readable anonymously. Withdrawal and revoked dependencies take effect on subsequent reads. Responses use `Cache-Control: private, no-store` and vary by authorization. Configure `REVEAL_GATEWAY_SECRET` with at least 32 bytes for signed provenance cursors.
 
@@ -11,14 +11,49 @@ Authorization: Bearer <application credential>
 
 `payload_sha256` optionally selects an exact account payload. `limit` defaults to 100 and accepts 1–250. Follow `page.next_cursor` on the same endpoint until it is null; omit `limit` to retain the cursor's page size. Changed source observations, supplements, publication state, permissions, or an explicitly changed limit invalidate a cursor with `409 CURSOR_EXPIRED`. An inaccessible account or unavailable requested payload returns 404.
 
+## How a request is served
+
+The route reads in three phases and writes no file (`provenance_api.trace`):
+
+1. **Authorize** (one application read transaction): the caller's identity, the authorized account source, its retained artifact records and the cursor secret.
+2. **Hydrate** (no application lease): capture bytes from the artifact store, then the reference reads under the reference lease alone (`provenance_reference.expand`). Only the reload-era (legacy generation) path opens an application read, for registered recovery supplements.
+3. **Portal** (no database lease): the bottom-line GWAS graph of every reached trait from the Translator provenance portal, within 15 seconds in all. A failure is coverage, never an error.
+4. **Recheck and rank** (one short read transaction): identity, publication or ownership state and the withheld dependencies are read again; any change returns `409 CURSOR_EXPIRED`. Then the walk, the withheld filter, the snapshot and the page.
+
+At most two traces per process are in their database phases at once.
+
+## Reference hydration
+
+Only trusted captures bind an account's opaque ids to reference data, each checksum-verified against its retained bytes:
+
+- research captures (`get_factor` binds Mechanisms, re-minted from the captured row; gene-set reads bind gene sets);
+- Box evidence-package captures `reveal.reference-evidence.mysql-capture/2` (`reference-release`, `reference-factors`, `candidate-factors`), whose Mechanisms are re-minted with the captured release manifest exactly as the package builder minted them.
+
+A capture pinned to the published reference release is read from its `ref_*` tables, after `ref_release` on the same connection (see [reference releases](reference-release.md)): `ref_factors` (checked against the captured row), every per-library `ref_projections` row, `ref_gene_sets` and `ref_collections`. Gene sets the account reaches get their full node; gene sets reached only by a projection get their name, collection and generating activity, never their members. Collection lineage merges the producer's provenance with the curated source datasets (`reference_lineage.collection_lineage`) and keeps only one gene set's closure (`lineage_closure`). Parsed lineage is cached per release, collection and document checksum (128 MB) and dropped when the release changes.
+
+A capture pinned to a release that is no longer published records `reference_release_superseded`. That work is hydrated only from capture bytes and the environment's archived factor snapshot (its top gene sets per library), never from the current tables. Missing reload-era tables (dropped by `cleanup`) record `reference_tables_unavailable` instead of failing.
+
+## Traits and their GWAS
+
+Every KPN trait the account reaches becomes a `trait` node: a bound Mechanism's fitted trait (`reveal:fittedOnTrait`), or a trait a proposition cites as `KPN.TRAIT:NNNNNNN` or by its kpn-data-models page. Names come from `ref_phenotypes`, else `ref_traits`. A trait unknown to the release is `trait_unavailable`.
+
+The trait's GWAS route (`trait_gwas`) is its release metadata's bottom-line artifact (`metadata.bottom_line.gwas_artifact`, the Mixed ancestry). The portal's `get_provenance` document for that artifact is compacted in memory:
+
+- `R`, the Dataset that holds the artifact's DRS object, is the only node the walk reaches: `trait —reveal:publishedGwas→ R`.
+- The document's raw inputs (C2M2 files never generated by an activity and reachable from `R`) are attached by `reveal:portalTransitiveInput`, with their path length, the portal URL and the document checksum. They are shown but never traversed, and never raise missing lineage.
+
+T2D Mixed compacts from 749 nodes to 74. Configure the portal with `REVEAL_PROVENANCE_PORTAL_URL` (set in `deploy/dig/service.yaml` and the local durable deployment). Unset, nothing is fetched and every trait GWAS route is `external_provenance_unavailable`. Graphs are cached in memory (64 MB): fresh for 24 hours, then served only if a refetch fails, for up to 7 days. A 404 or an invalid document is cached for 5 minutes; timeouts, 5xx and 429 never are (each is retried once, honouring `Retry-After` within the budget). Bodies are capped at 2 MiB and parsed in memory. Each portal fetch is shared by every waiting request. Collection YAML is never fetched: gene-set lineage is local, and the portal is only a link-out for it.
+
+Rare-disease lists have no GWAS (`not_a_gwas_trait`), and some traits are not on the portal (`not_on_portal`). These, and GWAS Datasets that name no organization (`no_upstream_organizations`), are reported in `coverage.upstream_gaps`. They are gaps of the sources, so they do not make a trace incomplete.
+
 ## Response
 
 - `account`, `claims`, `propositions`, and `evidence_items` contain `{record, provenance}` wrappers. `record` preserves the original scientific object. `provenance` adds the total trace count, current-page trace IDs/count, reached dataset and organization IDs, and resolution status.
 - `traces` identify the originating claim, proposition/evidence item and source field, dataset reached, route classifications, input roles and organization attributions. `path_steps` describe an auditable witness path; reverse dataset membership steps are explicit.
-- `nodes` and `edges` share the traversed graph across traces. Alternative recorded branches remain in the graph, without enumerating every path. Nodes are compact summaries rather than complete GeneSet member lists. The bounded shared graph repeats on each page.
+- `nodes` and `edges` share the traversed graph across traces. Alternative recorded branches remain in the graph, without enumerating every path. Nodes are compact summaries rather than complete GeneSet member lists; a trait and the portal's GWAS nodes carry `href`, a public page built from their ids. The bounded shared graph repeats on each page.
 - `dataset_reuse` and `organization_reuse` are full-account totals, computed before pagination. Do not sum totals from successive pages.
-- `snapshot` pins the account payload, authorized document, publication version, reference generations, supplements and tracing policy. Source observations contain hashes and public scientific coordinates, not private storage locations.
-- `coverage` separates lineage resolution, retained-projection coverage and recovery status. Missing lineage makes counts explicit lower bounds. Processing limits and storage failures do not produce zero rankings.
+- `snapshot` pins the account payload, authorized document, publication version, reference generations and releases, supplements and tracing policy (`account-provenance-v2`). Source observations contain hashes and public scientific coordinates, not private storage locations. A `portal_bottom_line` observation is keyed by the portal URL read, with the checksum of the compacted graph, so a changed portal graph expires cursors.
+- `coverage` separates lineage resolution, retained-projection coverage, recovery status and the optional `upstream_gaps`. Missing lineage makes counts explicit lower bounds. Processing limits and storage failures do not produce zero rankings.
 
 The generated [OpenAPI contract](../api/openapi.json) provides exact types and a complete fixture response.
 
@@ -26,19 +61,21 @@ The generated [OpenAPI contract](../api/openapi.json) provides exact types and a
 
 A dataset contributes once to each distinct component/conclusion claim that reaches it, regardless of how many propositions, evidence items or inherited paths reach the same dataset. Component and conclusion membership is a set. An outside source claim supplies lineage but does not become another counted claim in this account.
 
-Route classifications overlap: `proposition_reference`, `evidence_derivation`, `inherited_source_claim`, and `factor_projection`. Their subtotals must not be added. Evidence direction belongs to the originating evidence item; it is not multiplied through source claims. Referencing a factor does not mean every associated dataset directly supports the proposition.
+Route classifications overlap: `proposition_reference`, `evidence_derivation`, `inherited_source_claim`, `factor_projection` and `trait_gwas`. Their subtotals must not be added. Evidence direction belongs to the originating evidence item; it is not multiplied through source claims. Referencing a factor does not mean every associated dataset directly supports the proposition.
 
 Organization summaries count distinct datasets, claims and claim–dataset pairs, with breakdowns by recorded role. Publishers, creators, contributors and generation agents remain distinct. Award/funder text does not create an Organization identity. Mapping/reference datasets are included, and their recorded input roles are retained; absent roles stay `unknown`.
 
 Traversal uses derivation, generation and activity-input relationships in fields and edge records. A reached File may be associated with its recorded Dataset, but this inverse membership does not expand sibling files or inherit unrelated lineage of the containing dataset. Free-text names, retrieval candidates, KnowledgeGap selection links, embeddings and account-authoring activity inputs do not establish claim reuse.
 
-Factor expansion is pinned to trusted captured generation bindings. KPN projections are the retained top-50 joint **or** marginal union; legacy links are ranked summaries. Neither establishes the complete model construction history. An unavailable or ambiguous binding stays unresolved rather than using the active catalog.
+Factor expansion is pinned to trusted captured generation or release bindings. Release projections are the retained top 50 of each library, joint **or** marginal; reload-era KPN projections are the per-trait top-50 union; legacy links are ranked summaries. Neither establishes the complete model construction history. An unavailable or ambiguous binding stays unresolved rather than using the active catalog.
+
+An activity's used inputs that share one onward lineage (the same generating activities, derivations and Datasets) are followed through one representative once more than 25 of them do, and `collapsed_inputs` is observed on its edge. GlyGen HZ2's 6,620 cached API responses are one path to the GlyGen release. Datasets are always followed one by one. More than 25 inputs with no lineage at all are one `unlinked_inputs` coverage entry (`{activity, count}`).
 
 The processing bounds are 10,000 nodes, 50,000 edges and depth 128; a 100,000-state processing limit also bounds repeated work. Serialized responses are limited to 8 MiB. Exceeding a bound returns `422 PROVENANCE_LIMIT_EXCEEDED` without rankings. Retained storage outages return a service error. A missing full account source returns `409 PROVENANCE_SOURCE_UNAVAILABLE`; conflicting root payload observations return `409 SCIENTIFIC_SOURCE_CONFLICT` (or 404 when an exact payload was requested).
 
 ## Import preservation and historical recovery
 
-Reference releases retain every provenance node and relationship group that appears before or after `gene_sets` in collection YAML, in `reveal_ref_collections.payload.provenance` (`reference_release.collection_provenance`). Relevant sections are streamed and validated; embedding sections are skipped unparsed. Captures and evidence packages preserve anonymous provenance edges alongside exact scientific nodes. Dataset and organization records reachable only through inverse membership remain in immutable retained captures, because canonical DAPPER reachability is directed; the endpoint expands that verified context without rewriting accepted records, even when the original catalog rows have retired.
+Reference releases need no recovery. They retain every provenance node and relationship group that appears before or after `gene_sets` in collection YAML, in `reveal_ref_collections.payload.provenance` (`reference_release.collection_provenance`). Relevant sections are streamed and validated; embedding sections are skipped unparsed. Captures and evidence packages preserve anonymous provenance edges alongside exact scientific nodes. Dataset and organization records reachable only through inverse membership remain in immutable retained captures, because canonical DAPPER reachability is directed; the endpoint expands that verified context without rewriting accepted records, even when the original catalog rows have retired.
 
 Older imports (historical reference generations) may have retained a generating Activity but dropped its input edges. The offline recovery command reads the source with the release build's reader and can register an immutable supplement from the exact original collection YAML. It checks the complete file checksum against both the stored collection and generation manifest, validates extracted relationships, and refuses conflicts. It never rewrites accounts, historical packages, collection payloads or generation manifests. It binds to the historical `reference_generations` and `cfde_gene_set_collections` rows, which `scripts/reference_migration.py cleanup` drops, so run any pending recovery (MoTrPAC included) before cleanup.
 

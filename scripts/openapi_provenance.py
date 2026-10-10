@@ -31,7 +31,11 @@ def extend(b, fixture, examples):
                   'organization_attributions', 'path_steps', 'path_edge_ids'],
         description='Deterministic witness path for an originating scientific use. Direction is present only for evidence-origin traces and is not multiplied through source claims. Alternative recorded branches remain in the shared graph.'))
     b.add('ProvenanceNode', obj({'id': string(), 'kind': string(), 'status': b.enum('resolved', 'unresolved', 'conflicting'),
-        'name': nullable(string()), 'sha256': nullable(string()), 'filename': nullable(string()), 'ror': nullable(string())}, required=['id', 'kind', 'status']))
+        'name': nullable(string()), 'sha256': nullable(string()), 'filename': nullable(string()), 'ror': nullable(string()),
+        'href': nullable(string('A public page for the node: a KPN trait\'s bottom-line GWAS listing on the provenance portal (or its '
+                                'kpn-data-models page), or the portal page of a bottom-line GWAS artifact for its Dataset and raw inputs. '
+                                'Built from identifiers; nothing is fetched to make it.'))},
+        required=['id', 'kind', 'status']))
     b.add('ProvenanceEdge', obj({'id': string(), 'subject': string(), 'predicate': string(), 'object': string(),
         'relation': string(), 'input_role': string(), 'observations': array(raw), 'provenance_source': array(raw)},
         required=['id', 'subject', 'predicate', 'object', 'relation']))
@@ -44,15 +48,22 @@ def extend(b, fixture, examples):
     b.add('OrganizationReuse', obj({'organization_id': string(), **organization_counts,
         'roles': {'type': 'object', 'additionalProperties': obj(organization_counts)}},
         description='Distinct claims, datasets and claim-dataset pairs, grouped by recorded organization roles; publisher and funder do not imply data producer.'))
-    b.add('ProvenanceCoverage', obj({'status': status, 'counts_are_lower_bounds': {'type': 'boolean'},
+    coverage = {'status': status, 'counts_are_lower_bounds': {'type': 'boolean'},
         'claim_count': count, 'resolved_claim_count': count, 'trace_count': count,
         'lineage_resolution': obj({'status': status, 'issue_count': count}),
-        'retained_projection_coverage': array(raw), 'recovery_status': array(raw), 'issues': array(raw)},
-        description='Independent lineage, retained projection and source-recovery coverage. Complete retained projection rows do not establish complete model-construction lineage. Missing or withheld sources make counts lower bounds.'))
+        'retained_projection_coverage': array(raw), 'recovery_status': array(raw), 'issues': array(raw)}
+    b.add('ProvenanceCoverage', obj({**coverage, 'upstream_gaps': array(obj({'route': b.enum(*CLASSIFICATIONS),
+            'code': string('not_a_gwas_trait (a rare-disease list), not_on_portal (no bottom-line GWAS listed), or '
+                           'no_upstream_organizations (the reached Dataset names no organization).'),
+            'object_ids': strings}),
+            description='Gaps of the upstream sources themselves: absent, never inferred. They do not make the trace incomplete.')},
+        required=list(coverage),
+        description='Independent lineage, retained projection and source-recovery coverage. Complete retained projection rows do not establish complete model-construction lineage. Missing or withheld sources make counts lower bounds. Issue codes include external_provenance_unavailable (a trait\'s portal GWAS graph could not be read: object_id is the trait), reference_release_superseded (the account\'s captures pin a release that is no longer published; only capture bytes and archived snapshots were read), trait_unavailable and unlinked_inputs ({activity, count}: more inputs of one activity than the fan-out bound, none with recorded lineage).'))
     b.add('ProvenanceSnapshot', obj({'id': string(), 'policy_version': string(), 'account_id': b.did('ScientificAccount'),
         'account_payload_sha256': string(), 'document_sha256': string(), 'publication_version': count,
         'reference_generation_ids': strings, 'supplement_ids': strings,
-        'source_observations': array(obj({'kind': string(), 'key': string(), 'sha256': string()}))}))
+        'source_observations': array(obj({'kind': string(), 'key': string(), 'sha256': string()}),
+            description='Hashes of every source read. kind portal_bottom_line: key is the portal URL read, sha256 that of the compacted GWAS graph (canonical JSON); a changed portal graph expires cursors.')}))
     b.add('AccountProvenance', obj({'account': ref('AnnotatedScientificAccount'),
         'claims': array(ref('AnnotatedClaim')), 'propositions': array(ref('AnnotatedProposition')),
         'evidence_items': array(ref('AnnotatedEvidenceItem')), 'traces': array(ref('ProvenanceTrace')),
@@ -71,7 +82,11 @@ def extend(b, fixture, examples):
         'Expand scientific account provenance and dataset reuse',
         'Read the full authorized account and annotate its propositions and evidence with dataset and organization lineage. '
         'Totals count distinct claims, before trace pagination. Stored factor projections are distinguished from direct lineage; '
-        'no complete model-input provenance is implied. Source gaps produce explicit lower bounds. The processing bounds are '
+        'no complete model-input provenance is implied. A reached KPN trait (a factor\'s fitted trait or one a proposition cites) '
+        'adds its published GWAS: route trait_gwas to the bottom-line Dataset of the Translator provenance portal, read within a '
+        '15 s budget (an unreachable portal is coverage external_provenance_unavailable, never an error); the GWAS raw inputs are '
+        'shown on reveal:portalTransitiveInput edges and never traversed. An activity\'s inputs sharing one onward lineage are '
+        'followed through one representative past 25 (collapsed_inputs). Source gaps produce explicit lower bounds. The processing bounds are '
         '10,000 nodes, 50,000 edges and depth 128; responses are capped at 8 MiB. Exceeding bounds returns '
         'PROVENANCE_LIMIT_EXCEEDED without rankings. Cursors bind authorization, immutable observations and tracing policy. '
         'Public reads use frozen publication records and public reference sources only. The example uses the existing illustrative '

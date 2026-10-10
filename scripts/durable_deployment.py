@@ -86,6 +86,8 @@ def prepare(*, scheduler='local', api_port=18001, frontend_port=3000, callback_u
         REVEAL_GATEWAY_SECRET=keys['gateway'], REVEAL_GATEWAY_SERVICE_TOKEN=keys['service'],
         REVEAL_GATEWAY_ISSUER='reveal-nextjs', REVEAL_GATEWAY_AUDIENCE='reveal-api',
         NEXTAUTH_URL=origin, REVEAL_CANONICAL_URL=origin, REVEAL_PUBLIC_WEB_URL=origin)
+    # The account trace's trait GWAS lineage (deploy/dig/service.yaml); a .env value, even empty (disabled), wins.
+    backend.setdefault('REVEAL_PROVENANCE_PORTAL_URL', 'https://translator.broadinstitute.org/artifact_provenance')
     backend.pop('SERVICE_PATH_PREFIX', None)
     frontend = {k:v for k,v in source.items() if k.startswith(('AUTH_GOOGLE_','AUTH_ORCID_')) or k == 'ADMIN_EMAILS'}
     frontend.update({k:backend[k] for k in ('REVEAL_GATEWAY_SECRET','REVEAL_GATEWAY_SERVICE_TOKEN',
