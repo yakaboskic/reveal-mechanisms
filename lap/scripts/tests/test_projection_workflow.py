@@ -1226,5 +1226,80 @@ class FactorTraitLinkageTest(unittest.TestCase):
         self.assertEqual([round(x, 6) for x in q], [0.05, 0.066667, 0.066667, 1.0, 0.25])
 
 
+class ProvenanceAuditTest(unittest.TestCase):
+    """provenance-audit against a local stand-in for the Translator artifact-provenance portal (its HTML routes)."""
+    C1, C2, C3, C4, C5 = ("dapper:GeneSetCollection." + c * 32 for c in "ABCDE")
+    G = {k: "dapper:GeneSet." + k * 32 for k in "1234679"}
+
+    def page(self, items, count=None):
+        found = '<p class="muted">%d gene sets found.</p>' % (len(items) if count is None else count)
+        return "<html><body>%s<ul>%s</ul></body></html>" % (found, "".join(
+            '<li><a href="#" data-app-route="gene_set/details/id=%s">\n  %s\n</a></li>' % (gid.replace(":", "%3A"), name)
+            for gid, name in items))
+
+    def setUp(self):
+        import http.server
+        import threading
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        p = self.p = lambda *parts: os.path.join(self.tmp.name, *parts)
+        g = self.G
+        home = "".join('<li><a class="document-name" href="#" data-app-route="gene_set/list/id=%s">\n  %s\n</a>%s</li>'
+                       % (cid.replace(":", "%3A"), name, '\n  <div class="description">About &#39;%s&#39;</div>' % name)
+                       for cid, name in ((self.C1, "Shared &amp; listed"), (self.C2, "Portal grouping"), (self.C4, "Broken")))
+        pages = {"/ap/home/gene_set": "<html><body><ul>%s</ul></body></html>" % home,
+                 "/ap/gene_set/list/id=" + self.C1.replace(":", "%3A"): self.page([(g["1"], "one"), (g["2"], "two"), (g["9"], "nine")]),
+                 "/ap/gene_set/list/id=" + self.C2.replace(":", "%3A"): self.page([(g["3"], "three"), (g["7"], "seven")])}
+
+        class Portal(http.server.BaseHTTPRequestHandler):
+            def do_GET(handler):
+                body = pages.get(handler.path)
+                handler.send_response(200 if body else 404)
+                handler.end_headers()
+                handler.wfile.write((body or '{"error":"not_found"}').encode())
+
+            def log_message(handler, *args):
+                pass
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Portal)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        self.url = "http://127.0.0.1:%d/ap" % server.server_address[1]
+        index = ["library", "partition", "model", "comparison", "program", "label", "collection_id", "n_sets"]
+        release = [("LibA", "", "", "", "", "A__one", self.C1, "2"), ("LibB", "", "", "", "", "B__three", self.C3, "2")]
+        write(p("snapshot.tsv"), tsv([index] + release + [("GaultonLab", "", "", "", "", "X__five", self.C5, "1")]))
+        write(p("release.tsv"), tsv([index] + release))
+        write(p("gene_set_index.tsv"), tsv([pw.GENE_SET_INDEX_COLUMNS] + [
+            (gid, name, cid, label, library, "", "", "", "", "1", "3", "3", "2026-10-05")
+            for gid, name, cid, label, library in ((g["1"], "one", self.C1, "A__one", "LibA"), (g["2"], "two", self.C1, "A__one", "LibA"),
+                                                   (g["3"], "three", self.C3, "B__three", "LibB"),
+                                                   (g["4"], "four", self.C3, "B__three", "LibB"))]))
+
+    def audit(self):
+        p = self.p
+        return run(["provenance-audit", "--portal-url", self.url, "--snapshot-index-file", p("snapshot.tsv"), "--cfde-index-file",
+                    p("release.tsv"), "--gene-set-index-file", p("gene_set_index.tsv"), "--work-dir", p("portal"),
+                    "--output-collections-file", p("collections.tsv"), "--output-map-file", p("map.tsv"),
+                    "--output-gene-sets-file", p("gene_sets.tsv"), "--workers", "2"])
+
+    def test_matches_gene_sets_by_id_across_portal_collections(self):
+        self.assertEqual(self.audit(), (0, ""))
+        rows = {r["collection_id"]: r for r in read_rows(self.p("collections.tsv"))}
+        self.assertEqual({cid: r["status"] for cid, r in rows.items()},
+                         {self.C1: "in_both", self.C3: "gene_sets_elsewhere_on_portal", self.C5: "snapshot_excluded",
+                          self.C2: "portal_only", self.C4: "portal_only"})
+        c1, c3 = rows[self.C1], rows[self.C3]
+        self.assertEqual((c1["portal_name"], c1["n_portal_gene_sets"], c1["n_release_gene_sets"], c1["n_release_on_portal"],
+                          c1["n_release_in_same_portal_collection"]), ("Shared & listed", "3", "2", "2", "2"))
+        self.assertEqual((c3["in_portal"], c3["n_release_gene_sets"], c3["n_release_on_portal"]), ("False", "2", "1"))
+        self.assertEqual([(r["release_collection_id"], r["portal_collection_id"], r["n_gene_sets"]) for r in read_rows(self.p("map.tsv"))],
+                         [(self.C1, self.C1, "2"), (self.C3, self.C2, "1")])
+        self.assertEqual(sorted((r["gene_set_id"], r["status"]) for r in read_rows(self.p("gene_sets.tsv"))),
+                         [(self.G["4"], "release_only"), (self.G["9"], "portal_only")])
+        listed = {r["collection_id"]: r for r in read_rows(self.p("portal", "portal_collections.tsv"))}
+        self.assertEqual((listed[self.C4]["list_status"], listed[self.C1]["description"]), ("http_404", "About 'Shared & listed'"))
+        self.assertEqual(len(read_rows(self.p("portal", "portal_gene_sets.tsv"))), 5)
+
+
 if __name__ == "__main__":
     unittest.main()

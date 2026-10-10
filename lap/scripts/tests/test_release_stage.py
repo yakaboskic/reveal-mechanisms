@@ -185,7 +185,7 @@ def expand(decl, text, seen=()):
 
 class StagesCfgTest(unittest.TestCase):
     """The stages, in run order, and plain-text outputs."""
-    STAGES = ("genesets_", "factors_", "projection_", "betas_", "linkage_", "lincs_", "portal_", "release_")
+    STAGES = ("genesets_", "factors_", "projection_", "betas_", "linkage_", "provenance_", "lincs_", "portal_", "release_")
 
     @classmethod
     def setUpClass(cls):
