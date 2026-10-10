@@ -37,6 +37,36 @@ export type CfdeAssessment = {
   error: { code: string; detail: string; retryable: boolean } | null;
   stale: boolean;
 };
+export type LightningAuditResult = {
+  assessment: "promising" | "partial" | "unsupported";
+  summary: string;
+  observations: { text: string; evidence_refs: string[] }[];
+  recommended_direction: string;
+  missing_evidence: string[];
+  next_steps: string[];
+  limitations: string[];
+};
+export type LightningAuditProgress = {
+  revision: number;
+  phase: "writing" | "validating";
+  summary: string;
+  recommended_direction: string;
+  observations: string[];
+  missing_evidence: string[];
+  next_steps: string[];
+  limitations: string[];
+};
+export type LightningAudit = {
+  id: string;
+  kind: "lightning_audit";
+  status: "preparing" | "assessing" | "succeeded" | "failed" | "interrupted";
+  source_draft_id: string;
+  source_draft_version: number;
+  created_at: string;
+  result: LightningAuditResult | null;
+  progress?: LightningAuditProgress | null;
+  error: { code: string; detail: string; retryable?: boolean } | null;
+};
 export type FactorLoading = { id: string; label: string; loading: number; rank: number; gene_set_id?: string | null; library?: string | null; joint_loading?: number | null; marginal_loading?: number | null };
 export type CatalogGeneSet = { id: string; object?: { members?: unknown[] | null } | null };
 export type FactorLoadings = { items: FactorLoading[]; total: number; offset: number; limit: number; next_offset: number | null };
@@ -81,6 +111,9 @@ export const api = {
     method: "POST", key, body,
   }),
   cfdeAssessment: (draftId: string, assessmentId: string, signal?: AbortSignal) => request<CfdeAssessment>(backend("drafts/" + encodeURIComponent(draftId) + "/cfde-assessments/" + encodeURIComponent(assessmentId)), { signal }),
+  lightningAudits: () => request<{ items: LightningAudit[] }>(backend("lightning-audits?limit=20")),
+  createLightningAudit: (body: { draft_id: string; draft_version: number }, key: string) => request<LightningAudit>(backend("lightning-audits"), { method: "POST", key, body }),
+  lightningAudit: (auditId: string) => request<LightningAudit>(backend("lightning-audits/" + encodeURIComponent(auditId))),
   suggest: (composer: Composer, signal?: AbortSignal) => request<Schema<"Suggestions">>(backend("mechanisms/suggest"), {
     method: "POST", signal, body: { source_gap: composer.source_gap, manual_eaggl_anchors: [], dismissed_source_ids: [],
       subquery: composer.mechanism_subquery, mode: "semantic", model: composer.model },

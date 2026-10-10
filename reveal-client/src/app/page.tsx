@@ -3,12 +3,13 @@ import { changedWorkspace, sessionReloadKey } from "@/lib/browser-session";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { version as clientVersion } from "../../package.json";
-import { api, ApiError, backend, errorMessage, request, type CfdeAssessment, type FactorLoading } from "../lib/api";
+import { api, ApiError, backend, errorMessage, request, type CfdeAssessment, type FactorLoading, type LightningAudit, type LightningAuditProgress, type LightningAuditResult } from "../lib/api";
 import { followJob, followWorkspace } from "../lib/events";
 import { createMutationKeys } from "../lib/mutations";
 import { emptyComposer, terminal, withFactors, type AnalysisInput, type Composer, type Draft, type Factor, type Gap, type Job, type JobEvent, type Me, type Schema } from "../lib/types";
 
 type PendingSubmission = { body: AnalysisInput; key: string };
+type FeasibilityRun = { draft: Draft; cfde: "yes" | "no"; audit: LightningAudit | null };
 type ParagraphProgress = { job?: Job; text?: string; error?: string };
 const readable = (value: string) => value.replaceAll("_", " ");
 function outcomeLabel(status: string) {
@@ -565,6 +566,10 @@ function displayActivity(events: JobEvent[]) {
   }
   return shown;
 }
+function FeasibilityReport({ result }: { result: LightningAuditResult }) {
+  const summary = result.summary.split(/\n\n+/).map(paragraph => paragraph.trim()).filter(Boolean);
+  return <section className="feasibility-report"><h3>Feasibility assessment report</h3><h4>Test summary</h4>{summary.map(paragraph => <p key={paragraph}>{paragraph}</p>)}{!!result.observations.length && <><h4>Observations</h4><ul>{result.observations.map(item => <li key={item.text}>{item.text}</li>)}</ul></>}{!!result.limitations.length && <><h4>Limitations</h4><ul>{result.limitations.map(item => <li key={item}>{item}</li>)}</ul></>}{!!result.missing_evidence.length && <><h4>Missing evidence</h4><ul>{result.missing_evidence.map(item => <li key={item}>{item}</li>)}</ul></>}{result.recommended_direction && <><h4>Recommended direction</h4><p>{result.recommended_direction}</p></>}{!!result.next_steps.length && <><h4>Next steps</h4><ul>{result.next_steps.map(item => <li key={item}>{item}</li>)}</ul></>}</section>;
+}
 function ActivityRecord({ events, logRef }: { events: JobEvent[]; logRef: RefObject<HTMLDivElement | null> }) {
   const shown = displayActivity(events);
   return <div className="event-log" ref={logRef} aria-label="Job activity events">{!shown.length && <p className="empty">Loading saved activity…</p>}{shown.map(event => <article className={"event " + event.event_type} key={event.id}><div className="event-header"><span>{event.detail?.tool_name || readable(event.event_type)}</span><time dateTime={event.occurred_at}>{new Date(event.occurred_at).toLocaleTimeString()}</time></div><p>{event.message}</p>{event.detail?.output_excerpt && <details><summary>Captured output</summary><pre>{event.detail.output_excerpt}</pre></details>}{event.detail?.artifact_sha256 && <a href={backend("artifacts/" + event.detail.artifact_sha256)} target="_blank" rel="noreferrer">Open captured artifact</a>}</article>)}</div>;
@@ -745,7 +750,6 @@ export default function Home() {
   const [composer, setComposer] = useState<Composer>(emptyComposer);
   const [gap, setGap] = useState<Gap | null>(null);
   const [query, setQuery] = useState("");
-  const [researchContext, setResearchContext] = useState("");
   const [gaps, setGaps] = useState<Gap[]>([]);
   const [searching, setSearching] = useState(false);
   const [searched, setSearched] = useState(false);
@@ -774,6 +778,9 @@ export default function Home() {
   const [pendingDelete, setPendingDelete] = useState<Draft | null>(null);
   const [cfdeGate, setCfdeGate] = useState<Draft | null>(null);
   const [cfdePassed, setCfdePassed] = useState(false);
+  const [feasibility, setFeasibility] = useState<FeasibilityRun | null>(null);
+  const [fullInvestigation, setFullInvestigation] = useState(false);
+  const [investigationTab, setInvestigationTab] = useState<"assessment" | "result">("assessment");
   const [inspectGap, setInspectGap] = useState<Gap | null>(null);
   const [inspectGapNote, setInspectGapNote] = useState("");
   const [inspectFactor, setInspectFactor] = useState<Factor | null>(null);
@@ -807,6 +814,11 @@ export default function Home() {
   const activityPinned = useRef<string | null>(null);
   const activityCollapsed = useRef<string | null>(null);
   const activityLogRef = useRef<HTMLDivElement>(null);
+  const lightningSeen = useRef<LightningAuditProgress | null>(null);
+  const lightningStatus = useRef("");
+  const runLightningRef = useRef<(saved: Draft, cfde: "yes" | "no", existing?: LightningAudit) => Promise<void>>(async () => undefined);
+  const assessmentActive = useRef(false);
+  const draftIdRef = useRef<string | null>(null);
   const submittedDraft = useRef<string | null>(null);
   const completionSaved = useRef(new Set<string>());
   const saveRef = useRef<(asNew?: boolean, options?: { name?: string; quiet?: boolean; updateOnly?: boolean; draftId?: string; composer?: Composer }) => Promise<Draft | null>>(async () => null);
@@ -815,6 +827,8 @@ export default function Home() {
   const helpMenu = useRef<HTMLDivElement>(null);
   const keptName = useRef("");
   const searchedQuery = useRef<string | null>(null);
+  const suggestedSubquery = useRef<string | null>(null);
+  draftIdRef.current = draft?.id ?? null;
   const dirty = !draft || JSON.stringify(draft.composer) !== JSON.stringify(composer) || (draft.name || "") !== name;
   const selectionForked = !!draft && selectionSignature(composer) !== selectionSignature(draft.composer);
   const mutable = Boolean(principal) && !busy;
@@ -855,12 +869,14 @@ export default function Home() {
     } catch (error) { if (generation === jobGeneration.current && owner === identity.current) setError(errorMessage(error)); }
   }, []);
   const openDraft = useCallback(async (id: string) => {
+    if (assessmentActive.current && draftIdRef.current === id) return;
+    assessmentActive.current = false;
     const generation = ++editorGeneration.current, owner = identity.current;
     suggestionAbort.current?.abort(); setSuggesting(false);
     try {
       const value = await api.draft(id);
       if (generation !== editorGeneration.current || owner !== identity.current) return;
-      setDraft(value); setComposer(value.composer); setName(value.name || ""); setSuggestion(null); setGap(null); setResearchContext(""); setCfdePassed(readCfdePassed().includes(id));
+      setDraft(value); setComposer(value.composer); setName(value.name || ""); setSuggestion(null); setGap(null); suggestedSubquery.current = value.composer.mechanism_subquery || ""; setFeasibility(null); setFullInvestigation(false); assessmentActive.current = false; setCfdePassed(readCfdePassed().includes(id));
       setQuery(""); setGaps([]); setSearched(false); setGapListMode(null); searchedQuery.current = null;
       setLocation("draft", id); setNotice("Saved draft loaded."); setError(""); setWelcomeOpen(false);
       const suggestionController = new AbortController();
@@ -903,7 +919,26 @@ export default function Home() {
       const requestIds = new Set(requestPage.items.filter(item => item.source_draft_id === id).map(item => item.id));
       const linked = jobPage.items.filter(item => item.kind === "analysis" && !!item.research_request_id && requestIds.has(item.research_request_id))
         .sort((a, b) => Number(b.status === "succeeded") - Number(a.status === "succeeded") || b.created_at.localeCompare(a.created_at))[0];
-      if (!linked) { setStartedDraftId(null); setStep(value.composer.source_gap ? "anchors" : "gap"); return; }
+      let audit: LightningAudit | undefined;
+      try {
+        const page = await api.lightningAudits();
+        if (generation !== editorGeneration.current || owner !== identity.current) return;
+        audit = page.items.filter(item => item.source_draft_id === id).sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
+      } catch { /* A draft still opens when the feasibility list is unavailable. */ }
+      if (generation !== editorGeneration.current || owner !== identity.current) return;
+      const support = readCfdePassed().includes(id) ? "yes" as const : "no" as const;
+      if (audit?.status === "succeeded" && audit.result) {
+        setFeasibility({ draft: value, cfde: support, audit });
+        if (linked) { setFullInvestigation(true); setInvestigationTab("result"); }
+      } else if (audit && (audit.status === "preparing" || audit.status === "assessing")) {
+        void runLightningRef.current(value, support, audit);
+      }
+      if (!linked) {
+        setStartedDraftId(null);
+        if ((audit?.status === "succeeded" && audit.result) || audit?.status === "preparing" || audit?.status === "assessing" || assessmentActive.current) setStep("investigation");
+        else setStep(value.composer.source_gap ? "anchors" : "gap");
+        return;
+      }
       setStartedDraftId(id); submittedDraft.current = id; submittedJob.current = linked.id;
       const finished = terminal(linked.status);
       if (finished) activityCollapsed.current = linked.id;
@@ -1198,7 +1233,7 @@ export default function Home() {
       }
       if (restore) setLocation("draft", restore);
       setPrincipal(value.principal); setNotice(""); setPanelView("menu"); setWelcomeOpen(!restore); setActivityOpen(false); setSettingsOpen(false);
-      setDraft(null); setComposer(emptyComposer()); setName(""); setGap(null); setSuggestion(null); setResearchContext(""); setStep("gap"); currentJob.current = null; setJob(null);
+      setDraft(null); setComposer(emptyComposer()); setName(""); setGap(null); setSuggestion(null); setFeasibility(null); setFullInvestigation(false); assessmentActive.current = false; setStep("gap"); currentJob.current = null; setJob(null);
     }
     catch (error) { setError(errorMessage(error)); }
     finally { setBusy(""); }
@@ -1209,7 +1244,7 @@ export default function Home() {
     setBusy("disconnect");
     try {
       await api.disconnect(); setSessionOpen(false); setDraftPicker(false); setHelpOpen(false); setSettingsOpen(false); setWelcomeOpen(false); setPanelView("menu"); setStep("gap"); setActivityOpen(false); setPrincipal(null); currentJob.current = null; setJob(null); setDraft(null); setJobs([]); setDrafts([]);
-      setComposer(emptyComposer()); setName(""); setGap(null); setSuggestion(null); setResearchContext(""); setActivity([]); setPending(null);
+      setComposer(emptyComposer()); setName(""); setGap(null); setSuggestion(null); setFeasibility(null); setFullInvestigation(false); assessmentActive.current = false; setActivity([]); setPending(null);
       setNotice(guest ? "Disconnected. Access to this guest workspace is lost. Running jobs remain on the server." : "Disconnected. Saved work and running jobs remain on the server.");
     } catch (error) { setError(errorMessage(error)); }
     finally { setBusy(""); }
@@ -1234,6 +1269,7 @@ export default function Home() {
     try {
       const value = await api.suggest(next, controller.signal);
       if (controller.signal.aborted || generation !== editorGeneration.current) return;
+      suggestedSubquery.current = next.mechanism_subquery || "";
       setSuggestion(value); setFactors(values => ({ ...values, ...Object.fromEntries(value.automatic_anchors.map(anchor => [anchor.factor.source_id, anchor.factor])) }));
       const suggested = value.automatic_anchors.map(anchor => anchor.factor);
       setComposer(current => {
@@ -1249,19 +1285,19 @@ export default function Home() {
     ++editorGeneration.current;
     const next: Composer = { ...composer, source_gap: { id: value.object.id, source_id: value.source.source_id, source_revision: value.source.source_revision }, eaggl_anchors: [], dismissed_source_ids: [] };
     if (searchedQuery.current !== null) rememberGapSearch(searchedQuery.current, draft?.id, value.source.source_id);
-    setGap(value); setComposer(next); setSuggestion(null); setNotice(""); setStep("anchors");
+    setGap(value); setComposer(next); setSuggestion(null); setFeasibility(null); setFullInvestigation(false); assessmentActive.current = false; setNotice(""); setStep("anchors");
     void suggest(next, false);
   }
   function newDraft() {
     if (dirty && (composer.source_gap || name) && !window.confirm("Start a new draft? Unsaved changes will be discarded.")) return false;
     ++editorGeneration.current; suggestionAbort.current?.abort(); setSuggesting(false);
-    setDraft(null); setName(""); setComposer(emptyComposer()); setGap(null); setSuggestion(null); setResearchContext(""); setLocation("draft", null); setNotice(""); setError(""); setStep("gap"); setActivityOpen(false);
+    setDraft(null); setName(""); setComposer(emptyComposer()); setGap(null); setSuggestion(null); setFeasibility(null); setFullInvestigation(false); assessmentActive.current = false; setLocation("draft", null); setNotice(""); setError(""); setStep("gap"); setActivityOpen(false);
     return true;
   }
   function beginWithoutDraft() {
     if (dirty && (draft || composer.source_gap || name) && !window.confirm("Leave this draft and choose a knowledge gap? Unsaved changes will be discarded.")) return;
     ++editorGeneration.current; suggestionAbort.current?.abort(); setSuggesting(false);
-    setDraft(null); setName(""); setComposer(emptyComposer()); setGap(null); setSuggestion(null); setResearchContext("");
+    setDraft(null); setName(""); setComposer(emptyComposer()); setGap(null); setSuggestion(null); setFeasibility(null); setFullInvestigation(false); assessmentActive.current = false;
     searchedQuery.current = null;
     setQuery(""); setGaps([]); setSearched(false); setGapListMode(null); setLocation("draft", null); setNotice(""); setError("");
     setStep("gap"); setActivityOpen(false); setWelcomeOpen(false); setPanelView("menu");
@@ -1271,7 +1307,7 @@ export default function Home() {
     setSessionOpen(false);
     if (dirty && (draft || composer.source_gap || name) && !window.confirm("Start a new session? Unsaved changes will be discarded.")) return;
     ++editorGeneration.current; suggestionAbort.current?.abort(); setSuggesting(false);
-    setDraft(null); setName(""); setComposer(emptyComposer()); setGap(null); setSuggestion(null); setResearchContext("");
+    setDraft(null); setName(""); setComposer(emptyComposer()); setGap(null); setSuggestion(null); setFeasibility(null); setFullInvestigation(false); assessmentActive.current = false;
     searchedQuery.current = null;
     setQuery(""); setGaps([]); setSearched(false); setGapListMode(null); setLocation("draft", null); setLocation("job", null);
     setNotice(""); setError(""); setStep("gap"); setActivityOpen(false); setPanelView("menu");
@@ -1300,7 +1336,7 @@ export default function Home() {
   async function browseTrending() {
     if (dirty && (draft || composer.source_gap || name) && !window.confirm("Leave this draft and browse trending knowledge gaps? Unsaved changes will be discarded.")) return;
     ++editorGeneration.current; suggestionAbort.current?.abort(); setSuggesting(false);
-    setDraft(null); setName(""); setComposer(emptyComposer()); setGap(null); setSuggestion(null); setResearchContext("");
+    setDraft(null); setName(""); setComposer(emptyComposer()); setGap(null); setSuggestion(null); setFeasibility(null); setFullInvestigation(false); assessmentActive.current = false;
     searchedQuery.current = null;
     setQuery(""); setGaps([]); setSearched(false); setGapListMode(null); setLocation("draft", null); setNotice(""); setError("");
     setStep("gap"); setActivityOpen(false); setWelcomeOpen(false); setPanelView("menu");
@@ -1325,7 +1361,7 @@ export default function Home() {
       await mutationKeys.current.run(["delete", value.id, value.version], key => api.deleteDraft(value, key));
       if (draft?.id === value.id) {
         ++editorGeneration.current; suggestionAbort.current?.abort(); setSuggesting(false);
-        setDraft(null); setName(""); setComposer(emptyComposer()); setGap(null); setSuggestion(null); setResearchContext(""); setLocation("draft", null); setStep("gap"); setActivityOpen(false);
+        setDraft(null); setName(""); setComposer(emptyComposer()); setGap(null); setSuggestion(null); setFeasibility(null); setFullInvestigation(false); assessmentActive.current = false; setLocation("draft", null); setStep("gap"); setActivityOpen(false);
       }
       await refresh(["drafts"]);
     } catch (error) { setError(errorMessage(error)); }
@@ -1356,6 +1392,60 @@ export default function Home() {
   function noteActivity(message: string, eventType: JobEvent["event_type"] = "progress") {
     setActivity(items => [...items, activityNote(message, eventType)].slice(-1000));
   }
+  function noteLightningProgress(progress: LightningAuditProgress) {
+    const phase = progress.phase === "validating" ? "Checking the feasibility assessment." : "Writing the feasibility assessment.";
+    if (lightningStatus.current !== phase) { lightningStatus.current = phase; noteActivity(phase); }
+    const previous = lightningSeen.current;
+    lightningSeen.current = progress;
+    if (previous?.revision === progress.revision) return;
+    const addedText = (label: string, before: string, after: string) => {
+      const added = after.startsWith(before) ? after.slice(before.length).trim() : after.trim();
+      if (added && added !== before.trim()) noteActivity(`${label}: ${added}`);
+    };
+    const addedItems = (label: string, before: string[], after: string[]) => {
+      for (const item of after) if (item.trim() && !before.includes(item)) noteActivity(`${label}: ${item.trim()}`);
+    };
+    addedText("Test summary", previous?.summary || "", progress.summary);
+    addedItems("Observations", previous?.observations || [], progress.observations);
+    addedItems("Limitations", previous?.limitations || [], progress.limitations);
+    addedItems("Missing evidence", previous?.missing_evidence || [], progress.missing_evidence);
+    addedText("Recommended direction", previous?.recommended_direction || "", progress.recommended_direction);
+    addedItems("Next steps", previous?.next_steps || [], progress.next_steps);
+  }
+  async function runLightningAudit(saved: Draft, cfde: "yes" | "no", existing?: LightningAudit) {
+    const generation = editorGeneration.current;
+    assessmentActive.current = true;
+    lightningSeen.current = null; lightningStatus.current = "";
+    setFeasibility({ draft: saved, cfde, audit: existing?.result ? existing : null });
+    setFullInvestigation(false); setInvestigationTab("assessment"); setStep("investigation"); setActivityLogOpen(true); setInspectFocus("activity");
+    try {
+      let current = existing;
+      if (!current) {
+        noteActivity("Starting the feasibility assessment.");
+        current = await mutationKeys.current.run(["lightning-audit", saved.id, saved.version], key => api.createLightningAudit({ draft_id: saved.id, draft_version: saved.version }, key));
+      }
+      const deadline = Date.now() + 150_000;
+      while (current.status === "preparing" || current.status === "assessing") {
+        if (generation !== editorGeneration.current) return;
+        if (current.status === "preparing" && !lightningStatus.current) { lightningStatus.current = "preparing"; noteActivity("Preparing the feasibility assessment."); }
+        if (current.progress) noteLightningProgress(current.progress);
+        if (Date.now() > deadline) throw new Error("The feasibility assessment did not finish. Start the investigation again to retry.");
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        current = await api.lightningAudit(current.id);
+      }
+      if (generation !== editorGeneration.current) return;
+      if (current.status !== "succeeded" || !current.result) throw new Error(current.error?.detail || "The feasibility assessment did not finish. Start the investigation again to retry.");
+      noteActivity("Feasibility assessment finished.");
+      setFeasibility({ draft: saved, cfde, audit: current });
+    } catch (error) {
+      if (generation !== editorGeneration.current) return;
+      const message = error instanceof Error && error.name === "Error" ? error.message : errorMessage(error);
+      noteActivity(message, "failure");
+      setError(message);
+      setFeasibility(null);
+    }
+  }
+  runLightningRef.current = runLightningAudit;
   async function assessCfdeSupport(saved: Draft): Promise<"yes" | "no"> {
     const created = await mutationKeys.current.run(["cfde-assessment", saved.id, saved.version, saved.composer], key => api.createCfdeAssessment(saved.id, { draft_version: saved.version, composer: saved.composer }, key));
     let current: CfdeAssessment = created;
@@ -1377,10 +1467,13 @@ export default function Home() {
   async function startInvestigation() {
     if (pending) { await beginAnalysis(); return; }
     if (!composer.source_gap || !composer.eaggl_anchors.length) return;
+    ++editorGeneration.current;
+    assessmentActive.current = true;
     setCfdeGate(null);
     setCfdePassed(false);
     setActivity([activityNote("Checking CFDE support for this investigation.")]);
-    setActivityLogOpen(true); setInspectFocus("activity");
+    setActivityLogOpen(true); setInspectFocus("activity"); setStep("investigation");
+    setFeasibility(null); setFullInvestigation(false); currentJob.current = null; setJob(null); setLocation("job", null);
     setBusy("assess"); setError("");
     let saved: Draft | null = null;
     let verdict: "yes" | "no" | null = null;
@@ -1395,20 +1488,31 @@ export default function Home() {
       setError(message);
       return;
     } finally { setBusy(""); }
-    if (!saved) return;
+    if (!saved || !verdict) return;
     if (verdict === "yes") {
       rememberCfdePassed(saved.id);
       setCfdePassed(true);
       noteActivity("CFDE evidence can support this investigation.");
-      await beginAnalysis(saved);
+      setBusy("lightning");
+      try { await runLightningAudit(saved, "yes"); }
+      finally { setBusy(""); }
       return;
     }
-    if (verdict === "no") {
-      forgetCfdePassed(saved.id);
-      noteActivity("No CFDE evidence was found for this investigation.", "warning");
-      setCfdePassed(false);
-      setCfdeGate(saved);
-    }
+    forgetCfdePassed(saved.id);
+    noteActivity("No CFDE evidence was found for this investigation.", "warning");
+    setCfdePassed(false);
+    setCfdeGate(saved);
+  }
+  async function continueAfterCfde(saved: Draft) {
+    setBusy("lightning");
+    try { await runLightningAudit(saved, "no"); }
+    finally { setBusy(""); }
+  }
+  async function launchFullInvestigation(saved: Draft) {
+    const previousJob = currentJob.current?.id || null;
+    setFullInvestigation(true); setInvestigationTab("result");
+    await beginAnalysis(saved);
+    if (currentJob.current?.id === previousJob) setFullInvestigation(false);
   }
   async function beginAnalysis(saved?: Draft) {
     if (!principal) return;
@@ -1501,10 +1605,13 @@ export default function Home() {
     return <>{bubbles}<span className="factor-more">+ {extra} {extra === 1 ? "factor" : "factors"}</span></>;
   };
   const factorList = composer.eaggl_anchors.map(anchor => { const factor = factors[anchor.reference.source_id]; return factor ? factorTitle(factor) : anchor.reference.source_id; }).join(", ");
-  const investigationPanel = <>
-    {!!factorList && <p className="investigation-field"><strong>Factors:</strong> {factorList}</p>}
-    {job && <div className="activity-status-row"><strong>Status:</strong><p>Started {date(job.created_at)}</p>{job.completed_at && <p>Completed {date(job.completed_at)}</p>}<span className={"status " + job.status}>{readable(job.status)}</span>{paragraphWriting && <span className="status running">Writing the cited claim</span>}{!terminal(job.status) && <button className="danger small" onClick={cancel} disabled={!!busy || job.status === "cancel_requested"}>{job.status === "cancel_requested" ? "Stopping…" : "Stop"}</button>}{resultActions.map(action => <span className="status-link-item" key={action.key}><span className="status-rule" aria-hidden="true">|</span><button type="button" className="status-link" onClick={() => openResultInspect(action.inspect)}>{action.label}</button></span>)}<span className="status-link-item"><span className="status-rule" aria-hidden="true">|</span><button type="button" className="status-link" onClick={openActivityInspect}>Activity</button></span></div>}
-    {job?.kind === "analysis" && job.status === "succeeded" && <p className="evidence-provenance"><button type="button">Evidence provenance</button></p>}
+  const feasibilityResult = feasibility?.audit?.result;
+  const feasibilityReport = feasibilityResult ? <FeasibilityReport result={feasibilityResult} /> : feasibility ? <p role="status" className="loading">Running the feasibility assessment…</p> : busy === "assess" ? <p role="status" className="loading">Checking CFDE support…</p> : null;
+  const showTabs = fullInvestigation && !!feasibilityResult;
+  const showStartFull = !!feasibilityResult && !fullInvestigation && !job && !selectionForked;
+  const jobReport = <>
+    {!job && showTabs && <p role="status" className="loading">Submitting the investigation…</p>}
+    {job && <div className="activity-status-row"><strong>Status:</strong><p>Started {date(job.created_at)}</p>{job.completed_at && <p>Completed {date(job.completed_at)}</p>}<span className={"status " + job.status}>{readable(job.status)}</span>{paragraphWriting && <span className="status running">Writing the cited claim</span>}{!terminal(job.status) && <button className="danger small" onClick={cancel} disabled={!!busy || job.status === "cancel_requested"}>{job.status === "cancel_requested" ? "Stopping…" : "Stop"}</button>}</div>}
     {!!job?.warnings.length && <div className="notice"><ul>{job.warnings.map(value => <li key={value}>{value}</li>)}</ul></div>}
     {job?.failure && <div className="notice error" role="alert"><div><strong>Research could not complete</strong><p>{job.failure.message}</p><span className="small">{job.failure.code}</span>{job.failure.code.startsWith("REVIEW_") && job.failure.retryable && <p><button className="secondary" onClick={retryReview} disabled={!!busy}>{busy === "review" ? "Requesting review…" : "Retry saved review"}</button></p>}</div></div>}
     {job?.status === "cancelled" && <p className="notice">This job was stopped. No successful result is implied.</p>}
@@ -1512,6 +1619,10 @@ export default function Home() {
     {job?.result && <ResultView job={job} principalKind={principal?.principal_kind} onActions={setResultActions} />}
     {job?.kind === "analysis" && job.status === "succeeded" && <section className="paragraph-result"><h3>Cited claim</h3>{job.result?.kind === "analysis" && job.result.paragraph_job_ids.map(id => <ParagraphView key={id} progress={paragraphs[id]} />)}</section>}
   </>;
+  const investigationPanel = showTabs ? (investigationTab === "assessment" ? feasibilityReport : jobReport) : <>{feasibilityReport}{jobReport}</>;
+  const showActivityLink = !!job || !!feasibility || activity.length > 0;
+  const showEvidenceProvenance = job?.kind === "analysis" && job.status === "succeeded";
+  const headingAside = showStartFull || showEvidenceProvenance;
   const activeStep = step === "anchors" || step === "investigation" ? step : "gap";
   if (trackedStep !== activeStep) {
     const previous = trackedStep;
@@ -1529,6 +1640,7 @@ export default function Home() {
   const inspectColumnOpen = showGapInspect || showFactorInspect || showResultInspect || showActivityInspect;
   const inspectColumnFocus = activeStep === "gap" ? "gap" as const : activeStep === "anchors" ? "factor" as const : inspectFocus === "activity" && showActivityInspect ? "activity" as const : inspectFocus === "result" && showResultInspect ? "result" as const : showActivityInspect ? "activity" as const : "result" as const;
   const analysisRunning = !!job && !terminal(job.status);
+  const step3Ready = !!job || !!feasibility || busy === "assess" || busy === "lightning";
   const lastActivity = displayActivity(activity).at(-1) ?? null;
   const analysisComplete = !!job && terminal(job.status);
   const publicationLabel = publication === "public" ? "Published" : "";
@@ -1547,7 +1659,7 @@ export default function Home() {
         {principal ? <span className="connection-status" role="status">Workspace connected</span> : <button onClick={() => void connect()} disabled={checking || busy === "connect"}>{checking || busy === "connect" ? "Connecting…" : "Connect workspace"}</button>}
         <button type="button" className="settings-button" aria-label="Settings" aria-expanded={settingsOpen} onClick={() => { setSessionOpen(false); setHelpOpen(false); setSettingsTab("settings"); setSettingsOpen(true); }}><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.48.48 0 0 0-.48-.41h-3.84a.48.48 0 0 0-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 0 0-.59.22L2.74 8.87a.48.48 0 0 0 .12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32a.49.49 0 0 0-.12-.61l-2.03-1.58zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z" /></svg></button>
       </div></header>
-    {inWorkspace && <div className="workspace-bar"><div className="step-rail" role="tablist" aria-label="Investigation steps"><button type="button" role="tab" aria-selected={activeStep === "gap"} className={"step-rail-card" + (activeStep === "gap" ? " active" : "")} onClick={() => setStep("gap")}><span className="step-rail-title"><span className="step-number">1</span>Choose a knowledge gap</span>{gap && <span className="step-rail-summary">{gap.object.text || gapTitle(gap)}</span>}</button><button type="button" role="tab" aria-selected={activeStep === "anchors"} className={"step-rail-card" + (activeStep === "anchors" ? " active" : "") + (gapChosen ? "" : " inactive")} disabled={!gapChosen && activeStep !== "anchors"} onClick={() => { if (gapChosen) setStep("anchors"); }}><span className="step-rail-title"><span className="step-number">2</span>Select mechanism anchors</span>{anchorChosen && <span className="step-rail-summary bubbles">{factorBubbles(2)}</span>}</button><button type="button" role="tab" aria-selected={activeStep === "investigation"} className={"step-rail-card" + (activeStep === "investigation" ? " active" : "") + (job ? "" : " inactive")} disabled={!job && activeStep !== "investigation"} onClick={() => { if (job) setStep("investigation"); }}><span className="step-rail-title"><span className="step-number">3</span>Investigation</span>{investigationRail}</button></div>{errorNotice}</div>}
+    {inWorkspace && <div className="workspace-bar"><div className="step-rail" role="tablist" aria-label="Investigation steps"><button type="button" role="tab" aria-selected={activeStep === "gap"} className={"step-rail-card" + (activeStep === "gap" ? " active" : "")} onClick={() => setStep("gap")}><span className="step-rail-title"><span className="step-number">1</span>Choose a knowledge gap</span>{gap && <span className="step-rail-summary">{gap.object.text || gapTitle(gap)}</span>}</button><button type="button" role="tab" aria-selected={activeStep === "anchors"} className={"step-rail-card" + (activeStep === "anchors" ? " active" : "") + (gapChosen ? "" : " inactive")} disabled={!gapChosen && activeStep !== "anchors"} onClick={() => { if (gapChosen) setStep("anchors"); }}><span className="step-rail-title"><span className="step-number">2</span>Select mechanism anchors</span>{anchorChosen && <span className="step-rail-summary bubbles">{factorBubbles(2)}</span>}</button><button type="button" role="tab" aria-selected={activeStep === "investigation"} className={"step-rail-card" + (activeStep === "investigation" ? " active" : "") + (step3Ready ? "" : " inactive")} disabled={!step3Ready && activeStep !== "investigation"} onClick={() => { if (step3Ready) setStep("investigation"); }}><span className="step-rail-title"><span className="step-number">3</span>Investigation</span>{investigationRail}</button></div>{errorNotice}</div>}
     <main className={inWorkspace ? "workspace" : undefined}>
       {guestNote && principal?.principal_kind === "anonymous" && <p className="notice">Guest workspace: available in this browser until {date(principal.workspace_expires_at || "")}. Clearing cookies or disconnecting loses access to saved work.</p>}
       {!inWorkspace && errorNotice}
@@ -1558,14 +1670,14 @@ export default function Home() {
             <h2 className="step-heading"><span className="step-number">1</span>Choose a knowledge gap</h2>
             <p className="step-guide">Find an existing scientific question that evidence still leaves unexplained. The gap you select becomes the question this investigation will try to ground.</p>
             <div className="step-body"><form className="search-control" autoComplete="off" onSubmit={event => { event.preventDefault(); void search(); }}><label className="sr-only" htmlFor="gap-search">Search knowledge gaps</label><input id="gap-search" name="reveal-gap-search" type="text" inputMode="search" autoComplete="off" autoCorrect="off" spellCheck={false} value={query} onChange={event => setQuery(event.target.value)} placeholder="Search a disease or research question" /><button type="submit" className="secondary" disabled={searching}>{searching ? "Searching…" : "Search"}</button></form>
+              <label className="research-context" htmlFor="research-context"><span className="research-context-heading"><span>Research context (optional)</span><span className="research-context-note">This context is included in the mechanism search and the investigation.</span></span><input id="research-context" type="text" maxLength={2000} value={composer.mechanism_subquery || ""} onChange={event => setComposer(current => ({ ...current, mechanism_subquery: event.target.value }))} onBlur={() => { if (composer.source_gap && (composer.mechanism_subquery || "") !== (suggestedSubquery.current ?? "")) void suggest(composer, true); }} disabled={!mutable} autoComplete="off" /></label>
               {gaps.length > 0 && <div className="gap-results"><p className="gap-guide">{gapListMode === "selected" ? "The knowledge gap selected for this draft." : `${query.trim() ? `${gaps.length} knowledge gap${gaps.length === 1 ? "" : "s"} found.` : `${gaps.length} trending knowledge gaps.`} Use Select to choose one for the next step.`}</p><div className="gap-list" aria-label="Knowledge gap search results">{gaps.map(value => <GapOption key={value.source.source_id} gap={value} maxAccounts={maxGapAccounts} selected={composer.source_gap?.source_id === value.source.source_id} disabled={!mutable} onSelect={() => selectGap(value)} onInspect={() => void openInspect(value)} />)}</div><ul className="gap-legend"><li><span className="gap-swatch accounts" aria-hidden="true" />Accounts</li><li><span className="gap-swatch up" aria-hidden="true" />Upvotes</li><li><span className="gap-swatch down" aria-hidden="true" />Downvotes</li></ul></div>}
               {searched && !searching && !gaps.length && <p className="empty">No matching gaps. Try a broader disease name.</p>}
             </div>
           </section>}
           {activeStep === "anchors" && <section className="step open">
-            <div className="step-heading-row"><div className="step-heading-copy"><h2 className="step-heading"><span className="step-number">2</span>Select mechanism anchors</h2><p className="step-guide">Choose genetic factors that may help explain the selected gap. Suggested factors start selected, and at least one is required to start an investigation.{suggestion?.limitations.length ? ` ${suggestion.limitations.join(" ")}` : ""}</p></div>{(anchorChosen || pending) && (!(startedDraftId && startedDraftId === draft?.id) || selectionForked) && <button type="button" className="step-next" onClick={() => void startInvestigation()} disabled={!mutable || suggesting || !!cfdeGate || (!pending && (!composer.source_gap || !composer.eaggl_anchors.length))}>{busy === "assess" ? "Checking CFDE support…" : busy === "submit" ? "Submitting…" : busy === "save" ? "Saving draft…" : pending ? "Recover submission" : "Start investigation"}</button>}</div>
+            <div className="step-heading-row"><div className="step-heading-copy"><h2 className="step-heading"><span className="step-number">2</span>Select mechanism anchors</h2><p className="step-guide">Choose genetic factors that may help explain the selected gap. Suggested factors start selected, and at least one is required to start an investigation.{suggestion?.limitations.length ? ` ${suggestion.limitations.join(" ")}` : ""}</p></div>{(anchorChosen || pending) && (!(startedDraftId && startedDraftId === draft?.id) || selectionForked) && !(feasibility && feasibility.draft.id === draft?.id && !selectionForked) && <button type="button" className="step-next" onClick={() => void startInvestigation()} disabled={!mutable || suggesting || !!cfdeGate || (!pending && (!composer.source_gap || !composer.eaggl_anchors.length))}>{busy === "assess" ? "Checking CFDE support…" : busy === "lightning" ? "Assessing feasibility…" : busy === "submit" ? "Submitting…" : busy === "save" ? "Saving draft…" : pending ? "Recover submission" : "Start investigation"}</button>}</div>
             <div className="step-body">{!composer.source_gap ? <p className="empty">Select a question to find related genetic mechanisms.</p> : <>
-                <label className="research-context" htmlFor="research-context">Attach research context (optional)<input id="research-context" type="text" value={researchContext} onChange={event => setResearchContext(event.target.value)} disabled={!mutable} autoComplete="off" /></label>
                 {!!anchorIds.length && <FactorNetwork guide={anchorChosen ? undefined : "At least one factor has to be selected to initiate investigation."} gapLabel={gap?.object.text || (gap ? gapTitle(gap) : "Knowledge gap")} rows={anchorIds.map(sourceId => {
                   const factor = factors[sourceId], selected = composer.eaggl_anchors.some(value => value.reference.source_id === sourceId);
                   const title = factor ? factorTitle(factor) : factorMisses[sourceId] ? sourceId : "Loading…";
@@ -1579,7 +1691,7 @@ export default function Home() {
             </div>
           </section>}
           {activeStep === "investigation" && <section className="step open">
-            <div className="step-heading-row investigation-heading"><div className="step-heading-copy"><h2 className="step-heading"><span className="step-number">3</span>Investigation</h2><p className="investigation-field">{gap ? <><strong>Knowledge gap:</strong> {gap.object.text || gapTitle(gap)}</> : <><strong>Knowledge gap:</strong> <span className="muted">Select a knowledge gap to investigate.</span></>}</p></div></div>
+            <div className={"step-heading-row investigation-heading" + (headingAside ? " with-aside" : "")}><div className="step-heading-copy"><h2 className="step-heading"><span className="step-number">3</span>Investigation</h2><p className="investigation-field">{gap ? <><strong>Knowledge gap:</strong> {gap.object.text || gapTitle(gap)}</> : <><strong>Knowledge gap:</strong> <span className="muted">Select a knowledge gap to investigate.</span></>}</p>{!!factorList && <p className="investigation-field"><strong>Factors:</strong> {factorList}</p>}{(showActivityLink || resultActions.length > 0) && <p className="investigation-nav">{resultActions.map((action, index) => <span className="status-link-item" key={action.key}>{index > 0 && <span className="status-rule" aria-hidden="true">|</span>}<button type="button" className="status-link" onClick={() => openResultInspect(action.inspect)}>{action.label}</button></span>)}{showActivityLink && <span className="status-link-item">{resultActions.length > 0 && <span className="status-rule" aria-hidden="true">|</span>}<button type="button" className="status-link" onClick={openActivityInspect}>Activity</button></span>}</p>}{showTabs && <div className="investigation-tabs" role="tablist" aria-label="Investigation contents"><button type="button" role="tab" aria-selected={investigationTab === "assessment"} onClick={() => setInvestigationTab("assessment")}>Feasibility assessment</button><button type="button" role="tab" aria-selected={investigationTab === "result"} onClick={() => setInvestigationTab("result")}>Investigation result</button></div>}</div>{headingAside && <div className="investigation-heading-actions">{showStartFull && <button type="button" className="step-next" onClick={() => { if (!feasibility) return; void launchFullInvestigation(feasibility.draft); }} disabled={!mutable || !!cfdeGate}>Start full investigation</button>}{showEvidenceProvenance && <p className="evidence-provenance"><button type="button">Evidence provenance</button></p>}</div>}</div>
             <div className="step-body">{investigationPanel}</div>
           </section>}
         </div>
@@ -1590,7 +1702,7 @@ export default function Home() {
     {draftPicker && <SavedDrafts drafts={drafts} jobs={jobs} requests={draftRequests} gapLabels={gapLabels} factorLabels={factorLabels} ready={catalogReady} requestsReady={requestsReady} page={draftPage} deletingId={deletingId} onPage={setDraftPage} onOpen={chooseDraft} onDelete={setPendingDelete} onClose={() => { setPendingDelete(null); setDraftPicker(false); }} />}
     {settingsOpen && <SettingsPanel tab={settingsTab} openLastDraft={openLastDraft} onTab={setSettingsTab} onOpenLastDraft={value => { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ openLastDraft: value })); setOpenLastDraft(value); }} onClose={() => setSettingsOpen(false)} />}
     {pendingDelete && <div className="warning-stage"><section className="warning-panel" role="alertdialog" aria-modal="true" aria-labelledby="delete-draft-heading" aria-describedby="delete-draft-copy"><h2 id="delete-draft-heading">Delete this draft</h2><p id="delete-draft-copy">{`Delete "${pendingDelete.name || "Untitled draft"}"? A submitted investigation from this draft stays available.`}</p><div className="actions"><button type="button" className="secondary" autoFocus onClick={() => setPendingDelete(null)}>Cancel</button><button type="button" className="confirm-delete" disabled={!!deletingId} onClick={() => void removeDraft(pendingDelete)}>{deletingId ? "Deleting…" : "Delete"}</button></div></section></div>}
-    {cfdeGate && <div className="warning-stage"><section className="warning-panel" role="alertdialog" aria-modal="true" aria-labelledby="cfde-gate-heading" aria-describedby="cfde-gate-copy"><h2 id="cfde-gate-heading">No CFDE evidence</h2><p id="cfde-gate-copy">No CFDE evidence was found for this investigation. Continue with evidence from other sources?</p><div className="actions"><button type="button" className="secondary" autoFocus onClick={() => setCfdeGate(null)}>Cancel</button><button type="button" className="confirm-continue" onClick={() => { const saved = cfdeGate; forgetCfdePassed(saved.id); setCfdePassed(false); setCfdeGate(null); void beginAnalysis(saved); }}>Continue</button></div></section></div>}
+    {cfdeGate && <div className="warning-stage"><section className="warning-panel" role="alertdialog" aria-modal="true" aria-labelledby="cfde-gate-heading" aria-describedby="cfde-gate-copy"><h2 id="cfde-gate-heading">No CFDE evidence</h2><p id="cfde-gate-copy">No CFDE evidence was found for this investigation. Continue with evidence from other sources?</p><div className="actions"><button type="button" className="secondary" autoFocus onClick={() => setCfdeGate(null)}>Cancel</button><button type="button" className="confirm-continue" onClick={() => { const saved = cfdeGate; forgetCfdePassed(saved.id); setCfdePassed(false); setCfdeGate(null); void continueAfterCfde(saved); }}>Continue</button></div></section></div>}
   </>;
 }
 
