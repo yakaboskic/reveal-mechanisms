@@ -2101,14 +2101,15 @@ def cmd_provenance_bottom_line(args):
               "Trait %s has KPN id %r" % (trait["legacy_id"], kpn))
         kpn_ids[trait["legacy_id"]] = kpn if KPN_TRAIT_ID_RE.match(kpn) else ""
 
-    def fetch(trait):
-        status, page = portal_get(args.portal_url, "bottom_line/" + urllib.parse.quote(trait["legacy_id"], safe=""), context)
+    def fetch(trait):  # small pages: a stalled connection is retried after 60 s rather than portal_get's default 600
+        status, page = portal_get(args.portal_url, "bottom_line/" + urllib.parse.quote(trait["legacy_id"], safe=""), context, timeout=60)
         check(status == 200, "The bottom_line page of %s returned HTTP %d" % (trait["legacy_id"], status))
         return portal_bottom_line(page, trait["legacy_id"])
     rows, empty = [], 0
     with ThreadPoolExecutor(max_workers=args.workers) as pool:
-        for trait, artifacts in zip(traits, pool.map(fetch, traits)):
+        for done, (trait, artifacts) in enumerate(zip(traits, pool.map(fetch, traits)), 1):
             empty += not artifacts
+            if done % 100 == 0 or done == len(traits): print("bottom_line pages: %d of %d" % (done, len(traits)), file=sys.stderr, flush=True)
             rows.extend({"kpn_trait_id": kpn_ids[trait["legacy_id"]], "portal_trait_id": trait["legacy_id"],
                          "trait_name": " ".join(str(trait.get("name") or "").split()), "ancestry_code": code,
                          "ancestry_name": name, "artifact_id": artifact} for code, name, artifact in artifacts)

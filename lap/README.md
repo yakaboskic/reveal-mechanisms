@@ -446,8 +446,9 @@ read the portal again, delete `*.bottom_line_artifacts.tsv`.
 ## Reference release (`release_` stage)
 
 The app's reference data is published as one release folder: traits, factors and their gene loadings, CFDE
-collections and gene sets, per-library top projections, DAPPER provenance (nodes and edges), frozen factor
-snapshots and the vectors. Design, file formats and the one-time migration from the old reload:
+collections (with their producer and curated provenance) and the gene sets that projections or betas reference,
+per-library top projections, gene-set betas, factor-trait links and the linkage phenotypes, frozen factor snapshots and
+the vectors. Design, file formats and the one-time migration from the old reload:
 [../docs/reference-release.md](../docs/reference-release.md).
 
 **Build** (`release_build_cmd`, a project-level cluster job with 32 GB; files only). It writes
@@ -458,8 +459,9 @@ traits, so never run it under `--only`:
 lap_run --only-cmd '^release_build_cmd$' --bsub
 ```
 
-It reads the LAP outputs, the per-trait long files (per-library ranks), the per-trait gene-set betas, the collection
-YAMLs, the curated source datasets `config/source_datasets.yaml` (below) and the vector cache
+It reads the LAP outputs, the per-trait long files (per-library ranks), the per-trait gene-set betas, the factor-trait
+links (`linkage_`), the portal's collection map and GWAS bottom-line artifacts (`provenance_`; run
+`lap_run --only-cmd '^provenance_' ` first), the collection YAMLs, the curated source datasets `config/source_datasets.yaml` (below) and the vector cache
 `raw/reference_vector_cache.sqlite` (factor-label and DisMech context vectors keyed by the sha256 of their text, seeded
 once from Aurora with `../scripts/reference_migration.py export-vectors`). Gene sets are not embedded. Only factor
 labels missing from the cache are embedded, with `EMBEDDING_SERVICE_URL` from the repository `.env`.
@@ -486,7 +488,8 @@ does not know: LINCS_L1000 HZ3 and HZ4 (384 collections), IDG HZ2 and GlyGen HZ2
 For each environment it loads that environment's `<prefix>_ref_*` tables (`reveal_workflow_local`,
 `reveal_workflow_qa`, `reveal`), swaps them in with one `RENAME`, and syncs the fixed Upstash namespaces
 `<env>-factors` and `<env>-contexts`. Running apps pick the new release up
-within a few seconds. A re-run is safe, and publishing an earlier release folder rolls back.
+within a few seconds. A re-run is safe. Publishing an earlier release folder rolls back, always from the newest
+checkout (it knows every file an older folder may hold; an absent optional file publishes an empty table).
 
 ## Environment and versions
 

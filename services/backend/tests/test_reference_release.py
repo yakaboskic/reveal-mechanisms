@@ -406,6 +406,15 @@ def test_factor_trait_links_are_sorted_with_empty_kpn_ids_and_summarized_on_each
     assert all('trait_links' not in row['snapshot']['metadata'] for row in rows(tmp_path / 'release' / rr.ARCHIVE_FILE))
 
 
+def test_subnormal_link_values_are_written_as_zero(lap, tmp_path):
+    """MySQL DOUBLE refuses subnormal numbers (LAP writes a few underflowed p values such as 1.85e-310)."""
+    links_file(lap, lambda lines: [line.replace('\t0.002\t0.02', '\t1.85e-310\t0.02') for line in lines])
+    build(lap, tmp_path / 'release')
+    links = {(row['factor_key'], row['phenotype']): row for row in rows(tmp_path / 'release' / 'factor_trait_links.tsv.gz', rr.FACTOR_LINK_COLUMNS)}
+    assert links[f'{KPN_A}::Factor1', 'gcat_trait_waist']['phewas_p_onesided'] == '0'
+    assert links[f'{KPN_A}::Factor1', 'T2D']['phewas_q'] == '2e-05'  # normal numbers keep LAP's text
+
+
 def links_file(lap, edit):
     path = lap.project / 'proj.factor_links.tsv'
     lines = path.read_text().splitlines(keepends=True)

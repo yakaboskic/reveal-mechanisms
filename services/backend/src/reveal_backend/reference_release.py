@@ -512,6 +512,16 @@ def _finite(value, where):
     return number
 
 
+# MySQL DOUBLE stores no subnormal numbers (strict mode refuses them): LAP writes a few p values below this.
+DOUBLE_MIN = 2.2250738585072014e-308
+
+
+def _double_text(value, where):
+    """LAP's number text, or '0' for a subnormal (an underflowed p value, as LAP already writes 0 for most)."""
+    number = _finite(value, where)
+    return '0' if number and abs(number) < DOUBLE_MIN else value
+
+
 def bottom_lines(rows):
     """{kpn_trait_id: (portal_trait_id, artifacts)} of the portal's bottom-line GWAS artifacts (the LAP
     provenance_bottom_line_cmd, one row per artifact); rows of portal traits without a KPN id are not joinable."""
@@ -742,7 +752,8 @@ def write_factor_links(path, out, lap):
                     if (link_factor, link_kpn) != (factor, kpn): raise Refused(f'{where}: the link names another KPN trait')
                     if phenotype not in phenotypes or _na(phenotype_kpn) != phenotypes[phenotype]['kpn_trait_id'] or phenotype in rows:
                         raise Refused(f'{where}: unknown or repeated phenotype, or its KPN id differs from the linkage phenotypes')
-                    q = [_finite(value, where) for value in values][-1]
+                    values = [_double_text(value, where) for value in values]
+                    q = float(values[-1])
                     rows[phenotype] = (q, (key, phenotype, _na(phenotype_kpn) or '', str(_truth(own, where)), str(_truth(atlas, where)), *values))
             if summary['n_linked'] != len(rows): raise Refused(f"{factor}: {len(rows)} link rows, the summary says {summary['n_linked']}")
             writer.write(''.join('\t'.join(rows[phenotype][1]) + '\n' for phenotype in sorted(rows)))
