@@ -1968,7 +1968,7 @@ def cmd_provenance_audit(args):
     def fetch(collection):
         status, body = portal_get(args.portal_url, "gene_set/list/id=" + urllib.parse.quote(collection[0], safe=""), context)
         return (status,) + (portal_gene_sets(body) if status == 200 else ([], None))
-    portal_of, counts, listed, failures = {}, Counter(), [], []
+    portal_of, also_in, counts, listed, failures = {}, defaultdict(list), Counter(), [], []
     with ThreadPoolExecutor(max_workers=args.workers) as pool, \
             open_text(os.path.join(args.work_dir, "portal_gene_sets.tsv"), "w") as out:
         out.write(tsv_line(PORTAL_GENE_SET_COLUMNS))
@@ -1979,7 +1979,10 @@ def cmd_provenance_audit(args):
                 failures.append((cid, list_status))
             for gid, gene_set_name in gene_sets:
                 out.write(tsv_line([gid, gene_set_name, cid]))
-                portal_of.setdefault(gid, cid)
+                if gid in portal_of:  # a gene set the portal lists in several collections
+                    also_in[gid].append(cid)
+                else:
+                    portal_of[gid] = cid
             counts[cid] = len(gene_sets)
             listed.append({"collection_id": cid, "name": name, "description": description, "n_gene_sets": len(gene_sets),
                            "list_status": list_status})
@@ -2002,9 +2005,11 @@ def cmd_provenance_audit(args):
                 n_missing += 1
                 out.write(tsv_line([gid, "release_only", row["gene_set_name"], cid, row["cfde_label"], row["library"], NA]))
                 continue
+            holders = [where] + also_in.get(gid, [])
             counts_of["on_portal"] += 1
-            counts_of["same_collection"] += where == cid
-            mapping[cid][where] += 1
+            counts_of["same_collection"] += cid in holders
+            for holder in holders:
+                mapping[cid][holder] += 1
         portal_only = 0
         with open_text(os.path.join(args.work_dir, "portal_gene_sets.tsv")) as fh:
             for portal_row in csv.DictReader(fh, delimiter="\t", quoting=csv.QUOTE_NONE):
@@ -2034,10 +2039,10 @@ def cmd_provenance_audit(args):
                      "n_release_in_same_portal_collection": per_release[cid]["same_collection"] if in_release else NA})
     write_tsv(args.output_collections_file, PROVENANCE_COLLECTION_COLUMNS, rows)
     statuses = Counter(r["status"] for r in rows)
-    print("Portal: %d collections, %d gene sets (%d list pages failed: %s). Release: %d collections, %d gene sets; %d gene "
-          "sets missing from the portal, %d portal gene sets of release collections missing from the release. "
-          "Collections: %s" % (len(collections), len(portal_of), len(failures), failures[:5], len(release), n_release,
-                               n_missing, portal_only, dict(sorted(statuses.items()))))
+    print("Portal: %d collections, %d gene sets (%d in several collections; %d list pages failed: %s). Release: %d "
+          "collections, %d gene sets; %d gene sets missing from the portal, %d portal gene sets of release collections missing "
+          "from the release. Collections: %s" % (len(collections), len(portal_of), len(also_in), len(failures), failures[:5],
+                                                  len(release), n_release, n_missing, portal_only, dict(sorted(statuses.items()))))
 
 
 # -------------------------------------------------------------------------------------------------

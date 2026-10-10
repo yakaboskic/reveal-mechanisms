@@ -1249,7 +1249,8 @@ class ProvenanceAuditTest(unittest.TestCase):
                        for cid, name in ((self.C1, "Shared &amp; listed"), (self.C2, "Portal grouping"), (self.C4, "Broken")))
         pages = {"/ap/home/gene_set": "<html><body><ul>%s</ul></body></html>" % home,
                  "/ap/gene_set/list/id=" + self.C1.replace(":", "%3A"): self.page([(g["1"], "one"), (g["2"], "two"), (g["9"], "nine")]),
-                 "/ap/gene_set/list/id=" + self.C2.replace(":", "%3A"): self.page([(g["3"], "three"), (g["7"], "seven")])}
+                 "/ap/gene_set/list/id=" + self.C2.replace(":", "%3A"): self.page([(g["3"], "three"), (g["7"], "seven"),
+                                                                                    (g["1"], "one again")])}
 
         class Portal(http.server.BaseHTTPRequestHandler):
             def do_GET(handler):
@@ -1293,12 +1294,12 @@ class ProvenanceAuditTest(unittest.TestCase):
                           c1["n_release_in_same_portal_collection"]), ("Shared & listed", "3", "2", "2", "2"))
         self.assertEqual((c3["in_portal"], c3["n_release_gene_sets"], c3["n_release_on_portal"]), ("False", "2", "1"))
         self.assertEqual([(r["release_collection_id"], r["portal_collection_id"], r["n_gene_sets"]) for r in read_rows(self.p("map.tsv"))],
-                         [(self.C1, self.C1, "2"), (self.C3, self.C2, "1")])
+                         [(self.C1, self.C1, "2"), (self.C1, self.C2, "1"), (self.C3, self.C2, "1")])
         self.assertEqual(sorted((r["gene_set_id"], r["status"]) for r in read_rows(self.p("gene_sets.tsv"))),
                          [(self.G["4"], "release_only"), (self.G["9"], "portal_only")])
         listed = {r["collection_id"]: r for r in read_rows(self.p("portal", "portal_collections.tsv"))}
         self.assertEqual((listed[self.C4]["list_status"], listed[self.C1]["description"]), ("http_404", "About 'Shared & listed'"))
-        self.assertEqual(len(read_rows(self.p("portal", "portal_gene_sets.tsv"))), 5)
+        self.assertEqual(len(read_rows(self.p("portal", "portal_gene_sets.tsv"))), 6)  # G1 is listed twice
 
 
 if __name__ == "__main__":
