@@ -479,6 +479,7 @@ does not know: LINCS_L1000 HZ3 and HZ4 (384 collections), IDG HZ2 and GlyGen HZ2
   `ARCHS4_IDG_Coexp` for IDG HZ2. GlyGen HZ2's 6,620 cached glycan-detail API responses are linked to the existing
   GlyGen v1.12.1 release Dataset; that one is a patch (the producer records the API cache, not the release).
 - The producer provenance is kept as it is. The curated nodes and edges are stored beside it.
+- The map is a plain key of `release_build_cmd`, not a tracked input: after editing it, delete `*.release.json` to rebuild.
 
 **Publish** (by hand, from this host; about 5 minutes per environment):
 

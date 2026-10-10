@@ -49,10 +49,10 @@ FACTORS_SQL = ('SELECT ' + ','.join('f.' + column for column in FACTOR_COLUMNS[:
 # Trait metadata (its ontology mappings feed disease-identity suggestions) is read once per trait, not joined onto every factor.
 TRAITS_SQL = 'SELECT kpn_trait_id,metadata FROM reveal_ref_traits'
 # Frozen factor snapshots: the shared archived_reference_factors, scoped by this environment's archive index
-# (reveal_archive_index, written by reference_release.index_archived) where that table exists.
+# (reveal_archive_index, written by reference_release.index_archived) where that table exists: the latest publish wins.
 ARCHIVED_SQL = 'SELECT archive_id,generation_id,source_id,snapshot,captured_at FROM archived_reference_factors WHERE '
 INDEXED_SQL = ('SELECT a.archive_id,a.generation_id,a.source_id,a.snapshot,a.captured_at FROM archived_reference_factors a '
-               'JOIN reveal_archive_index i ON i.archive_id=a.archive_id WHERE i.{}=%s ORDER BY a.captured_at DESC,a.archive_id DESC LIMIT 1')
+               'JOIN reveal_archive_index i ON i.archive_id=a.archive_id WHERE i.{}=%s ORDER BY i.published_at DESC,a.captured_at DESC,a.archive_id DESC LIMIT 1')
 MECHANISM_ID_RE = re.compile(r'dapper:Mechanism\.[A-Za-z0-9_-]{1,110}')
 
 
@@ -548,7 +548,7 @@ class Catalog:
                     except Exception as error:  # an environment the new publisher has not reached yet
                         if not missing_table(error): raise
                 if rows is None and where:
-                    cursor.execute(ARCHIVED_SQL + where + ' ORDER BY captured_at DESC,archive_id', args)
+                    cursor.execute(ARCHIVED_SQL + where + ' ORDER BY captured_at DESC,archive_id DESC', args)
                     rows = cursor.fetchall()
                 rows = rows or []
                 if not rows: cursor.execute('SELECT 1 FROM archived_reference_factors LIMIT 1')

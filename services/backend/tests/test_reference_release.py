@@ -394,12 +394,12 @@ def test_factor_trait_links_are_sorted_with_empty_kpn_ids_and_summarized_on_each
     t2d = factors[f'{KPN_A}::Factor1']['metadata']['trait_links']
     assert {key: value for key, value in t2d.items() if key != 'top_linked'} == {
         'n_phenotypes': 5, 'n_linked': 6, 'n_linked_kpn_traits': 4, 'n_linked_atlas_traits': 2, 'own_trait_q': 2e-05}
-    assert t2d['top_linked'] == [  # (phewas_q, phenotype) order: BMI wins the 0.04 tie, so the glucose link is the 6th
-        {'phenotype': 'T2D', 'kpn_trait_id': KPN_A, 'name': 'Type 2 diabetes', 'phewas_q': 2e-05},
+    assert t2d['top_linked'] == [  # LAP's summary: other traits only (T2D is own_trait_q); the 0.04 tie (same p) by phenotype
         {'phenotype': 'Rare_thing_Orphanet_1', 'kpn_trait_id': KPN_RARE, 'name': 'Rare thing', 'phewas_q': 0.001},
         {'phenotype': 'gcat_trait_waist', 'kpn_trait_id': None, 'name': 'waist', 'phewas_q': 0.02},
         {'phenotype': 'gcat_trait_hdl', 'kpn_trait_id': KPN_HDL, 'name': 'HDL cholesterol', 'phewas_q': 0.03},
-        {'phenotype': 'BMI', 'kpn_trait_id': KPN_B, 'name': 'Body mass index', 'phewas_q': 0.04}]
+        {'phenotype': 'BMI', 'kpn_trait_id': KPN_B, 'name': 'Body mass index', 'phewas_q': 0.04},
+        {'phenotype': 'gcat_trait_glucose', 'kpn_trait_id': None, 'name': 'glucose', 'phewas_q': 0.04}]
     assert factors[f'{KPN_A}::Factor2']['metadata']['trait_links'] == {'n_phenotypes': 5, 'n_linked': 0, 'n_linked_kpn_traits': 0,
                                                                        'n_linked_atlas_traits': 0, 'own_trait_q': None, 'top_linked': []}
     # The frozen snapshots keep the LAP factor metadata only.
@@ -456,7 +456,7 @@ def test_phenotypes_carry_their_display_names_legacy_ids_and_bottom_lines(lap, t
         'portal_trait_id': 'T2D', 'artifacts': [{'ancestry_code': 'EU', 'ancestry_name': 'European', 'artifact_id': 'bl-t2d-eu'},
                                                 {'ancestry_code': 'Mixed', 'ancestry_name': 'Mixed ancestry', 'artifact_id': 'bl-t2d-mixed'}],
         'gwas_artifact': {'ancestry_code': 'Mixed', 'ancestry_name': 'Mixed ancestry', 'artifact_id': 'bl-t2d-mixed'}, 'gwas_reason': None}
-    assert traits[KPN_B]['gwas_artifact'] is None and traits[KPN_B]['gwas_reason'] == 'not_on_portal'  # no Mixed artifact
+    assert traits[KPN_B]['gwas_artifact'] is None and traits[KPN_B]['gwas_reason'] == 'no_gwas_ancestry_artifact'  # EU only, no Mixed
     assert rr.open_release(tmp_path / 'release')['bottom_line'] == {'gwas_ancestry': 'Mixed', 'portal_traits': 3}
     european = build(lap, tmp_path / 'eu', gwas_ancestry='EU')
     assert european['release_id'] != result['release_id']
@@ -503,13 +503,13 @@ def test_curated_lineage_links_the_raw_files_of_a_collection_without_a_dataset(l
                                  'version': '2024', 'alternate_identifier': ['https://example.org/other'], 'location': 'https://example.org/other',
                                  'publisher': ORG['id'], 'was_attributed_to': [LAB['id']]})
     assert other['curated_provenance'] == {
-        'source': 'lap/config/source_datasets.yaml', 'source_sha256': hashlib.sha256(lap.source_datasets.read_bytes()).hexdigest(),
+        'source': str(lap.source_datasets.resolve()), 'source_sha256': hashlib.sha256(lap.source_datasets.read_bytes()).hexdigest(),
         'groups': {'organizations': sorted([ORG, LAB], key=lambda node: node['id']), 'datasets': [dataset],
                    'was_derived_from_edges': [{'subject': node, 'predicate': 'prov:wasDerivedFrom', 'object': dataset['id']}
                                               for node in sorted([RAW_C2M2, RAW_FILE])]},  # not the generated File named genesets.gmt
         'notes': [{'dataset': dataset['id'], 'note': 'curated: the producer names no source dataset'}]}
     assert rr.open_release(tmp_path / 'release')['curated'] == {
-        'source': 'lap/config/source_datasets.yaml', 'source_sha256': other['curated_provenance']['source_sha256'],
+        'source': str(lap.source_datasets.resolve()), 'source_sha256': other['curated_provenance']['source_sha256'],
         'datasets': {'lib_source': {'collections': 0, 'edges': 0}, 'other_source': {'collections': 1, 'edges': 2}}}
     from reveal_backend.reference_lineage import collection_lineage, lineage_closure
     gene_set = {'id': OTHER_SETS[0], 'was_generated_by': 'dapper:Activity.other' + 'a' * 27}
@@ -827,7 +827,7 @@ class FakeCursor:
 class FakeDB:
     """Stateful MySQL stand-in: tables are lists of row dicts; DDL, RENAME, INSERT [IGNORE] and the publish SELECTs."""
     def __init__(self, events, lock=1, failures=None):
-        self.events, self.tables, self.lock, self.closed = events, {}, lock, 0
+        self.events, self.tables, self.lock, self.closed, self.packet = events, {}, lock, 0, 64 << 20
         self.failures = failures or {}  # {sql prefix: [error code, times]}: that statement raises before it changes anything
     def cursor(self): return FakeCursor(self)
     def commit(self): pass
@@ -838,6 +838,7 @@ class FakeDB:
             if sql.startswith(prefix) and failure[1]:
                 failure[1] -= 1; raise OSError(failure[0], f'scripted failure of {prefix}')
         if sql.startswith('SELECT GET_LOCK'): return [(self.lock,)]
+        if sql == 'SELECT @@max_allowed_packet': return [(self.packet,)]
         if sql.startswith(('SELECT RELEASE_LOCK',)): return [(1,)]
         if sql.startswith(('SET ', 'SHOW WARNINGS')): return []
         if 'information_schema.TABLES' in sql: return [(name,) for name in params if name in self.tables]
@@ -873,6 +874,12 @@ class FakeDB:
             return self.inserted
         raise AssertionError(f'Unexpected SQL {sql}')
     def insert(self, sql, rows):
+        restamp = re.fullmatch(r'UPDATE (\w+_archive_index) SET published_at=%s WHERE source_id_sha256=%s AND archive_id=%s', sql)
+        if restamp:
+            for stamp, sha, archive in rows:
+                for stored in self.tables[restamp[1]]:
+                    if (stored['source_id_sha256'], stored['archive_id']) == (sha, archive): stored['published_at'] = stamp
+            return
         match = re.fullmatch(r'INSERT (IGNORE )?INTO (\w+) \((.+?)\) VALUES \(.+\)', sql)
         table, columns, self.inserted = self.tables[match[2]], match[3].split(','), []
         key = ('source_id_sha256', 'archive_id') if 'source_id_sha256' in columns else ('archive_id',)
@@ -943,8 +950,9 @@ def test_publish_fills_new_tables_swaps_them_in_one_rename_and_records_the_relea
     assert sql_events(events, r'^SELECT GET_LOCK')[0][2] == ('reveal:publish:reveal_workflow_qa', 0)
     assert statements[-1] == 'SELECT RELEASE_LOCK(%s)' and services.db.closed == 1
     tables = [f'reveal_workflow_qa_ref_{name}' for name in rr.TABLES]
-    retired = [f'reveal_workflow_qa_ref_{name}{suffix}' for name in ('dapper_nodes', 'dapper_edges') for suffix in ('', '__new', '__old')]
-    assert sql_events(events, r'^DROP TABLE')[0][1] == 'DROP TABLE IF EXISTS ' + ', '.join([t + '__new' for t in tables] + [t + '__old' for t in tables] + retired)
+    leftovers = [f'reveal_workflow_qa_ref_{name}{suffix}' for name in ('dapper_nodes', 'dapper_edges') for suffix in ('__new', '__old')]
+    retired = [f'reveal_workflow_qa_ref_{name}' for name in ('dapper_nodes', 'dapper_edges')]  # live ones only after the swap
+    assert sql_events(events, r'^DROP TABLE')[0][1] == 'DROP TABLE IF EXISTS ' + ', '.join([t + '__new' for t in tables] + [t + '__old' for t in tables] + leftovers)
     assert [re.match(r'CREATE TABLE (\w+)', event[1])[1] for event in sql_events(events, r'^CREATE TABLE reveal')] == [t + '__new' for t in tables]
     inserted = {re.match(r'INSERT INTO (\w+)', event[1])[1] for event in sql_events(events, r'^INSERT INTO reveal')}
     assert inserted == {t + '__new' for t in tables}
@@ -1008,11 +1016,11 @@ def test_republishing_the_same_release_changes_nothing(release, tmp_path, monkey
     assert again['tables']['action'] == 'unchanged' and again['archived_factors'] == {'rows': 3, 'inserted': 0}
     assert again['archive_index'] == {'rows': 3, 'inserted': 0, 'shared_inserted': 0}
     tables = [f'reveal_workflow_qa_ref_{name}' for name in rr.TABLES]
-    retired = [f'reveal_workflow_qa_ref_{name}{suffix}' for name in rr.RETIRED_TABLES for suffix in ('', '__new', '__old')]
-    # Only the leftovers of a run that died (and retired tables) are dropped: none here. The shared generations are indexed again (IGNORE).
+    leftovers = [f'reveal_workflow_qa_ref_{name}{suffix}' for name in rr.RETIRED_TABLES for suffix in ('__new', '__old')]
+    # Only the leftovers of a run that died are dropped: none here. Then the index: the shared generations again (IGNORE).
     assert [event[1].split(' SELECT ')[0] for event in sql_events(events, r'^(CREATE TABLE reveal|RENAME|DROP|INSERT)')] == [
-        'INSERT IGNORE INTO reveal_workflow_qa_archive_index (source_id_sha256,archive_id,mechanism_id,published_at)',
-        'DROP TABLE IF EXISTS ' + ', '.join([t + '__new' for t in tables] + [t + '__old' for t in tables] + retired)]
+        'DROP TABLE IF EXISTS ' + ', '.join([t + '__new' for t in tables] + [t + '__old' for t in tables] + leftovers),
+        'INSERT IGNORE INTO reveal_workflow_qa_archive_index (source_id_sha256,archive_id,mechanism_id,published_at)']
     assert not [e for e in events if e[0] in ('upsert', 'delete')]
     assert all((plan['added'], plan['updated'], plan['deleted']) == (0, 0, 0) for plan in again['vectors'].values())
     assert again['record']['written'] is False and record(services, 'reveal_workflow_qa')['version'] == 1
@@ -1198,10 +1206,12 @@ def test_open_release_refuses_a_folder_whose_identity_does_not_hold(release, tmp
     with pytest.raises(rr.Refused, match='not a reveal.reference-release/1 folder'): rr.open_release(release)
 
 
-def edited_release(release, folder, *, drop=(), add=()):
-    """A copy of a release folder whose manifest drops or adds data files (an older or newer release), its identity recomputed."""
+def edited_release(release, folder, *, drop=(), add=(), counts=None):
+    """A copy of a release folder whose manifest drops or adds data files (an older or newer release) or states other
+    counts, its identity recomputed."""
     shutil.copytree(release, folder)
     manifest = rr.read_json(folder / 'manifest.json')
+    manifest['counts'].update(counts or {})
     for name in drop: (folder / name).unlink(); del manifest['files'][name]
     for name in add:
         (folder / name).write_bytes(gzip.compress(b'x\n', mtime=0)); manifest['files'][name] = hashlib.sha256((folder / name).read_bytes()).hexdigest()
@@ -1211,8 +1221,8 @@ def edited_release(release, folder, *, drop=(), add=()):
 
 
 def test_an_absent_optional_file_publishes_an_empty_table_and_is_recorded(release, tmp_path):
-    older = edited_release(release, tmp_path / 'older', drop=('factor_trait_links.tsv.gz', 'phenotypes.jsonl.gz'), add=rr.RETIRED_FILES)
-    manifest = rr.open_release(older)  # retired files of an older release are verified and ignored
+    older = edited_release(release, tmp_path / 'older', drop=('factor_trait_links.tsv.gz', 'phenotypes.jsonl.gz'))
+    manifest = rr.open_release(older)
     services = publish_services(tmp_path, [])
     qa = rr.publish_release(services, older, ['qa'])['environments'][0]
     db = services.db.tables
@@ -1221,6 +1231,30 @@ def test_an_absent_optional_file_publishes_an_empty_table_and_is_recorded(releas
     assert json.loads(db['reveal_workflow_qa_ref_release'][0]['manifest']) == {**manifest, 'absent_files': ['factor_trait_links.tsv.gz', 'phenotypes.jsonl.gz']}
     for name in rr.REQUIRED_FILES[:1]:
         with pytest.raises(rr.Refused, match='not a reveal.reference-release/1 folder'): rr.open_release(edited_release(release, tmp_path / 'broken', drop=(name,)))
+
+
+def test_a_folder_from_before_the_curated_lineage_is_refused_before_anything_changes(release, tmp_path):
+    events = []
+    for name, folder in (('retired', edited_release(release, tmp_path / 'retired', add=rr.RETIRED_FILES)), ('uncurated', tmp_path / 'uncurated')):
+        if name == 'uncurated':
+            shutil.copytree(release, folder)
+            manifest = rr.read_json(folder / 'manifest.json'); del manifest['curated']; rr.write_json(folder / 'manifest.json', manifest)
+        with pytest.raises(rr.Refused, match='built before the curated lineage and portal collection ids: rebuild this release'):
+            rr.publish_release(publish_services(tmp_path, events), folder, ['qa'])
+    assert not events  # no vector, snapshot, index or table was touched
+
+
+def test_a_row_too_large_for_max_allowed_packet_or_a_short_load_is_refused_before_the_swap(release, tmp_path):
+    events = []
+    services = publish_services(tmp_path, events)
+    services.db.packet = 4096
+    with pytest.raises(rr.Refused, match='max_allowed_packet 4096 cannot hold it'): rr.publish_release(services, release, ['qa'])
+    assert not sql_events(events, r'^CREATE TABLE reveal_workflow_qa_ref') and not sql_events(events, r'^RENAME')
+    short = edited_release(release, tmp_path / 'short', counts={'projections': 999})
+    events.clear()
+    with pytest.raises(rr.Refused, match=r"Loaded row counts differ from the manifest \(loaded, manifest\): \{'projections'"):
+        rr.publish_release(publish_services(tmp_path, events), short, ['qa'])
+    assert not sql_events(events, r'^RENAME')
 
 
 def test_a_release_file_this_checkout_does_not_know_is_refused(release, tmp_path):

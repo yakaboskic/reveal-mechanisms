@@ -49,7 +49,7 @@ These are places where `main`-side code still assumes the reload-era tables or c
    On the rebuild, check that:
    - all 532 collection documents pass the new section and edge validation;
    - the largest `ref_collections` row fits `max_allowed_packet`;
-   - the `dapper_edges` count looks right, since it now includes edge sections before `gene_sets`.
+   - the curated lineage edge counts per dataset look right (LINCS 384, IDG 1, GlyGen 6,620) and no referenced collection lacks a Dataset.
 7. **Tables the app does not read yet**:
    - `ref_trait_gene_sets` (the betas), `ref_factor_trait_links` and `ref_phenotypes` (the factor-trait links and their phenotypes): a later phase serves them (new routes and research tools).
    - `ref_dapper_nodes` and `ref_dapper_edges` are retired: nothing read them, and the collections' `payload.provenance` (plus `payload.curated_provenance`, through `reference_lineage.collection_lineage`) holds the same graph. The release no longer writes them, and publishing drops them by name.

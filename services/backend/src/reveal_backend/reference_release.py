@@ -77,8 +77,8 @@ LONG_COLUMNS = ['trait', 'kpn_trait_id', 'factor_id', 'factor', 'factor_label', 
 
 # Release folder. manifest.json `files` = {name: sha256} of its data files and release_id = digest({format, files});
 # archived_factors.jsonl.gz is written afterwards (it carries the release_id) and listed under `archive`. build writes
-# DATA_FILES. A folder must hold REQUIRED_FILES; an OPTIONAL_FILES file it lacks (an older release) publishes an empty
-# table; the RETIRED_FILES of an older release are verified and ignored; any other file is refused.
+# DATA_FILES. A folder must hold REQUIRED_FILES; an OPTIONAL_FILES file it lacks publishes an empty table. A folder with
+# RETIRED_FILES predates the curated lineage and portal ids and is refused up front (rebuild it); any other file too.
 VECTOR_FILES = tuple(f'vectors/{kind}.{suffix}' for kind in KINDS for suffix in ('f32.npy', 'tsv'))
 REQUIRED_FILES = ('traits.jsonl.gz', 'factors.jsonl.gz', 'factor_genes.tsv.gz', 'collections.jsonl.gz', 'gene_sets.jsonl.gz',
                   'projections.tsv.gz') + VECTOR_FILES
@@ -421,6 +421,10 @@ def _writer(path):
         with open(path, 'w', encoding='utf-8', newline='') as text: yield text
 
 
+def max_line_bytes(path):
+    with _open_text(path) as stream: return max((len(line.encode('utf-8')) for line in stream), default=0)
+
+
 def write_jsonl(path, rows):
     count = 0
     with _writer(path) as out:
@@ -544,8 +548,8 @@ def bottom_line(found, kpn, category, ancestry):
     artifacts = sorted(artifacts, key=lambda item: (item['ancestry_code'], item['artifact_id']))
     gwas = [item for item in artifacts if item['ancestry_code'] == ancestry]
     if len(gwas) > 1: raise Refused(f'{kpn}: several {ancestry} bottom-line artifacts')
-    return {'portal_trait_id': portal, 'artifacts': artifacts, 'gwas_artifact': gwas[0] if gwas else None,
-            'gwas_reason': None if gwas else 'not_a_gwas_trait' if (category or '').startswith('rare') else 'not_on_portal'}
+    reason = None if gwas else 'no_gwas_ancestry_artifact' if artifacts else 'not_a_gwas_trait' if (category or '').startswith('rare') else 'not_on_portal'
+    return {'portal_trait_id': portal, 'artifacts': artifacts, 'gwas_artifact': gwas[0] if gwas else None, 'gwas_reason': reason}
 
 
 def phenotype_rows(rows, registry, found, ancestry):
@@ -757,9 +761,10 @@ def write_factor_links(path, out, lap):
                     rows[phenotype] = (q, (key, phenotype, _na(phenotype_kpn) or '', str(_truth(own, where)), str(_truth(atlas, where)), *values))
             if summary['n_linked'] != len(rows): raise Refused(f"{factor}: {len(rows)} link rows, the summary says {summary['n_linked']}")
             writer.write(''.join('\t'.join(rows[phenotype][1]) + '\n' for phenotype in sorted(rows)))
-            top = sorted((q, phenotype) for phenotype, (q, _) in rows.items())[:TOP_LINKED]
+            # As LAP's summary: the factor's own trait is own_trait_q, not one of its top links; q ties go to the smaller p.
+            top = sorted((q, float(row[7]), phenotype) for phenotype, (q, row) in rows.items() if row[3] == '0')[:TOP_LINKED]
             links[key] = {**summary, 'top_linked': [{'phenotype': phenotype, 'kpn_trait_id': phenotypes[phenotype]['kpn_trait_id'],
-                                                     'name': phenotypes[phenotype]['display_name'], 'phewas_q': q} for q, phenotype in top]}
+                                                     'name': phenotypes[phenotype]['display_name'], 'phewas_q': q} for q, _, phenotype in top]}
             count += len(rows)
     return count, links
 
@@ -1002,7 +1007,9 @@ def load_source_datasets(path, runtime):
         try: patterns = [re.compile(pattern) for pattern in files]
         except re.error as error: raise Refused(f'{where}: invalid file pattern ({error})') from error
         links.append({'dataset': link['dataset'], 'libraries': frozenset(libraries), 'patterns': patterns, 'note': link.get('note') or ''})
-    return {'sha256': _sha256_file(path), 'organizations': organizations, 'datasets': datasets, 'links': links}
+    path = Path(path).resolve()
+    source = str(path.relative_to(ROOT)) if path.is_relative_to(ROOT) else str(path)  # the map this release read
+    return {'source': source, 'sha256': _sha256_file(path), 'organizations': organizations, 'datasets': datasets, 'links': links}
 
 
 def reaches_dataset(provenance):
@@ -1038,7 +1045,7 @@ def curate(provenance, library, curated):
     groups = {group: items for group, items in groups.items() if items}
     try: validate_provenance_edges(groups)
     except ValueError as error: raise Refused(f'curated lineage of {library}: {error}') from error  # EvidenceBuildError
-    return {'source': SOURCE_DATASETS, 'source_sha256': curated['sha256'], 'groups': groups,
+    return {'source': curated['source'], 'source_sha256': curated['sha256'], 'groups': groups,
             'notes': [notes[key] for key in sorted(notes)]}, dict(counts)
 
 
@@ -1081,7 +1088,7 @@ def write_collections(directory, lap, documents, submit, in_flight, *, reference
             counts['collections'] += 1; counts['gene_sets'] += len(kept); counts['gene_sets_indexed'] += len(members)
             del parsed
     if gaps: raise Refused(f'{len(gaps)} collections holding referenced gene sets reach no Dataset (link them in {SOURCE_DATASETS}): {sorted(gaps)[:20]}')
-    return counts, {'source': SOURCE_DATASETS, 'source_sha256': curated['sha256'],
+    return counts, {'source': curated['source'], 'source_sha256': curated['sha256'],
                     'datasets': {key: dict(used[key]) or {'collections': 0, 'edges': 0} for key in sorted({link['dataset'] for link in curated['links']})}}
 
 
@@ -1381,6 +1388,8 @@ def build_release(services, project_dir, long_files, cache_path, out, *, gene_se
                                 'cfde_snapshot': sorted({row['metadata']['cfde_snapshot'] for row in lap['gene_sets']}),
                                 'long_files': len(files), 'vector_cache': str(Path(cache_path).resolve()),
                                 'source_datasets': str(Path(source_datasets).resolve())}}
+        # The publisher refuses up front when one row would not fit the server's max_allowed_packet.
+        manifest['max_row_bytes'] = {name: max_line_bytes(temporary / name) for name in DATA_FILES if name.endswith('.jsonl.gz')}
         write_json(temporary / 'manifest.json', manifest)
         progress('written')
         result = {'release_id': release_id, 'out': str(out), 'counts': counts, 'embedding': embedding}
@@ -1466,7 +1475,9 @@ def open_release(release):
     if manifest.get('format') != RELEASE_FORMAT or not set(REQUIRED_FILES) <= set(manifest.get('files') or {}) \
             or release_identity(manifest['files']) != manifest.get('release_id'):
         raise Refused(f'{release}: not a {RELEASE_FORMAT} folder')
-    unknown = sorted(set(manifest['files']) - set(DATA_FILES) - set(RETIRED_FILES))
+    if set(manifest['files']) & set(RETIRED_FILES) or 'curated' not in manifest:
+        raise Refused(f'{release}: built before the curated lineage and portal collection ids: rebuild this release')
+    unknown = sorted(set(manifest['files']) - set(DATA_FILES))
     if unknown: raise Refused(f'{release}: release files {unknown} are unknown to this checkout: publish with a newer checkout')
     expected = {**manifest['files'], ARCHIVE_FILE: (manifest.get('archive') or {}).get('sha256')}
     for name, sha in expected.items():
@@ -1547,15 +1558,23 @@ def replace_tables(services, connection, release, manifest, prefix, unchanged_fo
     RETIRED_TABLES (also with the leftovers of a run that died). `unchanged_folder()` refuses before the RENAME when the
     release folder was replaced while its tables loaded."""
     new, old = [table_name(prefix, t, '__new') for t in TABLES], [table_name(prefix, t, '__old') for t in TABLES]
-    retired = [table_name(prefix, t, suffix) for t in RETIRED_TABLES for suffix in ('', '__new', '__old')]
-    swap_ddl(services, connection, 'DROP TABLE IF EXISTS ' + ', '.join(new + old + retired))  # leftovers of a run that died
+    leftovers = [table_name(prefix, t, suffix) for t in RETIRED_TABLES for suffix in ('__new', '__old')]
+    retired = [table_name(prefix, t) for t in RETIRED_TABLES]  # dropped only once the new release is swapped in
+    swap_ddl(services, connection, 'DROP TABLE IF EXISTS ' + ', '.join(new + old + leftovers))  # leftovers of a run that died
     current = current_release(connection, prefix)
     if current and current['release_id'] == manifest['release_id']: return {'action': 'unchanged', 'published_at': current['published_at']}
+    packet, largest = int(scalar(connection, 'SELECT @@max_allowed_packet')), max((manifest.get('max_row_bytes') or {}).values(), default=0)
+    if largest * 2 + (64 << 10) > packet:  # escaping can double a JSON row
+        raise Refused(f'The largest release row is {largest} bytes; max_allowed_packet {packet} cannot hold it escaped')
     for statement in schema_statements(prefix, '__new'): execute(connection, statement)
     published, rows = published_at or services.clock(), {}
     for table, rows_of, batch_size in table_rows(release, manifest, published):
         emit(services, f'{prefix}: loading {table}')
         rows[table] = insert_rows(connection, table_name(prefix, table, '__new'), COLUMNS[table], rows_of(), batch_size)
+    absent = {name.split('.')[0] for name in OPTIONAL_FILES if name not in manifest['files']}  # published empty
+    wrong = {table: (rows[table], manifest['counts'][table]) for table in rows if isinstance((manifest.get('counts') or {}).get(table), int)
+             and table not in absent and rows[table] != manifest['counts'][table]}
+    if wrong: raise Refused(f'Loaded row counts differ from the manifest (loaded, manifest): {wrong}')
     unchanged_folder()
     present = existing_tables(connection, [table_name(prefix, t) for t in TABLES])
     pairs = []
@@ -1584,9 +1603,10 @@ def insert_archived(connection, release):
 
 
 def index_archived(connection, release, prefix, published_at):
-    """List in <prefix>_archive_index (created when absent; INSERT IGNORE) every frozen snapshot of the release, and the
-    shared snapshots of the SHARED_GENERATIONS: the archived factors this environment serves. The shared
-    archived_reference_factors is never altered."""
+    """List in <prefix>_archive_index (created when absent) every frozen snapshot of the release, stamped with this publish
+    (a republish of an earlier release restamps its rows, so the catalog serves that release's snapshot again), and once
+    (INSERT IGNORE) the shared snapshots of the SHARED_GENERATIONS: the archived factors this environment serves. The
+    shared archived_reference_factors is never altered."""
     table, stamp = application_sql('reveal_archive_index', prefix), published_at.astimezone(timezone.utc).strftime('%Y-%m-%d %H:%M:%S.%f')
     execute(connection, application_sql(ARCHIVE_INDEX, prefix))
     total = inserted = 0
@@ -1597,6 +1617,10 @@ def index_archived(connection, release, prefix, published_at):
         stored = set(query(connection, f"SELECT source_id_sha256,archive_id FROM {table} WHERE source_id_sha256 IN ({','.join(['%s'] * len(hashes))})", hashes))
         inserted += insert_rows(connection, table, ARCHIVE_INDEX_COLUMNS, ((row['source_id_sha256'], row['archive_id'], (row['snapshot'].get('mechanism') or {}).get('id'), stamp)
                                 for row in chunk if (row['source_id_sha256'], row['archive_id']) not in stored), 1000, ignore=True)
+        restamp = [(stamp, row['source_id_sha256'], row['archive_id']) for row in chunk if (row['source_id_sha256'], row['archive_id']) in stored]
+        if restamp:
+            with connection.cursor() as cursor: cursor.executemany(f'UPDATE {table} SET published_at=%s WHERE source_id_sha256=%s AND archive_id=%s', restamp)
+            connection.commit()
     with connection.cursor() as cursor:
         cursor.execute(f"INSERT IGNORE INTO {table} ({','.join(ARCHIVE_INDEX_COLUMNS)}) SELECT source_id_sha256,archive_id,"
                        "NULLIF(JSON_UNQUOTE(JSON_EXTRACT(snapshot,'$.mechanism.id')),'null'),%s FROM archived_reference_factors "
@@ -1727,8 +1751,9 @@ def publish_environment(services, release, manifest, env, *, vectors=True, table
             # Snapshots first: immutable rows keyed by factor revision, so a run that dies at any later step never misses them.
             published = services.clock()
             result['archived_factors'] = step('archived_factors', lambda: insert_archived(connection, release))
-            result['archive_index'] = step('archive_index', lambda: index_archived(connection, release, prefix, published))
             result['tables'] = step('tables', lambda: replace_tables(services, connection, release, manifest, prefix, unchanged_folder, published))
+            # Only once the environment serves the release (a rerun of an unchanged release finishes it).
+            result['archive_index'] = step('archive_index', lambda: index_archived(connection, release, prefix, published))
         else: result['tables'] = result['archived_factors'] = result['archive_index'] = 'skipped'
         current = current_release(connection, prefix)
         if plans is not None and current and current['release_id'] == release_id: step('update', lambda: update_vectors(client, plans))
