@@ -227,7 +227,7 @@ export interface paths {
         put?: never;
         /**
          * Suggest five EAGGL anchors total
-         * @description Resolve linked DisMech context server-side from source_gap. Search existing EAGGL label embeddings and join the configured completed exact-trait/factor-number CFDE crosswalk before the top-five cutoff. Rank mapped factors by maximum per-mechanism cosine, deduplicate full native identity, stable ID tie-break, at most five total excluding manual anchors and dismissals. Return fewer if needed; no silent refill on removal. With no linked mechanisms use the exact gap text/subquery and require user anchor selection. Ignore label/gene differences for routing; pin mapping/source/embedding runs in server-owned selection provenance. Suggestions come from the active reference generation; manual anchors from a superseded generation return 409 REFERENCE_GENERATION_SUPERSEDED.
+         * @description Resolve linked DisMech context server-side from source_gap. Search existing EAGGL label embeddings and join the configured completed exact-trait/factor-number CFDE crosswalk before the top-five cutoff. Rank mapped factors by maximum per-mechanism cosine, deduplicate full native identity, stable ID tie-break, at most five total excluding manual anchors and dismissals. Where the Jev rerank is configured (REVEAL_SUGGEST_RERANK=jev), semantic requests without a subquery instead pool every eligible disease identity with the top 100 cosine factors, ask Jev to rate the label and trait of each factor (no genes or loadings) for relevance to the gap and ability to help answer it, and return the top five by that rating; any provider failure falls back to the disease-then-cosine policy, and the rerank field of the response reports which order was used. Return fewer if needed; no silent refill on removal. With no linked mechanisms use the exact gap text/subquery and require user anchor selection. Ignore label/gene differences for routing; pin mapping/source/embedding runs in server-owned selection provenance. Suggestions come from the active reference generation; manual anchors from a superseded generation return 409 REFERENCE_GENERATION_SUPERSEDED.
          */
         post: operations["suggestMechanisms"];
         delete?: never;
@@ -4167,7 +4167,7 @@ export interface components {
         Rank: {
             value: number;
             /** @enum {string} */
-            metric: "cosine_similarity" | "lexical_rank" | "fuzzy_similarity" | "reciprocal_rank_fusion" | "eligible_disease_identity";
+            metric: "cosine_similarity" | "lexical_rank" | "fuzzy_similarity" | "reciprocal_rank_fusion" | "eligible_disease_identity" | "jev_gap_relevance";
             rank: number;
         };
         SearchProvenance: {
@@ -4226,6 +4226,16 @@ export interface components {
             automatic_target_count: 5;
             search: components["schemas"]["SearchProvenance"];
             limitations: string[];
+            /** @description Present only where the Jev rerank is configured (REVEAL_SUGGEST_RERANK=jev). applied: automatic anchors are ordered by Jev ratings (metric jev_gap_relevance) of factor names against the gap, over every eligible disease identity plus the top cosine factors. fallback: the provider could not answer, so the disease-identity-then-cosine policy was used over the same pool (not_configured: no provider key, retrieval was unchanged). not_applicable: subquery or hybrid requests, or no open anchor slots. Ratings order candidates for inspection; they are not evidence. */
+            rerank?: {
+                /** @enum {string} */
+                status: "applied" | "fallback" | "not_applicable";
+                /** @enum {string} */
+                reason?: "not_configured" | "timeout" | "too_large" | "unavailable" | "invalid" | "internal_error" | "subquery" | "hybrid_mode" | "no_open_slots";
+                model?: string;
+                rubric_version?: string;
+                pool_size?: number;
+            };
         };
         JobBudgets: {
             /** @default 3 */

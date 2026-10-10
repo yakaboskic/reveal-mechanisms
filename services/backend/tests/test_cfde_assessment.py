@@ -13,7 +13,7 @@ import httpx
 import pytest
 
 import test_application as application
-from reveal_backend import app as api, cfde_assessment as assessment, cfde_assessment_state as state
+from reveal_backend import app as api, cfde_assessment as assessment, cfde_assessment_state as state, jev_batch
 from reveal_backend.auth import Problem
 from reveal_backend.repository import digest, uid
 
@@ -533,7 +533,7 @@ def test_provider_protocol_one_attempt_and_no_diagnostics(monkeypatch, variant):
         if variant == 'huge': return httpx.Response(200, content=b' ' * 64_001)
         return httpx.Response(200, content=json.dumps(value).encode())
     factory = httpx.Client
-    monkeypatch.setattr(assessment.httpx, 'Client', lambda **kwargs: factory(transport=httpx.MockTransport(handle), **kwargs))
+    monkeypatch.setattr(jev_batch.httpx, 'Client', lambda **kwargs: factory(transport=httpx.MockTransport(handle), **kwargs))
     if variant == 'valid':
         result = assessment.call_provider(body)
         assert result['answers']['cfde_support']['probabilities']['yes'] == .56
