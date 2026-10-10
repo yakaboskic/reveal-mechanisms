@@ -23,6 +23,7 @@ Updated October 1, 2026. Start with the [Workflow runtime](durable-workflow-runt
 - [Login and researcher identity](authentication.md)
 - [Authentication gateway contract](gateway-contract.md)
 - [Account publication and gap discovery](account-publication.md)
+- [Scientific account provenance and dataset reuse](account-provenance.md)
 - [Saved explorations and literature search](exploration-outcomes.md)
 - [Explicit draft saving, private uploads, and agent inputs](research-inputs.md)
 - [Automatic CFDE support assessment and shared default-input cache](cfde-assessment.md)

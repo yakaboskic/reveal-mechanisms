@@ -177,7 +177,8 @@ class QueryCapture:
                     node = item.get('payload') or {}
                     row = {'gene_set_id': node.get('id'), 'metadata': {'dapper_gene_set': node}}
                     collection = {'provenance': item.get('provenance') or {}}
-                exact, dependencies, prefixes, reason = _resolve_gene_set(dapper, row, collection, {}, groups)
+                edges = {}
+                exact, dependencies, prefixes, reason = _resolve_gene_set(dapper, row, collection, {}, groups, edge_groups=edges)
                 resolutions.append({'id': row.get('gene_set_id'), 'status': 'ready' if exact else 'unavailable',
                     'dapper_id': exact['id'] if exact else None, 'reason': reason,
                     'reference_generation_id': self.source['generation_id'],
@@ -191,6 +192,9 @@ class QueryCapture:
                 if exact:
                     context.setdefault('prefixes', {}).update(prefixes)
                     context.setdefault('gene_sets', []).append(exact)
+                    for group, rows in edges.items():
+                        target = context.setdefault(group, [])
+                        target.extend(edge for edge in rows if edge not in target)
                     for dependency in dependencies:
                         target = context.setdefault(groups[_class_of(dependency['id'])], [])
                         if dependency['id'] not in {node['id'] for node in target}: target.append(dependency)

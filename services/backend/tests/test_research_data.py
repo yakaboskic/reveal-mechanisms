@@ -331,6 +331,28 @@ CREATE TABLE dapper_objects(id TEXT,payload TEXT);
         self.assertNotIn('gene_sets',missing['dapper_context'])
         self.assertEqual(missing['object_resolution'][0]['status'],'unavailable')
 
+    def test_materialization_retains_anonymous_activity_input_edges(self):
+        runtime = SeedTests.runtime()
+        activity = {'name': 'extract'}
+        activity['id'] = runtime.compute_id(activity, 'Activity', runtime.schema)
+        dataset = {'name': 'raw measurements'}
+        dataset['id'] = runtime.compute_id(dataset, 'Dataset', runtime.schema)
+        node = {'name': 'source set', 'member_type': 'gene', 'members': ['https://identifiers.org/hgnc.symbol:GENE_A'],
+                'was_generated_by': activity['id']}
+        node['id'] = runtime.compute_id(node, 'GeneSet', runtime.schema)
+        edge = {'subject': activity['id'], 'predicate': 'prov:used', 'object': dataset['id'], 'edge_role': 'data_input'}
+        provenance = {'activities': [activity], 'datasets': [dataset], 'used_edges': [edge]}
+        with sqlite3.connect(self.path) as c:
+            c.execute('UPDATE cfde_gene_sets SET gene_set_id=?,metadata=? WHERE generation_id=?',
+                      (node['id'], json.dumps({'dapper_gene_set': node}), GEN))
+            c.execute('UPDATE cfde_gene_set_collections SET payload=? WHERE generation_id=?',
+                      (json.dumps({'provenance': provenance}), GEN))
+        materialized = self.query('get_gene_set', {'gene_set_id': node['id']}).materialize(runtime)
+        self.assertEqual(materialized['dapper_context']['used_edges'], [edge])
+        self.assertEqual(materialized['dapper_context']['datasets'], [dataset])
+        self.assertEqual(materialized['dapper_context']['gene_sets'], [node])
+        runtime.validate(materialized['dapper_context'])
+
     def test_byte_budget_does_not_truncate_a_source_object_and_unknown_model_is_explicit(self):
         self.service.max_capture_bytes=20_300
         with sqlite3.connect(self.path) as c:

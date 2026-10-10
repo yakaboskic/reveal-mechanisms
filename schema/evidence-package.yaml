@@ -1179,6 +1179,96 @@ classes:
         multivalued: true
         inlined: true
         inlined_as_list: false
+      has_creator_edges:
+        range: HasCreator
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+      has_contributor_edges:
+        range: HasContributor
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+      funded_by_edges:
+        range: FundedBy
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+      is_described_by_edges:
+        range: IsDescribedBy
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+      was_derived_from_edges:
+        range: WasDerivedFrom
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+      was_generated_by_edges:
+        range: WasGeneratedBy
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+      used_edges:
+        range: Used
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+      was_attributed_to_edges:
+        range: WasAttributedTo
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+      has_lineage_step_edges:
+        range: HasLineageStep
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+      has_recommended_citation_edges:
+        range: HasRecommendedCitation
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+      has_mirror_provenance_edges:
+        range: HasMirrorProvenance
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+      has_data_use_term_edges:
+        range: HasDataUseTerm
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+      has_file_edges:
+        range: HasFile
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+      has_drs_object_edges:
+        range: HasDrsObject
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+      drs_representation_edges:
+        range: DrsRepresentation
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+      packaged_as_edges:
+        range: PackagedAs
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+      has_workflow_provenance_edges:
+        range: HasWorkflowProvenance
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+      has_agentic_workspace_edges:
+        range: HasAgenticWorkspace
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
       files:
         range: File
         multivalued: true

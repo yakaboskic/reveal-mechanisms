@@ -1149,64 +1149,92 @@ async def update_outcome_publication(outcome_id:str,request:Request):
                 lambda:analysis_outcomes.change(tx,outcome_id,user,body['visibility'],body['expected_version']))
     return await asyncio.to_thread(save)
 
+def scientific_source(tx,identity,user,kind='object',payload_sha256=None,*,verify_payload=False):
+    """Resolve the full authorized immutable source before any display pagination."""
+    public=None; snapshot=None; reference=None; publication_record=None
+    if kind not in ('account','object','paragraph'):
+        if user is None: raise Problem(401,'SESSION_EXPIRED','Continue with a registered or anonymous session.')
+        row=owned(tx,kind,identity,user)['data']
+    else:
+        try:
+            if not user: raise Problem(404,'NOT_FOUND','Scientific resource unavailable.')
+            key=digest([user,identity])
+            keys=[(kind,key),('object_document',key),('scientific_dependencies',key)]
+            if kind=='account': keys.append(('publication',key))
+            records=tx.get_records(keys)
+            row=require_owned(tx,kind,identity,user,records.get((kind,key)),
+                dependency=records.get(('scientific_dependencies',key)))['data']
+            reference=records.get(('object_document',key))
+            publication_record=records.get(('publication',key))
+        except Problem as error:
+            if error.status!=404: raise
+            public,snapshot=publication.find(tx,identity,kind)
+            from .acceptance import object_envelope
+            row=object_envelope(snapshot['document'],identity,snapshot['citation_metadata'],snapshot['artifacts'])
+            if kind=='account': row['research_statement']=snapshot['summary']['research_statement']
+    # Outdated-reference state lives beside the immutable result: summary.archive.
+    archive=((snapshot['summary'] if public is not None else row.get('summary')) or {}).get('archive') if kind=='account' else None
+    result=row.get('result',row)
+    if 'document' not in result: return {'legacy_result': result}
+    checksum=payload_sha256
+    if checksum and not any(p['object_id']==identity and p['payload_sha256']==checksum for p in result['payloads']):
+        raise Problem(404,'PAYLOAD_NOT_FOUND','The exact requested payload observation is unavailable.')
+    from .acceptance import object_envelope
+    document=result['document']; metadata=result['citation_metadata']; artifacts={a['file']['id']:a for a in result['artifacts']}
+    full_document_available = public is not None or result.get('coverage', {}).get('complete') is not False
+    if public is None and kind not in ('account','object','paragraph'):
+        reference=tx.get('object_document',digest([user,identity]))
+    if reference and reference['owner'] != user: reference=None
+    document_sha=reference['data']['sha256'] if reference else None
+    if public is None and document_sha is None:
+        # Rows accepted before the direct document index retain their exact
+        # source observation and full immutable document under this owner.
+        observations=[r['data'] for r in tx.list('object_observation',user) if r['data']['object_id']==identity]
+        if observations: document_sha=observations[-1]['document_sha256']
+    if document_sha:
+        stored=tx.get('scientific_document',digest([user,document_sha]))
+        if stored and stored['owner']==user:
+            full_document_available = True
+            document=stored['data']['document']; metadata=stored['data'].get('citation_metadata',metadata); artifacts=stored['data'].get('artifact_access',artifacts)
+    from .evidence_package import canonical_json, sha256
+    expected_payload=next(p['payload_sha256'] for p in result['payloads'] if p['object_id']==identity)
+    root_observations={sha256(canonical_json(node)) for rows in document.values() if isinstance(rows,list)
+        for node in rows if isinstance(node,dict) and node.get('id')==identity}
+    if verify_payload and root_observations != {expected_payload}:
+        if checksum:
+            raise Problem(404,'PAYLOAD_NOT_FOUND','The exact requested payload observation is unavailable.')
+        raise Problem(409,'SCIENTIFIC_SOURCE_CONFLICT','The scientific source does not match its retained account observation.')
+    root_payload=next(iter(root_observations)) if verify_payload else expected_payload
+    withheld_dependencies = False
+    withheld_ids = set()
+    if public is not None:
+        document=snapshot['document']; metadata=snapshot['citation_metadata']; artifacts=snapshot['artifacts']
+    elif user:
+        from .scientific_reuse import readable_document
+        before_visibility = document
+        document = readable_document(tx, user, document)
+        withheld_dependencies = document != before_visibility
+        withheld_ids = {n['id'] for rows in before_visibility.values() if isinstance(rows, list)
+            for n in rows if isinstance(n, dict) and 'id' in n} - {n['id'] for rows in document.values()
+            if isinstance(rows, list) for n in rows if isinstance(n, dict) and 'id' in n}
+        visible = {n['id'] for rows in document.values() if isinstance(rows, list)
+            for n in rows if isinstance(n, dict) and 'id' in n}
+        metadata = [item for item in metadata if item['target_id'] in visible]
+        artifacts = {key: item for key, item in artifacts.items() if key in visible}
+    return {'user': user, 'public': public, 'snapshot': snapshot, 'publication_record': publication_record,
+            'result': result, 'document': document, 'metadata': metadata, 'artifacts': artifacts,
+            'full_document_available': full_document_available,
+            'root_payload': root_payload, 'withheld_dependencies': withheld_dependencies, 'withheld_ids': withheld_ids, 'archive': archive}
+
 def scientific(identity,request,kind='object'):
     with repo.read_transaction() as tx:
-        user=optional_identity(tx,request); public=None; reference=None; publication_record=None
-        if kind not in ('account','object','paragraph'):
-            if user is None: raise Problem(401,'SESSION_EXPIRED','Continue with a registered or anonymous session.')
-            row=owned(tx,kind,identity,user)['data']
-        else:
-            try:
-                if not user: raise Problem(404,'NOT_FOUND','Scientific resource unavailable.')
-                key=digest([user,identity])
-                keys=[(kind,key),('object_document',key),('scientific_dependencies',key)]
-                if kind=='account': keys.append(('publication',key))
-                records=tx.get_records(keys)
-                row=require_owned(tx,kind,identity,user,records.get((kind,key)),
-                    dependency=records.get(('scientific_dependencies',key)))['data']
-                reference=records.get(('object_document',key))
-                publication_record=records.get(('publication',key))
-            except Problem as error:
-                if error.status!=404: raise
-                public,snapshot=publication.find(tx,identity,kind)
-                from .acceptance import object_envelope
-                row=object_envelope(snapshot['document'],identity,snapshot['citation_metadata'],snapshot['artifacts'])
-                if kind=='account': row['research_statement']=snapshot['summary']['research_statement']
-        # Outdated-reference state lives beside the immutable result: summary.archive.
-        archive=((snapshot['summary'] if public is not None else row.get('summary')) or {}).get('archive') if kind=='account' else None
-        result=row.get('result',row)
-        if 'document' not in result: return result
-        checksum=request.query_params.get('payload_sha256')
-        if checksum and not any(p['object_id']==identity and p['payload_sha256']==checksum for p in result['payloads']):
-            raise Problem(404,'PAYLOAD_NOT_FOUND','The exact requested payload observation is unavailable.')
+        user=optional_identity(tx,request)
+        source=scientific_source(tx,identity,user,kind,request.query_params.get('payload_sha256'))
+        if 'legacy_result' in source: return source['legacy_result']
+        public=source['public']; publication_record=source['publication_record']; result=source['result']
+        document=source['document']; metadata=source['metadata']; artifacts=source['artifacts']
+        root_payload=source['root_payload']; withheld_dependencies=source['withheld_dependencies']; archive=source['archive']
         from .acceptance import object_envelope
-        document=result['document']; metadata=result['citation_metadata']; artifacts={a['file']['id']:a for a in result['artifacts']}
-        if public is None and kind not in ('account','object','paragraph'):
-            reference=tx.get('object_document',digest([user,identity]))
-        if reference and reference['owner'] != user: reference=None
-        document_sha=reference['data']['sha256'] if reference else None
-        if public is None and document_sha is None:
-            # Rows accepted before the direct document index retain their exact
-            # source observation and full immutable document under this owner.
-            observations=[r['data'] for r in tx.list('object_observation',user) if r['data']['object_id']==identity]
-            if observations: document_sha=observations[-1]['document_sha256']
-        if document_sha:
-            stored=tx.get('scientific_document',digest([user,document_sha]))
-            if stored and stored['owner']==user:
-                document=stored['data']['document']; metadata=stored['data'].get('citation_metadata',metadata); artifacts=stored['data'].get('artifact_access',artifacts)
-        withheld_dependencies = False
-        if public is not None:
-            document=snapshot['document']; metadata=snapshot['citation_metadata']; artifacts=snapshot['artifacts']
-        elif user:
-            from .scientific_reuse import readable_document
-            before_visibility = document
-            document = readable_document(tx, user, document)
-            withheld_dependencies = document != before_visibility
-            visible = {n['id'] for rows in document.values() if isinstance(rows, list)
-                for n in rows if isinstance(n, dict) and 'id' in n}
-            metadata = [item for item in metadata if item['target_id'] in visible]
-            artifacts = {key: item for key, item in artifacts.items() if key in visible}
-        root_payload=next(p['payload_sha256'] for p in result['payloads'] if p['object_id']==identity)
         binding={'owner':user if public is None else 'publication:'+public['id']+':'+str(public['data']['version']),
             'kind':kind,'root':identity,'payload':root_payload,'document':digest(document)}
         depth=int(request.query_params.get('max_depth','5')); maximum=int(request.query_params.get('max_nodes','250')); offset=0
@@ -1239,6 +1267,14 @@ def scientific(identity,request,kind='object'):
 
 @app.get('/v1/accounts/{dapper_id}')
 def account(dapper_id:str,request:Request): return scientific(dapper_id,request,'account')
+
+@app.get('/v1/accounts/{account_id}/provenance')
+def account_provenance(account_id:str,request:Request):
+    from .provenance_api import read
+    with repo.read_transaction() as tx:
+        user=optional_identity(tx,request)
+        source=scientific_source(tx,account_id,user,'account',request.query_params.get('payload_sha256'),verify_payload=True)
+        return read(tx,account_id,source,request.query_params)
 
 @app.get('/v1/claims/{dapper_id}')
 @app.get('/v1/objects/{dapper_id}')

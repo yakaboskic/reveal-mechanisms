@@ -212,7 +212,11 @@ class DapperRuntime:
         from lint_provenance import build_validator
         self.schema = load_schema(self.schema_path / 'dapper.yaml')
         self.compute_id = compute_id
-        self.groups = DOC_GROUPS
+        from .provenance_schema import PROVENANCE_EDGES
+        self.edge_groups = {group: cls for group, cls in PROVENANCE_EDGES.items() if cls in self.schema.all_classes()}
+        # Preserve the node-only projection contract: anonymous edge payloads are
+        # validated below, but display projections must not rewrite their predicates.
+        self.groups = dict(DOC_GROUPS)
         self.resolver_class = PrefixResolver
         self.transform = transform_identifiers
         self.validator = build_validator(self.schema_path / 'dapper.yaml')
@@ -228,21 +232,28 @@ class DapperRuntime:
         return node
 
     def validate(self, document):
-        require(set(document) <= set(self.groups) | {'prefixes'}, 'Unknown DAPPER input collection')
+        groups = {**self.groups, **self.edge_groups}
+        require(set(document) <= set(groups) | {'prefixes'}, 'Unknown DAPPER input collection')
         index = {}
         for group, nodes in document.items():
             if group == 'prefixes':
                 continue
             require(isinstance(nodes, list), f'{group} must be a list')
-            cls = self.groups[group]
+            cls = groups[group]
             for node in nodes:
-                require(node.get('id') not in index, f'Duplicate DAPPER ID: {node.get("id")}')
+                if group not in self.edge_groups:
+                    require(node.get('id') not in index, f'Duplicate DAPPER ID: {node.get("id")}')
                 result = self.validator.validate(node, cls)
                 require(not result.results, f'Invalid {cls}: {[r.message for r in result.results]}')
+                if group in self.edge_groups:
+                    expected = self.schema.induced_slot('predicate', cls).ifabsent
+                    if expected:
+                        require(node.get('predicate') == str(expected)[7:-1], f'Invalid {cls} predicate')
+                    continue
                 if node['id'].startswith('dapper:'):
                     require(self.compute_id(node, cls, self.schema) == node['id'], f'DAPPER identity mismatch: {node["id"]}')
                 index[node['id']] = node
-        _, errors = self.transform(document, self.schema, self.groups)
+        _, errors = self.transform(document, self.schema, groups)
         require(not errors, f'Invalid DAPPER references: {errors}')
         def references(value):
             if isinstance(value, dict):
@@ -644,7 +655,7 @@ def build_package(spec, blobs, dapper):
         elif isinstance(value, list):
             for child in value: check_refs(child)
     for node in document.values():
-        if isinstance(node, list): node.sort(key=lambda x: x['id'])  # Within-node arrays retain their scientific order.
+        if isinstance(node, list): node.sort(key=lambda x: x.get('id') or canonical_json(x).decode())  # Preserve within-node array order.
     index = dapper.validate(document)
     require(spec['authoring']['required_question'] == gap_node['id'], 'Authoring question differs from selection')
     require(spec['external_evidence']['status'] == 'not_queried' and not spec['external_evidence'].get('assertions') and

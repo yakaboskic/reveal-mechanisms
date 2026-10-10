@@ -1603,6 +1603,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/accounts/{account_id}/provenance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Expand scientific account provenance and dataset reuse
+         * @description Read the full authorized account and annotate its propositions and evidence with dataset and organization lineage. Totals count distinct claims, before trace pagination. Stored factor projections are distinguished from direct lineage; no complete model-input provenance is implied. Source gaps produce explicit lower bounds. The processing bounds are 10,000 nodes, 50,000 edges and depth 128; responses are capped at 8 MiB. Exceeding bounds returns PROVENANCE_LIMIT_EXCEEDED without rankings. Cursors bind authorization, immutable observations and tracing policy. Public reads use frozen publication records and public reference sources only. The example uses the existing illustrative scientific-account fixture and does not claim historical provenance recovery.
+         */
+        get: operations["getAccountProvenance"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -6032,12 +6052,25 @@ export interface components {
             data_use_terms?: components["schemas"]["PackageDataUseTerm"][] | null;
             datasets?: components["schemas"]["PackageDataset"][] | null;
             drs_objects?: components["schemas"]["PackageDrsObject"][] | null;
+            drs_representation_edges?: components["schemas"]["PackageDrsRepresentation"][] | null;
             embeddings?: components["schemas"]["PackageEmbedding"][] | null;
             evidence_items?: components["schemas"]["PackageEvidenceItem"][] | null;
             files?: components["schemas"]["PackageFile"][] | null;
+            funded_by_edges?: components["schemas"]["PackageFundedBy"][] | null;
             gene_programs?: components["schemas"]["PackageGeneProgram"][] | null;
             gene_set_collections?: components["schemas"]["PackageGeneSetCollection"][] | null;
             gene_sets?: components["schemas"]["PackageGeneSet"][] | null;
+            has_agentic_workspace_edges?: components["schemas"]["PackageHasAgenticWorkspace"][] | null;
+            has_contributor_edges?: components["schemas"]["PackageHasContributor"][] | null;
+            has_creator_edges?: components["schemas"]["PackageHasCreator"][] | null;
+            has_data_use_term_edges?: components["schemas"]["PackageHasDataUseTerm"][] | null;
+            has_drs_object_edges?: components["schemas"]["PackageHasDrsObject"][] | null;
+            has_file_edges?: components["schemas"]["PackageHasFile"][] | null;
+            has_lineage_step_edges?: components["schemas"]["PackageHasLineageStep"][] | null;
+            has_mirror_provenance_edges?: components["schemas"]["PackageHasMirrorProvenance"][] | null;
+            has_recommended_citation_edges?: components["schemas"]["PackageHasRecommendedCitation"][] | null;
+            has_workflow_provenance_edges?: components["schemas"]["PackageHasWorkflowProvenance"][] | null;
+            is_described_by_edges?: components["schemas"]["PackageIsDescribedBy"][] | null;
             knowledge_gaps?: components["schemas"]["PackageKnowledgeGap"][] | null;
             licenses?: components["schemas"]["PackageLicense"][] | null;
             lineage_steps?: components["schemas"]["PackageLineageStep"][] | null;
@@ -6050,6 +6083,7 @@ export interface components {
             nanopub_signatures?: components["schemas"]["PackageNanopubSignature"][] | null;
             nanopublications?: components["schemas"]["PackageNanopublication"][] | null;
             organizations?: components["schemas"]["PackageOrganization"][] | null;
+            packaged_as_edges?: components["schemas"]["PackagePackagedAs"][] | null;
             paragraphs?: components["schemas"]["PackageParagraph"][] | null;
             persons?: components["schemas"]["PackagePerson"][] | null;
             prefixes: {
@@ -6062,6 +6096,10 @@ export interface components {
             ro_crate_packages?: components["schemas"]["PackageRoCratePackage"][] | null;
             scientific_accounts?: components["schemas"]["PackageScientificAccount"][] | null;
             sets?: components["schemas"]["PackageSet"][] | null;
+            used_edges?: components["schemas"]["PackageUsed"][] | null;
+            was_attributed_to_edges?: components["schemas"]["PackageWasAttributedTo"][] | null;
+            was_derived_from_edges?: components["schemas"]["PackageWasDerivedFrom"][] | null;
+            was_generated_by_edges?: components["schemas"]["PackageWasGeneratedBy"][] | null;
         };
         /**
          * EPDapperPin
@@ -9080,6 +9118,183 @@ export interface components {
                 next_cursor: string | null;
                 has_more: boolean;
                 snapshot_id?: string;
+            };
+        };
+        /** @description trace_count and reached IDs cover the entire account; trace_ids and page_trace_count cover this page. Scientific records are never rewritten. */
+        ProvenanceAnnotation: {
+            trace_count: number;
+            page_trace_count: number;
+            trace_ids: string[];
+            dataset_ids: string[];
+            organization_ids: string[];
+            /** @enum {string} */
+            resolution: "complete" | "incomplete" | "not_applicable";
+        };
+        AnnotatedScientificAccount: {
+            record: components["schemas"]["DapperScientificAccount"];
+            provenance: components["schemas"]["ProvenanceAnnotation"];
+        };
+        AnnotatedClaim: {
+            record: components["schemas"]["DapperClaim"];
+            provenance: components["schemas"]["ProvenanceAnnotation"];
+        };
+        AnnotatedProposition: {
+            record: components["schemas"]["DapperProposition"];
+            provenance: components["schemas"]["ProvenanceAnnotation"];
+        };
+        AnnotatedEvidenceItem: {
+            record: components["schemas"]["DapperEvidenceItem"];
+            provenance: components["schemas"]["ProvenanceAnnotation"];
+        };
+        /** @description Deterministic witness path for an originating scientific use. Direction is present only for evidence-origin traces and is not multiplied through source claims. Alternative recorded branches remain in the shared graph. */
+        ProvenanceTrace: {
+            id: string;
+            claim_id: string | null;
+            proposition_id: string | null;
+            evidence_item_id: string | null;
+            origin_id: string;
+            source_field: string;
+            source_id: string;
+            dataset_id: string;
+            route_classifications: ("proposition_reference" | "evidence_derivation" | "inherited_source_claim" | "factor_projection")[];
+            input_roles: string[];
+            organization_ids: string[];
+            organization_attributions: {
+                organization_id: string;
+                role: string;
+                path_steps: {
+                    edge_id: string;
+                    /** @enum {string} */
+                    direction: "forward" | "reverse";
+                }[];
+            }[];
+            path_steps: {
+                edge_id: string;
+                /** @enum {string} */
+                direction: "forward" | "reverse";
+            }[];
+            path_edge_ids: string[];
+            /** @enum {string} */
+            direction?: "SUPPORTS" | "DISPUTES" | "MIXED" | "NEUTRAL" | "UNKNOWN";
+        };
+        ProvenanceNode: {
+            id: string;
+            kind: string;
+            /** @enum {string} */
+            status: "resolved" | "unresolved" | "conflicting";
+            name?: string | null;
+            sha256?: string | null;
+            filename?: string | null;
+            ror?: string | null;
+        };
+        ProvenanceEdge: {
+            id: string;
+            subject: string;
+            predicate: string;
+            object: string;
+            relation: string;
+            input_role?: string;
+            observations?: {
+                [key: string]: unknown;
+            }[];
+            provenance_source?: {
+                [key: string]: unknown;
+            }[];
+        };
+        /** @description Distinct claims reaching an exact dataset. Route classifications overlap and must not be added. This measures reuse/reference lineage, not evidentiary strength. */
+        DatasetReuse: {
+            dataset_id: string;
+            claim_count: number;
+            claim_ids: string[];
+            trace_count: number;
+            classification_claim_counts: {
+                proposition_reference: number;
+                evidence_derivation: number;
+                inherited_source_claim: number;
+                factor_projection: number;
+            };
+            classification_claim_ids: {
+                proposition_reference: string[];
+                evidence_derivation: string[];
+                inherited_source_claim: string[];
+                factor_projection: string[];
+            };
+            input_roles: string[];
+        };
+        /** @description Distinct claims, datasets and claim-dataset pairs, grouped by recorded organization roles; publisher and funder do not imply data producer. */
+        OrganizationReuse: {
+            organization_id: string;
+            claim_count: number;
+            claim_ids: string[];
+            dataset_count: number;
+            dataset_ids: string[];
+            claim_dataset_count: number;
+            roles: {
+                [key: string]: {
+                    claim_count: number;
+                    claim_ids: string[];
+                    dataset_count: number;
+                    dataset_ids: string[];
+                    claim_dataset_count: number;
+                };
+            };
+        };
+        /** @description Independent lineage, retained projection and source-recovery coverage. Complete retained projection rows do not establish complete model-construction lineage. Missing or withheld sources make counts lower bounds. */
+        ProvenanceCoverage: {
+            /** @enum {string} */
+            status: "complete" | "incomplete";
+            counts_are_lower_bounds: boolean;
+            claim_count: number;
+            resolved_claim_count: number;
+            trace_count: number;
+            lineage_resolution: {
+                /** @enum {string} */
+                status: "complete" | "incomplete";
+                issue_count: number;
+            };
+            retained_projection_coverage: {
+                [key: string]: unknown;
+            }[];
+            recovery_status: {
+                [key: string]: unknown;
+            }[];
+            issues: {
+                [key: string]: unknown;
+            }[];
+        };
+        ProvenanceSnapshot: {
+            id: string;
+            policy_version: string;
+            /** @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values. */
+            account_id: string;
+            account_payload_sha256: string;
+            document_sha256: string;
+            publication_version: number;
+            reference_generation_ids: string[];
+            supplement_ids: string[];
+            source_observations: {
+                kind: string;
+                key: string;
+                sha256: string;
+            }[];
+        };
+        AccountProvenance: {
+            account: components["schemas"]["AnnotatedScientificAccount"];
+            claims: components["schemas"]["AnnotatedClaim"][];
+            propositions: components["schemas"]["AnnotatedProposition"][];
+            evidence_items: components["schemas"]["AnnotatedEvidenceItem"][];
+            traces: components["schemas"]["ProvenanceTrace"][];
+            nodes: components["schemas"]["ProvenanceNode"][];
+            edges: components["schemas"]["ProvenanceEdge"][];
+            dataset_reuse: components["schemas"]["DatasetReuse"][];
+            organization_reuse: components["schemas"]["OrganizationReuse"][];
+            coverage: components["schemas"]["ProvenanceCoverage"];
+            snapshot: components["schemas"]["ProvenanceSnapshot"];
+            page: {
+                limit: number;
+                offset: number;
+                total: number;
+                next_cursor: string | null;
             };
         };
     };
@@ -16060,6 +16275,92 @@ export interface operations {
                     "Cache-Control"?: string;
                     /** @example Authorization */
                     Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getAccountProvenance: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Optional exact account payload observation; a mismatch returns 404.
+                 * @example 9c4cdd23451a6ec0c04ec47539387b4d78a3db81ca707eba62f7a97e34619d66
+                 */
+                payload_sha256?: string;
+                /** @example 100 */
+                limit?: number;
+                /**
+                 * @description Opaque trace continuation. Changed sources, visibility, or explicit limit return 409.
+                 * @example opaque-signed-cursor
+                 */
+                cursor?: string;
+            };
+            header?: never;
+            path: {
+                /**
+                 * @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values.
+                 * @example dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd
+                 */
+                account_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountProvenance"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Version Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid Input */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dependency Unavailable */
+            503: {
+                headers: {
                     [name: string]: unknown;
                 };
                 content: {

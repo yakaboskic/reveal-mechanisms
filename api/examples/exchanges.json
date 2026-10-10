@@ -22004,6 +22004,2353 @@
     "curl": "curl -X POST https://api.reveal.example.org/v1/lightning-audits/cccccccc-cccc-4ccc-8ccc-cccccccccccc/continue -H 'Idempotency-Key: 66666666-6666-4666-8666-666666666666' -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Content-Type: application/json' -H 'Accept: application/json' --data-raw '{\"mode\":\"local\",\"research_direction\":\"Investigate whether the observed factor-gene association provides a context-specific connection to the gap.\"}'"
   },
   {
+    "operation_id": "getAccountProvenance",
+    "case": "request",
+    "method": "GET",
+    "path_template": "/v1/accounts/{account_id}/provenance",
+    "request": {
+      "url": "https://api.reveal.example.org/v1/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/provenance?payload_sha256=9c4cdd23451a6ec0c04ec47539387b4d78a3db81ca707eba62f7a97e34619d66&limit=100",
+      "path": {
+        "account_id": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd"
+      },
+      "query": {
+        "payload_sha256": "9c4cdd23451a6ec0c04ec47539387b4d78a3db81ca707eba62f7a97e34619d66",
+        "limit": 100
+      },
+      "headers": {
+        "Accept": "application/json"
+      },
+      "body": null
+    },
+    "responses": {
+      "200": {
+        "content_type": "application/json",
+        "examples": {
+          "account": {
+            "account": {
+              "record": {
+                "id": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
+                "name": "Genes and gene programs in a shared CAD-in-T2D mechanism",
+                "question": "dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk",
+                "context": "A CAD-in-T2D evidence slice used to investigate the selected broader CAD gap. This authored design packet combines captured CFDE observations with explicitly illustrative KG membership assertions. No live agent ran.",
+                "component_claims": [
+                  "dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km",
+                  "dapper:Claim.Uv7_cT46DdsqZMvk5nh8G48qOIKvhRgc",
+                  "dapper:Claim.I2mf6PJ0DPF5_nnbiBjAhgjlUCOiUZZ9",
+                  "dapper:Claim.Kd3psmdr4G9AlD0UU1E1Vu6AjpKaQYWE",
+                  "dapper:Claim.NBafdtdEE2Uabs-8pZqurv7SoWpg7Yhi",
+                  "dapper:Claim.Oe2UZeV7oMY4NsMHyB8h4HJO1FH4nSGF",
+                  "dapper:Claim.2idJniYU4zCtCN6puy8XZ2mzo9Mq6c5p",
+                  "dapper:Claim.H5icBYm5JLM3_T-b1mMfH65Nc0zMhZzH",
+                  "dapper:Claim.xzV_35EYnLl-zy03YbmhfBk_ynNbl7H9",
+                  "dapper:Claim.SYqCJXxCVXDpwflRSdZnkVLzGLO_vi_r",
+                  "dapper:Claim.x7aCVQ1uTkYKLJo32ZyAGMGZaAGCSvWV",
+                  "dapper:Claim.uzqyfwuhf59hSTdravdcr4cTxuitWGx-"
+                ],
+                "conclusion_claims": [
+                  "dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km",
+                  "dapper:Claim.Uv7_cT46DdsqZMvk5nh8G48qOIKvhRgc",
+                  "dapper:Claim.I2mf6PJ0DPF5_nnbiBjAhgjlUCOiUZZ9",
+                  "dapper:Claim.Kd3psmdr4G9AlD0UU1E1Vu6AjpKaQYWE",
+                  "dapper:Claim.NBafdtdEE2Uabs-8pZqurv7SoWpg7Yhi"
+                ],
+                "closing_remarks": "SHH, GLI3 and TCF7L2, together with the AMP AD / GTEx and PsychENCODE geneM16 programs, are implicated in the same CAD-in-T2D mechanism by their captured EAGGL loadings. Their PIGEAN trait-level results connect these assessments to CAD in people with type 2 diabetes. The illustrative membership assertions show how genes could be connected to the programs, but those links remain unverified. Together, the assessed relationships prioritize a mechanism for investigating the selected gap. They do not distinguish exposure-driven amplification of genetic risk from downstream readouts or reverse causation; that requires temporal or intervention evidence not present here.",
+                "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+                "was_attributed_to": [
+                  "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+                ]
+              },
+              "provenance": {
+                "trace_count": 0,
+                "trace_ids": [],
+                "dataset_ids": [],
+                "organization_ids": [],
+                "resolution": "incomplete",
+                "page_trace_count": 0
+              }
+            },
+            "claims": [
+              {
+                "record": {
+                  "id": "dapper:Claim.2idJniYU4zCtCN6puy8XZ2mzo9Mq6c5p",
+                  "proposition": "dapper:Proposition.6cRd977XvXOzcsRLrJfwthdIHn_iRAOT",
+                  "statement": "PIGEAN supports GLI3 trait-level involvement with a combined relevance score of 1.98; this is distinct from its mechanism loading.",
+                  "direction": "SUPPORTS",
+                  "status": "proposed",
+                  "has_evidence": [
+                    "dapper:EvidenceItem.kvUX6sx8doykSMMmWJe0FEet-fPmMxpN"
+                  ],
+                  "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+                  "was_attributed_to": [
+                    "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+                  ]
+                },
+                "provenance": {
+                  "trace_count": 0,
+                  "trace_ids": [],
+                  "dataset_ids": [],
+                  "organization_ids": [],
+                  "resolution": "incomplete",
+                  "page_trace_count": 0
+                }
+              },
+              {
+                "record": {
+                  "id": "dapper:Claim.H5icBYm5JLM3_T-b1mMfH65Nc0zMhZzH",
+                  "proposition": "dapper:Proposition.9Ah6tV2FtJ8m_rEHO6e92pmWxAyfU8U_",
+                  "statement": "PIGEAN supports TCF7L2 trait-level involvement with a combined relevance score of 2.42; this is distinct from its mechanism loading.",
+                  "direction": "SUPPORTS",
+                  "status": "proposed",
+                  "has_evidence": [
+                    "dapper:EvidenceItem.KU2TsRllsq60RcwOPrk5OGbnX6QX4kvT"
+                  ],
+                  "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+                  "was_attributed_to": [
+                    "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+                  ]
+                },
+                "provenance": {
+                  "trace_count": 0,
+                  "trace_ids": [],
+                  "dataset_ids": [],
+                  "organization_ids": [],
+                  "resolution": "incomplete",
+                  "page_trace_count": 0
+                }
+              },
+              {
+                "record": {
+                  "id": "dapper:Claim.I2mf6PJ0DPF5_nnbiBjAhgjlUCOiUZZ9",
+                  "proposition": "dapper:Proposition.b06Styo26ZiZC2Sy599Uk98OKhiNgcuy",
+                  "statement": "The EAGGL result supports TCF7L2 involvement in this mechanism through its reported loading of 0.3813 under cfde-inc-v2.",
+                  "direction": "SUPPORTS",
+                  "status": "proposed",
+                  "has_evidence": [
+                    "dapper:EvidenceItem.4j1Kh6qQTrMLAMh2i8HOqwY-E1jBEC4G",
+                    "dapper:EvidenceItem.j6xtY8mzZ5SGHhlKOH1bOMu2lXp5idpW"
+                  ],
+                  "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+                  "was_attributed_to": [
+                    "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+                  ]
+                },
+                "provenance": {
+                  "trace_count": 0,
+                  "trace_ids": [],
+                  "dataset_ids": [],
+                  "organization_ids": [],
+                  "resolution": "incomplete",
+                  "page_trace_count": 0
+                }
+              },
+              {
+                "record": {
+                  "id": "dapper:Claim.Kd3psmdr4G9AlD0UU1E1Vu6AjpKaQYWE",
+                  "proposition": "dapper:Proposition.yUAm2Mgs3NxOTghFk_4SrqgpYaecOFvL",
+                  "statement": "The EAGGL result supports involvement of the AMP AD / GTEx brain-aging set, with a loading of 1.0 on mechanism Factor1.",
+                  "direction": "SUPPORTS",
+                  "status": "proposed",
+                  "has_evidence": [
+                    "dapper:EvidenceItem.TmJpftCshV-2i4dhf6jejSdst3s6VSib"
+                  ],
+                  "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+                  "was_attributed_to": [
+                    "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+                  ]
+                },
+                "provenance": {
+                  "trace_count": 0,
+                  "trace_ids": [],
+                  "dataset_ids": [],
+                  "organization_ids": [],
+                  "resolution": "incomplete",
+                  "page_trace_count": 0
+                }
+              },
+              {
+                "record": {
+                  "id": "dapper:Claim.NBafdtdEE2Uabs-8pZqurv7SoWpg7Yhi",
+                  "proposition": "dapper:Proposition.YglauZfsf1X5GagFEmSSWB-dwoGljEGz",
+                  "statement": "The EAGGL result supports involvement of the PsychENCODE geneM16 set, with a loading of 0.4518 on mechanism Factor1.",
+                  "direction": "SUPPORTS",
+                  "status": "proposed",
+                  "has_evidence": [
+                    "dapper:EvidenceItem.e_woYuSIytDbJ7bWIRGY0q6K8vCabcFw"
+                  ],
+                  "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+                  "was_attributed_to": [
+                    "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+                  ]
+                },
+                "provenance": {
+                  "trace_count": 0,
+                  "trace_ids": [],
+                  "dataset_ids": [],
+                  "organization_ids": [],
+                  "resolution": "incomplete",
+                  "page_trace_count": 0
+                }
+              },
+              {
+                "record": {
+                  "id": "dapper:Claim.Oe2UZeV7oMY4NsMHyB8h4HJO1FH4nSGF",
+                  "proposition": "dapper:Proposition.3dNz6hkwxQ199hXVaHISAWghx_R6G8og",
+                  "statement": "PIGEAN supports SHH trait-level involvement with a combined relevance score of 3.86; this is distinct from its mechanism loading.",
+                  "direction": "SUPPORTS",
+                  "status": "proposed",
+                  "has_evidence": [
+                    "dapper:EvidenceItem.QMnxv6KQF0En3XH-b9ruB3myjTEYc1a9"
+                  ],
+                  "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+                  "was_attributed_to": [
+                    "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+                  ]
+                },
+                "provenance": {
+                  "trace_count": 0,
+                  "trace_ids": [],
+                  "dataset_ids": [],
+                  "organization_ids": [],
+                  "resolution": "incomplete",
+                  "page_trace_count": 0
+                }
+              },
+              {
+                "record": {
+                  "id": "dapper:Claim.SYqCJXxCVXDpwflRSdZnkVLzGLO_vi_r",
+                  "proposition": "dapper:Proposition.JfxEcQLDt9bMiSejgOKxh7G8ylVGAqxI",
+                  "statement": "PIGEAN supports trait-level involvement of the PsychENCODE geneM16 set, with beta=0.00729 and beta_uncorrected=0.0586.",
+                  "direction": "SUPPORTS",
+                  "status": "proposed",
+                  "has_evidence": [
+                    "dapper:EvidenceItem.O0yC2UWrCiEd7Iw-S3hgW070oHE_x8hm"
+                  ],
+                  "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+                  "was_attributed_to": [
+                    "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+                  ]
+                },
+                "provenance": {
+                  "trace_count": 0,
+                  "trace_ids": [],
+                  "dataset_ids": [],
+                  "organization_ids": [],
+                  "resolution": "incomplete",
+                  "page_trace_count": 0
+                }
+              },
+              {
+                "record": {
+                  "id": "dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km",
+                  "proposition": "dapper:Proposition.cjK2Yz-rwiv49w9zH71aodlAHIzbNVqE",
+                  "statement": "The EAGGL result supports SHH involvement in this mechanism through its reported loading of 0.5042 under cfde-inc-v2.",
+                  "direction": "SUPPORTS",
+                  "status": "proposed",
+                  "has_evidence": [
+                    "dapper:EvidenceItem.1Sq7f12tg9y1afcop6HdNCwT4vNBk0-H",
+                    "dapper:EvidenceItem.YkOjbB_uxlxEhXe6VEJ5-zDGTfEh5Iek"
+                  ],
+                  "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+                  "was_attributed_to": [
+                    "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+                  ]
+                },
+                "provenance": {
+                  "trace_count": 0,
+                  "trace_ids": [],
+                  "dataset_ids": [],
+                  "organization_ids": [],
+                  "resolution": "incomplete",
+                  "page_trace_count": 0
+                }
+              },
+              {
+                "record": {
+                  "id": "dapper:Claim.Uv7_cT46DdsqZMvk5nh8G48qOIKvhRgc",
+                  "proposition": "dapper:Proposition.rCjXmKoJQot2L0j-JXULHltjuBgtYhnD",
+                  "statement": "The EAGGL result supports GLI3 involvement in this mechanism through its reported loading of 0.3245 under cfde-inc-v2.",
+                  "direction": "SUPPORTS",
+                  "status": "proposed",
+                  "has_evidence": [
+                    "dapper:EvidenceItem.YN7PV1PkRn3wAY5eX7voYINQIrYZpd8x"
+                  ],
+                  "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+                  "was_attributed_to": [
+                    "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+                  ]
+                },
+                "provenance": {
+                  "trace_count": 0,
+                  "trace_ids": [],
+                  "dataset_ids": [],
+                  "organization_ids": [],
+                  "resolution": "incomplete",
+                  "page_trace_count": 0
+                }
+              },
+              {
+                "record": {
+                  "id": "dapper:Claim.uzqyfwuhf59hSTdravdcr4cTxuitWGx-",
+                  "proposition": "dapper:Proposition.6T-VChVL5ddew5vFiMsuYE8O4_60DfUz",
+                  "statement": "For this illustrative scenario, a mock BiomarkerKG assertion supports TCF7L2 membership in the PsychENCODE geneM16 set. The membership is unverified.",
+                  "direction": "SUPPORTS",
+                  "status": "proposed",
+                  "has_evidence": [
+                    "dapper:EvidenceItem.-2rU_GVD34ddH6jrpbtOyP3TZq-y3c1q",
+                    "dapper:EvidenceItem.1raZeL7bxIDn9SyULEBH0z1Yj4Lds5-k"
+                  ],
+                  "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+                  "was_attributed_to": [
+                    "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+                  ]
+                },
+                "provenance": {
+                  "trace_count": 0,
+                  "trace_ids": [],
+                  "dataset_ids": [],
+                  "organization_ids": [],
+                  "resolution": "incomplete",
+                  "page_trace_count": 0
+                }
+              },
+              {
+                "record": {
+                  "id": "dapper:Claim.x7aCVQ1uTkYKLJo32ZyAGMGZaAGCSvWV",
+                  "proposition": "dapper:Proposition.9l7Nq6exgMpGL5Z3Tn4Luy62urD9GHT5",
+                  "statement": "For this illustrative scenario, a mock ProKN assertion supports SHH membership in the AMP AD / GTEx brain-aging set. The membership is unverified.",
+                  "direction": "SUPPORTS",
+                  "status": "proposed",
+                  "has_evidence": [
+                    "dapper:EvidenceItem.2uQrn7wZLvOA2uUhncD6zCHmyIB_N5Jh",
+                    "dapper:EvidenceItem.KIcbQc5Jr6Ac4zUJr52D7SlNWXmDeElR"
+                  ],
+                  "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+                  "was_attributed_to": [
+                    "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+                  ]
+                },
+                "provenance": {
+                  "trace_count": 0,
+                  "trace_ids": [],
+                  "dataset_ids": [],
+                  "organization_ids": [],
+                  "resolution": "incomplete",
+                  "page_trace_count": 0
+                }
+              },
+              {
+                "record": {
+                  "id": "dapper:Claim.xzV_35EYnLl-zy03YbmhfBk_ynNbl7H9",
+                  "proposition": "dapper:Proposition.NJYh11lXY-LXoFXrJeK7KkfI7r7iQzFT",
+                  "statement": "PIGEAN supports trait-level involvement of the AMP AD / GTEx brain-aging set, with beta=0.115 and beta_uncorrected=0.119.",
+                  "direction": "SUPPORTS",
+                  "status": "proposed",
+                  "has_evidence": [
+                    "dapper:EvidenceItem.LG9zY-dbXmGT8ldum4A8LrmAHFAvSyBm"
+                  ],
+                  "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+                  "was_attributed_to": [
+                    "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+                  ]
+                },
+                "provenance": {
+                  "trace_count": 0,
+                  "trace_ids": [],
+                  "dataset_ids": [],
+                  "organization_ids": [],
+                  "resolution": "incomplete",
+                  "page_trace_count": 0
+                }
+              }
+            ],
+            "propositions": [
+              {
+                "record": {
+                  "id": "dapper:Proposition.3dNz6hkwxQ199hXVaHISAWghx_R6G8og",
+                  "statement": "SHH is involved in the biology of coronary artery disease in people with type 2 diabetes.",
+                  "proposition_kind": "BIOLOGICAL_INTERPRETATION",
+                  "scope": "Coronary artery disease in people with type 2 diabetes (portal CADinT2D). Trait-level biological involvement.",
+                  "subject_entity": "urn:cfde:gene:SHH",
+                  "relation": "urn:reveal:relation:involved-in",
+                  "object_entity": "urn:cfde:trait:portal:CADinT2D"
+                },
+                "provenance": {
+                  "trace_count": 0,
+                  "trace_ids": [],
+                  "dataset_ids": [],
+                  "organization_ids": [],
+                  "resolution": "not_applicable",
+                  "page_trace_count": 0
+                }
+              },
+              {
+                "record": {
+                  "id": "dapper:Proposition.6T-VChVL5ddew5vFiMsuYE8O4_60DfUz",
+                  "statement": "TCF7L2 belongs to the gene set representing the PsychENCODE geneM16 set.",
+                  "proposition_kind": "BIOLOGICAL_INTERPRETATION",
+                  "scope": "Coronary artery disease in people with type 2 diabetes (portal CADinT2D). Illustrative membership proposition; not established by captured CFDE data.",
+                  "subject_entity": "urn:cfde:gene:TCF7L2",
+                  "relation": "urn:reveal:relation:member-of",
+                  "object_entity": "dapper:GeneSet.zQ8X81n_J-Fuv0zNRp1iQQXqIzuAOzGP"
+                },
+                "provenance": {
+                  "trace_count": 0,
+                  "trace_ids": [],
+                  "dataset_ids": [],
+                  "organization_ids": [],
+                  "resolution": "incomplete",
+                  "page_trace_count": 0
+                }
+              },
+              {
+                "record": {
+                  "id": "dapper:Proposition.6cRd977XvXOzcsRLrJfwthdIHn_iRAOT",
+                  "statement": "GLI3 is involved in the biology of coronary artery disease in people with type 2 diabetes.",
+                  "proposition_kind": "BIOLOGICAL_INTERPRETATION",
+                  "scope": "Coronary artery disease in people with type 2 diabetes (portal CADinT2D). Trait-level biological involvement.",
+                  "subject_entity": "urn:cfde:gene:GLI3",
+                  "relation": "urn:reveal:relation:involved-in",
+                  "object_entity": "urn:cfde:trait:portal:CADinT2D"
+                },
+                "provenance": {
+                  "trace_count": 0,
+                  "trace_ids": [],
+                  "dataset_ids": [],
+                  "organization_ids": [],
+                  "resolution": "not_applicable",
+                  "page_trace_count": 0
+                }
+              },
+              {
+                "record": {
+                  "id": "dapper:Proposition.9Ah6tV2FtJ8m_rEHO6e92pmWxAyfU8U_",
+                  "statement": "TCF7L2 is involved in the biology of coronary artery disease in people with type 2 diabetes.",
+                  "proposition_kind": "BIOLOGICAL_INTERPRETATION",
+                  "scope": "Coronary artery disease in people with type 2 diabetes (portal CADinT2D). Trait-level biological involvement.",
+                  "subject_entity": "urn:cfde:gene:TCF7L2",
+                  "relation": "urn:reveal:relation:involved-in",
+                  "object_entity": "urn:cfde:trait:portal:CADinT2D"
+                },
+                "provenance": {
+                  "trace_count": 0,
+                  "trace_ids": [],
+                  "dataset_ids": [],
+                  "organization_ids": [],
+                  "resolution": "not_applicable",
+                  "page_trace_count": 0
+                }
+              },
+              {
+                "record": {
+                  "id": "dapper:Proposition.9l7Nq6exgMpGL5Z3Tn4Luy62urD9GHT5",
+                  "statement": "SHH belongs to the gene set representing the AMP AD / GTEx brain-aging set.",
+                  "proposition_kind": "BIOLOGICAL_INTERPRETATION",
+                  "scope": "Coronary artery disease in people with type 2 diabetes (portal CADinT2D). Illustrative membership proposition; not established by captured CFDE data.",
+                  "subject_entity": "urn:cfde:gene:SHH",
+                  "relation": "urn:reveal:relation:member-of",
+                  "object_entity": "dapper:GeneSet.I1UZhVhKU-YDerPLIxtnZOGlTXNAlrgD"
+                },
+                "provenance": {
+                  "trace_count": 0,
+                  "trace_ids": [],
+                  "dataset_ids": [],
+                  "organization_ids": [],
+                  "resolution": "incomplete",
+                  "page_trace_count": 0
+                }
+              },
+              {
+                "record": {
+                  "id": "dapper:Proposition.JfxEcQLDt9bMiSejgOKxh7G8ylVGAqxI",
+                  "statement": "The gene program represented by the PsychENCODE geneM16 set is involved in the biology of CAD in people with type 2 diabetes.",
+                  "proposition_kind": "BIOLOGICAL_INTERPRETATION",
+                  "scope": "Coronary artery disease in people with type 2 diabetes (portal CADinT2D). Trait-level biological involvement.",
+                  "subject_entity": "dapper:GeneSet.zQ8X81n_J-Fuv0zNRp1iQQXqIzuAOzGP",
+                  "relation": "urn:reveal:relation:involved-in",
+                  "object_entity": "urn:cfde:trait:portal:CADinT2D"
+                },
+                "provenance": {
+                  "trace_count": 0,
+                  "trace_ids": [],
+                  "dataset_ids": [],
+                  "organization_ids": [],
+                  "resolution": "incomplete",
+                  "page_trace_count": 0
+                }
+              },
+              {
+                "record": {
+                  "id": "dapper:Proposition.NJYh11lXY-LXoFXrJeK7KkfI7r7iQzFT",
+                  "statement": "The gene program represented by the AMP AD / GTEx brain-aging set is involved in the biology of CAD in people with type 2 diabetes.",
+                  "proposition_kind": "BIOLOGICAL_INTERPRETATION",
+                  "scope": "Coronary artery disease in people with type 2 diabetes (portal CADinT2D). Trait-level biological involvement.",
+                  "subject_entity": "dapper:GeneSet.I1UZhVhKU-YDerPLIxtnZOGlTXNAlrgD",
+                  "relation": "urn:reveal:relation:involved-in",
+                  "object_entity": "urn:cfde:trait:portal:CADinT2D"
+                },
+                "provenance": {
+                  "trace_count": 0,
+                  "trace_ids": [],
+                  "dataset_ids": [],
+                  "organization_ids": [],
+                  "resolution": "incomplete",
+                  "page_trace_count": 0
+                }
+              },
+              {
+                "record": {
+                  "id": "dapper:Proposition.YglauZfsf1X5GagFEmSSWB-dwoGljEGz",
+                  "statement": "The gene program represented by the PsychENCODE geneM16 set is involved in mechanism Factor1 relevant to CAD in people with type 2 diabetes.",
+                  "proposition_kind": "BIOLOGICAL_INTERPRETATION",
+                  "scope": "Coronary artery disease in people with type 2 diabetes (portal CADinT2D). The mechanism is factor:portal:CADinT2D:cfde-inc-v2:Factor1.",
+                  "subject_entity": "dapper:GeneSet.zQ8X81n_J-Fuv0zNRp1iQQXqIzuAOzGP",
+                  "relation": "urn:reveal:relation:involved-in",
+                  "object_entity": "dapper:Mechanism.kEJMDzCkDYE94DpWaXrQg-eC4gFGQyuX"
+                },
+                "provenance": {
+                  "trace_count": 0,
+                  "trace_ids": [],
+                  "dataset_ids": [],
+                  "organization_ids": [],
+                  "resolution": "incomplete",
+                  "page_trace_count": 0
+                }
+              },
+              {
+                "record": {
+                  "id": "dapper:Proposition.b06Styo26ZiZC2Sy599Uk98OKhiNgcuy",
+                  "statement": "TCF7L2 is involved in mechanism Factor1 relevant to coronary artery disease in people with type 2 diabetes.",
+                  "proposition_kind": "BIOLOGICAL_INTERPRETATION",
+                  "scope": "Coronary artery disease in people with type 2 diabetes (portal CADinT2D). The mechanism is factor:portal:CADinT2D:cfde-inc-v2:Factor1.",
+                  "subject_entity": "urn:cfde:gene:TCF7L2",
+                  "relation": "urn:reveal:relation:involved-in",
+                  "object_entity": "dapper:Mechanism.kEJMDzCkDYE94DpWaXrQg-eC4gFGQyuX"
+                },
+                "provenance": {
+                  "trace_count": 0,
+                  "trace_ids": [],
+                  "dataset_ids": [],
+                  "organization_ids": [],
+                  "resolution": "incomplete",
+                  "page_trace_count": 0
+                }
+              },
+              {
+                "record": {
+                  "id": "dapper:Proposition.cjK2Yz-rwiv49w9zH71aodlAHIzbNVqE",
+                  "statement": "SHH is involved in mechanism Factor1 relevant to coronary artery disease in people with type 2 diabetes.",
+                  "proposition_kind": "BIOLOGICAL_INTERPRETATION",
+                  "scope": "Coronary artery disease in people with type 2 diabetes (portal CADinT2D). The mechanism is factor:portal:CADinT2D:cfde-inc-v2:Factor1.",
+                  "subject_entity": "urn:cfde:gene:SHH",
+                  "relation": "urn:reveal:relation:involved-in",
+                  "object_entity": "dapper:Mechanism.kEJMDzCkDYE94DpWaXrQg-eC4gFGQyuX"
+                },
+                "provenance": {
+                  "trace_count": 0,
+                  "trace_ids": [],
+                  "dataset_ids": [],
+                  "organization_ids": [],
+                  "resolution": "incomplete",
+                  "page_trace_count": 0
+                }
+              },
+              {
+                "record": {
+                  "id": "dapper:Proposition.rCjXmKoJQot2L0j-JXULHltjuBgtYhnD",
+                  "statement": "GLI3 is involved in mechanism Factor1 relevant to coronary artery disease in people with type 2 diabetes.",
+                  "proposition_kind": "BIOLOGICAL_INTERPRETATION",
+                  "scope": "Coronary artery disease in people with type 2 diabetes (portal CADinT2D). The mechanism is factor:portal:CADinT2D:cfde-inc-v2:Factor1.",
+                  "subject_entity": "urn:cfde:gene:GLI3",
+                  "relation": "urn:reveal:relation:involved-in",
+                  "object_entity": "dapper:Mechanism.kEJMDzCkDYE94DpWaXrQg-eC4gFGQyuX"
+                },
+                "provenance": {
+                  "trace_count": 0,
+                  "trace_ids": [],
+                  "dataset_ids": [],
+                  "organization_ids": [],
+                  "resolution": "incomplete",
+                  "page_trace_count": 0
+                }
+              },
+              {
+                "record": {
+                  "id": "dapper:Proposition.yUAm2Mgs3NxOTghFk_4SrqgpYaecOFvL",
+                  "statement": "The gene program represented by the AMP AD / GTEx brain-aging set is involved in mechanism Factor1 relevant to CAD in people with type 2 diabetes.",
+                  "proposition_kind": "BIOLOGICAL_INTERPRETATION",
+                  "scope": "Coronary artery disease in people with type 2 diabetes (portal CADinT2D). The mechanism is factor:portal:CADinT2D:cfde-inc-v2:Factor1.",
+                  "subject_entity": "dapper:GeneSet.I1UZhVhKU-YDerPLIxtnZOGlTXNAlrgD",
+                  "relation": "urn:reveal:relation:involved-in",
+                  "object_entity": "dapper:Mechanism.kEJMDzCkDYE94DpWaXrQg-eC4gFGQyuX"
+                },
+                "provenance": {
+                  "trace_count": 0,
+                  "trace_ids": [],
+                  "dataset_ids": [],
+                  "organization_ids": [],
+                  "resolution": "incomplete",
+                  "page_trace_count": 0
+                }
+              }
+            ],
+            "evidence_items": [
+              {
+                "record": {
+                  "id": "dapper:EvidenceItem.-2rU_GVD34ddH6jrpbtOyP3TZq-y3c1q",
+                  "target_proposition": "dapper:Proposition.6T-VChVL5ddew5vFiMsuYE8O4_60DfUz",
+                  "direction": "SUPPORTS",
+                  "evidence_source": "BiomarkerKG — illustrative assertion, not retrieved",
+                  "snippet": "TCF7L2 is a member of the PsychENCODE geneM16 gene set.",
+                  "explanation": "This invented assertion directly supplies membership for the UI example. It is not a returned KG result and must not update the imported GeneSet membership.",
+                  "context": "Source locator: illustrative-kg-assertions.json#/assertions/1. Trait: portal CADinT2D; model: cfde-inc-v2; mechanism: factor:portal:CADinT2D:cfde-inc-v2:Factor1. This is synthetic design evidence and has not been verified.",
+                  "was_derived_from": [
+                    "dapper:File._FB2fhvDopxDEHgoDgf2Hk4jE0wxilag"
+                  ],
+                  "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+                  "was_attributed_to": [
+                    "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+                  ]
+                },
+                "provenance": {
+                  "trace_count": 0,
+                  "trace_ids": [],
+                  "dataset_ids": [],
+                  "organization_ids": [],
+                  "resolution": "incomplete",
+                  "page_trace_count": 0
+                }
+              },
+              {
+                "record": {
+                  "id": "dapper:EvidenceItem.1Sq7f12tg9y1afcop6HdNCwT4vNBk0-H",
+                  "target_proposition": "dapper:Proposition.cjK2Yz-rwiv49w9zH71aodlAHIzbNVqE",
+                  "direction": "SUPPORTS",
+                  "evidence_source": "CFDE — captured PIGEAN/EAGGL result",
+                  "snippet": "\"factor_value\":0.5042",
+                  "explanation": "The loading is used as evidence of involvement in the mechanism. It does not distinguish amplification from inhibition.",
+                  "context": "Source locator: pigean-gene-factor.response.json#/data/0. Trait: portal CADinT2D; model: cfde-inc-v2; mechanism: factor:portal:CADinT2D:cfde-inc-v2:Factor1. Source metrics retain their original meanings; no probability calibration is assumed.",
+                  "was_derived_from": [
+                    "dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ"
+                  ],
+                  "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+                  "was_attributed_to": [
+                    "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+                  ]
+                },
+                "provenance": {
+                  "trace_count": 0,
+                  "trace_ids": [],
+                  "dataset_ids": [],
+                  "organization_ids": [],
+                  "resolution": "incomplete",
+                  "page_trace_count": 0
+                }
+              },
+              {
+                "record": {
+                  "id": "dapper:EvidenceItem.1raZeL7bxIDn9SyULEBH0z1Yj4Lds5-k",
+                  "target_proposition": "dapper:Proposition.6T-VChVL5ddew5vFiMsuYE8O4_60DfUz",
+                  "direction": "NEUTRAL",
+                  "evidence_source": "CFDE — captured PIGEAN/EAGGL result",
+                  "snippet": "\"factor\":\"Factor1\"",
+                  "explanation": "Both entities load on the same mechanism. That is useful investigation context but does not establish that the gene belongs to the set.",
+                  "context": "Source locator: pigean-gene-factor.response.json and pigean-gene-set-factor.response.json; shared Factor1 neighborhood. Trait: portal CADinT2D; model: cfde-inc-v2; mechanism: factor:portal:CADinT2D:cfde-inc-v2:Factor1. Source metrics retain their original meanings; no probability calibration is assumed.",
+                  "was_derived_from": [
+                    "dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ",
+                    "dapper:File.Dt0S38v_sLn5jiOAVXMrMWTrXBLnsn83"
+                  ],
+                  "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+                  "was_attributed_to": [
+                    "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+                  ]
+                },
+                "provenance": {
+                  "trace_count": 0,
+                  "trace_ids": [],
+                  "dataset_ids": [],
+                  "organization_ids": [],
+                  "resolution": "incomplete",
+                  "page_trace_count": 0
+                }
+              },
+              {
+                "record": {
+                  "id": "dapper:EvidenceItem.2uQrn7wZLvOA2uUhncD6zCHmyIB_N5Jh",
+                  "target_proposition": "dapper:Proposition.9l7Nq6exgMpGL5Z3Tn4Luy62urD9GHT5",
+                  "direction": "SUPPORTS",
+                  "evidence_source": "ProKN — illustrative assertion, not retrieved",
+                  "snippet": "SHH is a member of the retained AMP AD / GTEx gene set.",
+                  "explanation": "This invented assertion directly supplies membership for the UI example. It is not a returned KG result and must not update the imported GeneSet membership.",
+                  "context": "Source locator: illustrative-kg-assertions.json#/assertions/0. Trait: portal CADinT2D; model: cfde-inc-v2; mechanism: factor:portal:CADinT2D:cfde-inc-v2:Factor1. This is synthetic design evidence and has not been verified.",
+                  "was_derived_from": [
+                    "dapper:File._FB2fhvDopxDEHgoDgf2Hk4jE0wxilag"
+                  ],
+                  "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+                  "was_attributed_to": [
+                    "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+                  ]
+                },
+                "provenance": {
+                  "trace_count": 0,
+                  "trace_ids": [],
+                  "dataset_ids": [],
+                  "organization_ids": [],
+                  "resolution": "incomplete",
+                  "page_trace_count": 0
+                }
+              },
+              {
+                "record": {
+                  "id": "dapper:EvidenceItem.4j1Kh6qQTrMLAMh2i8HOqwY-E1jBEC4G",
+                  "target_proposition": "dapper:Proposition.b06Styo26ZiZC2Sy599Uk98OKhiNgcuy",
+                  "direction": "SUPPORTS",
+                  "evidence_source": "CFDE — captured PIGEAN/EAGGL result",
+                  "snippet": "\"factor_value\":0.3813",
+                  "explanation": "The loading is used as evidence of involvement in the mechanism. It does not distinguish amplification from inhibition.",
+                  "context": "Source locator: pigean-gene-factor.response.json#/data/1. Trait: portal CADinT2D; model: cfde-inc-v2; mechanism: factor:portal:CADinT2D:cfde-inc-v2:Factor1. Source metrics retain their original meanings; no probability calibration is assumed.",
+                  "was_derived_from": [
+                    "dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ"
+                  ],
+                  "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+                  "was_attributed_to": [
+                    "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+                  ]
+                },
+                "provenance": {
+                  "trace_count": 0,
+                  "trace_ids": [],
+                  "dataset_ids": [],
+                  "organization_ids": [],
+                  "resolution": "incomplete",
+                  "page_trace_count": 0
+                }
+              },
+              {
+                "record": {
+                  "id": "dapper:EvidenceItem.KIcbQc5Jr6Ac4zUJr52D7SlNWXmDeElR",
+                  "target_proposition": "dapper:Proposition.9l7Nq6exgMpGL5Z3Tn4Luy62urD9GHT5",
+                  "direction": "NEUTRAL",
+                  "evidence_source": "CFDE — captured PIGEAN/EAGGL result",
+                  "snippet": "\"factor\":\"Factor1\"",
+                  "explanation": "Both entities load on the same mechanism. That is useful investigation context but does not establish that the gene belongs to the set.",
+                  "context": "Source locator: pigean-gene-factor.response.json and pigean-gene-set-factor.response.json; shared Factor1 neighborhood. Trait: portal CADinT2D; model: cfde-inc-v2; mechanism: factor:portal:CADinT2D:cfde-inc-v2:Factor1. Source metrics retain their original meanings; no probability calibration is assumed.",
+                  "was_derived_from": [
+                    "dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ",
+                    "dapper:File.Dt0S38v_sLn5jiOAVXMrMWTrXBLnsn83"
+                  ],
+                  "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+                  "was_attributed_to": [
+                    "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+                  ]
+                },
+                "provenance": {
+                  "trace_count": 0,
+                  "trace_ids": [],
+                  "dataset_ids": [],
+                  "organization_ids": [],
+                  "resolution": "incomplete",
+                  "page_trace_count": 0
+                }
+              },
+              {
+                "record": {
+                  "id": "dapper:EvidenceItem.KU2TsRllsq60RcwOPrk5OGbnX6QX4kvT",
+                  "target_proposition": "dapper:Proposition.9Ah6tV2FtJ8m_rEHO6e92pmWxAyfU8U_",
+                  "direction": "SUPPORTS",
+                  "evidence_source": "CFDE — captured PIGEAN/EAGGL result",
+                  "snippet": "\"combined\":2.42",
+                  "explanation": "The reported gene–trait relevance supports this scoped involvement assessment. It does not answer whether genetic risk is amplified by an exposure or whether the exposure is a downstream readout.",
+                  "context": "Source locator: pigean-gene-factor.response.json#/data/1. Trait: portal CADinT2D; model: cfde-inc-v2; mechanism: factor:portal:CADinT2D:cfde-inc-v2:Factor1. Source metrics retain their original meanings; no probability calibration is assumed.",
+                  "was_derived_from": [
+                    "dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ"
+                  ],
+                  "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+                  "was_attributed_to": [
+                    "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+                  ]
+                },
+                "provenance": {
+                  "trace_count": 0,
+                  "trace_ids": [],
+                  "dataset_ids": [],
+                  "organization_ids": [],
+                  "resolution": "incomplete",
+                  "page_trace_count": 0
+                }
+              },
+              {
+                "record": {
+                  "id": "dapper:EvidenceItem.LG9zY-dbXmGT8ldum4A8LrmAHFAvSyBm",
+                  "target_proposition": "dapper:Proposition.NJYh11lXY-LXoFXrJeK7KkfI7r7iQzFT",
+                  "direction": "SUPPORTS",
+                  "evidence_source": "CFDE — captured PIGEAN/EAGGL result",
+                  "snippet": "\"beta\":0.115,\"beta_uncorrected\":0.119",
+                  "explanation": "The two effect estimates describe the annotation–trait relationship on their source scales. They come from the same analysis and are not independent replications.",
+                  "context": "Source locator: pigean-gene-set-factor.response.json#/data/0. Trait: portal CADinT2D; model: cfde-inc-v2; mechanism: factor:portal:CADinT2D:cfde-inc-v2:Factor1. Source metrics retain their original meanings; no probability calibration is assumed.",
+                  "was_derived_from": [
+                    "dapper:File.Dt0S38v_sLn5jiOAVXMrMWTrXBLnsn83"
+                  ],
+                  "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+                  "was_attributed_to": [
+                    "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+                  ]
+                },
+                "provenance": {
+                  "trace_count": 0,
+                  "trace_ids": [],
+                  "dataset_ids": [],
+                  "organization_ids": [],
+                  "resolution": "incomplete",
+                  "page_trace_count": 0
+                }
+              },
+              {
+                "record": {
+                  "id": "dapper:EvidenceItem.O0yC2UWrCiEd7Iw-S3hgW070oHE_x8hm",
+                  "target_proposition": "dapper:Proposition.JfxEcQLDt9bMiSejgOKxh7G8ylVGAqxI",
+                  "direction": "SUPPORTS",
+                  "evidence_source": "CFDE — captured PIGEAN/EAGGL result",
+                  "snippet": "\"beta\":0.00729,\"beta_uncorrected\":0.0586",
+                  "explanation": "The two effect estimates describe the annotation–trait relationship on their source scales. They come from the same analysis and are not independent replications.",
+                  "context": "Source locator: pigean-gene-set-factor.response.json#/data/2. Trait: portal CADinT2D; model: cfde-inc-v2; mechanism: factor:portal:CADinT2D:cfde-inc-v2:Factor1. Source metrics retain their original meanings; no probability calibration is assumed.",
+                  "was_derived_from": [
+                    "dapper:File.Dt0S38v_sLn5jiOAVXMrMWTrXBLnsn83"
+                  ],
+                  "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+                  "was_attributed_to": [
+                    "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+                  ]
+                },
+                "provenance": {
+                  "trace_count": 0,
+                  "trace_ids": [],
+                  "dataset_ids": [],
+                  "organization_ids": [],
+                  "resolution": "incomplete",
+                  "page_trace_count": 0
+                }
+              },
+              {
+                "record": {
+                  "id": "dapper:EvidenceItem.QMnxv6KQF0En3XH-b9ruB3myjTEYc1a9",
+                  "target_proposition": "dapper:Proposition.3dNz6hkwxQ199hXVaHISAWghx_R6G8og",
+                  "direction": "SUPPORTS",
+                  "evidence_source": "CFDE — captured PIGEAN/EAGGL result",
+                  "snippet": "\"combined\":3.86",
+                  "explanation": "The reported gene–trait relevance supports this scoped involvement assessment. It does not answer whether genetic risk is amplified by an exposure or whether the exposure is a downstream readout.",
+                  "context": "Source locator: pigean-gene-factor.response.json#/data/0. Trait: portal CADinT2D; model: cfde-inc-v2; mechanism: factor:portal:CADinT2D:cfde-inc-v2:Factor1. Source metrics retain their original meanings; no probability calibration is assumed.",
+                  "was_derived_from": [
+                    "dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ"
+                  ],
+                  "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+                  "was_attributed_to": [
+                    "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+                  ]
+                },
+                "provenance": {
+                  "trace_count": 0,
+                  "trace_ids": [],
+                  "dataset_ids": [],
+                  "organization_ids": [],
+                  "resolution": "incomplete",
+                  "page_trace_count": 0
+                }
+              },
+              {
+                "record": {
+                  "id": "dapper:EvidenceItem.TmJpftCshV-2i4dhf6jejSdst3s6VSib",
+                  "target_proposition": "dapper:Proposition.yUAm2Mgs3NxOTghFk_4SrqgpYaecOFvL",
+                  "direction": "SUPPORTS",
+                  "evidence_source": "CFDE — captured PIGEAN/EAGGL result",
+                  "snippet": "\"factor_value\":1.0",
+                  "explanation": "This is program-level involvement. The source label alone does not establish a particular causal process, cell type or activity readout.",
+                  "context": "Source locator: pigean-gene-set-factor.response.json#/data/0. Trait: portal CADinT2D; model: cfde-inc-v2; mechanism: factor:portal:CADinT2D:cfde-inc-v2:Factor1. Source metrics retain their original meanings; no probability calibration is assumed.",
+                  "was_derived_from": [
+                    "dapper:File.Dt0S38v_sLn5jiOAVXMrMWTrXBLnsn83"
+                  ],
+                  "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+                  "was_attributed_to": [
+                    "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+                  ]
+                },
+                "provenance": {
+                  "trace_count": 0,
+                  "trace_ids": [],
+                  "dataset_ids": [],
+                  "organization_ids": [],
+                  "resolution": "incomplete",
+                  "page_trace_count": 0
+                }
+              },
+              {
+                "record": {
+                  "id": "dapper:EvidenceItem.YN7PV1PkRn3wAY5eX7voYINQIrYZpd8x",
+                  "target_proposition": "dapper:Proposition.rCjXmKoJQot2L0j-JXULHltjuBgtYhnD",
+                  "direction": "SUPPORTS",
+                  "evidence_source": "CFDE — captured PIGEAN/EAGGL result",
+                  "snippet": "\"factor_value\":0.3245",
+                  "explanation": "The loading is used as evidence of involvement in the mechanism. It does not distinguish amplification from inhibition.",
+                  "context": "Source locator: pigean-gene-factor.response.json#/data/3. Trait: portal CADinT2D; model: cfde-inc-v2; mechanism: factor:portal:CADinT2D:cfde-inc-v2:Factor1. Source metrics retain their original meanings; no probability calibration is assumed.",
+                  "was_derived_from": [
+                    "dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ"
+                  ],
+                  "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+                  "was_attributed_to": [
+                    "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+                  ]
+                },
+                "provenance": {
+                  "trace_count": 0,
+                  "trace_ids": [],
+                  "dataset_ids": [],
+                  "organization_ids": [],
+                  "resolution": "incomplete",
+                  "page_trace_count": 0
+                }
+              },
+              {
+                "record": {
+                  "id": "dapper:EvidenceItem.YkOjbB_uxlxEhXe6VEJ5-zDGTfEh5Iek",
+                  "target_proposition": "dapper:Proposition.cjK2Yz-rwiv49w9zH71aodlAHIzbNVqE",
+                  "direction": "NEUTRAL",
+                  "evidence_source": "ProKN — illustrative assertion, not retrieved",
+                  "snippet": "SHH is a member of the retained AMP AD / GTEx gene set.",
+                  "explanation": "The mock membership suggests a gene-to-program connection to inspect alongside the program’s captured mechanism loading. It supplies context only; it is not independent support for mechanism involvement.",
+                  "context": "Source locator: illustrative-kg-assertions.json#/assertions/0. Trait: portal CADinT2D; model: cfde-inc-v2; mechanism: factor:portal:CADinT2D:cfde-inc-v2:Factor1. This is synthetic design evidence and has not been verified.",
+                  "was_derived_from": [
+                    "dapper:File._FB2fhvDopxDEHgoDgf2Hk4jE0wxilag"
+                  ],
+                  "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+                  "was_attributed_to": [
+                    "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+                  ]
+                },
+                "provenance": {
+                  "trace_count": 0,
+                  "trace_ids": [],
+                  "dataset_ids": [],
+                  "organization_ids": [],
+                  "resolution": "incomplete",
+                  "page_trace_count": 0
+                }
+              },
+              {
+                "record": {
+                  "id": "dapper:EvidenceItem.e_woYuSIytDbJ7bWIRGY0q6K8vCabcFw",
+                  "target_proposition": "dapper:Proposition.YglauZfsf1X5GagFEmSSWB-dwoGljEGz",
+                  "direction": "SUPPORTS",
+                  "evidence_source": "CFDE — captured PIGEAN/EAGGL result",
+                  "snippet": "\"factor_value\":0.4518",
+                  "explanation": "This is program-level involvement. The source label alone does not establish a particular causal process, cell type or activity readout.",
+                  "context": "Source locator: pigean-gene-set-factor.response.json#/data/2. Trait: portal CADinT2D; model: cfde-inc-v2; mechanism: factor:portal:CADinT2D:cfde-inc-v2:Factor1. Source metrics retain their original meanings; no probability calibration is assumed.",
+                  "was_derived_from": [
+                    "dapper:File.Dt0S38v_sLn5jiOAVXMrMWTrXBLnsn83"
+                  ],
+                  "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+                  "was_attributed_to": [
+                    "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+                  ]
+                },
+                "provenance": {
+                  "trace_count": 0,
+                  "trace_ids": [],
+                  "dataset_ids": [],
+                  "organization_ids": [],
+                  "resolution": "incomplete",
+                  "page_trace_count": 0
+                }
+              },
+              {
+                "record": {
+                  "id": "dapper:EvidenceItem.j6xtY8mzZ5SGHhlKOH1bOMu2lXp5idpW",
+                  "target_proposition": "dapper:Proposition.b06Styo26ZiZC2Sy599Uk98OKhiNgcuy",
+                  "direction": "NEUTRAL",
+                  "evidence_source": "BiomarkerKG — illustrative assertion, not retrieved",
+                  "snippet": "TCF7L2 is a member of the PsychENCODE geneM16 gene set.",
+                  "explanation": "The mock membership suggests a gene-to-program connection to inspect alongside the program’s captured mechanism loading. It supplies context only; it is not independent support for mechanism involvement.",
+                  "context": "Source locator: illustrative-kg-assertions.json#/assertions/1. Trait: portal CADinT2D; model: cfde-inc-v2; mechanism: factor:portal:CADinT2D:cfde-inc-v2:Factor1. This is synthetic design evidence and has not been verified.",
+                  "was_derived_from": [
+                    "dapper:File._FB2fhvDopxDEHgoDgf2Hk4jE0wxilag"
+                  ],
+                  "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+                  "was_attributed_to": [
+                    "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+                  ]
+                },
+                "provenance": {
+                  "trace_count": 0,
+                  "trace_ids": [],
+                  "dataset_ids": [],
+                  "organization_ids": [],
+                  "resolution": "incomplete",
+                  "page_trace_count": 0
+                }
+              },
+              {
+                "record": {
+                  "id": "dapper:EvidenceItem.kvUX6sx8doykSMMmWJe0FEet-fPmMxpN",
+                  "target_proposition": "dapper:Proposition.6cRd977XvXOzcsRLrJfwthdIHn_iRAOT",
+                  "direction": "SUPPORTS",
+                  "evidence_source": "CFDE — captured PIGEAN/EAGGL result",
+                  "snippet": "\"combined\":1.98",
+                  "explanation": "The reported gene–trait relevance supports this scoped involvement assessment. It does not answer whether genetic risk is amplified by an exposure or whether the exposure is a downstream readout.",
+                  "context": "Source locator: pigean-gene-factor.response.json#/data/3. Trait: portal CADinT2D; model: cfde-inc-v2; mechanism: factor:portal:CADinT2D:cfde-inc-v2:Factor1. Source metrics retain their original meanings; no probability calibration is assumed.",
+                  "was_derived_from": [
+                    "dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ"
+                  ],
+                  "was_generated_by": "dapper:Activity.2QI1hHVOadL8MgOzm6YlDnmbXL2LerAz",
+                  "was_attributed_to": [
+                    "dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he"
+                  ]
+                },
+                "provenance": {
+                  "trace_count": 0,
+                  "trace_ids": [],
+                  "dataset_ids": [],
+                  "organization_ids": [],
+                  "resolution": "incomplete",
+                  "page_trace_count": 0
+                }
+              }
+            ],
+            "traces": [],
+            "nodes": [
+              {
+                "id": "dapper:Activity.VM0nxPd0QVsZJ-7qw4WjAvXtEiFMehqx",
+                "kind": "activity",
+                "status": "resolved",
+                "name": "CFDE GeneSet catalog encoding"
+              },
+              {
+                "id": "dapper:Claim.2idJniYU4zCtCN6puy8XZ2mzo9Mq6c5p",
+                "kind": "claim",
+                "status": "resolved"
+              },
+              {
+                "id": "dapper:Claim.H5icBYm5JLM3_T-b1mMfH65Nc0zMhZzH",
+                "kind": "claim",
+                "status": "resolved"
+              },
+              {
+                "id": "dapper:Claim.I2mf6PJ0DPF5_nnbiBjAhgjlUCOiUZZ9",
+                "kind": "claim",
+                "status": "resolved"
+              },
+              {
+                "id": "dapper:Claim.Kd3psmdr4G9AlD0UU1E1Vu6AjpKaQYWE",
+                "kind": "claim",
+                "status": "resolved"
+              },
+              {
+                "id": "dapper:Claim.NBafdtdEE2Uabs-8pZqurv7SoWpg7Yhi",
+                "kind": "claim",
+                "status": "resolved"
+              },
+              {
+                "id": "dapper:Claim.Oe2UZeV7oMY4NsMHyB8h4HJO1FH4nSGF",
+                "kind": "claim",
+                "status": "resolved"
+              },
+              {
+                "id": "dapper:Claim.SYqCJXxCVXDpwflRSdZnkVLzGLO_vi_r",
+                "kind": "claim",
+                "status": "resolved"
+              },
+              {
+                "id": "dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km",
+                "kind": "claim",
+                "status": "resolved"
+              },
+              {
+                "id": "dapper:Claim.Uv7_cT46DdsqZMvk5nh8G48qOIKvhRgc",
+                "kind": "claim",
+                "status": "resolved"
+              },
+              {
+                "id": "dapper:Claim.uzqyfwuhf59hSTdravdcr4cTxuitWGx-",
+                "kind": "claim",
+                "status": "resolved"
+              },
+              {
+                "id": "dapper:Claim.x7aCVQ1uTkYKLJo32ZyAGMGZaAGCSvWV",
+                "kind": "claim",
+                "status": "resolved"
+              },
+              {
+                "id": "dapper:Claim.xzV_35EYnLl-zy03YbmhfBk_ynNbl7H9",
+                "kind": "claim",
+                "status": "resolved"
+              },
+              {
+                "id": "dapper:EvidenceItem.-2rU_GVD34ddH6jrpbtOyP3TZq-y3c1q",
+                "kind": "evidence",
+                "status": "resolved"
+              },
+              {
+                "id": "dapper:EvidenceItem.1Sq7f12tg9y1afcop6HdNCwT4vNBk0-H",
+                "kind": "evidence",
+                "status": "resolved"
+              },
+              {
+                "id": "dapper:EvidenceItem.1raZeL7bxIDn9SyULEBH0z1Yj4Lds5-k",
+                "kind": "evidence",
+                "status": "resolved"
+              },
+              {
+                "id": "dapper:EvidenceItem.2uQrn7wZLvOA2uUhncD6zCHmyIB_N5Jh",
+                "kind": "evidence",
+                "status": "resolved"
+              },
+              {
+                "id": "dapper:EvidenceItem.4j1Kh6qQTrMLAMh2i8HOqwY-E1jBEC4G",
+                "kind": "evidence",
+                "status": "resolved"
+              },
+              {
+                "id": "dapper:EvidenceItem.KIcbQc5Jr6Ac4zUJr52D7SlNWXmDeElR",
+                "kind": "evidence",
+                "status": "resolved"
+              },
+              {
+                "id": "dapper:EvidenceItem.KU2TsRllsq60RcwOPrk5OGbnX6QX4kvT",
+                "kind": "evidence",
+                "status": "resolved"
+              },
+              {
+                "id": "dapper:EvidenceItem.LG9zY-dbXmGT8ldum4A8LrmAHFAvSyBm",
+                "kind": "evidence",
+                "status": "resolved"
+              },
+              {
+                "id": "dapper:EvidenceItem.O0yC2UWrCiEd7Iw-S3hgW070oHE_x8hm",
+                "kind": "evidence",
+                "status": "resolved"
+              },
+              {
+                "id": "dapper:EvidenceItem.QMnxv6KQF0En3XH-b9ruB3myjTEYc1a9",
+                "kind": "evidence",
+                "status": "resolved"
+              },
+              {
+                "id": "dapper:EvidenceItem.TmJpftCshV-2i4dhf6jejSdst3s6VSib",
+                "kind": "evidence",
+                "status": "resolved"
+              },
+              {
+                "id": "dapper:EvidenceItem.YN7PV1PkRn3wAY5eX7voYINQIrYZpd8x",
+                "kind": "evidence",
+                "status": "resolved"
+              },
+              {
+                "id": "dapper:EvidenceItem.YkOjbB_uxlxEhXe6VEJ5-zDGTfEh5Iek",
+                "kind": "evidence",
+                "status": "resolved"
+              },
+              {
+                "id": "dapper:EvidenceItem.e_woYuSIytDbJ7bWIRGY0q6K8vCabcFw",
+                "kind": "evidence",
+                "status": "resolved"
+              },
+              {
+                "id": "dapper:EvidenceItem.j6xtY8mzZ5SGHhlKOH1bOMu2lXp5idpW",
+                "kind": "evidence",
+                "status": "resolved"
+              },
+              {
+                "id": "dapper:EvidenceItem.kvUX6sx8doykSMMmWJe0FEet-fPmMxpN",
+                "kind": "evidence",
+                "status": "resolved"
+              },
+              {
+                "id": "dapper:File.Dt0S38v_sLn5jiOAVXMrMWTrXBLnsn83",
+                "kind": "file",
+                "status": "resolved",
+                "sha256": "b4ba6a21f6791c8b80ce8ef471361634ebb8b9f1f4e91e886fe1f05d02e7c1fa",
+                "filename": "pigean-gene-set-factor.response.json"
+              },
+              {
+                "id": "dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ",
+                "kind": "file",
+                "status": "resolved",
+                "sha256": "3fdf0f2ae3f782824ec7f96687c4a988a88a6ffb0a106b52f4e20464cdf51e30",
+                "filename": "pigean-gene-factor.response.json"
+              },
+              {
+                "id": "dapper:File._FB2fhvDopxDEHgoDgf2Hk4jE0wxilag",
+                "kind": "file",
+                "status": "resolved",
+                "sha256": "9539fb6db89cdc4f3122fa497dfe70c4940f9d0b21bcc17505f90da8770391dc",
+                "filename": "illustrative-kg-assertions.json"
+              },
+              {
+                "id": "dapper:GeneSet.I1UZhVhKU-YDerPLIxtnZOGlTXNAlrgD",
+                "kind": "gene_set",
+                "status": "resolved",
+                "name": "AMP AD / all brain / AMP AD MAYO TCX Diagnosis.AOD AD-CONTROL ALL dn | GTEx / brain / GTEx aging Brain 20-29 60-69 dn"
+              },
+              {
+                "id": "dapper:GeneSet.zQ8X81n_J-Fuv0zNRp1iQQXqIzuAOzGP",
+                "kind": "gene_set",
+                "status": "resolved",
+                "name": "PsychENCODE / all signatures / PsychENCODE geneM16"
+              },
+              {
+                "id": "dapper:Mechanism.kEJMDzCkDYE94DpWaXrQg-eC4gFGQyuX",
+                "kind": "mechanism",
+                "status": "resolved",
+                "name": "CAD-in-T2D mechanism Factor1"
+              },
+              {
+                "id": "dapper:Proposition.3dNz6hkwxQ199hXVaHISAWghx_R6G8og",
+                "kind": "proposition",
+                "status": "resolved"
+              },
+              {
+                "id": "dapper:Proposition.6T-VChVL5ddew5vFiMsuYE8O4_60DfUz",
+                "kind": "proposition",
+                "status": "resolved"
+              },
+              {
+                "id": "dapper:Proposition.6cRd977XvXOzcsRLrJfwthdIHn_iRAOT",
+                "kind": "proposition",
+                "status": "resolved"
+              },
+              {
+                "id": "dapper:Proposition.9Ah6tV2FtJ8m_rEHO6e92pmWxAyfU8U_",
+                "kind": "proposition",
+                "status": "resolved"
+              },
+              {
+                "id": "dapper:Proposition.9l7Nq6exgMpGL5Z3Tn4Luy62urD9GHT5",
+                "kind": "proposition",
+                "status": "resolved"
+              },
+              {
+                "id": "dapper:Proposition.JfxEcQLDt9bMiSejgOKxh7G8ylVGAqxI",
+                "kind": "proposition",
+                "status": "resolved"
+              },
+              {
+                "id": "dapper:Proposition.NJYh11lXY-LXoFXrJeK7KkfI7r7iQzFT",
+                "kind": "proposition",
+                "status": "resolved"
+              },
+              {
+                "id": "dapper:Proposition.YglauZfsf1X5GagFEmSSWB-dwoGljEGz",
+                "kind": "proposition",
+                "status": "resolved"
+              },
+              {
+                "id": "dapper:Proposition.b06Styo26ZiZC2Sy599Uk98OKhiNgcuy",
+                "kind": "proposition",
+                "status": "resolved"
+              },
+              {
+                "id": "dapper:Proposition.cjK2Yz-rwiv49w9zH71aodlAHIzbNVqE",
+                "kind": "proposition",
+                "status": "resolved"
+              },
+              {
+                "id": "dapper:Proposition.rCjXmKoJQot2L0j-JXULHltjuBgtYhnD",
+                "kind": "proposition",
+                "status": "resolved"
+              },
+              {
+                "id": "dapper:Proposition.yUAm2Mgs3NxOTghFk_4SrqgpYaecOFvL",
+                "kind": "proposition",
+                "status": "resolved"
+              },
+              {
+                "id": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
+                "kind": "account",
+                "status": "resolved",
+                "name": "Genes and gene programs in a shared CAD-in-T2D mechanism"
+              },
+              {
+                "id": "https://cfde-dev.hugeampkpnbi.org/api/bio/keys/pigean-gene-set/2",
+                "kind": "unresolved",
+                "status": "unresolved"
+              }
+            ],
+            "edges": [
+              {
+                "subject": "dapper:EvidenceItem.YN7PV1PkRn3wAY5eX7voYINQIrYZpd8x",
+                "predicate": "prov:wasDerivedFrom",
+                "object": "dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ",
+                "relation": "was_derived_from",
+                "id": "edge:03806d935a6bd80d21fbf0231b501d23d9f523bc7ccbb5eb4bb65bc7ddff30d1",
+                "observations": [
+                  {
+                    "source_field": "was_derived_from"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:Claim.Oe2UZeV7oMY4NsMHyB8h4HJO1FH4nSGF",
+                "predicate": "dapper:proposition",
+                "object": "dapper:Proposition.3dNz6hkwxQ199hXVaHISAWghx_R6G8og",
+                "relation": "proposition",
+                "id": "edge:04e8a9a7ed942a8f925b92ce4dd84a7e3bc49ff24f86a788a68d78466823450f",
+                "observations": [
+                  {
+                    "source_field": "proposition"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:EvidenceItem.KIcbQc5Jr6Ac4zUJr52D7SlNWXmDeElR",
+                "predicate": "prov:wasDerivedFrom",
+                "object": "dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ",
+                "relation": "was_derived_from",
+                "id": "edge:0544ff8a9247c5ba99b71b56f7377d7a063e68a04a500ca9d6457efdcdf9115a",
+                "observations": [
+                  {
+                    "source_field": "was_derived_from"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
+                "predicate": "dapper:componentClaims",
+                "object": "dapper:Claim.xzV_35EYnLl-zy03YbmhfBk_ynNbl7H9",
+                "relation": "component_claims",
+                "id": "edge:0ab8ad543470f0ca7cf37675ac3fa91714515ea08edae6805165214d7ee6d5eb",
+                "observations": [
+                  {
+                    "source_field": "component_claims"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:Claim.I2mf6PJ0DPF5_nnbiBjAhgjlUCOiUZZ9",
+                "predicate": "dapper:hasEvidence",
+                "object": "dapper:EvidenceItem.4j1Kh6qQTrMLAMh2i8HOqwY-E1jBEC4G",
+                "relation": "has_evidence",
+                "id": "edge:1e2e909ddfa43965c4f90698ab5cb8ed30c97dcdb4faca36dd659e879e3a1029",
+                "observations": [
+                  {
+                    "source_field": "has_evidence"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:EvidenceItem.1raZeL7bxIDn9SyULEBH0z1Yj4Lds5-k",
+                "predicate": "prov:wasDerivedFrom",
+                "object": "dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ",
+                "relation": "was_derived_from",
+                "id": "edge:25edd378c55284f91a28b9127eed4593bff15e9b2e839b1e095e3ab82a4edb43",
+                "observations": [
+                  {
+                    "source_field": "was_derived_from"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:EvidenceItem.TmJpftCshV-2i4dhf6jejSdst3s6VSib",
+                "predicate": "prov:wasDerivedFrom",
+                "object": "dapper:File.Dt0S38v_sLn5jiOAVXMrMWTrXBLnsn83",
+                "relation": "was_derived_from",
+                "id": "edge:2d4c3f65aabdaea4e168b540dce6b406a3b7a04928af1e0f32c29701935bdcab",
+                "observations": [
+                  {
+                    "source_field": "was_derived_from"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:Claim.x7aCVQ1uTkYKLJo32ZyAGMGZaAGCSvWV",
+                "predicate": "dapper:hasEvidence",
+                "object": "dapper:EvidenceItem.2uQrn7wZLvOA2uUhncD6zCHmyIB_N5Jh",
+                "relation": "has_evidence",
+                "id": "edge:2e2f6129e1a9f95a9038d45bb62d39b008fad94e917bea0200b5467549ee91bc",
+                "observations": [
+                  {
+                    "source_field": "has_evidence"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:EvidenceItem.2uQrn7wZLvOA2uUhncD6zCHmyIB_N5Jh",
+                "predicate": "prov:wasDerivedFrom",
+                "object": "dapper:File._FB2fhvDopxDEHgoDgf2Hk4jE0wxilag",
+                "relation": "was_derived_from",
+                "id": "edge:32a6d3e0b29a72fde1b4ecd8a344d56ef907d62d844276ec4f8ec26b9c4c0352",
+                "observations": [
+                  {
+                    "source_field": "was_derived_from"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:Proposition.yUAm2Mgs3NxOTghFk_4SrqgpYaecOFvL",
+                "predicate": "dapper:objectEntity",
+                "object": "dapper:Mechanism.kEJMDzCkDYE94DpWaXrQg-eC4gFGQyuX",
+                "relation": "object_entity",
+                "id": "edge:32ec41f8a67d2a239085e84315d137e4e16cc578d05d1270041f5cbf4090e23a",
+                "observations": [
+                  {
+                    "source_field": "object_entity"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:EvidenceItem.KU2TsRllsq60RcwOPrk5OGbnX6QX4kvT",
+                "predicate": "prov:wasDerivedFrom",
+                "object": "dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ",
+                "relation": "was_derived_from",
+                "id": "edge:35ec82ef2a33958650602319edd31c4d2bba78937f24eed1c13f05dd1fa21537",
+                "observations": [
+                  {
+                    "source_field": "was_derived_from"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:Claim.NBafdtdEE2Uabs-8pZqurv7SoWpg7Yhi",
+                "predicate": "dapper:hasEvidence",
+                "object": "dapper:EvidenceItem.e_woYuSIytDbJ7bWIRGY0q6K8vCabcFw",
+                "relation": "has_evidence",
+                "id": "edge:3926e1d937792dd26d3289cbdb129bcd675bcafa32ab5c57bab87bdb2e2d07a7",
+                "observations": [
+                  {
+                    "source_field": "has_evidence"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:Claim.H5icBYm5JLM3_T-b1mMfH65Nc0zMhZzH",
+                "predicate": "dapper:hasEvidence",
+                "object": "dapper:EvidenceItem.KU2TsRllsq60RcwOPrk5OGbnX6QX4kvT",
+                "relation": "has_evidence",
+                "id": "edge:3f85728bf49f2a7b6ef8d05cf4e30590804f567f1b4d4aa05c822b8e3036533b",
+                "observations": [
+                  {
+                    "source_field": "has_evidence"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:GeneSet.I1UZhVhKU-YDerPLIxtnZOGlTXNAlrgD",
+                "predicate": "prov:wasDerivedFrom",
+                "object": "https://cfde-dev.hugeampkpnbi.org/api/bio/keys/pigean-gene-set/2",
+                "relation": "was_derived_from",
+                "id": "edge:4a762dc6ab45e96b59260ab44a626d0c8d1baa6e353ddf784be8c33b7051b50c",
+                "observations": [
+                  {
+                    "source_field": "was_derived_from"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
+                "predicate": "dapper:conclusionClaims",
+                "object": "dapper:Claim.NBafdtdEE2Uabs-8pZqurv7SoWpg7Yhi",
+                "relation": "conclusion_claims",
+                "id": "edge:4be1eccef4049fad24278ce1f7ec386b9e6f88a9f2ca7c113a4cc04ca870033a",
+                "observations": [
+                  {
+                    "source_field": "conclusion_claims"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
+                "predicate": "dapper:componentClaims",
+                "object": "dapper:Claim.Oe2UZeV7oMY4NsMHyB8h4HJO1FH4nSGF",
+                "relation": "component_claims",
+                "id": "edge:513ea4773836e72a5e49c14e011e010c6526c7443387f92df84e9fff0385700a",
+                "observations": [
+                  {
+                    "source_field": "component_claims"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:Claim.SYqCJXxCVXDpwflRSdZnkVLzGLO_vi_r",
+                "predicate": "dapper:hasEvidence",
+                "object": "dapper:EvidenceItem.O0yC2UWrCiEd7Iw-S3hgW070oHE_x8hm",
+                "relation": "has_evidence",
+                "id": "edge:55c8cf993ef9369935795e4243f60fb9782fa887caf9c810edb501d23152e5dd",
+                "observations": [
+                  {
+                    "source_field": "has_evidence"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:Claim.2idJniYU4zCtCN6puy8XZ2mzo9Mq6c5p",
+                "predicate": "dapper:proposition",
+                "object": "dapper:Proposition.6cRd977XvXOzcsRLrJfwthdIHn_iRAOT",
+                "relation": "proposition",
+                "id": "edge:56c5a4b376e83aa63757debdb3bbe976cb7350755010cd8fa9755a25c2349f22",
+                "observations": [
+                  {
+                    "source_field": "proposition"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:Proposition.b06Styo26ZiZC2Sy599Uk98OKhiNgcuy",
+                "predicate": "dapper:objectEntity",
+                "object": "dapper:Mechanism.kEJMDzCkDYE94DpWaXrQg-eC4gFGQyuX",
+                "relation": "object_entity",
+                "id": "edge:57aeae327329ebb0b7cc1178fc17008a2722b476d79c455596aabf7e64172081",
+                "observations": [
+                  {
+                    "source_field": "object_entity"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:Claim.Kd3psmdr4G9AlD0UU1E1Vu6AjpKaQYWE",
+                "predicate": "dapper:proposition",
+                "object": "dapper:Proposition.yUAm2Mgs3NxOTghFk_4SrqgpYaecOFvL",
+                "relation": "proposition",
+                "id": "edge:5a11d491937a59b397238e1115ccc8dd4c9055b96ca7fd0a08e6cf0d2831becd",
+                "observations": [
+                  {
+                    "source_field": "proposition"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:Claim.uzqyfwuhf59hSTdravdcr4cTxuitWGx-",
+                "predicate": "dapper:hasEvidence",
+                "object": "dapper:EvidenceItem.-2rU_GVD34ddH6jrpbtOyP3TZq-y3c1q",
+                "relation": "has_evidence",
+                "id": "edge:5bd3e64a6bacdfc9e139720f01750730174712edbbff8882d4265de848d21328",
+                "observations": [
+                  {
+                    "source_field": "has_evidence"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:Proposition.rCjXmKoJQot2L0j-JXULHltjuBgtYhnD",
+                "predicate": "dapper:objectEntity",
+                "object": "dapper:Mechanism.kEJMDzCkDYE94DpWaXrQg-eC4gFGQyuX",
+                "relation": "object_entity",
+                "id": "edge:60b8b01083ba76e0183271845cf545d80e38ddfe89a77057ab8953db7f88f207",
+                "observations": [
+                  {
+                    "source_field": "object_entity"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
+                "predicate": "dapper:componentClaims",
+                "object": "dapper:Claim.SYqCJXxCVXDpwflRSdZnkVLzGLO_vi_r",
+                "relation": "component_claims",
+                "id": "edge:64bcb01d21e33887ea769f211ff0835f0519e15a7002be772508d4fe5518a344",
+                "observations": [
+                  {
+                    "source_field": "component_claims"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:Claim.xzV_35EYnLl-zy03YbmhfBk_ynNbl7H9",
+                "predicate": "dapper:proposition",
+                "object": "dapper:Proposition.NJYh11lXY-LXoFXrJeK7KkfI7r7iQzFT",
+                "relation": "proposition",
+                "id": "edge:65297ee67dbefa26de51de3c360e4968dcf1f8eebc2f0740a38253b903322693",
+                "observations": [
+                  {
+                    "source_field": "proposition"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:EvidenceItem.1Sq7f12tg9y1afcop6HdNCwT4vNBk0-H",
+                "predicate": "prov:wasDerivedFrom",
+                "object": "dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ",
+                "relation": "was_derived_from",
+                "id": "edge:68286e3470e3878fdd5d964bbe65beaea9259441864682afe8b46b7ec5a29861",
+                "observations": [
+                  {
+                    "source_field": "was_derived_from"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:Proposition.YglauZfsf1X5GagFEmSSWB-dwoGljEGz",
+                "predicate": "dapper:objectEntity",
+                "object": "dapper:Mechanism.kEJMDzCkDYE94DpWaXrQg-eC4gFGQyuX",
+                "relation": "object_entity",
+                "id": "edge:69be0de0dd12e8e0629216b13e261b02fea2268c9fd40face2673b3e2760f5d7",
+                "observations": [
+                  {
+                    "source_field": "object_entity"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:Claim.Uv7_cT46DdsqZMvk5nh8G48qOIKvhRgc",
+                "predicate": "dapper:hasEvidence",
+                "object": "dapper:EvidenceItem.YN7PV1PkRn3wAY5eX7voYINQIrYZpd8x",
+                "relation": "has_evidence",
+                "id": "edge:6b079c237f8f3bbbe2b98df15fc71e9ec4d6b40817b9815b02965b3a448739d8",
+                "observations": [
+                  {
+                    "source_field": "has_evidence"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:EvidenceItem.-2rU_GVD34ddH6jrpbtOyP3TZq-y3c1q",
+                "predicate": "prov:wasDerivedFrom",
+                "object": "dapper:File._FB2fhvDopxDEHgoDgf2Hk4jE0wxilag",
+                "relation": "was_derived_from",
+                "id": "edge:6f292f149d82e1af80a797f3599576e685f680a0ebf7d1312a56b944ee6efab0",
+                "observations": [
+                  {
+                    "source_field": "was_derived_from"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:EvidenceItem.YkOjbB_uxlxEhXe6VEJ5-zDGTfEh5Iek",
+                "predicate": "prov:wasDerivedFrom",
+                "object": "dapper:File._FB2fhvDopxDEHgoDgf2Hk4jE0wxilag",
+                "relation": "was_derived_from",
+                "id": "edge:7035da0eaba0bb263d877d98907c3d88ed8002ea8ce796a744de16d2063b717a",
+                "observations": [
+                  {
+                    "source_field": "was_derived_from"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:Claim.x7aCVQ1uTkYKLJo32ZyAGMGZaAGCSvWV",
+                "predicate": "dapper:proposition",
+                "object": "dapper:Proposition.9l7Nq6exgMpGL5Z3Tn4Luy62urD9GHT5",
+                "relation": "proposition",
+                "id": "edge:749a25caa3f60ed7743233357b213b51e2edbdb597fd2c1b9fe986aabbdc34a9",
+                "observations": [
+                  {
+                    "source_field": "proposition"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:Proposition.cjK2Yz-rwiv49w9zH71aodlAHIzbNVqE",
+                "predicate": "dapper:objectEntity",
+                "object": "dapper:Mechanism.kEJMDzCkDYE94DpWaXrQg-eC4gFGQyuX",
+                "relation": "object_entity",
+                "id": "edge:7a18ca17bf66990c51738a22aba9dd2d7e36b11289bd5e562603a50d28e3f5e5",
+                "observations": [
+                  {
+                    "source_field": "object_entity"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:GeneSet.zQ8X81n_J-Fuv0zNRp1iQQXqIzuAOzGP",
+                "predicate": "prov:wasDerivedFrom",
+                "object": "https://cfde-dev.hugeampkpnbi.org/api/bio/keys/pigean-gene-set/2",
+                "relation": "was_derived_from",
+                "id": "edge:7e8f0dce86f3c06a91d460e27c2c2d6e43c7527ee60235e9349fe72453dd05fd",
+                "observations": [
+                  {
+                    "source_field": "was_derived_from"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
+                "predicate": "dapper:componentClaims",
+                "object": "dapper:Claim.I2mf6PJ0DPF5_nnbiBjAhgjlUCOiUZZ9",
+                "relation": "component_claims",
+                "id": "edge:83c885fe7b85be29c223b99d501885081283b84456e1c4c2358b8924095d20a4",
+                "observations": [
+                  {
+                    "source_field": "component_claims"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:Proposition.YglauZfsf1X5GagFEmSSWB-dwoGljEGz",
+                "predicate": "dapper:subjectEntity",
+                "object": "dapper:GeneSet.zQ8X81n_J-Fuv0zNRp1iQQXqIzuAOzGP",
+                "relation": "subject_entity",
+                "id": "edge:86109e7b5779631d294fcfdebf3f15ad5b60035ea39e5420fb606d0f4ba44c1c",
+                "observations": [
+                  {
+                    "source_field": "subject_entity"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:Proposition.yUAm2Mgs3NxOTghFk_4SrqgpYaecOFvL",
+                "predicate": "dapper:subjectEntity",
+                "object": "dapper:GeneSet.I1UZhVhKU-YDerPLIxtnZOGlTXNAlrgD",
+                "relation": "subject_entity",
+                "id": "edge:861fd11f0f9e282dd1d6e02e7d586f1ec87fe2ae5a763b6193a45ad476f8cb70",
+                "observations": [
+                  {
+                    "source_field": "subject_entity"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:EvidenceItem.O0yC2UWrCiEd7Iw-S3hgW070oHE_x8hm",
+                "predicate": "prov:wasDerivedFrom",
+                "object": "dapper:File.Dt0S38v_sLn5jiOAVXMrMWTrXBLnsn83",
+                "relation": "was_derived_from",
+                "id": "edge:8a6c5bb4fda5fae720495bbe57fa4277a023f9d9aea0d1237db6d6e387fb55a6",
+                "observations": [
+                  {
+                    "source_field": "was_derived_from"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
+                "predicate": "dapper:componentClaims",
+                "object": "dapper:Claim.2idJniYU4zCtCN6puy8XZ2mzo9Mq6c5p",
+                "relation": "component_claims",
+                "id": "edge:8b034b1be7630f1a8a540f29d0457011f192a8cdf3a7774ff6c5cb1c836a3cea",
+                "observations": [
+                  {
+                    "source_field": "component_claims"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
+                "predicate": "dapper:componentClaims",
+                "object": "dapper:Claim.Kd3psmdr4G9AlD0UU1E1Vu6AjpKaQYWE",
+                "relation": "component_claims",
+                "id": "edge:8e25dc799916cc0043f39de9e5d2f9ec6fad0e7e4212c6ce75bd0d2202d7a1e4",
+                "observations": [
+                  {
+                    "source_field": "component_claims"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
+                "predicate": "dapper:componentClaims",
+                "object": "dapper:Claim.x7aCVQ1uTkYKLJo32ZyAGMGZaAGCSvWV",
+                "relation": "component_claims",
+                "id": "edge:8f2fe5b265fe394a741872773b00f9be74dd785fc2ef0efea0b8de19bcd20af6",
+                "observations": [
+                  {
+                    "source_field": "component_claims"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
+                "predicate": "dapper:componentClaims",
+                "object": "dapper:Claim.H5icBYm5JLM3_T-b1mMfH65Nc0zMhZzH",
+                "relation": "component_claims",
+                "id": "edge:923f3ce68f0460b69f891e437c272e74811a080e2f5f37f2a2461f69c48e296d",
+                "observations": [
+                  {
+                    "source_field": "component_claims"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
+                "predicate": "dapper:componentClaims",
+                "object": "dapper:Claim.Uv7_cT46DdsqZMvk5nh8G48qOIKvhRgc",
+                "relation": "component_claims",
+                "id": "edge:9321ae81f645d11839d12b48541ad223bae44054c128a715f0480b7586206a53",
+                "observations": [
+                  {
+                    "source_field": "component_claims"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:Claim.uzqyfwuhf59hSTdravdcr4cTxuitWGx-",
+                "predicate": "dapper:proposition",
+                "object": "dapper:Proposition.6T-VChVL5ddew5vFiMsuYE8O4_60DfUz",
+                "relation": "proposition",
+                "id": "edge:932769efcb72b245108a50fb47ada473257448bb7d6c7984d52adc11610faefb",
+                "observations": [
+                  {
+                    "source_field": "proposition"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km",
+                "predicate": "dapper:hasEvidence",
+                "object": "dapper:EvidenceItem.1Sq7f12tg9y1afcop6HdNCwT4vNBk0-H",
+                "relation": "has_evidence",
+                "id": "edge:94164b3b92ecdaa89266e07f27b7e69b2ab1b527f58296feaa1f15d683c34841",
+                "observations": [
+                  {
+                    "source_field": "has_evidence"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
+                "predicate": "dapper:componentClaims",
+                "object": "dapper:Claim.NBafdtdEE2Uabs-8pZqurv7SoWpg7Yhi",
+                "relation": "component_claims",
+                "id": "edge:94c9e33dbafeec5c5fa719e734c71e557ef4f0d3255cf8d686f1f91b71a7fcbe",
+                "observations": [
+                  {
+                    "source_field": "component_claims"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:EvidenceItem.LG9zY-dbXmGT8ldum4A8LrmAHFAvSyBm",
+                "predicate": "prov:wasDerivedFrom",
+                "object": "dapper:File.Dt0S38v_sLn5jiOAVXMrMWTrXBLnsn83",
+                "relation": "was_derived_from",
+                "id": "edge:9a22bf6cc12498b9341454efd32043548697e43d03b9266f00355c8cd33ccd22",
+                "observations": [
+                  {
+                    "source_field": "was_derived_from"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:Proposition.NJYh11lXY-LXoFXrJeK7KkfI7r7iQzFT",
+                "predicate": "dapper:subjectEntity",
+                "object": "dapper:GeneSet.I1UZhVhKU-YDerPLIxtnZOGlTXNAlrgD",
+                "relation": "subject_entity",
+                "id": "edge:9d0973fd49c6db594613f7c864ae74586d06064f25d4fb37b4e6994ef3e2bc47",
+                "observations": [
+                  {
+                    "source_field": "subject_entity"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
+                "predicate": "dapper:componentClaims",
+                "object": "dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km",
+                "relation": "component_claims",
+                "id": "edge:a4a69be5b1ec4b9cc3dde2f16f70526ebedf433dade203a6bb2aaf199fc9d359",
+                "observations": [
+                  {
+                    "source_field": "component_claims"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:Claim.H5icBYm5JLM3_T-b1mMfH65Nc0zMhZzH",
+                "predicate": "dapper:proposition",
+                "object": "dapper:Proposition.9Ah6tV2FtJ8m_rEHO6e92pmWxAyfU8U_",
+                "relation": "proposition",
+                "id": "edge:a707dd9208fab7c5ce13760fe2374c09ec9f57bc1cf93bc9770ee31782a5edda",
+                "observations": [
+                  {
+                    "source_field": "proposition"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:EvidenceItem.j6xtY8mzZ5SGHhlKOH1bOMu2lXp5idpW",
+                "predicate": "prov:wasDerivedFrom",
+                "object": "dapper:File._FB2fhvDopxDEHgoDgf2Hk4jE0wxilag",
+                "relation": "was_derived_from",
+                "id": "edge:a81cc2a6b255e78ac9abc55c4723e99af46cb5d5ce81969810ae5cb9b271f963",
+                "observations": [
+                  {
+                    "source_field": "was_derived_from"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:GeneSet.zQ8X81n_J-Fuv0zNRp1iQQXqIzuAOzGP",
+                "predicate": "prov:wasGeneratedBy",
+                "object": "dapper:Activity.VM0nxPd0QVsZJ-7qw4WjAvXtEiFMehqx",
+                "relation": "was_generated_by",
+                "id": "edge:a84f0561b6f6f17c493f037b19c45962400f894ab8e390d60738707237d0cc9b",
+                "observations": [
+                  {
+                    "source_field": "was_generated_by"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:Claim.I2mf6PJ0DPF5_nnbiBjAhgjlUCOiUZZ9",
+                "predicate": "dapper:hasEvidence",
+                "object": "dapper:EvidenceItem.j6xtY8mzZ5SGHhlKOH1bOMu2lXp5idpW",
+                "relation": "has_evidence",
+                "id": "edge:acd5d84bf5d08bb5295462f22797bdfa2754966bbc5ceba5259ac6c43a7f6654",
+                "observations": [
+                  {
+                    "source_field": "has_evidence"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:EvidenceItem.4j1Kh6qQTrMLAMh2i8HOqwY-E1jBEC4G",
+                "predicate": "prov:wasDerivedFrom",
+                "object": "dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ",
+                "relation": "was_derived_from",
+                "id": "edge:ad67fb4f83d5a84f6562ff07373db1191a09e6df1cbdca60b64d748cc0d79321",
+                "observations": [
+                  {
+                    "source_field": "was_derived_from"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:EvidenceItem.kvUX6sx8doykSMMmWJe0FEet-fPmMxpN",
+                "predicate": "prov:wasDerivedFrom",
+                "object": "dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ",
+                "relation": "was_derived_from",
+                "id": "edge:aea5b428b5b7e69d9432264fc8e7c0cde8ceadff0bb66e8bca6327119321c170",
+                "observations": [
+                  {
+                    "source_field": "was_derived_from"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
+                "predicate": "dapper:conclusionClaims",
+                "object": "dapper:Claim.Uv7_cT46DdsqZMvk5nh8G48qOIKvhRgc",
+                "relation": "conclusion_claims",
+                "id": "edge:b40e20f4c9402459e04f90f3fc8e6a5d5bf69a1b5115d9ec3b47034704d25c8c",
+                "observations": [
+                  {
+                    "source_field": "conclusion_claims"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:Claim.xzV_35EYnLl-zy03YbmhfBk_ynNbl7H9",
+                "predicate": "dapper:hasEvidence",
+                "object": "dapper:EvidenceItem.LG9zY-dbXmGT8ldum4A8LrmAHFAvSyBm",
+                "relation": "has_evidence",
+                "id": "edge:b5c279a5ab07a82dc8c3bb8b957ebc0373eca497d88f8a49648b575d13fbbd7f",
+                "observations": [
+                  {
+                    "source_field": "has_evidence"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:Claim.x7aCVQ1uTkYKLJo32ZyAGMGZaAGCSvWV",
+                "predicate": "dapper:hasEvidence",
+                "object": "dapper:EvidenceItem.KIcbQc5Jr6Ac4zUJr52D7SlNWXmDeElR",
+                "relation": "has_evidence",
+                "id": "edge:b5cfedbd50ffa44f4fb4a06d25f08cc5cae6ed9b7918d602443457bd3a1f0f78",
+                "observations": [
+                  {
+                    "source_field": "has_evidence"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:Claim.Oe2UZeV7oMY4NsMHyB8h4HJO1FH4nSGF",
+                "predicate": "dapper:hasEvidence",
+                "object": "dapper:EvidenceItem.QMnxv6KQF0En3XH-b9ruB3myjTEYc1a9",
+                "relation": "has_evidence",
+                "id": "edge:b637fab30855b027369e9b25cc42be60a4451216ebc23c47a461dd31f9f87cb3",
+                "observations": [
+                  {
+                    "source_field": "has_evidence"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:EvidenceItem.1raZeL7bxIDn9SyULEBH0z1Yj4Lds5-k",
+                "predicate": "prov:wasDerivedFrom",
+                "object": "dapper:File.Dt0S38v_sLn5jiOAVXMrMWTrXBLnsn83",
+                "relation": "was_derived_from",
+                "id": "edge:ba9c296e54827bff8a229748dae001abd6a9fd93b15d161b51aa6016a2c5c7d1",
+                "observations": [
+                  {
+                    "source_field": "was_derived_from"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:Proposition.JfxEcQLDt9bMiSejgOKxh7G8ylVGAqxI",
+                "predicate": "dapper:subjectEntity",
+                "object": "dapper:GeneSet.zQ8X81n_J-Fuv0zNRp1iQQXqIzuAOzGP",
+                "relation": "subject_entity",
+                "id": "edge:bbcf1285c2b7c98c5510ea53d50b1cadc61e3c0332ce14d6518f7f046b87607a",
+                "observations": [
+                  {
+                    "source_field": "subject_entity"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:Claim.Kd3psmdr4G9AlD0UU1E1Vu6AjpKaQYWE",
+                "predicate": "dapper:hasEvidence",
+                "object": "dapper:EvidenceItem.TmJpftCshV-2i4dhf6jejSdst3s6VSib",
+                "relation": "has_evidence",
+                "id": "edge:bcd17faf50cd50e15dcbb2781a13f442debc50183b2a872fb6fa27aff8dadb39",
+                "observations": [
+                  {
+                    "source_field": "has_evidence"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:Claim.NBafdtdEE2Uabs-8pZqurv7SoWpg7Yhi",
+                "predicate": "dapper:proposition",
+                "object": "dapper:Proposition.YglauZfsf1X5GagFEmSSWB-dwoGljEGz",
+                "relation": "proposition",
+                "id": "edge:c1b1ef6927f0cb8bed601d777acde95a77c447420372695fe04357233b977c1d",
+                "observations": [
+                  {
+                    "source_field": "proposition"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:Proposition.9l7Nq6exgMpGL5Z3Tn4Luy62urD9GHT5",
+                "predicate": "dapper:objectEntity",
+                "object": "dapper:GeneSet.I1UZhVhKU-YDerPLIxtnZOGlTXNAlrgD",
+                "relation": "object_entity",
+                "id": "edge:c53cf1cc17e9c12e3804458ec4c98c1ca96db1c566776bddc8e44f46c3f7005e",
+                "observations": [
+                  {
+                    "source_field": "object_entity"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:Claim.uzqyfwuhf59hSTdravdcr4cTxuitWGx-",
+                "predicate": "dapper:hasEvidence",
+                "object": "dapper:EvidenceItem.1raZeL7bxIDn9SyULEBH0z1Yj4Lds5-k",
+                "relation": "has_evidence",
+                "id": "edge:c6a612912574a41c38baaf79b51a147bf7ba22cc1bea8cfb60c4f72974779783",
+                "observations": [
+                  {
+                    "source_field": "has_evidence"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:EvidenceItem.KIcbQc5Jr6Ac4zUJr52D7SlNWXmDeElR",
+                "predicate": "prov:wasDerivedFrom",
+                "object": "dapper:File.Dt0S38v_sLn5jiOAVXMrMWTrXBLnsn83",
+                "relation": "was_derived_from",
+                "id": "edge:c87d15df9ce3d547c2d1d903bd877bed7ca6d5802c3ede322b4e46502b43632f",
+                "observations": [
+                  {
+                    "source_field": "was_derived_from"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
+                "predicate": "dapper:conclusionClaims",
+                "object": "dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km",
+                "relation": "conclusion_claims",
+                "id": "edge:c9c4cc3f0c7db474ea9f6e4c1e047c2038de8d9439c227024ed5155ae7b8f311",
+                "observations": [
+                  {
+                    "source_field": "conclusion_claims"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km",
+                "predicate": "dapper:hasEvidence",
+                "object": "dapper:EvidenceItem.YkOjbB_uxlxEhXe6VEJ5-zDGTfEh5Iek",
+                "relation": "has_evidence",
+                "id": "edge:cff75c0bdc1014a789028f8026c59b59930522bb3ee3d82dda0668a76d8d3d55",
+                "observations": [
+                  {
+                    "source_field": "has_evidence"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:Claim.2idJniYU4zCtCN6puy8XZ2mzo9Mq6c5p",
+                "predicate": "dapper:hasEvidence",
+                "object": "dapper:EvidenceItem.kvUX6sx8doykSMMmWJe0FEet-fPmMxpN",
+                "relation": "has_evidence",
+                "id": "edge:d2e8aab242a4857736a7a81bea94822a710deee2c554026364a0764e4f0a1755",
+                "observations": [
+                  {
+                    "source_field": "has_evidence"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:GeneSet.I1UZhVhKU-YDerPLIxtnZOGlTXNAlrgD",
+                "predicate": "prov:wasGeneratedBy",
+                "object": "dapper:Activity.VM0nxPd0QVsZJ-7qw4WjAvXtEiFMehqx",
+                "relation": "was_generated_by",
+                "id": "edge:e472919839a6e9ebf85519352d510ae1f71a96695ef8e1fa1adba7729a6bfc82",
+                "observations": [
+                  {
+                    "source_field": "was_generated_by"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km",
+                "predicate": "dapper:proposition",
+                "object": "dapper:Proposition.cjK2Yz-rwiv49w9zH71aodlAHIzbNVqE",
+                "relation": "proposition",
+                "id": "edge:e5df4fbddfad84d2d2370e480f51ca9d6e7b4eed4c47c25bfc208edafc11d550",
+                "observations": [
+                  {
+                    "source_field": "proposition"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:Claim.SYqCJXxCVXDpwflRSdZnkVLzGLO_vi_r",
+                "predicate": "dapper:proposition",
+                "object": "dapper:Proposition.JfxEcQLDt9bMiSejgOKxh7G8ylVGAqxI",
+                "relation": "proposition",
+                "id": "edge:ef71c0f1294d4112720b20a7b08cbf8a7425ab312646305d1a1e4ad116a8f47d",
+                "observations": [
+                  {
+                    "source_field": "proposition"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:EvidenceItem.QMnxv6KQF0En3XH-b9ruB3myjTEYc1a9",
+                "predicate": "prov:wasDerivedFrom",
+                "object": "dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ",
+                "relation": "was_derived_from",
+                "id": "edge:f26970698fa29a9701038b32c21fcaf15815cefbd1fefea77feeaf087f0a1311",
+                "observations": [
+                  {
+                    "source_field": "was_derived_from"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:EvidenceItem.e_woYuSIytDbJ7bWIRGY0q6K8vCabcFw",
+                "predicate": "prov:wasDerivedFrom",
+                "object": "dapper:File.Dt0S38v_sLn5jiOAVXMrMWTrXBLnsn83",
+                "relation": "was_derived_from",
+                "id": "edge:f287fc60ec897efe60f7532639df99d69fee3ab88375e77b350eeac1a9fe950e",
+                "observations": [
+                  {
+                    "source_field": "was_derived_from"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
+                "predicate": "dapper:conclusionClaims",
+                "object": "dapper:Claim.I2mf6PJ0DPF5_nnbiBjAhgjlUCOiUZZ9",
+                "relation": "conclusion_claims",
+                "id": "edge:f36760d32a03ab1fc673a848f18eda6dabaca3a929bf012509e020fe83bffccc",
+                "observations": [
+                  {
+                    "source_field": "conclusion_claims"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
+                "predicate": "dapper:componentClaims",
+                "object": "dapper:Claim.uzqyfwuhf59hSTdravdcr4cTxuitWGx-",
+                "relation": "component_claims",
+                "id": "edge:f4c8dd9aac448d3ad1bb961e111c8c43b27db37f863eb51394ee5df4d798ae0d",
+                "observations": [
+                  {
+                    "source_field": "component_claims"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:Claim.I2mf6PJ0DPF5_nnbiBjAhgjlUCOiUZZ9",
+                "predicate": "dapper:proposition",
+                "object": "dapper:Proposition.b06Styo26ZiZC2Sy599Uk98OKhiNgcuy",
+                "relation": "proposition",
+                "id": "edge:f67f848bd22738da01b86e55f77fb099945ef207bfcaa53cad1bff7b2098368f",
+                "observations": [
+                  {
+                    "source_field": "proposition"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
+                "predicate": "dapper:conclusionClaims",
+                "object": "dapper:Claim.Kd3psmdr4G9AlD0UU1E1Vu6AjpKaQYWE",
+                "relation": "conclusion_claims",
+                "id": "edge:f690b1157f04bf7fdd4335557fb6e4baa8c8390eee80e96feb06e92bc97d492d",
+                "observations": [
+                  {
+                    "source_field": "conclusion_claims"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:Claim.Uv7_cT46DdsqZMvk5nh8G48qOIKvhRgc",
+                "predicate": "dapper:proposition",
+                "object": "dapper:Proposition.rCjXmKoJQot2L0j-JXULHltjuBgtYhnD",
+                "relation": "proposition",
+                "id": "edge:faf011b938ec393c2903ab508cf6514b216fb00338d385f56a4d02b00879441a",
+                "observations": [
+                  {
+                    "source_field": "proposition"
+                  }
+                ]
+              },
+              {
+                "subject": "dapper:Proposition.6T-VChVL5ddew5vFiMsuYE8O4_60DfUz",
+                "predicate": "dapper:objectEntity",
+                "object": "dapper:GeneSet.zQ8X81n_J-Fuv0zNRp1iQQXqIzuAOzGP",
+                "relation": "object_entity",
+                "id": "edge:fb2e98a09626c335ae50010f4d6474276fc6f8e9b69825b8ae74aabbaf6b3355",
+                "observations": [
+                  {
+                    "source_field": "object_entity"
+                  }
+                ]
+              }
+            ],
+            "dataset_reuse": [],
+            "organization_reuse": [],
+            "coverage": {
+              "status": "incomplete",
+              "counts_are_lower_bounds": true,
+              "claim_count": 12,
+              "resolved_claim_count": 12,
+              "trace_count": 0,
+              "lineage_resolution": {
+                "status": "incomplete",
+                "issue_count": 25
+              },
+              "retained_projection_coverage": [],
+              "recovery_status": [],
+              "issues": [
+                {
+                  "code": "MISSING_LINEAGE",
+                  "origin_id": "dapper:EvidenceItem.-2rU_GVD34ddH6jrpbtOyP3TZq-y3c1q"
+                },
+                {
+                  "code": "MISSING_LINEAGE",
+                  "origin_id": "dapper:EvidenceItem.1Sq7f12tg9y1afcop6HdNCwT4vNBk0-H"
+                },
+                {
+                  "code": "MISSING_LINEAGE",
+                  "origin_id": "dapper:EvidenceItem.1raZeL7bxIDn9SyULEBH0z1Yj4Lds5-k"
+                },
+                {
+                  "code": "MISSING_LINEAGE",
+                  "origin_id": "dapper:EvidenceItem.2uQrn7wZLvOA2uUhncD6zCHmyIB_N5Jh"
+                },
+                {
+                  "code": "MISSING_LINEAGE",
+                  "origin_id": "dapper:EvidenceItem.4j1Kh6qQTrMLAMh2i8HOqwY-E1jBEC4G"
+                },
+                {
+                  "code": "MISSING_LINEAGE",
+                  "origin_id": "dapper:EvidenceItem.KIcbQc5Jr6Ac4zUJr52D7SlNWXmDeElR"
+                },
+                {
+                  "code": "MISSING_LINEAGE",
+                  "origin_id": "dapper:EvidenceItem.KU2TsRllsq60RcwOPrk5OGbnX6QX4kvT"
+                },
+                {
+                  "code": "MISSING_LINEAGE",
+                  "origin_id": "dapper:EvidenceItem.LG9zY-dbXmGT8ldum4A8LrmAHFAvSyBm"
+                },
+                {
+                  "code": "MISSING_LINEAGE",
+                  "origin_id": "dapper:EvidenceItem.O0yC2UWrCiEd7Iw-S3hgW070oHE_x8hm"
+                },
+                {
+                  "code": "MISSING_LINEAGE",
+                  "origin_id": "dapper:EvidenceItem.QMnxv6KQF0En3XH-b9ruB3myjTEYc1a9"
+                },
+                {
+                  "code": "MISSING_LINEAGE",
+                  "origin_id": "dapper:EvidenceItem.TmJpftCshV-2i4dhf6jejSdst3s6VSib"
+                },
+                {
+                  "code": "MISSING_LINEAGE",
+                  "origin_id": "dapper:EvidenceItem.YN7PV1PkRn3wAY5eX7voYINQIrYZpd8x"
+                },
+                {
+                  "code": "MISSING_LINEAGE",
+                  "origin_id": "dapper:EvidenceItem.YkOjbB_uxlxEhXe6VEJ5-zDGTfEh5Iek"
+                },
+                {
+                  "code": "MISSING_LINEAGE",
+                  "origin_id": "dapper:EvidenceItem.e_woYuSIytDbJ7bWIRGY0q6K8vCabcFw"
+                },
+                {
+                  "code": "MISSING_LINEAGE",
+                  "origin_id": "dapper:EvidenceItem.j6xtY8mzZ5SGHhlKOH1bOMu2lXp5idpW"
+                },
+                {
+                  "code": "MISSING_LINEAGE",
+                  "origin_id": "dapper:EvidenceItem.kvUX6sx8doykSMMmWJe0FEet-fPmMxpN"
+                },
+                {
+                  "code": "MISSING_LINEAGE",
+                  "origin_id": "dapper:Proposition.6T-VChVL5ddew5vFiMsuYE8O4_60DfUz"
+                },
+                {
+                  "code": "MISSING_LINEAGE",
+                  "origin_id": "dapper:Proposition.9l7Nq6exgMpGL5Z3Tn4Luy62urD9GHT5"
+                },
+                {
+                  "code": "MISSING_LINEAGE",
+                  "origin_id": "dapper:Proposition.JfxEcQLDt9bMiSejgOKxh7G8ylVGAqxI"
+                },
+                {
+                  "code": "MISSING_LINEAGE",
+                  "origin_id": "dapper:Proposition.NJYh11lXY-LXoFXrJeK7KkfI7r7iQzFT"
+                },
+                {
+                  "code": "MISSING_LINEAGE",
+                  "origin_id": "dapper:Proposition.YglauZfsf1X5GagFEmSSWB-dwoGljEGz"
+                },
+                {
+                  "code": "MISSING_LINEAGE",
+                  "origin_id": "dapper:Proposition.b06Styo26ZiZC2Sy599Uk98OKhiNgcuy"
+                },
+                {
+                  "code": "MISSING_LINEAGE",
+                  "origin_id": "dapper:Proposition.cjK2Yz-rwiv49w9zH71aodlAHIzbNVqE"
+                },
+                {
+                  "code": "MISSING_LINEAGE",
+                  "origin_id": "dapper:Proposition.rCjXmKoJQot2L0j-JXULHltjuBgtYhnD"
+                },
+                {
+                  "code": "MISSING_LINEAGE",
+                  "origin_id": "dapper:Proposition.yUAm2Mgs3NxOTghFk_4SrqgpYaecOFvL"
+                }
+              ]
+            },
+            "snapshot": {
+              "policy_version": "account-provenance-v1",
+              "account_id": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
+              "account_payload_sha256": "9c4cdd23451a6ec0c04ec47539387b4d78a3db81ca707eba62f7a97e34619d66",
+              "document_sha256": "accbb338a0d8ca9f6241ce9e43d125ba6816c8cd1d014de781a612b289c4ee32",
+              "publication_version": 1,
+              "reference_generation_ids": [],
+              "supplement_ids": [],
+              "source_observations": [],
+              "id": "b88dc188a9faeee76174717939e17e31b5b6e69108a28573f60a7c8bb22e59bd"
+            },
+            "page": {
+              "limit": 100,
+              "offset": 0,
+              "total": 0,
+              "next_cursor": null
+            }
+          }
+        }
+      }
+    },
+    "curl": "curl -X GET 'https://api.reveal.example.org/v1/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/provenance?payload_sha256=9c4cdd23451a6ec0c04ec47539387b4d78a3db81ca707eba62f7a97e34619d66&limit=100' -H 'Accept: application/json'"
+  },
+  {
     "operation_id": "getJob",
     "case": "paragraph",
     "method": "GET",

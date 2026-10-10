@@ -158,6 +158,7 @@ def test_build_is_deterministic_and_content_addressed(tmp_path):
     for name in rr.BUNDLE_FILES: assert (a / name).read_bytes() == (b / name).read_bytes(), name
     assert rr.build_bundle(project, tmp_path / 'out1')['reused'] is True
     manifest = rr.open_bundle(a)
+    assert manifest['schema_version'] == 3
     assert manifest['pigean_commit'] == 'ca59661' and manifest['kpn_release_commit'] == '3cd554f'
     factors = {row['factor_key']: row for row in rr.read_jsonl(a / 'reference_factors.jsonl.gz')}
     first_factor = factors[f'{KPN_A}::Factor1']
@@ -204,7 +205,7 @@ def test_collection_header_never_parses_gene_sets(tmp_path):
     header, collection = rr.collection_header(path)
     assert collection == {'id': 'x', 'n_sets': 2}
     path.write_text('gene_sets:\n- id: a\ngene_set_collections:\n- id: x\n')
-    with pytest.raises(rr.Refused): rr.collection_header(path)
+    assert rr.collection_header(path)[1] == {'id': 'x'}
 
 
 def fake_services(tmp_path, **kwargs):

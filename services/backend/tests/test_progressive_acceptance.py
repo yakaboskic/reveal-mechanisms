@@ -121,6 +121,104 @@ class ProgressiveAcceptanceTests(unittest.TestCase):
                         {'id': 'fixture-' + execution}, 1, execution)
                     self.assertTrue(report['valid'], report)
 
+    def test_membership_context_survives_capture_acceptance_and_publication(self):
+        import json
+        import sqlite3
+        from test_research_data import ReferenceQueryTests, Connection, GEN
+        from test_provenance_api import ProvenanceApiTests
+        from reveal_backend.repository import digest
+        runtime = acceptance.public_runtime()
+        def node(cls, **fields):
+            return {**fields, 'id': runtime.compute_id(fields, cls, runtime.schema)}
+        original_file = deepcopy(self.science.draft['files'][0])
+        organization = node('Organization', name='Source consortium')
+        activity = node('Activity', name='Gene set extraction')
+        gene_set = node('GeneSet', name='Derived source set', member_type='gene',
+                        members=['https://identifiers.org/hgnc.symbol:SHH'], was_generated_by=activity['id'])
+        sibling = node('File', filename='sibling.tsv')
+        unrelated = node('Dataset', name='Sibling parent', has_file=[sibling['id']])
+        for membership in ('native', 'edge'):
+            with self.subTest(membership=membership):
+                refs = ReferenceQueryTests('runTest'); refs.setUp()
+                web = None
+                try:
+                    dataset = node('Dataset', name='Measured source dataset', has_creator=[organization['id']],
+                        **({'has_file': [original_file['id'], sibling['id']]} if membership == 'native' else {}))
+                    provenance = {'datasets': [dataset, unrelated], 'organizations': [organization],
+                        'activities': [activity], 'files': [original_file, sibling],
+                        'used_edges': [{'subject': activity['id'], 'predicate': 'prov:used', 'object': original_file['id']}]}
+                    if membership == 'edge':
+                        provenance['has_file_edges'] = [{'subject': dataset['id'], 'predicate': 'dapper:hasFile', 'object': original_file['id']},
+                            {'subject': unrelated['id'], 'predicate': 'dapper:hasFile', 'object': sibling['id']}]
+                    with sqlite3.connect(refs.path) as db:
+                        db.execute('UPDATE cfde_gene_sets SET gene_set_id=?,metadata=? WHERE generation_id=?',
+                            (gene_set['id'], json.dumps({'dapper_gene_set': gene_set}), GEN))
+                        db.execute('UPDATE cfde_gene_set_collections SET payload=? WHERE generation_id=?',
+                            (json.dumps({'provenance': provenance}), GEN))
+                    capture = refs.service.query('get_gene_set', {'gene_set_id': gene_set['id']}, generation_id=GEN)
+                    materialized = capture.materialize(runtime)
+                    self.assertIn(dataset, materialized['dapper_context']['datasets'])
+                    self.assertIn(organization, materialized['dapper_context']['organizations'])
+                    self.assertNotIn(unrelated, materialized['dapper_context']['datasets'])
+                    for relative, raw in materialized['files'].items():
+                        path = self.root / relative; path.parent.mkdir(parents=True, exist_ok=True); path.write_bytes(raw)
+                    package = acceptance.build_validation_context(self.package, contexts=[materialized])
+                    descriptor = next(iter(materialized['source_artifacts'].values()))
+                    capture_file = next(file for file in materialized['dapper_context']['files'] if file['id'] == descriptor['dapper_file_id'])
+                    package_path = self.root / (membership + '-context.json'); package_path.write_bytes(canonical_json(package))
+                    draft = deepcopy(self.science.draft)
+                    draft['propositions'][0]['subject_entity'] = gene_set['id']
+                    draft['evidence_items'][0]['was_derived_from'].append(capture_file['id'])
+                    source = self.root / (membership + '-draft.json'); source.write_bytes(canonical_json(draft))
+                    target = self.root / (membership + '-accepted.json')
+                    with patch.object(acceptance, 'release_root', return_value=self.science.release), patch.object(acceptance, 'LOCK', self.science.lock):
+                        try:
+                            document, report = acceptance.assemble_account(source, package_path, target,
+                                {'user_id': 'owner', 'principal_kind': 'anonymous'}, {'id': membership}, 1, 'local')
+                        except AccountValidationError as error:
+                            self.fail(error.report)
+                    self.assertIn(gene_set, document['gene_sets'])
+                    # Pinned DAPPER reachability is directed. Inverse-only context
+                    # stays in the exact retained capture, never invented account edges.
+                    self.assertNotIn(dataset, document.get('datasets', []))
+                    self.assertNotIn(organization, document.get('organizations', []))
+                    original_hash = sha256(canonical_json(document))
+                    saved = deepcopy(document); saved.pop('prefixes', None)
+                    web = ProvenanceApiTests('runTest'); web.setUp()
+                    web.account_id = saved['scientific_accounts'][0]['id']
+                    web.route = '/v1/accounts/' + web.account_id; web.control = web.route + '/publication'
+                    web.provenance_route = web.route + '/provenance'
+                    web.seed(web.owner, paragraph=False); web.install_document(saved)
+                    retained = {'sha256': descriptor['sha256'], 'file': capture_file, 'research_source': descriptor}
+                    with web.repo.transaction() as tx:
+                        tx.put('artifact', digest([web.owner, descriptor['sha256']]), web.owner, retained)
+                    with patch('reveal_backend.runtime_config.reference_mysql_connection',
+                               side_effect=lambda: Connection(refs.path, refs.queries)), \
+                         patch('reveal_backend.provenance_reference._read_capture', return_value=capture.raw):
+                        private = web.request('get', web.provenance_route, web.owner)
+                        self.assertEqual(private.status_code, 200, private.text)
+                        published = web.publish()
+                        self.assertEqual(published.status_code, 200, published.text)
+                        # Public reads retain exact membership context even after
+                        # private registry removal and reference-table retirement.
+                        with web.repo.transaction() as tx:
+                            tx.remove('artifact', digest([web.owner, descriptor['sha256']]))
+                        with sqlite3.connect(refs.path) as db:
+                            db.execute("UPDATE reference_generations SET status='retired' WHERE generation_id=?", (GEN,))
+                            db.execute('DELETE FROM cfde_gene_sets WHERE generation_id=?', (GEN,))
+                            db.execute('DELETE FROM cfde_gene_set_collections WHERE generation_id=?', (GEN,))
+                        public = web.client.get(web.provenance_route)
+                        self.assertEqual(public.status_code, 200, public.text)
+                    for response in (private, public):
+                        self.assertEqual([item['dataset_id'] for item in response.json()['dataset_reuse']], [dataset['id']])
+                        self.assertEqual([item['organization_id'] for item in response.json()['organization_reuse']], [organization['id']])
+                    self.assertEqual(private.json()['dataset_reuse'], public.json()['dataset_reuse'])
+                    self.assertEqual(sha256(canonical_json(document)), original_hash)
+                    self.assertEqual(sha256(capture.raw), descriptor['sha256'])
+                finally:
+                    if web is not None: web.doCleanups()
+                    refs.doCleanups()
+
     def test_context_conflict_and_authoring_files_cannot_be_promoted(self):
         altered = deepcopy(self.package['dapper_context']['knowledge_gaps'][0]); altered['text']='Edited source'
         with self.assertRaises(EvidenceBuildError):
