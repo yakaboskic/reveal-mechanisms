@@ -11,6 +11,7 @@ import base64
 import hmac
 import re
 from contextlib import asynccontextmanager
+from time import monotonic
 from fastapi import BackgroundTasks, FastAPI, Request, Depends, Query
 from fastapi.responses import JSONResponse, StreamingResponse, Response, RedirectResponse
 from starlette.concurrency import run_in_threadpool
@@ -27,6 +28,7 @@ from . import analysis_outcomes
 from . import reference_generation
 from . import votes
 from . import user_inputs
+from . import gap_rerank
 
 CONTRACT = json.loads((ROOT/'api/openapi.json').read_text())
 GATEWAY = json.loads((ROOT/'schema/gateway.schema.json').read_text())
@@ -229,7 +231,7 @@ def freeze_draft_bindings(tx,draft_id,owner,composer,*,new=False):
         if identity and identity not in suggestions: suggestions[identity]=tx.get('suggestion',identity)
         suggestion=suggestions.get(identity) if identity else None
         if suggestion and native in suggestion['data']['hits']:
-            selections[native]['retrieval']={k:v for k,v in suggestion['data'].items() if k!='hits'}|{'hit':suggestion['data']['hits'][native]}
+            selections[native]['retrieval']={k:v for k,v in suggestion['data'].items() if k not in ('hits','rerank_pool')}|{'hit':suggestion['data']['hits'][native]}
     if len(selections)!=len(composer['eaggl_anchors']): raise Problem(422,'DUPLICATE_ANCHOR','Select each native mechanism once.')
     frozen={'dismech_import_id':catalog.dismech_import if gap else None,'source_gap':gap,'selections':selections}
     if not new: tx.put('draft_binding',draft_id,owner,frozen)
@@ -586,6 +588,37 @@ async def suggest(request: Request):
     # the entire synchronous path off the event loop, including cached results.
     return await asyncio.to_thread(build_suggestions,body)
 
+def rerank_status(body,remaining):
+    """None while the Jev rerank flag is off (responses and audit rows unchanged), else its initial status."""
+    if not gap_rerank.enabled(): return None
+    if body.get('subquery'): return {'status':'not_applicable','reason':'subquery'}
+    if body.get('mode','semantic')!='semantic': return {'status':'not_applicable','reason':'hybrid_mode'}
+    if not remaining: return {'status':'not_applicable','reason':'no_open_slots'}
+    model={'model':gap_rerank.MODEL,'rubric_version':gap_rerank.RUBRIC_VERSION}
+    return {**model,'status':'fallback','reason':'not_configured'} if not gap_rerank.api_key() else {**model,'status':'pending'}
+
+def reranked_suggestions(gap,contexts,remaining,exclude,rerank,index):
+    """(items, public rerank status, audit fields): Jev order over every eligible disease identity plus the
+    top cosine factors, or today's disease-then-cosine policy over that pool when Jev cannot answer."""
+    disease_items=getattr(catalog,'disease_factors',lambda *_: [])(gap,gap_rerank.DISEASE_POOL_SIZE,exclude)
+    cosine_items=catalog.suggest_factors(contexts,'semantic',gap_rerank.POOL_SIZE,exclude,precomputed=True,**index)
+    entries=gap_rerank.pool(disease_items,cosine_items)
+    mechanisms=[catalog.mechanisms[identity] for identity,_ in contexts if identity in catalog.mechanisms]
+    factors=[(entry['item']['record']['source_id'],gap_rerank.factor_view(entry['item']['record'])) for entry in entries]
+    public={**{k:v for k,v in rerank.items() if k!='reason'},'pool_size':len(entries)}; started=monotonic()
+    try:
+        scores,meta=gap_rerank.score_pool(gap_rerank.state(gap,mechanisms),factors,key=gap_rerank.api_key(),deadline=started+gap_rerank.timeout_seconds())
+        items,public['status']=gap_rerank.rank(entries,scores,remaining),'applied'
+    except Exception as error:
+        # Advisory ordering never fails a suggestion; known skips carry a short public code.
+        if not isinstance(error,gap_rerank.Skip):
+            import logging
+            logging.getLogger('reveal').error('Suggestion rerank failed (%s)', type(error).__name__)
+        scores,meta={},{}
+        items,public['status'],public['reason']=gap_rerank.fallback(entries,disease_items,remaining),'fallback',getattr(error,'reason','internal_error')
+    audit={**public,**meta,'elapsed_ms':round((monotonic()-started)*1000)}
+    return items,public,{'rerank':audit,'rerank_pool':gap_rerank.pool_rows(entries,scores)}
+
 def build_suggestions(body):
     validate(body,'SuggestInput'); gap=catalog.selected(body['source_gap'])
     # Manual anchors must come from the served generation, so a draft never mixes generations.
@@ -598,10 +631,14 @@ def build_suggestions(body):
     if not contexts: contexts=[(gap['object']['id'],gap['object']['text'])]
     remaining=max(0,5-len(body['manual_eaggl_anchors']))
     precomputed=not bool(body.get('subquery'))
-    disease_candidates=getattr(catalog,'disease_factors',lambda *_: [])(gap,remaining,exclude)
-    excluded=exclude | {item['record']['source_id'] for item in disease_candidates}
     index=pinned_index()  # the response's search provenance always needs it, so no request resolves it more than once
-    items=disease_candidates+catalog.suggest_factors(contexts,body.get('mode','semantic'),remaining-len(disease_candidates),excluded,precomputed=precomputed,**index)
+    rerank=rerank_status(body,remaining); rerank_audit={'rerank':rerank} if rerank else {}
+    if rerank and rerank['status']=='pending':
+        items,rerank,rerank_audit=reranked_suggestions(gap,contexts,remaining,exclude,rerank,index)
+    else:
+        disease_candidates=getattr(catalog,'disease_factors',lambda *_: [])(gap,remaining,exclude)
+        excluded=exclude | {item['record']['source_id'] for item in disease_candidates}
+        items=disease_candidates+catalog.suggest_factors(contexts,body.get('mode','semantic'),remaining-len(disease_candidates),excluded,precomputed=precomputed,**index)
     for rank,item in enumerate(items,1):
         item['ranking']['rank']=rank
         item.setdefault('reason','Similarity to selected source context; inspect for relevance, not biological support.')
@@ -609,11 +646,16 @@ def build_suggestions(body):
     suggestion_id=uid()
     # A new uuid-keyed audit row, committed before its id is returned; only a later fenced draft write reads it.
     repo.append('suggestion',suggestion_id,'catalog',{'mode':body.get('mode','semantic'),'embedding_run_id':catalog.embedding_run,'mapping_run_id':catalog.mapping_run,
-        **context_provenance,'hits':{x['record']['source_id']:{'ranking':x['ranking'],'matched_context_ids':x['contexts'],'reason':x['reason'],
+        **context_provenance,**rerank_audit,'hits':{x['record']['source_id']:{'ranking':x['ranking'],'matched_context_ids':x['contexts'],'reason':x['reason'],
             **({'retrieval':x['retrieval']} if 'retrieval' in x else {}),
-            **({'context_similarities':x['context_similarities']} if 'context_similarities' in x else {})} for x in items}})
+            **({'context_similarities':x['context_similarities']} if 'context_similarities' in x else {}),
+            **{key:x[key] for key in ('jev','cosine_rank','disease_identity') if key in x}} for x in items}})
+    limitations=['Retrieval similarity is not evidence of biological support.']
+    if rerank and rerank['status']=='applied':
+        limitations.append('Order reflects a Jev model rating of factor names against the knowledge gap text; it is not evidence.')
     return {'suggestion_id':suggestion_id,'automatic_anchors':[{'factor':x['record'],'ranking':x['ranking'],'matched_context_ids':x['contexts'],'reason':x['reason']} for x in items],
-        'automatic_target_count':5,'search':catalog.provenance(query,body.get('mode','semantic'),True,**index),'limitations':['Retrieval similarity is not evidence of biological support.']}
+        'automatic_target_count':5,'search':catalog.provenance(query,body.get('mode','semantic'),True,**index),'limitations':limitations,
+        **({'rerank':rerank} if rerank else {})}
 
 def archived_factor(source_id):
     """(superseded, frozen snapshot|None) for a factor id the served generation does not serve.

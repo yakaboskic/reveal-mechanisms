@@ -13,19 +13,16 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
-import json
 import os
 import threading
 from time import monotonic
-
-import httpx
 
 from .auth import Problem, owned, principal_with
 from . import user_inputs
 from . import cfde_assessment_cache as cache
 from .cfde_assessment_compact import compact
 from .cfde_assessment_payload import model_state
-from .jev_batch import ENDPOINT, validate_response
+from .jev_batch import JevCallError, post_systemone, validate_response
 from .redis_notifications import closing
 from .reference_generation import GENERATION_RE
 from .repository import digest, now, uid, canonical
@@ -86,46 +83,24 @@ def provider_key():
     return key
 
 
+PROVIDER_PROBLEMS = {
+    'timeout': (503, 'CFDE_MODEL_TIMEOUT', 'The assessment timed out. You can request another check.'),
+    'too_large': (422, 'CFDE_ASSESSMENT_TOO_LARGE',
+        'These inputs exceed the model token limit. Use fewer mechanisms or shorter context; the research run remains available.'),
+    'unavailable': (503, 'CFDE_MODEL_UNAVAILABLE', 'The assessment service could not complete this check. Try again later.'),
+    'invalid': (503, 'CFDE_MODEL_RESPONSE_INVALID', 'The assessment service returned an invalid response.'),
+}
+
+
 def call_provider(body, *, deadline=None):
     """One bounded HTTPS attempt, without redirects or provider-error disclosure."""
     key = provider_key()
     deadline = min(deadline if deadline is not None else float('inf'), monotonic() + 25)
-    remaining = deadline - monotonic()
-    if remaining <= 0:
-        raise Problem(503, 'CFDE_MODEL_TIMEOUT', 'The assessment timed out. You can request another check.')
     try:
-        with httpx.Client(timeout=httpx.Timeout(remaining, connect=min(5, remaining)), follow_redirects=False,
-                headers={'Authorization': 'Bearer '+key, 'Accept': 'application/json'}) as client:
-            with client.stream('POST', ENDPOINT, content=canonical(body).encode(),
-                    headers={'Content-Type': 'application/json'}) as response:
-                if response.status_code != 200:
-                    # Recognize only the documented, bounded sizing error;
-                    # never relay provider diagnostics or echoed input text.
-                    if response.status_code in (400, 413, 422):
-                        raw_error = bytearray()
-                        for chunk in response.iter_bytes():
-                            raw_error.extend(chunk)
-                            if len(raw_error) > 4096 or monotonic() >= deadline: break
-                        try: provider_error = json.loads(raw_error).get('detail', {})
-                        except (ValueError, TypeError, AttributeError): provider_error = {}
-                        if isinstance(provider_error, dict) and provider_error.get('error_type') == 'max_tokens_exceeded':
-                            raise Problem(422, 'CFDE_ASSESSMENT_TOO_LARGE',
-                                'These inputs exceed the model token limit. Use fewer mechanisms or shorter context; the research run remains available.')
-                    raise Problem(503, 'CFDE_MODEL_UNAVAILABLE',
-                        'The assessment service could not complete this check. Try again later.')
-                raw = bytearray()
-                for chunk in response.iter_bytes():
-                    if monotonic() >= deadline:
-                        raise Problem(503, 'CFDE_MODEL_TIMEOUT', 'The assessment timed out. You can request another check.')
-                    raw.extend(chunk)
-                    if len(raw) > 64_000:
-                        raise Problem(503, 'CFDE_MODEL_RESPONSE_INVALID', 'The assessment service returned an invalid response.')
-    except httpx.TimeoutException:
-        raise Problem(503, 'CFDE_MODEL_TIMEOUT', 'The assessment timed out. You can request another check.') from None
-    except httpx.HTTPError:
-        raise Problem(503, 'CFDE_MODEL_UNAVAILABLE', 'The assessment service could not complete this check. Try again later.') from None
+        value = post_systemone(canonical(body).encode(), api_key=key, deadline=deadline)
+    except JevCallError as error:
+        raise Problem(*PROVIDER_PROBLEMS[error.kind]) from None
     try:
-        value = json.loads(raw)
         warnings = validate_response(value, body['questions'])
         if value['model'] != body['model']: raise ValueError('Model version mismatch')
         for name in ('cfde_support', 'main_blocker'):

@@ -109,6 +109,8 @@ qa:
     REVEAL_AGENT_TIMEOUT_SECONDS: '1800'
     # Private Lightning audits (docs/lightning-audit.md); the QA frontend is built with NEXT_PUBLIC_REVEAL_LIGHTNING_ENABLED=true.
     REVEAL_LIGHTNING_ENABLED: 'true'
+    # Jev ordering of automatic mechanism suggestions (docs/suggest-rerank.md); uses the QA TYPESAFE_API_KEY below.
+    REVEAL_SUGGEST_RERANK: jev
     REVEAL_JOB_NAMESPACE: reveal-workflow-qa
     REVEAL_VECTOR_ENVIRONMENT: qa
     REVEAL_NOTIFICATION_NAMESPACE: reveal-qa
