@@ -133,7 +133,7 @@ The proposed disease join must account for this run's gap using `http://purl.obo
 
 **Acceptance:** a TTD fixture prioritizes the eligible matching trait without promoting unrelated inherited MeSH associations; manual/dismissed choices survive; pinned attachment bodies and references resolve; old frozen requests are unchanged; index and reader response sizes remain bounded. Record seed preparation time, seed/download bytes, first-read size and export latency before/after. Do not claim a speed improvement from byte counts alone.
 
-Main code: `app.py` suggestion building, `catalog.py`, `reference_reload.py`, `research_seed.py`, evidence budget and stored-suggestion tests.
+Main code: `app.py` suggestion building, `catalog.py`, `reference_release.py` (`lap_tables`), `research_seed.py`, evidence budget and stored-suggestion tests.
 
 ## Work package 5 — Verified crosswalks and truthful capabilities (P1)
 
@@ -163,7 +163,7 @@ Leave this downloaded run, its pinned kit and its output account unchanged. A ne
 - Missing local views and schema packaging: `services/backend/src/reveal_backend/research_seed.py:252`, `research_setup.py:153`; hosted schema/view preparation: `box_remote.py:149`; existing view builder: `evidence_files.py:161`.
 - Progressive reference objects and capabilities: `services/backend/src/reveal_backend/research_data.py:76`, `:311`, `:391`, `:433`; import identity fields: `eaggl_database.py:18`.
 - Export and validation effects: `services/backend/src/reveal_backend/research_execution.py:256`, `:270`; tool descriptions and dispatch: `research_tools.py:74`, `:79`, `:292`, `:331`.
-- Anchor selection and raw mapping preservation: `services/backend/src/reveal_backend/app.py:495`, `catalog.py:591`, `reference_reload.py:464`.
+- Anchor selection and raw mapping preservation: `services/backend/src/reveal_backend/app.py:495`, `catalog.py:591`, `reference_release.py` `lap_tables` (`MAPPING_COLUMNS`; raw `ontology_mappings` in `reveal_ref_traits.metadata`).
 - Authoring rules: `services/backend/agent-skills/read-evidence-package/SKILL.md`, `construct-scientific-account/SKILL.md`; companion docs listed in the seed's authoring-kit manifest.
 
 ## Implementation record — October 6, 2026

@@ -118,7 +118,7 @@ class DatabaseInspectorTests(unittest.TestCase):
         self.assertEqual(self.client.get('/internal/v1/admin/tables/dismech_documents',headers=self.headers()).status_code,404)
         for key,status in [('not-json',422),(json.dumps({'kind':'draft'}),422),(json.dumps({'kind':'draft','id':'absent'}),404)]:
             self.assertEqual(self.client.get(self.root+'/row',params={'key':key},headers=self.headers()).status_code,status)
-        self.assertEqual(len(tables()),38)
+        self.assertEqual(len(tables()),48)
         self.assertTrue(all(s['primary_key'] for s in tables().values()))
 
     def test_lifecycle_fields_are_visible_beyond_payload_preview_without_full_download(self):

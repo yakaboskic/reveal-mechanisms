@@ -14,10 +14,8 @@ from .auth import Problem, owned
 from .acceptance import assemble_account, claim_structure_record, object_envelope, object_projection, with_citations, release_root, LOCK, mint, prewarm, validate_paragraph_document
 from .evidence_package import DapperRuntime, canonical_json, decode, require, sha256
 from .evidence_schema import validate_package_shape, load_generated_schema
-from .evidence_collector import collect_package
-from .evidence_database import geneset_resolver
 from .evidence_budget import fit_input_budget
-from .reference_generation import KPN_MODEL, LEGACY_MODEL, MODELS, generation_of_anchors
+from .reference_generation import KPN_MODEL, LEGACY_MODEL, MODELS
 from .repository import Repository, now, uid, digest
 from .runtime_config import ROOT, CURRENT_DAPPER_SNAPSHOT, setting, artifacts_root, mysql_connection
 from . import jobs
@@ -212,7 +210,7 @@ def enrichment_status(result,selected,mode):
     return items
 
 def collect_reference_package(**kwargs):
-    """KPN-generation collector (reveal_backend.reference_evidence), imported on first use."""
+    """Reference-release collector (reveal_backend.reference_evidence), imported on first use."""
     from .reference_evidence import collect_reference_package as collect_reference
     return collect_reference(**kwargs)
 
@@ -274,14 +272,12 @@ def collect(job,frozen,binding,budgets,directory,repository=None):
             selected_graphs=frozen['composer']['selected_kgs'],max_accounts=budgets.get('max_accounts',3),selection_metadata=metadata,
             limit=requested_limit,max_nodes=budgets.get('max_nodes',250),max_edges=budgets.get('max_edges',1000),
             user_inputs=frozen.get('user_inputs'))
-        model=anchor_model(binding['anchors'])
-        if model==KPN_MODEL:
-            # KPN generations capture the same evidence set from the reference tables in MySQL.
-            built=collect_reference_package(**sources,generation_id=generation_of_anchors(binding['anchors']),connection_factory=mysql_connection)
-        else:
-            built=collect_package(**sources,model=model,geneset_import=ROOT/'data/cfde-genesets/2026-09-24',
-                geneset_resolver=geneset_resolver(binding['anchors'][0]['gene_set_import_id']))
-
+        # Evidence comes from this environment's current reference release; legacy
+        # cfde-inc-v2 anchors are no longer served, so they cannot be collected.
+        require(anchor_model(binding['anchors'])==KPN_MODEL,
+            'Legacy cfde-inc-v2 anchors cannot be collected: the current reference data does not serve them. '
+            'Start a new analysis on this gap with current factors.')
+        built=collect_reference_package(**sources,connection_factory=mysql_connection)
         package=built.package
     validate_package_shape(package,load_generated_schema(ROOT/'schema/evidence-package.schema.json'))
     gap=next(g for g in package['dapper_context']['knowledge_gaps'] if g['id']==frozen['question_id'])
@@ -578,8 +574,6 @@ class Worker:
             for checksum,source in captured.items():
                 source['retained']=await asyncio.to_thread(retained_file,source['path'],checksum)
         await asyncio.to_thread(self.save_workspace,job,token,artifacts_root()/job['id'])
-        from .analysis_outcomes import creation_stamp, stamp_gap, stamped
-        from .reference_generation import ACTIVE_KIND, ACTIVE_ID
         from .scientific_writes import AcceptanceWrites, acceptance_keys, dapper_nodes
         from .workflow_execution import drain_on_cancel
         base=setting('NEXTAUTH_URL','http://localhost:3000').rstrip('/')+'/api/backend/v1/artifacts/'
@@ -601,7 +595,7 @@ class Worker:
                 [*(node['id'] for node in dapper_nodes(doc)),doc['scientific_accounts'][0]['id']])} for doc,snapshot in zip(documents,snapshots)]
             shas=[sha256(path.read_bytes()) for _,_,path in accepted]
             owner=job.get('owner_user_id')   # the fenced job row decides; a changed owner only costs the reads below
-            keys=[('job',job['id']),('queue',job['id']),('execution',job['id']),(ACTIVE_KIND,ACTIVE_ID),('local_work',job['id']),
+            keys=[('job',job['id']),('queue',job['id']),('execution',job['id']),('local_work',job['id']),
                 ('research_pin',job.get('research_request_id')),*acceptance_keys(owner,documents),
                 *(('scientific_document',digest([owner,sha])) for sha in shas)]
             for doc in documents:
@@ -651,11 +645,8 @@ class Worker:
                     envelope=with_citations(projection[identity],metadata); envelope['research_statement']=state
                     summary={'account':account,'knowledge_gap':gap,'claim_count':len(account['component_claims']),'created_at':now(),'job_id':job['id'],'research_statement':state}
                     if not previous:
-                        # A job that finishes after its reference generation was superseded is born archived.
-                        stamp=creation_stamp(tx,owner,job['research_request_id'],gap=stamp_gap(frozen['composer'].get('source_gap'),frozen.get('question_id')),scientific_document=doc,
-                            analysis={'job_id':job['id'],'request_id':job['research_request_id'],'evidence_package_sha256':evidence_sha256,'account_id':identity})
-                        writes.put('account',digest([owner,identity]),owner,stamped('account',{'result':envelope,'summary':deepcopy(summary),**claim_structure_record(report)},stamp))
-                        writes.put('account_membership',digest([owner,identity]),owner,stamped('account_membership',{'account_id':identity,'summary':summary},stamp))
+                        writes.put('account',digest([owner,identity]),owner,{'result':envelope,'summary':deepcopy(summary),**claim_structure_record(report)})
+                        writes.put('account_membership',digest([owner,identity]),owner,{'account_id':identity,'summary':summary})
                     writes.put('scientific_document',digest([owner,document_sha]),owner,{'sha256':document_sha,'document':doc,'job_id':job['id'],'observed_at':now(),
                         'citation_metadata':metadata,'artifact_access':snapshot})
                     writes.document(doc,document_sha,metadata,projection.__getitem__,borrowed_ids)

@@ -42,7 +42,6 @@ async def accept_accounts(self,job,token,accepted,frozen,package_path,result,dir
         for checksum,source in captured.items():
             source['retained']=await asyncio.to_thread(retained_file,source['path'],checksum)
     await asyncio.to_thread(self.save_workspace,job,token,artifacts_root()/job['id'])
-    from .analysis_outcomes import creation_stamp, stamp_gap, stamped
     from .workflow_execution import drain_on_cancel
     def persist():
         # One fenced transaction in one worker thread: the event loop keeps serving while it holds the fence.
@@ -89,11 +88,8 @@ async def accept_accounts(self,job,token,accepted,frozen,package_path,result,dir
                 envelope=object_envelope(doc,identity,metadata,artifact_access); envelope['research_statement']=state
                 summary={'account':account,'knowledge_gap':gap,'claim_count':len(account['component_claims']),'created_at':now(),'job_id':job['id'],'research_statement':state}
                 if not previous:
-                    # A job that finishes after its reference generation was superseded is born archived.
-                    stamp=creation_stamp(tx,owner,job['research_request_id'],gap=stamp_gap(frozen['composer'].get('source_gap'),frozen.get('question_id')),scientific_document=doc,
-                        analysis={'job_id':job['id'],'request_id':job['research_request_id'],'evidence_package_sha256':evidence_sha256,'account_id':identity})
-                    tx.put('account',digest([owner,identity]),owner,stamped('account',{'result':envelope,'summary':deepcopy(summary)},stamp))
-                    tx.put('account_membership',digest([owner,identity]),owner,stamped('account_membership',{'account_id':identity,'summary':summary},stamp))
+                    tx.put('account',digest([owner,identity]),owner,{'result':envelope,'summary':deepcopy(summary)})
+                    tx.put('account_membership',digest([owner,identity]),owner,{'account_id':identity,'summary':summary})
                 document_sha=sha256(path.read_bytes())
                 tx.put('scientific_document',digest([owner,document_sha]),owner,{'sha256':document_sha,'document':doc,'job_id':job['id'],'observed_at':now(),
                     'citation_metadata':metadata,'artifact_access':artifact_access})
@@ -128,7 +124,6 @@ def commit_accounts(service, tx, operation, prepared):
     from .acceptance import object_envelope
     from .citations import register
     from .scientific_reuse import record_dependencies
-    from .analysis_outcomes import creation_stamp, stamp_gap, stamped
     owner = operation['owner_user_id']; work_id = operation['local_work_id']; args = operation['arguments']
     frozen = owned(tx, 'request', operation['research_request_id'], owner)['data']
     reused = record_dependencies(tx, owner, frozen['id'], prepared['reused']['receipt_ids'],
@@ -153,11 +148,8 @@ def commit_accounts(service, tx, operation, prepared):
             envelope = object_envelope(doc, identity, metadata, access); envelope['research_statement'] = state
             summary = {'account': account, 'knowledge_gap': gap, 'claim_count': len(account['component_claims']),
                 'created_at': now(), 'job_id': work_id, 'local_work_id': work_id, 'execution_mode': 'local', 'research_statement': state}
-            stamp = creation_stamp(tx, owner, frozen['id'], gap=stamp_gap(frozen['composer'].get('source_gap'), frozen.get('question_id')),
-                scientific_document=doc, analysis={'job_id': work_id, 'request_id': frozen['id'],
-                    'evidence_package_sha256': prepared['evidence_manifest_sha256'], 'account_id': identity})
-            tx.put('account', digest([owner, identity]), owner, stamped('account', {'result': envelope, 'summary': deepcopy(summary)}, stamp))
-            tx.put('account_membership', digest([owner, identity]), owner, stamped('account_membership', {'account_id': identity, 'summary': summary}, stamp))
+            tx.put('account', digest([owner, identity]), owner, {'result': envelope, 'summary': deepcopy(summary)})
+            tx.put('account_membership', digest([owner, identity]), owner, {'account_id': identity, 'summary': summary})
         document_sha = accepted['storage']['sha256']
         tx.put('scientific_document', digest([owner, document_sha]), owner, {'sha256': document_sha, 'document': doc,
             'job_id': work_id, 'local_work_id': work_id, 'observed_at': now(), 'citation_metadata': metadata, 'artifact_access': access,

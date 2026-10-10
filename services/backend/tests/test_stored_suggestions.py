@@ -1,5 +1,4 @@
-"""Automatic source-context retrieval must never invoke a model service."""
-from copy import deepcopy
+"""Automatic source-context retrieval reads the stored `<env>-contexts` vectors; only misses reach the model service."""
 import unittest
 from unittest.mock import patch
 
@@ -14,11 +13,19 @@ from reveal_backend.dismech_embeddings import TEMPLATES, context_input
 from reveal_backend import dismech_embeddings
 
 
+def without_retrieval(rows):
+    """Suggestions without their retrieval provenance, which names how each context vector was obtained."""
+    return [{key: value for key, value in row.items() if key != 'retrieval'} for row in rows]
+
+
 class StoredSuggestionTests(unittest.TestCase):
     def setUp(self):
         self.catalog = Catalog()
         self.catalog.loaded = True
-        self.catalog.index = fixtures.make_index()
+        self.catalog.release_id = fixtures.RELEASE
+        self.catalog.embedding_run = 'embedding-space'
+        self.catalog.index = fixtures.make_release_index({text: vector for text, vector in zip(('alpha', 'beta', 'gamma'), fixtures.embedding(['alpha', 'beta', 'gamma']).tolist())})
+        self.provider = self.catalog.index.client
         self.catalog.dismech_import = 'dismech-import'
         self.catalog.factor_legacy = {legacy: {'source_id': native, 'source_revision': 'original-revision',
             'cfde_anchor': {'label': label}} for legacy, native, label in [
@@ -30,13 +37,6 @@ class StoredSuggestionTests(unittest.TestCase):
                 ('source:alpha', 'a' * 64, 'alpha'), ('source:beta', 'b' * 64, 'beta')]}
         self.catalog.gaps = {'dapper:gap': {'object': {'id': 'dapper:gap', 'text': 'gamma'},
             'source': {'source_id': 'source:gap', 'source_revision': 'c' * 64}}}
-        inputs = [context_input(identity, 'mechanism', row['source_revision'], row['object']['description'])
-                  for identity, row in self.catalog.mechanisms.items()]
-        inputs.append(context_input('source:gap', 'knowledge_gap', 'c' * 64, 'gamma'))
-        vectors = {row['source_id']: fixtures.embedding([row['input_text']])[0] for row in inputs}
-        self.catalog.dismech_embeddings = {'run_id': 'stored-context-run', 'config': {'templates': TEMPLATES},
-            'bindings': {row['source_id']: row for row in inputs}, 'vectors': vectors}
-        self.catalog.context_text_vectors = {row['input_sha256']: (row['input_text'], vectors[row['source_id']]) for row in inputs}
 
     def test_linked_semantic_and_hybrid_match_dynamic_ranking_without_any_http(self):
         contexts = [('source:alpha', 'alpha'), ('source:beta', 'beta')]
@@ -49,13 +49,13 @@ class StoredSuggestionTests(unittest.TestCase):
                      patch.object(catalog_module, 'get_embeddings', side_effect=AssertionError('Automatic context used HTTP')):
                     after = self.catalog.suggest_factors(contexts, mode, 5, (), precomputed=True)
                     excluded = self.catalog.suggest_factors(contexts, mode, 2, {'native:Y'}, precomputed=True)
-                self.assertEqual(before, after)
+                self.assertEqual(without_retrieval(before), without_retrieval(after))
                 self.assertEqual(len({row['record']['source_id'] for row in after}), len(after))
                 self.assertNotIn('native:Y', {row['record']['source_id'] for row in excluded})
                 self.assertEqual(len(excluded), 2)
                 self.assertEqual([row['ranking']['rank'] for row in excluded], [1, 2])
 
-    def test_unlinked_gap_fallback_uses_imported_exact_question_vector(self):
+    def test_unlinked_gap_fallback_uses_the_stored_exact_question_vector(self):
         with patch.object(self.catalog.index, 'query_vectors', side_effect=AssertionError('Fallback must not embed')), \
              patch.object(catalog_module, 'get_embeddings', side_effect=AssertionError('Fallback must not call HTTP')):
             for mode in ('semantic', 'hybrid'):
@@ -63,9 +63,9 @@ class StoredSuggestionTests(unittest.TestCase):
                 self.assertTrue(result)
                 self.assertEqual(result[0]['contexts'], ['dapper:gap'])
         provenance = self.catalog.context_embedding_provenance([('dapper:gap', 'gamma')])
-        self.assertEqual(provenance['dismech_embedding_run_id'], 'stored-context-run')
+        self.assertEqual(provenance['dismech_embedding_run_id'], 'embedding-space')
         self.assertEqual(provenance['context_embedding_inputs'][0], {
-            key: value for key, value in self.catalog.dismech_embeddings['bindings']['source:gap'].items() if key != 'input_text'})
+            key: value for key, value in context_input('source:gap', 'knowledge_gap', 'c' * 64, 'gamma').items() if key != 'input_text'})
         self.assertEqual(provenance['context_embedding_inputs'][0]['template'], 'dismech-gap-text-v1')
 
     def test_pairwise_cosines_survive_maximum_selection_and_hybrid_ranking(self):
@@ -89,30 +89,30 @@ class StoredSuggestionTests(unittest.TestCase):
         self.assertTrue(hits)
         self.assertTrue(all('context_similarities' not in hit for hit in hits))
 
-    def test_missing_stale_or_modified_bindings_fail_closed_without_runtime_fallback(self):
-        original = deepcopy(self.catalog.dismech_embeddings)
-        cases = [('source_revision', 'f' * 64), ('template', 'changed-template'), ('input_text', 'invented text'), ('input_sha256', '0' * 64)]
-        with patch.object(self.catalog.index, 'query_vectors', side_effect=AssertionError('No runtime fallback allowed')):
-            for field, value in cases:
-                self.catalog.dismech_embeddings = deepcopy(original)
-                self.catalog.dismech_embeddings['bindings']['source:alpha'][field] = value
-                with self.subTest(field=field), self.assertRaises(Problem) as failure:
-                    self.catalog.suggest_factors([('source:alpha', 'alpha')], 'semantic', 5, (), precomputed=True)
-                self.assertEqual(failure.exception.code, 'DISMECH_EMBEDDINGS_NOT_READY')
-            self.catalog.dismech_embeddings = None
-            with self.assertRaises(Problem):
-                self.catalog.suggest_factors([('source:alpha', 'alpha')], 'semantic', 5, (), precomputed=True)
+    def test_a_context_without_a_stored_vector_is_embedded_live_once(self):
+        self.provider.rows['test-contexts'].pop(fixtures.text_hash('beta'))
+        contexts = [('source:alpha', 'alpha'), ('source:beta', 'beta')]
+        with patch.object(catalog_module, 'get_embeddings', side_effect=fixtures.embedding) as embedder:
+            first = self.catalog.suggest_factors(contexts, 'semantic', 5, (), precomputed=True)
+            second = self.catalog.suggest_factors(contexts, 'semantic', 5, (), precomputed=True)
+        self.assertEqual(first, second)
+        self.assertEqual(embedder.call_count, 1)
+        self.assertEqual(embedder.call_args.args[0], ['beta'])
+        self.assertEqual(len([namespace for namespace, _ in self.provider.fetches if namespace == 'test-contexts']), 1)  # Cached in process.
+        with self.assertRaises(Problem) as failure:
+            self.catalog.suggest_factors([('source:unknown', 'alpha')], 'semantic', 5, (), precomputed=True)
+        self.assertEqual(failure.exception.code, 'DISMECH_EMBEDDINGS_NOT_READY')
 
-    def test_only_uncached_free_text_reaches_service_and_known_source_text_is_reused(self):
+    def test_free_text_is_embedded_live_once_and_cached(self):
         with patch.object(catalog_module, 'get_embeddings', return_value=np.asarray([[1., 1.]])) as embedder:
-            self.catalog.suggest_factors([('mechanism_subquery', 'alpha')], 'semantic', 5, ())
-            self.catalog.search_factors('beta', 'semantic')
-            self.assertEqual(embedder.call_count, 0)
             first = self.catalog.suggest_factors([('mechanism_subquery', 'novel text')], 'semantic', 5, ())
             second = self.catalog.suggest_factors([('mechanism_subquery', 'novel text')], 'semantic', 5, ())
             self.assertEqual(first, second)
             self.assertEqual(embedder.call_count, 1)
             self.assertEqual(embedder.call_args.args[0], ['novel text'])
+            self.catalog.search_factors('beta', 'semantic')
+            self.assertEqual(embedder.call_count, 2)
+            self.assertEqual(embedder.call_args.args[0], ['beta'])
 
     def test_frozen_context_provenance_has_native_revision_and_hash_for_each_context(self):
         result = self.catalog.context_embedding_provenance([('source:beta', 'beta'), ('source:alpha', 'alpha')])

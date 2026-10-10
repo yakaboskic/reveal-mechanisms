@@ -25,14 +25,14 @@ sys.path[:0]=[str(root/'services/backend/src'),str(root/'services/backend/tests'
     def test_public_factor_resolution_uses_current_release_and_keeps_process_guard(self):
         result = self.isolated('''from reveal_backend.acceptance import public_runtime
 from reveal_backend.evidence_package import DapperRuntime, EvidenceBuildError
-from reveal_backend import runtime_config, catalog, research_work, worker, reference_reload
+from reveal_backend import runtime_config, catalog, research_work, worker, reference_release
 import test_research_data as fixture
 runtime=public_runtime()
 assert runtime.schema_path == runtime_config.CURRENT_DAPPER_SNAPSHOT/'snapshot/schema'
 assert 'embeddings' in runtime.groups
 for module in (catalog,research_work,worker):
     assert module.CURRENT_DAPPER_SNAPSHOT == runtime_config.CURRENT_DAPPER_SNAPSHOT
-assert reference_reload.DEFAULT_DAPPER == runtime_config.CURRENT_DAPPER_SNAPSHOT
+assert reference_release.dapper_runtime().schema_path == runtime.schema_path
 test=fixture.ReferenceQueryTests();test.setUp()
 try:
     capture=test.query('get_factor',{'factor_id':fixture.FACTOR})

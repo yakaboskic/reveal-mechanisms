@@ -1,9 +1,9 @@
 """/readyz from memory: a per-process monitor checks readiness off the request path.
 
-Every GENERATION_TTL_SECONDS one statement reads the application database and both active pointers
-(reference_active, vector_active); the catalog's poller reuses that read. Sources (reference tables,
-the verified Vector snapshot and provider, the artifact store) are re-verified in their own thread
-whenever the pointers change, at least every READINESS_VERIFICATION_TTL_SECONDS, and at the next tick
+Every RELEASE_TTL_SECONDS one statement reads the application database and the published reference
+release id (reveal_ref_release); the catalog's poller reuses that read. Sources (the release tables,
+the Vector provider, the artifact store) are re-verified in their own thread whenever the release
+changes, at least every READINESS_VERIFICATION_TTL_SECONDS, and at the next tick
 after a failed verification. A probe does no I/O. Readiness fails closed: a failed read or verification
 answers 503 until the next success, and so does a monitor whose last read is older than POINTER_MAX_AGE
 (hung or stopped). A busy pool is load, not an outage: while every failure since the last good read is
@@ -17,13 +17,13 @@ import threading
 from time import monotonic
 
 from .auth import Problem
-from .catalog import GENERATION_TTL_SECONDS, READINESS_VERIFICATION_TTL_SECONDS, active_pointers, readiness_binding, vector_backend
+from .catalog import READINESS_VERIFICATION_TTL_SECONDS, RELEASE_TTL_SECONDS, current_release_id, readiness_binding
 from .mysql_pool import DatabaseBusy
 
 LOGGER = logging.getLogger(__name__)
-POINTER_MAX_AGE = 3 * GENERATION_TTL_SECONDS
+POINTER_MAX_AGE = 3 * RELEASE_TTL_SECONDS
 VERIFY_MAX_AGE = 3 * READINESS_VERIFICATION_TTL_SECONDS
-NEW_BINDING_GRACE = 2 * READINESS_VERIFICATION_TTL_SECONDS  # a cutover keeps the last verified sources this long
+NEW_BINDING_GRACE = 2 * READINESS_VERIFICATION_TTL_SECONDS  # a publish keeps the last verified sources this long
 BUSY_MAX_AGE = 60.0  # the last good read answers this long while every later tick found the pool busy
 _monitor = None
 
@@ -36,7 +36,7 @@ def _answer(error):
 
 
 class ReadinessMonitor:
-    def __init__(self, repo, catalog, *, interval=GENERATION_TTL_SECONDS, clock=monotonic):
+    def __init__(self, repo, catalog, *, interval=RELEASE_TTL_SECONDS, clock=monotonic):
         # repo/catalog are callables, so a probe always reports on the objects the routes serve.
         self.repo, self.catalog, self.interval, self.clock = repo, catalog, interval, clock
         self.lock, self.stopped, self.thread, self.pid = threading.Lock(), threading.Event(), None, os.getpid()
@@ -52,9 +52,9 @@ class ReadinessMonitor:
             def inspect(tx):
                 facts['database'] = ({'database': 'sqlite-test', 'tls': False} if repo.sqlite_path else
                     {'database': 'aurora-mysql', 'tls': True} if getattr(tx.connection, 'reveal_verified_tls', False) else None)
-            generation, snapshot = active_pointers(repo, vector_backend(), inspect=inspect)
+            release = current_release_id(repo, inspect=inspect)
             database = facts['database'] or repo.readiness()  # sessions not opened by mysql_database.connect
-            binding = readiness_binding(generation, snapshot)
+            binding = readiness_binding(release)
         except Exception as error:
             now = self.clock()
             with self.lock:
@@ -66,8 +66,8 @@ class ReadinessMonitor:
                 if busy is None: LOGGER.warning('Readiness check deferred: the database is busy')
             elif previous is None or previous[4] is None: LOGGER.warning('Readiness check failed (%s)', type(error).__name__)
             return
-        observe = getattr(catalog, 'observe_pointers', None)
-        if observe: observe(generation, snapshot)
+        observe = getattr(catalog, 'observe_release', None)
+        if observe: observe(release)
         now = self.clock()
         with self.lock:
             seen = self.current[3] if self.current and self.current[2] == binding else now
@@ -108,7 +108,7 @@ class ReadinessMonitor:
         if not fresh: raise Problem(503, 'SOURCE_NOT_READY', 'Readiness has not been confirmed recently.')
         if current[4] is not None: raise _answer(current[4])
         if verified is not None and verified[0] != current[2] and (verified[3] is not None or now - current[3] > NEW_BINDING_GRACE):
-            verified = None  # the active pointers changed and their sources are not verified yet
+            verified = None  # the published release changed and its sources are not verified yet
         if verified is None: raise Problem(503, 'SOURCE_NOT_READY', 'Source verification is pending.')
         if now - verified[1] > VERIFY_MAX_AGE: raise Problem(503, 'SOURCE_NOT_READY', 'Source verification is overdue.')
         if verified[3] is not None: raise _answer(verified[3])

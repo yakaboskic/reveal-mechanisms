@@ -2,6 +2,12 @@
 
 Scientific rows and generation manifests are never rewritten. Only the catalog-owned
 registry and content-addressed artifact are added, after verifying the original source.
+
+Recovery is for historical reference generations: it binds the source to their
+reference_generations and cfde_gene_set_collections rows, which
+`scripts/reference_migration.py cleanup` drops, so it must run before cleanup. A reference
+release needs no recovery: its build keeps every provenance group of each collection
+document (reference_release.collection_provenance).
 """
 from __future__ import annotations
 
@@ -113,20 +119,23 @@ def _source_binding(tx, generation_id, collection_id, sha):
 
 
 def recover_collection_provenance(repository, generation_id, source_path, *, apply=False):
-    """Default dry run; apply adds one immutable supplement and never changes source rows."""
-    from .reference_reload import collection_header, _sha256_file
-    from .provenance_schema import PROVENANCE_GROUPS, validate_provenance_edges
+    """Default dry run; apply adds one immutable supplement and never changes source rows.
+
+    The source is read as a reference release build reads it (reference_release.read_collection): the graph is
+    the document's retained provenance, before or after its gene sets, with its edges validated.
+    """
+    from .reference_release import read_collection, _sha256_file
     if not isinstance(generation_id, str) or not re.fullmatch(r'[a-f0-9]{64}', generation_id):
         raise RecoveryRefused('Invalid reference generation id')
     path = Path(source_path)
     source_sha = _sha256_file(path)
-    header, collection = collection_header(path)
-    collection_id = collection.get('id')
+    parsed = read_collection(path)  # refuses repeated sections and malformed or invalid edges
+    collection_id = parsed['document'].get('id')
     if not isinstance(collection_id, str) or not re.fullmatch(r'dapper:GeneSetCollection\.[A-Za-z0-9_-]{32}', collection_id):
         raise RecoveryRefused('Invalid source collection id')
-    if _sha256_file(path) != source_sha: raise RecoveryRefused('Original source changed during extraction')
-    graph = {group: header[group] for group in PROVENANCE_GROUPS if header.get(group) is not None}
-    validate_provenance_edges(graph)
+    # read_collection hashes the file after its parse: a different hash means the source changed during extraction.
+    if parsed['sha256'] != source_sha: raise RecoveryRefused('Original source changed during extraction')
+    graph = parsed['provenance']
     data = canonical(graph).encode('utf-8')
     if len(data) > MAX_GRAPH_BYTES: raise RecoveryRefused('Recovered provenance exceeds the artifact bound')
     graph_sha = hashlib.sha256(data).hexdigest()

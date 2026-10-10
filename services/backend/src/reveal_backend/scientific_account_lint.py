@@ -35,7 +35,8 @@ def cfde_source_files(package, package_path):
     """Recognize frozen reference evidence across the HTTP and SQL collectors.
 
     A SQL-looking origin alone is not evidence. Bind its verified capture to the
-    package's reference generation and source envelope, and follow derived
+    package's reference data (a generation's tables in format /1, the environment's
+    reference release tables in format /2) and source envelope, and follow derived
     captures only when all their inputs are captured reference observations.
     """
     sources = package['source_artifacts']
@@ -47,9 +48,12 @@ def cfde_source_files(package, package_path):
     if pigean.get('model') == 'eaggl-capped-v1' and len(generations) == 1:
         generation = next(iter(generations))
         if isinstance(generation, str) and re.fullmatch(r'[a-f0-9]{64}', generation):
-            tables = {'reference_factors', 'kpn_traits', 'eaggl_factors', 'eaggl_genes',
-                      'eaggl_gene_loadings', 'factor_gene_set_projections', 'cfde_gene_sets',
-                      'cfde_gene_set_collections'}
+            # Capture format version -> (identity key, tables it may read).
+            versions = {'1': ('generation_id', {'reference_factors', 'kpn_traits', 'eaggl_factors', 'eaggl_genes',
+                                                'eaggl_gene_loadings', 'factor_gene_set_projections', 'cfde_gene_sets',
+                                                'cfde_gene_set_collections'}),
+                        '2': ('release_id', {'reveal_ref_release', 'reveal_ref_factors', 'reveal_ref_traits', 'reveal_ref_factor_genes',
+                                             'reveal_ref_projections', 'reveal_ref_gene_sets', 'reveal_ref_collections'})}
             reference, derived = set(), {}
             root = Path(package_path).resolve().parent
             for key, source in sources.items():
@@ -64,13 +68,16 @@ def cfde_source_files(package, package_path):
                 provenance = capture.get('source', {})
                 kind = provenance.get('kind')
                 names = provenance.get('tables' if kind == 'mysql' else 'derived_from')
-                if (capture.get('generation_id') != generation or capture.get('model') != 'eaggl-capped-v1'
+                version = capture.get('format').rsplit('/', 1)[-1] if isinstance(capture.get('format'), str) else None
+                if version not in versions: continue
+                field, tables = versions[version]
+                if (capture.get(field) != generation or capture.get('model') != 'eaggl-capped-v1'
                         or not isinstance(names, list) or not names or not all(isinstance(name, str) for name in names)
-                        or origin != f"{kind}:{'+'.join(names)}?generation_id={generation}"):
+                        or origin != f"{kind}:{'+'.join(names)}?{field}={generation}"):
                     continue
-                if kind == 'mysql' and capture.get('format') == 'reveal.reference-evidence.mysql-capture/1' and set(names) <= tables:
+                if kind == 'mysql' and capture.get('format') == 'reveal.reference-evidence.mysql-capture/' + version and set(names) <= tables:
                     reference.add(key)
-                elif kind == 'mysql-derived' and capture.get('format') == 'reveal.reference-evidence.derived-capture/1':
+                elif kind == 'mysql-derived' and capture.get('format') == 'reveal.reference-evidence.derived-capture/' + version:
                     derived[key] = set(names)
             while added := {key for key, dependencies in derived.items() if key not in reference and dependencies <= reference}:
                 reference.update(added)

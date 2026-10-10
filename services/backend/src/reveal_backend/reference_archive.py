@@ -62,7 +62,7 @@ KIND_ACTIONS: dict[str, str] = {
         'cfde_assessment_shared', 'cfde_assessment_shared_cache',
         'lightning_audit', 'lightning_audit_progress', 'lightning_audit_idempotency', 'lightning_continuation',
         # Progressive research retains immutable captures independently of the
-        # currently active catalog. Active research_pin rows block table purge.
+        # currently active catalog. research_pin rows are retained; publishing a reference release purges no tables.
         'local_work', 'research_pin', 'research_package', 'research_access', 'research_grant_issue',
         'research_idempotency', 'research_operation', 'research_artifact', 'research_upload', 'research_setup_ticket',
         'research_oauth_client', 'research_oauth_request', 'research_oauth_code', 'research_oauth_device',
@@ -75,6 +75,8 @@ KIND_ACTIONS: dict[str, str] = {
         # Community ballots and their public tallies (votes.py), keyed by gap or published account id and never
         # by a factor: they stay valid across generations and are never stamped.
         'vote', 'vote_total',
+        # The publisher's per-environment marker of the current reference release (reference_release.py).
+        'reference_release',
         # Infrastructure: workers, durable workflow, vector bookkeeping and the reference pointers.
         'worker_control', 'runtime', 'probe_result', 'workflow_activity', 'workflow_cleanup', 'workflow_cleanup_completed',
         'workflow_control', 'workflow_delivery', 'workflow_dispatch', 'workflow_handoff', 'workflow_recovery_audit', 'workflow_step',
@@ -275,12 +277,14 @@ class _Owner:
 
     `fallback` is the generation assumed for rows whose own generation cannot be derived
     (only the legacy generation: before any reload it is the only one ever used), or None.
+    `only_from`, when given, is the one generation archived: work of any other generation (a
+    newer reference release's) and fallback rows anchored to KPN factors count as current.
     """
     STAMP_ORDER = ('account', 'account_membership', 'publication_snapshot', 'publication', 'analysis_outcome',
                    'outcome_summary', 'outcome_snapshot', 'outcome_publication', 'request')
 
-    def __init__(self, tx, owner, *, to_generation=None, fallback=None, at=None):
-        self.tx, self.owner, self.to, self.fallback, self.at = tx, owner, to_generation, fallback, at
+    def __init__(self, tx, owner, *, to_generation=None, fallback=None, at=None, only_from=None):
+        self.tx, self.owner, self.to, self.fallback, self.at, self.only_from = tx, owner, to_generation, fallback, at, only_from
         self.loaded, self.contexts = {}, {}
         self.unresolved, self.stamps, self.drops, self.backfilled = [], [], [], {}
         self.unrecoverable, self.missing = [], 0
@@ -465,7 +469,9 @@ class _Owner:
                 else:
                     context = self.context(kind, row); generation = context['generation']
                     if generation is None: self.unresolve(kind, row, context['reason'], False); continue
-                    if generation == self.to: self.current[kind] += 1; continue
+                    if generation == self.to or self.only_from and (generation != self.only_from or context['fallback']
+                            and (context['reference'] or {}).get('model') == KPN_MODEL):
+                        self.current[kind] += 1; continue
                     if context['fallback']: self.unresolve(kind, row, context['reason'], True)
                     stamp = build_stamp(generation, self.to, reference=context['reference'], gap=context['gap'],
                                         analysis=context['analysis'], at=self.at)
@@ -489,6 +495,7 @@ class _Owner:
                 except ReferenceError: invalid = True
             sources = [(item.get('reference') or {}).get('source_id') for item in anchors]
             if generations == {self.to} and not invalid: continue
+            if self.only_from and generations and generations != {self.only_from}: continue  # Not the archived generation's work.
             if not generations or generations == {self.to}:
                 # No usable frozen binding: only a legacy-mode cutover can assume the legacy generation.
                 if self.fallback and all(model_of_source_id(source) == LEGACY_MODEL for source in sources):
@@ -594,8 +601,8 @@ def backfill_anchor_display(repo, *, apply: bool) -> dict:
     return report
 
 
-def _survey(tx, owner, to_generation, fallback, at):
-    survey = _Owner(tx, owner, to_generation=to_generation, fallback=fallback, at=at)
+def _survey(tx, owner, to_generation, fallback, at, only_from=None):
+    survey = _Owner(tx, owner, to_generation=to_generation, fallback=fallback, at=at, only_from=only_from)
     survey.backfill(); survey.survey_stamps(); survey.survey_drafts()
     return survey
 
@@ -636,7 +643,7 @@ def plan_prefix(repo, active_generation_id: str, *, from_generation: str | None 
 
 
 def archive_prefix(repo, from_generation: str, to_generation: str, *, apply: bool, at: str | None = None,
-                   from_is_legacy: bool | None = None) -> dict:
+                   from_is_legacy: bool | None = None, only_from: str | None = None) -> dict:
     """Archive one prefix's work built on generations other than `to_generation` (docs §4.2, §6 P4).
 
     Per owner, in one repository transaction: backfill anchor_display, stamp archived kinds
@@ -646,7 +653,8 @@ def archive_prefix(repo, from_generation: str, to_generation: str, *, apply: boo
     be derived are reported in `unresolved`, and still archived when `from_generation` is the
     legacy generation (auto-detected from the prefix's reference_active record unless
     `from_is_legacy` is given). Applying requires `to_generation` to be the active generation.
-    Writes the reference_archive_run ledger (id digest([prefix, from, to])).
+    `only_from` restricts the pass to that generation's work (_Owner). Writes the
+    reference_archive_run ledger (id digest([prefix, from, to])).
     """
     _require_generation(from_generation, to_generation)
     if from_generation == to_generation: raise ReferenceError('Archive toward a different generation')
@@ -670,7 +678,7 @@ def archive_prefix(repo, from_generation: str, to_generation: str, *, apply: boo
                     'dropped_drafts': [], 'unresolved': [], 'runs': 0})
     for owner in owners:
         with (repo.transaction() if apply else repo.read_transaction()) as tx:
-            survey = _survey(tx, owner, to_generation, fallback, at)
+            survey = _survey(tx, owner, to_generation, fallback, at, only_from)
             if apply: survey.write()
         for key, counter in (('counts', survey.counts), ('restamped', survey.restamped), ('already_archived', survey.already),
                              ('current', survey.current), ('skipped', survey.skipped)): report[key].update(counter)
@@ -692,6 +700,17 @@ def archive_prefix(repo, from_generation: str, to_generation: str, *, apply: boo
                           unresolved=sorted(pending.values(), key=lambda item: (item['kind'], item['owner'], item['id'])))
             tx.put(ARCHIVE_RUN_KIND, run_id, CATALOG_OWNER, ledger, expected=row['version'])
     return report
+
+
+def nonterminal_analysis_jobs(repo, generation_id: str) -> list[dict]:
+    """Non-terminal analysis jobs of `generation_id`, or without a resolvable generation (_Owner.nonterminal_jobs items)."""
+    _require_generation(generation_id)
+    found = []
+    with repo.read_transaction() as tx:
+        for owner in _owners(tx, ('job',)):
+            found += [item for item in _Owner(tx, owner).nonterminal_jobs()
+                      if item['kind'] == 'analysis' and item['generation'] in (generation_id, None)]
+    return sorted(found, key=lambda item: (item['owner'], item['id']))
 
 
 def cancel_nonterminal_jobs(repo, generation_id: str, *, apply: bool) -> list[str]:

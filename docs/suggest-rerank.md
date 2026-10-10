@@ -40,7 +40,7 @@ A failed rerank never fails the suggestion. Unexpected errors are also logged as
 
 The pool contains every eligible disease identity (at most 50) plus the top 100 cosine factors, de-duplicated by native id.
 
-Disease identities are not excluded from cosine retrieval. As a result, a fallback reproduces today's disease-first, then cosine order. With the exact (legacy) index the output is identical. With Upstash the cosine top five come from a deeper approximate-nearest-neighbour candidate window (`max(32, 4 × 100)` per context), as recorded in each hit's retrieval provenance.
+Disease identities are not excluded from cosine retrieval. As a result, a fallback reproduces today's disease-first, then cosine order, except that the cosine top five come from a deeper approximate-nearest-neighbour candidate window (`max(32, 4 × 100)` per context), as recorded in each hit's retrieval provenance.
 
 In the Jev order, disease identities compete on their rating and are no longer pinned first.
 

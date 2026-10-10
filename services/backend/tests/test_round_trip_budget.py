@@ -205,7 +205,7 @@ class ReadinessBudget(unittest.TestCase):
     tick = readiness_monitor.ReadinessMonitorTests.tick
 
     def test_monitored_probe_reads_nothing_and_each_tick_is_one_single_read(self):
-        with count_round_trips() as budget: self.tick()   # every 5 s: database, reference_active and vector_active
+        with count_round_trips() as budget: self.tick()   # every 5 s: database and the published release id
         print('\nreadiness tick', budget)
         self.assertEqual((budget.kinds(), budget.unleased, budget.connects), (['single'], 0, 0), budget)
         self.assertLessEqual(budget.trips(), BUDGET['readiness_tick'], budget)

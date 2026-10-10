@@ -40,7 +40,7 @@ class HostedResearchJourneyTests(unittest.TestCase):
         for target, value in [('reveal_backend.acceptance.release_root', lambda: self.science.release),
                               ('reveal_backend.acceptance.LOCK', self.science.lock), ('reveal_backend.worker.LOCK', self.science.lock)]:
             patcher = patch(target, value); patcher.start(); self.addCleanup(patcher.stop)
-        for target in ('reveal_backend.worker.collect_reference_package', 'reveal_backend.worker.collect_package'):
+        for target in ('reveal_backend.worker.collect_reference_package',):
             patcher = patch(target, side_effect=AssertionError('Progressive startup cannot use an eager collector'))
             patcher.start(); self.addCleanup(patcher.stop)
         with self.repo.transaction() as tx:

@@ -1,5 +1,6 @@
 """/readyz is served from a background readiness monitor: a probe does no I/O, and readiness still fails closed."""
 import os
+import sqlite3
 from pathlib import Path
 import tempfile
 import threading
@@ -12,9 +13,8 @@ import pymysql
 from round_trips import count_round_trips
 from reveal_backend import app as api, readiness
 from reveal_backend.auth import Problem
-from reveal_backend.catalog import Catalog, GENERATION_TTL_SECONDS, READINESS_VERIFICATION_TTL_SECONDS
+from reveal_backend.catalog import Catalog, RELEASE_TTL_SECONDS, READINESS_VERIFICATION_TTL_SECONDS
 from reveal_backend.mysql_pool import DatabaseBusy
-from reveal_backend.reference_generation import KPN_MODEL, write_active
 from reveal_backend.repository import Repository, digest
 
 KPN1, KPN2 = digest('kpn-1'), digest('kpn-2')
@@ -28,8 +28,8 @@ class Sources:
         if self.gate: self.gate.wait(5)
         self.verified.append(binding)
         if self.failure: raise self.failure
-        return {'mapping_run': binding[0], 'snapshot': binding[2]}
-    def observe_pointers(self, generation, snapshot): self.observed.append((generation, snapshot))
+        return {'release_id': binding[0], 'embedding_model': binding[2]}
+    def observe_release(self, release_id): self.observed.append(release_id)
     def readiness(self): raise AssertionError('a monitored probe never checks sources itself')
 
 
@@ -37,8 +37,8 @@ class ReadinessMonitorTests(unittest.TestCase):
     def setUp(self):
         directory = tempfile.TemporaryDirectory(); self.addCleanup(directory.cleanup)
         self.repo = Repository(str(Path(directory.name) / 'records.sqlite')); self.repo.migrate()
-        self.activate(KPN1, 'snapshot-1')
-        environment = patch.dict(os.environ, {'REVEAL_RETRIEVAL_BACKEND': 'upstash', 'REVEAL_VECTOR_ENVIRONMENT': 'local'})
+        self.activate(KPN1)
+        environment = patch.dict(os.environ, {'REVEAL_VECTOR_ENVIRONMENT': 'local'})
         environment.start(); self.addCleanup(environment.stop)
         for name in ('REVEAL_REFERENCE_GENERATION_ID', 'REVEAL_ARTIFACT_STORE'): os.environ.pop(name, None)
         self.sources, self.now = Sources(), [1000.0]
@@ -48,10 +48,12 @@ class ReadinessMonitorTests(unittest.TestCase):
         context = patch.object(readiness, '_monitor', self.monitor); context.start(); self.addCleanup(context.stop)
         self.client = TestClient(api.app)
 
-    def activate(self, generation, snapshot, previous=None):
-        with self.repo.transaction() as tx:
-            write_active(tx, generation, KPN_MODEL, expected_previous=previous)
-            tx.put('vector_active', 'local', 'catalog', {'snapshot_id': snapshot})
+    def activate(self, release_id):
+        """Publish release_id as this environment's one reveal_ref_release row (None: no release)."""
+        with sqlite3.connect(self.repo.sqlite_path) as db:
+            db.execute('CREATE TABLE IF NOT EXISTS reveal_ref_release(release_id TEXT PRIMARY KEY, published_at TEXT, manifest TEXT)')
+            db.execute('DELETE FROM reveal_ref_release')
+            if release_id: db.execute('INSERT INTO reveal_ref_release VALUES (?,?,?)', (release_id, '2026-10-10T00:00:00Z', '{}'))
 
     def tick(self):
         self.monitor.tick()
@@ -65,11 +67,11 @@ class ReadinessMonitorTests(unittest.TestCase):
     def test_a_probe_reads_nothing_and_reports_the_monitors_last_check(self):
         with count_round_trips() as budget: self.tick()
         self.assertEqual((budget.kinds(), budget.statements()), (['single'], 1), budget)  # database and both pointers: one statement
-        self.assertEqual(self.sources.observed, [(KPN1, 'snapshot-1')])  # shared with the catalog's poller
+        self.assertEqual(self.sources.observed, [KPN1])  # shared with the catalog's poller
         with patch.object(Repository, 'single_read', side_effect=AssertionError('probe read')), \
              patch.object(Repository, 'read_transaction', side_effect=AssertionError('probe read')), count_round_trips() as budget:
             status, body = self.probe()
-        self.assertEqual((status, body['status'], body['database'], body['sources']), (200, 'ready', 'sqlite-test', {'mapping_run': KPN1, 'snapshot': 'snapshot-1'}))
+        self.assertEqual((status, body['status'], body['database'], body['sources']['release_id']), (200, 'ready', 'sqlite-test', KPN1))
         self.assertEqual((budget.leases, budget.unleased, budget.connects), ([], 0, 0))
         self.tick(); self.assertEqual(len(self.sources.verified), 1)  # sources re-verified only once a minute
         self.now[0] += READINESS_VERIFICATION_TTL_SECONDS; self.tick(); self.assertEqual(len(self.sources.verified), 2)
@@ -80,14 +82,14 @@ class ReadinessMonitorTests(unittest.TestCase):
 
     def test_an_unreachable_database_turns_readiness_false_at_the_next_tick(self):
         self.tick(); self.assertEqual(self.probe()[0], 200)
-        self.now[0] += GENERATION_TTL_SECONDS; self.busy_tick(OSError('connection refused'))
+        self.now[0] += RELEASE_TTL_SECONDS; self.busy_tick(OSError('connection refused'))
         status, body = self.probe()
         self.assertEqual((status, body['code']), (503, 'SERVICE_UNAVAILABLE'))
-        self.now[0] += GENERATION_TTL_SECONDS; self.tick()
+        self.now[0] += RELEASE_TTL_SECONDS; self.tick()
         self.assertEqual(self.probe()[0], 200)  # recovers on the next good read, with no new verification
         self.assertEqual(len(self.sources.verified), 1)
-        self.now[0] += GENERATION_TTL_SECONDS; self.busy_tick()
-        self.now[0] += GENERATION_TTL_SECONDS; self.busy_tick(pymysql.err.OperationalError(1045, 'Access denied'))
+        self.now[0] += RELEASE_TTL_SECONDS; self.busy_tick()
+        self.now[0] += RELEASE_TTL_SECONDS; self.busy_tick(pymysql.err.OperationalError(1045, 'Access denied'))
         self.assertEqual(self.probe()[0], 503)  # only busy ticks keep the last good read; an auth error does not
         self.monitor.current = None; self.busy_tick()
         self.assertEqual(self.probe()[1]['code'], 'SERVICE_UNAVAILABLE')  # busy with no good read to keep: not ready
@@ -95,24 +97,24 @@ class ReadinessMonitorTests(unittest.TestCase):
     def test_a_busy_pool_keeps_the_last_good_read_for_a_minute(self):
         self.tick(); started = self.now[0]
         with self.assertLogs(readiness.LOGGER, 'WARNING') as logs:
-            while self.now[0] + GENERATION_TTL_SECONDS - started < readiness.BUSY_MAX_AGE:
-                self.now[0] += GENERATION_TTL_SECONDS; self.busy_tick()
+            while self.now[0] + RELEASE_TTL_SECONDS - started < readiness.BUSY_MAX_AGE:
+                self.now[0] += RELEASE_TTL_SECONDS; self.busy_tick()
                 status, body = self.probe()
-                self.assertEqual((status, body['database'], body['sources']['snapshot']), (200, 'sqlite-test', 'snapshot-1'))
+                self.assertEqual((status, body['database'], body['sources']['release_id']), (200, 'sqlite-test', KPN1))
             self.now[0] = started + readiness.BUSY_MAX_AGE; self.busy_tick()
             status, body = self.probe()
             self.assertEqual((status, body['code']), (503, 'SERVICE_UNAVAILABLE'))  # a minute without a good read
         self.assertEqual([record.getMessage() for record in logs.records],
                          ['Readiness check deferred: the database is busy', 'Readiness check failed (DatabaseBusy)'])
-        self.now[0] += GENERATION_TTL_SECONDS; self.tick()
+        self.now[0] += RELEASE_TTL_SECONDS; self.tick()
         self.assertEqual(self.probe()[0], 200)
-        self.now[0] += GENERATION_TTL_SECONDS; self.busy_tick()
-        self.now[0] += GENERATION_TTL_SECONDS; self.busy_tick(OSError('connection refused'))
+        self.now[0] += RELEASE_TTL_SECONDS; self.busy_tick()
+        self.now[0] += RELEASE_TTL_SECONDS; self.busy_tick(OSError('connection refused'))
         self.assertEqual(self.probe()[0], 503)  # any other failure ends the grace at once
 
     def test_a_monitor_that_stops_ticking_while_busy_still_fails_after_the_pointer_age(self):
         self.tick(); started = self.now[0]
-        for _ in range(4): self.now[0] += GENERATION_TTL_SECONDS; self.busy_tick()
+        for _ in range(4): self.now[0] += RELEASE_TTL_SECONDS; self.busy_tick()
         last = self.now[0]   # then the monitor hangs: no more ticks
         self.now[0] = last + readiness.POINTER_MAX_AGE
         self.assertEqual(self.probe()[0], 200)
@@ -138,13 +140,13 @@ class ReadinessMonitorTests(unittest.TestCase):
             for _ in range(2):
                 status, body = self.probe()
                 self.assertEqual((status, body['code'], body['detail']), (503, 'SEMANTIC_SEARCH_UNAVAILABLE', 'Vector provider unavailable'))
-            self.now[0] += GENERATION_TTL_SECONDS; self.tick()
+            self.now[0] += RELEASE_TTL_SECONDS; self.tick()
             self.assertEqual((len(self.sources.verified), self.probe()[1]['code']), (2, 'SEMANTIC_SEARCH_UNAVAILABLE'))
         self.assertEqual(len(logs.records), 1)  # an ongoing failure is logged once
         self.sources.failure = None
-        self.now[0] += GENERATION_TTL_SECONDS; self.tick()
+        self.now[0] += RELEASE_TTL_SECONDS; self.tick()
         self.assertEqual((self.probe()[0], len(self.sources.verified)), (200, 3))
-        self.now[0] += GENERATION_TTL_SECONDS; self.tick()
+        self.now[0] += RELEASE_TTL_SECONDS; self.tick()
         self.assertEqual(len(self.sources.verified), 3)  # a pass holds for the verification TTL again
 
     def test_a_busy_reference_pool_during_verification_keeps_the_verified_sources(self):
@@ -154,16 +156,16 @@ class ReadinessMonitorTests(unittest.TestCase):
         with self.assertLogs(readiness.LOGGER, 'WARNING') as logs:
             self.tick()
             status, body = self.probe()
-            self.assertEqual((status, body['sources']['snapshot']), (200, 'snapshot-1'))
-            self.now[0] += GENERATION_TTL_SECONDS; self.tick()  # retried at the next tick
+            self.assertEqual((status, body['sources']['release_id']), (200, KPN1))
+            self.now[0] += RELEASE_TTL_SECONDS; self.tick()  # retried at the next tick
             self.assertEqual((self.probe()[0], len(self.sources.verified)), (200, 3))
             while self.now[0] - verified <= readiness.VERIFY_MAX_AGE:
-                self.now[0] += GENERATION_TTL_SECONDS; self.tick()
+                self.now[0] += RELEASE_TTL_SECONDS; self.tick()
             status, body = self.probe()
             self.assertEqual((status, body['code'], body['detail']), (503, 'SOURCE_NOT_READY', 'Source verification is overdue.'))
         self.assertEqual([record.getMessage() for record in logs.records], ['Source verification deferred: the database is busy'])
         self.sources.failure = None
-        self.now[0] += GENERATION_TTL_SECONDS; self.tick()
+        self.now[0] += RELEASE_TTL_SECONDS; self.tick()
         self.assertEqual(self.probe()[0], 200)
         self.now[0] += READINESS_VERIFICATION_TTL_SECONDS
         self.sources.failure = Problem(503, 'SEMANTIC_SEARCH_UNAVAILABLE', 'Vector provider unavailable'); self.tick()
@@ -173,22 +175,22 @@ class ReadinessMonitorTests(unittest.TestCase):
         self.sources.failure = DatabaseBusy('Reference read capacity is busy'); self.tick()
         self.assertEqual(self.probe()[1]['code'], 'SERVICE_UNAVAILABLE')
         self.sources.failure = None
-        self.now[0] += GENERATION_TTL_SECONDS; self.tick()
+        self.now[0] += RELEASE_TTL_SECONDS; self.tick()
         self.assertEqual((self.probe()[0], len(self.sources.verified)), (200, 2))
 
-    def test_a_cutover_is_verified_and_a_missing_snapshot_pointer_fails_closed(self):
+    def test_a_publish_is_verified_and_a_missing_release_fails_closed(self):
         self.tick()
-        self.activate(KPN2, 'snapshot-2', previous=KPN1); self.sources.gate = threading.Event()
-        self.now[0] += GENERATION_TTL_SECONDS; self.monitor.tick()  # verification of the new pointers is in flight
+        self.activate(KPN2); self.sources.gate = threading.Event()
+        self.now[0] += RELEASE_TTL_SECONDS; self.monitor.tick()  # verification of the new release is in flight
         status, body = self.probe()
-        self.assertEqual((status, body['sources']['mapping_run']), (200, KPN1))  # the last verified sources, briefly
+        self.assertEqual((status, body['sources']['release_id']), (200, KPN1))  # the last verified sources, briefly
         self.now[0] += readiness.NEW_BINDING_GRACE + 1; self.monitor.current = (self.now[0],) + self.monitor.current[1:]
         self.assertEqual(self.probe()[1]['code'], 'SOURCE_NOT_READY')
         self.sources.gate.set(); self.tick()
-        self.assertEqual(self.probe()[1]['sources'], {'mapping_run': KPN2, 'snapshot': 'snapshot-2'})
-        with self.repo.transaction() as tx: tx.remove('vector_active', 'local')
+        self.assertEqual(self.probe()[1]['sources']['release_id'], KPN2)
+        self.activate(None)
         self.monitor.tick()
-        self.assertEqual(self.probe()[1]['code'], 'SEMANTIC_SEARCH_UNAVAILABLE')
+        self.assertEqual(self.probe()[1]['code'], 'SOURCE_NOT_READY')
 
     def test_readiness_still_checks_api_key_configuration_first(self):
         self.tick()
@@ -204,7 +206,7 @@ class LifespanTests(unittest.TestCase):
             def start_warmup(self): Lazy.warmed += 1
         sources = Lazy()
         with tempfile.TemporaryDirectory() as directory, \
-                patch.dict(os.environ, {'REVEAL_CATALOG_WARMUP': '1', 'REVEAL_READINESS_MONITOR': '1', 'REVEAL_RETRIEVAL_BACKEND': 'legacy'}), \
+                patch.dict(os.environ, {'REVEAL_CATALOG_WARMUP': '1', 'REVEAL_READINESS_MONITOR': '1'}), \
                 patch.object(api, 'catalog', sources), patch.object(api, 'repo', Repository(str(Path(directory) / 'r.sqlite'))):
             api.repo.migrate()
             with TestClient(api.app):

@@ -139,6 +139,15 @@ def generation_of_anchors(anchors) -> str | None:
     return next(iter(generations), None)
 
 
+def shared_release(anchors) -> str | None:
+    """The one release id (stored as reference_generation_id) that every anchor binding was saved under, or None.
+
+    Under the reference release a draft may keep anchors saved under different releases, so unlike
+    generation_of_anchors this never raises; a mixed or empty draft pins no release."""
+    releases = {(anchor or {}).get('reference_generation_id') for anchor in anchors or []}
+    return next(iter(releases)) if len(releases) == 1 else None
+
+
 # --------------------------------------------------------------------------------------
 # Archive stamp
 

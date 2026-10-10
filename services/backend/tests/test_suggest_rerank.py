@@ -338,7 +338,9 @@ class BuildSuggestionsTests(unittest.TestCase):
                  'no_open_slots': BODY | {'manual_eaggl_anchors': [dict(anchor, source_id=native(30 + i)) for i in range(5)]}}
         for reason, body in cases.items():
             with self.subTest(reason=reason):
-                jev = Jev(RATINGS); result, audit = self.build(Catalog(COSINE, DISEASE), ON, body=body, jev=jev)
+                catalog = Catalog(COSINE, DISEASE)  # manual anchors must be factors the catalog serves
+                catalog.factors.update({native(30 + i): record(30 + i, f'manual {i}') for i in range(5)})
+                jev = Jev(RATINGS); result, audit = self.build(catalog, ON, body=body, jev=jev)
                 self.assertEqual(result['rerank'], {'status': 'not_applicable', 'reason': reason})
                 self.assertEqual((audit['rerank'], jev.bodies), (result['rerank'], []))
 

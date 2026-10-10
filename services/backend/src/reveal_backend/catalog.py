@@ -1,56 +1,52 @@
-"""Version-pinned Aurora source adapters shared by the API and collector.
+"""Aurora source adapters shared by the API and collector.
 
-Served EAGGL factors come from one reference generation (docs/reference-reload.md §8). The
-prefix's `reference_active` record, or REVEAL_REFERENCE_GENERATION_ID, names it. load() reads it
-once, on the cold load, together with the active Vector snapshot (`vector_active`) in one
-statement; a loaded catalog does no I/O in load(), as before reference reloads, and serves that
-pinned snapshot's semantic index. A background poller (Catalog(poll_seconds=...), which the API
-enables) re-checks both pointers every GENERATION_TTL_SECONDS off the request path (reusing the
-readiness monitor's reads when it runs), and a change reloads the catalog. Without an active
-record the catalog runs in legacy mode, exactly as before reference reloads: the CFDE-linked
-factors of the one selected mapping run (cfde-inc-v2).
+Served EAGGL factors are this environment's flat reference tables (`reveal_ref_*`, named per
+application prefix by repository.application_sql): the published `reveal_ref_release` row and the
+factors of `reveal_ref_factors` joined to `reveal_ref_traits`. An anchor is current iff its factor
+id is served by that factor table; there are no generations, snapshots or pointers. Vectors live in
+this environment's fixed Upstash namespaces (vector_retrieval). DisMech gaps and mechanisms load
+from the dismech_* source tables.
+
+load() reads the release once, on the cold load; a loaded catalog does no I/O in load(). A
+background poller (Catalog(poll_seconds=...), which the API enables) re-reads the release id every
+RELEASE_TTL_SECONDS off the request path (reusing the readiness monitor's read when it runs), and a
+change reloads and swaps the catalog. The API also warms the catalog at startup (start_warmup).
 """
 from collections import defaultdict
-from concurrent.futures import Future, TimeoutError as FutureTimeout
-from copy import copy, deepcopy
+from copy import deepcopy
 from datetime import timezone
 from difflib import SequenceMatcher
 import json
 import logging
 import os
-from pathlib import Path
 import threading
 from time import monotonic
 from .auth import Problem
-from .repository import Repository, canonical, digest, now
-from .runtime_config import ROOT, CURRENT_DAPPER_SNAPSHOT, setting, mysql_connection, reference_mysql_connection
+from .repository import Repository, application_prefix, application_sql, now
+from .runtime_config import CURRENT_DAPPER_SNAPSHOT, setting, mysql_connection, reference_mysql_connection
 from .evidence_package import DapperRuntime, canonical_json, sha256
-from .eaggl_embeddings import database_search_index
 from .fuzzy import FuzzyWords
 from .embedding_client import get_embeddings
-from .dismech_embeddings import context_input, load_context_vectors
+from .dismech_embeddings import TEMPLATES, context_input
 from .mapping_identity import POLICY_VERSION, interpreted_mappings, normalize_disease_id
-from .vector_retrieval import UpstashFactorIndex, VectorUnavailable, check_snapshot_readiness, retrieve_native, query_vector_provenance
-from .vector_ingestion import VectorRegistry
-from .reference_generation import (ACTIVE_ID, ACTIVE_KIND, GENERATION_RE, KPN_KIND, KPN_MODEL, LEGACY_KIND, LEGACY_MODEL, ReferenceError as ReferenceInvariant,
-    archive_id as reference_archive_id, generation_of_binding, get_generation, legacy_generation_id, mechanism_node, model_of_source_id, parse_factor_key,
-    public_id, read_active)
+from .vector_retrieval import (UpstashFactorIndex, VectorUnavailable, embedding_config, embedding_space, retrieve_native,
+    query_vector_provenance)
+from .reference_generation import (GENERATION_RE, KPN_MODEL, ReferenceError as ReferenceInvariant,
+    mechanism_node, parse_factor_key, public_id)
 import numpy as np
 
 LOGGER = logging.getLogger(__name__)
-GENERATION_TTL_SECONDS = 5.0
+RELEASE_TTL_SECONDS = 5.0
 READINESS_VERIFICATION_TTL_SECONDS = 60.0
-VECTOR_BUILD_WAIT_SECONDS = 60.0  # a request waiting on another request's cold semantic index build
-# Prefixes cut over one at a time while reference_generations.status is shared by every prefix
-# of the scientific database, so a generation another prefix superseded stays servable.
-SERVED_STATUSES = ('complete', 'superseded')
-SERVED_KINDS = {LEGACY_KIND: LEGACY_MODEL, KPN_KIND: KPN_MODEL}
-KPN_FACTOR_COLUMNS = ('factor_key', 'label', 'public_id', 'eaggl_factor_id', 'kpn_trait_id', 'factor_number', 'eaggl_import_id',
-                      'source_revision', 'metadata', 'phenotype_name', 'legacy_phenotype_id', 'trait_group', 'trait_type')
-# Trait metadata (about 6.6 MB of the KPN cold load when joined onto each of 4,037 factors) is read once per trait.
-KPN_FACTORS = ('SELECT ' + ','.join('f.' + column for column in KPN_FACTOR_COLUMNS[:9]) + ',' + ','.join('t.' + column for column in KPN_FACTOR_COLUMNS[9:])
-               + ' FROM reference_factors f JOIN kpn_traits t ON t.generation_id=f.generation_id AND t.kpn_trait_id=f.kpn_trait_id'
-               ' WHERE f.generation_id=%s ORDER BY f.kpn_trait_id,f.factor_number')
+RELEASE_SQL = 'SELECT release_id,published_at,manifest FROM reveal_ref_release'
+RELEASE_ID_SQL = 'SELECT release_id FROM reveal_ref_release'
+FACTOR_COLUMNS = ('factor_key', 'label', 'public_id', 'eaggl_factor_id', 'kpn_trait_id', 'factor_number', 'source_revision', 'metadata',
+                  'phenotype_name', 'legacy_phenotype_id', 'trait_group', 'trait_type')
+FACTORS_SQL = ('SELECT ' + ','.join('f.' + column for column in FACTOR_COLUMNS[:8]) + ',' + ','.join('t.' + column for column in FACTOR_COLUMNS[8:])
+               + ' FROM reveal_ref_factors f JOIN reveal_ref_traits t ON t.kpn_trait_id=f.kpn_trait_id ORDER BY f.kpn_trait_id,f.factor_number')
+# Trait metadata (its ontology mappings feed disease-identity suggestions) is read once per trait, not joined onto every factor.
+TRAITS_SQL = 'SELECT kpn_trait_id,metadata FROM reveal_ref_traits'
+
 
 def check_vector_readiness(index):
     try:
@@ -59,54 +55,57 @@ def check_vector_readiness(index):
         raise Problem(503, 'SEMANTIC_SEARCH_UNAVAILABLE', str(error)) from error
 
 
-def vector_backend():
-    backend = setting('REVEAL_RETRIEVAL_BACKEND', 'upstash')
-    if backend not in ('upstash', 'legacy'): raise ValueError('Invalid retrieval backend')
-    return backend == 'upstash'
-
-
-def active_pointers(repo=None, vector=False, *, inspect=None):
-    """(active reference generation or None for legacy mode, active Vector snapshot id or None).
-
-    REVEAL_REFERENCE_GENERATION_ID pins the generation. Otherwise both pointers come from one statement:
-    reference_reload flips them in one transaction, so a reader never sees a cutover half done. inspect(tx)
-    runs inside that read (the readiness monitor's database check), which then happens even when pinned."""
-    pinned = setting('REVEAL_REFERENCE_GENERATION_ID')
-    if pinned and not GENERATION_RE.fullmatch(pinned):
-        raise Problem(503, 'SOURCE_NOT_READY', 'REVEAL_REFERENCE_GENERATION_ID is not a reference generation id.')
-    repo = repo or Repository()
-    registry = VectorRegistry(repo) if vector else None
-    if pinned and inspect is None: return pinned, registry.active_identity(required=False) if registry else None
-    with repo.single_read() as tx:
-        tx.get_records([(ACTIVE_KIND, ACTIVE_ID)] + ([('vector_active', registry.scope)] if registry else []))  # the reads below reuse it
-        active = read_active(tx)
-        if inspect: inspect(tx)
-        return pinned or (active['generation_id'] if active else None), registry.active_identity_in(tx) if registry else None
-
-
-def readiness_binding(generation_id, snapshot_id):
-    """What readiness verifies: the active pointers plus the deployment's source pins."""
-    backend = setting('REVEAL_RETRIEVAL_BACKEND', 'upstash')
-    if backend == 'upstash' and not snapshot_id:
-        raise Problem(503, 'SEMANTIC_SEARCH_UNAVAILABLE', 'No verified active Vector snapshot in this environment')
-    return (generation_id, backend, snapshot_id, *(setting(key) for key in
-        ('REVEAL_DISMECH_IMPORT_ID', 'REVEAL_MAPPING_RUN_ID', 'REVEAL_EMBEDDING_RUN_ID')))
-
-
 def missing_table(error):
-    """MySQL 1146: migration 008 is not applied yet, so no generation or archived factor exists."""
+    """MySQL 1146: the table does not exist (yet) in this database."""
     args = getattr(error, 'args', ())
     return bool(args) and args[0] == 1146
 
 
-def factor_key_index(index, rows):
-    """The exact (REVEAL_RETRIEVAL_BACKEND=legacy) index re-keyed from EAGGL factor ids to generation factor keys."""
-    keys = {row['eaggl_factor_id']: row['factor_key'] for row in rows}
-    if not set(keys) <= set(index.by_id): raise Problem(503, 'SOURCE_NOT_READY', 'The EAGGL embedding run does not cover every reference factor.')
-    index = copy(index)
-    index.factors = [dict(row, factor_id=keys.get(row['factor_id'], row['factor_id'])) for row in index.factors]
-    index.by_id = {row['factor_id']: position for position, row in enumerate(index.factors)}
-    return index
+def reference_sql(sql):
+    """A reveal_ref_* statement for this environment's application prefix."""
+    return application_sql(sql, application_prefix())
+
+
+def utc_text(value):
+    if hasattr(value, 'isoformat'):  # MySQL sessions run in UTC.
+        return (value if value.tzinfo else value.replace(tzinfo=timezone.utc)).astimezone(timezone.utc).isoformat().replace('+00:00', 'Z')
+    return value
+
+
+def read_release(cursor):
+    """The published reveal_ref_release row; a missing table or row is 503 SOURCE_NOT_READY."""
+    try:
+        cursor.execute(reference_sql(RELEASE_SQL))
+        rows = cursor.fetchall()
+    except Exception as error:
+        if not missing_table(error): raise
+        rows = []
+    if len(rows) != 1: raise Problem(503, 'SOURCE_NOT_READY', 'No reference release is published for this environment.')
+    identity, published, manifest = rows[0]
+    if isinstance(manifest, (str, bytes)): manifest = json.loads(manifest)
+    if not isinstance(identity, str) or not GENERATION_RE.fullmatch(identity) or not isinstance(manifest, dict):
+        raise Problem(503, 'SOURCE_NOT_READY', 'The published reference release is malformed.')
+    return {'release_id': identity, 'published_at': utc_text(published), 'manifest': manifest}
+
+
+def current_release_id(repo=None, *, inspect=None):
+    """The published release id, or None without a release row (or table), in one statement of the application pool.
+
+    inspect(tx) runs inside that read: the readiness monitor's database check, so a monitor tick is one read."""
+    with (repo or Repository()).single_read() as tx:
+        try: rows = tx.execute(RELEASE_ID_SQL).fetchall()
+        except Exception as error:
+            if not missing_table(error): raise
+            rows = []
+        if inspect: inspect(tx)
+    if len(rows) > 1: raise ValueError('More than one reference release row is published')
+    return rows[0][0] if rows else None
+
+
+def readiness_binding(release_id):
+    """What readiness verifies: the published release plus the deployment's source pins (DisMech import, query embedding model)."""
+    if not release_id: raise Problem(503, 'SOURCE_NOT_READY', 'No reference release is published for this environment.')
+    return (release_id, setting('REVEAL_DISMECH_IMPORT_ID'), embedding_config()['model'])
 
 
 def gap_search_text(gap):
@@ -125,16 +124,14 @@ def archived_factor(row):
     """An archived_reference_factors row as ArchivedReferenceFactor: the frozen snapshot plus its ids."""
     identity, generation, source, snapshot, captured = row
     snapshot = json.loads(snapshot) if isinstance(snapshot, (str, bytes)) else dict(snapshot)
-    if hasattr(captured, 'isoformat'):  # MySQL sessions run in UTC.
-        captured = (captured if captured.tzinfo else captured.replace(tzinfo=timezone.utc)).astimezone(timezone.utc).isoformat().replace('+00:00', 'Z')
-    return {**snapshot, 'archive_id': identity, 'generation_id': generation, 'source_id': source, 'captured_at': captured}
+    return {**snapshot, 'archive_id': identity, 'generation_id': generation, 'source_id': source, 'captured_at': utc_text(captured)}
 
 
 class Catalog:
     # Process-wide state that a reload (load() or refresh_if_changed()) keeps when it swaps in a freshly loaded catalog.
-    PROCESS_STATE = frozenset({'lock', 'dismech_catalog_lock', 'vector_lock', 'refresh_lock', 'lookup_lock', 'repo', 'generation_cache', 'archive_cache',
-                               'archive_unavailable_at', 'poll_seconds', 'poller', 'poller_lock', 'poller_stop', 'poller_wake', 'readiness_lock',
-                               'readiness_cache', 'observed_pointers', 'warmed', 'warmup'})
+    PROCESS_STATE = frozenset({'lock', 'dismech_catalog_lock', 'refresh_lock', 'lookup_lock', 'repo', 'archive_cache',
+                               'archive_unavailable_at', 'poll_seconds', 'poller', 'poller_lock', 'poller_stop', 'poller_wake',
+                               'readiness_lock', 'readiness_cache', 'observed_release', 'warmed', 'warmup'})
     def __init__(self, repo=None, *, poll_seconds=None):
         self.loaded = False
         self.lock = threading.Lock()
@@ -142,36 +139,36 @@ class Catalog:
         self.readiness_cache = None
         self.dismech_catalog_lock=threading.Lock()
         self.complete_dismech_catalog=None
-        self.vector_lock = threading.Lock()
-        # Loaded state (not PROCESS_STATE): adopt() swaps them with the generation, so a request after a reload
-        # never joins or publishes an index built for the previous one.
-        self.vector_indexes, self.vector_builds, self.vector_snapshot_id = {}, {}, None
-        # Reference generation: resolved by load(); None = legacy mode.
         self.repo = repo
         self.refresh_lock, self.lookup_lock = threading.Lock(), threading.Lock()
-        self.generation_checked_at = None
-        self.active_generation = self.reference_generation_id = self.model = self.generation_record = None
+        self.release_checked_at = None
+        # The served reference release, resolved by load(), and the run id of its embedding space (embedding_space).
+        self.release = self.release_id = self.reference_generation_id = self.geneset_import = self.eaggl_import = None
+        self.embedding_run = self.mapping_run = None
+        self.model = KPN_MODEL
+        # The release's semantic index: built with the release by _load, so a loaded catalog serves semantic requests with no I/O.
+        self.index = None
         self.gap_fuzzy = None  # FuzzyWords over the served gaps' search texts, built with them by _load
         # archive_cache: {archive_id: (checked_at, snapshot|None)}; archive_unavailable_at: when the table was last found missing or empty.
-        self.generation_cache, self.archive_cache, self.archive_unavailable_at = {}, {}, None
-        # None: no poller (tests, tools); the API polls reference_active every GENERATION_TTL_SECONDS.
+        self.archive_cache, self.archive_unavailable_at = {}, None
+        # None: no poller (tests, tools); the API polls the release id every RELEASE_TTL_SECONDS.
         self.poll_seconds, self.poller, self.poller_lock, self.poller_stop = poll_seconds, None, threading.Lock(), threading.Event()
-        # (read at, retrieval backend, generation, snapshot): the readiness monitor's latest pointer read.
-        self.poller_wake, self.observed_pointers = threading.Event(), None
+        # (read at, release id): the readiness monitor's latest release read, which the poller reuses.
+        self.poller_wake, self.observed_release = threading.Event(), None
         self.warmed, self.warmup = threading.Event(), None  # set once a startup warmup loaded everything
     def readiness(self):
-        """Verify serving pins and coverage without materializing research corpora (the synchronous path, when no
-        readiness monitor runs).
+        """Verify the published release and source pins without materializing research corpora (the synchronous path,
+        when no readiness monitor runs).
 
         This is separate from the catalog lock: health checks must not wait for
         an unrelated browse/suggestion request to construct all DAPPER objects.
         """
         with self.readiness_lock:
-            if self.readiness_cache and monotonic() - self.readiness_cache[0] < GENERATION_TTL_SECONDS:
+            if self.readiness_cache and monotonic() - self.readiness_cache[0] < RELEASE_TTL_SECONDS:
                 return dict(self.readiness_cache[1])
-            binding = readiness_binding(*active_pointers(self.repo, vector_backend()))
-            # Recheck small active pointers frequently; independently verify
-            # provider health/coverage at least once a minute, even with no cutover.
+            binding = readiness_binding(current_release_id(self.repo))
+            # Recheck the small release id frequently; independently verify
+            # provider health/coverage at least once a minute, even with no publish.
             if (self.readiness_cache and self.readiness_cache[2] == binding
                     and monotonic() - self.readiness_cache[3] < READINESS_VERIFICATION_TTL_SECONDS):
                 self.readiness_cache = (monotonic(), self.readiness_cache[1], binding, self.readiness_cache[3])
@@ -180,78 +177,50 @@ class Catalog:
             self.readiness_cache = (monotonic(), result, binding, monotonic())
             return dict(result)
     def verify_binding(self, binding):
-        """Check one readiness_binding against the reference tables, the verified snapshot and the Vector provider.
-        The pooled reference read ends before the snapshot read, so no lease nests in another."""
-        generation_id, backend, snapshot_id = binding[:3]
+        """Check one readiness_binding without loading the catalog: on one pooled reference session, the published release,
+        its factor count, the selected DisMech import and its gap count; then, with that session closed, the Vector provider
+        in the release's embedding dimensions (one info call). Reports the release it found: a publish since the binding's
+        read is verified here and re-bound by the next release read."""
         try:
             connection = reference_mysql_connection()
             try:
-                generation = self.select_generation(connection, generation_id) if generation_id else None
-                kpn = bool(generation) and generation['kind'] == KPN_KIND
                 with connection.cursor() as cursor:
+                    release = read_release(cursor)
+                    try:
+                        cursor.execute(reference_sql('SELECT COUNT(*) FROM reveal_ref_factors'))
+                        factors = cursor.fetchone()[0]
+                    except Exception as error:
+                        if not missing_table(error): raise
+                        factors = 0
+                    if not factors: raise Problem(503, 'SOURCE_NOT_READY', 'The reference release has no factors.')
                     cursor.execute("SELECT import_id FROM dismech_imports WHERE status='complete'")
-                    imports = [row[0] for row in cursor.fetchall() if not setting('REVEAL_DISMECH_IMPORT_ID')
-                        or row[0] == setting('REVEAL_DISMECH_IMPORT_ID')]
-                    if generation and generation['dismech_import_id']:
-                        imports = [identity for identity in imports if identity == generation['dismech_import_id']]
+                    requested = setting('REVEAL_DISMECH_IMPORT_ID')
+                    imports = [row[0] for row in cursor.fetchall() if not requested or row[0] == requested]
                     if len(imports) != 1: raise Problem(503, 'SOURCE_NOT_READY', 'Select one completed DisMech import.')
                     dismech = imports[0]
-                    if kpn:
-                        mapping, eaggl, embedding = generation_id, generation['eaggl_import_id'], generation['eaggl_embedding_run_id']
-                        cursor.execute('SELECT COUNT(*) FROM reference_factors WHERE generation_id=%s', (generation_id,))
-                    else:
-                        cursor.execute("SELECT run_id,eaggl_import_id FROM eaggl_cfde_link_runs WHERE status='complete'")
-                        mappings = [row for row in cursor.fetchall() if not setting('REVEAL_MAPPING_RUN_ID')
-                            or row[0] == setting('REVEAL_MAPPING_RUN_ID')]
-                        if generation: mappings = [row for row in mappings if row[0] == generation['legacy_mapping_run_id']]
-                        if len(mappings) != 1: raise Problem(503, 'SOURCE_NOT_READY', 'Select one completed EAGGL mapping run.')
-                        mapping, eaggl = mappings[0]
-                        embedding = generation['eaggl_embedding_run_id'] if generation else None
-                        cursor.execute('SELECT COUNT(*) FROM eaggl_cfde_factor_links WHERE run_id=%s', (mapping,))
-                    factors = cursor.fetchone()[0]
-                    if not factors: raise Problem(503, 'SOURCE_NOT_READY', 'The selected reference has no factors.')
-                    cursor.execute("SELECT run_id FROM eaggl_embedding_runs WHERE import_id=%s AND status='complete'", (eaggl,))
-                    embeddings = [row[0] for row in cursor.fetchall() if (not embedding or row[0] == embedding)
-                        and (kpn or not setting('REVEAL_EMBEDDING_RUN_ID') or row[0] == setting('REVEAL_EMBEDDING_RUN_ID'))]
-                    if len(embeddings) != 1: raise Problem(503, 'SOURCE_NOT_READY', 'Select one completed embedding run.')
-                    embedding = embeddings[0]
                     cursor.execute('SELECT COUNT(*) FROM dismech_discussions WHERE import_id=%s AND is_gap=1', (dismech,))
                     gaps = cursor.fetchone()[0]
             finally: connection.close()
-            if backend == 'upstash':
-                snapshot = VectorRegistry(self.repo).serving(snapshot_id, summary=True)
-                pinned = (snapshot.get('reference_generation_id') == generation_id if kpn else snapshot['mapping_run'] == mapping)
-                if (not pinned or snapshot['run']['run_id'] != embedding or snapshot['run']['config']['import_id'] != eaggl
-                        or snapshot['dismech_import'] != dismech or snapshot['_serving_counts'].get('factors') != factors):
-                    raise VectorUnavailable('Active Vector snapshot differs from selected source runs')
-                check_snapshot_readiness(snapshot)
-            else:
-                # The optional local-vector backend has no verified serving
-                # manifest, so preserve its full compatibility checks.
-                self.load()
+            embedding = release['manifest'].get('embedding') or {}
+            UpstashFactorIndex((), dimensions=embedding.get('dimensions'), release_id=release['release_id']).check()
         except VectorUnavailable as error:
             raise Problem(503, 'SEMANTIC_SEARCH_UNAVAILABLE', str(error)) from error
-        return {'dismech_import': dismech, 'gaps': gaps, 'mapping_run': mapping,
-            'mapped_factors': factors, 'embedding_run': embedding}
+        space = embedding_space(embedding)
+        return {'dismech_import': dismech, 'gaps': gaps, 'release_id': release['release_id'], 'mapping_run': space,
+            'mapped_factors': factors, 'embedding_run': space}
     def load(self):
-        """Serve the loaded generation without I/O; a cold load (or one after a failed reload) reads the active generation.
+        """Serve the loaded release without I/O; a cold load (or one after a failed reload) reads the published release.
 
         Callers may hold a pooled write transaction, so a loaded catalog never touches the database
-        here: generation changes are picked up by the background poller (refresh_if_changed).
+        here: release changes are picked up by the background poller (refresh_if_changed).
         """
         with self.lock:
             if self.loaded: return
-            try: generation, snapshot = active_pointers(self.repo, vector_backend())
-            except Problem: raise
-            except VectorUnavailable as error: raise Problem(503, 'SEMANTIC_SEARCH_UNAVAILABLE', str(error)) from error
-            except Exception as error:
-                raise Problem(503, 'SOURCE_NOT_READY', 'The active reference generation is unavailable.') from error
             checked = monotonic()
-            # Always load beside the current state: a failed reload leaves the previous generation's
-            # state (e.g. its DisMech context run) behind, and a failed load must leave nothing half-set.
+            # Always load beside the current state: a failed load must leave nothing half-set.
             fresh = self.fresh()
-            fresh._load(generation, snapshot)
-            fresh.generation_checked_at = checked
+            fresh._load()
+            fresh.release_checked_at = checked
             self.adopt(fresh)
         self.start_poller()
     def warm(self):
@@ -276,54 +245,52 @@ class Catalog:
         return fresh
     def adopt(self, fresh):
         """Replace the serving state with a loaded catalog's (caller holds self.lock)."""
-        with self.vector_lock:
-            self.__dict__.update({key: value for key, value in fresh.__dict__.items() if key not in self.PROCESS_STATE})
-    def observe_pointers(self, generation, snapshot, at=None):
-        """Share a pointer read (the readiness monitor's) with the poller, which then needs no read of its own."""
-        self.observed_pointers = (monotonic() if at is None else at, setting('REVEAL_RETRIEVAL_BACKEND', 'upstash'), generation, snapshot)
+        self.__dict__.update({key: value for key, value in fresh.__dict__.items() if key not in self.PROCESS_STATE})
+    def observe_release(self, release_id, at=None):
+        """Share a release read (the readiness monitor's) with the poller, which then needs no read of its own."""
+        self.observed_release = (monotonic() if at is None else at, release_id)
         self.poller_wake.set()
     def refresh_if_changed(self):
-        """Reload when the active reference generation or Vector snapshot changed; checked at most every TTL.
+        """Reload when the published release id changed; checked at most every TTL.
 
         Runs on the poller thread, never on the request path. A newer readiness-monitor observation replaces
-        the read; without one for two TTLs the poller reads itself. The new generation loads beside the
+        the read; without one for two TTLs the poller reads itself. The new release loads beside the
         serving state, which keeps serving meanwhile, and replaces it at once. A failed check keeps
         serving; a failed reload fails closed (loaded=False, so the next load() retries and raises
-        until the generation loads).
+        until the release loads).
         """
-        checked = self.generation_checked_at
+        checked = self.release_checked_at
         if not self.loaded or checked is None: return False
         if not self.refresh_lock.acquire(blocking=False): return False
         try:
-            checked = self.generation_checked_at
-            observed = self.observed_pointers; now_ = monotonic()
-            if observed and observed[1] != setting('REVEAL_RETRIEVAL_BACKEND', 'upstash'): observed = None
+            checked = self.release_checked_at
+            observed = self.observed_release; now_ = monotonic()
             if not self.loaded: return False
-            if observed and observed[0] > checked and now_ - observed[0] <= GENERATION_TTL_SECONDS:
-                self.generation_checked_at = observed[0]; generation, snapshot = observed[2:]
+            if observed and observed[0] > checked and now_ - observed[0] <= RELEASE_TTL_SECONDS:
+                self.release_checked_at = observed[0]; release = observed[1]
             else:
-                if now_ - checked < GENERATION_TTL_SECONDS * (2 if observed and now_ - observed[0] < 2 * GENERATION_TTL_SECONDS else 1):
+                if now_ - checked < RELEASE_TTL_SECONDS * (2 if observed and now_ - observed[0] < 2 * RELEASE_TTL_SECONDS else 1):
                     return False
-                self.generation_checked_at = now_
-                try: generation, snapshot = active_pointers(self.repo, vector_backend())
+                self.release_checked_at = now_
+                try: release = current_release_id(self.repo)
                 except Exception:
-                    LOGGER.warning('Reference generation check failed; serving the loaded generation', exc_info=True)
+                    LOGGER.warning('Reference release check failed; serving the loaded release', exc_info=True)
                     return False
-                finally: self.generation_checked_at = monotonic()  # A slow check never re-triggers at once.
-            if generation == self.active_generation and snapshot == self.vector_snapshot_id: return False
+                finally: self.release_checked_at = monotonic()  # A slow check never re-triggers at once.
+            if release == self.release_id: return False
             fresh = self.fresh()
-            try: fresh._load(generation, snapshot)
+            try: fresh._load()
             except BaseException:
                 with self.lock: self.loaded = False
                 raise
-            fresh.generation_checked_at = self.generation_checked_at
+            fresh.release_checked_at = self.release_checked_at
             with self.lock: self.adopt(fresh)
-            LOGGER.info('Reference generation %s or Vector snapshot changed; catalog reloaded', generation or 'legacy')
+            LOGGER.info('Reference release changed to %s; catalog reloaded', self.release_id)
             return True
         finally: self.refresh_lock.release()
     def start_poller(self):
-        """Start (once per process) the thread that re-checks the active pointers every poll_seconds, or as
-        soon as the readiness monitor shares a read.
+        """Start (once per process) the thread that re-checks the release id every poll_seconds, or as soon as
+        the readiness monitor shares a read.
 
         It holds no request's lease or lock, so its pooled read may wait without stalling writers
         or the event loop. A failed reload is logged; the next load() then reloads inline, fail-closed.
@@ -336,63 +303,59 @@ class Catalog:
                     self.poller_wake.wait(self.poll_seconds); self.poller_wake.clear()
                     if self.poller_stop.is_set(): return
                     try: self.refresh_if_changed()
-                    except Exception: LOGGER.warning('Reference generation refresh failed; the next request reloads', exc_info=True)
-            thread = threading.Thread(target=run, name='reference-generation-poll', daemon=True)
+                    except Exception: LOGGER.warning('Reference release refresh failed; the next request reloads', exc_info=True)
+            thread = threading.Thread(target=run, name='reference-release-poll', daemon=True)
             self.poller = (os.getpid(), thread); thread.start()
     def stop_poller(self, timeout=None):
         self.poller_stop.set(); self.poller_wake.set()
         if self.poller and self.poller[1].is_alive(): self.poller[1].join(timeout)
-    def select_generation(self, connection, generation_id):
-        """The active generation's reference_generations row; only a loaded, servable generation qualifies."""
-        try: generation = get_generation(connection, generation_id)
+    def release_factors(self, cursor):
+        """Every served factor joined to its KPN trait, identities checked, with its trait's metadata (trait_metadata)."""
+        try:
+            cursor.execute(reference_sql(FACTORS_SQL))
+            rows = [dict(zip(FACTOR_COLUMNS, row)) for row in cursor.fetchall()]
+            cursor.execute(reference_sql(TRAITS_SQL))
+            # One parsed dict per trait, shared by its factors: kpn_factors copies what it keeps and never mutates it.
+            traits = {trait: json.loads(metadata) if isinstance(metadata, (str, bytes)) else metadata for trait, metadata in cursor.fetchall()}
         except Exception as error:
             if not missing_table(error): raise
-            generation = None
-        if (not generation or generation['status'] not in SERVED_STATUSES or SERVED_KINDS.get(generation['kind']) != generation['model']
-                or (generation['kind'] == LEGACY_KIND and (not GENERATION_RE.fullmatch(generation['legacy_mapping_run_id'] or '')
-                                                            or legacy_generation_id(generation['legacy_mapping_run_id']) != generation_id))
-                or (generation['kind'] == KPN_KIND and not (generation['eaggl_import_id'] and generation['eaggl_embedding_run_id']))):
-            raise Problem(503, 'SOURCE_NOT_READY', 'Select one loaded reference generation.')
-        return generation
-    def generation_factors(self, cursor, generation):
-        """KPN mode: every factor of the generation joined to its KPN trait, identities checked."""
-        identity, self.eaggl_import = generation['generation_id'], generation['eaggl_import_id']
-        cursor.execute("SELECT run_id FROM eaggl_embedding_runs WHERE run_id=%s AND import_id=%s AND status='complete'",
-                       (generation['eaggl_embedding_run_id'], self.eaggl_import))
-        if len(cursor.fetchall()) != 1: raise Problem(503, 'SOURCE_NOT_READY', 'Select one completed embedding run.')
-        # KPN bindings carry the generation where legacy ones carry the mapping run and gene-set import.
-        self.mapping_run = self.geneset_import = identity
-        self.embedding_run = generation['eaggl_embedding_run_id']
-        cursor.execute(KPN_FACTORS, (identity,))
-        rows = [dict(zip(KPN_FACTOR_COLUMNS, row)) for row in cursor.fetchall()]
-        if not rows: raise Problem(503, 'SOURCE_NOT_READY', 'The reference generation has no factors.')
-        cursor.execute('SELECT kpn_trait_id,metadata FROM kpn_traits WHERE generation_id=%s', (identity,))
-        # One parsed dict per trait, shared by its factors: kpn_factors copies what it keeps and never mutates it.
-        traits = {trait: json.loads(metadata) if isinstance(metadata, (str, bytes)) else metadata for trait, metadata in cursor.fetchall()}
-        for row in rows: row['trait_metadata'] = traits.get(row['kpn_trait_id'])
+            raise Problem(503, 'SOURCE_NOT_READY', 'The reference factor tables are not loaded.') from error
+        if not rows: raise Problem(503, 'SOURCE_NOT_READY', 'The reference release has no factors.')
         for row in rows:
-            try: row['factor'] = parse_factor_key(row['factor_key'])['factor']
-            except ReferenceInvariant: row['factor'] = None
-            if (not row['factor'] or row['factor_key'] != f"{row['kpn_trait_id']}::{row['factor']}" or row['public_id'] != public_id(row['kpn_trait_id'], row['factor'])
-                    or row['eaggl_import_id'] not in (None, self.eaggl_import)):
-                raise Problem(503, 'SOURCE_NOT_READY', 'Reference generation factor identities are inconsistent.')
+            try:
+                row['factor'] = parse_factor_key(row['factor_key'])['factor']
+                consistent = (row['factor_key'] == f"{row['kpn_trait_id']}::{row['factor']}"
+                              and row['public_id'] == public_id(row['kpn_trait_id'], row['factor']))
+            except ReferenceInvariant: consistent = False
+            if not consistent: raise Problem(503, 'SOURCE_NOT_READY', 'Reference release factor identities are inconsistent.')
             if isinstance(row['metadata'], (str, bytes)): row['metadata'] = json.loads(row['metadata'])
+            row['trait_metadata'] = traits.get(row['kpn_trait_id'])
         return rows
-    def _load(self, generation_id, vector_snapshot_id=None):
-        """Load generation_id; with the Upstash backend, serve vector_snapshot_id (read with it by active_pointers)."""
+    def vector_index(self, factor_rows):
+        """The environment's Upstash index for the served factor keys, in the release's embedding dimensions."""
+        embedding = self.release['manifest'].get('embedding') or {}
+        published = embedding.get('model')
+        if published and published != embedding_config()['model']:
+            LOGGER.warning('The configured query embedding model differs from the reference release embedding model')
+        try:
+            index = UpstashFactorIndex([row['factor_key'] for row in factor_rows], dimensions=embedding.get('dimensions'), release_id=self.release_id,
+                                       embedding_run=self.embedding_run)
+        except VectorUnavailable as error:
+            raise Problem(503, 'SEMANTIC_SEARCH_UNAVAILABLE', str(error)) from error
+        check_vector_readiness(index)
+        return index
+    def _load(self):
         runtime = getattr(self, 'runtime', None) or DapperRuntime(CURRENT_DAPPER_SNAPSHOT)
         self.runtime = runtime
         connection = mysql_connection()
         try:
-            generation = self.select_generation(connection, generation_id) if generation_id else None
-            kpn = bool(generation) and generation['kind'] == KPN_KIND
+            # One connection, one read transaction: the release row and its factors are read consistently.
             with connection.cursor() as cursor:
+                release = read_release(cursor)
                 cursor.execute("SELECT import_id,source_commit,source_files FROM dismech_imports WHERE status='complete'")
                 imports = cursor.fetchall()
                 requested = setting('REVEAL_DISMECH_IMPORT_ID')
                 imports = [r for r in imports if not requested or r[0] == requested]
-                # An active generation also pins the DisMech import that its archived gap ids depend on.
-                if generation and generation['dismech_import_id']: imports = [r for r in imports if r[0] == generation['dismech_import_id']]
                 if len(imports) != 1: raise Problem(503, 'SOURCE_NOT_READY', 'Select one completed DisMech import.')
                 self.dismech_import, self.source_commit, files = imports[0]
                 files = json.loads(files)
@@ -409,73 +372,16 @@ class Catalog:
                 attachments = defaultdict(list)
                 for r in cursor.fetchall():
                     item = json.loads(r[0]); attachments[item['gap_id']].append(item)
-                if kpn: factor_rows = self.generation_factors(cursor, generation)
-                else:
-                    cursor.execute("SELECT run_id,eaggl_import_id,gene_set_import_id FROM eaggl_cfde_link_runs WHERE status='complete'")
-                    runs = [r for r in cursor.fetchall() if not setting('REVEAL_MAPPING_RUN_ID') or r[0] == setting('REVEAL_MAPPING_RUN_ID')]
-                    # An active legacy generation (e.g. a rollback) pins its own mapping and embedding runs.
-                    if generation: runs = [r for r in runs if r[0] == generation['legacy_mapping_run_id']]
-                    if len(runs) != 1: raise Problem(503, 'SOURCE_NOT_READY', 'Select one completed EAGGL mapping run.')
-                    self.mapping_run, self.eaggl_import, self.geneset_import = runs[0]
-                    cursor.execute("SELECT run_id FROM eaggl_embedding_runs WHERE import_id=%s AND status='complete'", (self.eaggl_import,))
-                    runs = [r[0] for r in cursor.fetchall() if not setting('REVEAL_EMBEDDING_RUN_ID') or r[0] == setting('REVEAL_EMBEDDING_RUN_ID')]
-                    if generation and generation['eaggl_embedding_run_id']: runs = [r for r in runs if r == generation['eaggl_embedding_run_id']]
-                    if len(runs) != 1: raise Problem(503, 'SOURCE_NOT_READY', 'Select one completed embedding run.')
-                    self.embedding_run = runs[0]
-                    cursor.execute('SELECT f.factor_id,f.label,l.cfde_node_id,l.payload FROM eaggl_cfde_factor_links l JOIN eaggl_factors f ON f.import_id=l.eaggl_import_id AND f.factor_index=l.factor_index WHERE l.run_id=%s', (self.mapping_run,))
-                    factor_rows = cursor.fetchall()
-            self.active_generation, self.generation_record = generation_id, generation
-            self.model = KPN_MODEL if kpn else LEGACY_MODEL
-            self.reference_generation_id = generation_id or (legacy_generation_id(self.mapping_run) if GENERATION_RE.fullmatch(str(self.mapping_run)) else None)
-            self.vector_backend = vector_backend()
-            context_ids = {row['id'] for row in mechanism_rows}
-            inputs = [context_input(row['id'], 'mechanism', self.file_hashes[row['source_file']],
-                row.get('description') or row['name']) for row in mechanism_rows]
-            inputs.extend(context_input(row['id'], 'knowledge_gap', self.file_hashes[row['source_file']], row['raw']['prompt'])
-                for row in gap_rows if not any(item.get('target_id') in context_ids for item in attachments[row['id']]))
-            self.context_source_ids = tuple(row['source_id'] for row in inputs)
-            self.expected_context_inputs = tuple(inputs)
-            self.vector_snapshot_id = vector_snapshot_id if self.vector_backend else None
-            if self.vector_backend:
-                # Browsing and freezing selected records need their native source
-                # bindings, not a semantic index. Verify aliases/contexts on the
-                # first actual semantic request, before returning any matches.
-                self.index = None
-                self.expected_factor_aliases = ({(row['factor_key'], row['label'], row['public_id']) for row in factor_rows} if kpn
-                    else {(row[0], row[1], row[2]) for row in factor_rows})
-                try:
-                    if not vector_snapshot_id: raise VectorUnavailable('No verified active Vector snapshot in this environment')
-                    summary = VectorRegistry(self.repo).serving(vector_snapshot_id, summary=True)
-                except VectorUnavailable as error:
-                    raise Problem(503, 'SEMANTIC_SEARCH_UNAVAILABLE', str(error)) from error
-                pinned = (summary.get('reference_generation_id') == self.reference_generation_id if kpn
-                    else summary['mapping_run'] == self.mapping_run)
-                if (not pinned or summary['run']['run_id'] != self.embedding_run
-                        or summary['run']['config']['import_id'] != self.eaggl_import
-                        or summary['dismech_import'] != self.dismech_import
-                        or summary['_serving_counts']['factors'] != len(self.expected_factor_aliases)):
-                    raise Problem(503, 'SEMANTIC_SEARCH_UNAVAILABLE', 'Active Vector snapshot differs from selected source runs')
-                try: check_snapshot_readiness(summary)
-                except VectorUnavailable as error:
-                    raise Problem(503, 'SEMANTIC_SEARCH_UNAVAILABLE', str(error)) from error
-            else:
-                self.index = database_search_index(connection, self.eaggl_import, self.embedding_run)
-                if kpn: self.index = factor_key_index(self.index, factor_rows)
-            # Actual catalog use loads only bindings used by these gaps. The
-            # provider still returns exact selected vectors on demand.
-            try:
-                if self.vector_backend:
-                    self.dismech_embeddings = {'run_id': summary['context_run_id'], 'config': summary['context_config']}
-                    self.context_text_vectors = {}
-                else:
-                    self.dismech_embeddings = load_context_vectors(connection, self.dismech_import, self.index.run, inputs,
-                        run_id=setting('REVEAL_DISMECH_EMBEDDING_RUN_ID'))
-                    self.context_text_vectors = {row['input_sha256']: (row['input_text'], self.dismech_embeddings['vectors'][identity])
-                        for identity, row in self.dismech_embeddings['bindings'].items()}
-            except Exception as error:
-                raise Problem(503, 'DISMECH_EMBEDDINGS_NOT_READY',
-                    'Import and verify compatible DisMech context embeddings before automatic retrieval.') from error
+                factor_rows = self.release_factors(cursor)
         finally: connection.close()
+        self.release, self.release_id = release, release['release_id']
+        # Bindings keep their field names: the generation and gene-set fields name the release, the run fields its
+        # embedding space (vector_retrieval.embedding_space), so a release that only adds gene sets keeps every run.
+        self.reference_generation_id = self.geneset_import = self.release_id
+        self.mapping_run = self.embedding_run = embedding_space(release['manifest'].get('embedding'))
+        self.eaggl_import = release['manifest'].get('eaggl_import_id')
+        # The provider check (one info call) runs after the direct connection is closed.
+        self.index = self.vector_index(factor_rows)
         self.mechanisms, self.gaps, self.by_source, self.bindings = {}, {}, {}, {}
         for row in mechanism_rows:
             node = {'name': row['name'], 'description': row.get('description') or row['name']}
@@ -506,111 +412,39 @@ class Catalog:
             self.gaps[node['id']] = gap; self.by_source[row['id']] = gap
         self.gap_fuzzy = FuzzyWords([gap_search_text(gap) for gap in self.gaps.values()])
         self.factors, self.factor_legacy = {}, {}
-        if kpn: self.kpn_factors(runtime, factor_rows)
-        else:
-            for legacy, label, native, payload in factor_rows:
-                raw = json.loads(payload)['raw']; trait, factor = native.split(':')[2], native.split(':')[4]
-                node = {'name': f'{trait} mechanism {factor}', 'description': f'EAGGL mechanism {native}. Source label: {raw["label"]}.'}
-                node['id'] = runtime.compute_id(node, 'Mechanism', runtime.schema)
-                record = {'source': 'eaggl', 'source_id': native, 'source_revision': sha256(canonical_json(raw)), 'object_class': 'Mechanism', 'object': node,
-                    'cfde_anchor': {'node_id': native, 'node_type': 'factor', 'label': label, 'subtitle': f'{trait} ({factor})'}, 'model': 'cfde-inc-v2',
-                    'catalog_file': runtime.file('cfde-factor.json', canonical_json(raw), 'application/json')}
-                self.factors[native] = record; self.factor_legacy[legacy] = record
-                self.bindings[native] = {'eaggl_factor_id': legacy, 'eaggl_import_id': self.eaggl_import, 'embedding_run_id': self.embedding_run,
-                    'mapping_run_id': self.mapping_run, 'gene_set_import_id': self.geneset_import, 'cfde_node_id': native, 'cfde_payload': raw}
+        self.kpn_factors(runtime, factor_rows)
         self.loaded = True
     def kpn_factors(self, runtime, rows):
-        """KPN records keyed by public id (docs §4); factor_legacy keyed by factor key, the vector alias."""
-        generation = self.reference_generation_id
+        """KPN records keyed by public id (docs §4); factor_legacy keyed by factor key, the vector id."""
+        release = self.reference_generation_id
+        # A release manifest names no identity version (nor an EAGGL import), so its Mechanism nodes are version 1, as are the
+        # frozen snapshots reference_release.archived_rows mints for it; a manifest that opts into version 2 must name its import.
+        identity_version = ((self.release or {}).get('manifest') or {}).get('mechanism_identity_version', 1)
         for row in rows:
             native, trait, factor, label, phenotype, metadata = (row[key] for key in ('public_id', 'kpn_trait_id', 'factor', 'label', 'phenotype_name', 'metadata'))
             trait_metadata = row.get('trait_metadata') or {}
             if isinstance(trait_metadata, (str, bytes)): trait_metadata = json.loads(trait_metadata)
             mappings = deepcopy(trait_metadata.get('ontology_mappings', []))
-            node = mechanism_node(native, phenotype, trait, factor, label,
-                identity_version=((getattr(self, 'generation_record', None) or {}).get('manifest') or {}).get('mechanism_identity_version', 1),
-                eaggl_import_id=self.eaggl_import)
+            try: node = mechanism_node(native, phenotype, trait, factor, label, identity_version=identity_version, eaggl_import_id=self.eaggl_import)
+            except ReferenceInvariant as error:
+                raise Problem(503, 'SOURCE_NOT_READY', 'The reference release names an unsupported Mechanism identity.') from error
             node['id'] = runtime.compute_id(node, 'Mechanism', runtime.schema)
             record = {'source': 'eaggl', 'source_id': native, 'source_revision': row['source_revision'], 'object_class': 'Mechanism', 'object': node,
                 'cfde_anchor': {'node_id': native, 'node_type': 'factor', 'label': label, 'subtitle': f'{phenotype} ({factor})'},
-                'model': KPN_MODEL, 'reference_generation_id': generation,
+                'model': KPN_MODEL, 'reference_generation_id': release,
                 'kpn_trait': {'id': trait, 'name': phenotype, 'legacy_phenotype_id': row['legacy_phenotype_id'], 'trait_group': row['trait_group'], 'trait_type': row['trait_type'],
                     'ontology_mappings': mappings, 'mapping_interpretations': interpreted_mappings(mappings),
                     'mapping_policy_version': POLICY_VERSION},
                 'catalog_file': runtime.file('cfde-factor.json', canonical_json(metadata), 'application/json')}
             self.factors[native] = record; self.factor_legacy[row['factor_key']] = record
             self.bindings[native] = {'eaggl_factor_id': row['eaggl_factor_id'], 'factor_key': row['factor_key'], 'kpn_trait_id': trait,
-                'eaggl_import_id': self.eaggl_import, 'embedding_run_id': self.embedding_run, 'mapping_run_id': generation,
-                'gene_set_import_id': generation, 'reference_generation_id': generation, 'model': KPN_MODEL,
+                'eaggl_import_id': self.eaggl_import, 'embedding_run_id': self.embedding_run, 'mapping_run_id': self.mapping_run,
+                'gene_set_import_id': release, 'reference_generation_id': release, 'model': KPN_MODEL,
                 'cfde_node_id': native, 'cfde_payload': metadata}
-    def _retrieval_binding(self):
-        return (self.reference_generation_id, self.mapping_run, self.eaggl_import, self.embedding_run,
-            self.dismech_import, (getattr(self, 'dismech_embeddings', None) or {}).get('run_id'), self.model)
     def retrieval_index(self):
-        """The loaded snapshot's semantic index; no database read once it is built.
-
-        The snapshot id is pinned with the loaded generation (the poller reloads on a change). One caller
-        per catalog state builds a cold index while the others wait for it; a build that straddles a reload
-        is never published, and a failed build is never replayed by its waiters.
-        """
-        if not getattr(self, 'vector_backend', False): return self.index
-        try:
-            with self.vector_lock:
-                identity, binding = self.vector_snapshot_id, self._retrieval_binding()
-                cached = self.vector_indexes.get(identity)
-                if cached is not None:
-                    self.index = cached; self.dismech_embeddings = cached.contexts
-                    return cached
-                builds = self.vector_builds; future = builds.get(identity); owner = future is None
-                if owner:
-                    future = builds[identity] = Future()
-                    expected = (self.expected_factor_aliases, self.factor_legacy, self.expected_context_inputs,
-                                getattr(self, 'context_source_ids', None))
-            if owner:
-                try:
-                    index = self._build_index(identity, binding, *expected)
-                    future.set_result(index)
-                except BaseException as error:
-                    future.set_exception(error); raise
-                finally:
-                    with self.vector_lock:
-                        if builds.get(identity) is future: del builds[identity]
-            else:
-                try: index = future.result(timeout=VECTOR_BUILD_WAIT_SECONDS)
-                except FutureTimeout: raise VectorUnavailable('The semantic index is still loading; retry the query') from None
-                except Problem as error: raise Problem(error.status, error.code, error.detail) from error
-                except Exception as error: raise VectorUnavailable('The semantic index could not be prepared; retry the query') from error
-            with self.vector_lock:
-                if self._retrieval_binding() != binding or self.vector_snapshot_id != identity:
-                    raise VectorUnavailable('The reference generation changed during retrieval; retry the query')
-                self.vector_indexes.setdefault(identity, index)
-                while len(self.vector_indexes) > 4: self.vector_indexes.pop(next(iter(self.vector_indexes)))
-                self.index = self.vector_indexes[identity]
-                self.dismech_embeddings = self.index.contexts
-                return self.index
-        except VectorUnavailable as error:
-            raise Problem(503, 'SEMANTIC_SEARCH_UNAVAILABLE', str(error)) from error
-    def _build_index(self, identity, binding, aliases, factor_legacy, context_inputs, context_ids):
-        """Read and verify one snapshot's serving subset outside vector_lock (a pooled read plus a provider call)."""
-        snapshot = VectorRegistry(self.repo).serving(identity, context_ids=context_ids)
-        generation, mapping, eaggl, embedding, dismech, context_run, model = binding
-        # KPN snapshots are pinned by their generation, legacy ones by the mapping run.
-        pinned = (snapshot.get('reference_generation_id') == generation if model == KPN_MODEL
-                  else snapshot['mapping_run'] == mapping)
-        if (not pinned or snapshot['run']['run_id'] != embedding
-                or snapshot['run']['config']['import_id'] != eaggl or snapshot['dismech_import'] != dismech
-                or (context_run and snapshot['context_run_id'] != context_run)):
-            raise VectorUnavailable('Active Vector snapshot differs from selected source runs')
-        index = UpstashFactorIndex(snapshot)
-        check_vector_readiness(index)
-        actual = {(row['factor_id'], row['label'], row['native_id']) for row in index.factors}
-        if actual != aliases:
-            raise VectorUnavailable('Vector aliases differ from selected mapping')
-        if any(row['source_revision'] != factor_legacy[row['factor_id']]['source_revision'] for row in index.factors):
-            raise VectorUnavailable('Vector source revisions differ from current canonical factor payloads')
-        if any(index.contexts['bindings'].get(row['source_id']) != row for row in context_inputs):
-            raise VectorUnavailable('Vector context bindings differ from current source revisions/text')
-        return index
+        """The loaded release's semantic index (built with it by _load). Requests resolve it once and pass it on, so a
+        suggestion's hits, context inputs and provenance name one release even if the poller swaps the catalog meanwhile."""
+        return self.index
 
     def dismech_catalog(self):
         """Load the independent full corpus only when mechanism search needs it."""
@@ -653,56 +487,31 @@ class Catalog:
             if ref['source_id'] in seen: raise Problem(422, 'DUPLICATE_ANCHOR', 'Select each native factor only once.')
             seen.add(ref['source_id'])
         return gap
-    def binding_superseded(self, binding):
-        """True when a frozen catalog binding is not of the active generation; never in legacy mode."""
-        self.load()
-        if self.active_generation is None: return False
-        try: return generation_of_binding(binding or {}) != self.reference_generation_id
-        except ReferenceInvariant: return True
-    def source_superseded(self, source_id):
-        """True for an EAGGL factor source_id that the active generation does not serve; never in legacy mode."""
-        self.load()
-        return self.active_generation is not None and source_id not in self.factors and model_of_source_id(source_id) is not None
-    def generation(self, generation_id):
-        """A reference_generations row (cached for the generation TTL), or None."""
-        if not isinstance(generation_id, str) or not GENERATION_RE.fullmatch(generation_id): return None
-        with self.lookup_lock: cached = self.generation_cache.get(generation_id)
-        if cached and monotonic() - cached[0] < GENERATION_TTL_SECONDS: return deepcopy(cached[1])
-        connection = mysql_connection()
-        try: value = get_generation(connection, generation_id)
-        except Exception as error:
-            if not missing_table(error): raise
-            value = None
-        finally: connection.close()
-        with self.lookup_lock:
-            self.generation_cache.pop(generation_id, None); self.generation_cache[generation_id] = (monotonic(), value)
-            while len(self.generation_cache) > 16: self.generation_cache.pop(next(iter(self.generation_cache)))
-        return deepcopy(value)
     def archived_reference_factor(self, archive_id):
         """GET /v1/reference-factors/{archive_id}: a frozen factor snapshot plus its ids, or None.
 
         archived_reference_factors rows are immutable and never purged, so hits are cached for the
-        process. The route is public, so misses are cached for the generation TTL (a later capture
-        may add the row) and legacy mode, with the table missing or empty, connects at most once per TTL.
+        process. The route is public, so misses are cached for the TTL (a later capture may add the
+        row), and while the table is missing or empty it connects at most once per TTL.
         """
         if not isinstance(archive_id, str) or not GENERATION_RE.fullmatch(archive_id): return None
         with self.lookup_lock: cached = self.archive_cache.get(archive_id)
-        if cached is not None and cached[1] is None and monotonic() - cached[0] >= GENERATION_TTL_SECONDS: cached = None
+        if cached is not None and cached[1] is None and monotonic() - cached[0] >= RELEASE_TTL_SECONDS: cached = None
         if cached is None:
             cached = (monotonic(), next(iter(self.archived_factors('archive_id=%s', (archive_id,))), None))
             with self.lookup_lock:
                 self.archive_cache.pop(archive_id, None); self.archive_cache[archive_id] = cached
                 while len(self.archive_cache) > 1024: self.archive_cache.pop(next(iter(self.archive_cache)))
         return deepcopy(cached[1])
-    def archived_for_source(self, source_id, generation_id=None):
-        """The frozen snapshot of a factor source_id: of generation_id when given, else the latest captured; or None."""
+    def archived_for_source(self, source_id):
+        """The latest frozen snapshot of a factor source_id, or None."""
         if not isinstance(source_id, str) or not source_id: return None
-        if generation_id: return self.archived_reference_factor(reference_archive_id(generation_id, source_id))
         return next(iter(self.archived_factors('source_id=%s', (source_id,))), None)
     def archived_factors(self, where, args):
         with self.lookup_lock: unavailable = self.archive_unavailable_at
-        # Migration 008 absent or nothing archived yet (legacy mode): no connection until the TTL passes.
-        if unavailable is not None and monotonic() - unavailable < GENERATION_TTL_SECONDS: return []
+        # Table absent or nothing archived yet: no connection until the TTL passes.
+        if unavailable is not None and monotonic() - unavailable < RELEASE_TTL_SECONDS: return []
+        # A request-path reference read: a pooled session, never a direct connect.
         connection = reference_mysql_connection()
         try:
             with connection.cursor() as cursor:
@@ -718,11 +527,10 @@ class Catalog:
         with self.lookup_lock: self.archive_unavailable_at = monotonic() if empty else None
         return [archived_factor(row) for row in rows]
     def provenance(self, query, mode, semantic=False, *, index=None):
-        """index: the one a request already resolved, so its hits and provenance share a snapshot."""
-        index = (index if index is not None else self.retrieval_index()) if semantic else None
-        corpus = (self.reference_generation_id if self.model == KPN_MODEL else self.mapping_run) if semantic else self.dismech_import
-        return {'query': query, 'mode': mode, 'corpus_snapshot': corpus,
-            'embedding_model': index.run['config']['model'] if semantic else None, 'embedding_revision': self.embedding_run if semantic else None,
+        """index: the one a request already resolved, so its hits and this provenance name the same release."""
+        release = getattr(index, 'release_id', None) or self.release_id
+        return {'query': query, 'mode': mode, 'corpus_snapshot': release if semantic else self.dismech_import,
+            'embedding_model': embedding_config()['model'] if semantic else None, 'embedding_revision': release if semantic else None,
             'template_version': 'eaggl-label-v1' if semantic else 'dismech-question-v1', 'score_aggregation': 'maximum_per_context' if semantic else None}
     def fuzzy_gaps(self, texts):
         """The fuzzy accelerator for exactly these gap search texts (rebuilt only if the served gaps changed)."""
@@ -785,11 +593,8 @@ class Catalog:
         return [{'record': record, 'ranking': {'value': score, 'metric': metric, 'rank': rank}}
                 for rank, (score, record) in enumerate(candidates[:limit], 1)]
 
-    def stored_context_inputs(self, contexts, *, stored=None):
-        if stored is None and getattr(self, 'vector_backend', False): stored = self.retrieval_index().contexts
-        stored = stored if stored is not None else getattr(self, 'dismech_embeddings', None)
-        if stored is None:
-            raise Problem(503, 'DISMECH_EMBEDDINGS_NOT_READY', 'Compatible imported DisMech context vectors are unavailable.')
+    def context_inputs(self, contexts):
+        """Exact source bindings (id, kind, revision, template, text hash and text) of DisMech contexts."""
         inputs = []
         for identity, text in contexts:
             if identity in self.mechanisms:
@@ -799,31 +604,19 @@ class Catalog:
                 source = self.gaps[identity]['source']
                 row = context_input(source['source_id'], 'knowledge_gap', source['source_revision'], text)
             else:
-                raise Problem(503, 'DISMECH_EMBEDDINGS_NOT_READY', 'The selected source context has no imported vector binding.')
-            if stored['bindings'].get(row['source_id']) != row or row['source_id'] not in stored['vectors']:
-                raise Problem(503, 'DISMECH_EMBEDDINGS_NOT_READY', 'The imported context vector does not match the exact source revision and text.')
+                raise Problem(503, 'DISMECH_EMBEDDINGS_NOT_READY', 'The selected source context is not a loaded DisMech mechanism or gap.')
             inputs.append(row)
         return inputs
 
     def context_embedding_provenance(self, contexts, *, index=None):
-        stored = index.contexts if isinstance(index, UpstashFactorIndex) else None
-        inputs = self.stored_context_inputs(contexts, stored=stored)
-        stored = stored if stored is not None else self.dismech_embeddings
-        return {'dismech_embedding_run_id': stored['run_id'], 'dismech_import_id': self.dismech_import,
-                'context_embedding_templates': stored['config']['templates'],
+        """index: the one a request already resolved, so the context run names the space its vectors came from."""
+        inputs = self.context_inputs(contexts)
+        return {'dismech_embedding_run_id': getattr(index, 'embedding_run', None) or self.embedding_run, 'dismech_import_id': self.dismech_import,
+                'context_embedding_templates': deepcopy(TEMPLATES),
                 'context_embedding_inputs': [{key: value for key, value in row.items() if key != 'input_text'} for row in inputs]}
 
     def runtime_query_vectors(self, texts, *, index=None):
-        index = index if index is not None else self.retrieval_index()
-        if isinstance(index, UpstashFactorIndex): return index.query_vectors(texts, embedder=get_embeddings)
-        imported = getattr(self, 'context_text_vectors', {})
-        known = [imported.get(sha256(text.encode('utf-8'))) for text in texts]
-        missing = [i for i, (text, row) in enumerate(zip(texts, known)) if row is None or row[0] != text]
-        resolved = {i: row[1] for i, row in enumerate(known) if i not in missing}
-        if missing:
-            fresh = index.query_vectors([texts[i] for i in missing], embedder=get_embeddings)
-            resolved.update(zip(missing, fresh))
-        return np.stack([resolved[i] for i in range(len(texts))])
+        return (index if index is not None else self.retrieval_index()).query_vectors(texts, embedder=get_embeddings)
 
     def disease_factors(self, gap, remaining, exclude):
         """Eligible exact disease identity is a retrieval reason, never scientific support."""
@@ -847,6 +640,7 @@ class Catalog:
         return candidates[:remaining]
 
     def suggest_factors(self,contexts,mode,remaining,exclude,*,precomputed=False,index=None):
+        """index: the one a request already resolved (app.pinned_index), shared with its context and search provenance."""
         self.load()
         if not remaining: return []
         index = (index if index is not None else self.retrieval_index()) if mode in ('semantic', 'hybrid') else None
@@ -855,12 +649,11 @@ class Catalog:
         try:
             if mode in ('semantic', 'hybrid'):
                 if precomputed:
-                    stored = index.contexts if isinstance(index, UpstashFactorIndex) else self.dismech_embeddings
-                    inputs = self.stored_context_inputs(contexts, stored=stored)
+                    # Source contexts: stored `<env>-contexts` vectors by text hash; a miss is embedded live.
+                    inputs = self.context_inputs(contexts)
                     query_inputs = [{**frozen, **{key: value for key, value in row.items() if key != 'input_text'}}
                                     for frozen, row in zip(query_inputs, inputs)]
-                    vectors = (index.context_vectors([row['source_id'] for row in inputs]) if isinstance(index, UpstashFactorIndex)
-                               else np.stack([stored['vectors'][row['source_id']] for row in inputs]))
+                    vectors = index.context_vectors([row['input_text'] for row in inputs], embedder=get_embeddings)
                 else:
                     vectors = self.runtime_query_vectors([text for _, text in contexts], index=index)
             if mode == 'semantic':
@@ -885,20 +678,21 @@ class Catalog:
                 selected = {item['record']['source_id']: item for item in items}
                 aliases = [row['factor_id'] for row in index.factors if row['factor_id'] in self.factor_legacy
                            and self.factor_legacy[row['factor_id']]['source_id'] in selected]
-                scores = index.fetch_vectors(aliases) @ vectors.T
+                fetched = index.fetch_vectors(aliases)
                 for item in items: item['context_similarities'] = {}
-                for alias, row in zip(aliases, scores):
+                for alias in aliases:
+                    if alias not in fetched: continue  # A lexical winner without a stored vector has no measured similarity.
                     item = selected[self.factor_legacy[alias]['source_id']]
-                    for (identity, _), score in zip(contexts, row):
+                    for (identity, _), score in zip(contexts, np.asarray(fetched[alias]) @ vectors.T):
                         item['context_similarities'][identity] = max(item['context_similarities'].get(identity, -1), float(np.clip(score, -1, 1)))
-                if isinstance(index, UpstashFactorIndex):
+                if hasattr(index, 'provenance'):
                     for item in items:
                         # Lexical-only hybrid winners still freeze the actual
                         # semantic vectors used to score every context/alias.
                         item['retrieval'] = {**index.provenance(), **item.get('retrieval', {}), **query_vector_provenance(vectors),
                             'context_retrievals': context_retrievals, 'query_inputs': query_inputs,
-                            'aliases': [{'id': index.by_id[alias]['id'], 'original_vector_sha256': index.by_id[alias]['original_vector_sha256']}
-                                for alias in aliases if self.factor_legacy[alias]['source_id'] == item['record']['source_id']]}
+                            'aliases': [{'id': alias, 'vector_sha256': getattr(index, 'vector_sha256', {}).get(alias)} for alias in aliases
+                                        if alias in fetched and self.factor_legacy[alias]['source_id'] == item['record']['source_id']]}
             return items
         except VectorUnavailable as error:
             raise Problem(503, 'SEMANTIC_SEARCH_UNAVAILABLE', str(error)) from error

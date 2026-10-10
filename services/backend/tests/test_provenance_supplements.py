@@ -8,7 +8,7 @@ import sqlite3
 import pytest
 import yaml
 
-from reveal_backend import provenance_supplements as ps, reference_reload as rr
+from reveal_backend import provenance_supplements as ps, reference_release as rr
 from reveal_backend.artifact_store import StorageUnavailable
 from reveal_backend.evidence_package import DapperRuntime, EvidenceBuildError
 from reveal_backend.evidence_schema import load_generated_schema
@@ -64,14 +64,14 @@ def test_streams_edges_after_gene_sets_and_skips_large_unwanted_sections(tmp_pat
     path = tmp_path / 'source.yaml'; source_document(path, node, graph)
     original = path.read_text().replace('gene_sets:\n', 'embeddings:\n- {unparsed garbage\ngene_sets:\n')
     path.write_text(original)
-    header, collection = rr.collection_header(path)
-    assert collection['id'] == COLLECTION
-    assert 'gene_sets' not in header and 'embeddings' not in header
-    assert header['used_edges'] == graph['used_edges']
-    assert list(rr.collection_gene_sets(path)) == [node]
-    with pytest.raises(rr.Refused, match='exceeds'): rr.collection_header(path, limit=10)
+    parsed = rr.read_collection(path)
+    assert parsed['document']['id'] == COLLECTION
+    assert 'gene_sets' not in parsed['header'] and 'embeddings' not in parsed['header']
+    assert parsed['provenance'] == graph and parsed['provenance']['used_edges'] == graph['used_edges']
+    assert [json.loads(value) for value in parsed['gene_sets'].values()] == [node]
+    with pytest.raises(rr.Refused, match='exceeds'): rr.read_collection(path, limit=10)
     path.write_text(original + '\nused_edges: []\n')
-    with pytest.raises(rr.Refused, match='duplicate'): rr.collection_header(path)
+    with pytest.raises(rr.Refused, match='duplicate'): rr.read_collection(path)
 
 
 def test_preserves_edges_dependencies_roles_and_original_id(provenance):
