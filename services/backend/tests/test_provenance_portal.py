@@ -179,6 +179,24 @@ def test_retry_after_is_capped_to_the_remaining_budget(mock, monkeypatch):
     assert outcome.status == 'ok' and len(server.requests) == 2 and slept and slept[0] <= 0.5
 
 
+def test_a_body_that_never_ends_stops_at_the_fetch_budget_and_frees_its_slot(mock, monkeypatch):
+    monkeypatch.setattr(portal, 'FETCH_BUDGET_SECONDS', 0.5)
+    async def drip():  # every read arrives within httpx's read timeout; the body never ends
+        yield b'{"provenance": '
+        await asyncio.sleep(3600)
+        yield b'{}}'
+    server = mock(lambda request: httpx.Response(200, content=drip()))
+    async def fetch():
+        loop = asyncio.get_running_loop(); started = loop.time()
+        outcome = await portal.bottom_line(ARTIFACT, timeout=30)
+        await asyncio.sleep(0)
+        state = portal._state()
+        return outcome, loop.time() - started, dict(state.inflight), state.slots._value
+    outcome, elapsed, inflight, free = run(fetch())
+    assert (outcome.status, outcome.reason, len(server.requests)) == ('unavailable', 'timeout', 1) and elapsed < 2
+    assert inflight == {} and free == portal.CONCURRENCY  # the shared fetch ended: a later request fetches afresh
+
+
 def test_concurrent_waiters_share_one_shielded_fetch(mock):
     server = mock(ok(), delay=0.2)
     async def both():

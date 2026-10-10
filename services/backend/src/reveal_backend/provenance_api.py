@@ -181,7 +181,8 @@ def _phase3(repo, account_id, resolve, fence, original, expanded, metadata, outc
         elif outcome.status == 'ok':
             for group, rows in trait_lineage(identity, outcome).items():
                 expanded.setdefault(group, []).extend(rows)
-            observations.append({'kind': 'portal_bottom_line', 'key': outcome.portal_url, 'sha256': outcome.sha256})
+            observed = {'kind': 'portal_bottom_line', 'key': outcome.portal_url, 'sha256': outcome.sha256}
+            if observed not in observations: observations.append(observed)  # traits sharing one GWAS artifact read it once
         else:
             issues.append({'code': 'external_provenance_unavailable', 'object_id': identity})
     if blocked:

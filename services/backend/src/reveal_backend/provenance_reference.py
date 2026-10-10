@@ -572,8 +572,9 @@ def expand(document, artifact_records, *, tx, connection_factory=None, blocked_i
                        or source.get('gene_set_import_id') != gen['legacy_gene_set_import_id'])) for source in sources):
                 issue('reference_generation_conflict'); continue
             valid[generation] = gen
-        # Cited traits are read from the published release unless the account's work is pinned to a superseded one.
-        if release and not superseded: current = release['release_id']
+        # Cited traits are read from the published release unless the account's work is pinned only to a superseded one: work
+        # bound to the published release keeps its fitted traits, their names and GWAS routes, beside superseded work.
+        if release and (not superseded or release['release_id'] in valid): current = release['release_id']
         projections = []
         for generation, gen in sorted(valid.items()):
             current_bindings = {identity: binding for identity, binding in chosen.items() if binding['generation_id'] == generation}

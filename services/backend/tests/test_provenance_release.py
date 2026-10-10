@@ -225,6 +225,31 @@ CREATE TABLE reveal_ref_collections(collection_id TEXT,cfde_label TEXT,portal_co
         self.assertEqual(metadata['retained_projection_coverage'][0]['status'], 'unresolved')
         self.assertIn('MISSING_FACTOR_PROJECTIONS', {row['code'] for row in self.collect(doc, metadata)['coverage']['issues']})
 
+    def test_work_on_the_published_release_keeps_its_traits_beside_superseded_work(self):
+        older = 'd' * 64
+        item = {**self.item, 'factor_key': 'KPN.TRAIT:0000398::Factor2', 'public_id': 'factor:kpn:0000398:eaggl-capped-v1:Factor2',
+                'eaggl_factor_id': 'T2D::Factor2', 'label': 'beta cell mass'}
+        source = {**self.source, 'origin': 'mysql:reveal_ref_factors+reveal_ref_traits?release_id=' + older, 'generation_id': older, 'release_id': older}
+        superseded = reference._compute_mechanism(item, source)
+        self.document['mechanisms'].append(superseded)
+        self.document['propositions'].append({'id': 'dapper:Proposition.older', 'subject_entity': superseded['id']})
+        self.document['claims'].append({'id': 'dapper:Claim.c', 'proposition': 'dapper:Proposition.older'})
+        self.document['scientific_accounts'][0]['component_claims'].append('dapper:Claim.c')
+        self.capture()
+        self.capture(items=[item], source=source)
+        doc, metadata = self.expand(archived=lambda identity: None)
+        self.assertIn({'code': 'reference_release_superseded'}, metadata['issues'])
+        self.assertNotIn('trait_unavailable', {row['code'] for row in metadata['issues']})
+        coverage = {row['mechanism_id']: row['status'] for row in metadata['retained_projection_coverage']}
+        self.assertEqual(coverage, {self.mechanism['id']: 'retained_rows_loaded', superseded['id']: 'unresolved'})
+        traits = {node['id']: node for node in doc['traits']}
+        self.assertEqual(traits[TRAIT]['name'], 'Type 2 diabetes')  # named from the published release, not the superseded capture
+        self.assertEqual(metadata['traits'][TRAIT]['gwas_artifact']['artifact_id'], ARTIFACT)
+        self.assertEqual(metadata['traits'][RARE]['gwas_reason'], 'not_a_gwas_trait')
+        self.assertEqual({(edge['subject'], edge['object']) for edge in doc['fitted_on_trait_edges']},
+                         {(self.mechanism['id'], TRAIT), (superseded['id'], TRAIT)})
+        self.assertEqual(metadata['reference_generation_ids'], sorted([older, RELEASE]))
+
     def test_a_capture_that_disagrees_with_the_release_manifest_does_not_bind(self):
         self.capture(source={**self.source, 'generation_manifest_sha256': '9' * 64})
         doc, metadata = self.expand()

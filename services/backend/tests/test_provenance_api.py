@@ -287,6 +287,24 @@ class TracePhaseTests(unittest.TestCase):
         self.assertEqual(value['snapshot']['reference_generation_ids'], [RELEASE])
         self.assertEqual(len([edge for edge in value['edges'] if edge['relation'] == 'portal_transitive_input']), 2)
 
+    def test_traits_sharing_one_gwas_artifact_fetch_and_observe_it_once(self):
+        import httpx
+        alias = 'https://broadinstitute.github.io/kpn-data-models/kpn.trait/0000398/'
+        def both(document, records, **kwargs):
+            expanded, metadata = self.expand(document, records, **kwargs)
+            expanded['traits'].append({**expanded['traits'][0], 'id': alias})
+            metadata['traits'][alias] = deepcopy(metadata['traits'][TRAIT])
+            return expanded, metadata
+        requests = []
+        def portal(request):
+            requests.append(request); return httpx.Response(200, json=self.bottom_line)
+        with patch('reveal_backend.provenance_reference.expand', side_effect=both):
+            response = self.trace(portal)
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(len(requests), 1)
+        portal_observations = [item for item in response.json()['snapshot']['source_observations'] if item['kind'] == 'portal_bottom_line']
+        self.assertEqual(len(portal_observations), 1)
+
     def test_a_mechanism_route_response_conforms_to_the_generated_contract(self):
         import httpx
         document = deepcopy(self.fixture['account']['document'])

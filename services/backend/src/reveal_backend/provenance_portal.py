@@ -7,7 +7,8 @@ are built from ids (the public portal is their default base); only bottom_line()
 bottom_line(artifact_id) reads <portal>/get_provenance?id=<artifact>: one httpx.AsyncClient, Semaphore(4) and in-flight map per
 running loop (created lazily; aclose() in the app lifespan closes it), a 10 s timeout (3 s to connect), no redirects, the body
 streamed into memory and capped at 2 MiB, one retry on a transport error, 5xx or 429 (Retry-After capped to the fetch's remaining
-budget). The document is parsed in memory (json.loads, NaN -> None) in a worker thread and compacted:
+budget); the whole fetch, slot wait and body included, ends within FETCH_BUDGET_SECONDS. The document is parsed in memory
+(json.loads, NaN -> None) in a worker thread and compacted:
 
   R           the subject of the has_drs_object edge whose DrsObject drs_id is the artifact: exactly one Dataset, else invalid
   raw inputs  the C2M2Files never the subject of was_generated_by and reachable from R over was_generated_by and used
@@ -219,7 +220,9 @@ async def _fetch(state, base, artifact_id):
         remaining, retry, delay = deadline - time.monotonic(), False, None
         if remaining <= 0: break
         try:
-            async with state.slots:
+            # httpx's read timeout bounds each read, not the body: a portal dripping bytes would otherwise hold a slot and
+            # this shared fetch for as long as it likes. The attempt (slot wait included) ends with the fetch's budget.
+            async with asyncio.timeout(remaining), state.slots:
                 async with state.client.stream('GET', url, params={'id': artifact_id}, headers=HEADERS, follow_redirects=False,
                                                timeout=httpx.Timeout(min(TIMEOUT_SECONDS, remaining), connect=min(CONNECT_SECONDS, remaining))) as response:
                     portal, status = str(response.request.url), response.status_code
@@ -231,7 +234,9 @@ async def _fetch(state, base, artifact_id):
                         body = await _body(response)
                         outcome = (Outcome('invalid', artifact_id, portal, reason='oversize') if body is None else
                                    await asyncio.to_thread(_parse, body, artifact_id, base, portal))
-        except httpx.HTTPError as error:  # timeouts included
+        except TimeoutError:  # the budget ran out: nothing is left for a retry
+            outcome = Outcome('unavailable', artifact_id, url, reason='timeout'); break
+        except httpx.HTTPError as error:  # httpx timeouts included
             outcome, retry = Outcome('unavailable', artifact_id, url, reason=type(error).__name__), True
         if not retry or attempt == 2: break
         delay = min(RETRY_SECONDS if delay is None else delay, deadline - time.monotonic() - 1)  # leave the retry a second
