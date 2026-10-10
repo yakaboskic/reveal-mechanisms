@@ -51,9 +51,8 @@ These are places where `main`-side code still assumes the reload-era tables or c
    - the largest `ref_collections` row fits `max_allowed_packet`;
    - the `dapper_edges` count looks right, since it now includes edge sections before `gene_sets`.
 7. **Tables the app does not read yet**:
-   - `ref_trait_gene_sets` (the betas)
-   - `ref_dapper_nodes`
-   - `ref_dapper_edges`
+   - `ref_trait_gene_sets` (the betas), `ref_factor_trait_links` and `ref_phenotypes` (the factor-trait links and their phenotypes): a later phase serves them (new routes and research tools).
+   - `ref_dapper_nodes` and `ref_dapper_edges` are retired: nothing read them, and the collections' `payload.provenance` (plus `payload.curated_provenance`, through `reference_lineage.collection_lineage`) holds the same graph. The release no longer writes them, and publishing drops them by name.
 8. **Trait ontology mappings**. The Jev rerank's disease pool uses `Catalog.disease_factors`, which recomputes `interpreted_mappings` from the raw `ontology_mappings` in `reveal_ref_traits.metadata`. Keep those mappings in whatever trait schema replaces it.
 
 ## Verification on this branch

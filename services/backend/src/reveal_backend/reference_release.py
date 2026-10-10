@@ -3,15 +3,17 @@
 `python -m reveal_backend.reference_release <command>` prints one JSON object on stdout (progress goes to stderr)
 and exits non-zero on any failure:
 
-  build    LAP project outputs, the per-trait long files and gene-set betas and the vector cache -> one release
-           folder, built beside --out and swapped into place (a folder already holding the same release is reused
-           untouched). Only factor labels and DisMech contexts have vectors; factor labels missing from the cache are
-           embedded, and only after re-embedded cached texts reproduce their stored vectors.
+  build    LAP project outputs, the per-trait long files and gene-set betas, the curated source datasets and the
+           vector cache -> one release folder, built beside --out and swapped into place (a folder already holding the
+           same release is reused untouched). Only factor labels and DisMech contexts have vectors; factor labels
+           missing from the cache are embedded, and only after re-embedded cached texts reproduce their stored vectors.
   publish  every file checked against the manifest; then for each --env, in order: add the vectors its fixed
-           Upstash namespaces lack, add new frozen factor snapshots to the shared archived_reference_factors,
-           replace its <prefix>_ref_* tables with one RENAME, overwrite changed vectors and delete the ones the
-           release no longer has, and record the release in <prefix>_records. Re-running a published release
-           changes nothing; re-running a failed publish finishes it.
+           Upstash namespaces lack, add new frozen factor snapshots to the shared archived_reference_factors and list
+           them in the environment's <prefix>_archive_index, replace its <prefix>_ref_* tables with one RENAME (and
+           drop the RETIRED_TABLES), overwrite changed vectors and delete the ones the release no longer has, and
+           record the release in <prefix>_records. Re-running a published release changes nothing; re-running a
+           failed publish finishes it. A folder naming a file this checkout does not know is refused: publish (and roll
+           back) with the newest checkout.
 
 Secrets are read only from the environment (the repository .env via python-dotenv) and are never printed.
 """
@@ -29,6 +31,7 @@ import hashlib
 from itertools import groupby, islice
 import io
 import json
+import math
 import multiprocessing
 from operator import itemgetter
 import os
@@ -44,6 +47,7 @@ import uuid
 
 from . import reference_generation as rg
 from .provenance_schema import PROVENANCE_EDGES, PROVENANCE_GROUPS, validate_provenance_edges
+from .reference_lineage import ORG_FIELDS, _refs
 from .repository import Repository, application_sql, canonical, digest, now
 from .runtime_config import ROOT
 
@@ -71,11 +75,16 @@ LONG_COLUMNS = ['trait', 'kpn_trait_id', 'factor_id', 'factor', 'factor_label', 
                 'joint_loading', 'marginal_loading', 'joint_rank_in_factor', 'marginal_rank_in_factor', 'is_joint_top_factor',
                 'joint_rank_in_library', 'marginal_rank_in_library']
 
-# Release folder. manifest.json `files` = {name: sha256} of DATA_FILES and release_id = digest({format, files});
-# archived_factors.jsonl.gz is written afterwards (it carries the release_id) and listed under `archive`.
+# Release folder. manifest.json `files` = {name: sha256} of its data files and release_id = digest({format, files});
+# archived_factors.jsonl.gz is written afterwards (it carries the release_id) and listed under `archive`. build writes
+# DATA_FILES. A folder must hold REQUIRED_FILES; an OPTIONAL_FILES file it lacks (an older release) publishes an empty
+# table; the RETIRED_FILES of an older release are verified and ignored; any other file is refused.
 VECTOR_FILES = tuple(f'vectors/{kind}.{suffix}' for kind in KINDS for suffix in ('f32.npy', 'tsv'))
-DATA_FILES = ('traits.jsonl.gz', 'factors.jsonl.gz', 'factor_genes.tsv.gz', 'collections.jsonl.gz', 'gene_sets.jsonl.gz',
-              'projections.tsv.gz', 'trait_gene_sets.tsv.gz', 'dapper_nodes.jsonl.gz', 'dapper_edges.tsv.gz') + VECTOR_FILES
+REQUIRED_FILES = ('traits.jsonl.gz', 'factors.jsonl.gz', 'factor_genes.tsv.gz', 'collections.jsonl.gz', 'gene_sets.jsonl.gz',
+                  'projections.tsv.gz') + VECTOR_FILES
+OPTIONAL_FILES = ('trait_gene_sets.tsv.gz', 'factor_trait_links.tsv.gz', 'phenotypes.jsonl.gz')
+RETIRED_FILES = ('dapper_nodes.jsonl.gz', 'dapper_edges.tsv.gz')
+DATA_FILES = REQUIRED_FILES + OPTIONAL_FILES
 ARCHIVE_FILE = 'archived_factors.jsonl.gz'
 FACTOR_GENE_COLUMNS = ('factor_key', 'gene', 'loading')
 # Trait -> CFDE gene-set betas: the LAP betas_ stage's per-trait files (projection_workflow.py annotate-gene-set-stats:
@@ -85,11 +94,20 @@ LAP_GENE_SET_STATS_COLUMNS = ('trait', 'kpn_trait_id', 'gene_set_id', 'collectio
                               'beta_uncorrected', 'beta', 'avg_postp', 'library_rank', 'response', 'p', 'sigma2')
 TRAIT_GENE_SET_COLUMNS = ('kpn_trait_id', 'gene_set_id', 'library', 'beta_uncorrected', 'beta', 'avg_postp', 'library_rank')
 PROJECTION_COLUMNS = ('factor_key', 'gene_set_id', 'library', 'joint_loading', 'marginal_loading', 'joint_rank', 'marginal_rank', 'is_joint_top_factor')
-EDGE_COLUMNS = ('subject', 'predicate', 'object', 'edge_role')
+# Factor -> phenotype links (the LAP linkage_ stage: eaggl's trait linkage and factor-PheWAS, q <= its cutoff) and the
+# summary each factor's metadata.trait_links carries (TOP_LINKED best links by phewas_q).
+FACTOR_LINK_COLUMNS = ('factor_key', 'phenotype', 'phenotype_kpn_trait_id', 'is_own_trait', 'is_atlas_trait', 'nnls_loading', 'phewas_beta',
+                       'phewas_p_onesided', 'phewas_q')
+TOP_LINKED = 5
 VECTOR_COLUMNS = ('row', 'id', 'input_sha256', 'vector_sha256')
-# DAPPER node sections of a collection document (before or after its gene_sets list). Its `embeddings` and
-# `has_embedding_edges` are left out: the release embeds no gene set or collection.
-NODE_SECTIONS, SKIPPED_SECTIONS = ('organizations', 'datasets', 'files', 'activities', 'gene_set_collections'), ('embeddings', 'has_embedding_edges')
+# A collection document's `embeddings` and `has_embedding_edges` are skipped: the release embeds no gene set or collection.
+SKIPPED_SECTIONS = ('embeddings', 'has_embedding_edges')
+# Curated lineage (lap/config/source_datasets.yaml): Datasets for the raw files of collections whose producer names none.
+SOURCE_DATASETS = 'lap/config/source_datasets.yaml'
+NEW_DATASET_KEYS = frozenset({'name', 'description', 'version', 'alternate_identifier', 'publisher', 'attributed_to', 'location'})
+LINK_KEYS = frozenset({'dataset', 'libraries', 'files', 'note'})
+# The portal's bottom-line GWAS artifact a trait's GWAS route uses (one per build; --gwas-ancestry).
+DEFAULT_GWAS_ANCESTRY = 'Mixed'
 # A top-level section of a collection document starts with its key at column 0.
 SECTION_RE = re.compile(r'([A-Za-z_][A-Za-z_0-9]*):(?:\s|$)')
 # The vector cache (seeded by the migration script; build adds embedded factor labels). The same text may appear
@@ -97,7 +115,6 @@ SECTION_RE = re.compile(r'([A-Za-z_][A-Za-z_0-9]*):(?:\s|$)')
 CACHE_SCHEMA = ('CREATE TABLE IF NOT EXISTS vectors(input_sha256 TEXT NOT NULL, kind TEXT NOT NULL, text TEXT NOT NULL, '
                 'dimensions INTEGER NOT NULL, vector BLOB NOT NULL, PRIMARY KEY(input_sha256, kind))',
                 'CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT)')
-DAPPER_ID_RE = re.compile(r'dapper:([A-Za-z][A-Za-z0-9]*)\.[A-Za-z0-9_-]{1,64}')
 
 # Per-environment tables (<prefix>_ref_<name>; one row in ref_release), in RENAME order.
 COLUMNS = {
@@ -105,15 +122,21 @@ COLUMNS = {
                'trait_type', 'description', 'is_dichotomous', 'is_complex', 'n_factors', 'metadata'),
     'factors': ('factor_key', 'public_id', 'eaggl_factor_id', 'kpn_trait_id', 'factor_number', 'label', 'input_sha256', 'source_revision', 'metadata'),
     'factor_genes': FACTOR_GENE_COLUMNS,
-    'collections': ('collection_id', 'cfde_label', 'library', 'n_sets', 'payload'),
+    'collections': ('collection_id', 'cfde_label', 'library', 'n_sets', 'portal_collection_id', 'payload'),
     'gene_sets': ('gene_set_id', 'collection_id', 'gene_set_name', 'library', 'n_genes', 'n_genes_in_eaggl_universe', 'legacy_source_key', 'metadata'),
     'projections': ('factor_key', 'gene_set_id', 'library', 'joint_loading', 'marginal_loading', 'joint_loading_text', 'marginal_loading_text',
                     'joint_rank', 'marginal_rank', 'is_joint_top_factor'),
-    'dapper_nodes': ('id', 'class_name', 'payload'),
-    'dapper_edges': EDGE_COLUMNS,
     'trait_gene_sets': TRAIT_GENE_SET_COLUMNS,
+    'factor_trait_links': FACTOR_LINK_COLUMNS,
+    'phenotypes': ('phenotype', 'kpn_trait_id', 'phenotype_name', 'display_name', 'legacy_phenotype_id', 'category', 'is_atlas', 'metadata'),
     'release': ('release_id', 'published_at', 'manifest')}
 TABLES = tuple(COLUMNS)
+# Each table's release file (ref_release is the manifest).
+TABLE_FILES = {'traits': 'traits.jsonl.gz', 'factors': 'factors.jsonl.gz', 'factor_genes': 'factor_genes.tsv.gz', 'collections': 'collections.jsonl.gz',
+               'gene_sets': 'gene_sets.jsonl.gz', 'projections': 'projections.tsv.gz', 'trait_gene_sets': 'trait_gene_sets.tsv.gz',
+               'factor_trait_links': 'factor_trait_links.tsv.gz', 'phenotypes': 'phenotypes.jsonl.gz'}
+# Tables of older releases: dropped by name (live, __new and __old), never by pattern.
+RETIRED_TABLES = ('dapper_nodes', 'dapper_edges')
 JSON_COLUMNS = frozenset({'metadata', 'payload', 'manifest'})
 # Written with reveal_ref_* names: repository.application_sql adds the environment prefix. Types follow migration 008
 # without generation_id; no foreign keys, so every table is swapped at once.
@@ -162,6 +185,7 @@ CREATE TABLE reveal_ref_collections{suffix} (
   cfde_label VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
   library VARCHAR(64) NOT NULL,
   n_sets INT UNSIGNED NOT NULL,
+  portal_collection_id VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
   payload JSON NOT NULL,
   UNIQUE KEY ref_collection_label (cfde_label)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
@@ -194,21 +218,6 @@ CREATE TABLE reveal_ref_projections{suffix} (
   INDEX ref_projection_library (factor_key, library, joint_rank)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
 
-CREATE TABLE reveal_ref_dapper_nodes{suffix} (
-  id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL PRIMARY KEY,
-  class_name VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-  payload JSON NOT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
-
-CREATE TABLE reveal_ref_dapper_edges{suffix} (
-  subject VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-  predicate VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-  object VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-  edge_role VARCHAR(64) NULL,
-  PRIMARY KEY (subject, predicate, object),
-  INDEX ref_dapper_edge_object (object)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
-
 CREATE TABLE reveal_ref_trait_gene_sets{suffix} (
   kpn_trait_id VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
   gene_set_id VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
@@ -220,6 +229,33 @@ CREATE TABLE reveal_ref_trait_gene_sets{suffix} (
   PRIMARY KEY (kpn_trait_id, gene_set_id),
   INDEX ref_trait_gene_set (gene_set_id),
   INDEX ref_trait_gene_set_library (kpn_trait_id, library, library_rank)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+
+CREATE TABLE reveal_ref_factor_trait_links{suffix} (
+  factor_key VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  phenotype VARCHAR(191) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  phenotype_kpn_trait_id VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NULL,
+  is_own_trait TINYINT NOT NULL,
+  is_atlas_trait TINYINT NOT NULL,
+  nnls_loading DOUBLE NOT NULL,
+  phewas_beta DOUBLE NOT NULL,
+  phewas_p_onesided DOUBLE NOT NULL,
+  phewas_q DOUBLE NOT NULL,
+  PRIMARY KEY (factor_key, phenotype),
+  INDEX ref_factor_trait_link_trait (phenotype_kpn_trait_id, phewas_q),
+  INDEX ref_factor_trait_link_q (factor_key, phewas_q)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+
+CREATE TABLE reveal_ref_phenotypes{suffix} (
+  phenotype VARCHAR(191) CHARACTER SET ascii COLLATE ascii_bin NOT NULL PRIMARY KEY,
+  kpn_trait_id VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NULL,
+  phenotype_name TEXT NULL,
+  display_name TEXT NOT NULL,
+  legacy_phenotype_id VARCHAR(191) NULL,
+  category VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NULL,
+  is_atlas TINYINT NOT NULL,
+  metadata JSON NOT NULL,
+  UNIQUE KEY ref_phenotype_kpn (kpn_trait_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
 
 CREATE TABLE reveal_ref_release{suffix} (
@@ -246,6 +282,21 @@ ARCHIVED_TABLE = '''CREATE TABLE IF NOT EXISTS archived_reference_factors (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin'''
 ARCHIVED_COLUMNS = ('archive_id', 'generation_id', 'source_id', 'source_id_sha256', 'model', 'factor_id', 'trait', 'kpn_trait_id', 'label',
                     'snapshot', 'snapshot_sha256')
+# Per environment (application_sql prefixes it), never swapped or purged: which shared archived_reference_factors rows the
+# environment published (index_archived); catalog.archived_for_source and archived_for_mechanism read through it.
+ARCHIVE_INDEX = '''CREATE TABLE IF NOT EXISTS reveal_archive_index (
+  source_id_sha256 CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  archive_id CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  mechanism_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NULL,
+  published_at TIMESTAMP(6) NOT NULL,
+  PRIMARY KEY (source_id_sha256, archive_id),
+  INDEX archive_index_mechanism (mechanism_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin'''
+ARCHIVE_INDEX_COLUMNS = ('source_id_sha256', 'archive_id', 'mechanism_id', 'published_at')
+# The shared snapshots of the state the releases replaced, which every environment serves: the KPN and legacy generations
+# (scripts/reference_migration.py KPN_GENERATION and LEGACY_GENERATION; freeze-legacy and the old cutover wrote them).
+SHARED_GENERATIONS = ('ec3364ae1dfdeeead0110dd8129a16aa03dbd90b11400108e274f8d9ded92c8a',
+                      '16e78f6a1282320367b4e6507ad828fc71bdb38ad06e0e0a7d384026f4414e19')
 STRICT_MODE = "SET SESSION sql_mode = CONCAT_WS(',', NULLIF(@@SESSION.sql_mode, ''), 'STRICT_ALL_TABLES')"
 
 # LAP project outputs <stem>.<suffix> (columns required).
@@ -264,7 +315,22 @@ LAP_FILES = {
     'kpn_trait_flat': ('kpn_trait_flat.tsv', ('portal_id', 'description', 'is_dichotomous', 'is_complex', 'target_id', 'target_label',
                                               'target_ontology', 'mapping_predicate', 'confidence')),
     'factors_by_genes': ('all_factors.factors_by_genes.tsv', ('Factor',)),
+    # linkage_ stage: every factor x PIGEAN phenotype at the q-value cutoff (2.3M rows, streamed), one summary row per factor
+    'factor_links': ('factor_links.tsv', ('trait', 'kpn_trait_id', 'factor_id', 'factor_label', 'phenotype', 'phenotype_kpn_trait_id',
+                                          'phenotype_name', 'is_own_trait', 'is_atlas_trait', 'nnls_loading', 'phewas_beta',
+                                          'phewas_p_onesided', 'phewas_q')),
+    'factor_links_summary': ('factor_links_summary.tsv', ('trait', 'kpn_trait_id', 'factor_id', 'factor_label', 'n_phenotypes', 'n_linked',
+                                                          'n_linked_kpn_traits', 'n_linked_atlas_traits', 'own_trait_q', 'top_linked')),
+    'linkage_phenotypes': ('linkage_phenotypes.tsv', ('phenotype', 'kpn_trait_id', 'kpn_match', 'gwas_source_category', 'phenotype_name',
+                                                      'is_anchor', 'n_genes', 'n_genes_kept')),
+    # provenance_ stage: each collection's portal collection, and the portal's bottom-line GWAS artifacts (one row each)
+    'provenance_map': ('provenance_collection_map.tsv', ('release_collection_id', 'cfde_label', 'library', 'portal_collection_id', 'portal_name',
+                                                         'n_gene_sets')),
+    'bottom_line_artifacts': ('bottom_line_artifacts.tsv', ('kpn_trait_id', 'portal_trait_id', 'trait_name', 'ancestry_code', 'ancestry_name',
+                                                            'artifact_id')),
 }
+STREAMED_LAP_FILES = ('gene_set_index', 'factors_by_genes', 'factor_links')  # not read by lap_tables
+PHENOTYPE_ID_RE = re.compile(r'[\x21-\x7e]{1,191}')  # reveal_ref_phenotypes.phenotype: printable ascii
 MAPPING_COLUMNS = ('target_id', 'target_label', 'target_ontology', 'mapping_predicate', 'confidence', 'mapping_justification', 'source')
 
 
@@ -432,9 +498,74 @@ def _single(values, what):
     return values.pop()
 
 
-def lap_tables(paths, kpn_release=None):
-    """Traits, factors (source_revision still unset), gene sets and the CFDE index of a LAP project."""
-    table = {role: read_tsv(paths[role], LAP_FILES[role][1]) for role in LAP_FILES if role not in ('gene_set_index', 'factors_by_genes')}
+def _na(value): return None if value in ('', 'NA') else value  # LAP writes 'NA' for missing values
+
+
+def _truth(value, where):
+    if value not in ('True', 'False'): raise Refused(f'{where}: expected True or False, found {value!r}')
+    return int(value == 'True')
+
+
+def _finite(value, where):
+    number = _number(value, where, float)
+    if not math.isfinite(number): raise Refused(f'{where}: not finite')
+    return number
+
+
+def bottom_lines(rows):
+    """{kpn_trait_id: (portal_trait_id, artifacts)} of the portal's bottom-line GWAS artifacts (the LAP
+    provenance_bottom_line_cmd, one row per artifact); rows of portal traits without a KPN id are not joinable."""
+    found = {}
+    for row in rows:
+        kpn = row['kpn_trait_id']
+        if not kpn: continue
+        portal, artifacts = found.setdefault(kpn, (row['portal_trait_id'], []))
+        if not portal or portal != row['portal_trait_id']: raise Refused(f"{kpn}: bottom-line artifacts of several or no portal traits")
+        if not row['artifact_id'] or any(item['artifact_id'] == row['artifact_id'] for item in artifacts):
+            raise Refused(f"{kpn}: empty or repeated bottom-line artifact {row['artifact_id']!r}")
+        artifacts.append({key: row[key] for key in ('ancestry_code', 'ancestry_name', 'artifact_id')})
+    return found
+
+
+def bottom_line(found, kpn, category, ancestry):
+    """A trait's or phenotype's metadata.bottom_line: its portal artifacts and the one its GWAS route uses (ancestry
+    --gwas-ancestry), or why there is none: rare-disease lists have no GWAS; other traits are not on the portal."""
+    portal, artifacts = found.get(kpn, (None, [])) if kpn else (None, [])
+    artifacts = sorted(artifacts, key=lambda item: (item['ancestry_code'], item['artifact_id']))
+    gwas = [item for item in artifacts if item['ancestry_code'] == ancestry]
+    if len(gwas) > 1: raise Refused(f'{kpn}: several {ancestry} bottom-line artifacts')
+    return {'portal_trait_id': portal, 'artifacts': artifacts, 'gwas_artifact': gwas[0] if gwas else None,
+            'gwas_reason': None if gwas else 'not_a_gwas_trait' if (category or '').startswith('rare') else 'not_on_portal'}
+
+
+def phenotype_rows(rows, registry, found, ancestry):
+    """reveal_ref_phenotypes rows, in phenotype order: every PIGEAN phenotype the linkage linked factors to ('NA' -> None).
+    display_name is the phenotype name, else the id without its gcat_trait_ prefix; legacy_phenotype_id comes from the KPN
+    registry."""
+    phenotypes, kpns = {}, set()
+    for row in rows:
+        name, kpn = row['phenotype'], _na(row['kpn_trait_id'])
+        if not PHENOTYPE_ID_RE.fullmatch(name) or name in phenotypes: raise Refused(f'linkage phenotypes: invalid or repeated phenotype {name!r}')
+        if kpn:
+            rg.kpn_number(kpn)
+            if kpn in kpns: raise Refused(f'linkage phenotypes: {kpn} names several phenotypes')
+            kpns.add(kpn)
+        category, display = _na(row['gwas_source_category']), _na(row['phenotype_name'])
+        legacy = (registry.get(kpn) or {}).get('legacy_phenotype_id') or None if kpn else None
+        if legacy and len(legacy) > 191: raise Refused(f'{kpn}: legacy phenotype id longer than 191 characters')
+        phenotypes[name] = {'phenotype': name, 'kpn_trait_id': kpn, 'phenotype_name': display,
+                            'display_name': display or name.removeprefix('gcat_trait_'), 'legacy_phenotype_id': legacy, 'category': category,
+                            'is_atlas': _truth(row['is_anchor'], name),
+                            'metadata': {'kpn_match': _na(row['kpn_match']), 'n_genes': _number(row['n_genes'], name),
+                                         'n_genes_kept': _number(row['n_genes_kept'], name),
+                                         'bottom_line': bottom_line(found, kpn, category, ancestry)}}
+    return [phenotypes[name] for name in sorted(phenotypes)]
+
+
+def lap_tables(paths, kpn_release=None, gwas_ancestry=DEFAULT_GWAS_ANCESTRY):
+    """Traits, factors (source_revision still unset), gene sets and the CFDE index of a LAP project, with the linkage
+    phenotypes, each factor's link summary and each collection's portal collection."""
+    table = {role: read_tsv(paths[role], LAP_FILES[role][1]) for role in LAP_FILES if role not in STREAMED_LAP_FILES}
     qc = table['projection_manifest']
     failed = sorted(row['trait'] for row in qc if row['qc_pass'] != 'True')
     if failed or not qc: raise Refused(f'LAP projection QC did not pass for {len(failed)} traits: {failed[:10]}')
@@ -447,6 +578,7 @@ def lap_tables(paths, kpn_release=None):
     if kpn_release and kpn_release != release: raise Refused(f'LAP outputs are KPN {release}, not {kpn_release}')
     if {row['kpn_release'] for row in qc} != {release}: raise Refused('Projection manifest KPN release differs from the trait map')
     registry = {row['portal_id']: row for row in table['kpn_trait_registry']}
+    found = bottom_lines(table['bottom_line_artifacts'])
     flat = {}
     for row in table['kpn_trait_flat']: flat.setdefault(row['portal_id'], []).append(row)
     traits, by_trait = [], {}
@@ -463,7 +595,8 @@ def lap_tables(paths, kpn_release=None):
                   'description': extras[0].get('description') or None, 'is_dichotomous': _flag(extras[0].get('is_dichotomous')),
                   'is_complex': _flag(extras[0].get('is_complex')), 'n_factors': _number(row['n_factors'], trait),
                   'metadata': {'kpn_release': release, 'kpn_release_commit': release_commit, 'pigean_id': entry.get('pigean_id') or None,
-                               'ontology_mappings': mappings}}
+                               'ontology_mappings': mappings,
+                               'bottom_line': bottom_line(found, kpn, row['gwas_source_category'], gwas_ancestry)}}
         if kpn in by_trait.values(): raise Refused(f'KPN trait {kpn} maps to several EAGGL traits')
         by_trait[trait] = kpn; traits.append(record)
     metadata_rows = {row['factor_id']: row for row in table['factor_metadata']}
@@ -511,9 +644,33 @@ def lap_tables(paths, kpn_release=None):
     for collection_id, row in index.items():
         if not re.fullmatch(r'dapper:GeneSetCollection\.[A-Za-z0-9_-]{32}', collection_id): raise Refused(f'Invalid collection id {collection_id!r}')
         if members.get(collection_id, 0) != _number(row['n_sets'], row['label']): raise Refused(f"{row['label']}: n_sets differs from its gene sets")
+    portal = {}
+    for row in table['provenance_map']:
+        collection = index.get(row['release_collection_id'])
+        if not collection or collection['label'] != row['cfde_label'] or row['release_collection_id'] in portal \
+                or not re.fullmatch(r'dapper:GeneSetCollection\.[A-Za-z0-9_-]{32}', row['portal_collection_id']):
+            raise Refused(f"provenance collection map: unknown, repeated or invalid row for {row['release_collection_id']!r}")
+        portal[row['release_collection_id']] = row['portal_collection_id']
+    unmapped = sorted(index[collection_id]['label'] for collection_id in set(index) - set(portal))
+    if unmapped: raise Refused(f'{len(unmapped)} collections have no portal collection, e.g. {unmapped[:3]}')
+    summary = {}
+    for row in table['factor_links_summary']:
+        factor = index_rows.get(row['factor_id'])
+        if not factor or factor['kpn_trait_id'] != row['kpn_trait_id'] or row['factor_id'] in summary:
+            raise Refused(f"factor link summary: unknown, misfiled or repeated factor {row['factor_id']!r}")
+        own = _na(row['own_trait_q'])
+        summary[row['factor_id']] = {**{key: _number(row[key], row['factor_id']) for key in ('n_phenotypes', 'n_linked', 'n_linked_kpn_traits',
+                                                                                          'n_linked_atlas_traits')},
+                                     'own_trait_q': None if own is None else _finite(own, row['factor_id'])}
+    unlinked = sorted(set(index_rows) - set(summary))
+    if unlinked: raise Refused(f'{len(unlinked)} factors have no link summary, e.g. {unlinked[:3]}')
+    phenotypes = phenotype_rows(table['linkage_phenotypes'], registry, found, gwas_ancestry)
+    if {row['kpn_trait_id'] for row in phenotypes if row['is_atlas']} != set(by_trait.values()):
+        raise Refused('The linkage phenotypes flagged as anchors are not the KPN traits of the trait map')
     return {'traits': traits, 'factors': sorted(factors, key=lambda item: item['factor_key']), 'keys': keys, 'index_rows': index_rows,
             'kpn_map': kpn_map, 'gene_sets': gene_sets, 'members': members, 'index': index, 'kpn_release': release,
-            'kpn_release_commit': release_commit, 'pigean_commit': pigean_commit}
+            'kpn_release_commit': release_commit, 'pigean_commit': pigean_commit, 'portal': portal, 'link_summary': summary,
+            'phenotypes': phenotypes, 'bottom_line': {'gwas_ancestry': gwas_ancestry, 'portal_traits': len(found)}}
 
 
 def write_factor_genes(path, out, keys, index_rows):
@@ -545,6 +702,55 @@ def write_factor_genes(path, out, keys, index_rows):
     missing = sorted(set(keys.values()) - set(sums))
     if missing: raise Refused(f'{name} lacks {len(missing)} factors, e.g. {missing[:3]}')
     return count, sums, top
+
+
+def write_factor_links(path, out, lap):
+    """factor_trait_links.tsv.gz in (factor_key, phenotype) order from LAP's factor_links.tsv (2.3M rows, each factor's
+    rows together, in trait order): one pass finds each factor's block of lines, a second writes the blocks in factor_key
+    order, so one factor's rows are in memory at a time. 'NA' KPN ids are written empty, booleans as 1/0, numbers as LAP
+    wrote them. Returns (rows, {factor_key: metadata.trait_links}): the factor's link summary and its TOP_LINKED links by
+    (phewas_q, phenotype)."""
+    name, required, blocks = Path(path).name, LAP_FILES['factor_links'][1], {}
+    with open(path, 'rb') as stream:
+        first = stream.readline()
+        header = first.decode('utf-8').rstrip('\n').split('\t')
+        if any(column not in header for column in required) or len(set(header)) != len(header): raise Refused(f'{name}: missing or duplicate columns')
+        width, at, offset, current, start = len(header), header.index('factor_id'), len(first), None, None
+        for number, line in enumerate(stream, 2):
+            fields = line.rstrip(b'\n').split(b'\t')
+            if len(fields) != width: raise Refused(f'{name}: malformed row {number}')
+            if fields[at] != current:
+                if current is not None: blocks[current.decode('utf-8')] = (start, offset)
+                current, start = fields[at], offset
+                if current.decode('utf-8') in blocks: raise Refused(f"{name}: the rows of {current.decode('utf-8')} are not contiguous")
+            offset += len(line)
+        if current is not None: blocks[current.decode('utf-8')] = (start, offset)
+    unknown = sorted(set(blocks) - set(lap['keys']))
+    if unknown: raise Refused(f'{name}: unknown factors {unknown[:3]}')
+    phenotypes, position = {row['phenotype']: row for row in lap['phenotypes']}, [header.index(column) for column in required]
+    count, links = 0, {}
+    with open(path, 'rb') as stream, _writer(out) as writer:
+        writer.write('\t'.join(FACTOR_LINK_COLUMNS) + '\n')
+        for key, factor in sorted((lap['keys'][factor], factor) for factor in lap['keys']):
+            summary, kpn, rows = lap['link_summary'][factor], lap['index_rows'][factor]['kpn_trait_id'], {}
+            if factor in blocks:
+                stream.seek(blocks[factor][0])
+                for line in stream.read(blocks[factor][1] - blocks[factor][0]).decode('utf-8').rstrip('\n').split('\n'):
+                    fields = line.split('\t')
+                    _, link_kpn, link_factor, _, phenotype, phenotype_kpn, _, own, atlas, *values = (fields[i] for i in position)
+                    where = f'{name}: {factor} x {phenotype}'
+                    if (link_factor, link_kpn) != (factor, kpn): raise Refused(f'{where}: the link names another KPN trait')
+                    if phenotype not in phenotypes or _na(phenotype_kpn) != phenotypes[phenotype]['kpn_trait_id'] or phenotype in rows:
+                        raise Refused(f'{where}: unknown or repeated phenotype, or its KPN id differs from the linkage phenotypes')
+                    q = [_finite(value, where) for value in values][-1]
+                    rows[phenotype] = (q, (key, phenotype, _na(phenotype_kpn) or '', str(_truth(own, where)), str(_truth(atlas, where)), *values))
+            if summary['n_linked'] != len(rows): raise Refused(f"{factor}: {len(rows)} link rows, the summary says {summary['n_linked']}")
+            writer.write(''.join('\t'.join(rows[phenotype][1]) + '\n' for phenotype in sorted(rows)))
+            top = sorted((q, phenotype) for phenotype, (q, _) in rows.items())[:TOP_LINKED]
+            links[key] = {**summary, 'top_linked': [{'phenotype': phenotype, 'kpn_trait_id': phenotypes[phenotype]['kpn_trait_id'],
+                                                     'name': phenotypes[phenotype]['display_name'], 'phewas_q': q} for q, phenotype in top]}
+            count += len(rows)
+    return count, links
 
 
 # --------------------------------------------------------------------------------------
@@ -700,8 +906,9 @@ def _tasks(workers):
 # build: release files
 
 
-def write_projections(path, futures, keys, index_rows, libraries):
-    """projections.tsv.gz in factor_key order from the long-file results [(kpn_trait_id, future)], each released once written."""
+def write_projections(path, futures, keys, index_rows, libraries, referenced):
+    """projections.tsv.gz in factor_key order from the long-file results [(kpn_trait_id, future)], each released once written;
+    the gene sets written are added to `referenced`."""
     seen, count = set(), 0
     futures = sorted(futures, key=lambda item: item[0], reverse=True)
     with _writer(path) as out:
@@ -725,24 +932,117 @@ def write_projections(path, futures, keys, index_rows, libraries):
                     if flag not in ('0', '1'): raise Refused(f'{where}: invalid is_joint_top_factor')
                     sets.add(gene_set)
                     out.write(f'{key}\t{gene_set}\t{library}\t{joint}\t{marginal}\t{joint_rank}\t{marginal_rank}\t{flag}\n')
-                count += len(rows)
+                count += len(rows); referenced.update(sets)
     missing = sorted(set(keys.values()) - seen)
     if missing: raise Refused(f'{len(missing)} factors have no projections (missing long files?), e.g. {missing[:3]}')
     return count
 
 
-def write_collections(directory, lap, documents, submit, in_flight):
-    """collections.jsonl.gz and gene_sets.jsonl.gz (+ each exact GeneSet node) and the DAPPER graph, one collection
+def load_source_datasets(path, runtime):
+    """lap/config/source_datasets.yaml, validated once: {sha256, organizations: {key: node}, datasets: {key: node}, links}.
+
+    organizations and datasets with an id are verbatim copies of existing DAPPER nodes (their id must recompute); a new
+    Dataset names its publisher and attributed_to organizations by key and gets a minted id. A link maps raw-file name
+    patterns of some libraries to one dataset (curate)."""
+    import yaml
+    path = Path(path); name = path.name
+    try: data = yaml.safe_load(path.read_text(encoding='utf-8'))
+    except (OSError, yaml.YAMLError) as error: raise Refused(f'{path}: unreadable source datasets ({error})') from error
+    if not isinstance(data, dict) or set(data) - {'organizations', 'datasets', 'links'}: raise Refused(f'{name}: expected organizations, datasets and links')
+    def entries(section):
+        value = data.get(section) or {}
+        if not isinstance(value, dict) or any(not isinstance(key, str) or not isinstance(node, dict) for key, node in value.items()):
+            raise Refused(f'{name}: {section} must map keys to nodes')
+        return value
+    def verbatim(key, node, cls):
+        if not isinstance(node.get('id'), str) or runtime.compute_id({k: v for k, v in node.items() if k != 'id'}, cls, runtime.schema) != node['id']:
+            raise Refused(f'{name}: {key} is not a verbatim copy of an existing {cls} (its id does not recompute)')
+        return node
+    organizations = {key: verbatim(key, node, 'Organization') for key, node in entries('organizations').items()}
+    known, datasets = {node['id'] for node in organizations.values()}, {}
+    for key, node in entries('datasets').items():
+        if 'id' in node: datasets[key] = verbatim(key, node, 'Dataset')
+        else:
+            if set(node) - NEW_DATASET_KEYS: raise Refused(f'{name}: dataset {key} has unknown keys {sorted(set(node) - NEW_DATASET_KEYS)}')
+            attributed = node.get('attributed_to') or []
+            if not isinstance(attributed, list) or not isinstance(node.get('publisher') or '', str) \
+                    or any(org not in organizations for org in [*_refs(node.get('publisher')), *attributed]):
+                raise Refused(f'{name}: dataset {key} names an organization key missing from organizations')
+            body = {**{field: node.get(field) for field in ('name', 'description', 'version', 'alternate_identifier', 'location')},
+                    'publisher': organizations[node['publisher']]['id'] if node.get('publisher') else None,
+                    'was_attributed_to': [organizations[org]['id'] for org in attributed]}
+            body = {field: value for field, value in body.items() if value not in (None, '', [])}
+            datasets[key] = {'id': runtime.compute_id(dict(body), 'Dataset', runtime.schema), **body}
+        missing = sorted({org for field in ORG_FIELDS for org in _refs(datasets[key].get(field))} - known)
+        if missing: raise Refused(f'{name}: dataset {key} names organizations missing from organizations: {missing}')
+    check = getattr(runtime, 'validator', None)  # the DAPPER runtime's node validator (test stand-ins have none)
+    for cls, nodes in (('Organization', organizations), ('Dataset', datasets)):
+        for key, node in nodes.items():
+            results = check.validate(node, cls).results if check else []
+            if results: raise Refused(f'{name}: {key} is not a valid {cls}: {[result.message for result in results][:3]}')
+    links = []
+    for position, link in enumerate(data.get('links') or []):
+        where = f'{name}: links[{position}]'
+        if not isinstance(link, dict) or set(link) - LINK_KEYS or link.get('dataset') not in datasets: raise Refused(f'{where}: unknown keys or dataset')
+        libraries, files = link.get('libraries'), link.get('files')
+        if not isinstance(libraries, list) or not libraries or not isinstance(files, list) or not files \
+                or any(not isinstance(value, str) or not value for value in libraries + files) or not isinstance(link.get('note', ''), str):
+            raise Refused(f'{where}: libraries and files must be non-empty lists of strings')
+        try: patterns = [re.compile(pattern) for pattern in files]
+        except re.error as error: raise Refused(f'{where}: invalid file pattern ({error})') from error
+        links.append({'dataset': link['dataset'], 'libraries': frozenset(libraries), 'patterns': patterns, 'note': link.get('note') or ''})
+    return {'sha256': _sha256_file(path), 'organizations': organizations, 'datasets': datasets, 'links': links}
+
+
+def reaches_dataset(provenance):
+    """Whether a collection's provenance has a was_derived_from edge to one of its own Datasets."""
+    datasets = {node.get('id') for node in provenance.get('datasets') or []}
+    return any(edge.get('object') in datasets for edge in provenance.get('was_derived_from_edges') or [])
+
+
+def curate(provenance, library, curated):
+    """(payload.curated_provenance or None, {dataset key: edges}) of a collection whose producer's provenance reaches no
+    Dataset: every raw File (in files or c2m2_files, never generated) whose filename (or name) matches a pattern of a
+    link of the collection's library gets a was_derived_from edge to the link's Dataset. The groups hold only the
+    Datasets and Organizations those edges reach, and are validated as retained provenance."""
+    if reaches_dataset(provenance): return None, {}
+    generated = {edge.get('subject') for edge in provenance.get('was_generated_by_edges') or []}
+    raw = sorted((node for group in ('files', 'c2m2_files') for node in provenance.get(group) or []
+                  if node.get('id') not in generated and not node.get('was_generated_by')), key=lambda node: node['id'])
+    edges, counts, notes = {}, Counter(), {}
+    for link in curated['links']:
+        if library not in link['libraries']: continue
+        dataset = curated['datasets'][link['dataset']]['id']
+        for node in raw:
+            if (node['id'], dataset) not in edges and any(pattern.search(node.get('filename') or node.get('name') or '') for pattern in link['patterns']):
+                edges[node['id'], dataset] = {'subject': node['id'], 'predicate': 'prov:wasDerivedFrom', 'object': dataset}
+                counts[link['dataset']] += 1
+                if link['note']: notes[dataset, link['note']] = {'dataset': dataset, 'note': link['note']}
+    if not edges: return None, {}
+    reached = {edge['object'] for edge in edges.values()}
+    datasets = sorted((node for node in curated['datasets'].values() if node['id'] in reached), key=lambda node: node['id'])
+    named = {org for node in datasets for field in ORG_FIELDS for org in _refs(node.get(field))}
+    groups = {'organizations': sorted((node for node in curated['organizations'].values() if node['id'] in named), key=lambda node: node['id']),
+              'datasets': datasets, 'was_derived_from_edges': [edges[key] for key in sorted(edges)]}
+    groups = {group: items for group, items in groups.items() if items}
+    try: validate_provenance_edges(groups)
+    except ValueError as error: raise Refused(f'curated lineage of {library}: {error}') from error  # EvidenceBuildError
+    return {'source': SOURCE_DATASETS, 'source_sha256': curated['sha256'], 'groups': groups,
+            'notes': [notes[key] for key in sorted(notes)]}, dict(counts)
+
+
+def write_collections(directory, lap, documents, submit, in_flight, *, referenced, curated):
+    """collections.jsonl.gz and gene_sets.jsonl.gz (each referenced gene set with its exact GeneSet node), one collection
     document at a time in collection_id order, with at most `in_flight` parsed documents in memory.
 
-    A collection's payload.provenance is its document's collection_provenance (every provenance node and edge group).
-    Graph nodes: organizations, datasets, files, activities and the collection (without members); edges: every
-    *_edges section but SKIPPED_SECTIONS, before or after the gene sets. First occurrence wins; a later differing
-    variant is counted. Returns (collections, gene sets, nodes, edges, variants skipped).
+    A collection's payload.provenance is its document's collection_provenance (every provenance node and edge group), and
+    payload.curated_provenance the curated lineage of its raw files when the producer names no Dataset (curate). Every
+    document's gene sets must be its gene_set_index rows; only the `referenced` ones (projected or with betas) are
+    written. A collection holding a referenced gene set must reach a Dataset. Returns (counts, the manifest's curated block).
     """
     by_collection = {}
     for row in lap['gene_sets']: by_collection.setdefault(row['collection_id'], []).append(row)
-    nodes, edges, variants, counts = {}, {}, 0, {'collections': 0, 'gene_sets': 0}
+    counts, used, gaps = {'collections': 0, 'gene_sets': 0, 'gene_sets_indexed': 0}, defaultdict(Counter), []
     order = iter(sorted(documents))
     pending = deque((identity, submit(read_collection, documents[identity])) for identity in islice(order, in_flight))
     with _writer(directory / 'collections.jsonl.gz') as collections_out, _writer(directory / 'gene_sets.jsonl.gz') as gene_sets_out:
@@ -751,36 +1051,27 @@ def write_collections(directory, lap, documents, submit, in_flight):
             following = next(order, None)
             if following: pending.append((following, submit(read_collection, documents[following])))
             parsed, row = future.result(), lap['index'][collection_id]
-            header, document, count = parsed['header'], parsed['document'], lap['members'].get(collection_id, 0)
+            document, count = parsed['document'], lap['members'].get(collection_id, 0)
             if document.get('id') != collection_id or document.get('n_sets', count) != count:
                 raise Refused(f"{row['label']}: document does not describe collection {collection_id}")
             members = by_collection.get(collection_id, [])
             if set(parsed['gene_sets']) != {member['gene_set_id'] for member in members}:
                 raise Refused(f"{row['label']}: document gene sets differ from gene_set_index")
+            payload = {'collection': document, 'index': row, 'document_sha256': parsed['sha256'], 'provenance': parsed['provenance']}
+            lineage, edges = curate(parsed['provenance'], row['library'], curated)
+            if lineage: payload['curated_provenance'] = lineage
+            for key, number in edges.items(): used[key]['collections'] += 1; used[key]['edges'] += number
+            kept = [member for member in members if member['gene_set_id'] in referenced]
+            if kept and not lineage and not reaches_dataset(parsed['provenance']): gaps.append(row['label'])
             collections_out.write(canonical({'collection_id': collection_id, 'cfde_label': row['label'], 'library': row['library'], 'n_sets': count,
-                'payload': {'collection': document, 'index': row, 'document_sha256': parsed['sha256'], 'provenance': parsed['provenance']}}) + '\n')
-            for member in members:
+                                             'portal_collection_id': lap['portal'][collection_id], 'payload': payload}) + '\n')
+            for member in kept:
                 gene_sets_out.write(canonical({**member, 'metadata': {**member['metadata'], 'dapper_gene_set': json.loads(parsed['gene_sets'][member['gene_set_id']])}}) + '\n')
-            counts['collections'] += 1; counts['gene_sets'] += len(members)
-            sections = {**header, **parsed['tail']}  # each section appears once (read_collection)
-            for section in NODE_SECTIONS:
-                for node in sections.get(section) or []:
-                    match = DAPPER_ID_RE.fullmatch(str(node.get('id') if isinstance(node, dict) else ''))
-                    if not match: raise Refused(f'{collection_id}: {section} entry without a DAPPER id')
-                    if section == 'gene_set_collections': node = {key: value for key, value in node.items() if key != 'members'}
-                    if node['id'] in nodes: variants += nodes[node['id']]['payload'] != node; continue
-                    nodes[node['id']] = {'id': node['id'], 'class_name': match[1], 'payload': node}
-            for section, entries in sections.items():
-                if not section.endswith('_edges') or section in SKIPPED_SECTIONS: continue
-                for edge in entries or []:
-                    values = [edge.get(key) if isinstance(edge, dict) else None for key in EDGE_COLUMNS]
-                    if not all(isinstance(value, str) and value for value in values[:3]) or not isinstance(values[3], (str, type(None))):
-                        raise Refused(f'{collection_id}: malformed {section} entry')
-                    key = tuple(values[:3])
-                    if key in edges: variants += edges[key] != values[3]; continue
-                    edges[key] = values[3]
+            counts['collections'] += 1; counts['gene_sets'] += len(kept); counts['gene_sets_indexed'] += len(members)
             del parsed
-    return counts['collections'], counts['gene_sets'], [nodes[key] for key in sorted(nodes)], [(*key, edges[key] or '') for key in sorted(edges)], variants
+    if gaps: raise Refused(f'{len(gaps)} collections holding referenced gene sets reach no Dataset (link them in {SOURCE_DATASETS}): {sorted(gaps)[:20]}')
+    return counts, {'source': SOURCE_DATASETS, 'source_sha256': curated['sha256'],
+                    'datasets': {key: dict(used[key]) or {'collections': 0, 'edges': 0} for key in sorted({link['dataset'] for link in curated['links']})}}
 
 
 class VectorCache:
@@ -949,10 +1240,10 @@ def gene_set_stats_files_in(directory):
                   if not any(part.startswith('.') for part in path.relative_to(directory).parts))
 
 
-def write_trait_gene_sets(path, files, kpn_map, gene_set_ids):
+def write_trait_gene_sets(path, files, kpn_map, gene_set_ids, referenced):
     """trait_gene_sets.tsv.gz from the per-trait `<trait>.betas.tsv` files, in KPN trait order: one file per
     trait (no gene set PIGEAN analyzed is a header-only file), one response, known gene sets, library ranks 1..n.
-    Returns (rows, the manifest block)."""
+    The gene sets written are added to `referenced`. Returns (rows, the manifest block)."""
     by_kpn = {}
     for file in map(Path, files):
         if not file.name.endswith(GENE_SET_STATS_SUFFIX): raise Refused(f'{file.name}: not a <trait>{GENE_SET_STATS_SUFFIX} file')
@@ -977,6 +1268,7 @@ def write_trait_gene_sets(path, files, kpn_map, gene_set_ids):
                 yield tuple(row[column] for column in TRAIT_GENE_SET_COLUMNS)
             if any(values != list(range(1, len(values) + 1)) for values in ranks.values()):
                 raise Refused(f'{file.name}: library ranks are not 1..n in rank order')
+            referenced.update(seen)
     total = write_tsv(path, TRAIT_GENE_SET_COLUMNS, rows())
     return total, {'response': next(iter(responses), None), 'traits': len(by_kpn), 'traits_with_rows': len(counts),
                    'source': 'pigean betas mode (no outer Gibbs) on each trait\'s PIGEAN gene stats, one fit per CFDE library; '
@@ -997,14 +1289,16 @@ def _replaceable(path):
     return isinstance(manifest, dict) and manifest.get('format') == RELEASE_FORMAT
 
 
-def build_release(services, project_dir, long_files, cache_path, out, *, gene_set_stats_files=(), kpn_release=None,
-                  top_n=DEFAULT_TOP_N, workers=1, runtime=None):
+def build_release(services, project_dir, long_files, cache_path, out, *, gene_set_stats_files=(), source_datasets=None,
+                  gwas_ancestry=DEFAULT_GWAS_ANCESTRY, kpn_release=None, top_n=DEFAULT_TOP_N, workers=1, runtime=None):
     """Write the release folder (module docstring) and swap it into `out`; reuse an identical release already there."""
     project_dir, out = Path(project_dir), Path(out)
     if top_n < 1 or workers < 1: raise Refused('--top-n and --workers must be positive')
+    if not source_datasets: raise Refused(f'Pass the curated source datasets (--source-datasets {SOURCE_DATASETS})')
+    if not gwas_ancestry: raise Refused('--gwas-ancestry must name an ancestry code')
     if out.exists() and not _replaceable(out): raise Refused(f'{out} exists and is not a release folder: refusing to replace it')
     stem, paths = lap_inputs(project_dir)
-    lap = lap_tables(paths, kpn_release)
+    lap = lap_tables(paths, kpn_release, gwas_ancestry)
     by_kpn = {trait['kpn_trait_id']: trait for trait in lap['traits']}
     files, kpn_of = sorted(set(map(Path, long_files))), {}
     if not files: raise Refused('Pass the per-trait long files (--long-file or --long-files-from)')
@@ -1023,6 +1317,7 @@ def build_release(services, project_dir, long_files, cache_path, out, *, gene_se
         # Required: a factor revision's frozen snapshot is stored once, so a missing Mechanism id could never be added later.
         try: runtime = dapper_runtime()
         except Exception as error: raise Refused(f'The DAPPER runtime that mints Mechanism ids is unavailable ({type(error).__name__}: {error})') from error
+    curated = load_source_datasets(source_datasets, runtime)
     out.parent.mkdir(parents=True, exist_ok=True)
     temporary, started = Path(tempfile.mkdtemp(prefix=f'.{out.name}.build-', dir=out.parent)), time.monotonic()
     def progress(message): emit(services, f'{stem}: {message} ({time.monotonic() - started:.0f}s)')
@@ -1038,21 +1333,28 @@ def build_release(services, project_dir, long_files, cache_path, out, *, gene_se
         progress('vectors')
         embedding, counts['vectors'] = build_vectors(services, temporary / 'vectors', factors, cache_path)
         counts['traits'] = write_jsonl(temporary / 'traits.jsonl.gz', lap['traits'])
-        counts['factors'] = write_jsonl(temporary / 'factors.jsonl.gz', ({column: factor[column] for column in COLUMNS['factors']} for factor in factors))
+        progress('factor-trait links')
+        counts['factor_trait_links'], trait_links = write_factor_links(paths['factor_links'], temporary / 'factor_trait_links.tsv.gz', lap)
+        # metadata.trait_links is served with the factor; its frozen snapshot keeps the LAP metadata only (archived_rows).
+        counts['factors'] = write_jsonl(temporary / 'factors.jsonl.gz', ({**{column: factor[column] for column in COLUMNS['factors']},
+                                                                          'metadata': {**factor['metadata'], 'trait_links': trait_links[factor['factor_key']]}}
+                                                                         for factor in factors))
+        counts['phenotypes'] = write_jsonl(temporary / 'phenotypes.jsonl.gz', lap['phenotypes'])
         progress(f'{len(files)} long files on {workers} workers')
-        libraries = {row['gene_set_id']: row['library'] for row in lap['gene_sets']}
+        libraries, referenced = {row['gene_set_id']: row['library'] for row in lap['gene_sets']}, set()
         with _tasks(workers) as submit:  # long files in factor_key order
             counts['projections'] = write_projections(temporary / 'projections.tsv.gz', [
                 (kpn_of[path], submit(long_file_ranks, path, top_n)) for path in sorted(files, key=lambda path: kpn_of[path])],
-                lap['keys'], lap['index_rows'], libraries)
+                lap['keys'], lap['index_rows'], libraries, referenced)
         progress(f'{len(gene_set_stats_files)} trait gene-set stats files')
         counts['trait_gene_sets'], gene_set_stats = write_trait_gene_sets(temporary / 'trait_gene_sets.tsv.gz', gene_set_stats_files,
-                                                                          lap['kpn_map'], set(libraries))
-        progress(f'{len(documents)} collection documents, gene sets and DAPPER provenance on {workers} workers')
+                                                                          lap['kpn_map'], set(libraries), referenced)
+        progress(f'{len(documents)} collection documents and the {len(referenced)} referenced gene sets on {workers} workers')
         with _tasks(workers) as submit:
-            counts['collections'], counts['gene_sets'], nodes, edges, variants = write_collections(temporary, lap, documents, submit, workers + 1)
-        counts['dapper_nodes'] = write_jsonl(temporary / 'dapper_nodes.jsonl.gz', nodes)
-        counts['dapper_edges'] = write_tsv(temporary / 'dapper_edges.tsv.gz', EDGE_COLUMNS, edges)
+            collection_counts, curated_block = write_collections(temporary, lap, documents, submit, workers + 1, referenced=referenced, curated=curated)
+        counts.update(collection_counts)
+        progress('curated lineage edges: ' + ', '.join(f"{key} {value['edges']} in {value['collections']} collections"
+                                                      for key, value in curated_block['datasets'].items()))
         files_sha = {name: _sha256_file(temporary / name) for name in DATA_FILES}
         release_id = release_identity(files_sha)
         progress(f'release {release_id[:12]}; archived factor snapshots')
@@ -1062,11 +1364,12 @@ def build_release(services, project_dir, long_files, cache_path, out, *, gene_se
                     'counts': counts, 'top_n': top_n, 'embedding': embedding,
                     'archive': {'file': ARCHIVE_FILE, 'sha256': _sha256_file(temporary / ARCHIVE_FILE), 'top_genes': TOP_GENES,
                                 'top_gene_sets_per_library': TOP_GENE_SETS, 'mechanism_ids': bool(runtime)},
-                    'dapper': {'nodes': len(nodes), 'edges': len(edges), 'variants_skipped': variants}, 'gene_set_stats': gene_set_stats,
+                    'gene_set_stats': gene_set_stats, 'curated': curated_block, 'bottom_line': lap['bottom_line'],
                     'sources': {'lap_project': str(project_dir.resolve()), 'lap_stem': stem, 'pigean_commit': lap['pigean_commit'],
                                 'kpn_release': lap['kpn_release'], 'kpn_release_commit': lap['kpn_release_commit'],
                                 'cfde_snapshot': sorted({row['metadata']['cfde_snapshot'] for row in lap['gene_sets']}),
-                                'long_files': len(files), 'vector_cache': str(Path(cache_path).resolve())}}
+                                'long_files': len(files), 'vector_cache': str(Path(cache_path).resolve()),
+                                'source_datasets': str(Path(source_datasets).resolve())}}
         write_json(temporary / 'manifest.json', manifest)
         progress('written')
         result = {'release_id': release_id, 'out': str(out), 'counts': counts, 'embedding': embedding}
@@ -1149,9 +1452,11 @@ def open_release(release):
     release = Path(release)
     if not (release / 'manifest.json').is_file(): raise Refused(f'{release}: no manifest.json')
     manifest = read_json(release / 'manifest.json')
-    if manifest.get('format') != RELEASE_FORMAT or set(manifest.get('files') or {}) != set(DATA_FILES) \
+    if manifest.get('format') != RELEASE_FORMAT or not set(REQUIRED_FILES) <= set(manifest.get('files') or {}) \
             or release_identity(manifest['files']) != manifest.get('release_id'):
         raise Refused(f'{release}: not a {RELEASE_FORMAT} folder')
+    unknown = sorted(set(manifest['files']) - set(DATA_FILES) - set(RETIRED_FILES))
+    if unknown: raise Refused(f'{release}: release files {unknown} are unknown to this checkout: publish with a newer checkout')
     expected = {**manifest['files'], ARCHIVE_FILE: (manifest.get('archive') or {}).get('sha256')}
     for name, sha in expected.items():
         path = release / name
@@ -1163,10 +1468,11 @@ def open_release(release):
 def watch_release(release):
     """A check that refuses once the folder's files were replaced (a rebuild swaps the folder). The publisher re-reads them at
     each step, so it checks before each swap that every table came from the folder it verified."""
-    names = (*DATA_FILES, ARCHIVE_FILE, 'manifest.json')
     def stats():
-        try: return [(lambda stat: (stat.st_ino, stat.st_size, stat.st_mtime_ns))((Path(release) / name).stat()) for name in names]
-        except OSError: return None
+        try:
+            names = (*sorted(read_json(Path(release) / 'manifest.json').get('files') or {}), ARCHIVE_FILE, 'manifest.json')
+            return [(name, *(lambda stat: (stat.st_ino, stat.st_size, stat.st_mtime_ns))((Path(release) / name).stat())) for name in names]
+        except (OSError, ValueError, AttributeError): return None
     before = stats()
     def unchanged():
         if before is None or stats() != before: raise Refused(f'{release} changed during the publish (a rebuild?): publish it again')
@@ -1174,27 +1480,37 @@ def watch_release(release):
 
 
 def table_rows(release, manifest, published_at):
-    """(table, rows(), batch size) of every reference table (COLUMNS order), ref_release last."""
-    r = Path(release)
-    def jsonl(name, table):
+    """(table, rows(), batch size) of every reference table (COLUMNS order), ref_release last. A table whose optional file the
+    folder lacks (an older release) gets no rows; the stored manifest lists those files under absent_files."""
+    r, absent = Path(release), sorted(name for name in OPTIONAL_FILES if name not in manifest['files'])
+    def jsonl(table):
         columns = COLUMNS[table]
-        return lambda: (tuple(canonical(row[c]) if c in JSON_COLUMNS else row[c] for c in columns) for row in read_jsonl(r / name))
-    def projections():
-        for row in tsv_rows(r / 'projections.tsv.gz', PROJECTION_COLUMNS):
+        def rows(path):
+            for row in read_jsonl(path):
+                if any(c not in row for c in columns): raise Refused(f'{path.name} lacks {[c for c in columns if c not in row]}: rebuild this release')
+                yield tuple(canonical(row[c]) if c in JSON_COLUMNS else row[c] for c in columns)
+        return rows
+    def projections(path):
+        for row in tsv_rows(path, PROJECTION_COLUMNS):
             yield (row['factor_key'], row['gene_set_id'], row['library'], float(row['joint_loading']), float(row['marginal_loading']),
                    row['joint_loading'], row['marginal_loading'], int(row['joint_rank']), int(row['marginal_rank']), int(row['is_joint_top_factor']))
+    def links(path):
+        for row in tsv_rows(path, FACTOR_LINK_COLUMNS):
+            yield (row['factor_key'], row['phenotype'], row['phenotype_kpn_trait_id'] or None, int(row['is_own_trait']), int(row['is_atlas_trait']),
+                   *(float(row[c]) for c in ('nnls_loading', 'phewas_beta', 'phewas_p_onesided', 'phewas_q')))
+    readers = {'traits': (jsonl('traits'), 1000), 'factors': (jsonl('factors'), 1000), 'collections': (jsonl('collections'), 20),
+               'factor_genes': (lambda path: ((row['factor_key'], row['gene'], float(row['loading'])) for row in tsv_rows(path, FACTOR_GENE_COLUMNS)), 10000),
+               'gene_sets': (jsonl('gene_sets'), 500), 'projections': (projections, 5000),
+               'trait_gene_sets': (lambda path: ((row['kpn_trait_id'], row['gene_set_id'], row['library'], float(row['beta_uncorrected']),
+                                                  float(row['beta']), float(row['avg_postp']), int(row['library_rank']))
+                                                 for row in tsv_rows(path, TRAIT_GENE_SET_COLUMNS)), 5000),
+               'factor_trait_links': (links, 5000), 'phenotypes': (jsonl('phenotypes'), 1000)}
     stamp = published_at.astimezone(timezone.utc).strftime('%Y-%m-%d %H:%M:%S.%f')
-    return [('traits', jsonl('traits.jsonl.gz', 'traits'), 1000), ('factors', jsonl('factors.jsonl.gz', 'factors'), 1000),
-            ('factor_genes', lambda: ((row['factor_key'], row['gene'], float(row['loading']))
-                                      for row in tsv_rows(r / 'factor_genes.tsv.gz', FACTOR_GENE_COLUMNS)), 10000),
-            ('collections', jsonl('collections.jsonl.gz', 'collections'), 20), ('gene_sets', jsonl('gene_sets.jsonl.gz', 'gene_sets'), 500),
-            ('projections', projections, 5000), ('dapper_nodes', jsonl('dapper_nodes.jsonl.gz', 'dapper_nodes'), 500),
-            ('dapper_edges', lambda: ((row['subject'], row['predicate'], row['object'], row['edge_role'] or None)
-                                      for row in tsv_rows(r / 'dapper_edges.tsv.gz', EDGE_COLUMNS)), 5000),
-            ('trait_gene_sets', lambda: ((row['kpn_trait_id'], row['gene_set_id'], row['library'], float(row['beta_uncorrected']),
-                                          float(row['beta']), float(row['avg_postp']), int(row['library_rank']))
-                                         for row in tsv_rows(r / 'trait_gene_sets.tsv.gz', TRAIT_GENE_SET_COLUMNS)), 5000),
-            ('release', lambda: [(manifest['release_id'], stamp, canonical(manifest))], 1)]
+    def source(table):
+        read, name = readers[table][0], TABLE_FILES[table]
+        return (lambda: iter(())) if name in absent else (lambda: read(r / name))
+    return [*((table, source(table), readers[table][1]) for table in TABLES if table != 'release'),
+            ('release', lambda: [(manifest['release_id'], stamp, canonical({**manifest, 'absent_files': absent}))], 1)]
 
 
 def current_release(connection, prefix):
@@ -1215,15 +1531,17 @@ def swap_ddl(services, connection, sql):
             services.sleep(SWAP_LOCK_WAIT)
 
 
-def replace_tables(services, connection, release, manifest, prefix, unchanged_folder=lambda: None):
-    """Fill <prefix>_ref_*__new, then swap every table (ref_release included) in one RENAME and drop the old ones.
-    `unchanged_folder()` refuses before the RENAME when the release folder was replaced while its tables loaded."""
+def replace_tables(services, connection, release, manifest, prefix, unchanged_folder=lambda: None, published_at=None):
+    """Fill <prefix>_ref_*__new, then swap every table (ref_release included) in one RENAME and drop the old ones and the
+    RETIRED_TABLES (also with the leftovers of a run that died). `unchanged_folder()` refuses before the RENAME when the
+    release folder was replaced while its tables loaded."""
     new, old = [table_name(prefix, t, '__new') for t in TABLES], [table_name(prefix, t, '__old') for t in TABLES]
-    swap_ddl(services, connection, 'DROP TABLE IF EXISTS ' + ', '.join(new + old))  # leftovers of a run that died
+    retired = [table_name(prefix, t, suffix) for t in RETIRED_TABLES for suffix in ('', '__new', '__old')]
+    swap_ddl(services, connection, 'DROP TABLE IF EXISTS ' + ', '.join(new + old + retired))  # leftovers of a run that died
     current = current_release(connection, prefix)
     if current and current['release_id'] == manifest['release_id']: return {'action': 'unchanged', 'published_at': current['published_at']}
     for statement in schema_statements(prefix, '__new'): execute(connection, statement)
-    published, rows = services.clock(), {}
+    published, rows = published_at or services.clock(), {}
     for table, rows_of, batch_size in table_rows(release, manifest, published):
         emit(services, f'{prefix}: loading {table}')
         rows[table] = insert_rows(connection, table_name(prefix, table, '__new'), COLUMNS[table], rows_of(), batch_size)
@@ -1235,7 +1553,7 @@ def replace_tables(services, connection, release, manifest, prefix, unchanged_fo
         if final in present: pairs.append(f'{final} TO {table_name(prefix, table, "__old")}')
         pairs.append(f'{table_name(prefix, table, "__new")} TO {final}')
     swap_ddl(services, connection, 'RENAME TABLE ' + ', '.join(pairs))
-    swap_ddl(services, connection, 'DROP TABLE IF EXISTS ' + ', '.join(old))
+    swap_ddl(services, connection, 'DROP TABLE IF EXISTS ' + ', '.join(old + retired))
     return {'action': 'replaced', 'rows': rows, 'published_at': _timestamp(published)}
 
 
@@ -1252,6 +1570,32 @@ def insert_archived(connection, release):
         inserted += insert_rows(connection, 'archived_reference_factors', ARCHIVED_COLUMNS, (tuple(canonical(row[c]) if c == 'snapshot' else row[c]
                                 for c in ARCHIVED_COLUMNS) for row in chunk if row['archive_id'] not in stored), 100, ignore=True)
     return {'rows': total, 'inserted': inserted}
+
+
+def index_archived(connection, release, prefix, published_at):
+    """List in <prefix>_archive_index (created when absent; INSERT IGNORE) every frozen snapshot of the release, and the
+    shared snapshots of the SHARED_GENERATIONS: the archived factors this environment serves. The shared
+    archived_reference_factors is never altered."""
+    table, stamp = application_sql('reveal_archive_index', prefix), published_at.astimezone(timezone.utc).strftime('%Y-%m-%d %H:%M:%S.%f')
+    execute(connection, application_sql(ARCHIVE_INDEX, prefix))
+    total = inserted = 0
+    rows = read_jsonl(Path(release) / ARCHIVE_FILE)
+    while chunk := list(islice(rows, 1000)):
+        total += len(chunk)
+        hashes = sorted({row['source_id_sha256'] for row in chunk})
+        stored = set(query(connection, f"SELECT source_id_sha256,archive_id FROM {table} WHERE source_id_sha256 IN ({','.join(['%s'] * len(hashes))})", hashes))
+        inserted += insert_rows(connection, table, ARCHIVE_INDEX_COLUMNS, ((row['source_id_sha256'], row['archive_id'], (row['snapshot'].get('mechanism') or {}).get('id'), stamp)
+                                for row in chunk if (row['source_id_sha256'], row['archive_id']) not in stored), 1000, ignore=True)
+    with connection.cursor() as cursor:
+        cursor.execute(f"INSERT IGNORE INTO {table} ({','.join(ARCHIVE_INDEX_COLUMNS)}) SELECT source_id_sha256,archive_id,"
+                       "NULLIF(JSON_UNQUOTE(JSON_EXTRACT(snapshot,'$.mechanism.id')),'null'),%s FROM archived_reference_factors "
+                       f"WHERE generation_id IN ({','.join(['%s'] * len(SHARED_GENERATIONS))})", (stamp, *SHARED_GENERATIONS))
+        shared = cursor.rowcount
+        cursor.execute('SHOW WARNINGS')
+        warnings = [row for row in cursor.fetchall() if int(row[1]) != DUPLICATE_KEY]
+    if warnings: raise RuntimeError(f'MySQL warning indexing the shared archived factors: {warnings[0][2]}')
+    connection.commit()
+    return {'rows': total, 'inserted': inserted, 'shared_inserted': shared}
 
 
 def _value(row, name, default=None): return row.get(name, default) if isinstance(row, dict) else getattr(row, name, default)
@@ -1349,7 +1693,8 @@ def write_record(repository, current, release_id, notification_namespace):
 
 def publish_environment(services, release, manifest, env, *, vectors=True, tables=True, unchanged_folder=lambda: None):
     """One environment (module docstring): add the missing vectors; then, under the environment's lock, store new frozen
-    snapshots and swap the tables; once its tables hold the release, update changed vectors, delete stale ones, write the record."""
+    snapshots, list them in the environment's archive index and swap the tables; once its tables hold the release, update
+    changed vectors, delete stale ones, write the record."""
     prefix, release_id, lock = ENVIRONMENTS[env], manifest['release_id'], f'reveal:publish:{ENVIRONMENTS[env]}'
     seconds, started = {}, time.monotonic()
     result = {'env': env, 'prefix': prefix, 'release_id': release_id, 'seconds': seconds}
@@ -1369,9 +1714,11 @@ def publish_environment(services, release, manifest, env, *, vectors=True, table
         locked = True
         if tables:
             # Snapshots first: immutable rows keyed by factor revision, so a run that dies at any later step never misses them.
+            published = services.clock()
             result['archived_factors'] = step('archived_factors', lambda: insert_archived(connection, release))
-            result['tables'] = step('tables', lambda: replace_tables(services, connection, release, manifest, prefix, unchanged_folder))
-        else: result['tables'] = result['archived_factors'] = 'skipped'
+            result['archive_index'] = step('archive_index', lambda: index_archived(connection, release, prefix, published))
+            result['tables'] = step('tables', lambda: replace_tables(services, connection, release, manifest, prefix, unchanged_folder, published))
+        else: result['tables'] = result['archived_factors'] = result['archive_index'] = 'skipped'
         current = current_release(connection, prefix)
         if plans is not None and current and current['release_id'] == release_id: step('update', lambda: update_vectors(client, plans))
         # updated and deleted stay None until the environment's tables hold the release.
@@ -1419,6 +1766,8 @@ def parser():
     c.add_argument('--gene-set-stats-file', type=Path, action='extend', nargs='+', default=[],
                    help=f'A per-trait <trait>{GENE_SET_STATS_SUFFIX} of the LAP betas_ stage (repeatable)')
     c.add_argument('--gene-set-stats-from', type=Path, help=f'Directory searched recursively for *{GENE_SET_STATS_SUFFIX}')
+    c.add_argument('--source-datasets', type=Path, required=True, help=f'Curated source datasets of raw files ({SOURCE_DATASETS})')
+    c.add_argument('--gwas-ancestry', default=DEFAULT_GWAS_ANCESTRY, help="The portal bottom-line ancestry a trait's GWAS route uses")
     c.add_argument('--vector-cache', type=Path, required=True, help='SQLite vector cache of factor labels and contexts')
     c.add_argument('--out', type=Path, required=True, help='Release folder (replaced unless it already holds this release)')
     c.add_argument('--kpn-release')
@@ -1437,7 +1786,8 @@ def run(services, args, result):
         files = list(args.long_file) + (long_files_in(args.long_files_from) if args.long_files_from else [])
         stats = list(args.gene_set_stats_file) + (gene_set_stats_files_in(args.gene_set_stats_from) if args.gene_set_stats_from else [])
         return build_release(services, args.lap_project_dir, files, args.vector_cache, args.out,
-                             gene_set_stats_files=sorted(set(stats)), kpn_release=args.kpn_release, top_n=args.top_n, workers=args.workers)
+                             gene_set_stats_files=sorted(set(stats)), source_datasets=args.source_datasets, gwas_ancestry=args.gwas_ancestry,
+                             kpn_release=args.kpn_release, top_n=args.top_n, workers=args.workers)
     return publish_release(services, args.release, args.env, vectors=not args.skip_vectors, tables=not args.skip_tables,
                            results=result.setdefault('environments', []))
 

@@ -42,14 +42,39 @@ CONTEXTS = ['ctx one', 'ctx two', 'Beta cell']  # a context may share a factor l
 # BMI's PIGEAN run analyzed no gene set: a header-only file.
 GENE_SET_STATS = {'T2D': [(LIB_SETS[0], 'LIB', '0.9', '0.8', '0.95', 1), (LIB_SETS[2], 'LIB', '0.2', '0.1', '0.3', 2),
                           (OTHER_SETS[1], 'OTHER', '0.05', '0.04', '0.06', 1)], 'BMI': []}
-ORG = {'id': 'dapper:Organization.' + 'o' * 32, 'name': 'Broad Institute'}
+RUNTIME = SimpleNamespace(schema='schema', compute_id=lambda node, cls, schema: f'dapper:{cls}.' + hashlib.sha256(canonical(node).encode()).hexdigest()[:32])
+
+
+def minted(cls, body): return {'id': RUNTIME.compute_id(dict(body), cls, RUNTIME.schema), **body}
+
+
+ORG, LAB = minted('Organization', {'name': 'Broad Institute', 'ror': 'ror:05a0ya142'}), minted('Organization', {'name': 'A source lab'})
+SOURCE = minted('Dataset', {'name': 'LIB source release', 'version': 'v1', 'publisher': ORG['id']})  # an existing Dataset, copied verbatim
 SHARED_EDGE = {'subject': 'dapper:Activity.' + 'a' * 32, 'predicate': 'prov:used', 'object': 'dapper:File.' + 'f' * 32, 'edge_role': 'data_input'}
+# The OTHER collection's producer names no Dataset: its raw File (by name) and C2M2File (by filename) get curated edges, its
+# generated File of the same name does not.
+RAW_FILE, RAW_C2M2, MADE_FILE = 'dapper:File.' + 'r' * 32, 'dapper:C2M2File.' + 'c' * 32, 'dapper:File.' + 'g' * 32
 MODEL, DIMS = 'm/x', 8
 ENVIRON = {'EMBEDDING_MODEL': MODEL, 'EMBEDDING_SERVICE_URL': 'https://embed.invalid/'}
 CLOCK = datetime(2026, 10, 5, 12, 0, 0, 123456, tzinfo=timezone.utc)
-RUNTIME = SimpleNamespace(schema='schema', compute_id=lambda node, cls, schema: f'dapper:{cls}.' + hashlib.sha256(canonical(node).encode()).hexdigest()[:32])
 SNAPSHOT_KEYS = {'format', 'generation_id', 'model', 'source_id', 'factor_id', 'trait', 'kpn_trait_id', 'label', 'mechanism', 'metadata',
                  'top_genes', 'top_gene_sets', 'generation_manifest_sha256'}
+# The linkage_ stage: PIGEAN phenotypes (phenotype, KPN id, match, category, name, anchor) and each factor's links at the
+# q cutoff (phenotype, own, atlas, nnls, beta, p, q) in LAP's order (trait order; unsorted within a factor). T2D::Factor2 has none.
+KPN_RARE, KPN_HDL = 'KPN.TRAIT:0005950', 'KPN.TRAIT:0002589'
+PHENOTYPES = [('BMI', KPN_B, 'legacy_phenotype_id', 'KPN', 'Body mass index', 'True'), ('T2D', KPN_A, 'legacy_phenotype_id', 'KPN', 'Type 2 diabetes', 'True'),
+              ('Rare_thing_Orphanet_1', KPN_RARE, 'legacy_phenotype_id', 'rare_v2', 'Rare thing', 'False'),
+              ('gcat_trait_hdl', KPN_HDL, 'pigean_id', 'gcat_trait', 'HDL cholesterol', 'False'),
+              ('gcat_trait_waist', 'NA', 'none', 'NA', 'NA', 'False'), ('gcat_trait_glucose', 'NA', 'none', 'NA', 'NA', 'False')]
+LINKS = {'BMI::Factor1': [('T2D', 'False', 'True', '0.5', '1.2', '0', '0'), ('gcat_trait_glucose', 'False', 'False', '0.1', '0.3', '0.001', '0.01'),
+                          ('BMI', 'True', 'True', '0.9', '2.5', '1e-12', '1e-10')],
+         'T2D::Factor1': [('gcat_trait_waist', 'False', 'False', '0.2', '0.4', '0.002', '0.02'), ('T2D', 'True', 'True', '0.8', '3.1', '1e-07', '2e-05'),
+                          ('gcat_trait_hdl', 'False', 'False', '0.3', '0.5', '0.003', '0.03'), ('Rare_thing_Orphanet_1', 'False', 'False', '0.1', '0.2', '1e-05', '0.001'),
+                          ('BMI', 'False', 'True', '0.4', '0.6', '0.004', '0.04'), ('gcat_trait_glucose', 'False', 'False', '0.05', '0.1', '0.004', '0.04')]}
+# The portal's bottom-line GWAS artifacts: T2D has a Mixed one, BMI only a European one, HDL (not an atlas trait) a Mixed one.
+ARTIFACTS = [(KPN_A, 'T2D', 'EU', 'European', 'bl-t2d-eu'), (KPN_A, 'T2D', 'Mixed', 'Mixed ancestry', 'bl-t2d-mixed'), (KPN_B, 'BMI', 'EU', 'European', 'bl-bmi-eu'),
+             ('', 'NoKpn', 'Mixed', 'Mixed ancestry', 'bl-unlinked'), (KPN_HDL, 'HDL', 'Mixed', 'Mixed ancestry', 'bl-hdl-mixed')]
+PORTAL = {COLL[0]: COLL[0], COLL[1]: 'dapper:GeneSetCollection.' + 'p' * 31 + '1'}  # LINCS-like: OTHER's sets are a re-minted portal collection
 
 
 @pytest.fixture(autouse=True)
@@ -96,7 +121,12 @@ def collection_document(collection, members):
         'was_derived_from_edges': [{'subject': file, 'predicate': 'prov:wasDerivedFrom', 'object': f'dapper:Dataset.{label[:5].lower():d<32}'}],
         'embeddings': embeddings,
         'has_embedding_edges': [{'subject': item['embedding_of'], 'predicate': 'dapper:hasEmbedding', 'object': item['id']} for item in embeddings]}
-    if collection == COLL[1]:  # DAPPER 0.2.0 order: the collection follows its gene sets
+    if collection == COLL[1]:  # DAPPER 0.2.0 order: the collection follows its gene sets; no Dataset (a lineage gap)
+        del document['datasets'], document['was_derived_from_edges']
+        document['files'] = [{'id': RAW_FILE, 'name': 'genesets.gmt'}, {'id': MADE_FILE, 'name': 'output', 'filename': 'genesets.gmt'}]
+        document['c2m2_files'] = [{'id': RAW_C2M2, 'name': 'Upstream library', 'filename': 'upstream.gmt'}]
+        document['used_edges'] += [{'subject': activity, 'predicate': 'prov:used', 'object': node, 'edge_role': 'data_input'} for node in (RAW_FILE, RAW_C2M2)]
+        document['was_generated_by_edges'] += [{'subject': MADE_FILE, 'predicate': 'prov:wasGeneratedBy', 'object': activity}]
         document = {key: value for key, value in document.items() if key != 'gene_set_collections'} | {
             'gene_set_collections': document['gene_set_collections']}
         document = dict(sorted(document.items(), key=lambda item: list(document).index(item[0]) if item[0] != 'gene_set_collections'
@@ -131,8 +161,33 @@ def lap_project(root):
         {'library': lib, 'partition': 'part', 'model': 'HZ1', 'comparison': '', 'program': '', 'label': LABELS[c], 'collection_id': c,
          'n_sets': n, 'n_genes': 30, 'yaml_path': '/ignored'} for c, lib, n in ((COLL[0], 'LIB', 4), (COLL[1], 'OTHER', 3))])
     tsv(project / 'proj.kpn_trait_registry.tsv', rr.LAP_FILES['kpn_trait_registry'][1], [
-        {'portal_id': k, 'gwas_source_category': 'KPN', 'legacy_phenotype_id': t, 'phenotype_name': name, 'legacy_trait_group': 'GLYCEMIC',
-         'trait_group': 'metabolic', 'trait_type': 'phenotype', 'pigean_id': ''} for t, k, name, n in TRAITS])
+        {'portal_id': k, 'gwas_source_category': category, 'legacy_phenotype_id': t, 'phenotype_name': name, 'legacy_trait_group': 'GLYCEMIC',
+         'trait_group': 'metabolic', 'trait_type': 'phenotype', 'pigean_id': ''}
+        for t, k, name, category in [(t, k, name, 'KPN') for t, k, name, n in TRAITS]
+        + [('Raré_thing_Orphanet_1', KPN_RARE, 'Rare thing', 'rare_v2'), ('HDL', KPN_HDL, 'HDL cholesterol', 'gcat_trait')]])
+    tsv(project / 'proj.linkage_phenotypes.tsv', rr.LAP_FILES['linkage_phenotypes'][1], [
+        {'phenotype': p, 'kpn_trait_id': k, 'kpn_match': match, 'gwas_source_category': category, 'phenotype_name': name, 'is_anchor': anchor,
+         'n_genes': 42351, 'n_genes_kept': 7} for p, k, match, category, name, anchor in PHENOTYPES])
+    kpn_of = {p: k for p, k, *_ in PHENOTYPES}
+    atlas = {p for p, *_, anchor in PHENOTYPES if anchor == 'True'}
+    tsv(project / 'proj.factor_links.tsv', rr.LAP_FILES['factor_links'][1], [
+        {'trait': factor.split('::')[0], 'kpn_trait_id': dict((t, k) for t, k, *_ in TRAITS)[factor.split('::')[0]], 'factor_id': factor, 'factor_label': 'x',
+         'phenotype': p, 'phenotype_kpn_trait_id': kpn_of[p], 'phenotype_name': 'x', 'is_own_trait': own, 'is_atlas_trait': atlas_flag,
+         'nnls_loading': nnls, 'phewas_beta': beta, 'phewas_p_onesided': pvalue, 'phewas_q': q}
+        for factor, links in LINKS.items() for p, own, atlas_flag, nnls, beta, pvalue, q in links])
+    tsv(project / 'proj.factor_links_summary.tsv', rr.LAP_FILES['factor_links_summary'][1], [
+        {'trait': t, 'kpn_trait_id': k, 'factor_id': f'{t}::Factor{n}', 'factor_label': label, 'n_phenotypes': len(PHENOTYPES) - 1,
+         'n_linked': len(LINKS.get(f'{t}::Factor{n}', [])),
+         'n_linked_kpn_traits': sum(kpn_of[p] != 'NA' for p, *_ in LINKS.get(f'{t}::Factor{n}', [])),
+         'n_linked_atlas_traits': sum(p in atlas for p, *_ in LINKS.get(f'{t}::Factor{n}', [])),
+         'own_trait_q': next((link[-1] for link in LINKS.get(f'{t}::Factor{n}', []) if link[1] == 'True'), 'NA'), 'top_linked': 'a; b'}
+        for t, k, n, label in FACTORS])
+    tsv(project / 'proj.provenance_collection_map.tsv', rr.LAP_FILES['provenance_map'][1], [
+        {'release_collection_id': c, 'cfde_label': LABELS[c], 'library': LIBRARY[LIB_SETS[0]] if c == COLL[0] else 'OTHER', 'portal_collection_id': PORTAL[c],
+         'portal_name': LABELS[c], 'n_gene_sets': 4 if c == COLL[0] else 3} for c in COLL])
+    tsv(project / 'proj.bottom_line_artifacts.tsv', rr.LAP_FILES['bottom_line_artifacts'][1], [
+        {'kpn_trait_id': k, 'portal_trait_id': portal, 'trait_name': portal, 'ancestry_code': code, 'ancestry_name': name, 'artifact_id': artifact}
+        for k, portal, code, name, artifact in ARTIFACTS])
     tsv(project / 'proj.kpn_trait_flat.tsv', rr.LAP_FILES['kpn_trait_flat'][1] + ('mapping_justification', 'source'), [
         {'portal_id': KPN_A, 'description': 'T2D', 'is_dichotomous': '1', 'is_complex': 'true', 'target_id': 'EFO:0001360',
          'target_label': 'type 2 diabetes', 'target_ontology': 'EFO', 'mapping_predicate': 'skos:exactMatch', 'confidence': '0.9',
@@ -164,6 +219,23 @@ def lap_project(root):
         tsv(project / 'traits' / trait / f'{trait}{rr.LONG_SUFFIX}', rr.LONG_COLUMNS, rows)
         gene_set_stats(project, trait, kpn, GENE_SET_STATS[trait])
     return project
+
+
+SOURCE_DATASETS = {
+    'organizations': {'broad': ORG, 'lab': LAB},
+    'datasets': {'lib_source': SOURCE,
+                 'other_source': {'name': 'OTHER upstream library', 'description': 'The library the OTHER collection was converted from.',
+                                  'version': '2024', 'alternate_identifier': ['https://example.org/other'], 'publisher': 'broad',
+                                  'attributed_to': ['lab'], 'location': 'https://example.org/other'}},
+    'links': [{'dataset': 'other_source', 'libraries': ['OTHER'], 'files': [r'^genesets\.gmt$', r'^upstream\.gmt$'],
+               'note': 'curated: the producer names no source dataset'},
+              {'dataset': 'lib_source', 'libraries': ['LIB'], 'files': ['.'], 'note': 'unused: LIB reaches its own Dataset'}]}
+
+
+def source_datasets(root, data=SOURCE_DATASETS):
+    path = root / 'source_datasets.yaml'
+    path.write_text(yaml.safe_dump(data, sort_keys=False))
+    return path
 
 
 def gene_set_stats(project, trait, kpn, items, response='log_bf'):
@@ -205,12 +277,13 @@ def build_services(embed=no_embedding, environ=ENVIRON):
 def lap(tmp_path):
     project = lap_project(tmp_path)
     return SimpleNamespace(project=project, long_files=rr.long_files_in(project / 'traits'), cache=vector_cache(tmp_path),
-                           gene_set_stats=rr.gene_set_stats_files_in(project / 'traits'))
+                           gene_set_stats=rr.gene_set_stats_files_in(project / 'traits'), source_datasets=source_datasets(tmp_path))
 
 
 def build(lap, out, services=None, **options):
     return rr.build_release(services or build_services(), lap.project, lap.long_files, lap.cache, out,
-                            **{'gene_set_stats_files': lap.gene_set_stats, 'top_n': 2, 'workers': 1, 'runtime': RUNTIME, **options})
+                            **{'gene_set_stats_files': lap.gene_set_stats, 'source_datasets': lap.source_datasets, 'top_n': 2, 'workers': 1,
+                               'runtime': RUNTIME, **options})
 
 
 def rows(path, columns=None):
@@ -226,8 +299,8 @@ def test_build_writes_every_release_file_deterministically(lap, tmp_path):
     second = build(lap, tmp_path / 'two')
     assert first['release_id'] == second['release_id'] and re.fullmatch('[a-f0-9]{64}', first['release_id']) and first['reused'] is False
     counts = {key: value for key, value in first['counts'].items() if key != 'projections'}
-    assert counts == {'traits': 2, 'factors': 3, 'factor_genes': 8, 'collections': 2, 'gene_sets': 7, 'dapper_nodes': 9, 'dapper_edges': 7,
-                      'trait_gene_sets': 3, 'vectors': {'factors': 3, 'contexts': 3}, 'archived_factors': 3}
+    assert counts == {'traits': 2, 'factors': 3, 'factor_genes': 8, 'collections': 2, 'gene_sets': 7, 'gene_sets_indexed': 7, 'factor_trait_links': 9,
+                      'phenotypes': 6, 'trait_gene_sets': 3, 'vectors': {'factors': 3, 'contexts': 3}, 'archived_factors': 3}
     release, other = tmp_path / 'one', tmp_path / 'two'
     for name in rr.DATA_FILES: assert (release / name).read_bytes() == (other / name).read_bytes(), name
     manifest = rr.open_release(release)
@@ -254,7 +327,9 @@ def test_build_writes_every_release_file_deterministically(lap, tmp_path):
                                                        'members': ['HGNC.SYMBOL:INS', 'HGNC.SYMBOL:GCK'], 'in_gene_set_collection': [COLL[0]]}
     collection = rows(release / 'collections.jsonl.gz')[0]
     assert set(collection['payload']) == {'collection', 'index', 'document_sha256', 'provenance'} and 'members' not in collection['payload']['collection']
-    assert collection['payload']['provenance']['organizations'] == [ORG] and collection['n_sets'] == 4
+    assert collection['payload']['provenance']['organizations'] == [ORG] and collection['n_sets'] == 4 and set(collection) == set(rr.COLUMNS['collections'])
+    assert {row['collection_id']: row['portal_collection_id'] for row in rows(release / 'collections.jsonl.gz')} == PORTAL
+    assert 'dapper' not in manifest and not set(rr.RETIRED_FILES) & {path.name for path in release.iterdir()}
     # Rebuilding into the same folder reuses it untouched.
     stamp = (release / 'manifest.json').stat().st_mtime_ns
     assert build(lap, release)['reused'] is True and (release / 'manifest.json').stat().st_mtime_ns == stamp
@@ -303,23 +378,179 @@ def test_source_revision_follows_label_and_loadings_only(lap, tmp_path):
     assert {key: value for key, value in changed.items() if key != f'{KPN_A}::Factor2'} == {key: value for key, value in base.items() if key != f'{KPN_A}::Factor2'}
 
 
-def test_dapper_nodes_and_edges_come_from_every_document_without_embeddings(lap, tmp_path):
+def test_factor_trait_links_are_sorted_with_empty_kpn_ids_and_summarized_on_each_factor(lap, tmp_path):
     build(lap, tmp_path / 'release')
-    nodes = {row['id']: row for row in rows(tmp_path / 'release' / 'dapper_nodes.jsonl.gz')}
-    classes = sorted(row['class_name'] for row in nodes.values())
-    assert classes.count('Organization') == 1 and classes.count('GeneSetCollection') == 2  # either section order
-    assert set(classes) == {'Organization', 'Dataset', 'File', 'Activity', 'GeneSetCollection'}  # gene sets are not embedded
-    assert nodes[ORG['id']]['payload'] == ORG  # first document (collection_id order) wins
-    assert 'members' not in nodes[COLL[0]]['payload'] and nodes[COLL[0]]['payload']['n_sets'] == 4
-    edges = rows(tmp_path / 'release' / 'dapper_edges.tsv.gz', rr.EDGE_COLUMNS)
-    keys = [(row['subject'], row['predicate'], row['object']) for row in edges]
-    assert keys == sorted(set(keys)) and len(edges) == 7
-    shared = [row for row in edges if row['subject'] == SHARED_EDGE['subject'] and row['object'] == SHARED_EDGE['object']]
-    assert shared == [SHARED_EDGE]  # deduplicated across documents, edge_role kept
-    assert {row['predicate'] for row in edges} == {'prov:used', 'prov:wasGeneratedBy', 'prov:wasDerivedFrom'}
-    assert all(row['edge_role'] == '' for row in edges if row['predicate'] != 'prov:used')
-    manifest = rr.open_release(tmp_path / 'release')
-    assert manifest['dapper'] == {'nodes': 9, 'edges': 7, 'variants_skipped': 1}
+    links = rows(tmp_path / 'release' / 'factor_trait_links.tsv.gz', rr.FACTOR_LINK_COLUMNS)
+    keys = [(row['factor_key'], row['phenotype']) for row in links]
+    assert keys == sorted(set(keys)) and len(links) == sum(map(len, LINKS.values()))
+    assert {row['factor_key'] for row in links} == {f'{KPN_A}::Factor1', f'{KPN_B}::Factor1'}  # T2D::Factor2 links to nothing
+    by_key = {(row['factor_key'], row['phenotype']): row for row in links}
+    assert by_key[f'{KPN_B}::Factor1', 'gcat_trait_glucose'] == {
+        'factor_key': f'{KPN_B}::Factor1', 'phenotype': 'gcat_trait_glucose', 'phenotype_kpn_trait_id': '', 'is_own_trait': '0', 'is_atlas_trait': '0',
+        'nnls_loading': '0.1', 'phewas_beta': '0.3', 'phewas_p_onesided': '0.001', 'phewas_q': '0.01'}
+    assert by_key[f'{KPN_B}::Factor1', 'BMI']['phenotype_kpn_trait_id'] == KPN_B and by_key[f'{KPN_B}::Factor1', 'BMI']['is_own_trait'] == '1'
+    assert by_key[f'{KPN_B}::Factor1', 'T2D']['phewas_q'] == '0'  # a q of 0 is kept
+    factors = {row['factor_key']: row for row in rows(tmp_path / 'release' / 'factors.jsonl.gz')}
+    t2d = factors[f'{KPN_A}::Factor1']['metadata']['trait_links']
+    assert {key: value for key, value in t2d.items() if key != 'top_linked'} == {
+        'n_phenotypes': 5, 'n_linked': 6, 'n_linked_kpn_traits': 4, 'n_linked_atlas_traits': 2, 'own_trait_q': 2e-05}
+    assert t2d['top_linked'] == [  # (phewas_q, phenotype) order: BMI wins the 0.04 tie, so the glucose link is the 6th
+        {'phenotype': 'T2D', 'kpn_trait_id': KPN_A, 'name': 'Type 2 diabetes', 'phewas_q': 2e-05},
+        {'phenotype': 'Rare_thing_Orphanet_1', 'kpn_trait_id': KPN_RARE, 'name': 'Rare thing', 'phewas_q': 0.001},
+        {'phenotype': 'gcat_trait_waist', 'kpn_trait_id': None, 'name': 'waist', 'phewas_q': 0.02},
+        {'phenotype': 'gcat_trait_hdl', 'kpn_trait_id': KPN_HDL, 'name': 'HDL cholesterol', 'phewas_q': 0.03},
+        {'phenotype': 'BMI', 'kpn_trait_id': KPN_B, 'name': 'Body mass index', 'phewas_q': 0.04}]
+    assert factors[f'{KPN_A}::Factor2']['metadata']['trait_links'] == {'n_phenotypes': 5, 'n_linked': 0, 'n_linked_kpn_traits': 0,
+                                                                       'n_linked_atlas_traits': 0, 'own_trait_q': None, 'top_linked': []}
+    # The frozen snapshots keep the LAP factor metadata only.
+    assert all('trait_links' not in row['snapshot']['metadata'] for row in rows(tmp_path / 'release' / rr.ARCHIVE_FILE))
+
+
+def links_file(lap, edit):
+    path = lap.project / 'proj.factor_links.tsv'
+    lines = path.read_text().splitlines(keepends=True)
+    path.write_text(''.join(edit(lines)))
+
+
+@pytest.mark.parametrize('edit, message', [
+    (lambda lines: lines + [lines[1].replace('BMI::Factor1', 'BMI::Factor7')], 'unknown factors'),
+    (lambda lines: lines[:2] + lines[4:5] + lines[2:4] + lines[5:], 'are not contiguous'),
+    (lambda lines: lines + [lines[-1]], 'unknown or repeated phenotype'),
+    (lambda lines: [lines[0], lines[1].replace(KPN_B, KPN_A, 1)] + lines[2:], 'names another KPN trait'),
+    (lambda lines: [lines[0], lines[1].replace('\tT2D\tKPN.TRAIT:0000398\t', '\tT2D\tNA\t')] + lines[2:], 'KPN id differs'),
+    (lambda lines: [lines[0], lines[1].replace('\t1.2\t', '\tnan\t')] + lines[2:], 'NaN'),
+    (lambda lines: [lines[0], lines[1].replace('\t1.2\t', '\tinf\t')] + lines[2:], 'not finite'),
+    (lambda lines: [lines[0], lines[1].replace('\tFalse\tTrue\t', '\tno\tTrue\t')] + lines[2:], 'expected True or False'),
+    (lambda lines: lines[:-1], '5 link rows, the summary says 6')])
+def test_factor_links_that_do_not_hold_are_refused(lap, tmp_path, edit, message):
+    links_file(lap, edit)
+    with pytest.raises(rr.Refused, match=message): build(lap, tmp_path / 'release')
+    assert not (tmp_path / 'release').exists()
+
+
+def test_phenotypes_carry_their_display_names_legacy_ids_and_bottom_lines(lap, tmp_path):
+    result = build(lap, tmp_path / 'release')
+    phenotypes = {row['phenotype']: row for row in rows(tmp_path / 'release' / 'phenotypes.jsonl.gz')}
+    assert list(phenotypes) == sorted(p for p, *_ in PHENOTYPES) and all(set(row) == set(rr.COLUMNS['phenotypes']) for row in phenotypes.values())
+    glucose, rare, hdl, t2d = (phenotypes[name] for name in ('gcat_trait_glucose', 'Rare_thing_Orphanet_1', 'gcat_trait_hdl', 'T2D'))
+    assert (glucose['kpn_trait_id'], glucose['phenotype_name'], glucose['display_name'], glucose['legacy_phenotype_id'], glucose['category']) == \
+        (None, None, 'glucose', None, None)
+    assert glucose['metadata'] == {'kpn_match': 'none', 'n_genes': 42351, 'n_genes_kept': 7, 'bottom_line': {
+        'portal_trait_id': None, 'artifacts': [], 'gwas_artifact': None, 'gwas_reason': 'not_on_portal'}}
+    assert (rare['legacy_phenotype_id'], rare['category'], rare['is_atlas']) == ('Raré_thing_Orphanet_1', 'rare_v2', 0)
+    assert rare['metadata']['bottom_line']['gwas_reason'] == 'not_a_gwas_trait'
+    mixed = {'ancestry_code': 'Mixed', 'ancestry_name': 'Mixed ancestry', 'artifact_id': 'bl-hdl-mixed'}
+    assert hdl['metadata']['bottom_line'] == {'portal_trait_id': 'HDL', 'artifacts': [mixed], 'gwas_artifact': mixed, 'gwas_reason': None}
+    assert (hdl['legacy_phenotype_id'], hdl['is_atlas'], t2d['is_atlas'], t2d['legacy_phenotype_id']) == ('HDL', 0, 1, 'T2D')
+    traits = {row['kpn_trait_id']: row['metadata']['bottom_line'] for row in rows(tmp_path / 'release' / 'traits.jsonl.gz')}
+    assert traits[KPN_A] == t2d['metadata']['bottom_line'] == {
+        'portal_trait_id': 'T2D', 'artifacts': [{'ancestry_code': 'EU', 'ancestry_name': 'European', 'artifact_id': 'bl-t2d-eu'},
+                                                {'ancestry_code': 'Mixed', 'ancestry_name': 'Mixed ancestry', 'artifact_id': 'bl-t2d-mixed'}],
+        'gwas_artifact': {'ancestry_code': 'Mixed', 'ancestry_name': 'Mixed ancestry', 'artifact_id': 'bl-t2d-mixed'}, 'gwas_reason': None}
+    assert traits[KPN_B]['gwas_artifact'] is None and traits[KPN_B]['gwas_reason'] == 'not_on_portal'  # no Mixed artifact
+    assert rr.open_release(tmp_path / 'release')['bottom_line'] == {'gwas_ancestry': 'Mixed', 'portal_traits': 3}
+    european = build(lap, tmp_path / 'eu', gwas_ancestry='EU')
+    assert european['release_id'] != result['release_id']
+    assert {row['kpn_trait_id']: row['metadata']['bottom_line']['gwas_artifact']['artifact_id']
+            for row in rows(tmp_path / 'eu' / 'traits.jsonl.gz')} == {KPN_A: 'bl-t2d-eu', KPN_B: 'bl-bmi-eu'}
+
+
+@pytest.mark.parametrize('name, edit, message', [
+    ('linkage_phenotypes.tsv', lambda text: text + 'T2D\tNA\tnone\tNA\tNA\tFalse\t1\t1\n', 'repeated phenotype'),
+    ('linkage_phenotypes.tsv', lambda text: text.replace('Rare_thing_Orphanet_1\tKPN.TRAIT:0005950', 'Rare_thing_Orphanet_1\tKPN.TRAIT:0000398'),
+     'names several phenotypes'),
+    ('linkage_phenotypes.tsv', lambda text: text.replace('BMI\tKPN.TRAIT:0000100\tlegacy_phenotype_id\tKPN\tBody mass index\tTrue',
+                                                         'BMI\tKPN.TRAIT:0000100\tlegacy_phenotype_id\tKPN\tBody mass index\tFalse'), 'flagged as anchors'),
+    ('bottom_line_artifacts.tsv', lambda text: text + f'{KPN_A}\tT2D\tT2D\tMixed\tMixed again\tbl-t2d-mixed-2\n', 'several Mixed bottom-line'),
+    ('bottom_line_artifacts.tsv', lambda text: text + f'{KPN_A}\tT2D-other\tT2D\tAA\tAfrican\tbl-t2d-aa\n', 'several or no portal traits'),
+    ('factor_links_summary.tsv', lambda text: '\n'.join(text.split('\n')[:-2]) + '\n', 'have no link summary'),
+    ('provenance_collection_map.tsv', lambda text: '\n'.join(text.split('\n')[:-2]) + '\n', 'have no portal collection')])
+def test_lap_linkage_and_provenance_files_that_do_not_hold_are_refused(lap, tmp_path, name, edit, message):
+    path = lap.project / f'proj.{name}'
+    path.write_text(edit(path.read_text()))
+    with pytest.raises(rr.Refused, match=message): build(lap, tmp_path / 'release')
+
+
+def test_only_referenced_gene_sets_are_released(lap, tmp_path):
+    build(lap, tmp_path / 'release', top_n=1)
+    release = tmp_path / 'release'
+    referenced = {row['gene_set_id'] for row in rows(release / 'projections.tsv.gz', rr.PROJECTION_COLUMNS)} | \
+        {row['gene_set_id'] for row in rows(release / 'trait_gene_sets.tsv.gz', rr.TRAIT_GENE_SET_COLUMNS)}
+    gene_sets = [row['gene_set_id'] for row in rows(release / 'gene_sets.jsonl.gz')]
+    assert gene_sets == sorted(referenced) and len(gene_sets) < len(SETS)  # every library's top 1 and the betas
+    manifest = rr.open_release(release)
+    assert (manifest['counts']['gene_sets'], manifest['counts']['gene_sets_indexed']) == (len(referenced), len(SETS))
+    assert {row['n_sets'] for row in rows(release / 'collections.jsonl.gz')} == {4, 3}  # collections keep their full counts
+    for row in rows(release / rr.ARCHIVE_FILE): assert {item['gene_set_id'] for item in row['snapshot']['top_gene_sets']} <= referenced
+
+
+def test_curated_lineage_links_the_raw_files_of_a_collection_without_a_dataset(lap, tmp_path):
+    build(lap, tmp_path / 'release')
+    collections = {row['collection_id']: row for row in rows(tmp_path / 'release' / 'collections.jsonl.gz')}
+    assert 'curated_provenance' not in collections[COLL[0]]['payload']  # LIB reaches its own Dataset: its link is not applied
+    other = collections[COLL[1]]['payload']
+    assert 'datasets' not in other['provenance'] and 'was_derived_from_edges' not in other['provenance']  # the producer's, unchanged
+    dataset = minted('Dataset', {'name': 'OTHER upstream library', 'description': 'The library the OTHER collection was converted from.',
+                                 'version': '2024', 'alternate_identifier': ['https://example.org/other'], 'location': 'https://example.org/other',
+                                 'publisher': ORG['id'], 'was_attributed_to': [LAB['id']]})
+    assert other['curated_provenance'] == {
+        'source': 'lap/config/source_datasets.yaml', 'source_sha256': hashlib.sha256(lap.source_datasets.read_bytes()).hexdigest(),
+        'groups': {'organizations': sorted([ORG, LAB], key=lambda node: node['id']), 'datasets': [dataset],
+                   'was_derived_from_edges': [{'subject': node, 'predicate': 'prov:wasDerivedFrom', 'object': dataset['id']}
+                                              for node in sorted([RAW_C2M2, RAW_FILE])]},  # not the generated File named genesets.gmt
+        'notes': [{'dataset': dataset['id'], 'note': 'curated: the producer names no source dataset'}]}
+    assert rr.open_release(tmp_path / 'release')['curated'] == {
+        'source': 'lap/config/source_datasets.yaml', 'source_sha256': other['curated_provenance']['source_sha256'],
+        'datasets': {'lib_source': {'collections': 0, 'edges': 0}, 'other_source': {'collections': 1, 'edges': 2}}}
+    from reveal_backend.reference_lineage import collection_lineage, lineage_closure
+    gene_set = {'id': OTHER_SETS[0], 'was_generated_by': 'dapper:Activity.other' + 'a' * 27}
+    closure = lineage_closure(gene_set, collection_lineage(other))['provenance']
+    assert closure['datasets'] == [dataset] and {node['id'] for node in closure['organizations']} == {ORG['id'], LAB['id']}
+
+
+def test_a_referenced_collection_that_reaches_no_dataset_is_refused(lap, tmp_path):
+    source_datasets(lap.source_datasets.parent, {**SOURCE_DATASETS, 'links': SOURCE_DATASETS['links'][1:]})
+    with pytest.raises(rr.Refused, match=r"1 collections holding referenced gene sets reach no Dataset .*\['OTHER__p__HZ1'\]"):
+        build(lap, tmp_path / 'release')
+    assert not (tmp_path / 'release').exists()
+
+
+@pytest.mark.parametrize('data, message', [
+    ({**SOURCE_DATASETS, 'extra': {}}, 'expected organizations, datasets and links'),
+    ({**SOURCE_DATASETS, 'organizations': {'broad': {**ORG, 'name': 'Broad'}, 'lab': LAB}}, 'broad is not a verbatim copy'),
+    ({**SOURCE_DATASETS, 'organizations': {'lab': LAB}}, 'lib_source names organizations missing'),
+    ({**SOURCE_DATASETS, 'datasets': {**SOURCE_DATASETS['datasets'], 'other_source': {**SOURCE_DATASETS['datasets']['other_source'], 'attributed_to': ['nobody']}}},
+     'other_source names an organization key missing'),
+    ({**SOURCE_DATASETS, 'datasets': {**SOURCE_DATASETS['datasets'], 'other_source': {**SOURCE_DATASETS['datasets']['other_source'], 'url': 'x'}}},
+     r"other_source has unknown keys \['url'\]"),
+    ({**SOURCE_DATASETS, 'links': [{**SOURCE_DATASETS['links'][0], 'files': ['(']}]}, 'invalid file pattern'),
+    ({**SOURCE_DATASETS, 'links': [{**SOURCE_DATASETS['links'][0], 'dataset': 'nowhere'}]}, 'unknown keys or dataset'),
+    ({**SOURCE_DATASETS, 'links': [{**SOURCE_DATASETS['links'][0], 'roles': ['x']}]}, 'unknown keys or dataset'),
+    ({**SOURCE_DATASETS, 'links': [{**SOURCE_DATASETS['links'][0], 'libraries': []}]}, 'non-empty lists of strings')])
+def test_source_datasets_that_do_not_hold_are_refused_before_any_work(lap, tmp_path, data, message):
+    source_datasets(lap.source_datasets.parent, data)
+    with pytest.raises(rr.Refused, match=message): build(lap, tmp_path / 'release')
+    assert not (tmp_path / 'release').exists() and not list(tmp_path.glob('.release.*'))
+    with pytest.raises(rr.Refused, match='Pass the curated source datasets'): build(lap, tmp_path / 'release', source_datasets=None)
+
+
+def test_curated_nodes_mint_and_validate_with_the_dapper_runtime(tmp_path):
+    runtime = rr.dapper_runtime()
+    org = {'name': 'Broad Institute', 'ror': 'ror:05a0ya142'}
+    org = {'id': runtime.compute_id(dict(org), 'Organization', runtime.schema), **org}
+    path = source_datasets(tmp_path, {'organizations': {'broad': org}, 'datasets': {'new': {
+        'name': 'A source', 'version': 'v1', 'alternate_identifier': ['x:1'], 'publisher': 'broad', 'location': 'https://example.org/a'}},
+        'links': [{'dataset': 'new', 'libraries': ['OTHER'], 'files': ['^a$']}]})
+    curated = rr.load_source_datasets(path, runtime)
+    dataset = curated['datasets']['new']
+    assert dataset['id'] == runtime.compute_id({key: value for key, value in dataset.items() if key != 'id'}, 'Dataset', runtime.schema)
+    assert dataset['publisher'] == org['id'] and 'was_attributed_to' not in dataset  # empty keys are dropped
+    provenance = {'c2m2_files': [{'id': RAW_C2M2, 'filename': 'a'}], 'used_edges': []}
+    lineage, edges = rr.curate(provenance, 'OTHER', curated)  # a C2M2File -> Dataset edge passes the closed DAPPER validator
+    assert edges == {'new': 1} and lineage['groups']['was_derived_from_edges'][0]['subject'] == RAW_C2M2 and lineage['notes'] == []
+    bad = {'name': 'x', 'bogus_slot': 1, 'publisher': org['id']}  # recomputes, but is no DAPPER Dataset
+    path = source_datasets(tmp_path, {'organizations': {'broad': org}, 'datasets': {'bad': {'id': runtime.compute_id(dict(bad), 'Dataset', runtime.schema), **bad}}})
+    with pytest.raises(rr.Refused, match=r"bad is not a valid Dataset: .*'bogus_slot' was unexpected"): rr.load_source_datasets(path, runtime)
 
 
 def test_read_collection_streams_gene_sets_and_parses_the_tail(tmp_path):
@@ -364,8 +595,8 @@ def test_collection_payload_provenance_keeps_every_group_including_edges_after_t
     build(lap, tmp_path / 'release')
     for collection in rows(tmp_path / 'release' / 'collections.jsonl.gz'):
         provenance = collection['payload']['provenance']
-        assert set(provenance) == {'prefixes', 'organizations', 'datasets', 'files', 'activities',
-                                   'used_edges', 'was_generated_by_edges', 'was_derived_from_edges'}
+        assert set(provenance) == {'prefixes', 'organizations', 'files', 'activities', 'used_edges', 'was_generated_by_edges'} | (
+            {'datasets', 'was_derived_from_edges'} if collection['collection_id'] == COLL[0] else {'c2m2_files'})
         assert provenance['used_edges'][0] == SHARED_EDGE
         assert provenance['was_generated_by_edges'][0]['subject'] == collection['collection_id']
 
@@ -547,7 +778,7 @@ def test_library_ranks_with_a_gap_are_refused(tmp_path):
 def test_build_refuses_missing_long_files_and_unordered_factors(lap, tmp_path):
     with pytest.raises(rr.Refused, match='No long file for 1 traits'):
         rr.build_release(build_services(), lap.project, lap.long_files[:1], lap.cache, tmp_path / 'out',
-                         gene_set_stats_files=lap.gene_set_stats, workers=1, runtime=RUNTIME)
+                         gene_set_stats_files=lap.gene_set_stats, source_datasets=lap.source_datasets, workers=1, runtime=RUNTIME)
     path = next(path for path in lap.long_files if path.name.startswith('T2D'))
     with open(path) as stream: lines = stream.readlines()
     with open(path, 'w') as stream: stream.writelines(lines[:2] + lines[9:10] + lines[2:9] + lines[10:])
@@ -619,14 +850,27 @@ class FakeDB:
         if sql.startswith('SELECT archive_id FROM archived_reference_factors WHERE archive_id IN ('):
             assert sql.count('%s') == len(params)
             return [(row['archive_id'],) for row in self.tables['archived_reference_factors'] if row['archive_id'] in params]
+        indexed = re.fullmatch(r'SELECT source_id_sha256,archive_id FROM (\w+_archive_index) WHERE source_id_sha256 IN \((.+)\)', sql)
+        if indexed:
+            assert indexed[2].count('%s') == len(params)
+            return [(row['source_id_sha256'], row['archive_id']) for row in self.tables[indexed[1]] if row['source_id_sha256'] in params]
+        shared = re.fullmatch(r"INSERT IGNORE INTO (\w+_archive_index) \(source_id_sha256,archive_id,mechanism_id,published_at\) SELECT source_id_sha256,"
+                              r"archive_id,NULLIF\(JSON_UNQUOTE\(JSON_EXTRACT\(snapshot,'\$\.mechanism\.id'\)\),'null'\),%s FROM archived_reference_factors "
+                              r"WHERE generation_id IN \(%s,%s\)", sql)
+        if shared:
+            rows = [(row['source_id_sha256'], row['archive_id'], (json.loads(row['snapshot']).get('mechanism') or {}).get('id'), params[0])
+                    for row in self.tables['archived_reference_factors'] if row['generation_id'] in params[1:]]
+            self.insert(f'INSERT IGNORE INTO {shared[1]} (source_id_sha256,archive_id,mechanism_id,published_at) VALUES (%s,%s,%s,%s)', rows)
+            return self.inserted
         raise AssertionError(f'Unexpected SQL {sql}')
     def insert(self, sql, rows):
         match = re.fullmatch(r'INSERT (IGNORE )?INTO (\w+) \((.+?)\) VALUES \(.+\)', sql)
-        table, columns = self.tables[match[2]], match[3].split(',')
+        table, columns, self.inserted = self.tables[match[2]], match[3].split(','), []
+        key = ('source_id_sha256', 'archive_id') if 'source_id_sha256' in columns else ('archive_id',)
         for row in rows:
             record = dict(zip(columns, row))
-            if match[1] and any(stored['archive_id'] == record['archive_id'] for stored in table): continue
-            table.append(record)
+            if match[1] and any(all(stored[k] == record[k] for k in key) for stored in table): continue
+            table.append(record); self.inserted.append(row)
 
 
 class FakeIndex:
@@ -682,7 +926,7 @@ def test_publish_fills_new_tables_swaps_them_in_one_rename_and_records_the_relea
     qa = result['environments'][0]
     assert qa['tables']['action'] == 'replaced' and qa['tables']['published_at'] == '2026-10-05T12:00:00.123456Z'
     assert qa['tables']['rows'] == {'traits': 2, 'factors': 3, 'factor_genes': 8, 'collections': 2, 'gene_sets': 7,
-                                    'projections': manifest['counts']['projections'], 'dapper_nodes': 9, 'dapper_edges': 7, 'trait_gene_sets': 3,
+                                    'projections': manifest['counts']['projections'], 'trait_gene_sets': 3, 'factor_trait_links': 9, 'phenotypes': 6,
                                     'release': 1}
     statements = [event[1] for event in events if event[0] == 'sql']
     # Strict mode before the lock, the lock before any change; released at the end.
@@ -690,23 +934,30 @@ def test_publish_fills_new_tables_swaps_them_in_one_rename_and_records_the_relea
     assert sql_events(events, r'^SELECT GET_LOCK')[0][2] == ('reveal:publish:reveal_workflow_qa', 0)
     assert statements[-1] == 'SELECT RELEASE_LOCK(%s)' and services.db.closed == 1
     tables = [f'reveal_workflow_qa_ref_{name}' for name in rr.TABLES]
-    assert sql_events(events, r'^DROP TABLE')[0][1] == 'DROP TABLE IF EXISTS ' + ', '.join([t + '__new' for t in tables] + [t + '__old' for t in tables])
+    retired = [f'reveal_workflow_qa_ref_{name}{suffix}' for name in ('dapper_nodes', 'dapper_edges') for suffix in ('', '__new', '__old')]
+    assert sql_events(events, r'^DROP TABLE')[0][1] == 'DROP TABLE IF EXISTS ' + ', '.join([t + '__new' for t in tables] + [t + '__old' for t in tables] + retired)
     assert [re.match(r'CREATE TABLE (\w+)', event[1])[1] for event in sql_events(events, r'^CREATE TABLE reveal')] == [t + '__new' for t in tables]
     inserted = {re.match(r'INSERT INTO (\w+)', event[1])[1] for event in sql_events(events, r'^INSERT INTO reveal')}
     assert inserted == {t + '__new' for t in tables}
     renames = sql_events(events, r'^RENAME TABLE')
     assert len(renames) == 1 and renames[0][1] == 'RENAME TABLE ' + ', '.join(f'{t}__new TO {t}' for t in tables)
-    assert sql_events(events, r'^DROP TABLE')[-1][1] == 'DROP TABLE IF EXISTS ' + ', '.join(t + '__old' for t in tables)
+    assert sql_events(events, r'^DROP TABLE')[-1][1] == 'DROP TABLE IF EXISTS ' + ', '.join([t + '__old' for t in tables] + retired)
     db = services.db.tables
-    assert set(db) == set(tables) | {'archived_reference_factors'}
+    assert set(db) == set(tables) | {'archived_reference_factors', 'reveal_workflow_qa_archive_index'}
     assert [row['release_id'] for row in db['reveal_workflow_qa_ref_release']] == [manifest['release_id']]
-    assert json.loads(db['reveal_workflow_qa_ref_release'][0]['manifest']) == manifest
+    assert json.loads(db['reveal_workflow_qa_ref_release'][0]['manifest']) == {**manifest, 'absent_files': []}
     assert db['reveal_workflow_qa_ref_release'][0]['published_at'] == '2026-10-05 12:00:00.123456'
     factor = next(row for row in db['reveal_workflow_qa_ref_factors'] if row['factor_key'] == f'{KPN_A}::Factor1')
     assert json.loads(factor['metadata'])['factor'] == 'Factor1' and isinstance(db['reveal_workflow_qa_ref_factor_genes'][0]['loading'], float)
     projection = db['reveal_workflow_qa_ref_projections'][0]
     assert isinstance(projection['joint_loading'], float) and isinstance(projection['joint_loading_text'], str) and isinstance(projection['joint_rank'], int)
-    assert {row['edge_role'] for row in db['reveal_workflow_qa_ref_dapper_edges']} == {'data_input', 'metadata_input', None}
+    link = next(row for row in db['reveal_workflow_qa_ref_factor_trait_links'] if row['phenotype'] == 'gcat_trait_glucose')
+    assert link['phenotype_kpn_trait_id'] is None and (link['is_own_trait'], link['phewas_q']) == (0, 0.01) and isinstance(link['nnls_loading'], float)
+    phenotype = next(row for row in db['reveal_workflow_qa_ref_phenotypes'] if row['phenotype'] == 'gcat_trait_glucose')
+    assert (phenotype['kpn_trait_id'], phenotype['display_name'], phenotype['is_atlas']) == (None, 'glucose', 0)
+    assert json.loads(phenotype['metadata'])['bottom_line']['gwas_reason'] == 'not_on_portal'
+    assert {row['collection_id']: row['portal_collection_id'] for row in db['reveal_workflow_qa_ref_collections']} == PORTAL
+    assert qa['archive_index'] == {'rows': 3, 'inserted': 3, 'shared_inserted': 0}
     # Frozen snapshots: INSERT IGNORE into the shared table, before the swap.
     archived = sql_events(events, r'^INSERT IGNORE INTO archived_reference_factors')
     assert len(db['archived_reference_factors']) == 3 and qa['archived_factors'] == {'rows': 3, 'inserted': 3}
@@ -732,7 +983,7 @@ def test_publish_fills_new_tables_swaps_them_in_one_rename_and_records_the_relea
                                         'stale': 1, 'deleted': 1}
     stored = record(services, 'reveal_workflow_qa')
     assert stored['owner'] == rg.CATALOG_OWNER and stored['data'] == {'release_id': manifest['release_id'], 'published_at': '2026-10-05T12:00:00.123456Z'}
-    assert qa['record']['written'] is True and set(qa['seconds']) == {'vectors', 'tables', 'archived_factors', 'update', 'record', 'total'}
+    assert qa['record']['written'] is True and set(qa['seconds']) == {'vectors', 'tables', 'archived_factors', 'archive_index', 'update', 'record', 'total'}
     if workspace_events.tracked(rr.RECORD_KIND):  # the app announces a published release as the public 'reference' catalog event
         with services.repository('reveal_workflow_qa').read_transaction() as tx: published = tx.list('workspace_event', 'public')
         assert [(event['data']['event_type'], event['data']['entity_id']) for event in published] == [('catalog.updated', 'reference')]
@@ -746,10 +997,13 @@ def test_republishing_the_same_release_changes_nothing(release, tmp_path, monkey
     events.clear()
     again = rr.publish_release(services, release, ['qa'])['environments'][0]
     assert again['tables']['action'] == 'unchanged' and again['archived_factors'] == {'rows': 3, 'inserted': 0}
+    assert again['archive_index'] == {'rows': 3, 'inserted': 0, 'shared_inserted': 0}
     tables = [f'reveal_workflow_qa_ref_{name}' for name in rr.TABLES]
-    # Only the leftovers of a run that died are dropped: none here.
-    assert [event[1] for event in sql_events(events, r'^(CREATE TABLE reveal|RENAME|DROP|INSERT)')] == [
-        'DROP TABLE IF EXISTS ' + ', '.join([t + '__new' for t in tables] + [t + '__old' for t in tables])]
+    retired = [f'reveal_workflow_qa_ref_{name}{suffix}' for name in rr.RETIRED_TABLES for suffix in ('', '__new', '__old')]
+    # Only the leftovers of a run that died (and retired tables) are dropped: none here. The shared generations are indexed again (IGNORE).
+    assert [event[1].split(' SELECT ')[0] for event in sql_events(events, r'^(CREATE TABLE reveal|RENAME|DROP|INSERT)')] == [
+        'INSERT IGNORE INTO reveal_workflow_qa_archive_index (source_id_sha256,archive_id,mechanism_id,published_at)',
+        'DROP TABLE IF EXISTS ' + ', '.join([t + '__new' for t in tables] + [t + '__old' for t in tables] + retired)]
     assert not [e for e in events if e[0] in ('upsert', 'delete')]
     assert all((plan['added'], plan['updated'], plan['deleted']) == (0, 0, 0) for plan in again['vectors'].values())
     assert again['record']['written'] is False and record(services, 'reveal_workflow_qa')['version'] == 1
@@ -772,10 +1026,11 @@ def test_publishing_a_new_release_replaces_every_table_and_prunes_old_vectors(la
     tables = [f'reveal_workflow_qa_ref_{name}' for name in rr.TABLES]
     renames = sql_events(events, r'^RENAME TABLE')
     assert len(renames) == 1 and renames[0][1] == 'RENAME TABLE ' + ', '.join(f'{t} TO {t}__old, {t}__new TO {t}' for t in tables)
-    assert sql_events(events, r'^DROP TABLE')[-1][1] == 'DROP TABLE IF EXISTS ' + ', '.join(t + '__old' for t in tables)
+    assert sql_events(events, r'^DROP TABLE')[-1][1].startswith('DROP TABLE IF EXISTS ' + ', '.join(t + '__old' for t in tables) + ', ')
     assert [row['release_id'] for row in services.db.tables['reveal_workflow_qa_ref_release']] == [second_release['release_id']]
     archived = services.db.tables['archived_reference_factors']  # only the changed factor gets a new frozen snapshot
     assert second['archived_factors'] == {'rows': 3, 'inserted': 1} and len(archived) == 4
+    assert second['archive_index'] == {'rows': 3, 'inserted': 1, 'shared_inserted': 0} and len(services.db.tables['reveal_workflow_qa_archive_index']) == 4
     changed = rg.public_id(KPN_B, 'Factor1')
     assert sorted((row['source_id'] == changed, row['generation_id']) for row in archived) == sorted(
         [(False, first['release_id'])] * 2 + [(True, first['release_id']), (True, second_release['release_id'])])
@@ -807,6 +1062,8 @@ def test_publish_environments_in_order_with_their_own_prefix_lock_and_namespaces
     assert {'reveal_workflow_local_ref_release', 'reveal_workflow_qa_ref_release'} <= set(services.db.tables)
     assert set(services.index.namespaces) == {'local-factors', 'local-contexts', 'qa-factors', 'qa-contexts'}
     assert result['environments'][1]['archived_factors'] == {'rows': 3, 'inserted': 0}  # shared table, written once
+    assert result['environments'][1]['archive_index']['inserted'] == 3  # each environment lists them in its own index
+    assert len(services.db.tables['reveal_workflow_local_archive_index']) == len(services.db.tables['reveal_workflow_qa_archive_index']) == 3
     assert record(services, 'reveal_workflow_local')['data']['release_id'] == result['release_id']
     prod = publish_services(tmp_path, events)
     rr.publish_release(prod, release, ['prod'], tables=True, vectors=False)
@@ -932,6 +1189,135 @@ def test_open_release_refuses_a_folder_whose_identity_does_not_hold(release, tmp
     with pytest.raises(rr.Refused, match='not a reveal.reference-release/1 folder'): rr.open_release(release)
 
 
+def edited_release(release, folder, *, drop=(), add=()):
+    """A copy of a release folder whose manifest drops or adds data files (an older or newer release), its identity recomputed."""
+    shutil.copytree(release, folder)
+    manifest = rr.read_json(folder / 'manifest.json')
+    for name in drop: (folder / name).unlink(); del manifest['files'][name]
+    for name in add:
+        (folder / name).write_bytes(gzip.compress(b'x\n', mtime=0)); manifest['files'][name] = hashlib.sha256((folder / name).read_bytes()).hexdigest()
+    manifest['release_id'] = rr.release_identity(manifest['files'])
+    rr.write_json(folder / 'manifest.json', manifest)
+    return folder
+
+
+def test_an_absent_optional_file_publishes_an_empty_table_and_is_recorded(release, tmp_path):
+    older = edited_release(release, tmp_path / 'older', drop=('factor_trait_links.tsv.gz', 'phenotypes.jsonl.gz'), add=rr.RETIRED_FILES)
+    manifest = rr.open_release(older)  # retired files of an older release are verified and ignored
+    services = publish_services(tmp_path, [])
+    qa = rr.publish_release(services, older, ['qa'])['environments'][0]
+    db = services.db.tables
+    assert qa['tables']['rows']['factor_trait_links'] == qa['tables']['rows']['phenotypes'] == 0 and qa['tables']['rows']['traits'] == 2
+    assert db['reveal_workflow_qa_ref_factor_trait_links'] == db['reveal_workflow_qa_ref_phenotypes'] == []  # created and swapped in, empty
+    assert json.loads(db['reveal_workflow_qa_ref_release'][0]['manifest']) == {**manifest, 'absent_files': ['factor_trait_links.tsv.gz', 'phenotypes.jsonl.gz']}
+    for name in rr.REQUIRED_FILES[:1]:
+        with pytest.raises(rr.Refused, match='not a reveal.reference-release/1 folder'): rr.open_release(edited_release(release, tmp_path / 'broken', drop=(name,)))
+
+
+def test_a_release_file_this_checkout_does_not_know_is_refused(release, tmp_path):
+    newer = edited_release(release, tmp_path / 'newer', add=('trait_networks.tsv.gz',))
+    events = []
+    with pytest.raises(rr.Refused, match=r"release files \['trait_networks.tsv.gz'\] are unknown to this checkout: publish with a newer checkout"):
+        rr.publish_release(publish_services(tmp_path, events), newer, ['qa'])
+    assert not events
+
+
+def test_a_folder_built_before_portal_collection_ids_is_refused_before_the_swap(release, tmp_path):
+    older = tmp_path / 'older'
+    shutil.copytree(release, older)
+    collections = [{key: value for key, value in row.items() if key != 'portal_collection_id'} for row in rows(older / 'collections.jsonl.gz')]
+    rr.write_jsonl(older / 'collections.jsonl.gz', collections)
+    manifest = rr.read_json(older / 'manifest.json')
+    manifest['files']['collections.jsonl.gz'] = hashlib.sha256((older / 'collections.jsonl.gz').read_bytes()).hexdigest()
+    manifest['release_id'] = rr.release_identity(manifest['files']); rr.write_json(older / 'manifest.json', manifest)
+    events = []
+    services = publish_services(tmp_path, events)
+    with pytest.raises(rr.Refused, match=r"collections.jsonl.gz lacks \['portal_collection_id'\]: rebuild this release"): rr.publish_release(services, older, ['qa'])
+    assert not sql_events(events, r'^RENAME') and 'reveal_workflow_qa_ref_release' not in services.db.tables
+
+
+def test_retired_tables_are_dropped_by_name_after_the_swap(release, tmp_path):
+    events = []
+    services = publish_services(tmp_path, events)
+    stale = ['reveal_workflow_qa_ref_dapper_nodes', 'reveal_workflow_qa_ref_dapper_edges', 'reveal_workflow_qa_ref_dapper_edges__old']
+    services.db.tables.update({name: [{'id': 'x'}] for name in stale + ['reveal_workflow_qa_ref_dapper_other', 'reveal_workflow_local_ref_dapper_nodes']})
+    assert rr.publish_release(services, release, ['qa'])['environments'][0]['tables']['action'] == 'replaced'
+    assert not set(stale) & set(services.db.tables)
+    assert {'reveal_workflow_qa_ref_dapper_other', 'reveal_workflow_local_ref_dapper_nodes'} <= set(services.db.tables)  # never by pattern
+    renames = sql_events(events, r'^RENAME TABLE')
+    assert 'dapper' not in renames[0][1] and 'reveal_workflow_qa_ref_dapper_nodes' in sql_events(events, r'^DROP TABLE')[-1][1]
+
+
+def test_the_archive_index_lists_the_release_and_the_shared_generations_per_environment(release, tmp_path):
+    services = publish_services(tmp_path, [])
+    legacy = [{'archive_id': digest(['legacy', index]), 'generation_id': generation, 'source_id': f'factor:portal:X{index}:cfde-inc-v2:Factor1',
+               'source_id_sha256': hashlib.sha256(f'factor:portal:X{index}:cfde-inc-v2:Factor1'.encode()).hexdigest(),
+               'snapshot': canonical({'mechanism': {'id': f'dapper:Mechanism.{index:0>32}'}} if index else {'label': 'no mechanism'})}
+              for index, generation in enumerate([*rr.SHARED_GENERATIONS, 'f' * 64])]
+    services.db.tables['archived_reference_factors'] = list(legacy)
+    qa = rr.publish_release(services, release, ['qa'], vectors=False)['environments'][0]
+    assert qa['archive_index'] == {'rows': 3, 'inserted': 3, 'shared_inserted': 2}  # the other generation's row is not this environment's
+    index = {row['archive_id']: row for row in services.db.tables['reveal_workflow_qa_archive_index']}
+    archived = rows(release / rr.ARCHIVE_FILE)
+    assert set(index) == {row['archive_id'] for row in archived} | {row['archive_id'] for row in legacy[:2]}
+    for row in archived:
+        assert (index[row['archive_id']]['source_id_sha256'], index[row['archive_id']]['mechanism_id']) == (row['source_id_sha256'], row['snapshot']['mechanism']['id'])
+    assert (index[legacy[0]['archive_id']]['mechanism_id'], index[legacy[1]['archive_id']]['mechanism_id']) == (None, f'dapper:Mechanism.{1:0>32}')
+    assert {row['published_at'] for row in index.values()} == {'2026-10-05 12:00:00.123456'}
+    again = rr.publish_release(services, release, ['qa'], vectors=False)['environments'][0]
+    assert again['archive_index'] == {'rows': 3, 'inserted': 0, 'shared_inserted': 0} and len(services.db.tables['reveal_workflow_qa_archive_index']) == 5
+
+
+def test_catalog_archived_lookups_read_through_the_environment_index(tmp_path, monkeypatch):
+    from reveal_backend import catalog as catalog_module
+
+    class MissingTable(Exception): pass
+
+    class Cursor:
+        def __init__(self, connection): self.cursor = connection.cursor()
+        def __enter__(self): return self
+        def __exit__(self, *exc): return False
+        def execute(self, sql, params=()):
+            statements.append(sql)
+            try: self.cursor.execute(sql.replace('%s', '?'), tuple(params))
+            except sqlite3.OperationalError as error:
+                if 'no such table' in str(error): raise MissingTable(1146, str(error)) from error
+                raise
+        def fetchall(self): return self.cursor.fetchall()
+
+    class Connection:
+        def __init__(self): self.connection = sqlite3.connect(path)
+        def cursor(self): return Cursor(self.connection)
+        def close(self): self.connection.close()
+
+    path, statements = str(tmp_path / 'archive.sqlite'), []
+    db = sqlite3.connect(path)
+    db.execute('CREATE TABLE archived_reference_factors(archive_id TEXT PRIMARY KEY, generation_id TEXT, source_id TEXT, snapshot TEXT, captured_at TEXT)')
+    source, mechanism = 'factor:kpn:0000398:eaggl-capped-v1:Factor1', 'dapper:Mechanism.' + 'm' * 32
+    snapshots = [('a' * 64, 'r1', '2026-10-01T00:00:00Z'), ('b' * 64, 'r2', '2026-10-02T00:00:00Z'), ('c' * 64, 'r3', '2026-10-03T00:00:00Z')]
+    db.executemany('INSERT INTO archived_reference_factors VALUES (?,?,?,?,?)', [
+        (identity, generation, source, json.dumps({'label': generation}), at) for identity, generation, at in snapshots])
+    db.commit()
+    monkeypatch.setattr(catalog_module, 'reference_mysql_connection', Connection)
+    monkeypatch.setenv('REVEAL_APPLICATION_TABLE_PREFIX', 'reveal_workflow_qa')
+    catalog = catalog_module.Catalog()
+    assert catalog.archived_for_source(source)['generation_id'] == 'r3'  # no index yet: the latest of any environment
+    assert catalog.archived_for_mechanism(mechanism) is None
+    assert any('reveal_workflow_qa_archive_index' in sql for sql in statements)
+    db.execute('CREATE TABLE reveal_workflow_qa_archive_index(source_id_sha256 TEXT, archive_id TEXT, mechanism_id TEXT, published_at TEXT)')
+    db.executemany('INSERT INTO reveal_workflow_qa_archive_index VALUES (?,?,?,?)', [
+        (hashlib.sha256(source.encode()).hexdigest(), identity, mechanism, '2026-10-05') for identity in ('a' * 64, 'b' * 64)])
+    db.commit()
+    catalog = catalog_module.Catalog()
+    assert catalog.archived_for_source(source)['generation_id'] == 'r2'  # r3 was published to another environment
+    assert catalog.archived_for_source('factor:kpn:0000100:eaggl-capped-v1:Factor1') is None
+    found = catalog.archived_for_mechanism(mechanism)
+    assert (found['archive_id'], found['label']) == ('b' * 64, 'r2')
+    found['label'] = 'changed by a caller'
+    assert catalog.archived_for_mechanism(mechanism)['label'] == 'r2' and catalog.archived_for_mechanism('dapper:Mechanism.' + 'z' * 32) is None
+    assert catalog.archived_for_mechanism("x' OR 1=1") is None and catalog.archived_reference_factor('c' * 64)['generation_id'] == 'r3'  # ids stay unscoped
+
+
 def test_vector_client_uses_the_write_token_and_per_environment_overrides(monkeypatch):
     import upstash_vector
     made = []
@@ -956,12 +1342,16 @@ def test_vector_client_uses_the_write_token_and_per_environment_overrides(monkey
 def test_cli_prints_one_json_object_and_exits_by_outcome(lap, tmp_path, capsys, monkeypatch):
     out = tmp_path / 'cli'
     argv = ['build', '--lap-project-dir', str(lap.project), '--long-files-from', str(lap.project / 'traits'),
-            '--gene-set-stats-from', str(lap.project / 'traits'),
+            '--gene-set-stats-from', str(lap.project / 'traits'), '--source-datasets', str(lap.source_datasets),
             '--vector-cache', str(lap.cache), '--out', str(out), '--top-n', '2', '--workers', '1']
     monkeypatch.setattr(rr, 'dapper_runtime', lambda: RUNTIME)
     assert rr.main(argv, build_services()) == 0
     built = json.loads(capsys.readouterr().out)
     assert built['command'] == 'build' and built['ok'] is True and built['reused'] is False and built['out'] == str(out)
+    assert rr.main(argv + ['--gwas-ancestry', 'EU', '--out', str(tmp_path / 'eu')], build_services()) == 0
+    assert json.loads(capsys.readouterr().out)['release_id'] != built['release_id']
+    assert rr.main([arg for arg in argv if arg not in ('--source-datasets', str(lap.source_datasets))], build_services()) == 2
+    assert 'required: --source-datasets' in json.loads(capsys.readouterr().out)['refused']
     events = []
     assert rr.main(['publish', '--release', str(out), '--env', 'qa'], publish_services(tmp_path, events)) == 0
     lines = capsys.readouterr().out.strip().splitlines()
@@ -984,6 +1374,8 @@ def test_application_sql_prefixes_reference_tables():
         'RENAME TABLE reveal_workflow_local_ref_factor_genes__new TO reveal_workflow_local_ref_factor_genes'
     assert application_sql('SELECT 1 FROM reveal_records, reveal_transaction_lock', 'reveal_workflow_qa') == \
         'SELECT 1 FROM reveal_workflow_qa_records, reveal_workflow_qa_transaction_lock'
+    assert application_sql('JOIN reveal_archive_index i', 'reveal_workflow_qa') == 'JOIN reveal_workflow_qa_archive_index i'
+    assert application_sql(rr.ARCHIVE_INDEX, 'reveal') == rr.ARCHIVE_INDEX and 'reveal_archive_index_x' in application_sql('reveal_archive_index_x', 'reveal_x')
     unchanged = 'SELECT reveal_reference, xreveal_ref_a FROM archived_reference_factors, reveal_ref_release'
     assert application_sql(unchanged, 'reveal') == unchanged
     assert application_sql(unchanged, 'reveal_workflow_qa') == unchanged.replace(' reveal_ref_release', ' reveal_workflow_qa_ref_release')

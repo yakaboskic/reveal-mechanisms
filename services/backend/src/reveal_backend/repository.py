@@ -55,8 +55,8 @@ def application_prefix(value=None):
     return value
 
 def application_sql(sql, prefix):
-    # Per-environment tables: records, the write fence and the reference release tables reveal_ref_<name>.
-    return re.sub(r'\breveal_(records|transaction_lock|ref_[a-z0-9_]+)\b', lambda match: prefix+'_'+match[1], sql)
+    # Per-environment tables: records, the write fence, the reference release tables reveal_ref_<name> and the archive index.
+    return re.sub(r'\breveal_(records|transaction_lock|archive_index|ref_[a-z0-9_]+)\b', lambda match: prefix+'_'+match[1], sql)
 
 class Transaction:
     """Rows read in this transaction are remembered by (kind, id). Under REPEATABLE READ a re-read returns the
