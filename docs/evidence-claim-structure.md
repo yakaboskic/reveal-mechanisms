@@ -15,8 +15,8 @@ The complete synthetic example in `input/package-sections/authoring-examples.jso
 |---|---|---|
 | Factor | the trusted `dapper:Mechanism.*` | `get_factor` (an EAGGL factor **is** the mechanism) |
 | Gene | `HGNC.SYMBOL:<symbol>`, as captured | `get_factor_loadings`, `get_gene_factors`, `get_gene_set_members`, `get_pigean_gene_phenotype` |
-| Gene set | the trusted `dapper:GeneSet.*` | `get_gene_set` |
-| Trait | `KPN.TRAIT:NNNNNNN` | the factor's fit or `kpn_traits` |
+| Gene set | the trusted `dapper:GeneSet.*` | `get_gene_set` (also for a set from `get_trait_gene_sets` or `get_gene_set_traits`) |
+| Trait | `KPN.TRAIT:NNNNNNN` | the factor's fit, `kpn_traits`, a release beta row or a factor–trait link row; a phenotype without a KPN trait id has no trait identifier |
 | Knowledge gap | the selected `dapper:KnowledgeGap.*` | the seed selection |
 
 Keep the captured symbol spelling. It matches `GeneSet.members` exactly, so membership triples and synthesis paths line up. Symbols are compared case-insensitively when paths are checked (`C10orf71` and `C10ORF71` are one gene); identity is never inferred from case alone. A verified `HGNC:<id>` from `resolve_gene` may be used where it is the captured identity.
@@ -28,7 +28,7 @@ The ontology terms below were checked in the EBI Ontology Lookup Service (OLS); 
 | Term | IRI | Label | Use |
 |---|---|---|---|
 | `prov:hadMember` | `http://www.w3.org/ns/prov#hadMember` | hadMember | gene set → member gene; the DAPPER-native `slot_uri` of `GeneSet.members` |
-| `obo:RO_0002610` | `http://purl.obolibrary.org/obo/RO_0002610` | correlated with | statistical dependence: factor loadings, set projections, set–trait effects |
+| `obo:RO_0002610` | `http://purl.obolibrary.org/obo/RO_0002610` | correlated with | statistical dependence: factor loadings, set projections, set–trait effects, factor–trait links |
 | `biolink:genetically_associated_with` | `https://w3id.org/biolink/vocab/genetically_associated_with` | genetically associated with | gene → trait (PIGEAN gene–phenotype) |
 | `obo:RO_0002331` | `http://purl.obolibrary.org/obo/RO_0002331` | involved in | synthesis: gene or set involved in a mechanism |
 | `urn:reveal:relation:candidate-gap-connection` | (REVEAL relation) | candidate gap connection | synthesis: gene or set → selected KnowledgeGap |
@@ -53,16 +53,26 @@ Each family is recognized from its endpoint kinds and predicate, falling back to
 | Factor–gene | gene → `obo:RO_0002610` → Mechanism | "Gene G has loading L on factor F (label)." | `LOADING` `loading` | `get_factor_loadings` (kind gene), `get_gene_factors` |
 | Factor–gene set | GeneSet → `obo:RO_0002610` → Mechanism | "Gene set S has joint loading L on factor F." | `LOADING` `joint_loading` or `marginal_loading` | `get_factor_loadings` (kind gene_set), `get_gene_set_factors`, `get_gene_gene_sets` with `factor_id` |
 | Phenotype–gene | gene → `biolink:genetically_associated_with` → KPN.TRAIT | "Gene G is associated with P in PIGEAN (combined C)." | `SCORE` `combined` (and `log_bf`, `prior`) | `get_pigean_gene_phenotype` |
-| Gene set–trait | GeneSet → `obo:RO_0002610` → KPN.TRAIT | "Gene set S is associated with P (beta_uncorrected B)." | `EFFECT_ESTIMATE` `beta_uncorrected` (and `beta`) | `get_pigean_gene_set_phenotype` |
+| Gene set–trait | GeneSet → `obo:RO_0002610` → KPN.TRAIT | "Gene set S is associated with P (beta_uncorrected B)." | `EFFECT_ESTIMATE` `beta_uncorrected` (and `beta`); `POSTERIOR_PROBABILITY` `avg_postp` | `get_trait_gene_sets`, then `get_gene_set`; `get_gene_set_traits` with `get_gene_set`; `get_pigean_gene_set_phenotype` where enabled |
+| Factor–trait | Mechanism → `obo:RO_0002610` → KPN.TRAIT | "Factor F is linked to trait P (phewas_beta B, phewas_q Q)." | `EFFECT_ESTIMATE` `phewas_beta`; `LOADING` `nnls_loading`; `SCORE` `phewas_q` or `phewas_p_onesided` | `get_factor_trait_links`; `get_trait_factor_links`, then `get_factor` |
 
 Rules for every atomic Claim:
 
 1. `proposition_kind: RESULT`, with `subject_entity`, `relation` and `object_entity` all set, in the orientation above.
-2. One observation per Claim: one gene or set, one factor or trait, one family. Several metrics of the same row (for example `combined` and `log_bf`) may share one Claim.
+2. One observation per Claim: one gene or set, one factor or trait, one family. Several metrics of the same row (for example `combined` and `log_bf`, or `phewas_beta` and `phewas_q`) may share one Claim.
 3. `has_score` references a ClaimScore whose `metric` is the exact captured column, whose `value` is the exact captured value, and whose `score_kind` is the kind in the table. Lint checks metric, value and kind against the cited row. Membership has no score.
 4. The statement states the value exactly, or rounded to at least three significant digits.
 5. The EvidenceItem's `was_derived_from` lists the captured File; set families also list the trusted GeneSet. The exact row locator (for example `` `/result/items/3` ``) goes in `context`, a verbatim excerpt of that row in `snippet`, and the bearing on this Proposition in `explanation`.
 6. Direction is normally `SUPPORTS`: the row is the observation. Missing data is a coverage limitation, never a contradiction.
+7. Only rows that state an association become atomic Claims. A gene set–trait row whose `beta_uncorrected` is exactly 0 is no association, and a phenotype without a KPN trait id has no trait endpoint; lint does not count either as an atomic Claim of its family and never suggests one. A factor–trait link to the factor's own fitted trait (`is_own_trait`) says the link is **within the factor's fit**.
+
+### Release betas and factor–trait links
+
+These readers serve a pinned reference release. They are available when the seed's capability catalog lists them as `supported`; an older seed's catalog does not list them, and lint then never suggests them.
+
+- **Gene set–trait betas** (`get_trait_gene_sets` for a trait, `get_gene_set_traits` for a set) come from the release's PIGEAN betas mode, fitted per library: `beta_uncorrected` (uncorrected effect), `beta` (joint effect) and `avg_postp` (average posterior probability). They are distinct from the BioIndex small-model values of `get_pigean_gene_set_phenotype`; keep the reader's metric names. A row exists only for a gene set PIGEAN kept for that trait: an absent pair is not a zero, and some kept rows are exactly 0. Resolve the set with `get_gene_set` before citing its trusted GeneSet.
+- **Factor–trait links** (`get_factor_trait_links` for a factor, `get_trait_factor_links` for the factors of other traits linked to a trait) come from eaggl's trait linkage and factor-PheWAS. `nnls_loading` is the phenotype's descriptive projection onto the factor (no p-value). `phewas_beta` and `phewas_p_onesided` test whether the phenotype's genes are enriched in the factor beyond the fitted trait's own support; `phewas_q` is the Benjamini–Hochberg q-value over every factor–phenotype test, and only links with q ≤ 0.05 are stored. An absent phenotype is unlinked at that threshold, not a negative result. Resolve a factor of another trait with `get_factor` before citing its trusted Mechanism.
+- Gene–trait scores still need the deployment-verified BioIndex phenotype tools.
 
 ## 4. Synthesis Claims
 
@@ -72,9 +82,9 @@ Number new draft IDs at one width once a kind reaches ten (for example `claim-01
 
 | Type | Proposition | Cites |
 |---|---|---|
-| **Gap relevance** (primary, at least one) | text-only, or S (or G) → `urn:reveal:relation:candidate-gap-connection` → the selected KnowledgeGap. "Gene G and gene set S provide a candidate connection between factor F, phenotype P and knowledge gap D." | factor–gene + gene–gene set + (phenotype–gene or gene set–trait), and factor–gene set where available |
+| **Gap relevance** (primary, at least one) | text-only, or S (or G) → `urn:reveal:relation:candidate-gap-connection` → the selected KnowledgeGap. "Gene G and gene set S provide a candidate connection between factor F, phenotype P and knowledge gap D." | factor–gene + gene–gene set + (phenotype–gene, gene set–trait or factor–trait), and factor–gene set where available |
 | Convergent involvement | S (or G) → `obo:RO_0002331` → Mechanism. "S is involved in F relevant to P." | factor–gene set + gene set–trait, or factor–gene + phenotype–gene |
-| Factor–phenotype bridge | text-only, or a triple to the other trait. For a phenotype other than F's own trait. | two or more shared genes or sets |
+| Factor–phenotype bridge | text-only, or F → `obo:RO_0002610` → the other trait. For a phenotype other than F's own trait. "Factor F links to phenotype P through gene G." | the factor–trait Claim for P with a factor–gene or factor–gene set Claim on the same path, or two or more shared genes or sets |
 
 When the phenotype is the factor's own fitted trait, say the link is **within the factor's fit**; it is not independent support. A different phenotype is an independent bridge. A synthesis states a scoped candidate interpretation and leaves causal direction unresolved unless the cited evidence distinguishes it.
 
@@ -126,7 +136,7 @@ evidence_items:
 ## 7. Alignment notes
 
 - `prov:hadMember` is the `slot_uri` of DAPPER `GeneSet.members`, so a membership triple is the RDF statement the trusted GeneSet already makes. RO:0002351 *has member* is its closest RO equivalent.
-- RO:0002610 *correlated with* asserts statistical dependence only. A loading or projection is a fitted model weight, not a probability, a biological effect size or a causal claim.
+- RO:0002610 *correlated with* asserts statistical dependence only. A loading or projection is a fitted model weight, not a probability, a biological effect size or a causal claim. A factor–trait link is an enrichment of the phenotype's genes in the factor, not evidence that the factor causes the phenotype.
 - Biolink `genetically_associated_with` aligns with PIGEAN's genetic-support scores. The scores keep their own meaning: `combined` and `log_bf` are not probabilities.
 - HYCL, which DAPPER imports, relates statements to statements, not entities to gaps, so gap relevance keeps the REVEAL `candidate-gap-connection` relation (or a text-only Proposition).
 - `docs/pigean-claim-model.md` explains the meaning of each metric and the older single-Claim templates, which remain valid for legacy accounts.

@@ -29,31 +29,43 @@ PREDICATES = {
     'involved': ('obo:RO_0002331', OBO + 'RO_0002331', {'RO:0002331', LEGACY + 'involved-in'}),
 }
 SET_LOADINGS = 'get_factor_loadings (kind gene_set)'
-# family: subject kind, predicate group, object kind, accepted metrics, score kind, label, retrieval routes (any one serves;
-# a route needs every get_* tool it names)
+# Release readers are fail-closed: a capability catalog frozen before them does not list them.
+RELEASE_TOOLS = ('get_trait_gene_sets', 'get_gene_set_traits', 'get_factor_trait_links', 'get_trait_factor_links')
+# family: subject kind, predicate group, object kind, accepted metrics, {metric: score kind}, label, retrieval routes (any one
+# serves; a route needs every get_* tool it names)
 FAMILIES = {
-    'factor_gene': ('gene', 'correlated', 'factor', ('loading', 'factor_value'), 'LOADING', 'factor-gene',
-                    ('get_factor_loadings', 'get_gene_factors')),
-    'phenotype_gene': ('gene', 'genetic', 'trait', ('combined', 'log_bf', 'prior'), 'SCORE', 'phenotype-gene',
-                       ('get_pigean_gene_phenotype',)),
-    'factor_gene_set': ('gene_set', 'correlated', 'factor', ('joint_loading', 'marginal_loading', 'factor_value'), 'LOADING',
-                        'factor-gene set', (SET_LOADINGS, 'get_gene_set_factors')),
-    'gene_gene_set': ('gene_set', 'member', 'gene', (), None, 'gene-gene set',
+    'factor_gene': ('gene', 'correlated', 'factor', ('loading', 'factor_value'), dict.fromkeys(('loading', 'factor_value'), 'LOADING'),
+                    'factor-gene', ('get_factor_loadings', 'get_gene_factors')),
+    'phenotype_gene': ('gene', 'genetic', 'trait', ('combined', 'log_bf', 'prior'), dict.fromkeys(('combined', 'log_bf', 'prior'), 'SCORE'),
+                       'phenotype-gene', ('get_pigean_gene_phenotype',)),
+    'factor_gene_set': ('gene_set', 'correlated', 'factor', ('joint_loading', 'marginal_loading', 'factor_value'),
+                        dict.fromkeys(('joint_loading', 'marginal_loading', 'factor_value'), 'LOADING'), 'factor-gene set',
+                        (SET_LOADINGS, 'get_gene_set_factors')),
+    'gene_gene_set': ('gene_set', 'member', 'gene', (), {}, 'gene-gene set',
                       ('get_gene_gene_sets (then get_gene_set)', 'get_gene_set_members (with get_gene_set)')),
-    'gene_set_trait': ('gene_set', 'correlated', 'trait', ('beta_uncorrected', 'beta'), 'EFFECT_ESTIMATE', 'gene set-trait',
-                       ('get_pigean_gene_set_phenotype',)),
+    'gene_set_trait': ('gene_set', 'correlated', 'trait', ('beta_uncorrected', 'beta', 'avg_postp'),
+                       {'beta_uncorrected': 'EFFECT_ESTIMATE', 'beta': 'EFFECT_ESTIMATE', 'avg_postp': 'POSTERIOR_PROBABILITY'}, 'gene set-trait',
+                       ('get_trait_gene_sets (then get_gene_set)', 'get_gene_set_traits (with get_gene_set)', 'get_pigean_gene_set_phenotype')),
+    'factor_trait': ('factor', 'correlated', 'trait', ('phewas_beta', 'nnls_loading', 'phewas_q', 'phewas_p_onesided'),
+                     {'phewas_beta': 'EFFECT_ESTIMATE', 'nnls_loading': 'LOADING', 'phewas_q': 'SCORE', 'phewas_p_onesided': 'SCORE'},
+                     'factor-trait', ('get_factor_trait_links', 'get_trait_factor_links (then get_factor)')),
 }
+# Rows a family hint never points at: an exactly zero beta_uncorrected is no association, and a phenotype without a KPN trait
+# id has no trait endpoint. Claims on them are not atomic Claims of the family (classify), so no check suggests repairs.
+ROWS = {'gene_set_trait': 'nonzero beta_uncorrected rows only', 'factor_trait': 'phenotypes with a KPN trait id only'}
 PHENOTYPE_TOOLS = ('get_pigean_gene_phenotype', 'get_pigean_gene_set_phenotype')
 TOOL = re.compile(r'\bget_\w+')
 TEMPLATES = {'factor_gene': 'Gene G has loading L on factor F.', 'phenotype_gene': 'Gene G is associated with P in PIGEAN (combined C).',
              'factor_gene_set': 'Gene set S has joint loading L on factor F.', 'gene_gene_set': 'Gene set S has member G.',
-             'gene_set_trait': 'Gene set S is associated with P (beta_uncorrected B).'}
+             'gene_set_trait': 'Gene set S is associated with P (beta_uncorrected B).',
+             'factor_trait': 'Factor F is linked to trait P (phewas_beta B, phewas_q Q).'}
 ENDPOINTS = {'gene': 'HGNC.SYMBOL:<symbol>', 'gene_set': '<trusted dapper:GeneSet>', 'factor': '<trusted dapper:Mechanism>',
              'trait': 'KPN.TRAIT:<NNNNNNN>'}
 PAIRS = {frozenset((spec[0], spec[2])): family for family, spec in FAMILIES.items()}
 METRIC_FAMILY = {'loading': 'factor_gene', 'joint_loading': 'factor_gene_set', 'marginal_loading': 'factor_gene_set',
                  'combined': 'phenotype_gene', 'log_bf': 'phenotype_gene', 'prior': 'phenotype_gene',
-                 'beta': 'gene_set_trait', 'beta_uncorrected': 'gene_set_trait'}
+                 'beta': 'gene_set_trait', 'beta_uncorrected': 'gene_set_trait', 'avg_postp': 'gene_set_trait',
+                 'phewas_beta': 'factor_trait', 'nnls_loading': 'factor_trait', 'phewas_q': 'factor_trait', 'phewas_p_onesided': 'factor_trait'}
 # Legacy relations name their family even when an endpoint is not a recognized identifier kind.
 RELATION_FAMILY = {LEGACY + 'member-of': 'gene_gene_set', LEGACY + 'has-member': 'gene_gene_set',
                    LEGACY + 'genetically-associated-with': 'phenotype_gene',
@@ -72,7 +84,7 @@ NUMBER = re.compile(r'(?<![\w.])[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?')
 MESSAGES = {
     'gap-relevance-missing': ('No gap-relevance synthesis Claim connects the atomic Claims to the selected KnowledgeGap.',
         'Add a BIOLOGICAL_INTERPRETATION Claim whose EvidenceItem.source_claims cite factor-gene, gene-gene set and phenotype-gene '
-        '(or gene set-trait) Claims on one path: a text-only Proposition, or gene/gene set ' + GAP_RELATION + ' the selected KnowledgeGap.'),
+        '(or gene set-trait or factor-trait) Claims on one path: a text-only Proposition, or gene/gene set ' + GAP_RELATION + ' the selected KnowledgeGap.'),
     'gap-target': ('A gap-relevance Claim does not target the selected KnowledgeGap.',
         'Use the account question as object_entity with relation ' + GAP_RELATION + ', or a text-only Proposition.'),
     'synthesis-families': ('A synthesis Claim cites atomic Claims from fewer than two families.',
@@ -92,13 +104,16 @@ MESSAGES = {
         'get_gene_set and get_factor, traits as KPN.TRAIT:<NNNNNNN>.'),
     'atomic-predicate': ('{label} relation is an accepted synonym, not the recommended predicate.', 'Use relation {predicate}.'),
     'atomic-score': ('{label} Claim lacks a ClaimScore with the expected metric and kind.',
-        'Add has_score: ClaimScore metric {metrics} (the exact captured column), score_kind {kind}, the exact captured value and an interpretation.'),
+        'Add has_score: a ClaimScore with the exact captured column as metric and its score_kind ({metrics}), the exact captured value and '
+        'an interpretation.'),
     'atomic-capture': ('{label} evidence does not derive directly from a captured source File{sets}.',
         'List the capture File{sets} in EvidenceItem.was_derived_from, with the exact row locator in context and a verbatim snippet.'),
     'atomic-single-fact': ('{label} Claim bundles more than one observation.',
         'Write one atomic Claim per observed pair and family; cite them together from a synthesis Claim.'),
     'atomic-value-in-statement': ('{label} statement does not state its ClaimScore value.',
         'State the exact value in the Proposition statement, for example: {template}'),
+    'atomic-within-fit': ('{label} Claim links a factor to the phenotype its own fit was estimated from.',
+        "Say the link is within the factor's fit, not independent support; a different phenotype is an independent bridge."),
     'family-missing': ('No atomic Claims for: {families}.', 'When relevant to the gap, consider {tools}.'),
 }
 ORDER = list(MESSAGES)
@@ -158,18 +173,24 @@ def mentions(statement, value):
     return False
 
 
+def zero(value):
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and value == 0
+
+
 def unavailable(package):
     """Tools and routes the package's capability catalog does not advertise as supported; none without a package.
 
     The BioIndex phenotype readers are a fail-closed deployment exception, available only when small_model_phenotype is
-    supported; an imported reader is unavailable when its listed operation is not (not_stored, model unsupported).
+    supported; an imported reader is unavailable when its listed operation is not (not_stored, model unsupported). The
+    release readers are also unavailable when the catalog does not list them, as one frozen before them does not.
     """
     if not package: return set()
     capabilities = package.get('capabilities') if isinstance(package.get('capabilities'), dict) else {}
     phenotype = capabilities.get('small_model_phenotype')
     blocked = set() if isinstance(phenotype, dict) and phenotype.get('availability') == 'supported' else set(PHENOTYPE_TOOLS)
-    blocked |= {operation['name'] for operation in records(capabilities, 'operations')
-                if isinstance(operation.get('name'), str) and operation.get('availability') != 'supported'}
+    operations = records(capabilities, 'operations')
+    blocked |= {operation['name'] for operation in operations if isinstance(operation.get('name'), str) and operation.get('availability') != 'supported'}
+    blocked |= set(RELEASE_TOOLS) - {operation.get('name') for operation in operations if operation.get('availability') == 'supported'}
     coverage = capabilities.get('coverage')
     # Legacy generations store ranked gene-set links, not numeric projections.
     if isinstance(coverage, dict) and coverage.get('gene_set_projections') == 'not_stored': blocked.add(SET_LOADINGS)
@@ -229,10 +250,14 @@ def claim_structure(document, package=None):
         subject, relation, obj = triple(claim)
         group = predicate_group(relation)[0] if isinstance(relation, str) else None
         pair = frozenset((kind_of(subject), kind_of(obj)))
-        if group not in (None, 'involved') and pair in PAIRS: return PAIRS[pair]
-        found = [METRIC_FAMILY[score['metric']] for score in scores(claim) if score['metric'] in METRIC_FAMILY]
-        if found: return min(found, key=list(FAMILIES).index)
-        return RELATION_FAMILY.get(text(relation), 'other')
+        if group not in (None, 'involved') and pair in PAIRS: family = PAIRS[pair]
+        else:
+            found = [METRIC_FAMILY[score['metric']] for score in scores(claim) if score['metric'] in METRIC_FAMILY]
+            family = min(found, key=list(FAMILIES).index) if found else RELATION_FAMILY.get(text(relation), 'other')
+        # ROWS: a zero-beta row or a phenotype without a KPN trait id is never an atomic Claim of the family.
+        if family == 'gene_set_trait' and any(score['metric'] == 'beta_uncorrected' and zero(score.get('value')) for score in scores(claim)): return 'other'
+        if family == 'factor_trait' and 'trait' not in (kind_of(subject), kind_of(obj)): return 'other'
+        return family
 
     def predicate(group):
         curie, iri, _ = PREDICATES[group]
@@ -242,8 +267,11 @@ def claim_structure(document, package=None):
         subject, group, obj = FAMILIES[family][:3]
         return f'subject_entity {ENDPOINTS[subject]}, relation {predicate(group)}, object_entity {ENDPOINTS[obj]}'
 
+    def words(claim):
+        return ' '.join(text(value) for value in (proposition(claim).get('statement'), proposition(claim).get('scope'), claim.get('statement')))
+
     def atomic(claim, family):
-        subject_kind, group, object_kind, metrics, score_kind = FAMILIES[family][:5]
+        subject_kind, group, object_kind, metrics, score_kinds = FAMILIES[family][:5]
         subject, relation, obj = triple(claim)
         issues = [] if proposition(claim).get('proposition_kind') == 'RESULT' else ['atomic-result-kind']
         kinds = (kind_of(subject), kind_of(obj))
@@ -254,7 +282,7 @@ def claim_structure(document, package=None):
                     kind_of(value) in ('gene_set', 'factor') and value not in trusted for value in (subject, obj)):
                 issues.append('atomic-endpoints')
             if relation not in PREDICATES[group][:2]: issues.append('atomic-predicate')
-        expected = [score for score in scores(claim) if score['metric'] in metrics and score.get('score_kind') == score_kind]
+        expected = [score for score in scores(claim) if score['metric'] in metrics and score.get('score_kind') == score_kinds[score['metric']]]
         if metrics and not expected: issues.append('atomic-score')
         derived = {ref for item in evidence(claim) for ref in refs(item, 'was_derived_from')}
         sets = {value for value in (subject, obj) if kind_of(value) == 'gene_set'}
@@ -267,6 +295,10 @@ def claim_structure(document, package=None):
             issues.append('atomic-single-fact')
         statement = text(proposition(claim).get('statement')) + ' ' + text(claim.get('statement'))
         if expected and not any(mentions(statement, score.get('value')) for score in expected): issues.append('atomic-value-in-statement')
+        fitted = {traits.get(value) for value in (subject, obj) if kind_of(value) == 'factor'}
+        if family == 'factor_trait' and fitted & {entity(value)[1] for value in (subject, obj) if kind_of(value) == 'trait'} \
+                and not WITHIN_FIT.search(words(claim)):
+            issues.append('atomic-within-fit')
         return issues
 
     families = {identity: classify(claim) for identity, claim in claims.items()}
@@ -314,8 +346,7 @@ def claim_structure(document, package=None):
                 synthesis['gap_relevance'] += 1
                 if relation == GAP_RELATION and gap and obj != gap: issues.append('gap-target')
             fitted = {traits.get(value) for kind, value in entities if kind == 'factor'}
-            words = ' '.join(text(value) for value in (proposition(claim).get('statement'), proposition(claim).get('scope'), claim.get('statement')))
-            if fitted & {value for kind, value in entities if kind == 'trait'} and not WITHIN_FIT.search(words):
+            if fitted & {value for kind, value in entities if kind == 'trait'} and not WITHIN_FIT.search(words(claim)):
                 issues.append('synthesis-within-fit')
             family = None
         else: continue
@@ -343,11 +374,14 @@ def claim_structure(document, package=None):
     for check, family in sorted(grouped, key=lambda key: (ORDER.index(key[0]), list(FAMILIES).index(key[1]) if key[1] else -1)):
         ids = grouped[(check, family)]
         spec = FAMILIES.get(family)
-        values = {'triple': triple_text(family), 'predicate': predicate(spec[1]), 'metrics': ' or '.join(spec[3]), 'kind': spec[4],
+        values = {'triple': triple_text(family), 'predicate': predicate(spec[1]),
+                  'metrics': '; '.join(' or '.join(metric for metric in spec[3] if spec[4][metric] == kind) + ': ' + kind
+                                       for kind in dict.fromkeys(spec[4].values())),
                   'label': spec[5][0].upper() + spec[5][1:], 'template': TEMPLATES[family],
                   'sets': ' and the trusted GeneSet' if spec[0] == 'gene_set' else ''} if spec else {
                   'families': ', '.join(FAMILIES[name][5] for name in hints),
-                  'tools': '; '.join(f"{FAMILIES[name][5]} via {' or '.join(routes)}" for name, routes in hints.items())}
+                  'tools': '; '.join(f"{FAMILIES[name][5]} via {' or '.join(routes)}" + (f', {ROWS[name]}' if name in ROWS else '')
+                                     for name, routes in hints.items())}
         message, repair = (part.format(**values) for part in MESSAGES[check])
         item = {'severity': 'suggestion', 'check': check, 'where': ids[0] if ids else where, 'message': message, 'repair': repair, 'why': WHY}
         if family: item['family'] = family

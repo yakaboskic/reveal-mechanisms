@@ -6,6 +6,13 @@ import re
 
 from .evidence_package import decode, pointer, require, sha256
 
+# The mathematical kind of each source metric a ClaimScore may restate; relabeling it is a source-fidelity error. PIGEAN
+# gene and gene-set scores, EAGGL loadings, release gene-set betas (avg_postp a posterior probability) and factor-trait links.
+METRIC_KINDS = {'factor_value': 'LOADING', 'loading': 'LOADING', 'joint_loading': 'LOADING', 'marginal_loading': 'LOADING',
+                'beta': 'EFFECT_ESTIMATE', 'beta_uncorrected': 'EFFECT_ESTIMATE', 'avg_postp': 'POSTERIOR_PROBABILITY',
+                'combined': 'SCORE', 'log_bf': 'SCORE', 'prior': 'SCORE', 'nnls_loading': 'LOADING', 'phewas_beta': 'EFFECT_ESTIMATE',
+                'phewas_p_onesided': 'SCORE', 'phewas_q': 'SCORE'}
+
 
 def exact_document(raw, format='json'):
     """Preserve numeric spelling for fidelity checks without changing schema types."""
@@ -158,10 +165,7 @@ def observation_findings(document, observed, *, exact_observed=None, authored_ex
                 else: repair['note'] = 'No cited source row resolves for this Claim; fix its EvidenceItem locators first.'
                 findings.append(finding('source-metric', score.get('id', claim.get('id', 'claims')),
                     'ClaimScore does not match the exact metric at its cited source row', repair))
-            expected = {'factor_value': 'LOADING', 'loading': 'LOADING', 'joint_loading': 'LOADING',
-                        'marginal_loading': 'LOADING', 'beta': 'EFFECT_ESTIMATE',
-                        'beta_uncorrected': 'EFFECT_ESTIMATE', 'combined': 'SCORE', 'log_bf': 'SCORE',
-                        'prior': 'SCORE'}.get(metric) if isinstance(metric, str) else None
+            expected = METRIC_KINDS.get(metric) if isinstance(metric, str) else None
             if expected and score.get('score_kind') != expected:
                 findings.append(finding('source-metric-kind', score.get('id', claim.get('id', 'claims')),
                     'Source metric was relabeled as a different mathematical quantity'))
