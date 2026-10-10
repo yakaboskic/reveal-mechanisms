@@ -100,6 +100,7 @@ raw/  out/  log/                    inputs / LAP outputs / run logs (git-ignored
 | 3. projection | `projection_check_cmd` (the kernel against eaggl) → `projection_trait_cmd` (per trait) → `projection_collect_cmd` (fan-in over all 711 traits) |
 | 4. gene-set betas | `betas_gene_stats_index_cmd` → `betas_trait_gene_stats_cmd`, `betas_trait_cmd` (per trait: a pigean fit per library, then ranked) → `betas_collect_cmd` (fan-in) |
 | 5. factor-trait links | `linkage_phenotype_stats_cmd` (one pass over the export) → `linkage_trait_cmd` (per trait: one eaggl run; needs the betas stage's `<trait>.gene_stats.tsv`) → `linkage_collect_cmd` (fan-in) |
+| provenance audit | `provenance_audit_cmd` (local: the Translator provenance portal against the release's gene sets) |
 | optional | `lincs_trait_betas_cmd` (per trait: the LINCS fit) |
 | audit portal | `portal_build_db_cmd` (fan-in over all 711 traits) → `portal_export_audit_cmd`, `portal_build_html_cmd` |
 | reference release | `release_build_cmd` (fan-in over all 711 traits; files only, publishing is by hand) |
@@ -171,6 +172,7 @@ lap_run --only-cmd '^(genesets_|factors_)' --bsub
 lap_run --only-cmd '^projection_' --bsub
 lap_run --only-cmd '^betas_' --bsub
 lap_run --only-cmd '^linkage_' --bsub
+lap_run --only-cmd '^provenance_' --bsub   # the provenance portal audit (needs the network; runs on the head node)
 lap_run --only-cmd '^(portal_|release_)' --bsub
 
 # or everything but the optional LINCS betas in one run
@@ -395,6 +397,29 @@ Mechanisms" to chronotype. A stricter q or an `nnls_loading` floor gives shorter
 per-trait files.
 
 Neither the release build nor the portal reads these files yet.
+
+## Provenance portal audit (`provenance_` stage)
+
+The Translator artifact-provenance portal (`provenance_portal_url`,
+https://translator.broadinstitute.org/artifact_provenance) hosts the provenance of gene sets and gene-set collections.
+`provenance_audit_cmd` checks which of them the portal holds against the mirrored snapshot and the release.
+- It reads the portal's gene-set home page (`home/gene_set`, every collection).
+- It then reads each collection's list page (`gene_set/list/id=<collection>`, its gene-set ids and names),
+  `provenance_workers` (4) at a time.
+- It matches gene sets by id across every portal collection. The portal groups some LINCS gene sets into collections of
+  its own, so a release collection can be absent while its gene sets are present.
+- The portal's own listings are kept in `provenance_audit/` (`portal_collections.tsv`, with each list page's status, and
+  `portal_gene_sets.tsv`).
+
+| file | contents |
+|---|---|
+| `*.provenance_collections_audit.tsv` | One row per collection of the portal or the snapshot: `status` (`in_both`, `gene_sets_elsewhere_on_portal`, `release_only`, `snapshot_excluded`, `portal_only`), the portal name, label, library, `in_portal, in_snapshot, in_release`, and the gene-set counts (portal, release, release gene sets on the portal, in the same portal collection) |
+| `*.provenance_collection_map.tsv` | For each release collection, the portal collections that hold its gene sets, with counts |
+| `*.provenance_gene_sets_audit.tsv` | The gene sets in one place only: `release_only` (a release gene set the portal lacks) and `portal_only` (a portal gene set of a release collection that the release lacks) |
+
+It is a local command, because it needs the network, and nothing depends on it. LAP reruns it only when its inputs
+change, so to audit the portal again, delete `*.provenance_collections_audit.tsv`. Gene sets are checked one at a time
+with `get_provenance?id=<id>` (JSON; 404 for an unknown id).
 
 ## Reference release (`release_` stage)
 

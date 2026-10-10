@@ -1871,6 +1871,181 @@ def cmd_linkage_collect(args):
 
 
 # -------------------------------------------------------------------------------------------------
+# Provenance audit: the Translator artifact-provenance portal against the release's gene sets and collections
+
+PORTAL_COLLECTION_COLUMNS = ["collection_id", "name", "description", "n_gene_sets", "list_status"]
+PORTAL_GENE_SET_COLUMNS = ["gene_set_id", "name", "collection_id"]
+PROVENANCE_COLLECTION_COLUMNS = ["collection_id", "status", "portal_name", "cfde_label", "library", "in_portal", "in_snapshot",
+                                 "in_release", "n_portal_gene_sets", "n_release_gene_sets", "n_release_on_portal",
+                                 "n_release_in_same_portal_collection"]
+PROVENANCE_MAP_COLUMNS = ["release_collection_id", "cfde_label", "library", "portal_collection_id", "portal_name", "n_gene_sets"]
+PROVENANCE_GENE_SET_COLUMNS = ["gene_set_id", "status", "name", "release_collection_id", "cfde_label", "library",
+                               "portal_collection_id"]
+PORTAL_COLLECTION_RE = re.compile(r'data-app-route="gene_set/list/id=dapper%3A(GeneSetCollection\.[A-Za-z0-9_-]+)">\s*(.*?)\s*</a>'
+                                  r'(?:\s*<div class="description">(.*?)</div>)?', re.S)
+PORTAL_GENE_SET_RE = re.compile(r'data-app-route="gene_set/details/id=dapper%3A(GeneSet\.[A-Za-z0-9_-]+)">\s*(.*?)\s*</a>', re.S)
+PORTAL_COUNT_RE = re.compile(r"([0-9,]+) gene sets? found")
+
+
+def https_context():
+    """An SSL context with a CA bundle: Python's own when SSL_CERT_FILE or its default file exists, else the system
+    bundle, else certifi's. The pigean venv's uv-built Python looks for /etc/ssl/cert.pem, which RHEL does not have."""
+    import ssl
+    paths = ssl.get_default_verify_paths()
+    if os.environ.get("SSL_CERT_FILE") or (paths.cafile and os.path.exists(paths.cafile)):
+        return ssl.create_default_context()
+    for bundle in ("/etc/pki/tls/certs/ca-bundle.crt", "/etc/ssl/certs/ca-certificates.crt"):
+        if os.path.exists(bundle):
+            return ssl.create_default_context(cafile=bundle)
+    try:
+        import certifi
+    except ImportError:
+        return ssl.create_default_context()
+    return ssl.create_default_context(cafile=certifi.where())
+
+
+def portal_get(base_url, route, context=None, attempts=3, timeout=600):
+    """(HTTP status, body) of one portal page; retries network errors and 5xx, not 4xx."""
+    import urllib.error
+    import urllib.request
+    request = urllib.request.Request(base_url.rstrip("/") + "/" + route, headers={"User-Agent": "reveal-mechanisms-lap/provenance-audit"})
+    for attempt in range(1, attempts + 1):
+        try:
+            with urllib.request.urlopen(request, timeout=timeout, context=context) as response:
+                return response.status, response.read().decode("utf-8", "replace")
+        except urllib.error.HTTPError as error:
+            if error.code < 500 or attempt == attempts:
+                return error.code, error.read().decode("utf-8", "replace")
+        except OSError:
+            if attempt == attempts:
+                raise
+        time.sleep(5 * attempt)
+
+
+def portal_text(value):
+    import html
+    return " ".join(html.unescape(re.sub(r"<[^>]+>", " ", value or "")).split())
+
+
+def portal_collections(page):
+    """[(collection id, name, description)] of the portal's gene-set home page, in page order."""
+    rows = [("dapper:" + cid, portal_text(name), portal_text(description)) for cid, name, description in PORTAL_COLLECTION_RE.findall(page)]
+    check(rows, "The portal's gene-set home page lists no collections")
+    check(len({r[0] for r in rows}) == len(rows), "The portal lists a collection twice")
+    return rows
+
+
+def portal_gene_sets(page):
+    """([(gene set id, name)], the count the page states or None) of one collection's list page."""
+    found = PORTAL_COUNT_RE.search(page)
+    return ([("dapper:" + gid, portal_text(name)) for gid, name in PORTAL_GENE_SET_RE.findall(page)],
+            int(found.group(1).replace(",", "")) if found else None)
+
+
+def cmd_provenance_audit(args):
+    """Which gene sets and collections the Translator artifact-provenance portal holds, against the mirrored CFDE
+    snapshot and the release's gene sets (the gene-set index the release build publishes).
+
+    Reads the portal's gene-set home page (every collection) and each collection's list page (its gene-set ids), with
+    --workers requests at a time, into --work-dir (portal_collections.tsv, portal_gene_sets.tsv). Gene sets are matched
+    by id across every portal collection: the portal can hold a release gene set under another collection id. Writes one
+    row per collection of the portal or the snapshot, the portal collections that hold each release collection's gene
+    sets, and the gene sets in one place only (release gene sets missing from the portal; portal gene sets of a release
+    collection that the release lacks).
+    """
+    from concurrent.futures import ThreadPoolExecutor
+    import urllib.parse
+    check(args.workers >= 1, "--workers must be positive")
+    snapshot = OrderedDict((r["collection_id"], r) for r in read_tsv(args.snapshot_index_file))
+    release = OrderedDict((r["collection_id"], r) for r in read_tsv(args.cfde_index_file))
+    check(set(release) <= set(snapshot), "The release's collections are not all in the snapshot index")
+    context = https_context()
+    status, page = portal_get(args.portal_url, "home/gene_set", context)
+    check(status == 200, "The portal's gene-set home page returned HTTP %d" % status)
+    collections = portal_collections(page)
+    os.makedirs(args.work_dir, exist_ok=True)
+
+    def fetch(collection):
+        status, body = portal_get(args.portal_url, "gene_set/list/id=" + urllib.parse.quote(collection[0], safe=""), context)
+        return (status,) + (portal_gene_sets(body) if status == 200 else ([], None))
+    portal_of, also_in, counts, listed, failures = {}, defaultdict(list), Counter(), [], []
+    with ThreadPoolExecutor(max_workers=args.workers) as pool, \
+            open_text(os.path.join(args.work_dir, "portal_gene_sets.tsv"), "w") as out:
+        out.write(tsv_line(PORTAL_GENE_SET_COLUMNS))
+        for (cid, name, description), (status, gene_sets, stated) in zip(collections, pool.map(fetch, collections)):
+            list_status = "ok" if status == 200 and (stated is None or stated == len(gene_sets)) else (
+                "http_%d" % status if status != 200 else "count_mismatch_%d_of_%d" % (len(gene_sets), stated))
+            if list_status != "ok":
+                failures.append((cid, list_status))
+            for gid, gene_set_name in gene_sets:
+                out.write(tsv_line([gid, gene_set_name, cid]))
+                if gid in portal_of:  # a gene set the portal lists in several collections
+                    also_in[gid].append(cid)
+                else:
+                    portal_of[gid] = cid
+            counts[cid] = len(gene_sets)
+            listed.append({"collection_id": cid, "name": name, "description": description, "n_gene_sets": len(gene_sets),
+                           "list_status": list_status})
+    write_tsv(os.path.join(args.work_dir, "portal_collections.tsv"), PORTAL_COLLECTION_COLUMNS, listed)
+    portal_names = {r["collection_id"]: r["name"] for r in listed}
+
+    # The release's gene sets: where the portal has each one.
+    per_release, mapping, release_ids, n_release, n_missing = defaultdict(Counter), defaultdict(Counter), set(), 0, 0
+    with open_text(args.output_gene_sets_file, "w") as out:
+        out.write(tsv_line(PROVENANCE_GENE_SET_COLUMNS))
+        for row in gene_set_index_rows(args.gene_set_index_file):
+            cid, gid = row["collection_id"], row["gene_set_id"]
+            check(cid in release, "%s is in collection %s, which the release index lacks" % (gid, cid))
+            n_release += 1
+            release_ids.add(gid)
+            counts_of = per_release[cid]
+            counts_of["release"] += 1
+            where = portal_of.get(gid)
+            if where is None:
+                n_missing += 1
+                out.write(tsv_line([gid, "release_only", row["gene_set_name"], cid, row["cfde_label"], row["library"], NA]))
+                continue
+            holders = [where] + also_in.get(gid, [])
+            counts_of["on_portal"] += 1
+            counts_of["same_collection"] += cid in holders
+            for holder in holders:
+                mapping[cid][holder] += 1
+        portal_only = 0
+        with open_text(os.path.join(args.work_dir, "portal_gene_sets.tsv")) as fh:
+            for portal_row in csv.DictReader(fh, delimiter="\t", quoting=csv.QUOTE_NONE):
+                cid = portal_row["collection_id"]
+                if cid in release and portal_row["gene_set_id"] not in release_ids:
+                    portal_only += 1
+                    out.write(tsv_line([portal_row["gene_set_id"], "portal_only", portal_row["name"], cid, release[cid]["label"],
+                                        release[cid]["library"], cid]))
+    write_tsv(args.output_map_file, PROVENANCE_MAP_COLUMNS, [
+        {"release_collection_id": cid, "cfde_label": release[cid]["label"], "library": release[cid]["library"],
+         "portal_collection_id": where, "portal_name": portal_names.get(where, NA), "n_gene_sets": n}
+        for cid in release for where, n in sorted(mapping[cid].items(), key=lambda item: (-item[1], item[0]))])
+
+    rows = []
+    for cid in list(snapshot) + [c for c in portal_names if c not in snapshot]:
+        in_portal, in_snapshot, in_release = cid in portal_names, cid in snapshot, cid in release
+        source = snapshot.get(cid, {})
+        if in_release:
+            status = "in_both" if in_portal else ("gene_sets_elsewhere_on_portal" if per_release[cid]["on_portal"] else "release_only")
+        else:
+            status = "snapshot_excluded" if in_snapshot else "portal_only"
+        rows.append({"collection_id": cid, "status": status, "portal_name": portal_names.get(cid, NA),
+                     "cfde_label": source.get("label", NA), "library": source.get("library", NA), "in_portal": in_portal,
+                     "in_snapshot": in_snapshot, "in_release": in_release, "n_portal_gene_sets": counts[cid] if in_portal else NA,
+                     "n_release_gene_sets": per_release[cid]["release"] if in_release else NA,
+                     "n_release_on_portal": per_release[cid]["on_portal"] if in_release else NA,
+                     "n_release_in_same_portal_collection": per_release[cid]["same_collection"] if in_release else NA})
+    write_tsv(args.output_collections_file, PROVENANCE_COLLECTION_COLUMNS, rows)
+    statuses = Counter(r["status"] for r in rows)
+    print("Portal: %d collections, %d gene sets (%d in several collections; %d list pages failed: %s). Release: %d "
+          "collections, %d gene sets; %d gene sets missing from the portal, %d portal gene sets of release collections missing "
+          "from the release. Collections: %s" % (len(collections), len(portal_of), len(also_in), len(failures), failures[:5],
+                                                  len(release), n_release, n_missing, portal_only, dict(sorted(statuses.items()))))
+
+
+# -------------------------------------------------------------------------------------------------
 
 
 def build_parser():
@@ -2017,6 +2192,13 @@ def build_parser():
         p.add_argument("--" + name, required=True)
     p.add_argument("--max-q", type=float, required=True)
     p.set_defaults(func=cmd_linkage_collect)
+
+    p = sub.add_parser("provenance-audit", help="Audit the Translator provenance portal against the release's gene sets")
+    for name in ("portal-url", "snapshot-index-file", "cfde-index-file", "gene-set-index-file", "work-dir",
+                 "output-collections-file", "output-map-file", "output-gene-sets-file"):
+        p.add_argument("--" + name, required=True)
+    p.add_argument("--workers", type=int, default=4, help="Portal requests at a time")
+    p.set_defaults(func=cmd_provenance_audit)
 
     p = sub.add_parser("compare-global", help="Compare per-trait and all-factor projections (manual check)")
     p.add_argument("--trait-long-file", action="append", required=True)
