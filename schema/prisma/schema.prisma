@@ -726,11 +726,12 @@ model RefFactorGene {
 }
 
 model RefCollection {
-  collection_id String @id @db.VarChar(64)
-  cfde_label    String @db.VarChar(128)
-  library       String @db.VarChar(64)
-  n_sets        Int    @db.UnsignedInt
-  payload       Json
+  collection_id        String @id @db.VarChar(64)
+  cfde_label           String @db.VarChar(128)
+  library              String @db.VarChar(64)
+  n_sets               Int    @db.UnsignedInt
+  portal_collection_id String @db.VarChar(64)
+  payload              Json
 
   @@unique([cfde_label], map: "ref_collection_label")
   @@map("reveal_ref_collections")
@@ -785,22 +786,48 @@ model RefTraitGeneSet {
   @@map("reveal_ref_trait_gene_sets")
 }
 
-// The DAPPER provenance graph of the CFDE collections.
-model RefDapperNode {
-  id         String @id @db.VarChar(128)
-  class_name String @db.VarChar(64)
-  payload    Json
+// Factor -> PIGEAN phenotype links at the factor-PheWAS q cutoff (the LAP linkage_ stage); a phenotype without a KPN id has none.
+model RefFactorTraitLink {
+  factor_key             String  @db.VarChar(64)
+  phenotype              String  @db.VarChar(191)
+  phenotype_kpn_trait_id String? @db.VarChar(32)
+  is_own_trait           Int     @db.TinyInt
+  is_atlas_trait         Int     @db.TinyInt
+  nnls_loading           Float   @db.Double
+  phewas_beta            Float   @db.Double
+  phewas_p_onesided      Float   @db.Double
+  phewas_q               Float   @db.Double
 
-  @@map("reveal_ref_dapper_nodes")
+  @@id([factor_key, phenotype])
+  @@index([phenotype_kpn_trait_id, phewas_q], map: "ref_factor_trait_link_trait")
+  @@index([factor_key, phewas_q], map: "ref_factor_trait_link_q")
+  @@map("reveal_ref_factor_trait_links")
 }
 
-model RefDapperEdge {
-  subject   String  @db.VarChar(128)
-  predicate String  @db.VarChar(64)
-  object    String  @db.VarChar(128)
-  edge_role String? @db.VarChar(64)
+// Every PIGEAN phenotype the linkage reads (the atlas traits and the others), with its portal bottom-line GWAS artifacts.
+model RefPhenotype {
+  phenotype           String  @id @db.VarChar(191)
+  kpn_trait_id        String? @db.VarChar(32)
+  phenotype_name      String? @db.Text
+  display_name        String  @db.Text
+  legacy_phenotype_id String? @db.VarChar(191)
+  category            String? @db.VarChar(32)
+  is_atlas            Int     @db.TinyInt
+  metadata            Json
 
-  @@id([subject, predicate, object])
-  @@index([object], map: "ref_dapper_edge_object")
-  @@map("reveal_ref_dapper_edges")
+  @@unique([kpn_trait_id], map: "ref_phenotype_kpn")
+  @@map("reveal_ref_phenotypes")
+}
+
+// Which archived_reference_factors rows this environment published (reference_release.index_archived). Created by the
+// publisher, never swapped or purged; local and QA prefix it like reveal_records.
+model ArchiveIndex {
+  source_id_sha256 String   @db.Char(64)
+  archive_id       String   @db.Char(64)
+  mechanism_id     String?  @db.VarChar(128)
+  published_at     DateTime @db.Timestamp(6)
+
+  @@id([source_id_sha256, archive_id])
+  @@index([mechanism_id], map: "archive_index_mechanism")
+  @@map("reveal_archive_index")
 }

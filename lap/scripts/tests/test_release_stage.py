@@ -146,8 +146,29 @@ class ReleaseCfgTest(unittest.TestCase):
         self.assertIn("--out !{key::release_files_dir} ", self.value)
         self.assertEqual(self.decl["reference_vector_cache"][1], "$base_dir/raw/reference_vector_cache.sqlite")
         self.assertRegex(self.decl["release_build_workers"][1], r"^[1-9][0-9]*$")
+        self.assertEqual(self.decl["source_datasets_file"][1], "$base_dir/config/source_datasets.yaml")
+        self.assertEqual(self.decl["gwas_ancestry"][1], "Mixed")
+        self.assertIn("--source-datasets $source_datasets_file --gwas-ancestry $gwas_ancestry ", self.value)
         for key in ("reference_vector_cache", "top_n_gene_sets", "release_build_workers"):
             self.assertIn("$" + key + " ", self.value)
+
+    def test_reads_the_links_phenotypes_and_portal_files(self):
+        inputs = set(re.findall(r"!\{input:(?:[^:}]*:)?([a-z0-9_]+)\}", self.value))
+        for key, value in (("factor_links_file", "@project.factor_links.tsv"), ("factor_links_summary_file", "@project.factor_links_summary.tsv"),
+                           ("linkage_phenotypes_file", "@project.linkage_phenotypes.tsv"),
+                           ("provenance_map_file", "@project.provenance_collection_map.tsv"),
+                           ("bottom_line_artifacts_file", "@project.bottom_line_artifacts.tsv")):
+            with self.subTest(key=key):
+                self.assertIn(key, inputs)
+                self.assertEqual(self.decl[key][1], value)  # the LAP_FILES suffix the backend build reads
+        self.assertNotIn("bottom_line", self.cmds["portal_build_db_cmd"][1])
+
+    def test_bottom_line_artifacts_are_fetched_once_by_a_local_command(self):
+        prefixes, value, postfix = self.cmds["provenance_bottom_line_cmd"]
+        self.assertEqual((prefixes, postfix), (["local", "cmd"], "class_level project"))
+        self.assertTrue(value.startswith("$helper_cmd provenance-bottom-line --portal-url $provenance_portal_url --workers $provenance_workers "))
+        self.assertEqual(re.findall(r"!\{output:[^}]*\}", value), ["!{output:--output-file:bottom_line_artifacts_file}"])
+        self.assertIn("parent provenance_cat class_level project", self.decl["bottom_line_artifacts_file"][2])
 
     def test_command_text_has_no_unsubstituted_instance_placeholders(self):
         self.assertNotIn("#", self.value)  # config.pm strips everything after an unescaped #
@@ -309,8 +330,10 @@ class LinkageCfgTest(unittest.TestCase):
         for text in ("!{input:--links-file:trait_factor_links_file}", "!{input:--qc-file:trait_linkage_qc_file}",
                      "--max-q $linkage_max_q ", "--expected-pigean-commit $pigean_commit "):
             self.assertIn(text, collect)
-        for value in (self.cmds["release_build_cmd"][1], self.cmds["portal_build_db_cmd"][1]):
-            self.assertNotIn("link", value)  # not read by the release or the portal
+        self.assertNotIn("link", self.cmds["portal_build_db_cmd"][1])  # not read by the portal
+        release = self.cmds["release_build_cmd"][1]  # the release publishes the collected links, never the per-trait files
+        self.assertEqual(sorted(set(re.findall(r"[a-z_]*link[a-z_]*", release))),
+                         ["factor_links_file", "factor_links_summary_file", "linkage_phenotypes_file"])
 
     def test_every_eaggl_flag_exists_in_the_pinned_cli(self):
         if not os.path.isfile(self.EAGGL_CLI):

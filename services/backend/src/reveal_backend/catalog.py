@@ -16,9 +16,11 @@ from collections import defaultdict
 from copy import deepcopy
 from datetime import timezone
 from difflib import SequenceMatcher
+import hashlib
 import json
 import logging
 import os
+import re
 import threading
 from time import monotonic
 from .auth import Problem
@@ -46,6 +48,12 @@ FACTORS_SQL = ('SELECT ' + ','.join('f.' + column for column in FACTOR_COLUMNS[:
                + ' FROM reveal_ref_factors f JOIN reveal_ref_traits t ON t.kpn_trait_id=f.kpn_trait_id ORDER BY f.kpn_trait_id,f.factor_number')
 # Trait metadata (its ontology mappings feed disease-identity suggestions) is read once per trait, not joined onto every factor.
 TRAITS_SQL = 'SELECT kpn_trait_id,metadata FROM reveal_ref_traits'
+# Frozen factor snapshots: the shared archived_reference_factors, scoped by this environment's archive index
+# (reveal_archive_index, written by reference_release.index_archived) where that table exists.
+ARCHIVED_SQL = 'SELECT archive_id,generation_id,source_id,snapshot,captured_at FROM archived_reference_factors WHERE '
+INDEXED_SQL = ('SELECT a.archive_id,a.generation_id,a.source_id,a.snapshot,a.captured_at FROM archived_reference_factors a '
+               'JOIN reveal_archive_index i ON i.archive_id=a.archive_id WHERE i.{}=%s ORDER BY a.captured_at DESC,a.archive_id DESC LIMIT 1')
+MECHANISM_ID_RE = re.compile(r'dapper:Mechanism\.[A-Za-z0-9_-]{1,110}')
 
 
 def check_vector_readiness(index):
@@ -129,7 +137,7 @@ def archived_factor(row):
 
 class Catalog:
     # Process-wide state that a reload (load() or refresh_if_changed()) keeps when it swaps in a freshly loaded catalog.
-    PROCESS_STATE = frozenset({'lock', 'dismech_catalog_lock', 'refresh_lock', 'lookup_lock', 'repo', 'archive_cache',
+    PROCESS_STATE = frozenset({'lock', 'dismech_catalog_lock', 'refresh_lock', 'lookup_lock', 'repo', 'archive_cache', 'mechanism_cache',
                                'archive_unavailable_at', 'poll_seconds', 'poller', 'poller_lock', 'poller_stop', 'poller_wake',
                                'readiness_lock', 'readiness_cache', 'observed_release', 'warmed', 'warmup'})
     def __init__(self, repo=None, *, poll_seconds=None):
@@ -151,6 +159,8 @@ class Catalog:
         self.gap_fuzzy = None  # FuzzyWords over the served gaps' search texts, built with them by _load
         # archive_cache: {archive_id: (checked_at, snapshot|None)}; archive_unavailable_at: when the table was last found missing or empty.
         self.archive_cache, self.archive_unavailable_at = {}, None
+        # mechanism_cache: {mechanism_id: (checked_at, snapshot|None)}, re-read after RELEASE_TTL_SECONDS (a publish may add a later one).
+        self.mechanism_cache = {}
         # None: no poller (tests, tools); the API polls the release id every RELEASE_TTL_SECONDS.
         self.poll_seconds, self.poller, self.poller_lock, self.poller_stop = poll_seconds, None, threading.Lock(), threading.Event()
         # (read at, release id): the readiness monitor's latest release read, which the poller reuses.
@@ -504,10 +514,25 @@ class Catalog:
                 while len(self.archive_cache) > 1024: self.archive_cache.pop(next(iter(self.archive_cache)))
         return deepcopy(cached[1])
     def archived_for_source(self, source_id):
-        """The latest frozen snapshot of a factor source_id, or None."""
+        """The latest frozen snapshot of a factor source_id this environment published (its archive index), or of any
+        environment while the index table is absent; None when there is none."""
         if not isinstance(source_id, str) or not source_id: return None
-        return next(iter(self.archived_factors('source_id=%s', (source_id,))), None)
-    def archived_factors(self, where, args):
+        indexed = ('source_id_sha256', hashlib.sha256(source_id.encode('utf-8')).hexdigest())
+        return next(iter(self.archived_factors('source_id=%s', (source_id,), indexed=indexed)), None)
+    def archived_for_mechanism(self, mechanism_id):
+        """The latest frozen snapshot this environment's archive index lists for a minted Mechanism id, or None (also while the
+        index table is absent). Hits and misses are re-read after the TTL: a later publish may archive a later revision."""
+        if not isinstance(mechanism_id, str) or not MECHANISM_ID_RE.fullmatch(mechanism_id): return None
+        with self.lookup_lock: cached = self.mechanism_cache.get(mechanism_id)
+        if cached is None or monotonic() - cached[0] >= RELEASE_TTL_SECONDS:
+            cached = (monotonic(), next(iter(self.archived_factors(None, (), indexed=('mechanism_id', mechanism_id))), None))
+            with self.lookup_lock:
+                self.mechanism_cache.pop(mechanism_id, None); self.mechanism_cache[mechanism_id] = cached
+                while len(self.mechanism_cache) > 1024: self.mechanism_cache.pop(next(iter(self.mechanism_cache)))
+        return deepcopy(cached[1])
+    def archived_factors(self, where, args, *, indexed=None):
+        """Snapshots matching `where` over the shared table, latest first. indexed=(index column, value): the latest one this
+        environment's archive index lists instead, unless that table is absent (then `where`, if any)."""
         with self.lookup_lock: unavailable = self.archive_unavailable_at
         # Table absent or nothing archived yet: no connection until the TTL passes.
         if unavailable is not None and monotonic() - unavailable < RELEASE_TTL_SECONDS: return []
@@ -515,9 +540,17 @@ class Catalog:
         connection = reference_mysql_connection()
         try:
             with connection.cursor() as cursor:
-                cursor.execute('SELECT archive_id,generation_id,source_id,snapshot,captured_at FROM archived_reference_factors WHERE '
-                               + where + ' ORDER BY captured_at DESC,archive_id', args)
-                rows = cursor.fetchall()
+                rows = None
+                if indexed:
+                    try:
+                        cursor.execute(reference_sql(INDEXED_SQL.format(indexed[0])), (indexed[1],))
+                        rows = cursor.fetchall()
+                    except Exception as error:  # an environment the new publisher has not reached yet
+                        if not missing_table(error): raise
+                if rows is None and where:
+                    cursor.execute(ARCHIVED_SQL + where + ' ORDER BY captured_at DESC,archive_id', args)
+                    rows = cursor.fetchall()
+                rows = rows or []
                 if not rows: cursor.execute('SELECT 1 FROM archived_reference_factors LIMIT 1')
                 empty = not rows and not cursor.fetchall()
         except Exception as error:
