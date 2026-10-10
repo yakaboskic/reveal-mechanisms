@@ -87,9 +87,24 @@ function GapOption({ gap, selected, disabled, maxAccounts, onSelect, onInspect }
   </div>;
 }
 const factorTitle = (factor: Factor) => factor.cfde_anchor.label || factor.object.name || factor.source_id;
+function gapMechanisms(gap: Gap | null) {
+  if (!gap) return [];
+  return attachedMechanisms(gap).flatMap(item => {
+    const id = item.target?.source_id;
+    return id ? [{ id, label: item.label || id }] : [];
+  });
+}
 function matchedMechanisms(gap: Gap | null, ids: string[]) {
-  const bySource = new Map((gap?.attachments || []).flatMap(item => item.target ? [[item.target.source_id, item] as const] : []));
-  return ids.map(id => ({ id, label: bySource.get(id)?.label || id }));
+  const catalog = gapMechanisms(gap);
+  const bySource = new Map(catalog.map(item => [item.id, item]));
+  const resolved = ids.flatMap(id => {
+    const item = bySource.get(id);
+    return item ? [item] : [];
+  });
+  if (resolved.length) return resolved;
+  // A research-context search is one context. The linked mechanisms stay inside that node.
+  if (ids.includes("mechanism_subquery")) return [{ id: "mechanism_subquery", label: "Research context" }];
+  return ids.map(id => ({ id, label: id }));
 }
 type FactorNetRow = { sourceId: string; title: string; subtitle: string; mechanisms: { id: string; label: string }[]; cosine: number | null; selected: boolean; selectDisabled: boolean; onToggle: () => void; onInspect: (() => void) | null };
 function edgePaint(value: number | null) {
@@ -102,7 +117,7 @@ function curvePath(x1: number, y1: number, x2: number, y2: number) {
   const bend = Math.max(28, Math.abs(x2 - x1) * 0.46);
   return `M ${x1} ${y1} C ${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2} ${y2}`;
 }
-function FactorNetwork({ gapLabel, rows, guide }: { gapLabel: string; rows: FactorNetRow[]; guide?: string }) {
+function FactorNetwork({ gapLabel, rows, guide, contextNode }: { gapLabel: string; rows: FactorNetRow[]; guide?: string; contextNode?: { text: string; mechanisms: { id: string; label: string }[] } | null }) {
   const root = useRef<HTMLDivElement>(null);
   const [graph, setGraph] = useState<{ width: number; height: number; links: { x1: number; y1: number; x2: number; y2: number; stroke: string; width: number; key: string; curve: boolean; label: string }[] }>({ width: 0, height: 0, links: [] });
   const mechanisms = useMemo(() => {
@@ -110,7 +125,7 @@ function FactorNetwork({ gapLabel, rows, guide }: { gapLabel: string; rows: Fact
     for (const row of rows) for (const item of row.mechanisms) if (!seen.has(item.id)) seen.set(item.id, item.label);
     return [...seen].map(([id, label]) => ({ id, label }));
   }, [rows]);
-  const layoutKey = gapLabel + "|" + mechanisms.map(item => item.id).join(",") + "|" + rows.map(row => row.sourceId + ":" + row.cosine + ":" + row.selected + ":" + row.mechanisms.map(item => item.id).join(",")).join(";");
+  const layoutKey = gapLabel + "|" + (contextNode ? contextNode.text + "|" + contextNode.mechanisms.map(item => item.id).join(",") : "") + "|" + mechanisms.map(item => item.id).join(",") + "|" + rows.map(row => row.sourceId + ":" + row.cosine + ":" + row.selected + ":" + row.mechanisms.map(item => item.id).join(",")).join(";");
   useLayoutEffect(() => {
     const rootEl = root.current;
     if (!rootEl) return;
@@ -151,7 +166,7 @@ function FactorNetwork({ gapLabel, rows, guide }: { gapLabel: string; rows: Fact
       <svg className="factor-net-edges" width={graph.width} height={graph.height} aria-hidden="true">{graph.links.map(link => link.curve ? <path key={link.key} d={curvePath(link.x1, link.y1, link.x2, link.y2)} fill="none" stroke={link.stroke} strokeWidth={link.width} strokeLinecap="round" /> : <line key={link.key} x1={link.x1} y1={link.y1} x2={link.x2} y2={link.y2} stroke={link.stroke} strokeWidth={link.width} strokeLinecap="round" />)}</svg>
       {graph.links.map(link => link.label ? <span className="net-edge-score" key={link.key} style={{ left: (link.x1 + link.x2) / 2, top: (link.y1 + link.y2) / 2 }}>{link.label}</span> : null)}
       <div className="factor-net-col"><h3>Knowledge gap</h3><article className="net-gap" data-net-id="gap" title={gapLabel}><span>{gapLabel}</span></article></div>
-      <div className="factor-net-col factor-net-mechanisms"><h3>DisMech mechanism</h3>{mechanisms.map(item => <article className="net-mechanism" data-net-id={"mech:" + item.id} key={item.id}>{item.label}</article>)}</div>
+      <div className="factor-net-col factor-net-mechanisms"><h3>DisMech mechanism</h3>{contextNode ? <article className="net-context-node" data-net-id="mech:mechanism_subquery"><p className="net-context-lead">{contextNode.text}</p>{!!contextNode.mechanisms.length && <ul className="net-context-bubbles" aria-label="DisMech mechanisms">{contextNode.mechanisms.map(item => <li key={item.id}>{item.label}</li>)}</ul>}</article> : mechanisms.map(item => <article className="net-mechanism" data-net-id={"mech:" + item.id} key={item.id}>{item.label}</article>)}</div>
       <div className="factor-net-col factor-net-factors"><h3><span className="factor-net-brand">CFDE REVEAL KG</span> mechanism factors</h3>{rows.map(row => <article className={"net-factor" + (row.selected ? " selected" : "")} data-net-id={"factor:" + row.sourceId} key={row.sourceId}>
         <div className="net-factor-row"><input type="checkbox" checked={row.selected} disabled={row.selectDisabled} aria-label={"Select " + row.title} onChange={row.onToggle} /><div className="net-factor-copy"><strong>{row.title}</strong>{row.subtitle && <small>{row.subtitle}</small>}{row.onInspect && <button type="button" className="gap-bubble inspect" onClick={row.onInspect}>Inspect factor</button>}</div></div>
       </article>)}</div>
@@ -1678,7 +1693,7 @@ export default function Home() {
           {activeStep === "anchors" && <section className="step open">
             <div className="step-heading-row"><div className="step-heading-copy"><h2 className="step-heading"><span className="step-number">2</span>Select mechanism anchors</h2><p className="step-guide">Choose genetic factors that may help explain the selected gap. Suggested factors start selected, and at least one is required to start an investigation.{suggestion?.limitations.length ? ` ${suggestion.limitations.join(" ")}` : ""}</p></div>{(anchorChosen || pending) && (!(startedDraftId && startedDraftId === draft?.id) || selectionForked) && !(feasibility && feasibility.draft.id === draft?.id && !selectionForked) && <button type="button" className="step-next" onClick={() => void startInvestigation()} disabled={!mutable || suggesting || !!cfdeGate || (!pending && (!composer.source_gap || !composer.eaggl_anchors.length))}>{busy === "assess" ? "Checking CFDE support…" : busy === "lightning" ? "Assessing feasibility…" : busy === "submit" ? "Submitting…" : busy === "save" ? "Saving draft…" : pending ? "Recover submission" : "Start investigation"}</button>}</div>
             <div className="step-body">{!composer.source_gap ? <p className="empty">Select a question to find related genetic mechanisms.</p> : <>
-                {!!anchorIds.length && <FactorNetwork guide={anchorChosen ? undefined : "At least one factor has to be selected to initiate investigation."} gapLabel={gap?.object.text || (gap ? gapTitle(gap) : "Knowledge gap")} rows={anchorIds.map(sourceId => {
+                {!!anchorIds.length && <FactorNetwork guide={anchorChosen ? undefined : "At least one factor has to be selected to initiate investigation."} gapLabel={gap?.object.text || (gap ? gapTitle(gap) : "Knowledge gap")} contextNode={(composer.mechanism_subquery || "").trim() && suggestion?.automatic_anchors.some(anchor => anchor.matched_context_ids.includes("mechanism_subquery")) ? { text: composer.mechanism_subquery.trim(), mechanisms: gapMechanisms(gap) } : null} rows={anchorIds.map(sourceId => {
                   const factor = factors[sourceId], selected = composer.eaggl_anchors.some(value => value.reference.source_id === sourceId);
                   const title = factor ? factorTitle(factor) : factorMisses[sourceId] ? sourceId : "Loading…";
                   const suggested = suggestion?.automatic_anchors.find(anchor => anchor.factor.source_id === sourceId);
