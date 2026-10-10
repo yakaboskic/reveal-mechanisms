@@ -87,7 +87,7 @@ class TraitDetailTests(unittest.TestCase):
             c.executemany('INSERT INTO reveal_ref_gene_sets VALUES(?,?,?,?,?)', [
                 (S1, COLLECTION, 'Beta cell', 'GTEx', 40), (S2, COLLECTION, 'Islet', 'GTEx', 30), (S3, COLLECTION, 'Exercise', 'MoTrPAC', 20)])
             c.executemany('INSERT INTO reveal_ref_trait_gene_sets VALUES(?,?,?,?,?,?,?)', [
-                (T2D, S1, 'GTEx', .5, .4, .3, 1), (T2D, S2, 'GTEx', .5, .1, .95, 2), (T2D, S3, 'MoTrPAC', 0., 0., .05, 1),
+                (T2D, S1, 'GTEx', .5, .4, .3, 1), (T2D, S2, 'GTEx', .5, -.1, .95, 2), (T2D, S3, 'MoTrPAC', 0., 0., .05, 1),
                 (RARE, S1, 'GTEx', .2, .2, .5, 1)])
             c.executemany('INSERT INTO reveal_ref_factor_trait_links VALUES(?,?,?,?,?,?,?,?,?)', [
                 (T2D + '::Factor1', 'T2D', T2D, 1, 1, .3, .5, 1e-9, 1e-6),
@@ -131,8 +131,13 @@ class TraitDetailTests(unittest.TestCase):
                                                                       {**ARTIFACTS[1], 'href': portal + '/artifact/bl%20t2d%2Fmixed'}]})
         self.assertEqual(result['factors'], [{'source_id': F1, 'label': 'Insulin secretion', 'factor_number': 1},
                                              {'source_id': F2, 'label': 'Adiposity', 'factor_number': 2}])
-        self.assertEqual(result['gene_set_libraries'], [{'library': 'GTEx', 'n_gene_sets': 2, 'n_nonzero': 2},
-                                                        {'library': 'MoTrPAC', 'n_gene_sets': 1, 'n_nonzero': 0}])
+        self.assertEqual([(item['library'], item['n_gene_sets'], item['n_nonzero'], [row['gene_set_id'] for row in item['top_gene_sets']])
+                          for item in result['gene_set_libraries']], [('GTEx', 2, 2, [S1, S2]), ('MoTrPAC', 1, 0, [])])  # top rows are nonzero
+        self.assertEqual(result['gene_set_libraries'][0]['top_gene_sets'][0], self.betas(trait_id=T2D)['items'][0])
+        traits.clear_caches()
+        with patch.object(traits, 'TOP_PER_LIBRARY', 1):  # only the library's first ranks
+            self.assertEqual([row['gene_set_id'] for row in self.get('/v1/traits/' + T2D)['gene_set_libraries'][0]['top_gene_sets']], [S1])
+        traits.clear_caches()
         self.assertEqual(result['linked_factors'], {'n_factors': 1})  # the rare trait's factor; T2D's own factor is not counted
         with patch.dict('os.environ', {'REVEAL_PROVENANCE_PORTAL_URL': 'https://portal.example.org/'}):  # links are built per request
             self.assertEqual(self.get('/v1/traits/' + T2D)['gwas']['portal_href'], 'https://portal.example.org/bottom_line/T2D')
@@ -188,7 +193,7 @@ class TraitDetailTests(unittest.TestCase):
         self.assertEqual(default['items'][0], {'kpn_trait_id': T2D, 'trait_name': 'Type 2 diabetes', 'gene_set_id': S1, 'gene_set_name': 'Beta cell',
             'library': 'GTEx', 'collection_id': COLLECTION, 'n_genes': 40, 'beta_uncorrected': .5, 'beta': .4, 'avg_postp': .3, 'library_rank': 1})
         self.assertIn('absent pair is not a zero', default['coverage'])
-        self.assertEqual(order(self.betas(trait_id=T2D, sort='beta')), [S1, S2, S3])
+        self.assertEqual(order(self.betas(trait_id=T2D, sort='beta')), [S1, S2, S3])  # zeros sort last, below a negative beta
         self.assertEqual(order(self.betas(trait_id=T2D, sort='avg_postp')), [S2, S1, S3])
         pages = [self.betas(trait_id=T2D, limit=1, offset=offset) for offset in (0, 1, 2)]
         self.assertEqual(([page['items'][0]['gene_set_id'] for page in pages], [page['next_offset'] for page in pages]), ([S1, S2, S3], [1, 2, None]))

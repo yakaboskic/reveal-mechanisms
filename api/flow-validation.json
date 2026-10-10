@@ -1,11 +1,11 @@
 {
-  "openapi_sha256": "e510ea797b238bc5f72633f889cf57eae3ba2aeec57dabe4cd1ef622da178cd6",
+  "openapi_sha256": "32994d22822b28d9a0c267c98e8dfbf8a90685878e781ae1641be06af0c79c95",
   "operations_mapped": 96,
   "exchanges_mapped": 121,
   "main_steps": 11,
   "support_paths": 16,
   "all_operations_mapped": true,
   "all_exchanges_reachable": true,
-  "flow_html_sha256": "81e82e6bce96866990706f3851ecf85be6216db4413db0240ffd0458e420833e",
+  "flow_html_sha256": "10b6e15517a2fcb1a29acc9dd70abda1dc4c72b64f478c0a7a8d23801e2d9e37",
   "passed": true
 }

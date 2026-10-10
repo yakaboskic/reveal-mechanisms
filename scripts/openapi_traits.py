@@ -7,7 +7,7 @@ KPN_PATTERN = r'^KPN\.TRAIT:[0-9]{7}$'
 
 
 def schemas(b):
-    from reveal_backend.trait_details import BETA_SORTS, LINK_SORTS
+    from reveal_backend.trait_details import BETA_SORTS, LINK_SORTS, TOP_PER_LIBRARY
     ref, obj, array, string, null = b.ref, b.obj, b.array, b.string, b.nullable
     number, boolean = {'type': 'number'}, {'type': 'boolean'}
     count, rank = {'type': 'integer', 'minimum': 0}, {'type': 'integer', 'minimum': 1}
@@ -22,16 +22,17 @@ def schemas(b):
             'gwas_artifact_id': null(string()), 'portal_href': null(string(format='uri')), 'artifacts': array(artifact)},
             description='The Translator provenance portal\'s bottom-line GWAS of the trait, as links built from stored ids (never fetched). gwas_artifact_id is the one artifact the account trace\'s GWAS route uses. Rare-disease gene lists have no GWAS (not_a_gwas_trait); other traits without artifacts are not_on_portal.'),
         'factors': array(obj({'source_id': string(), 'label': string(), 'factor_number': rank})),
-        'gene_set_libraries': array(obj({'library': string(), 'n_gene_sets': count, 'n_nonzero': count})),
+        'gene_set_libraries': array(obj({'library': string(), 'n_gene_sets': count, 'n_nonzero': count,
+            'top_gene_sets': array(ref('TraitGeneSet'), maxItems=TOP_PER_LIBRARY)})),
         'linked_factors': obj({'n_factors': count}), 'release_id': release},
-        description='A KPN trait of the published reference release. Atlas traits (is_atlas) have fitted EAGGL factors; a non-atlas phenotype is one the factor-trait linkage linked factors to, with no factors, betas or trait group of its own. phenotype is the PIGEAN phenotype id (an atlas trait without a phenotype row falls back to its EAGGL phenotype code). factors are fitted on this trait, in factor order; gene_set_libraries count its PIGEAN-kept gene sets per library and those with a nonzero beta_uncorrected; linked_factors counts factors of other traits linked to this trait.'))
+        description='A KPN trait of the published reference release. Atlas traits (is_atlas) have fitted EAGGL factors; a non-atlas phenotype is one the factor-trait linkage linked factors to, with no factors, betas or trait group of its own. phenotype is the PIGEAN phenotype id (an atlas trait without a phenotype row falls back to its EAGGL phenotype code). factors are fitted on this trait, in factor order; gene_set_libraries count its PIGEAN-kept gene sets per library and those with a nonzero beta_uncorrected, with its best ' + str(TOP_PER_LIBRARY) + ' nonzero gene sets of each library by library_rank (page the rest at /v1/trait-gene-sets); linked_factors counts factors of other traits linked to this trait.'))
     b.add('TraitGeneSet', obj({'kpn_trait_id': kpn, 'trait_name': string(), 'gene_set_id': b.did('GeneSet'), 'gene_set_name': string(),
         'library': string(), 'collection_id': b.did('GeneSetCollection'), 'n_genes': count, 'beta_uncorrected': number, 'beta': number,
         'avg_postp': probability, 'library_rank': rank},
         description='One trait x gene-set row of the release\'s PIGEAN betas mode (one fit per CFDE library on the trait\'s PIGEAN gene statistics, no outer Gibbs). beta_uncorrected is the gene set\'s uncorrected effect, beta its effect corrected for the library\'s other gene sets, avg_postp its average posterior inclusion probability; library_rank orders the trait\'s gene sets within the library by beta_uncorrected. These are not the BioIndex small-model values.'))
     b.add('TraitGeneSets', obj({'trait_id': null(kpn), 'gene_set_id': null(b.did('GeneSet')), 'library': null(string(maxLength=64)),
         'sort': b.enum(*BETA_SORTS), 'items': array(ref('TraitGeneSet')), **page},
-        description='Bounded page of gene-set betas for one trait (trait_id) or of one gene set across traits (gene_set_id). Sorted descending by sort, ties by library_rank then gene_set_id, before pagination. Only gene sets PIGEAN kept have rows: an absent pair is not a zero beta, and some kept rows are exactly 0.'))
+        description='Bounded page of gene-set betas for one trait (trait_id) or of one gene set across traits (gene_set_id). Sorted descending by sort with zero values last (below the few negative corrected betas), ties by library_rank then gene_set_id, before pagination. Only gene sets PIGEAN kept have rows: an absent pair is not a zero beta, and some kept rows are exactly 0.'))
     b.add('FactorTraitLink', obj({'source_id': string(), 'factor_label': string(), 'fitted_kpn_trait_id': kpn, 'fitted_trait_name': string(),
         'phenotype': string(), 'phenotype_kpn_trait_id': null(kpn), 'phenotype_name': string(), 'is_own_trait': boolean, 'is_atlas_trait': boolean,
         'nnls_loading': number, 'phewas_beta': number, 'phewas_p_onesided': probability, 'phewas_q': probability},
@@ -83,7 +84,8 @@ def endpoints(b, e):
              'gwas': {'status': 'available', 'portal_trait_id': trait['legacy_phenotype_id'], 'gwas_artifact_id': 'bl-t2d-mixed',
                       'portal_href': PORTAL_URL + '/bottom_line/' + quote(trait['legacy_phenotype_id'], safe=''), 'artifacts': artifacts},
              'factors': [{'source_id': factor['source_id'], 'label': KPN_EXAMPLE['label'], 'factor_number': 1}],
-             'gene_set_libraries': [{'library': 'GTEx', 'n_gene_sets': 140, 'n_nonzero': 112}, {'library': 'MoTrPAC', 'n_gene_sets': 64, 'n_nonzero': 41}],
+             'gene_set_libraries': [{'library': 'GTEx', 'n_gene_sets': 140, 'n_nonzero': 112, 'top_gene_sets': deepcopy(rows[:1])},
+                                    {'library': 'MoTrPAC', 'n_gene_sets': 64, 'n_nonzero': 41, 'top_gene_sets': deepcopy(rows[1:])}],
              'linked_factors': {'n_factors': 37}, 'release_id': release}
     linked = {'kpn_trait_id': 'KPN.TRAIT:0001360', 'phenotype': 'gcat_trait_illustrative_phenotype', 'name': 'illustrative phenotype', 'category': None,
               'is_atlas': False, 'legacy_phenotype_id': None, 'trait_group': None, 'trait_type': None, 'description': None,
@@ -103,7 +105,7 @@ def endpoints(b, e):
         parameters=[param('trait_id', 'query', kpn, trait['id'], description='A KPN trait id: list its gene sets. Exclusive with gene_set_id.'),
             param('gene_set_id', 'query', b.did('GeneSet'), rows[0]['gene_set_id'], description='A gene set: list the traits it has a beta for. Exclusive with trait_id.'),
             param('library', 'query', string(minLength=1, maxLength=64), 'GTEx', description='Keep one CFDE library.'),
-            param('sort', 'query', b.enum(*BETA_SORTS, default='beta_uncorrected'), 'beta_uncorrected', description='Descending; ties by library_rank, then gene_set_id.'),
+            param('sort', 'query', b.enum(*BETA_SORTS, default='beta_uncorrected'), 'beta_uncorrected', description='Descending with zero values last; ties by library_rank, then gene_set_id.'),
             *page], public=True, errors=('404', '422', '503'))
     _requests(b, op, {'trait': ({'trait_id': trait['id'], 'sort': 'beta_uncorrected', 'limit': 50, 'offset': 0}, ['trait']),
                       'gene_set': ({'gene_set_id': rows[0]['gene_set_id'], 'limit': 50, 'offset': 0}, ['gene_set'])})

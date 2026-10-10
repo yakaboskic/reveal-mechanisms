@@ -24412,12 +24412,42 @@
               {
                 "library": "GTEx",
                 "n_gene_sets": 140,
-                "n_nonzero": 112
+                "n_nonzero": 112,
+                "top_gene_sets": [
+                  {
+                    "kpn_trait_id": "KPN.TRAIT:0000398",
+                    "trait_name": "Type 2 diabetes (T2D)",
+                    "gene_set_id": "dapper:GeneSet.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "gene_set_name": "Example imported gene set",
+                    "library": "GTEx",
+                    "collection_id": "dapper:GeneSetCollection.cccccccccccccccccccccccccccccccc",
+                    "n_genes": 120,
+                    "beta_uncorrected": 0.031,
+                    "beta": 0.027,
+                    "avg_postp": 0.62,
+                    "library_rank": 1
+                  }
+                ]
               },
               {
                 "library": "MoTrPAC",
                 "n_gene_sets": 64,
-                "n_nonzero": 41
+                "n_nonzero": 41,
+                "top_gene_sets": [
+                  {
+                    "kpn_trait_id": "KPN.TRAIT:0000398",
+                    "trait_name": "Type 2 diabetes (T2D)",
+                    "gene_set_id": "dapper:GeneSet.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "gene_set_name": "Second example gene set",
+                    "library": "MoTrPAC",
+                    "collection_id": "dapper:GeneSetCollection.dddddddddddddddddddddddddddddddd",
+                    "n_genes": 85,
+                    "beta_uncorrected": 0.012,
+                    "beta": 0.0,
+                    "avg_postp": 0.18,
+                    "library_rank": 1
+                  }
+                ]
               }
             ],
             "linked_factors": {

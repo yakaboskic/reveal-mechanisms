@@ -1,9 +1,9 @@
 {
   "openapi": "3.1.1",
-  "openapi_sha256": "e510ea797b238bc5f72633f889cf57eae3ba2aeec57dabe4cd1ef622da178cd6",
+  "openapi_sha256": "32994d22822b28d9a0c267c98e8dfbf8a90685878e781ae1641be06af0c79c95",
   "paths": 82,
   "operations": 96,
-  "local_refs_resolved": 1117,
+  "local_refs_resolved": 1118,
   "request_body_examples_validated": 39,
   "response_examples_validated": 573,
   "parameter_examples_validated": 218,

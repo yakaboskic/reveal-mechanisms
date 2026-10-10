@@ -7,6 +7,7 @@ listing's row count are facts of the immutable release, read once per process. P
 never fetched. Mechanism ids resolve through the catalog, which serves the same release.
 """
 from collections import OrderedDict
+from copy import deepcopy
 import json
 import re
 import threading
@@ -22,7 +23,8 @@ from .runtime_config import reference_mysql_connection, setting
 PORTAL_URL = 'https://translator.broadinstitute.org/artifact_provenance'  # REVEAL_PROVENANCE_PORTAL_URL overrides it
 KPN_URL = 'https://broadinstitute.github.io/kpn-data-models/kpn.trait/{}/'
 GENE_SET_ID = re.compile(r'dapper:GeneSet\.[A-Za-z0-9_-]{32}')
-BETA_SORTS = ('beta_uncorrected', 'beta', 'avg_postp')  # all descending
+BETA_SORTS = ('beta_uncorrected', 'beta', 'avg_postp')  # all descending, zeros last (a few corrected betas are negative)
+TOP_PER_LIBRARY = 5  # a trait's best nonzero gene sets per library in TraitDetail (library_rank orders by beta_uncorrected)
 LINK_SORTS = {'phewas_q': 'l.phewas_q', 'phewas_beta': 'l.phewas_beta DESC', 'nnls_loading': 'l.nnls_loading DESC'}
 LINK_SUMMARY = ('n_phenotypes', 'n_linked', 'n_linked_kpn_traits', 'n_linked_atlas_traits', 'own_trait_q')
 BETA_COVERAGE = ("Gene-set betas from PIGEAN betas mode (one fit per CFDE library on the trait's PIGEAN gene statistics, no outer Gibbs), "
@@ -113,12 +115,24 @@ def _gwas(line):
                            'href': f"{portal}/artifact/{quote(item['artifact_id'], safe='')}"} for item in line.get('artifacts') or ()]}
 
 
+def _beta(row):
+    trait, name, identity, label, library, collection, size, uncorrected, beta, postp, rank = row
+    return {'kpn_trait_id': trait, 'trait_name': name, 'gene_set_id': identity, 'gene_set_name': label, 'library': library,
+            'collection_id': collection, 'n_genes': int(size), 'beta_uncorrected': float(uncorrected), 'beta': float(beta),
+            'avg_postp': float(postp), 'library_rank': int(rank)}
+
+
 def _trait_facts(rows, kpn):
     trait, phenotype = rows(TRAIT_SQL, (kpn,)), rows(PHENOTYPE_SQL, (kpn,))
     if not trait and not phenotype: raise Problem(404, 'NOT_FOUND', 'The trait is not in the published reference release.')
+    top = {}  # the index (kpn_trait_id, library, library_rank) bounds this to each library's first ranks
+    for row in rows(BETAS[1] + 't.kpn_trait_id=%s AND t.library_rank<=%s AND t.beta_uncorrected<>0 ORDER BY t.library,t.library_rank,t.gene_set_id',
+                    (kpn, TOP_PER_LIBRARY)):
+        top.setdefault(row[4], []).append(_beta(row))
     facts = {'factors': [{'source_id': source, 'label': label, 'factor_number': int(number)} for source, label, number in
                          rows('SELECT public_id,label,factor_number FROM reveal_ref_factors WHERE kpn_trait_id=%s ORDER BY factor_number', (kpn,))],
-             'gene_set_libraries': [{'library': library, 'n_gene_sets': int(count), 'n_nonzero': int(nonzero or 0)} for library, count, nonzero in
+             'gene_set_libraries': [{'library': library, 'n_gene_sets': int(count), 'n_nonzero': int(nonzero or 0), 'top_gene_sets': top.get(library, [])}
+                                    for library, count, nonzero in
                                     rows('SELECT library,COUNT(*),SUM(beta_uncorrected<>0) FROM reveal_ref_trait_gene_sets WHERE kpn_trait_id=%s'
                                          ' GROUP BY library ORDER BY library', (kpn,))],
              'linked_factors': {'n_factors': int(rows('SELECT COUNT(*) FROM reveal_ref_factor_trait_links'
@@ -141,8 +155,7 @@ def trait_detail(kpn_trait_id):
         facts = _immutable((release['release_id'], 'trait', kpn_trait_id), lambda: _trait_facts(rows, kpn_trait_id))
         return {'kpn_trait_id': kpn_trait_id, **{key: facts[key] for key in ('phenotype', 'name', 'category', 'is_atlas', 'legacy_phenotype_id',
                 'trait_group', 'trait_type', 'description')}, 'kpn_url': KPN_URL.format(match.group(1)), 'gwas': _gwas(facts['bottom_line']),
-                'factors': [dict(item) for item in facts['factors']], 'gene_set_libraries': [dict(item) for item in facts['gene_set_libraries']],
-                'linked_factors': dict(facts['linked_factors']), 'release_id': release['release_id']}
+                **deepcopy({key: facts[key] for key in ('factors', 'gene_set_libraries', 'linked_factors')}), 'release_id': release['release_id']}
     return _read(read)
 
 
@@ -156,12 +169,10 @@ def trait_gene_sets(*, trait_id=None, gene_set_id=None, library=None, sort='beta
     if library is not None: where, args = where + ' AND t.library=%s', args + (library,)
     def read(rows, release):
         _included(release, 'trait_gene_sets.tsv.gz')
-        # Descending on the metric; ties keep the library's own rank (by beta_uncorrected), then the ids.
-        page, total = _page(rows, release, BETAS, where, args, f't.{sort} DESC,t.library_rank,t.gene_set_id,t.kpn_trait_id', limit, offset)
-        items = [{'kpn_trait_id': trait, 'trait_name': name, 'gene_set_id': identity, 'gene_set_name': label, 'library': set_library,
-                  'collection_id': collection, 'n_genes': int(size), 'beta_uncorrected': float(uncorrected), 'beta': float(beta),
-                  'avg_postp': float(postp), 'library_rank': int(rank)}
-                 for trait, name, identity, label, set_library, collection, size, uncorrected, beta, postp, rank in page]
+        # Descending on the metric with its zeros last (below the few negative corrected betas); ties keep the library's own
+        # rank (by beta_uncorrected), then the ids.
+        page, total = _page(rows, release, BETAS, where, args, f't.{sort}=0,t.{sort} DESC,t.library_rank,t.gene_set_id,t.kpn_trait_id', limit, offset)
+        items = [_beta(row) for row in page]
         next_offset = offset + len(items)
         return {'trait_id': trait_id, 'gene_set_id': gene_set_id, 'library': library, 'sort': sort, 'items': items, 'total': total,
                 'next_offset': next_offset if items and next_offset < total else None, 'coverage': BETA_COVERAGE, 'release_id': release['release_id']}

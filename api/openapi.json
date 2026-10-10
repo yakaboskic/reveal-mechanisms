@@ -41401,12 +41401,42 @@
                         {
                           "library": "GTEx",
                           "n_gene_sets": 140,
-                          "n_nonzero": 112
+                          "n_nonzero": 112,
+                          "top_gene_sets": [
+                            {
+                              "kpn_trait_id": "KPN.TRAIT:0000398",
+                              "trait_name": "Type 2 diabetes (T2D)",
+                              "gene_set_id": "dapper:GeneSet.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                              "gene_set_name": "Example imported gene set",
+                              "library": "GTEx",
+                              "collection_id": "dapper:GeneSetCollection.cccccccccccccccccccccccccccccccc",
+                              "n_genes": 120,
+                              "beta_uncorrected": 0.031,
+                              "beta": 0.027,
+                              "avg_postp": 0.62,
+                              "library_rank": 1
+                            }
+                          ]
                         },
                         {
                           "library": "MoTrPAC",
                           "n_gene_sets": 64,
-                          "n_nonzero": 41
+                          "n_nonzero": 41,
+                          "top_gene_sets": [
+                            {
+                              "kpn_trait_id": "KPN.TRAIT:0000398",
+                              "trait_name": "Type 2 diabetes (T2D)",
+                              "gene_set_id": "dapper:GeneSet.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                              "gene_set_name": "Second example gene set",
+                              "library": "MoTrPAC",
+                              "collection_id": "dapper:GeneSetCollection.dddddddddddddddddddddddddddddddd",
+                              "n_genes": 85,
+                              "beta_uncorrected": 0.012,
+                              "beta": 0.0,
+                              "avg_postp": 0.18,
+                              "library_rank": 1
+                            }
+                          ]
                         }
                       ],
                       "linked_factors": {
@@ -41578,7 +41608,7 @@
               "default": "beta_uncorrected"
             },
             "example": "beta_uncorrected",
-            "description": "Descending; ties by library_rank, then gene_set_id."
+            "description": "Descending with zero values last; ties by library_rank, then gene_set_id."
           },
           {
             "name": "limit",
@@ -71610,12 +71640,20 @@
                 "n_nonzero": {
                   "type": "integer",
                   "minimum": 0
+                },
+                "top_gene_sets": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TraitGeneSet"
+                  },
+                  "maxItems": 5
                 }
               },
               "required": [
                 "library",
                 "n_gene_sets",
-                "n_nonzero"
+                "n_nonzero",
+                "top_gene_sets"
               ],
               "additionalProperties": false
             }
@@ -71657,7 +71695,7 @@
           "release_id"
         ],
         "additionalProperties": false,
-        "description": "A KPN trait of the published reference release. Atlas traits (is_atlas) have fitted EAGGL factors; a non-atlas phenotype is one the factor-trait linkage linked factors to, with no factors, betas or trait group of its own. phenotype is the PIGEAN phenotype id (an atlas trait without a phenotype row falls back to its EAGGL phenotype code). factors are fitted on this trait, in factor order; gene_set_libraries count its PIGEAN-kept gene sets per library and those with a nonzero beta_uncorrected; linked_factors counts factors of other traits linked to this trait."
+        "description": "A KPN trait of the published reference release. Atlas traits (is_atlas) have fitted EAGGL factors; a non-atlas phenotype is one the factor-trait linkage linked factors to, with no factors, betas or trait group of its own. phenotype is the PIGEAN phenotype id (an atlas trait without a phenotype row falls back to its EAGGL phenotype code). factors are fitted on this trait, in factor order; gene_set_libraries count its PIGEAN-kept gene sets per library and those with a nonzero beta_uncorrected, with its best 5 nonzero gene sets of each library by library_rank (page the rest at /v1/trait-gene-sets); linked_factors counts factors of other traits linked to this trait."
       },
       "TraitGeneSet": {
         "type": "object",
@@ -71808,7 +71846,7 @@
           "release_id"
         ],
         "additionalProperties": false,
-        "description": "Bounded page of gene-set betas for one trait (trait_id) or of one gene set across traits (gene_set_id). Sorted descending by sort, ties by library_rank then gene_set_id, before pagination. Only gene sets PIGEAN kept have rows: an absent pair is not a zero beta, and some kept rows are exactly 0."
+        "description": "Bounded page of gene-set betas for one trait (trait_id) or of one gene set across traits (gene_set_id). Sorted descending by sort with zero values last (below the few negative corrected betas), ties by library_rank then gene_set_id, before pagination. Only gene sets PIGEAN kept have rows: an absent pair is not a zero beta, and some kept rows are exactly 0."
       },
       "FactorTraitLink": {
         "type": "object",
