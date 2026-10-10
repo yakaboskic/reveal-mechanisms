@@ -16,8 +16,8 @@ import tempfile
 import time
 import unittest
 from collections import OrderedDict
-from unittest import mock
 from types import SimpleNamespace
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import projection_workflow as pw  # noqa: E402
@@ -1399,7 +1399,10 @@ class ProvenanceBottomLineTest(unittest.TestCase):
                 self.assertEqual(code, 1)
                 self.assertIn(message, err)
                 self.assertFalse(os.path.exists(self.out))
-        self.pages[page] = self.pages["/bl/bottom_line/Female_infertility_%28all_causes%29"] = self.page([])
+        self.pages[page] = self.page([])  # a KPN trait the portal lists without artifacts
+        self.assertIn("1 KPN traits have no bottom-line artifact: 2hrFFA", self.bottom_line()[1])
+        self.assertFalse(os.path.exists(self.out))
+        self.pages["/bl/bottom_line/Female_infertility_%28all_causes%29"] = self.page([])
         self.assertIn("No portal trait has a bottom-line artifact", self.bottom_line()[1])
         self.traits[0]["kpn_id"] = "KPN:507"
         self.assertIn("Trait 2hrFFA has KPN id 'KPN:507'", self.bottom_line()[1])

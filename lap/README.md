@@ -397,7 +397,8 @@ related traits; for example "Lipid Metabolism Regulation" links to polyunsaturat
 Mechanisms" to chronotype. A stricter q or an `nnls_loading` floor gives shorter lists; every test stays in the
 per-trait files.
 
-Neither the release build nor the portal reads these files yet.
+The release build reads `factor_links.tsv`, `factor_links_summary.tsv` and `linkage_phenotypes.tsv` into the release's
+`factor_trait_links` and `phenotypes` tables and each factor's `metadata.trait_links` summary.
 
 ## Provenance portal (`provenance_` stage)
 
@@ -418,8 +419,8 @@ https://translator.broadinstitute.org/artifact_provenance) hosts the provenance 
 | `*.provenance_collection_map.tsv` | For each release collection, the portal collections that hold its gene sets, with counts |
 | `*.provenance_gene_sets_audit.tsv` | The gene sets in one place only: `release_only` (a release gene set the portal lacks) and `portal_only` (a portal gene set of a release collection that the release lacks) |
 
-It is a local command, because it needs the network, and nothing depends on it. LAP reruns it only when its inputs
-change, so to audit the portal again, delete `*.provenance_collections_audit.tsv`. Gene sets are checked one at a time
+It is a local command, because it needs the network. The release build reads its collection map (each collection's
+portal id). LAP reruns it only when its inputs change, so to audit the portal again, delete `*.provenance_collections_audit.tsv`. Gene sets are checked one at a time
 with `get_provenance?id=<id>` (JSON; 404 for an unknown id).
 
 **Bottom-line artifacts** (`provenance_bottom_line_cmd`, helper `provenance-bottom-line`). The portal also holds each
@@ -433,8 +434,9 @@ trait's published GWAS "bottom-line" results, one artifact per ancestry. The com
 - On 2026-10-10 (6 minutes): 1,529 traits (1,233 with KPN ids), all with a `Mixed` artifact; 3,635 artifacts (`AA`
   229, `AF` 69, `EA` 187, `EU` 1,255, `GME` 38, `HS` 216, `Mixed` 1,529, `SA` 71, `SSAF` 41).
 - It fails, and writes nothing, if the trait list or any page cannot be read (after retries), a page's listing
-  disagrees with its stated count, or no trait has an artifact. Traits without artifacts are only counted in the summary
-  it prints to stderr.
+  disagrees with its stated count, no trait has an artifact, or a trait with a KPN id has none (the portal answers any
+  id with "0 results found", so that would mean lost artifacts). Traits without KPN ids and without artifacts are only
+  counted in the summary it prints to stderr.
 
 | file | contents |
 |---|---|

@@ -2105,18 +2105,25 @@ def cmd_provenance_bottom_line(args):
         status, page = portal_get(args.portal_url, "bottom_line/" + urllib.parse.quote(trait["legacy_id"], safe=""), context, timeout=60)
         check(status == 200, "The bottom_line page of %s returned HTTP %d" % (trait["legacy_id"], status))
         return portal_bottom_line(page, trait["legacy_id"])
-    rows, empty = [], 0
+    rows, empty, bare = [], 0, []
     with ThreadPoolExecutor(max_workers=args.workers) as pool:
         for done, (trait, artifacts) in enumerate(zip(traits, pool.map(fetch, traits)), 1):
             empty += not artifacts
+            if not artifacts and kpn_ids[trait["legacy_id"]]: bare.append(trait["legacy_id"])
             if done % 100 == 0 or done == len(traits): print("bottom_line pages: %d of %d" % (done, len(traits)), file=sys.stderr, flush=True)
             rows.extend({"kpn_trait_id": kpn_ids[trait["legacy_id"]], "portal_trait_id": trait["legacy_id"],
                          "trait_name": " ".join(str(trait.get("name") or "").split()), "ancestry_code": code,
                          "ancestry_name": name, "artifact_id": artifact} for code, name, artifact in artifacts)
     check(rows, "No portal trait has a bottom-line artifact")
+    # The portal answers any id with "0 results found": a KPN trait without artifacts means the portal lost them.
+    check(not bare, "%d KPN traits have no bottom-line artifact: %s" % (len(bare), ", ".join(bare[:10])))
     rows.sort(key=lambda r: (r["portal_trait_id"], r["ancestry_code"], r["artifact_id"]))
     partial = "%s.partial%s" % os.path.splitext(args.output_file)
-    write_tsv(partial, BOTTOM_LINE_COLUMNS, rows)
+    try:
+        write_tsv(partial, BOTTOM_LINE_COLUMNS, rows)
+    except BaseException:
+        if os.path.exists(partial): os.remove(partial)
+        raise
     os.replace(partial, args.output_file)
     print("Portal bottom line: %d traits (%d with KPN ids), %d with artifacts, %d without; %d artifacts (%s)"
           % (len(traits), sum(1 for k in kpn_ids.values() if k), len(traits) - empty, empty, len(rows),
